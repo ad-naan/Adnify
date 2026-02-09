@@ -143,7 +143,7 @@ body {
 }
 
 .monaco-editor {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace !important;
+  font-family: 'JetBrains Mono', 'JetBrainsMono', 'Fira Code', 'FiraCode-Retina', 'Consolas', 'Monaco', 'Hannotate SC', monospace, -apple-system !important;
 }
 
 /* Animations */

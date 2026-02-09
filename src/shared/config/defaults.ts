@@ -59,7 +59,7 @@ export const LSP_DEFAULTS = {
 
 export const TERMINAL_DEFAULTS = {
   fontSize: 13,
-  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+  fontFamily: "'JetBrains Mono', 'JetBrainsMono', 'Fira Code', 'FiraCode-Retina', 'Consolas', 'Monaco', 'Hannotate SC', monospace, -apple-system",
   lineHeight: 1.2,
   cursorBlink: true,
   scrollback: 1000,
@@ -72,7 +72,7 @@ export const TERMINAL_DEFAULTS = {
 
 export const EDITOR_DEFAULTS = {
   fontSize: 13,
-  fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
+  fontFamily: "'JetBrains Mono', 'JetBrainsMono', 'Fira Code', 'FiraCode-Retina', 'Consolas', 'Monaco', 'Hannotate SC', monospace, -apple-system",
   tabSize: 2,
   wordWrap: 'on' as const,
   lineHeight: 1.5,
@@ -185,7 +185,7 @@ export const AGENT_DEFAULTS = {
     maxSameTargetRepeats: 8,   // 同一文件的连续编辑阈值
     dynamicThreshold: true,    // 根据任务复杂度动态调整阈值
   },
-  
+
   // 动态并发控制
   dynamicConcurrency: {
     enabled: true,
