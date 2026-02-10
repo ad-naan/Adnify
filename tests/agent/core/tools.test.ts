@@ -36,9 +36,9 @@ vi.mock('@renderer/agent/tools/providers', () => ({
       } else if (name === 'list_directory') {
         delay = 50 // 列目录很快
       }
-      
+
       await new Promise(resolve => setTimeout(resolve, delay))
-      
+
       return {
         success: true,
         result: `Result from ${name}`,
@@ -93,7 +93,6 @@ describe('Tools Core - Parallel Execution', () => {
     useAgentStore.setState({
       threads: {},
       currentThreadId: null,
-      streamState: { phase: 'idle' },
     })
 
     // 创建测试线程和消息
@@ -115,11 +114,11 @@ describe('Tools Core - Parallel Execution', () => {
     it('should execute multiple fast tools in parallel efficiently', async () => {
       // 创建 5 个快速工具
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'fast1.txt' } },
-        { id: 'tc2', name: 'read_file', arguments: { path: 'fast2.txt' } },
-        { id: 'tc3', name: 'list_directory', arguments: { path: '.' } },
-        { id: 'tc4', name: 'read_file', arguments: { path: 'fast3.txt' } },
-        { id: 'tc5', name: 'list_directory', arguments: { path: './src' } },
+        { id: 'tc1', name: 'read_file', arguments: { path: 'fast1.txt' }, status: 'success' },
+        { id: 'tc2', name: 'read_file', arguments: { path: 'fast2.txt' }, status: 'success' },
+        { id: 'tc3', name: 'list_directory', arguments: { path: '.' }, status: 'success' },
+        { id: 'tc4', name: 'read_file', arguments: { path: 'fast3.txt' }, status: 'success' },
+        { id: 'tc5', name: 'list_directory', arguments: { path: './src' }, status: 'success' },
       ]
 
       const startTime = Date.now()
@@ -139,10 +138,10 @@ describe('Tools Core - Parallel Execution', () => {
     it('should handle mixed speed tools without blocking', async () => {
       // 混合快速和慢速工具
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'fast.txt' } },      // 100ms
-        { id: 'tc2', name: 'read_file', arguments: { path: 'slow.txt' } },      // 1000ms
-        { id: 'tc3', name: 'list_directory', arguments: { path: '.' } },        // 50ms
-        { id: 'tc4', name: 'read_file', arguments: { path: 'medium.txt' } },    // 500ms
+        { id: 'tc1', name: 'read_file', arguments: { path: 'fast.txt' }, status: 'success' },      // 100ms
+        { id: 'tc2', name: 'read_file', arguments: { path: 'slow.txt' }, status: 'success' },      // 1000ms
+        { id: 'tc3', name: 'list_directory', arguments: { path: '.' }, status: 'success' },        // 50ms
+        { id: 'tc4', name: 'read_file', arguments: { path: 'medium.txt' }, status: 'success' },    // 500ms
       ]
 
       const startTime = Date.now()
@@ -155,7 +154,7 @@ describe('Tools Core - Parallel Execution', () => {
         if (updates.status === 'success' || updates.status === 'error') {
           completionTimes[tcId] = Date.now() - startTime
         }
-        return originalUpdate(msgId, tcId, updates)
+        return originalUpdate(msgId, tcId, updates as unknown as Partial<ToolCall>)
       }) as typeof store.updateToolCall
 
       const { results } = await executeTools(toolCalls, context, store)
@@ -167,7 +166,7 @@ describe('Tools Core - Parallel Execution', () => {
       // tc1 (fast) 和 tc3 (list) 应该很快完成
       expect(completionTimes['tc1']).toBeLessThan(300)
       expect(completionTimes['tc3']).toBeLessThan(300)
-      
+
       // tc4 (medium) 应该在 tc2 (slow) 之前完成
       expect(completionTimes['tc4']).toBeLessThan(completionTimes['tc2'])
     })
@@ -178,6 +177,7 @@ describe('Tools Core - Parallel Execution', () => {
         id: `tc${i + 1}`,
         name: 'read_file',
         arguments: { path: `file${i + 1}.txt` },
+        status: 'success',
       }))
 
       let maxConcurrent = 0
@@ -186,12 +186,12 @@ describe('Tools Core - Parallel Execution', () => {
       // Mock toolManager.execute 来追踪并发数
       const { toolManager } = await import('@renderer/agent/tools/providers')
       const originalExecute = toolManager.execute
-      toolManager.execute = vi.fn(async (name: string, args: any) => {
+      toolManager.execute = vi.fn(async (name: string, _args: any) => {
         currentConcurrent++
         maxConcurrent = Math.max(maxConcurrent, currentConcurrent)
-        
+
         await new Promise(resolve => setTimeout(resolve, 100))
-        
+
         currentConcurrent--
         return {
           success: true,
@@ -212,9 +212,9 @@ describe('Tools Core - Parallel Execution', () => {
 
     it('should update UI state immediately when each tool completes', async () => {
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'fast.txt' } },
-        { id: 'tc2', name: 'read_file', arguments: { path: 'slow.txt' } },
-        { id: 'tc3', name: 'read_file', arguments: { path: 'medium.txt' } },
+        { id: 'tc1', name: 'read_file', arguments: { path: 'fast.txt' }, status: 'success' },
+        { id: 'tc2', name: 'read_file', arguments: { path: 'slow.txt' }, status: 'success' },
+        { id: 'tc3', name: 'read_file', arguments: { path: 'medium.txt' }, status: 'success' },
       ]
 
       const updateOrder: string[] = []
@@ -224,7 +224,7 @@ describe('Tools Core - Parallel Execution', () => {
         if (updates.status === 'success') {
           updateOrder.push(tcId)
         }
-        return originalUpdate(msgId, tcId, updates)
+        return originalUpdate(msgId, tcId, updates as unknown as Partial<ToolCall>)
       }) as typeof store.updateToolCall
 
       await executeTools(toolCalls, context, store)
@@ -239,16 +239,16 @@ describe('Tools Core - Parallel Execution', () => {
   describe('Error Handling in Parallel Execution', () => {
     it('should not block other tools when one tool fails', async () => {
       const { toolManager } = await import('@renderer/agent/tools/providers')
-      
+
       // Mock 一个会失败的工具
       toolManager.execute = vi.fn(async (name: string, args: any) => {
         const path = args.path as string
-        
+
         if (path === 'error.txt') {
           await new Promise(resolve => setTimeout(resolve, 100))
           throw new Error('File not found')
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 100))
         return {
           success: true,
@@ -258,20 +258,20 @@ describe('Tools Core - Parallel Execution', () => {
       })
 
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'good1.txt' } },
-        { id: 'tc2', name: 'read_file', arguments: { path: 'error.txt' } },
-        { id: 'tc3', name: 'read_file', arguments: { path: 'good2.txt' } },
+        { id: 'tc1', name: 'read_file', arguments: { path: 'good1.txt' }, status: 'success' },
+        { id: 'tc2', name: 'read_file', arguments: { path: 'error.txt' }, status: 'success' },
+        { id: 'tc3', name: 'read_file', arguments: { path: 'good2.txt' }, status: 'success' },
       ]
 
       const { results } = await executeTools(toolCalls, context, getStore())
 
       // 验证所有工具都有结果（包括失败的）
       expect(results).toHaveLength(3)
-      
+
       // 验证成功的工具正常执行
       const successResults = results.filter(r => !r.result.content.includes('Error'))
       expect(successResults).toHaveLength(2)
-      
+
       // 验证失败的工具有错误信息
       const errorResult = results.find(r => r.toolCall.id === 'tc2')
       expect(errorResult?.result.content).toContain('Error')
@@ -279,18 +279,18 @@ describe('Tools Core - Parallel Execution', () => {
 
     it('should continue executing other tools even if one is very slow', async () => {
       const { toolManager } = await import('@renderer/agent/tools/providers')
-      
+
       // Mock 一个很慢的工具和几个快速工具
       toolManager.execute = vi.fn(async (name: string, args: any) => {
         const path = args.path as string
-        
+
         if (path === 'very-slow.txt') {
           // 模拟很慢的工具（2秒）
           await new Promise(resolve => setTimeout(resolve, 2000))
         } else {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
-        
+
         return {
           success: true,
           result: `Result from ${name}`,
@@ -299,35 +299,35 @@ describe('Tools Core - Parallel Execution', () => {
       })
 
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'fast1.txt' } },
-        { id: 'tc2', name: 'read_file', arguments: { path: 'very-slow.txt' } },
-        { id: 'tc3', name: 'read_file', arguments: { path: 'fast2.txt' } },
-        { id: 'tc4', name: 'read_file', arguments: { path: 'fast3.txt' } },
+        { id: 'tc1', name: 'read_file', arguments: { path: 'fast1.txt' }, status: 'success' },
+        { id: 'tc2', name: 'read_file', arguments: { path: 'very-slow.txt' }, status: 'success' },
+        { id: 'tc3', name: 'read_file', arguments: { path: 'fast2.txt' }, status: 'success' },
+        { id: 'tc4', name: 'read_file', arguments: { path: 'fast3.txt' }, status: 'success' },
       ]
 
       const completionTimes: Record<string, number> = {}
       const startTime = Date.now()
-      
+
       const store = getStore()
       const originalUpdate = store.updateToolCall.bind(store)
       store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
         if (updates.status === 'success') {
           completionTimes[tcId] = Date.now() - startTime
         }
-        return originalUpdate(msgId, tcId, updates)
+        return originalUpdate(msgId, tcId, updates as unknown as Partial<ToolCall>)
       }) as typeof store.updateToolCall
 
       const { results } = await executeTools(toolCalls, context, store)
 
       // 所有工具都应该完成
       expect(results).toHaveLength(4)
-      
+
       // 快速工具应该在慢速工具之前完成
       expect(completionTimes['tc1']).toBeLessThan(500)
       expect(completionTimes['tc3']).toBeLessThan(500)
       expect(completionTimes['tc4']).toBeLessThan(500)
       expect(completionTimes['tc2']).toBeGreaterThan(1500)
-      
+
       // 验证快速工具不会被慢速工具阻塞
       expect(completionTimes['tc1']).toBeLessThan(completionTimes['tc2'])
       expect(completionTimes['tc3']).toBeLessThan(completionTimes['tc2'])
@@ -339,9 +339,9 @@ describe('Tools Core - Parallel Execution', () => {
     it('should execute independent tools in parallel', async () => {
       // 独立的工具应该并行执行
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'file1.txt' } },
-        { id: 'tc2', name: 'read_file', arguments: { path: 'file2.txt' } },
-        { id: 'tc3', name: 'list_directory', arguments: { path: './src' } },
+        { id: 'tc1', name: 'read_file', arguments: { path: 'file1.txt' }, status: 'success' },
+        { id: 'tc2', name: 'read_file', arguments: { path: 'file2.txt' }, status: 'success' },
+        { id: 'tc3', name: 'list_directory', arguments: { path: './src' }, status: 'success' },
       ]
 
       const startTime = Date.now()
@@ -355,15 +355,15 @@ describe('Tools Core - Parallel Execution', () => {
     it('should handle file edit dependencies correctly', async () => {
       // 编辑同一个文件的工具应该有依赖关系
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'write_file', arguments: { path: 'test.txt', content: 'v1' } },
-        { id: 'tc2', name: 'write_file', arguments: { path: 'test.txt', content: 'v2' } },
-        { id: 'tc3', name: 'read_file', arguments: { path: 'other.txt' } },
+        { id: 'tc1', name: 'write_file', arguments: { path: 'test.txt', content: 'v1' }, status: 'success' },
+        { id: 'tc2', name: 'write_file', arguments: { path: 'test.txt', content: 'v2' }, status: 'success' },
+        { id: 'tc3', name: 'read_file', arguments: { path: 'other.txt' }, status: 'success' },
       ]
 
       const executionOrder: string[] = []
       const { toolManager } = await import('@renderer/agent/tools/providers')
       const originalExecute = toolManager.execute
-      
+
       toolManager.execute = vi.fn(async (name: string, args: any) => {
         executionOrder.push(`${name}:${args.path}`)
         await new Promise(resolve => setTimeout(resolve, 50))
@@ -379,7 +379,7 @@ describe('Tools Core - Parallel Execution', () => {
       // tc3 (other.txt) 应该可以并行执行
       // tc1 和 tc2 (test.txt) 应该有依赖关系
       expect(executionOrder).toHaveLength(3)
-      
+
       // 恢复原始实现
       toolManager.execute = originalExecute
     })
@@ -389,11 +389,11 @@ describe('Tools Core - Parallel Execution', () => {
     it('should handle typical AI workflow efficiently', async () => {
       // 模拟 AI 典型的工作流：读取多个文件 + 搜索 + 列目录
       const toolCalls: ToolCall[] = [
-        { id: 'tc1', name: 'read_file', arguments: { path: 'src/main.ts' } },
-        { id: 'tc2', name: 'read_file', arguments: { path: 'src/utils.ts' } },
-        { id: 'tc3', name: 'list_directory', arguments: { path: './src' } },
-        { id: 'tc4', name: 'read_file', arguments: { path: 'package.json' } },
-        { id: 'tc5', name: 'list_directory', arguments: { path: './tests' } },
+        { id: 'tc1', name: 'read_file', arguments: { path: 'src/main.ts' }, status: 'success' },
+        { id: 'tc2', name: 'read_file', arguments: { path: 'src/utils.ts' }, status: 'success' },
+        { id: 'tc3', name: 'list_directory', arguments: { path: './src' }, status: 'success' },
+        { id: 'tc4', name: 'read_file', arguments: { path: 'package.json' }, status: 'success' },
+        { id: 'tc5', name: 'list_directory', arguments: { path: './tests' }, status: 'success' },
       ]
 
       const startTime = Date.now()
@@ -414,6 +414,7 @@ describe('Tools Core - Parallel Execution', () => {
         id: `tc${i + 1}`,
         name: 'read_file',
         arguments: { path: `file${i + 1}.txt` },
+        status: 'success',
       }))
 
       const startTime = Date.now()

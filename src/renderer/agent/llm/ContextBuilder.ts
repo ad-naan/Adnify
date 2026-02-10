@@ -39,7 +39,8 @@ export async function buildContextContent(
   contextItems: ContextItem[],
   userQuery?: string
 ): Promise<string> {
-  if (!contextItems || contextItems.length === 0) return ''
+  // if (!contextItems || contextItems.length === 0) return ''
+  const validContextItems = contextItems || []
 
   const parts: string[] = []
   let totalChars = 0
@@ -47,12 +48,12 @@ export async function buildContextContent(
   const config = getAgentConfig()
   const workspacePath = useStore.getState().workspacePath
 
-  for (const item of contextItems) {
+  for (const item of validContextItems) {
     if (totalChars >= config.maxTotalContextChars) {
       parts.push('\n[Additional context truncated]')
       break
     }
-    
+
     // 限制文件数量
     if (item.type === 'File') {
       if (fileCount >= config.maxContextFiles) {
@@ -70,7 +71,19 @@ export async function buildContextContent(
   }
 
   // 更新上下文统计信息
-  updateContextStats(contextItems, totalChars, config)
+  updateContextStats(validContextItems, totalChars, config)
+
+  // 尝试获取隐式上下文 (Auto-Context)
+  // 只有在上下文未满且配置开启时尝试
+  if (totalChars < config.maxTotalContextChars) {
+    const implicitContext = await processImplicitContext(userQuery, workspacePath, validContextItems)
+    if (implicitContext) {
+      parts.push(implicitContext)
+      // 不需要更新统计信息？或者也算入？
+      // 算入统计比较好，但这会改变 semanticResultCount
+      // 简单起见，暂不重新调用 updateContextStats，只是 append
+    }
+  }
 
   return parts.join('')
 }
@@ -159,7 +172,7 @@ async function processCodebaseContext(
     const cleanQuery = userQuery.replace(/@codebase\s*/i, '').trim() || userQuery
     const cacheKey = `${workspacePath}:${cleanQuery}`
     const config = getAgentConfig()
-    
+
     // 使用 CacheService 的 getOrSet
     const results = await searchResultCache.getOrSet(
       cacheKey,
@@ -181,6 +194,99 @@ async function processCodebaseContext(
   } catch (e) {
     logger.agent.error('[ContextBuilder] Codebase search failed:', e)
     return '\n[Codebase search failed]\n'
+  }
+}
+
+/**
+ * 处理隐式上下文（自动上下文）
+ * 
+ * 当用户没有显式指定 @codebase 时，自动搜索相关代码
+ */
+async function processImplicitContext(
+  userQuery: string | undefined,
+  workspacePath: string | null,
+  existingContextItems: ContextItem[]
+): Promise<string | null> {
+  // 1. 检查配置是否开启
+  const config = getAgentConfig()
+  logger.agent.info(`[AutoContext] Checking enableAutoContext: ${config.enableAutoContext}`)
+  if (!config.enableAutoContext) return null
+
+  // 2. 检查是否有 workspace 和 query
+  logger.agent.info(`[AutoContext] Checking workspace: ${!!workspacePath}, query length: ${userQuery?.length}`)
+  if (!workspacePath || !userQuery || userQuery.length < 5) return null
+
+  // 3. 检查是否已经显式包含了 @codebase 上下文
+  const hasExplicitCodebase = existingContextItems.some(item => item.type === 'Codebase')
+  logger.agent.info(`[AutoContext] Has explicit codebase: ${hasExplicitCodebase}`)
+  if (hasExplicitCodebase) return null
+
+  try {
+    // 4. 执行搜索 (使用较高的阈值，避免噪音)
+    // 缓存键添加 'implicit' 前缀
+    const cleanQuery = userQuery.trim()
+    const cacheKey = `implicit:${workspacePath}:${cleanQuery}`
+
+    // 更新 UI 状态
+    const language = useStore.getState().language || 'en'
+    logger.agent.info('[AutoContext] Starting implicit search...')
+    useAgentStore.getState().setAutoContextStatus(language === 'zh' ? '正在分析上下文...' : 'Analyzing context...')
+
+    const startTime = Date.now()
+    const results = await searchResultCache.getOrSet(
+      cacheKey,
+      async () => {
+        // 使用 hybridSearch
+        return await api.index.hybridSearch(workspacePath, cleanQuery, 10) || []
+      }
+    ) as Array<{ relativePath: string; score: number; language: string; content: string }>
+
+    // Ensure status is visible for at least 800ms to avoid flashing
+    const elapsed = Date.now() - startTime
+    if (elapsed < 800) {
+      await new Promise(resolve => setTimeout(resolve, 800 - elapsed))
+    }
+
+    logger.agent.info(`[AutoContext] Search finished. Found ${results?.length || 0} results.`)
+
+    if (!results || results.length === 0) {
+      useAgentStore.getState().setAutoContextStatus(null)
+      return null
+    }
+
+    // 5. 过滤相关性较低的结果
+    // 隐式搜索要求更高的准确度，防止 AI 被误导
+    // 假设 score 是 0-1 之间，1 为最相关
+    const IMPLICIT_THRESHOLD = 0.6
+    const relevantResults = results.filter(r => r.score >= IMPLICIT_THRESHOLD)
+
+    logger.agent.info(`[AutoContext] Relevant results (>=${IMPLICIT_THRESHOLD}): ${relevantResults.length}`)
+
+    if (relevantResults.length === 0) {
+      useAgentStore.getState().setAutoContextStatus(null)
+      return null
+    }
+
+    // 6. 限制结果数量 (取前 3 个)
+    const topResults = relevantResults.slice(0, 3)
+
+    // 更新状态为已找到
+    useAgentStore.getState().setAutoContextStatus(language === 'zh' ? `已自动关联 ${topResults.length} 个文件` : `Auto-linked ${topResults.length} files`)
+
+    // 3秒后清除状态
+    setTimeout(() => {
+      useAgentStore.getState().setAutoContextStatus(null)
+    }, 3000)
+
+    return `\n### Implicit Context (Auto-detected for "${cleanQuery}"):\n` +
+      topResults.map(r =>
+        `#### ${r.relativePath} (Relevance: ${r.score.toFixed(2)})\n\`\`\`${r.language}\n${r.content}\n\`\`\``
+      ).join('\n\n') + '\n'
+
+  } catch (e) {
+    // 隐式搜索失败不报错，默默忽略
+    logger.agent.warn('[ContextBuilder] Implicit context search failed:', e)
+    return null
   }
 }
 
@@ -291,14 +397,14 @@ async function processProblemsContext(
 ): Promise<string | null> {
   const diagnosticsState = useDiagnosticsStore.getState()
   const diagnostics = diagnosticsState.diagnostics
-  
+
   // 如果指定了文件，只获取该文件的诊断
   const targetFile = item.uri || useStore.getState().activeFilePath
-  
+
   if (targetFile) {
     const normalizedTarget = normalizePath(targetFile)
     const parts: string[] = []
-    
+
     for (const [uri, diags] of diagnostics) {
       let uriPath = uri
       if (uri.startsWith('file:///')) {
@@ -306,7 +412,7 @@ async function processProblemsContext(
       } else if (uri.startsWith('file://')) {
         uriPath = decodeURIComponent(uri.slice(7))
       }
-      
+
       const normalizedUri = normalizePath(uriPath)
       if (normalizedUri === normalizedTarget || normalizedUri.endsWith(normalizedTarget)) {
         if (diags.length > 0) {
@@ -319,35 +425,35 @@ async function processProblemsContext(
         break
       }
     }
-    
+
     if (parts.length > 0) {
       return '\n' + parts.join('\n') + '\n'
     }
     return '\n[No problems found in current file]\n'
   }
-  
+
   // 没有指定文件，返回所有诊断
   if (diagnostics.size === 0) {
     return '\n[No problems detected in workspace]\n'
   }
-  
+
   const parts: string[] = ['### All Problems:']
   let count = 0
   const maxProblems = 50
-  
+
   for (const [uri, diags] of diagnostics) {
     if (count >= maxProblems) {
       parts.push(`\n... and more (${diagnosticsState.errorCount} errors, ${diagnosticsState.warningCount} warnings total)`)
       break
     }
-    
+
     let filePath = uri
     if (uri.startsWith('file:///')) {
       filePath = decodeURIComponent(uri.slice(8))
     } else if (uri.startsWith('file://')) {
       filePath = decodeURIComponent(uri.slice(7))
     }
-    
+
     parts.push(`\n#### ${filePath}:`)
     for (const d of diags) {
       if (count >= maxProblems) break
@@ -356,7 +462,7 @@ async function processProblemsContext(
       count++
     }
   }
-  
+
   return '\n' + parts.join('\n') + '\n'
 }
 

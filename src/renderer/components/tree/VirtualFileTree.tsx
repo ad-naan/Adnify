@@ -463,9 +463,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
-    const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') || 
-                       node.item.name.toLowerCase().endsWith('.htm')
-    
+    const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') ||
+      node.item.name.toLowerCase().endsWith('.htm')
+
     const items: ContextMenuItem[] = [
       { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
       { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
@@ -476,8 +476,10 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     ]
 
     // 对 HTML 文件添加"在浏览器中打开"选项
-    items.push({ id: 'sep2', label: '', separator: true })
-    items.push({ id: 'openInBrowser', label: 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+    if (isHtmlFile) {
+      items.push({ id: 'sep2', label: '', separator: true })
+      items.push({ id: 'openInBrowser', label: 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+    }
 
     return items
   }, [language, handleNewFile, handleNewFolder, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])

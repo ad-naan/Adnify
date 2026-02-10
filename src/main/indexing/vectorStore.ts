@@ -31,12 +31,15 @@ interface LanceDBQuery {
   select(columns: string[]): LanceDBQuery
   where(filter: string): LanceDBQuery
   limit(n: number): LanceDBQuery
-  execute(): Promise<LanceDBRecord[]>
+  limit(n: number): LanceDBQuery
+  execute(): AsyncGenerator<LanceDBRecord>
+  toArray(): Promise<LanceDBRecord[]>
 }
 
 interface LanceDBVectorQuery {
   limit(n: number): LanceDBVectorQuery
-  execute(): Promise<LanceDBSearchResult[]>
+  execute(): AsyncGenerator<LanceDBSearchResult>
+  toArray(): Promise<LanceDBSearchResult[]>
 }
 
 /** LanceDB 记录类型 */
@@ -81,10 +84,14 @@ export class VectorStoreService {
       this.db = (await lancedb.connect(this.indexPath)) as unknown as LanceDBConnection
 
       // 检查是否已有表
+      // 检查是否已有表
       const tables = await this.db.tableNames()
+      logger.index.info(`[VectorStore] Existing tables: ${tables.join(', ')}`)
+
       if (tables.includes(this.tableName)) {
         this.table = (await this.db.openTable(this.tableName)) as unknown as LanceDBTable
-        
+        logger.index.info(`[VectorStore] Opened table: ${this.tableName}`)
+
         // 验证 schema 是否正确（检查是否有 filePath 字段）
         const isValidSchema = await this.validateSchema()
         if (!isValidSchema) {
@@ -92,6 +99,8 @@ export class VectorStoreService {
           await this.db.dropTable(this.tableName)
           this.table = null
         }
+      } else {
+        logger.index.warn(`[VectorStore] Table ${this.tableName} not found in database`)
       }
       logger.index.info('[VectorStore] Initialized at:', this.indexPath)
     } catch (e) {
@@ -106,15 +115,15 @@ export class VectorStoreService {
    */
   private async validateSchema(): Promise<boolean> {
     if (!this.table) return false
-    
+
     try {
       // 尝试查询一条记录来验证字段
       await this.table
         .query()
         .select(['filePath', 'fileHash'])
         .limit(1)
-        .execute()
-      
+        .toArray()
+
       // 如果能成功查询，说明 schema 正确
       return true
     } catch (e) {
@@ -135,6 +144,7 @@ export class VectorStoreService {
    * 检查是否有索引数据
    */
   async hasIndex(): Promise<boolean> {
+    await this.ensureTableOpen()
     if (!this.table) return false
     const count = await this.table.countRows()
     return count > 0
@@ -144,6 +154,7 @@ export class VectorStoreService {
    * 获取索引统计
    */
   async getStats(): Promise<{ chunkCount: number; fileCount: number }> {
+    await this.ensureTableOpen()
     if (!this.table) {
       return { chunkCount: 0, fileCount: 0 }
     }
@@ -158,16 +169,16 @@ export class VectorStoreService {
    */
   async getFileHashes(): Promise<Map<string, string>> {
     if (!this.table) return new Map()
-    
+
     try {
       const hashMap = new Map<string, string>()
-      
+
       // LanceDB 不支持 offset，直接查询所有记录
       // 只选择需要的字段以减少内存占用
       const results = await this.table
         .query()
         .select(['filePath', 'fileHash'])
-        .execute()
+        .toArray()
 
       for (const r of results) {
         if (r.filePath && r.fileHash) {
@@ -344,7 +355,7 @@ export class VectorStoreService {
       const conditions = filePaths
         .map(fp => `filePath = '${this.sanitizeFilePath(fp)}'`)
         .join(' OR ')
-      
+
       await this.table.delete(conditions)
       logger.index.info(`[VectorStore] Deleted chunks for ${filePaths.length} files`)
     } catch (e) {
@@ -357,15 +368,44 @@ export class VectorStoreService {
   }
 
   /**
+   * 确保表已打开
+   */
+  private async ensureTableOpen(): Promise<boolean> {
+    if (this.table) return true
+    if (!this.db) {
+      // 尝试重新初始化
+      await this.initialize()
+      if (!this.db) return false
+    }
+
+    try {
+      const tables = await this.db.tableNames()
+      if (tables.includes(this.tableName)) {
+        this.table = (await this.db.openTable(this.tableName)) as unknown as LanceDBTable
+        logger.index.info(`[VectorStore] Opened table: ${this.tableName} (lazy load)`)
+        return true
+      }
+    } catch (e) {
+      logger.index.error('[VectorStore] Failed to open table:', e)
+    }
+    return false
+  }
+
+  /**
    * 向量搜索
    */
   async search(queryVector: number[], topK: number = 10): Promise<SearchResult[]> {
-    if (!this.table) return []
+    if (!await this.ensureTableOpen()) {
+      logger.index.info('[VectorStore] Search failed: Table not initialized')
+      return []
+    }
 
-    const results = await this.table
+    const results = await this.table!
       .search(queryVector)
       .limit(topK)
-      .execute()
+      .toArray()
+
+    logger.index.info(`[VectorStore] Semantic search finished. Found: ${results.length}`)
 
     return results.map((r: LanceDBSearchResult) => ({
       filePath: r.filePath,
@@ -384,7 +424,11 @@ export class VectorStoreService {
    * 在 content、symbols、relativePath 中搜索关键词
    */
   async keywordSearch(keywords: string[], topK: number = 10): Promise<SearchResult[]> {
-    if (!this.table || keywords.length === 0) return []
+    if (!await this.ensureTableOpen()) {
+      logger.index.info('[VectorStore] Keyword search failed: Table not initialized')
+      return []
+    }
+    if (keywords.length === 0) return []
 
     try {
       // 构建 SQL WHERE 条件：任意关键词匹配 content、symbols 或 relativePath
@@ -394,14 +438,13 @@ export class VectorStoreService {
         return `(content LIKE '%${safeKw}%' OR symbols LIKE '%${safeKw}%' OR "relativePath" LIKE '%${safeKw}%')`
       }).join(' OR ')
 
-      const queryResult = await this.table
+      const results = await this.table!
         .query()
         .where(conditions)
         .limit(topK)
-        .execute()
+        .toArray()
 
-      // 确保结果是数组
-      const results = Array.isArray(queryResult) ? queryResult : []
+      logger.index.info(`[VectorStore] Keyword search SQL: "${conditions}", Found: ${results.length}`)
 
       return results.map((r: LanceDBRecord) => ({
         filePath: r.filePath,

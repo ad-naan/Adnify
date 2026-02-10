@@ -66,7 +66,7 @@ describe('AgentStore', () => {
       expect(messages).toHaveLength(1)
       expect(messages[0].id).toBe(messageId)
       expect(messages[0].role).toBe('user')
-      expect(messages[0].content).toBe('Hello')
+      expect((messages[0] as any).content).toBe('Hello')
     })
 
     it('should add assistant message', () => {
@@ -79,7 +79,7 @@ describe('AgentStore', () => {
       expect(messages).toHaveLength(1)
       expect(messages[0].id).toBe(messageId)
       expect(messages[0].role).toBe('assistant')
-      expect(messages[0].content).toBe('Hi there')
+      expect((messages[0] as any).content).toBe('Hi there')
     })
 
     it('should update message', () => {
@@ -90,7 +90,7 @@ describe('AgentStore', () => {
       store.updateMessage(messageId, { content: 'Updated' })
 
       const messages = store.getMessages()
-      expect(messages[0].content).toBe('Updated')
+      expect((messages[0] as any).content).toBe('Updated')
     })
 
     it('should clear messages', () => {

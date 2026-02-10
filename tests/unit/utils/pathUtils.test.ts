@@ -6,14 +6,14 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizePath,
   joinPath,
-  joinPaths,
-  getDirname,
+  // joinPaths,
+  // getDirname,
   getDirPath,
   getFileName,
   getExtension,
-  pathEquals,
+  // pathEquals,
   pathStartsWith,
-  toFullPath,
+  // toFullPath,
   toRelativePath,
 } from '@shared/utils/pathUtils'
 

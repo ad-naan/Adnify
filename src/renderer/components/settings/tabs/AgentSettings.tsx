@@ -21,7 +21,7 @@ export function AgentSettings({
     const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<string | null>(null)
     const [showAdvanced, setShowAdvanced] = useState(false)
     const [showGoogleApiKey, setShowGoogleApiKey] = useState(false)
-    
+
     // 使用 DEFAULT_AGENT_CONFIG 中的忽略目录作为默认值
     const defaultIgnoredDirs = DEFAULT_AGENT_CONFIG.ignoredDirectories
     const [ignoredDirsInput, setIgnoredDirsInput] = useState(
@@ -243,7 +243,7 @@ export function AgentSettings({
                             <FileText className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('上下文限制', 'Context Limits')}</h5>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-xs font-medium text-text-secondary">{t('工具结果限制', 'Tool Result Limit')}</label>
@@ -405,6 +405,11 @@ export function AgentSettings({
                                             label={t('自动会话交接', 'Auto Handoff')}
                                             checked={agentConfig.autoHandoff ?? true}
                                             onChange={(e) => setAgentConfig({ ...agentConfig, autoHandoff: e.target.checked })}
+                                        />
+                                        <Switch
+                                            label={t('自动上下文 (隐式检索)', 'Auto-Context (Implicit RAG)')}
+                                            checked={agentConfig.enableAutoContext ?? true}
+                                            onChange={(e) => setAgentConfig({ ...agentConfig, enableAutoContext: e.target.checked })}
                                         />
                                     </div>
                                 </div>

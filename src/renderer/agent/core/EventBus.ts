@@ -21,32 +21,32 @@ export type AgentEvent =
   | { type: 'stream:tool_start'; id: string; name: string }
   | { type: 'stream:tool_delta'; id: string; args: string }
   | { type: 'stream:tool_available'; id: string; name: string; args: Record<string, unknown> }
-  
+
   // LLM 事件
   | { type: 'llm:start' }
   | { type: 'llm:done'; content: string; toolCalls: ToolCall[]; usage?: TokenUsage }
   | { type: 'llm:error'; error: string }
-  
+
   // 工具事件
   | { type: 'tool:pending'; id: string; name: string; args: Record<string, unknown> }
   | { type: 'tool:running'; id: string }
   | { type: 'tool:completed'; id: string; result: string; meta?: Record<string, unknown> }
   | { type: 'tool:error'; id: string; error: string }
   | { type: 'tool:rejected'; id: string }
-  
+
   // 上下文事件
   | { type: 'context:level'; level: number; tokens: number; ratio: number }
   | { type: 'context:warning'; level: number; message: string }  // 新增：上下文预警
   | { type: 'context:prune'; prunedCount: number; savedTokens: number }
   | { type: 'context:summary'; summary: string }
   | { type: 'context:handoff'; document: HandoffDocument }
-  
+
   // 循环事件
   | { type: 'loop:start' }
   | { type: 'loop:iteration'; count: number }
   | { type: 'loop:end'; reason: string }
   | { type: 'loop:warning'; message: string }
-  
+
   // 情绪感知事件
   | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }
   | { type: 'emotion:message'; message: string; state: import('../types/emotion').EmotionState }
@@ -59,7 +59,7 @@ type EventHandler<T extends AgentEvent = AgentEvent> = (event: T) => void
 
 // ===== EventBus 实现 =====
 
-class EventBusClass {
+export class EventBusClass {
   private handlers = new Map<EventType, Set<EventHandler>>()
   private allHandlers = new Set<EventHandler>()
 
@@ -71,7 +71,7 @@ class EventBusClass {
       this.handlers.set(type, new Set())
     }
     this.handlers.get(type)!.add(handler as EventHandler)
-    
+
     // 返回取消订阅函数
     return () => {
       this.handlers.get(type)?.delete(handler as EventHandler)

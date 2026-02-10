@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
-import { mockElectronAPI } from '../setup'
+// import { mockElectronAPI } from '../setup'
 
 describe('Agent Workflow Integration', () => {
   beforeEach(() => {

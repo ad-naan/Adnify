@@ -198,7 +198,7 @@ export function cleanAgentConfig(config: Record<string, unknown>): AgentConfigSc
     }
   }
 
-  const boolFields = ['enableAutoFix', 'enableLLMSummary', 'autoHandoff'] as const
+  const boolFields = ['enableAutoFix', 'enableLLMSummary', 'autoHandoff', 'enableAutoContext'] as const
   for (const field of boolFields) {
     if (typeof config[field] === 'boolean') {
       (cleaned as Record<string, boolean>)[field] = config[field] as boolean
@@ -274,12 +274,12 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
   if (config.llmConfig && typeof config.llmConfig === 'object') {
     const llm = config.llmConfig as Record<string, unknown>
     cleaned.llmConfig = {}
-    
+
     // 基础字段
     if (typeof llm.provider === 'string') cleaned.llmConfig.provider = llm.provider
     if (typeof llm.model === 'string') cleaned.llmConfig.model = llm.model
     if (typeof llm.enableThinking === 'boolean') cleaned.llmConfig.enableThinking = llm.enableThinking
-    
+
     // 核心参数
     if (typeof llm.temperature === 'number') cleaned.llmConfig.temperature = llm.temperature
     if (typeof llm.maxTokens === 'number') cleaned.llmConfig.maxTokens = llm.maxTokens
@@ -288,11 +288,11 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
     if (typeof llm.frequencyPenalty === 'number') cleaned.llmConfig.frequencyPenalty = llm.frequencyPenalty
     if (typeof llm.presencePenalty === 'number') cleaned.llmConfig.presencePenalty = llm.presencePenalty
     if (typeof llm.seed === 'number') cleaned.llmConfig.seed = llm.seed
-    
+
     if (Array.isArray(llm.stopSequences)) {
       cleaned.llmConfig.stopSequences = llm.stopSequences.filter(s => typeof s === 'string')
     }
-    
+
     if (llm.logitBias && typeof llm.logitBias === 'object') {
       const bias = llm.logitBias as Record<string, unknown>
       const cleanedBias: Record<string, number> = {}
@@ -303,11 +303,11 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
         cleaned.llmConfig.logitBias = cleanedBias
       }
     }
-    
+
     // AI SDK 高级参数
     if (typeof llm.maxRetries === 'number') cleaned.llmConfig.maxRetries = llm.maxRetries
     if (typeof llm.parallelToolCalls === 'boolean') cleaned.llmConfig.parallelToolCalls = llm.parallelToolCalls
-    
+
     // toolChoice 验证
     if (llm.toolChoice) {
       if (llm.toolChoice === 'auto' || llm.toolChoice === 'none' || llm.toolChoice === 'required') {
@@ -319,7 +319,7 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
         }
       }
     }
-    
+
     // headers 验证
     if (llm.headers && typeof llm.headers === 'object') {
       const headers = llm.headers as Record<string, unknown>

@@ -88,6 +88,8 @@ export interface AgentConfig {
     detailed: number
     handoff: number
   }
+  // 自动上下文（隐式 RAG）
+  enableAutoContext?: boolean
   // Prune 配置
   pruneMinimumTokens?: number
   pruneProtectTokens?: number

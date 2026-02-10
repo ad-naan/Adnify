@@ -1,4 +1,4 @@
-import * as path from 'path'
+// import * as path from 'path'
 import { TreeSitterChunker } from '../src/main/indexing/treeSitterChunker'
 
 async function test() {
@@ -26,7 +26,7 @@ function helper() {
 
   console.log('Testing TypeScript chunking...')
   const chunks = await chunker.chunkFile('test.ts', tsContent, process.cwd())
-  
+
   console.log(`Generated ${chunks.length} chunks:`)
   chunks.forEach(c => {
     console.log(`[${c.type}] lines ${c.startLine}-${c.endLine}: ${c.symbols?.join(', ')}`)

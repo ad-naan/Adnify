@@ -511,6 +511,7 @@ export class EmbeddingService {
         EmbeddingService.loadingPromise = (async () => {
           logger.index.info('[EmbeddingService] Loading local transformers model:', model)
           try {
+            // @ts-ignore
             const { pipeline, env } = await import('@xenova/transformers')
 
             // 配置缓存目录

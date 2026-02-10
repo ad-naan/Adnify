@@ -35,7 +35,7 @@ import type { LLMConfig } from './types'
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
 
-class AgentClass {
+export class AgentClass {
   /** 运行中的任务（按线程追踪） */
   private runningTasks: Map<string, {
     abortController: AbortController

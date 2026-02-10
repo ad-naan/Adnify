@@ -71,10 +71,10 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { 
-                type: 'string', 
-                description: 'File path (string) or multiple paths (array). Examples: "src/main.ts" or ["src/a.ts", "src/b.ts"]', 
-                required: true 
+            path: {
+                type: 'string',
+                description: 'File path (string) or multiple paths (array). Examples: "src/main.ts" or ["src/a.ts", "src/b.ts"]',
+                required: true
             },
             start_line: { type: 'number', description: 'Starting line for single file (1-indexed)' },
             end_line: { type: 'number', description: 'Ending line for single file (inclusive)' },
@@ -129,7 +129,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'Directory OR file path relative to workspace root (e.g., "src" or "src/main.ts", NOT "./src")', required: true },
+            path: {
+                type: 'string',
+                description: 'Directory OR file path relative to workspace root. Defaults to "." (workspace root).',
+                default: '.'
+            },
             pattern: { type: 'string', description: 'Pattern. Combine multiple with | (e.g., "pat1|pat2|pat3")', required: true },
             is_regex: { type: 'boolean', description: 'Enable regex (auto-enabled for | patterns)', default: false },
             file_pattern: { type: 'string', description: 'Filter files (e.g., "*.ts")' },
@@ -191,20 +195,20 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             // 验证模式选择
             const hasStringMode = data.old_string || data.new_string
             const hasLineMode = data.start_line || data.end_line || data.content
-            
+
             if (hasStringMode && hasLineMode) {
                 return { valid: false, error: 'Cannot mix string mode and line mode parameters' }
             }
-            
+
             if (!hasStringMode && !hasLineMode) {
                 return { valid: false, error: 'Must provide either (old_string + new_string) or (start_line + end_line + content)' }
             }
-            
+
             // 验证字符串模式
             if (hasStringMode && (!data.old_string || data.new_string === undefined)) {
                 return { valid: false, error: 'String mode requires both old_string and new_string' }
             }
-            
+
             // 验证行模式
             if (hasLineMode) {
                 if (!data.start_line || !data.end_line || !data.content) {
@@ -214,7 +218,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
                     return { valid: false, error: 'start_line must be <= end_line' }
                 }
             }
-            
+
             return { valid: true }
         },
     },

@@ -19,7 +19,7 @@ function getRgPath(): string {
   if (!app.isPackaged) {
     return rgPath
   }
-  
+
   // 打包环境：ripgrep 在 asar.unpacked 中
   const unpackedPath = rgPath.replace('app.asar', 'app.asar.unpacked')
   return fs.existsSync(unpackedPath) ? unpackedPath : rgPath
@@ -44,11 +44,16 @@ async function searchInDirectory(
   // 规范化路径，确保 Windows 路径正确
   const normalizedPath = path.normalize(rootPath)
 
+  if (!fs.existsSync(normalizedPath)) {
+    logger.ipc.warn(`[Search] Skipped missing directory: ${normalizedPath}`)
+    return []
+  }
+
   return new Promise((resolve) => {
     const args = buildRipgrepArgs(query, normalizedPath, options)
     const actualRgPath = getRgPath()
     const rg = spawn(actualRgPath, args)
-    
+
     let output = ''
     let hasError = false
 

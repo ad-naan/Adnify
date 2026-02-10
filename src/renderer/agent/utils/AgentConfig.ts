@@ -48,10 +48,10 @@ export function getAgentConfig(): AgentRuntimeConfig {
         maxImportantOldTurns: agentConfig.maxImportantOldTurns ?? DEFAULT_AGENT_CONFIG.maxImportantOldTurns,
         enableLLMSummary: agentConfig.enableLLMSummary ?? DEFAULT_AGENT_CONFIG.enableLLMSummary,
         autoHandoff: agentConfig.autoHandoff ?? DEFAULT_AGENT_CONFIG.autoHandoff,
-        
+
         // 摘要生成配置
         summaryMaxContextChars: agentConfig.summaryMaxContextChars ?? DEFAULT_AGENT_CONFIG.summaryMaxContextChars,
-        
+
         // Prune 配置
         pruneMinimumTokens: agentConfig.pruneMinimumTokens ?? DEFAULT_AGENT_CONFIG.pruneMinimumTokens,
         pruneProtectTokens: agentConfig.pruneProtectTokens ?? DEFAULT_AGENT_CONFIG.pruneProtectTokens,
@@ -63,18 +63,21 @@ export function getAgentConfig(): AgentRuntimeConfig {
             maxSameTargetRepeats: agentConfig.loopDetection?.maxSameTargetRepeats ?? DEFAULT_AGENT_CONFIG.loopDetection.maxSameTargetRepeats,
             dynamicThreshold: agentConfig.loopDetection?.dynamicThreshold ?? DEFAULT_AGENT_CONFIG.loopDetection.dynamicThreshold,
         },
-        
+
         // 动态并发控制
         dynamicConcurrency: DEFAULT_AGENT_CONFIG.dynamicConcurrency,
-        
+
         // 模式后处理钩子
         modePostProcessHooks: DEFAULT_AGENT_CONFIG.modePostProcessHooks,
-        
+
         // 工具依赖声明
         toolDependencies: DEFAULT_AGENT_CONFIG.toolDependencies,
 
         // 忽略目录
         ignoredDirectories: agentConfig.ignoredDirectories ?? DEFAULT_AGENT_CONFIG.ignoredDirectories,
+
+        // 自动上下文
+        enableAutoContext: agentConfig.enableAutoContext ?? DEFAULT_AGENT_CONFIG.enableAutoContext,
     }
 }
 

@@ -41,7 +41,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: false,
     },
   },
-  
+
   frustrated: {
     theme: {
       id: 'adnify-dark',
@@ -70,7 +70,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: true,
     },
   },
-  
+
   tired: {
     theme: {
       id: 'adnify-dark',
@@ -99,7 +99,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: true,
     },
   },
-  
+
   excited: {
     theme: {
       id: 'adnify-dark',
@@ -128,7 +128,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: false,
     },
   },
-  
+
   bored: {
     theme: {
       id: 'cyberpunk',
@@ -157,7 +157,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: true,
     },
   },
-  
+
   stressed: {
     theme: {
       id: 'midnight',
@@ -186,7 +186,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: true,
     },
   },
-  
+
   flow: {
     theme: {
       id: 'adnify-dark',
@@ -215,7 +215,7 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
       microBreaks: true, // 但建议微休息
     },
   },
-  
+
   neutral: {
     theme: {
       id: 'adnify-dark',
@@ -402,7 +402,7 @@ class EmotionAdapter {
       bright: '1.1',
     }
     root.style.setProperty('--editor-brightness', brightnessMap[theme.brightness])
-    
+
     // 设置强调色
     root.style.setProperty('--custom-accent', theme.accentColor)
   }
@@ -562,7 +562,8 @@ class EmotionAdapter {
   /**
    * 获取音乐 URL（支持从设置中读取用户配置）
    */
-  private getMusicUrl(type: 'focus' | 'relax' | 'energize'): string | null {
+  // @ts-ignore: Unused method
+  private _getMusicUrl(type: 'focus' | 'relax' | 'energize'): string | null {
     const urls = this.MUSIC_URLS[type]
     // 优先使用第一个 URL，如果没有则返回 null（会使用回退方案）
     return urls && urls.length > 0 ? urls[0] : null
@@ -571,7 +572,8 @@ class EmotionAdapter {
   /**
    * 加载并播放网络音频（环境音效已关闭，此方法不再播放）
    */
-  private async loadAndPlayAudio(url: string, volume: number): Promise<void> {
+  // @ts-ignore: Unused method
+  private async _loadAndPlayAudio(url: string, volume: number): Promise<void> {
     if (!this.AMBIENT_SOUND_ENABLED) return
     try {
       // 使用 HTMLAudioElement 播放（更简单，支持网络资源）
@@ -583,12 +585,12 @@ class EmotionAdapter {
       // 淡入效果
       audio.volume = 0
       await audio.play()
-      
+
       // 淡入动画
       const fadeInDuration = 2000 // 2秒
       const startTime = Date.now()
       const targetVolume = volume * 0.3
-      
+
       const fadeInterval = setInterval(() => {
         const elapsed = Date.now() - startTime
         if (elapsed >= fadeInDuration) {
@@ -630,7 +632,7 @@ class EmotionAdapter {
       const bufferSize = this.audioContext.sampleRate * 2
       const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate)
       const data = buffer.getChannelData(0)
-      
+
       for (let i = 0; i < bufferSize; i++) {
         data[i] = Math.random() * 2 - 1
       }
@@ -657,7 +659,8 @@ class EmotionAdapter {
     }
   }
 
-  private async playAmbientSound(
+  // @ts-ignore: Unused method
+  private async _playAmbientSound(
     _type: 'focus' | 'relax' | 'energize' | 'none',
     _volume: number
   ): Promise<void> {
@@ -702,7 +705,7 @@ class EmotionAdapter {
             this.audioContext.currentTime + 1
           )
           setTimeout(() => {
-            try { 
+            try {
               if (this.currentAudioSource instanceof AudioBufferSourceNode) {
                 this.currentAudioSource.stop()
               }
@@ -711,7 +714,7 @@ class EmotionAdapter {
             this.currentGainNode = null
           }, 1100)
         } else {
-          try { 
+          try {
             if (this.currentAudioSource instanceof AudioBufferSourceNode) {
               this.currentAudioSource.stop()
             }
@@ -726,8 +729,8 @@ class EmotionAdapter {
 
     // 清理 AudioContext（如果不再需要）
     if (this.audioContext && !this.currentAudioSource) {
-      try { 
-        this.audioContext.close().catch(() => {}) 
+      try {
+        this.audioContext.close().catch(() => { })
       } catch { /* ignore */ }
       this.audioContext = null
     }
