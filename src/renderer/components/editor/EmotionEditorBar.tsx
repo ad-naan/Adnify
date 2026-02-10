@@ -57,18 +57,17 @@ export const EmotionEditorBar: React.FC = () => {
     setCurrentMessageIndex((prev) => (prev + 1) % extra.messages.length)
   }, [emotion])
 
-  if (!emotion || emotion.state === 'neutral') {
-    return null
-  }
-
-  const meta = EMOTION_META[emotion.state]
-  const extra = EDITOR_BAR_EXTRA[emotion.state]
-  const currentMessageKey = extra.messages[currentMessageIndex]
-  const intensity = emotion.intensity ?? 0.5
+  const isActive = emotion && emotion.state !== 'neutral'
+  const meta = isActive ? EMOTION_META[emotion.state] : null
+  const extra = isActive ? EDITOR_BAR_EXTRA[emotion.state] : null
+  const currentMessageKey = extra?.messages[currentMessageIndex]
+  const intensity = emotion?.intensity ?? 0.5
 
   return (
     <AnimatePresence>
+      {isActive && meta && extra && currentMessageKey && (
       <motion.div
+        key={emotion.state}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 10 }}
@@ -176,6 +175,7 @@ export const EmotionEditorBar: React.FC = () => {
           />
         </div>
       </motion.div>
+      )}
     </AnimatePresence>
   )
 }
