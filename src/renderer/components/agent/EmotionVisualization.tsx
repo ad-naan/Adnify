@@ -3,7 +3,7 @@
  * 动态、有趣的视觉展示
  */
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 // import { cn } from '@utils/cn'
@@ -18,12 +18,15 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
   emotion,
   history,
 }) => {
-  // 创建动态的粒子效果
-  const particles = Array.from({ length: 20 }, (_, i) => ({
+  // 创建动态的粒子效果（仅初始化一次，避免每次渲染跳动）
+  const particles = useMemo(() => Array.from({ length: 20 }, (_, i) => ({
     id: i,
     delay: i * 0.1,
     duration: 2 + Math.random() * 2,
-  }))
+    left: Math.random() * 100,
+    top: Math.random() * 100,
+    xOffset: Math.random() * 20 - 10,
+  })), [])
 
   // 情绪强度映射到动画参数
   const intensity = useMotionValue(emotion.intensity)
@@ -50,12 +53,12 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
               width: 4,
               height: 4,
               backgroundColor: color,
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
             }}
             animate={{
               y: [0, -30, 0],
-              x: [0, Math.random() * 20 - 10, 0],
+              x: [0, particle.xOffset, 0],
               opacity: [0, 0.8, 0],
               scale: [0, 1, 0],
             }}
