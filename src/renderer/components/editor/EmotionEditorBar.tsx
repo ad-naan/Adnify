@@ -49,7 +49,7 @@ export const EmotionEditorBar: React.FC = () => {
     }, 8000) // 每8秒切换一次消息
 
     return () => clearInterval(interval)
-  }, [emotion])
+  }, [emotion?.state])
 
   const handleClick = useCallback(() => {
     if (!emotion) return

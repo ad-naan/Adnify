@@ -44,7 +44,7 @@ export const EmotionStatusIndicator: React.FC = () => {
     }, 6000) // 每6秒切换一次
 
     return () => clearInterval(interval)
-  }, [emotion])
+  }, [emotion?.state])
 
   const state = emotion?.state || 'neutral'
   const meta = EMOTION_META[state]
