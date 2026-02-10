@@ -5,6 +5,10 @@
 
 import { vi } from 'vitest'
 
+declare global {
+  var mainWindow: any
+}
+
 // Mock window.electronAPI
 const mockElectronAPI = {
   file: {
@@ -115,41 +119,41 @@ global.window = {
   electronAPI: mockElectronAPI,
 } as any
 
-// Mock the raw electronAPI that's accessed by the wrapper
-;(global.window as any).electronAPI = {
-  ...mockElectronAPI,
-  // Add raw function names that are wrapped
-  mcpInitialize: vi.fn(),
-  mcpGetServersState: vi.fn(),
-  mcpGetAllTools: vi.fn(),
-  mcpConnectServer: vi.fn(),
-  mcpDisconnectServer: vi.fn(),
-  mcpReconnectServer: vi.fn(),
-  mcpCallTool: vi.fn(),
-  mcpReadResource: vi.fn(),
-  mcpGetPrompt: vi.fn(),
-  mcpRefreshCapabilities: vi.fn(),
-  mcpGetConfigPaths: vi.fn(),
-  mcpReloadConfig: vi.fn(),
-  mcpAddServer: vi.fn(),
-  mcpRemoveServer: vi.fn(),
-  mcpToggleServer: vi.fn(),
-  mcpStartOAuth: vi.fn(),
-  mcpFinishOAuth: vi.fn(),
-  mcpRefreshOAuthToken: vi.fn(),
-  onMcpServerStatus: vi.fn(() => vi.fn()),
-  onMcpToolsUpdated: vi.fn(() => vi.fn()),
-  onMcpResourcesUpdated: vi.fn(() => vi.fn()),
-  onMcpStateChanged: vi.fn(() => vi.fn()),
-  onLspDiagnostics: vi.fn(() => vi.fn()),
-  getLspDiagnostics: vi.fn(),
-  // File operations
-  fileExists: vi.fn(),
-  readFile: vi.fn(),
-  writeFile: vi.fn(),
-  saveFile: vi.fn(),
-  mkdir: vi.fn(),
-}
+  // Mock the raw electronAPI that's accessed by the wrapper
+  ; (global.window as any).electronAPI = {
+    ...mockElectronAPI,
+    // Add raw function names that are wrapped
+    mcpInitialize: vi.fn(),
+    mcpGetServersState: vi.fn(),
+    mcpGetAllTools: vi.fn(),
+    mcpConnectServer: vi.fn(),
+    mcpDisconnectServer: vi.fn(),
+    mcpReconnectServer: vi.fn(),
+    mcpCallTool: vi.fn(),
+    mcpReadResource: vi.fn(),
+    mcpGetPrompt: vi.fn(),
+    mcpRefreshCapabilities: vi.fn(),
+    mcpGetConfigPaths: vi.fn(),
+    mcpReloadConfig: vi.fn(),
+    mcpAddServer: vi.fn(),
+    mcpRemoveServer: vi.fn(),
+    mcpToggleServer: vi.fn(),
+    mcpStartOAuth: vi.fn(),
+    mcpFinishOAuth: vi.fn(),
+    mcpRefreshOAuthToken: vi.fn(),
+    onMcpServerStatus: vi.fn(() => vi.fn()),
+    onMcpToolsUpdated: vi.fn(() => vi.fn()),
+    onMcpResourcesUpdated: vi.fn(() => vi.fn()),
+    onMcpStateChanged: vi.fn(() => vi.fn()),
+    onLspDiagnostics: vi.fn(() => vi.fn()),
+    getLspDiagnostics: vi.fn(),
+    // File operations
+    fileExists: vi.fn(),
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    saveFile: vi.fn(),
+    mkdir: vi.fn(),
+  }
 
 // Mock performance API
 global.performance = {

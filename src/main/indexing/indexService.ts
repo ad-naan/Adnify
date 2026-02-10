@@ -283,7 +283,10 @@ export class CodebaseIndexService {
     }
 
     if (!this.vectorStore?.isInitialized() || !this.embedder) {
-      throw new Error('Semantic index not initialized')
+      await this.initSemanticComponents()
+      if (!this.vectorStore?.isInitialized() || !this.embedder) {
+        throw new Error('Semantic index not initialized (Initialization failed)')
+      }
     }
 
     const queryVector = await this.embedder.embed(query)
@@ -302,14 +305,21 @@ export class CodebaseIndexService {
 
     // 语义模式：向量 + 关键词搜索融合
     if (!this.vectorStore?.isInitialized() || !this.embedder) {
-      throw new Error('Semantic index not initialized')
+      await this.initSemanticComponents()
+      if (!this.vectorStore?.isInitialized() || !this.embedder) {
+        throw new Error('Semantic index not initialized (Initialization failed)')
+      }
     }
 
     const keywords = this.extractKeywords(query)
+    logger.index.info(`[IndexService] Hybrid search for "${query}", keywords: ${keywords.join(', ')}`)
+
     const [semanticResults, keywordResults] = await Promise.all([
       this.search(query, topK * 2),
       keywords.length > 0 ? this.vectorStore.keywordSearch(keywords, topK * 2) : Promise.resolve([])
     ])
+
+    logger.index.info(`[IndexService] Hybrid results - Semantic: ${semanticResults.length}, Keyword: ${keywordResults.length}`)
 
     if (keywordResults.length === 0) return semanticResults.slice(0, topK)
     return this.fuseResultsRRF(semanticResults, keywordResults, topK)
@@ -577,8 +587,12 @@ export class CodebaseIndexService {
     if (!this.embedder) {
       this.embedder = new EmbeddingService(this.config.embedding)
     }
+
     if (!this.vectorStore) {
       this.vectorStore = new VectorStoreService(this.workspacePath)
+    }
+
+    if (!this.vectorStore.isInitialized()) {
       await this.vectorStore.initialize()
     }
   }

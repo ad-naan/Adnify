@@ -53,6 +53,7 @@ export default function ChatPanel() {
   // 从 AgentStore 获取 inputPrompt
   const inputPrompt = useAgentStore(state => state.inputPrompt)
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
+  const autoContextStatus = useAgentStore(state => state.autoContextStatus)
 
   const { currentMode: chatMode, setMode: setChatMode } = useModeStore()
 
@@ -838,12 +839,7 @@ export default function ChatPanel() {
     )
   }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id, messageCheckpoints])
 
-  const getStreamingStatus = useCallback(() => {
-    if (streamState.phase === 'streaming') return 'Thinking...'
-    if (streamState.phase === 'tool_running') return `Running ${streamState.currentToolCall?.name || 'tool'}...`
-    if (streamState.phase === 'tool_pending') return 'Waiting for approval'
-    return undefined
-  }, [streamState])
+
 
   return (
     <div
@@ -1077,7 +1073,8 @@ export default function ChatPanel() {
                 pendingChanges={pendingChanges}
                 isStreaming={isStreaming}
                 isAwaitingApproval={isAwaitingApproval}
-                streamingStatus={getStreamingStatus()}
+                streamingStatus={streamState.statusText}
+                autoContextStatus={autoContextStatus}
                 onStop={abort}
                 onReviewFile={async (filePath) => {
                   const change = pendingChanges.find(c => c.filePath === filePath)

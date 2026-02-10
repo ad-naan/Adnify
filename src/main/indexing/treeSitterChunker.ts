@@ -2,6 +2,7 @@ import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as crypto from 'crypto'
 import Parser from 'web-tree-sitter'
+import * as fs from 'fs'
 import { CodeChunk, IndexConfig, DEFAULT_INDEX_CONFIG } from './types'
 
 // Map file extensions to Tree-sitter language names
@@ -31,6 +32,9 @@ const QUERIES: Record<string, string> = {
       name: (identifier) @name
       value: [(arrow_function) (function_expression)] @function_body
     ) @arrow_function
+    ;; Capture top-level statements that are not imports/exports (simplified)
+    (program (expression_statement) @statement)
+    (program (lexical_declaration) @statement)
   `,
   tsx: `
     (function_declaration) @function
@@ -56,6 +60,8 @@ const QUERIES: Record<string, string> = {
   python: `
     (function_definition) @function
     (class_definition) @class
+    ;; Top level code
+    (module (expression_statement) @statement)
   `,
   go: `
     (function_declaration) @function
@@ -119,18 +125,17 @@ export class TreeSitterChunker {
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
 
     // Determine WASM directory (needs to work in Dev and Prod)
-    // In production (packaged app), resources are in process.resourcesPath (not under node_modules)
-    // In development, we use project root's resources folder
-    const resourcesPath = (process as any).resourcesPath as string | undefined
-    const isPackaged = resourcesPath && !resourcesPath.includes('node_modules')
+    // We try multiple potential locations to be robust
+    const potentialPaths = [
+      path.join(process.resourcesPath || '', 'tree-sitter'), // Packaged app resources
+      path.join(process.cwd(), 'resources', 'tree-sitter'),  // Dev mode project root
+      path.join(__dirname, '..', '..', '..', 'resources', 'tree-sitter'), // Relative from build/
+    ];
 
-    if (isPackaged && resourcesPath) {
-      this.wasmDir = path.join(resourcesPath, 'tree-sitter')
-    } else {
-      // Development mode: use project root's resources folder
-      // process.cwd() returns project root in Electron dev mode
-      this.wasmDir = path.join(process.cwd(), 'resources', 'tree-sitter')
-    }
+    // We will resolve the actual path in init() or check existence here if synchronous check is allowed.
+    // simpler: store potential paths and try them in order during init/load
+    this.wasmDir = potentialPaths.find(p => fs.existsSync(p)) || potentialPaths[1];
+
   }
 
   async init() {
@@ -174,7 +179,7 @@ export class TreeSitterChunker {
     } catch (e) {
       // 只在第一次失败时警告，后续静默处理
       this.failedLanguages.add(langName)
-      logger.index.warn(`[TreeSitterChunker] Failed to load language ${langName} (will use fallback chunker)`)
+      logger.index.warn(`[TreeSitterChunker] Failed to load language ${langName}:`, e)
       return false
     }
   }
@@ -206,6 +211,9 @@ export class TreeSitterChunker {
     const chunks: CodeChunk[] = []
     const relativePath = path.relative(workspacePath, filePath)
 
+    // Store ranges covered by TS captures to fill gaps later
+    const coveredRanges: Array<{ start: number, end: number }> = []
+
     try {
       const lang = this.languages.get(langName)!
       const query = lang.query(queryStr)
@@ -214,31 +222,33 @@ export class TreeSitterChunker {
       // Sort captures by start index to process in order
       captures.sort((a: Parser.QueryCapture, b: Parser.QueryCapture) => a.node.startIndex - b.node.startIndex)
 
-      // Filter and merge overlaps?
-      // Simple strategy: valid captures become chunks.
-      // If a file has no captures (e.g. config file), we might want to fallback.
-
-      if (captures.length === 0) {
-        // No semantic blocks found, fallback to line chunking
-        return []
-      }
-
       for (const capture of captures) {
         const { node, name } = capture
 
         // Skip small nodes
         if (node.endPosition.row - node.startPosition.row < 3) continue
 
+        // Deduplicate: check if this node is already covered by a parent capture
+        // (Since we sort by start index, parents usually come first or we need to check overlap)
+        // Simplification: if this node is fully inside previous range, skip?
+        // Actually for nested structures (class with methods), we might want BOTH 
+        // OR we just want the smallest units? 
+        // Standard RAG split: Usually smallest overlapping units are better for retrieval context.
+        // But here we keep it simple: capture everything defined in QUERIES.
+
+        // Update covered ranges
+        coveredRanges.push({ start: node.startPosition.row, end: node.endPosition.row })
+
         // 检查节点大小，如果过大则递归拆分
-        const maxChunkChars = this.config.chunkSize * 100 // ~50000 字符
+        const maxChunkChars = this.config.chunkSize * 50 // ~25000 chars roughly
         if (node.text.length > maxChunkChars) {
-          // 递归拆分大块：尝试按子节点拆分
+          // 递归拆分大块
           const subChunks = this.splitLargeNode(node, filePath, relativePath, fileHash, langName, maxChunkChars)
           if (subChunks.length > 0) {
             chunks.push(...subChunks)
             continue
           }
-          // 如果无法拆分，截断内容
+          // Fallback to truncation
           chunks.push({
             id: `${filePath}:${node.startPosition.row}`,
             filePath,
@@ -268,11 +278,11 @@ export class TreeSitterChunker {
         })
       }
 
-      // Handle parts of the file that were NOT captured?
-      // Usually RAG only cares about meaningful blocks. 
-      // Comments outside functions might be lost.
-      // For now, this is a "Semantic Only" chunker. 
-      // We can mix in a "Line Chunker" for the gaps if needed.
+      // Fill gaps (code not captured by Tree-sitter)
+      const gapChunks = this.chunkGaps(content, coveredRanges, filePath, relativePath, fileHash, langName)
+      if (gapChunks.length > 0) {
+        chunks.push(...gapChunks)
+      }
 
     } catch (e) {
       logger.index.error(`[TreeSitterChunker] Error querying ${filePath}:`, e)
@@ -282,6 +292,103 @@ export class TreeSitterChunker {
 
     return chunks
   }
+
+  /**
+   * Handle code gaps not covered by Tree-sitter captures
+   * e.g. top level scripts, large comments, imports (if useful)
+   */
+  private chunkGaps(
+    content: string,
+    coveredRanges: Array<{ start: number, end: number }>,
+    filePath: string,
+    relativePath: string,
+    fileHash: string,
+    langName: string
+  ): CodeChunk[] {
+    const lines = content.split('\n')
+    const chunks: CodeChunk[] = []
+
+    // Merge overlapping ranges and sort
+    if (coveredRanges.length === 0) {
+      // No captures, chunk entire file if it's code? 
+      // Maybe it's a script file not matching any query.
+      // For now, let's just return nothing or implement a simple line chunker here.
+      // Better to keep behavior consistent: if TS fails to find structure, fallback to regex chunker (handled in caller).
+      return []
+    }
+
+    coveredRanges.sort((a, b) => a.start - b.start)
+    const merged: Array<{ start: number, end: number }> = []
+    if (coveredRanges.length > 0) {
+      let current = coveredRanges[0]
+      for (let i = 1; i < coveredRanges.length; i++) {
+        if (coveredRanges[i].start <= current.end) {
+          current.end = Math.max(current.end, coveredRanges[i].end)
+        } else {
+          merged.push(current)
+          current = coveredRanges[i]
+        }
+      }
+      merged.push(current)
+    }
+
+    // Find gaps
+    let currentLine = 0
+    for (const range of merged) {
+      if (range.start > currentLine) {
+        // Gap found
+        const gapLines = lines.slice(currentLine, range.start)
+        // Only chunk if gap is significant
+        if (gapLines.length > 5 && gapLines.join('').trim().length > 50) {
+          chunks.push({
+            id: `${filePath}:gap:${currentLine}`,
+            filePath,
+            relativePath,
+            fileHash,
+            content: gapLines.join('\n'),
+            startLine: currentLine + 1,
+            endLine: range.start, // exclusive in slice, so line number is inclusive? 
+            // slice(0, 5) -> 0,1,2,3,4. 
+            // range.start is the line index where next block starts.
+            // so previous block ends at range.start - 1. 
+            // But line numbers are 1-based.
+            type: 'block',
+            language: langName,
+            symbols: []
+          })
+        }
+      }
+      currentLine = range.end + 1 // range.end is inclusive index of last line?
+      // In TS node, endPosition.row is the index of the row where node ends. 
+      // If node ends at line 10, range.end is 10.
+      // So next content starts at 11?
+      // Correct, endPosition is inclusive for row? 
+      // Actually tree-sitter node.endPosition is where it ends.
+      // If a node covers line 5 to 10. currentLine should become 11.
+    }
+
+    // Check tail
+    if (currentLine < lines.length) {
+      const gapLines = lines.slice(currentLine)
+      if (gapLines.length > 5 && gapLines.join('').trim().length > 50) {
+        chunks.push({
+          id: `${filePath}:gap:${currentLine}`,
+          filePath,
+          relativePath,
+          fileHash,
+          content: gapLines.join('\n'),
+          startLine: currentLine + 1,
+          endLine: lines.length,
+          type: 'block',
+          language: langName,
+          symbols: []
+        })
+      }
+    }
+
+    return chunks
+  }
+
 
   /**
    * 迭代拆分过大的代码块（避免栈溢出）
@@ -368,6 +475,9 @@ export class TreeSitterChunker {
       return 'class'
     }
     if (captureName === 'type') {
+      return 'block'
+    }
+    if (captureName === 'statement') {
       return 'block'
     }
     return 'block'

@@ -187,6 +187,9 @@ export interface AgentRuntimeConfig {
   // 子配置（可选覆盖）
   cache?: Partial<CacheConfigs>
   toolTruncate?: Partial<Record<string, ToolTruncateConfig>>
+
+  // 自动上下文（隐式 RAG）
+  enableAutoContext?: boolean
 }
 
 // 从 defaults.ts 构建完整的 Agent 配置
@@ -214,6 +217,8 @@ export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
       type: 'sequential',
     },
   },
+  // Auto-Context Configuration
+  enableAutoContext: true,
 }
 
 // ============================================

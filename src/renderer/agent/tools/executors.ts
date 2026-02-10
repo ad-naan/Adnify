@@ -99,7 +99,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         // 支持单个文件或多个文件
         const pathArg = args.path
         const paths = Array.isArray(pathArg) ? pathArg : [pathArg as string]
-        
+
         // 如果是多个文件，使用并行读取
         if (paths.length > 1) {
             const pLimit = (await import('p-limit')).default
@@ -228,7 +228,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
         // 判断使用哪种模式
-        const hasStringMode = args.old_string || args.new_string
+        // const hasStringMode = args.old_string || args.new_string
         const hasLineMode = args.start_line || args.end_line || args.content
 
         if (hasLineMode) {

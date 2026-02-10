@@ -6,7 +6,7 @@
 import React from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
-import { cn } from '@utils/cn'
+// import { cn } from '@utils/cn'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 
 interface EmotionVisualizationProps {

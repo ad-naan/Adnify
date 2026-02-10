@@ -187,7 +187,7 @@ ListSkeleton.displayName = 'ListSkeleton'
 
 // ============ 代码块骨架屏 ============
 
-interface CodeSkeletonProps {
+export interface CodeSkeletonProps {
   lines?: number
 }
 

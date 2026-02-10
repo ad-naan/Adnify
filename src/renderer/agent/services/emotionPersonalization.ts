@@ -32,7 +32,7 @@ class EmotionPersonalization {
    */
   recordFeedback(feedback: UserFeedback): void {
     this.feedbackHistory.push(feedback)
-    
+
     // 限制历史记录大小
     if (this.feedbackHistory.length > this.FEEDBACK_HISTORY_LIMIT) {
       this.feedbackHistory.shift()
@@ -40,7 +40,7 @@ class EmotionPersonalization {
 
     // 更新个性化模式
     this.updatePatternFromFeedback(feedback)
-    
+
     // 保存
     this.saveFeedbackHistory()
     this.savePattern()
@@ -69,7 +69,7 @@ class EmotionPersonalization {
       this.getLastState(),
       detection.state
     )
-    
+
     // 如果转换概率很低，可能需要降低置信度
     let adjustedConfidence = detection.confidence
     if (transitionProbability < 0.1) {
@@ -96,7 +96,7 @@ class EmotionPersonalization {
   /**
    * 获取个人化的适配建议
    */
-  getPersonalizedAdaptation(state: EmotionState): Partial<import('../types/emotion').EnvironmentAdaptation> {
+  getPersonalizedAdaptation(_state: EmotionState): Partial<import('../types/emotion').EnvironmentAdaptation> {
     if (!this.pattern) return {}
 
     // 合并个人偏好和默认适配
@@ -105,6 +105,8 @@ class EmotionPersonalization {
       // 可以根据状态进一步个性化
     }
   }
+
+  // ... (intermediate lines skipped, focusing on updatePatternFromFeedback)
 
   /**
    * 预测用户可能需要的帮助
@@ -192,18 +194,19 @@ class EmotionPersonalization {
 
   private updatePatternFromFeedback(feedback: UserFeedback): void {
     if (!this.pattern) return
+    const pattern = this.pattern
 
     // 更新情绪转换概率
     const lastState = this.getLastState()
     if (lastState && feedback.userState) {
-      const currentProb = this.pattern.emotionTransitions[lastState][feedback.userState] || 0
+      const currentProb = pattern.emotionTransitions[lastState][feedback.userState] || 0
       // 简单移动平均更新
-      this.pattern.emotionTransitions[lastState][feedback.userState] = currentProb * 0.9 + 0.1
-      
+      pattern.emotionTransitions[lastState][feedback.userState] = currentProb * 0.9 + 0.1
+
       // 归一化
-      const total = Object.values(this.pattern.emotionTransitions[lastState]).reduce((a, b) => a + b, 0)
-      Object.keys(this.pattern.emotionTransitions[lastState]).forEach(key => {
-        this.pattern.emotionTransitions[lastState][key as EmotionState] /= total
+      const total = Object.values(pattern.emotionTransitions[lastState]).reduce((a, b) => a + b, 0)
+      Object.keys(pattern.emotionTransitions[lastState]).forEach(key => {
+        pattern.emotionTransitions[lastState][key as EmotionState] /= total
       })
     }
 

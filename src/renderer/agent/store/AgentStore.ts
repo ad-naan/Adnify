@@ -84,6 +84,10 @@ interface UIState {
     // 情绪感知方法
     setEmotionDetection: (detection: EmotionDetection | null) => void
     updateEmotionHistory: (history: EmotionHistory) => void
+
+    // Auto-Context 状态
+    autoContextStatus: string | null
+    setAutoContextStatus: (status: string | null) => void
 }
 
 // 线程绑定的 Store 操作接口
@@ -205,13 +209,13 @@ export const useAgentStore = create<AgentStore>()(
                 },
                 // 代码审查方法
                 setCodeReviewSession: (session) => set({ codeReviewSession: session }),
-                updateReviewProgress: (current, total, currentFile) => 
+                updateReviewProgress: (current, total, currentFile) =>
                     set({ reviewProgress: { current, total, currentFile } }),
                 updateReviewComment: (comment) => {
                     set(state => {
                         if (!state.codeReviewSession) return state
-                        const files = state.codeReviewSession.files.map(file => {
-                            const commentIndex = file.comments.findIndex(c => c.id === comment.id)
+                        const files = state.codeReviewSession.files.map((file: import('../types/codeReview').ReviewFile) => {
+                            const commentIndex = file.comments.findIndex((c: import('../types/codeReview').ReviewComment) => c.id === comment.id)
                             if (commentIndex === -1) return file
                             const newComments = [...file.comments]
                             newComments[commentIndex] = comment
@@ -230,6 +234,9 @@ export const useAgentStore = create<AgentStore>()(
                 updateEmotionHistory: (history) => set(state => ({
                     emotionHistory: [...state.emotionHistory, history].slice(-1440) // 保留最近24小时
                 })),
+                // Auto-Context
+                autoContextStatus: null,
+                setAutoContextStatus: (status) => set({ autoContextStatus: status }),
             }
 
             // 重写 finalizeAssistant 先刷新 StreamingBuffer
