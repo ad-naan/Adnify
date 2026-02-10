@@ -42,7 +42,7 @@ export const EmotionAwarenessPanel: React.FC = () => {
   const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
   const hasEnoughData = useMemo(() => {
     if (history.length === 0) return false
-    const oldest = Math.min(...history.map(h => h.timestamp))
+    const oldest = history.reduce((min, h) => Math.min(min, h.timestamp), Infinity)
     return Date.now() - oldest >= WELCOME_DATA_SPAN_MS
   }, [history])
   const isWelcomeState = !hasEnoughData
