@@ -53,7 +53,6 @@ export default function ChatPanel() {
   // 从 AgentStore 获取 inputPrompt
   const inputPrompt = useAgentStore(state => state.inputPrompt)
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
-  const autoContextStatus = useAgentStore(state => state.autoContextStatus)
 
   const { currentMode: chatMode, setMode: setChatMode } = useModeStore()
 
@@ -1074,7 +1073,6 @@ export default function ChatPanel() {
                 isStreaming={isStreaming}
                 isAwaitingApproval={isAwaitingApproval}
                 streamingStatus={streamState.statusText}
-                autoContextStatus={autoContextStatus}
                 onStop={abort}
                 onReviewFile={async (filePath) => {
                   const change = pendingChanges.find(c => c.filePath === filePath)

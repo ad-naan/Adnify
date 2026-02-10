@@ -85,9 +85,6 @@ interface UIState {
     setEmotionDetection: (detection: EmotionDetection | null) => void
     updateEmotionHistory: (history: EmotionHistory) => void
 
-    // Auto-Context 状态
-    autoContextStatus: string | null
-    setAutoContextStatus: (status: string | null) => void
 }
 
 // 线程绑定的 Store 操作接口
@@ -120,6 +117,11 @@ export interface ThreadBoundStore {
     addReasoningPart: (messageId: string) => string
     updateReasoningPart: (messageId: string, partId: string, content: string, isStreaming?: boolean) => void
     finalizeReasoningPart: (messageId: string, partId: string) => void
+
+    // Search 操作
+    addSearchPart: (messageId: string) => string
+    updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean) => void
+    finalizeSearchPart: (messageId: string, partId: string) => void
 
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
@@ -234,9 +236,6 @@ export const useAgentStore = create<AgentStore>()(
                 updateEmotionHistory: (history) => set(state => ({
                     emotionHistory: [...state.emotionHistory, history].slice(-1440) // 保留最近24小时
                 })),
-                // Auto-Context
-                autoContextStatus: null,
-                setAutoContextStatus: (status) => set({ autoContextStatus: status }),
             }
 
             // 重写 finalizeAssistant 先刷新 StreamingBuffer
@@ -293,6 +292,14 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.updateReasoningPart(messageId, partId, content, isStreaming, threadId),
                 finalizeReasoningPart: (messageId, partId) =>
                     messageSlice.finalizeReasoningPart(messageId, partId, threadId),
+
+                // Search 操作
+                addSearchPart: (messageId) =>
+                    messageSlice.addSearchPart(messageId, threadId),
+                updateSearchPart: (messageId, partId, content, isStreaming, append) =>
+                    messageSlice.updateSearchPart(messageId, partId, content, isStreaming, append, threadId),
+                finalizeSearchPart: (messageId, partId) =>
+                    messageSlice.finalizeSearchPart(messageId, partId, threadId),
 
                 // 交互式内容操作
                 setInteractive: (messageId, interactive) =>

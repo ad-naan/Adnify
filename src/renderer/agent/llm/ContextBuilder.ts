@@ -37,7 +37,9 @@ const searchResultCache = new CacheService<unknown[]>('ContextSearchCache', {
  */
 export async function buildContextContent(
   contextItems: ContextItem[],
-  userQuery?: string
+  userQuery?: string,
+  assistantId?: string,
+  threadId?: string
 ): Promise<string> {
   // if (!contextItems || contextItems.length === 0) return ''
   const validContextItems = contextItems || []
@@ -76,12 +78,9 @@ export async function buildContextContent(
   // 尝试获取隐式上下文 (Auto-Context)
   // 只有在上下文未满且配置开启时尝试
   if (totalChars < config.maxTotalContextChars) {
-    const implicitContext = await processImplicitContext(userQuery, workspacePath, validContextItems)
+    const implicitContext = await processImplicitContext(userQuery, workspacePath, validContextItems, assistantId, threadId)
     if (implicitContext) {
       parts.push(implicitContext)
-      // 不需要更新统计信息？或者也算入？
-      // 算入统计比较好，但这会改变 semanticResultCount
-      // 简单起见，暂不重新调用 updateContextStats，只是 append
     }
   }
 
@@ -205,32 +204,37 @@ async function processCodebaseContext(
 async function processImplicitContext(
   userQuery: string | undefined,
   workspacePath: string | null,
-  existingContextItems: ContextItem[]
+  existingContextItems: ContextItem[],
+  assistantId?: string,
+  threadId?: string
 ): Promise<string | null> {
   // 1. 检查配置是否开启
   const config = getAgentConfig()
-  logger.agent.info(`[AutoContext] Checking enableAutoContext: ${config.enableAutoContext}`)
   if (!config.enableAutoContext) return null
 
   // 2. 检查是否有 workspace 和 query
-  logger.agent.info(`[AutoContext] Checking workspace: ${!!workspacePath}, query length: ${userQuery?.length}`)
   if (!workspacePath || !userQuery || userQuery.length < 5) return null
 
   // 3. 检查是否已经显式包含了 @codebase 上下文
   const hasExplicitCodebase = existingContextItems.some(item => item.type === 'Codebase')
-  logger.agent.info(`[AutoContext] Has explicit codebase: ${hasExplicitCodebase}`)
   if (hasExplicitCodebase) return null
+
+  let searchPartId: string | undefined
 
   try {
     // 4. 执行搜索 (使用较高的阈值，避免噪音)
-    // 缓存键添加 'implicit' 前缀
     const cleanQuery = userQuery.trim()
     const cacheKey = `implicit:${workspacePath}:${cleanQuery}`
 
-    // 更新 UI 状态
     const language = useStore.getState().language || 'en'
-    logger.agent.info('[AutoContext] Starting implicit search...')
-    useAgentStore.getState().setAutoContextStatus(language === 'zh' ? '正在分析上下文...' : 'Analyzing context...')
+    const statusText = language === 'zh' ? '正在搜索相关文件...' : 'Searching for relevant files...'
+
+    // 如果提供了助手的消息 ID，则在其中创建一个专门的搜索块
+    if (assistantId && threadId) {
+      const threadBoundStore = useAgentStore.getState().forThread(threadId)
+      searchPartId = threadBoundStore.addSearchPart(assistantId)
+      threadBoundStore.updateSearchPart(assistantId, searchPartId, statusText, true)
+    }
 
     const startTime = Date.now()
     const results = await searchResultCache.getOrSet(
@@ -241,42 +245,61 @@ async function processImplicitContext(
       }
     ) as Array<{ relativePath: string; score: number; language: string; content: string }>
 
-    // Ensure status is visible for at least 800ms to avoid flashing
+    // Ensure status is visible for at least 600ms to avoid flashing too fast
     const elapsed = Date.now() - startTime
-    if (elapsed < 800) {
-      await new Promise(resolve => setTimeout(resolve, 800 - elapsed))
+    if (elapsed < 600) {
+      await new Promise(resolve => setTimeout(resolve, 600 - elapsed))
     }
 
-    logger.agent.info(`[AutoContext] Search finished. Found ${results?.length || 0} results.`)
-
     if (!results || results.length === 0) {
-      useAgentStore.getState().setAutoContextStatus(null)
+      if (assistantId && threadId && searchPartId) {
+        const noResultsText = language === 'zh' ? '未找到相关文件。' : 'No relevant files found.'
+        useAgentStore.getState().forThread(threadId).updateSearchPart(assistantId, searchPartId, noResultsText, false, false)
+        useAgentStore.getState().forThread(threadId).finalizeSearchPart(assistantId, searchPartId)
+      }
       return null
     }
 
     // 5. 过滤相关性较低的结果
-    // 隐式搜索要求更高的准确度，防止 AI 被误导
-    // 假设 score 是 0-1 之间，1 为最相关
-    const IMPLICIT_THRESHOLD = 0.6
+    // 对于本地 Transformers.js 模型，得分往往偏低，0.45 依然太保守，调优为 0.3
+    const IMPLICIT_THRESHOLD = 0.3
     const relevantResults = results.filter(r => r.score >= IMPLICIT_THRESHOLD)
 
-    logger.agent.info(`[AutoContext] Relevant results (>=${IMPLICIT_THRESHOLD}): ${relevantResults.length}`)
+    // 记录前几个结果的得分，方便调试为什么“找不到”
+    const scoreLog = results.slice(0, 5).map(r => `${r.relativePath}(${r.score.toFixed(3)})`).join(', ')
+    logger.agent.info(`[ContextBuilder] Auto-Context scores: ${scoreLog}`)
 
     if (relevantResults.length === 0) {
-      useAgentStore.getState().setAutoContextStatus(null)
+      if (assistantId && threadId && searchPartId) {
+        const bestScore = results.length > 0 ? results[0].score.toFixed(3) : 'N/A'
+        const lowScoreText = language === 'zh'
+          ? `未找到足够相关的代码（最高相关度: ${bestScore}，阈值: ${IMPLICIT_THRESHOLD}）。`
+          : `No highly relevant code found (Best score: ${bestScore}, Threshold: ${IMPLICIT_THRESHOLD}).`
+        useAgentStore.getState().forThread(threadId).updateSearchPart(assistantId, searchPartId, lowScoreText, false, false)
+        useAgentStore.getState().forThread(threadId).finalizeSearchPart(assistantId, searchPartId)
+      }
       return null
     }
 
     // 6. 限制结果数量 (取前 3 个)
     const topResults = relevantResults.slice(0, 3)
 
-    // 更新状态为已找到
-    useAgentStore.getState().setAutoContextStatus(language === 'zh' ? `已自动关联 ${topResults.length} 个文件` : `Auto-linked ${topResults.length} files`)
+    // 更新搜索块的内容，列出找到的文件 (覆盖之前的 "Searching..." 文案)
+    if (assistantId && threadId && searchPartId) {
+      const foundText = language === 'zh'
+        ? `已找到 ${topResults.length} 个相关文件：\n`
+        : `Found ${topResults.length} relevant files:\n`
+      const filesList = topResults.map(r => `- ${r.relativePath}`).join('\n')
 
-    // 3秒后清除状态
-    setTimeout(() => {
-      useAgentStore.getState().setAutoContextStatus(null)
-    }, 3000)
+      useAgentStore.getState().forThread(threadId).updateSearchPart(
+        assistantId,
+        searchPartId,
+        foundText + filesList,
+        false,
+        false // append = false, 替换 "Searching..."
+      )
+      useAgentStore.getState().forThread(threadId).finalizeSearchPart(assistantId, searchPartId)
+    }
 
     return `\n### Implicit Context (Auto-detected for "${cleanQuery}"):\n` +
       topResults.map(r =>
@@ -286,6 +309,9 @@ async function processImplicitContext(
   } catch (e) {
     // 隐式搜索失败不报错，默默忽略
     logger.agent.warn('[ContextBuilder] Implicit context search failed:', e)
+    if (assistantId && threadId && searchPartId) {
+      useAgentStore.getState().forThread(threadId).finalizeSearchPart(assistantId, searchPartId)
+    }
     return null
   }
 }

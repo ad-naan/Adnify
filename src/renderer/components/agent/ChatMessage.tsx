@@ -5,12 +5,13 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, RefreshCw, Edit2, RotateCcw, ChevronDown, X } from 'lucide-react'
+import { User, Copy, Check, RefreshCw, Edit2, RotateCcw, ChevronDown, X, Search } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import aiAvatar from '../../assets/icon/ai-avatar.gif'
 import { themeManager } from '../../config/themeConfig'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChatMessage as ChatMessageType,
   isUserMessage,
@@ -22,6 +23,7 @@ import {
   isToolCallPart,
   isReasoningPart,
   ReasoningPart,
+  isSearchPart,
   ToolCall,
 } from '@renderer/agent/types'
 import FileChangeCard from './FileChangeCard'
@@ -137,6 +139,59 @@ interface ThinkingBlockProps {
   isStreaming: boolean
   fontSize: number
 }
+
+// 搜索块组件 - 专门用于显示 Auto-Context 结果
+const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isStreaming?: boolean }) => {
+  const [isExpanded, setIsExpanded] = useState(true)
+  const { language } = useStore()
+
+  return (
+    <div className="my-3 overflow-hidden rounded-xl border border-accent/10 bg-accent/5">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center justify-between px-3 py-2 text-accent/80 hover:bg-accent/5 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {isStreaming ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Search className="w-3.5 h-3.5" />
+          )}
+          <span className="text-[11px] font-bold uppercase tracking-tight">
+            {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
+          </span>
+        </div>
+        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }}>
+          <ChevronDown className="w-3.5 h-3.5" />
+        </motion.div>
+      </button>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 pt-1">
+              {content ? (
+                <div className="text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
+                  {content}
+                </div>
+              ) : (
+                <div className="text-[11px] italic text-text-muted/40 py-1">
+                  {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+})
+SearchBlock.displayName = 'SearchBlock'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
   const [isExpanded, setIsExpanded] = useState(isStreaming)
@@ -341,6 +396,16 @@ const RenderPart = React.memo(({
         startTime={reasoningPart.startTime}
         isStreaming={!!reasoningPart.isStreaming}
         fontSize={fontSize}
+      />
+    )
+  }
+
+  if (isSearchPart(part)) {
+    return (
+      <SearchBlock
+        key={`search-${index}`}
+        content={part.content}
+        isStreaming={part.isStreaming}
       />
     )
   }
