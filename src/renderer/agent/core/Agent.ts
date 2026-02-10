@@ -78,14 +78,10 @@ export class AgentClass {
     }
 
     const abortController = new AbortController()
+    const contextItems = store.getCurrentThread()?.contextItems || []
 
     try {
-      // 1. 准备上下文
-      const contextItems = store.getCurrentThread()?.contextItems || []
-      const userQuery = this.extractUserQuery(userMessage)
-      const contextContent = await buildContextContent(contextItems, userQuery)
-
-      // 2. 添加用户消息（这可能会创建新线程）
+      // 1. 添加用户消息（立即显示气泡）
       const userMessageId = store.addUserMessage(userMessage, contextItems)
       store.clearContextItems()
 
@@ -96,24 +92,30 @@ export class AgentClass {
         return
       }
 
-      // 3. 记录任务（现在 threadId 一定存在）
+      // 2. 记录任务
       this.runningTasks.set(threadId, { abortController, assistantId: '' })
 
-      // 4. 创建检查点（用于撤销）
+      // 3. 创建助手消息（立即可见，甚至在搜索前）
+      const assistantId = store.addAssistantMessage(undefined, threadId)
+      const task = this.runningTasks.get(threadId)
+      if (task) task.assistantId = assistantId
+
+      // 4. 准备上下文（搜索状态会更新到刚才创建的助手消息中）
+      const userQuery = this.extractUserQuery(userMessage)
+      const contextContent = await buildContextContent(contextItems, userQuery, assistantId, threadId)
+
+      // 5. 创建检查点（用于撤销）
       const checkpointImages = this.extractCheckpointImages(userMessage)
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
       await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
 
-      // 5. 构建 LLM 消息（包含上下文压缩）
+      // 6. 构建 LLM 消息（包含上下文压缩）
       const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
 
-      // 6. 创建助手消息并开始流式响应
-      const assistantId = store.addAssistantMessage(undefined, threadId)
-      const task = this.runningTasks.get(threadId)
-      if (task) task.assistantId = assistantId
+      // 7. 开始流式响应
       store.setStreamPhase('streaming', threadId)
 
-      // 7. 运行主循环（传递 threadId 实现后台隔离）
+      // 8. 运行主循环
       const runLoop = await importRunLoop()
       await runLoop(
         config,

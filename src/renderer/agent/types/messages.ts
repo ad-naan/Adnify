@@ -31,8 +31,15 @@ export interface ToolCallPart {
   toolCall: ToolCall
 }
 
+/** 搜索部分 */
+export interface SearchPart {
+  type: 'search'
+  content: string
+  isStreaming?: boolean
+}
+
 /** 助手消息部分 */
-export type AssistantPart = TextPart | ReasoningPart | ToolCallPart
+export type AssistantPart = TextPart | ReasoningPart | ToolCallPart | SearchPart
 
 /** Token 使用统计 */
 export interface TokenUsage {
@@ -146,6 +153,10 @@ export function isReasoningPart(part: AssistantPart): part is ReasoningPart {
 
 export function isToolCallPart(part: AssistantPart): part is ToolCallPart {
   return part.type === 'tool_call'
+}
+
+export function isSearchPart(part: AssistantPart): part is SearchPart {
+  return part.type === 'search'
 }
 
 // ============================================

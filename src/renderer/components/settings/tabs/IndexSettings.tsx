@@ -51,6 +51,14 @@ export function IndexSettings({ language }: IndexSettingsProps) {
     { id: 'custom', name: language === 'zh' ? '自定义' : 'Custom', description: 'OpenAI API compatible' },
   ]
 
+  const TRANSFORMERS_MODELS = [
+    { id: 'Xenova/multilingual-e5-small', name: 'Multilingual E5 Small', description: language === 'zh' ? '推荐：最平衡的中英双语模型，精度高速度快' : 'Best balance, optimized for EN/CN' },
+    { id: 'Xenova/bge-small-zh-v1.5', name: 'BGE Small ZH', description: language === 'zh' ? '中文强化：最适合纯中文项目' : 'Best for pure Chinese projects' },
+    { id: 'Xenova/all-MiniLM-L6-v2', name: 'MiniLM L6 (English)', description: language === 'zh' ? '速度最快：适合纯英文项目，中文支持弱' : 'Fastest, mostly for English' },
+    { id: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', name: 'MiniLM L12 Multilingual', description: language === 'zh' ? '通用方案：老牌稳定的多语言模型' : 'Stable and general multilingual' },
+    { id: 'custom', name: language === 'zh' ? '自定义模型...' : 'Custom model...', description: '' },
+  ]
+
   // 加载配置
   useEffect(() => {
     api.settings.get('indexConfig').then(config => {
@@ -271,18 +279,50 @@ export function IndexSettings({ language }: IndexSettingsProps) {
               {language === 'zh' ? '高级配置' : 'Advanced'}
             </button>
 
-            {showAdvanced && (
+            {(showAdvanced || embeddingConfig.provider === 'transformers') && (
               <div className="space-y-3 animate-slide-down">
                 <div>
                   <label className="text-xs text-text-muted block mb-1">
-                    {language === 'zh' ? '模型名称（留空使用默认）' : 'Model (leave empty for default)'}
+                    {language === 'zh' ? '模型名称' : 'Model Name'}
                   </label>
-                  <Input
-                    type="text"
-                    value={embeddingConfig.model}
-                    onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, model: e.target.value }))}
-                    placeholder="e.g. text-embedding-3-small"
-                  />
+                  {embeddingConfig.provider === 'transformers' ? (
+                    <div className="space-y-2">
+                      <Select
+                        value={TRANSFORMERS_MODELS.some(m => m.id === embeddingConfig.model) ? embeddingConfig.model : 'custom'}
+                        onChange={(v) => {
+                          if (v === 'custom') {
+                            // 不清除 model，让用户可以基于当前值修改
+                          } else {
+                            setEmbeddingConfig(prev => ({ ...prev, model: v }))
+                          }
+                        }}
+                        options={TRANSFORMERS_MODELS.map(m => ({
+                          value: m.id,
+                          label: m.description ? `${m.name} - ${m.description}` : m.name
+                        }))}
+                      />
+                      {(embeddingConfig.model === 'custom' || !TRANSFORMERS_MODELS.some(m => m.id === embeddingConfig.model)) && (
+                        <div className="mt-2">
+                          <Input
+                            type="text"
+                            value={embeddingConfig.model === 'custom' ? '' : embeddingConfig.model}
+                            onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, model: e.target.value }))}
+                            placeholder="e.g. Xenova/multilingual-e5-small"
+                          />
+                          <p className="text-[10px] text-text-muted mt-1">
+                            {language === 'zh' ? '输入 HuggingFace 上的模型标识符' : 'Enter model identifier from HuggingFace'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Input
+                      type="text"
+                      value={embeddingConfig.model}
+                      onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, model: e.target.value }))}
+                      placeholder="e.g. text-embedding-3-small"
+                    />
+                  )}
                 </div>
               </div>
             )}

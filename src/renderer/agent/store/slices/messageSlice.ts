@@ -17,6 +17,7 @@ import type {
     FileSnapshot,
     AssistantPart,
     ReasoningPart,
+    SearchPart,
     InteractiveContent,
 } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
@@ -46,6 +47,11 @@ export interface MessageActions {
     addReasoningPart: (messageId: string, targetThreadId?: string) => string
     updateReasoningPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, targetThreadId?: string) => void
     finalizeReasoningPart: (messageId: string, partId: string, targetThreadId?: string) => void
+
+    // Search 操作
+    addSearchPart: (messageId: string, targetThreadId?: string) => string
+    updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean, targetThreadId?: string) => void
+    finalizeSearchPart: (messageId: string, partId: string, targetThreadId?: string) => void
 
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: InteractiveContent, targetThreadId?: string) => void
@@ -622,8 +628,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 完成推理部分
-    finalizeReasoningPart: (messageId, partId) => {
-        const threadId = get().currentThreadId
+    finalizeReasoningPart: (messageId, partId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {
@@ -637,6 +643,110 @@ export const createMessageSlice: StateCreator<
                         // 使用临时 id 属性进行匹配
                         const partWithId = part as ReasoningPart & { id?: string }
                         if (part.type === 'reasoning' && partWithId.id === partId) {
+                            return { ...part, isStreaming: false }
+                        }
+                        return part
+                    })
+                    return { ...assistantMsg, parts: newParts }
+                }
+                return msg
+            })
+
+            return {
+                threads: {
+                    ...state.threads,
+                    [threadId]: { ...thread, messages },
+                },
+            }
+        })
+    },
+
+    // 添加搜索部分
+    addSearchPart: (messageId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return ''
+
+        const partId = `search-${Date.now()}`
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newPart: SearchPart = {
+                        type: 'search',
+                        content: '',
+                        isStreaming: true,
+                    }
+                    // 临时添加 id 用于查找
+                    const partWithId = { ...newPart, id: partId }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, partWithId as SearchPart] }
+                }
+                return msg
+            })
+
+            return {
+                threads: {
+                    ...state.threads,
+                    [threadId]: { ...thread, messages },
+                },
+            }
+        })
+
+        return partId
+    },
+
+    // 更新搜索部分
+    updateSearchPart: (messageId, partId, content, isStreaming = true, append = false, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newParts = assistantMsg.parts.map(part => {
+                        const partWithId = part as SearchPart & { id?: string }
+                        if (part.type === 'search' && partWithId.id === partId) {
+                            const newContent = append ? (part as SearchPart).content + content : content
+                            return { ...part, content: newContent, isStreaming }
+                        }
+                        return part
+                    })
+                    return { ...assistantMsg, parts: newParts }
+                }
+                return msg
+            })
+
+            return {
+                threads: {
+                    ...state.threads,
+                    [threadId]: { ...thread, messages },
+                },
+            }
+        })
+    },
+
+    // 完成搜索部分
+    finalizeSearchPart: (messageId, partId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newParts = assistantMsg.parts.map(part => {
+                        const partWithId = part as SearchPart & { id?: string }
+                        if (part.type === 'search' && partWithId.id === partId) {
                             return { ...part, isStreaming: false }
                         }
                         return part

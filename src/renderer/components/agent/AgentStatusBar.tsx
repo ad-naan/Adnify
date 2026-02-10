@@ -22,7 +22,6 @@ import {
   CheckCheck,
   XCircle,
   FolderOpen,
-  BrainCircuit,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
@@ -33,7 +32,6 @@ interface AgentStatusBarProps {
   isStreaming: boolean
   isAwaitingApproval: boolean
   streamingStatus?: string
-  autoContextStatus?: string | null // 新增
   onStop?: () => void
   onReviewFile?: (filePath: string) => void
   onAcceptFile?: (filePath: string) => void
@@ -47,7 +45,6 @@ export default function AgentStatusBar({
   isStreaming,
   isAwaitingApproval,
   streamingStatus,
-  autoContextStatus,
   onStop,
   onReviewFile,
   onAcceptFile,
@@ -87,7 +84,7 @@ export default function AgentStatusBar({
   }, [pendingChanges])
 
   const hasChanges = pendingChanges.length > 0
-  const showBar = isStreaming || isAwaitingApproval || hasChanges || !!autoContextStatus
+  const showBar = isStreaming || isAwaitingApproval || hasChanges
 
   // 切换目录展开
   const toggleDir = useCallback((dir: string) => {
@@ -131,19 +128,11 @@ export default function AgentStatusBar({
     >
       {/* 主容器 - 与输入框风格统一 */}
       <div className="rounded-2xl border border-border bg-surface/30 backdrop-blur-xl overflow-hidden shadow-sm">
-        {/* 流式状态 / 等待审批 / Auto-Context */}
-        {(isStreaming || isAwaitingApproval || autoContextStatus) && (
+        {/* 流式状态 / 等待审批 */}
+        {(isStreaming || isAwaitingApproval) && (
           <div className={`flex items-center justify-between px-4 py-2 ${hasChanges ? 'border-b border-border/50' : ''}`}>
             <div className="flex items-center gap-2.5">
-              {autoContextStatus ? (
-                /* Auto-Context 状态 */
-                <>
-                  <BrainCircuit className="w-3.5 h-3.5 text-accent animate-pulse" />
-                  <span className="text-[11px] font-medium text-accent/80 animate-pulse">
-                    {autoContextStatus}
-                  </span>
-                </>
-              ) : isStreaming ? (
+              {isStreaming ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />
                   <span className="text-[11px] font-medium text-accent/80">
