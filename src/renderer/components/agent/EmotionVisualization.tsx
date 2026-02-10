@@ -150,7 +150,7 @@ const EmotionWaveform: React.FC<{
   history: Array<{ timestamp: number; state: EmotionState; intensity: number }>
   color: string
 }> = ({ history, color }) => {
-  if (history.length === 0) return null
+  if (history.length < 2) return null
 
   const width = 300
   const height = 60
