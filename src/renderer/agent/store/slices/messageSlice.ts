@@ -28,6 +28,7 @@ import type { ThreadSlice } from './threadSlice'
 export interface MessageActions {
     // 消息操作（支持可选的 targetThreadId，默认使用 currentThreadId）
     addUserMessage: (content: MessageContent, contextItems?: ContextItem[], targetThreadId?: string) => string
+    prepareExecution: (content: MessageContent, contextItems: ContextItem[], targetThreadId?: string) => { userMessageId: string, assistantId: string }
     addAssistantMessage: (content?: string, targetThreadId?: string) => string
     appendToAssistant: (messageId: string, content: string, targetThreadId?: string) => void
     finalizeAssistant: (messageId: string, targetThreadId?: string) => void
@@ -112,6 +113,53 @@ export const createMessageSlice: StateCreator<
         })
 
         return message.id
+    },
+
+    // 批量初始化执行环境（性能优化：合并渲染与持久化）
+    prepareExecution: (content, contextItems, targetThreadId) => {
+        let threadId = targetThreadId || get().currentThreadId
+
+        if (!threadId || !get().threads[threadId]) {
+            threadId = get().createThread()
+        }
+
+        const userMessage: UserMessage = {
+            id: generateId(),
+            role: 'user',
+            content,
+            timestamp: Date.now(),
+            contextItems: [...(contextItems || [])],
+        }
+
+        const assistantMessage: AssistantMessage = {
+            id: generateId(),
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now() + 1, // 确保在用户消息之后
+            isStreaming: true,
+            parts: [],
+            toolCalls: [],
+        }
+
+        set(state => {
+            const thread = state.threads[threadId!]
+            if (!thread) return state
+
+            return {
+                threads: {
+                    ...state.threads,
+                    [threadId!]: {
+                        ...thread,
+                        messages: [...thread.messages, userMessage, assistantMessage],
+                        lastModified: Date.now(),
+                        streamState: { ...thread.streamState, phase: 'streaming' },
+                        contextItems: [], // 同时清理上下文
+                    },
+                },
+            }
+        })
+
+        return { userMessageId: userMessage.id, assistantId: assistantMessage.id }
     },
 
     // 添加助手消息

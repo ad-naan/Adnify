@@ -19,7 +19,6 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { EventBus } from '../core/EventBus'
 import { Agent } from '../core/Agent'
-import { buildAgentSystemPrompt } from '../prompts/PromptBuilder'
 import { gitService } from './gitService'
 import { ExecutionScheduler } from '../orchestrator/ExecutionScheduler'
 import { getLLMConfigForTask } from './llmConfigService'
@@ -349,11 +348,6 @@ async function runTaskWithAgent(
         // task.role 就是 promptTemplateId
         const promptTemplateId = task.role || 'default'
 
-        const systemPrompt = await buildAgentSystemPrompt('agent', workspacePath, {
-            promptTemplateId,
-            orchestratorPhase: 'executing',
-        })
-
         // 2. 构建任务消息
         const taskMessage = buildTaskMessage(task, plan)
 
@@ -364,8 +358,11 @@ async function runTaskWithAgent(
         }
 
         // 4. 使用 Agent.send() 执行任务
-        // 这会创建新的线程并运行 Agent 循环
-        await Agent.send(taskMessage, llmConfig, workspacePath, systemPrompt, 'agent')
+        // 【性能优化】透传元数据，让 Agent 内部异步构建提示词，避免阻塞主流程
+        await Agent.send(taskMessage, llmConfig, workspacePath, 'agent', {
+            promptTemplateId,
+            orchestratorPhase: 'executing',
+        })
 
         // TODO: 捕获 Agent 的执行结果
         // 目前 Agent.send() 不返回结果，需要监听事件或从 Store 获取
