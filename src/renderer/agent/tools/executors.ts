@@ -16,6 +16,7 @@ import { smartReplace, normalizeLineEndings } from '@/renderer/utils/smartReplac
 import { getAgentConfig } from '../utils/AgentConfig'
 import { fileCacheService } from '../services/fileCacheService'
 import { lintService } from '../services/lintService'
+import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 
 // ===== 辅助函数 =====
@@ -1172,6 +1173,25 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 success: false,
                 result: '',
                 error: `Test generation failed: ${toAppError(err).message}`,
+            }
+        }
+    },
+
+    async remember(args, ctx) {
+        const content = args.content as string
+        if (!content) return { success: false, result: '', error: 'Missing content' }
+
+        try {
+            await memoryService.addMemory(content)
+            return {
+                success: true,
+                result: `Successfully remembered: ${content}`,
+            }
+        } catch (err) {
+            return {
+                success: false,
+                result: '',
+                error: `Failed to remember: ${toAppError(err).message}`,
             }
         }
     },

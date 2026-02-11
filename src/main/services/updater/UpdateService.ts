@@ -14,7 +14,7 @@
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater'
 import { logger } from '@shared/utils/Logger'
-import { toAppError } from '@shared/utils/errorHandler'
+import { toAppError, ErrorCode } from '@shared/utils/errorHandler'
 import * as path from 'path'
 import * as fs from 'fs'
 
@@ -105,7 +105,7 @@ class UpdateService {
     // 根据架构选择正确的更新通道
     const arch = process.arch
     const channel = arch === 'arm64' ? 'latest-arm64' : 'latest'
-    
+
     logger.system.info(`[Updater] Using update channel: ${channel} for arch: ${arch}`)
 
     // GitHub Releases 作为更新源
@@ -114,7 +114,7 @@ class UpdateService {
       owner: 'adnaan-worker',
       repo: 'adnify',
     })
-    
+
     // 设置更新通道（对应 yml 文件名）
     autoUpdater.channel = channel
 
@@ -199,7 +199,7 @@ class UpdateService {
     try {
       this.updateStatus({ status: 'checking' })
       logger.system.info('[Updater] Starting update check...')
-      
+
       // 设置超时（30秒）
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
@@ -214,7 +214,7 @@ class UpdateService {
           updateInfo: result.updateInfo ? { version: result.updateInfo.version } : null,
           cancellationToken: result.cancellationToken ? 'present' : null
         }) : 'null')
-        
+
         // 如果返回了结果，检查是否有更新信息
         if (result?.updateInfo) {
           logger.system.info(`[Updater] Update info found: ${result.updateInfo.version}`)
@@ -229,13 +229,13 @@ class UpdateService {
           }
           return
         }
-        
+
         // 如果返回 null，可能是找不到 yml 文件，回退到 GitHub API 检查
         if (!result) {
           logger.system.warn('[Updater] checkForUpdates() returned null, falling back to GitHub API check')
           // 等待一下看是否有事件触发
           await new Promise(resolve => setTimeout(resolve, 2000))
-          
+
           // 如果状态还是 checking，说明事件没有触发，使用 GitHub API
           if (this.status.status === 'checking') {
             logger.system.info('[Updater] No event triggered, using GitHub API as fallback')
@@ -244,7 +244,7 @@ class UpdateService {
           }
           return
         }
-        
+
         // 如果没有更新信息，等待事件触发（最多 5 秒）
         return new Promise<void>((resolve) => {
           const startTime = Date.now()
@@ -256,7 +256,7 @@ class UpdateService {
               resolve()
               return
             }
-            
+
             // 如果等待超过 5 秒，认为事件可能不会触发了
             if (Date.now() - startTime > 5000) {
               clearInterval(checkInterval)
@@ -290,12 +290,17 @@ class UpdateService {
       await Promise.race([checkPromise, timeoutPromise])
     } catch (err) {
       const error = toAppError(err)
-      logger.system.error(`[Updater] Check failed: ${toAppError(err).code}`, error)
+      if (error.code === ErrorCode.NETWORK || error.code === ErrorCode.TIMEOUT) {
+        logger.system.warn(`[Updater] Check failed due to network: ${error.code} (${error.message})`)
+      } else {
+        logger.system.error(`[Updater] Check failed: ${error.code}`, error)
+      }
+
       // 如果状态还是 checking，说明超时或出错了
       if (this.status.status === 'checking') {
         this.updateStatus({
           status: 'error',
-          error: toAppError(err).message || '更新检查失败',
+          error: error.message || '更新检查失败',
         })
       }
     }
@@ -331,7 +336,7 @@ class UpdateService {
             signal: controller.signal,
           }
         )
-        
+
         clearTimeout(timeoutId)
 
         if (!response.ok) {
@@ -382,10 +387,15 @@ class UpdateService {
       }
     } catch (err) {
       const error = toAppError(err)
-      logger.system.error(`[Updater] Portable check failed: ${toAppError(err).code}`, error)
+      if (error.code === ErrorCode.NETWORK || error.code === ErrorCode.TIMEOUT) {
+        logger.system.warn(`[Updater] Portable check failed due to network: ${error.code} (${error.message})`)
+      } else {
+        logger.system.error(`[Updater] Portable check failed: ${error.code}`, error)
+      }
+
       this.updateStatus({
         status: 'error',
-        error: toAppError(err).message || '更新检查失败',
+        error: error.message || '更新检查失败',
       })
     }
 
@@ -421,9 +431,9 @@ class UpdateService {
 
     // 设置退出时自动安装
     autoUpdater.autoInstallOnAppQuit = true
-    
+
     logger.system.info('[Updater] Initiating quit and install...')
-    
+
     // 延迟一点执行，确保所有窗口都已关闭
     setTimeout(() => {
       // isSilent: true - 静默安装，避免 UAC 弹窗干扰

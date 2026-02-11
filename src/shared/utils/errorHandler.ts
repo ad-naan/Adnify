@@ -26,27 +26,27 @@ export enum ErrorCode {
   NETWORK = 'NETWORK',
   TIMEOUT = 'TIMEOUT',
   ABORTED = 'ABORTED',
-  
+
   // 文件系统错误
   FILE_NOT_FOUND = 'FILE_NOT_FOUND',
   FILE_ACCESS_DENIED = 'FILE_ACCESS_DENIED',
   FILE_READ = 'FILE_READ',
   FILE_WRITE = 'FILE_WRITE',
-  
+
   // API 错误
   API_KEY_INVALID = 'API_KEY_INVALID',
   API_RATE_LIMIT = 'API_RATE_LIMIT',
   API_CALL_FAILED = 'API_CALL_FAILED',
-  
+
   // LSP 错误
   LSP_NOT_INITIALIZED = 'LSP_NOT_INITIALIZED',
   LSP_REQUEST_FAILED = 'LSP_REQUEST_FAILED',
-  
+
   // MCP 错误
   MCP_NOT_INITIALIZED = 'MCP_NOT_INITIALIZED',
   MCP_SERVER_ERROR = 'MCP_SERVER_ERROR',
   MCP_TOOL_ERROR = 'MCP_TOOL_ERROR',
-  
+
   // LLM 错误
   LLM_NO_CONTENT = 'LLM_NO_CONTENT',
   LLM_NO_OUTPUT = 'LLM_NO_OUTPUT',
@@ -200,24 +200,24 @@ export function getErrorMessage(code: ErrorCode, language: 'en' | 'zh' = 'en'): 
 export function mapNodeError(error: NodeJS.ErrnoException): { code: ErrorCode; originalMessage: string; retryable: boolean } {
   const code = error.code || ''
   const originalMessage = error.message
-  
+
   switch (code) {
     case 'ENOENT':
       return { code: ErrorCode.FILE_NOT_FOUND, originalMessage, retryable: false }
-    
+
     case 'EACCES':
     case 'EPERM':
       return { code: ErrorCode.FILE_ACCESS_DENIED, originalMessage, retryable: false }
-    
+
     case 'ETIMEDOUT':
     case 'ESOCKETTIMEDOUT':
       return { code: ErrorCode.TIMEOUT, originalMessage, retryable: true }
-    
+
     case 'ECONNREFUSED':
     case 'ENOTFOUND':
     case 'ENETUNREACH':
       return { code: ErrorCode.NETWORK, originalMessage, retryable: true }
-    
+
     default:
       return { code: ErrorCode.UNKNOWN, originalMessage: originalMessage || 'System error', retryable: false }
   }
@@ -278,7 +278,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
   if (APICallError.isInstance(error)) {
     const statusCode = (error as any).statusCode
     const responseBody = (error as any).responseBody
-    
+
     // 尝试从 responseBody 提取详细信息
     let detailMessage = originalMessage
     if (responseBody && typeof responseBody === 'string') {
@@ -293,7 +293,7 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
         // JSON 解析失败，使用原始消息
       }
     }
-    
+
     if (statusCode === 429) {
       return {
         code: ErrorCode.API_RATE_LIMIT,
@@ -445,14 +445,21 @@ export function toAppError(error: unknown, language: 'en' | 'zh' = 'en'): AppErr
   }
 
   if (error instanceof Error) {
-    // Node.js 系统错误
-    const nodeError = error as NodeJS.ErrnoException
-    if (nodeError.code) {
-      const mapped = mapNodeError(nodeError)
+    // 尝试进行启发式分析 (包含对 fetch, network, timeout 等关键词的识别)
+    const mapped = mapAISDKError(error)
+    if (mapped.code !== ErrorCode.UNKNOWN) {
       const friendlyMessage = getErrorMessage(mapped.code, language)
       return new AppError(friendlyMessage, mapped.code, mapped.retryable, error)
     }
-    
+
+    // Node.js 系统错误 (如果有 code 且启发式分析未捕获)
+    const nodeError = error as NodeJS.ErrnoException
+    if (nodeError.code) {
+      const nodeMapped = mapNodeError(nodeError)
+      const friendlyMessage = getErrorMessage(nodeMapped.code, language)
+      return new AppError(friendlyMessage, nodeMapped.code, nodeMapped.retryable, error)
+    }
+
     // 普通 Error：保留原始消息便于排查
     return new AppError(error.message, ErrorCode.UNKNOWN, false, error)
   }

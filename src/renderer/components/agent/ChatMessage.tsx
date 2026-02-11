@@ -30,6 +30,7 @@ import FileChangeCard from './FileChangeCard'
 import ToolCallCard from './ToolCallCard'
 import ToolCallGroup from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
+import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { MessageBranchActions } from './BranchControls'
@@ -48,6 +49,19 @@ interface ChatMessageProps {
   onSelectOption?: (messageId: string, selectedIds: string[]) => void
   pendingToolId?: string
   hasCheckpoint?: boolean
+  messageId: string
+}
+
+interface RenderPartProps {
+  part: AssistantPart
+  index: number
+  pendingToolId?: string
+  onApproveTool?: () => void
+  onRejectTool?: () => void
+  onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
+  fontSize: number
+  isStreaming?: boolean
+  messageId: string
 }
 
 // 代码块组件 - 更加精致的玻璃质感
@@ -371,16 +385,8 @@ const RenderPart = React.memo(({
   onOpenDiff,
   fontSize,
   isStreaming,
-}: {
-  part: AssistantPart
-  index: number
-  pendingToolId?: string
-  onApproveTool?: () => void
-  onRejectTool?: () => void
-  onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
-  fontSize: number
-  isStreaming?: boolean
-}) => {
+  messageId,
+}: RenderPartProps) => {
   if (isTextPart(part)) {
     if (!part.content.trim()) return null
     return <MarkdownContent key={`text-${index}`} content={part.content} fontSize={fontSize} isStreaming={isStreaming} />
@@ -425,8 +431,24 @@ const RenderPart = React.memo(({
             onApprove={isPending ? onApproveTool : undefined}
             onReject={isPending ? onRejectTool : undefined}
             onOpenInEditor={onOpenDiff}
+            messageId={messageId}
           />
         </div>
+      )
+    }
+
+    // AI 记忆提议使用极简内联渲染
+    if (tc.name === 'remember') {
+      return (
+        <MemoryApprovalInline
+          key={`tool-${tc.id}-${index}`}
+          content={tc.arguments.content as string}
+          isAwaitingApproval={isPending}
+          isSuccess={tc.status === 'success'}
+          messageId={messageId}
+          toolCallId={tc.id}
+          args={tc.arguments}
+        />
       )
     }
 
@@ -458,6 +480,7 @@ const AssistantMessageContent = React.memo(({
   onOpenDiff,
   fontSize,
   isStreaming,
+  messageId,
 }: {
   parts: AssistantPart[]
   pendingToolId?: string
@@ -466,6 +489,7 @@ const AssistantMessageContent = React.memo(({
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   fontSize: number
   isStreaming?: boolean
+  messageId: string
 }) => {
   // Memoize 分组逻辑
   const groups = React.useMemo(() => {
@@ -512,6 +536,7 @@ const AssistantMessageContent = React.memo(({
               onOpenDiff={onOpenDiff}
               fontSize={fontSize}
               isStreaming={isStreaming}
+              messageId={messageId}
             />
           )
         } else {
@@ -527,6 +552,7 @@ const AssistantMessageContent = React.memo(({
                 onOpenDiff={onOpenDiff}
                 fontSize={fontSize}
                 isStreaming={isStreaming}
+                messageId={messageId}
               />
             )
           }
@@ -538,6 +564,7 @@ const AssistantMessageContent = React.memo(({
               onApproveTool={onApproveTool}
               onRejectTool={onRejectTool}
               onOpenDiff={onOpenDiff}
+              messageId={messageId}
             />
           )
         }
@@ -753,6 +780,7 @@ const ChatMessage = React.memo(({
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
                     isStreaming={message.isStreaming}
+                    messageId={message.id}
                   />
                 )}
                 {message.isStreaming && <StreamingIndicator />}

@@ -77,6 +77,8 @@ const CORE_TOOLS: string[] = [
   // 网络
   'web_search',
   'read_url',
+  // 交互与记忆
+  'remember',
 ]
 
 /** UI/UX 工具 - uiux-designer 角色专用 */
