@@ -22,6 +22,7 @@ interface FileChangeCardProps {
     onApprove?: () => void
     onReject?: () => void
     onOpenInEditor?: (path: string, oldContent: string, newContent: string) => void
+    messageId?: string
 }
 
 export default function FileChangeCard({
@@ -202,8 +203,8 @@ export default function FileChangeCard({
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden">
                     {fileName ? (
                         <span className={`text-sm font-medium transition-colors truncate ${(isStreaming || isRunning)
-                                ? 'text-shimmer'
-                                : 'text-text-secondary group-hover:text-text-primary'
+                            ? 'text-shimmer'
+                            : 'text-text-secondary group-hover:text-text-primary'
                             }`}>
                             {fileName}
                         </span>

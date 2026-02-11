@@ -203,7 +203,7 @@ export interface ToolPropertySchema {
 // ============================================
 
 export type ToolStatus = 'pending' | 'awaiting' | 'running' | 'success' | 'error' | 'rejected'
-export type ToolApprovalType = 'none' | 'terminal' | 'dangerous'
+export type ToolApprovalType = 'none' | 'terminal' | 'dangerous' | 'interaction'
 export type ToolResultType = 'tool_request' | 'running_now' | 'success' | 'tool_error' | 'rejected'
 
 /** UI 层的工具调用记录（包含执行状态） */

@@ -22,6 +22,7 @@ interface ToolCallGroupProps {
     onApproveTool?: () => void
     onRejectTool?: () => void
     onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
+    messageId?: string
 }
 
 export default function ToolCallGroup({
@@ -30,6 +31,7 @@ export default function ToolCallGroup({
     onApproveTool,
     onRejectTool,
     onOpenDiff,
+    messageId,
 }: ToolCallGroupProps) {
     const [isExpanded, setIsExpanded] = useState(false)
     const { language } = useStore()
@@ -68,6 +70,7 @@ export default function ToolCallGroup({
                         onApprove={isPending ? onApproveTool : undefined}
                         onReject={isPending ? onRejectTool : undefined}
                         onOpenInEditor={onOpenDiff}
+                        messageId={messageId}
                     />
                 )
             }
@@ -84,7 +87,7 @@ export default function ToolCallGroup({
                 />
             )
         },
-        [pendingToolId, onApproveTool, onRejectTool, onOpenDiff]
+        [pendingToolId, onApproveTool, onRejectTool, onOpenDiff, messageId]
     )
 
     return (

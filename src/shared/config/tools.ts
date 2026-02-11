@@ -839,6 +839,25 @@ This will trigger the task executor to run through the plan.`,
             product_type: { type: 'string', description: 'Product type (e.g., saas, e-commerce, fintech, healthcare)', required: true },
         },
     },
+
+    remember: {
+        name: 'remember',
+        displayName: 'Remember',
+        description: 'Propose a new project-level memory (fact or preference) to be remembered across conversations. This will show a confirmation card to the user.',
+        detailedDescription: `Use this to persist important information about the project, such as:
+- Technical stack or architectural decisions
+- Recurring bugs and their fixes
+- User preferences for code style or behavior
+- Project-specific terminology`,
+        category: 'interaction',
+        approvalType: 'interaction',
+        parallel: false,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            content: { type: 'string', description: 'The fact or preference to remember', required: true },
+        },
+    },
 }
 
 

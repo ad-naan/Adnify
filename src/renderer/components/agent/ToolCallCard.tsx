@@ -65,6 +65,7 @@ const TOOL_LABELS: Record<string, string> = {
     read_url: 'Read URL',
     // 交互
     ask_user: 'Ask User',
+    remember: 'Remember Fact',
     // UI/UX
     uiux_search: 'UI/UX Search',
     uiux_recommend: 'UI/UX Recommend',
