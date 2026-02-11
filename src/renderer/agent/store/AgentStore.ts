@@ -99,6 +99,7 @@ export interface ThreadBoundStore {
     finalizeTextBeforeToolCall: (messageId: string) => void
     updateMessage: (messageId: string, updates: Partial<import('../types').ChatMessage>) => void
     addToolResult: (toolCallId: string, name: string, content: string, type: import('../types').ToolResultType, rawParams?: Record<string, unknown>) => string
+    getMessages: () => import('../types').ChatMessage[]
 
     // 工具调用操作
     addToolCallPart: (messageId: string, toolCall: Omit<import('../types').ToolCall, 'status'>) => void
@@ -269,6 +270,8 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.updateMessage(messageId, updates, threadId),
                 addToolResult: (toolCallId, name, content, type, rawParams) =>
                     messageSlice.addToolResult(toolCallId, name, content, type, rawParams, threadId),
+                getMessages: () =>
+                    messageSlice.getMessages(threadId),
 
                 // 工具调用操作
                 addToolCallPart: (messageId, toolCall) =>

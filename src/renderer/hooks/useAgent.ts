@@ -18,7 +18,6 @@ import {
 } from '@/renderer/agent/store/AgentStore'
 import { Agent, getAgentConfig } from '@/renderer/agent'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
-import { buildAgentSystemPrompt } from '@/renderer/agent/prompts/PromptBuilder'
 
 export function useAgent() {
   // 从主 store 获取配置
@@ -98,17 +97,9 @@ export function useAgent() {
 
   // 发送消息
   const sendMessage = useCallback(async (content: MessageContent) => {
-    // 类型转换：OpenFile[] -> string[], string | null -> string | undefined
+    // 收集元数据，但不在这里构建提示词（避免阻塞 UI）
     const openFilePaths = openFiles.map(f => f.path)
     const activeFile = activeFilePath || undefined
-
-    const systemPrompt = await buildAgentSystemPrompt(chatMode, workspacePath, {
-      openFiles: openFilePaths,
-      activeFile,
-      customInstructions: aiInstructions,
-      promptTemplateId,
-      orchestratorPhase: chatMode === 'orchestrator' ? orchestratorPhase : undefined,
-    })
 
     // 获取 agent 配置中的 contextLimit
     const agentConfig = getAgentConfig()
@@ -125,14 +116,19 @@ export function useAgent() {
         temperature: llmConfig.temperature,
         topP: llmConfig.topP,
         enableThinking: llmConfig.enableThinking,
-        // 传递上下文限制（用于压缩判断）
         contextLimit: agentConfig.maxContextTokens,
       },
       workspacePath,
-      systemPrompt,
-      chatMode
+      chatMode,
+      {
+        openFiles: openFilePaths,
+        activeFile,
+        customInstructions: aiInstructions,
+        promptTemplateId,
+        orchestratorPhase: chatMode === 'orchestrator' ? orchestratorPhase : undefined,
+      }
     )
-  }, [llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath])
+  }, [llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase])
 
   // 中止
   const abort = useCallback(() => {

@@ -35,6 +35,8 @@ import type { LLMConfig } from './types'
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
 
+import { buildAgentSystemPrompt } from '../prompts/PromptBuilder'
+
 export class AgentClass {
   /** 运行中的任务（按线程追踪） */
   private runningTasks: Map<string, {
@@ -50,15 +52,21 @@ export class AgentClass {
    * @param userMessage - 用户消息（文本或多模态内容）
    * @param config - LLM 配置
    * @param workspacePath - 工作区路径
-   * @param systemPrompt - 系统提示词
    * @param chatMode - 工作模式（chat/agent/plan）
+   * @param promptOptions - 构建系统提示词所需的元数据
    */
   async send(
     userMessage: MessageContent,
     config: LLMConfig,
     workspacePath: string | null,
-    systemPrompt: string,
-    chatMode: WorkMode = 'agent'
+    chatMode: WorkMode = 'agent',
+    promptOptions?: {
+      openFiles?: string[]
+      activeFile?: string
+      customInstructions?: string
+      promptTemplateId?: string
+      orchestratorPhase?: 'planning' | 'executing'
+    }
   ): Promise<void> {
     const store = useAgentStore.getState()
 
@@ -81,35 +89,37 @@ export class AgentClass {
     const contextItems = store.getCurrentThread()?.contextItems || []
 
     try {
-      // 1. 添加用户消息（立即显示气泡）
-      const userMessageId = store.addUserMessage(userMessage, contextItems)
-      store.clearContextItems()
+      // 1. 【性能关键】批量初始化消息环境（合并用户消息、助手气泡、上下文清理）
+      // 这将三次导致全量同步序列化（persist）的更新合并为一次，彻底消除 UI 线程阻塞。
+      const { userMessageId, assistantId } = store.prepareExecution(userMessage, contextItems)
 
-      // 重新获取 threadId（addUserMessage 可能创建了新线程）
-      threadId = useAgentStore.getState().currentThreadId
+      // 重新获取 threadId（prepareExecution 可能创建了新线程）
+      threadId = useAgentStore.getState().currentThreadId as string
       if (!threadId) {
-        logger.agent.error('[Agent] No thread ID after addUserMessage')
+        logger.agent.error('[Agent] No thread ID after prepareExecution')
         return
       }
 
-      // 2. 记录任务
-      this.runningTasks.set(threadId, { abortController, assistantId: '' })
+      // 2. 记录任务并绑定助手消息 ID
+      this.runningTasks.set(threadId, { abortController, assistantId })
 
-      // 3. 创建助手消息（立即可见，甚至在搜索前）
-      const assistantId = store.addAssistantMessage(undefined, threadId)
-      const task = this.runningTasks.get(threadId)
-      if (task) task.assistantId = assistantId
+      // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
+      // 避免后续耗时任务（提示词构建、隐式搜索）阻塞首屏显示
+      await new Promise(resolve => setTimeout(resolve, 0))
 
-      // 4. 准备上下文（搜索状态会更新到刚才创建的助手消息中）
+      // 4. 构建系统提示词（异步执行）
+      const systemPrompt = await buildAgentSystemPrompt(chatMode, workspacePath, promptOptions)
+
+      // 5. 准备上下文（搜索状态会更新到刚才创建的助手消息中）
       const userQuery = this.extractUserQuery(userMessage)
       const contextContent = await buildContextContent(contextItems, userQuery, assistantId, threadId)
 
-      // 5. 创建检查点（用于撤销）
+      // 6. 创建检查点（用于撤销）
       const checkpointImages = this.extractCheckpointImages(userMessage)
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
       await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
 
-      // 6. 构建 LLM 消息（包含上下文压缩）
+      // 7. 构建 LLM 消息（包含上下文压缩）
       const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
 
       // 7. 开始流式响应
