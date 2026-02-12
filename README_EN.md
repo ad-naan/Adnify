@@ -50,6 +50,18 @@ Adnify adopts Electron multi-process architecture combined with Web Workers and 
 
 <div align="center">
 
+<!-- Architecture Diagram: Supports automatic dark/light theme switching -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/architecture-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="images/architecture-light.svg">
+  <img src="images/architecture-dark.svg" alt="Adnify Architecture Diagram" style="max-width: 100%; height: auto;" />
+</picture>
+
+<p><em>Multi-process + multi-thread architecture, fully utilizing multi-core CPUs for smooth UI responsiveness</em></p>
+
+<details>
+<summary>📊 Click to view Mermaid source code (editable at <a href="https://mermaid.live/">Mermaid Live</a>)</summary>
+
 ```mermaid
 graph TB
     subgraph "User Interface Layer"
@@ -221,9 +233,11 @@ graph TB
     style IndexWorker fill:#c1dfc4
 ```
 
-<p><em>Multi-process + multi-thread architecture, fully utilizing multi-core CPUs for smooth UI responsiveness</em></p>
+</details>
 
 </div>
+
+> 💡 **View Larger Image**: Right-click the image and select "Open image in new tab" to view high-resolution version, or directly visit [Architecture Diagram SVG](images/architecture-dark.svg)
 
 ### Core Module Overview
 
