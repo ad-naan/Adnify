@@ -33,6 +33,7 @@ Join our community to discuss Adnify usage and development!
 
 ## Table of Contents
 
+- [Architecture Design](#-architecture-design)
 - [Core Features](#-core-features)
 - [Unique Advantages](#-unique-advantages-vs-cursorwindsurfclaude-code)
 - [Quick Start](#-quick-start)
@@ -40,6 +41,245 @@ Join our community to discuss Adnify usage and development!
 - [Keyboard Shortcuts](#-keyboard-shortcuts)
 - [Project Structure](#-project-structure)
 - [Contributing](#-contributing--feedback)
+
+---
+
+## 🏗 Architecture Design
+
+Adnify adopts Electron multi-process architecture combined with Web Workers and Node.js Worker Threads for high-performance concurrent processing.
+
+<div align="center">
+
+```mermaid
+graph TB
+    subgraph "User Interface Layer"
+        UI[React Components]
+        Monaco[Monaco Editor]
+        XTerm[XTerm Terminal]
+        ChatUI[Chat Panel]
+    end
+
+    subgraph "Renderer Process"
+        subgraph "AI Agent Core"
+            AgentCore[Agent Core]
+            EventBus[Event Bus]
+            ToolRegistry[Tool Registry]
+            ToolExecutors[Tool Executors]
+        end
+        
+        subgraph "State Management"
+            AgentStore[Agent Store]
+            EditorStore[Editor Store]
+            UIStore[UI Store]
+        end
+        
+        subgraph "Frontend Services"
+            TermMgr[Terminal Manager]
+            LSPClient[LSP Client]
+            WorkspaceMgr[Workspace Manager]
+            CompletionSvc[Completion Service]
+        end
+        
+        subgraph "Agent Subsystems"
+            Context[Context Manager]
+            Compression[Compression Manager]
+            Memory[Memory Service]
+            Session[Session Service]
+            Emotion[Emotion System]
+        end
+        
+        subgraph "Web Workers Thread Pool"
+            ComputeWorker[Compute Worker Pool]
+            MonacoWorkers[Monaco Language Workers]
+            TSWorker[TypeScript Worker]
+            JSONWorker[JSON Worker]
+            CSSWorker[CSS Worker]
+            HTMLWorker[HTML Worker]
+        end
+    end
+
+    subgraph "IPC Communication Layer"
+        IPC[Type-Safe IPC Handlers]
+    end
+
+    subgraph "Main Process"
+        subgraph "Security Layer"
+            Security[Security Module]
+            FileWatcher[File Watcher]
+            AuditLog[Audit Logger]
+        end
+        
+        subgraph "Core Services"
+            LSPMgr[LSP Manager]
+            IndexSvc[Indexing Service]
+            MCPMgr[MCP Manager]
+            LLMProxy[LLM Proxy]
+        end
+        
+        subgraph "Indexing System"
+            Chunker[Code Chunker]
+            Embedder[Embedder]
+            VectorDB[(LanceDB)]
+        end
+        
+        subgraph "Node.js Worker Threads"
+            IndexWorker[Indexer Worker]
+        end
+        
+        subgraph "LSP Ecosystem"
+            TSServer[TypeScript]
+            Pyright[Python]
+            Gopls[Go]
+            OtherLSP[10+ Languages]
+        end
+        
+        subgraph "MCP Ecosystem"
+            MCPClient[MCP Client]
+            MCPAuth[OAuth Provider]
+            MCPServers[External MCP Servers]
+        end
+    end
+
+    subgraph "External Services"
+        OpenAI[OpenAI]
+        Claude[Anthropic]
+        Gemini[Google]
+        DeepSeek[DeepSeek]
+        Ollama[Ollama]
+    end
+
+    UI --> AgentStore
+    Monaco --> EditorStore
+    Monaco --> MonacoWorkers
+    XTerm --> TermMgr
+    ChatUI --> AgentCore
+    
+    AgentCore --> ToolRegistry
+    ToolRegistry --> ToolExecutors
+    AgentCore --> Context
+    AgentCore --> EventBus
+    Context --> Compression
+    AgentCore --> Memory
+    AgentCore --> Session
+    
+    MonacoWorkers --> TSWorker
+    MonacoWorkers --> JSONWorker
+    MonacoWorkers --> CSSWorker
+    MonacoWorkers --> HTMLWorker
+    
+    Context --> ComputeWorker
+    Compression --> ComputeWorker
+    
+    AgentStore --> AgentCore
+    ToolExecutors --> IPC
+    LSPClient --> IPC
+    TermMgr --> IPC
+    WorkspaceMgr --> IPC
+    CompletionSvc --> IPC
+    
+    IPC --> Security
+    Security --> LSPMgr
+    Security --> IndexSvc
+    Security --> FileWatcher
+    Security --> AuditLog
+    
+    IPC --> MCPMgr
+    IPC --> LLMProxy
+    
+    IndexSvc --> IndexWorker
+    IndexWorker --> Chunker
+    IndexWorker --> Embedder
+    Embedder --> VectorDB
+    
+    LSPMgr --> TSServer
+    LSPMgr --> Pyright
+    LSPMgr --> Gopls
+    LSPMgr --> OtherLSP
+    
+    MCPMgr --> MCPClient
+    MCPMgr --> MCPAuth
+    MCPClient --> MCPServers
+    
+    LLMProxy --> OpenAI
+    LLMProxy --> Claude
+    LLMProxy --> Gemini
+    LLMProxy --> DeepSeek
+    LLMProxy --> Ollama
+    
+    Emotion -.emotion awareness.-> AgentCore
+
+    style AgentCore fill:#667eea
+    style Security fill:#764ba2
+    style IndexSvc fill:#f093fb
+    style LSPMgr fill:#4facfe
+    style LLMProxy fill:#43e97b
+    style MCPMgr fill:#fa709a
+    style VectorDB fill:#fee140
+    style Emotion fill:#ff6b9d
+    style ComputeWorker fill:#a8edea
+    style MonacoWorkers fill:#fed6e3
+    style IndexWorker fill:#c1dfc4
+```
+
+<p><em>Multi-process + multi-thread architecture, fully utilizing multi-core CPUs for smooth UI responsiveness</em></p>
+
+</div>
+
+### Core Module Overview
+
+**Renderer Process (Frontend)**
+- **Agent Core**: AI agent core, coordinates message flow, tool execution, and context management
+- **Tool Registry**: Tool registry, manages 23+ built-in tools' definitions, validation, and execution
+- **Context Manager**: Context manager, supports 4-level compression and Handoff document generation
+- **Event Bus**: Event bus, decouples inter-module communication
+- **Emotion System**: Emotion system, real-time user state awareness with intelligent suggestions
+- **Agent Store**: Zustand state management, persists conversation history, branches, and checkpoints
+- **Frontend Services**: Terminal management, LSP client, workspace management, code completion
+
+**Web Workers (Renderer Process Thread Pool)**
+- **Compute Worker Pool**: Handles CPU-intensive tasks like Diff computation and text search
+- **Monaco Language Workers**: Monaco editor's language service workers
+  - TypeScript/JavaScript Worker: Syntax highlighting, code completion
+  - JSON Worker: JSON formatting, validation
+  - CSS Worker: CSS syntax analysis
+  - HTML Worker: HTML syntax analysis
+
+**Main Process (Backend)**
+- **Security Module**: Security module with workspace isolation, path validation, command whitelist, and audit logging
+- **LSP Manager**: Language server management, intelligent project root detection, supports 10+ languages
+- **Indexing Service**: Codebase indexing with Tree-sitter parsing, semantic chunking, and vector storage
+- **MCP Manager**: MCP protocol management, supports external tools, OAuth authentication, and config hot-reload
+- **LLM Proxy**: LLM proxy layer, unified interface for multiple AI service providers with streaming response handling
+
+**Node.js Worker Threads (Main Process Thread Pool)**
+- **Indexer Worker**: Dedicated thread for code indexing, prevents blocking main process
+  - Code chunking
+  - Embedding generation
+  - Vector store updates
+
+**Communication Layer**
+- **IPC Bridge**: Type-safe inter-process communication, all main process features exposed via IPC
+
+**External Integration**
+- **Multi-LLM Support**: OpenAI, Claude, Gemini, DeepSeek, Ollama, and custom APIs
+- **MCP Ecosystem**: Extensible external tools and services, supports community plugins
+
+### Concurrency Advantages
+
+**Multi-Process Isolation**
+- Renderer process crashes don't affect main process
+- Main process handles heavy tasks: file system, LSP, indexing
+- Secure inter-process communication via IPC
+
+**Multi-Thread Parallelism**
+- Web Workers handle frontend compute-intensive tasks (Diff, search)
+- Monaco Workers independently handle language services without blocking UI
+- Node.js Worker Threads handle code indexing, supporting large projects
+
+**Performance Optimization**
+- UI thread always remains responsive
+- Fully utilizes multi-core CPUs
+- Large file operations without freezing
 
 ---
 
@@ -96,218 +336,65 @@ Join our community to discuss Adnify usage and development!
 
 ### 🚀 Unique Advantages (vs Cursor/Windsurf/Claude Code)
 
-#### 🔄 9-Strategy Smart Replace
-When AI edits code, mainstream tools often fail due to whitespace and indentation differences. Adnify implements **9 fault-tolerant matching strategies**, automatically trying in priority order:
-1. **Exact Match** - Completely identical
-2. **Line Trim Match** - Ignore leading/trailing whitespace per line
-3. **Block Anchor Match** - Anchor first/last lines + middle similarity matching
-4. **Whitespace Normalization** - Normalize consecutive whitespace to single space
-5. **Flexible Indentation** - Match after removing minimum common indentation
-6. **Escape Normalization** - Handle `\n`, `\t` escape differences
-7. **Trim Match** - Match after overall trim
-8. **Context-Aware Match** - First/last line anchors + 50% middle line matching
-9. **Multiple Occurrence Match** - Support replaceAll
+Adnify builds upon mainstream AI editors with multiple innovative features:
 
-> 💡 This means AI can successfully apply modifications even with slight format differences, dramatically improving edit success rate.
+- **🔄 9-Strategy Smart Replace**: When AI edits code, 9 fault-tolerant matching strategies (exact match, whitespace normalization, flexible indentation, etc.) ensure successful modifications even with slight format differences, dramatically improving edit success rate
 
-#### ⚡ Smart Parallel Tool Execution
-Mainstream tools typically execute all tool calls serially. Adnify implements **dependency-aware parallel execution**:
-- Automatically analyze dependencies between tools
-- Independent read operations execute in parallel
-- Write operations on different files can run in parallel
-- Write operations on same file remain serial
-- Write-after-read dependencies auto-detected
+- **⚡ Smart Parallel Tool Execution**: Dependency-aware parallel execution - independent reads run in parallel, writes on different files can parallelize, 2-5x speed improvement for multi-file operations
 
-> 💡 2-5x speed improvement for multi-file operations while ensuring data consistency.
+- **🧠 4-Level Context Compression**: Progressive compression (remove redundancy → compress old messages → generate summary → Handoff document), supports truly long conversations without context overflow interruption
 
-#### 🧠 4-Level Context Compression
-During long conversations, mainstream tools either truncate history or error out. Adnify implements **progressive 4-level compression**:
-- **L1**: Remove redundant tool results
-- **L2**: Compress old messages, retain key information
-- **L3**: Generate conversation summary
-- **L4**: Auto-create new session + Handoff document, seamlessly continue task
+- **📸 Checkpoint System**: Auto-creates snapshots before AI modifications, rollback by message granularity, more fine-grained version control than Git
 
-> 💡 Supports truly long conversations, tasks won't interrupt due to context overflow.
+- **🌿 Conversation Branching**: Create branches from any message to explore different solutions, visual management, like Git branches but for AI conversations
 
-#### 📸 Checkpoint System
-Auto-creates file snapshots before AI modifications, supporting:
-- Rollback by message granularity
-- Configurable retention policy (count, time, file size)
-- Project-level storage (`.adnify/sessions.json`)
-- View any checkpoint's file content
-- Compare changes between two checkpoints
+- **🔁 Smart Loop Detection**: Multi-dimensional detection of AI repetitive operations, auto-interrupt with suggestions, avoids token waste
 
-> 💡 More granular version control than Git, one-click rollback if AI makes mistakes.
+- **🩺 Auto Error Fix**: After Agent execution, automatically calls LSP to detect code errors, immediately fixes issues found
 
-#### 🌿 Conversation Branching
-Create branches from any message to explore different solutions:
-- Visual branch management
-- Branch rename, delete
-- Quick switch between main/branches
-- Preserve complete conversation history
+- **💾 AI Memory System**: Project-level memory storage, lets AI remember project-specific conventions and preferences
 
-> 💡 Like Git branches but for AI conversations, convenient for comparing different implementation approaches.
+- **🎬 Streaming Edit Preview**: Real-time Diff display as AI generates code, preview changes as they're generated
 
-#### 🔁 Smart Loop Detection
-AI sometimes falls into repetitive operation loops. Adnify implements **multi-dimensional loop detection**:
-- Tool call pattern detection
-- File content change tracking
-- Similarity threshold judgment
-- Auto-interrupt + suggestions
-
-> 💡 Avoid token waste, timely detect and interrupt ineffective loops.
-
-#### 🩺 Auto Error Fix
-Auto-detects code errors after Agent execution:
-- Call LSP for diagnostic information
-- Detect compilation/syntax errors
-- Auto-inject fix prompts
-- Configurable on/off
-
-> 💡 AI auto-checks after code changes, immediately fixes issues found.
-
-#### 💾 AI Memory System
-Inspired by Cursor Notepad / Claude Code Memory design:
-- User manually adds project-level memories
-- Full injection into context
-- Support enable/disable individual memories
-- Project-level storage (`.adnify/memory.json`)
-
-> 💡 Let AI remember project-specific conventions and preferences.
-
-#### 🎬 Streaming Edit Preview
-Real-time Diff display as AI generates code:
-- Incremental content updates
-- Multi-file simultaneous preview
-- Global state subscription
-- Integrated with Composer
-
-> 💡 No need to wait for AI to finish, preview changes as they're generated.
-
-#### 🎭 Role-based Tools
-Different roles/templates can have exclusive toolsets:
-- **Mode Layering**: Chat (no tools) → Agent (core tools) → Plan (+planning tools)
-- **Role Extension**: Add role-specific tools on top of mode base
-- **Built-in Roles**: UI/UX Designer (`uiux_search` design knowledge base)
-- **Extensible**: Register custom role tools via `registerTemplateTools`
-
-```typescript
-// Example: Add exclusive tools for uiux-designer role
-registerTemplateTools('uiux-designer', { toolGroups: ['uiux'] })
-```
-
-> 💡 Let AI gain different capabilities based on role, frontend and backend developers can have different toolsets.
+- **🎭 Role-based Tools**: Different roles have exclusive toolsets, frontend and backend developers can have different tool capabilities
 
 ### 📝 Professional Code Editing
 
 - **Monaco Editor**: Same editor core as VS Code
-- **Multi-Language LSP Support**: 
-  - TypeScript/JavaScript (tsserver)
-  - Python (Pyright)
-  - Go (gopls)
-  - Rust (rust-analyzer)
-  - C/C++ (clangd)
-  - HTML/CSS/JSON
-  - Vue (Volar)
-  - Zig (zls)
-  - C# (csharp-ls)
-  
-- **LSP Features**:
-  - Intelligent completion
-  - Hover info
-  - Go to definition
-  - Find references
-  - Call hierarchy
-  - Signature help
-  - Code diagnostics
-  - Code formatting
-  - Rename symbol
-
+- **Multi-Language LSP Support**: TypeScript/JavaScript, Python, Go, Rust, C/C++, HTML/CSS/JSON, Vue, Zig, C#, and 10+ languages
+- **Complete LSP Features**: Intelligent completion, go to definition, find references, hover info, code diagnostics, formatting, rename, etc.
 - **Smart Root Detection**: Auto-detect monorepo sub-projects, start independent LSP for each
-- **LSP Server Management**: Support custom install directory, one-click install missing language servers
 - **AI Code Completion**: Context-based intelligent code suggestions (Ghost Text)
 - **Inline Edit (Ctrl+K)**: Let AI modify selected code directly
 - **Diff Preview**: Show diff comparison before AI modifies code, support accept/reject
-- **Editor Context Menu**: Quick access to common operations
-- **Auto Save**: Configurable auto-save functionality
-- **Format on Save**: Auto-format code on save
 
 ![text](images/editor.png)
 
-### 🔍 Powerful Search Features
+### 🔍 Powerful Search & Tools
 
 - **Quick Open (Ctrl+P)**: Fuzzy search to quickly locate files
 - **Global Search (Ctrl+Shift+F)**: Support regex, case-sensitive, whole word match
 - **Semantic Search**: AI Embedding-based codebase semantic search
 - **Hybrid Search**: Combines semantic and keyword search, uses RRF algorithm to merge results
-- **Symbol Search**: Quickly locate functions, classes, variables
-- **In-File Search (Ctrl+F)**: Quick find in current file
-- **Search & Replace (Ctrl+H)**: Support batch replace
+- **Integrated Terminal**: Based on xterm.js + node-pty, supports multi-shell, split view, AI fix
+- **Git Version Control**: Complete Git operation interface, change management, commit history, diff view
+- **File Management**: Virtualized rendering supports 10k+ files, Markdown preview, image preview
+- **Code Outline**: Show file symbol structure, quick navigation
+- **Problems Panel**: Real-time diagnostics showing errors and warnings
 
-### 📟 Integrated Terminal
+![text](images/terminal.png)
 
-- **True Terminal**: Complete terminal experience based on `xterm.js` + `node-pty`
-- **Multi-Shell Support**: PowerShell, CMD, Git Bash, WSL, Bash, Zsh
-- **Split Terminal**: Support multiple terminals side-by-side
-- **Quick Scripts**: One-click run npm scripts from `package.json`
-- **AI Fix**: One-click let AI analyze and fix terminal errors
-- **Keyboard Shortcuts**: Ctrl+C/V copy/paste, Ctrl+Shift+C/V backup
-- **WebGL Rendering**: High-performance terminal rendering
+### 🔐 Security & Other Features
 
-![alt text](images/terminal.png)
+**Security Features**
+- Workspace isolation, sensitive path protection, command whitelist, audit logging
+- Git subcommand whitelist, permission confirmation, customizable security policies
 
-### 📂 File Management
+**Other Features**
+- Command palette, multi-window/multi-workspace support, workspace restore
+- Session management, token statistics, complete Chinese and English support
+- Custom shortcuts, onboarding wizard, Tree-sitter parsing for 20+ languages
 
-- **Explorer**: Complete file tree view
-- **Virtualized Rendering**: Support huge projects, smoothly browse 10k+ files
-- **File Operations**: Create, rename, delete, copy path
-- **Large File Support**: Smart detection of large files, optimized loading strategy
-- **File Preview**: 
-  - Markdown live preview (edit/preview/split modes)
-  - Image preview
-  - Plan file visualization
-- **Drag & Drop**: Drag files to AI chat to add context
-- **External Links**: Links in editor open in system browser
-
-### 🔀 Git Version Control
-
-- **Source Control Panel**: Complete Git operation interface
-- **Change Management**: Stage, unstage, discard changes
-- **Commit History**: View complete commit log, browse by timeline
-- **Diff View**: Side-by-side file change comparison
-- **Branch Management**: View and switch branches
-
-### 🗂 Code Outline
-
-- **Document Symbols**: Show function, class, variable structure of current file
-- **Quick Navigation**: Click symbol to jump to corresponding position
-- **Hierarchical Display**: Clear code structure hierarchy
-
-### ⚠️ Problems Panel
-
-- **Real-time Diagnostics**: Show errors and warnings in current file
-- **Quick Locate**: Click problem to jump to corresponding line
-- **Lint Integration**: Support ESLint and other code checking tools
-
-### 🔐 Security Features
-
-- **Workspace Isolation**: Strict workspace boundary checking
-- **Sensitive Path Protection**: Block access to system sensitive directories
-- **Command Whitelist**: Limit executable shell commands
-- **Git Subcommand Whitelist**: Limit executable Git operations
-- **Audit Log**: Record all sensitive operations (stored per workspace in `.adnify/audit.log`)
-- **Permission Confirmation**: Dangerous operations require user confirmation
-- **Security Settings Panel**: Customizable security policies
-
-### 🎯 Other Features
-
-- **Command Palette (Ctrl+Shift+O)**: Quickly execute various commands
-- **Multi-Window Support**: Open multiple projects simultaneously
-- **Multi-Workspace Support**: Open multiple project roots in single window
-- **Workspace Restore**: Auto-remember last working state
-- **Welcome Page**: Show welcome page in empty window, quickly open recent projects
-- **Session Management**: Save and restore AI conversation history
-- **Token Statistics**: Real-time display of conversation token consumption, configurable context limits
 - **Internationalization**: Complete Chinese and English support
 - **Custom Shortcuts**: Configurable keyboard bindings
 - **Onboarding Wizard**: Configuration guide for first-time use with beautiful animations
@@ -355,166 +442,51 @@ npm run dist
 
 ### Configure AI Model
 
-1. Click **Settings** icon in bottom-left or press `Ctrl+,`
-2. Select AI provider in **Provider** tab
-3. Enter API Key (local models like Ollama need Base URL)
-4. Select model and save
+1. Click settings icon in bottom-left or press `Ctrl+,`
+2. Select AI provider in Provider tab and enter API Key
+3. Select model and save
 
-Supported providers:
-- OpenAI (GPT-4, GPT-4o, GPT-4o-mini, GPT-3.5)
-- Anthropic (Claude 3.5 Sonnet, Claude 3 Opus/Sonnet/Haiku)
-- Google (Gemini 2.0 Flash, Gemini 1.5 Pro/Flash)
-- DeepSeek (DeepSeek Chat, DeepSeek Coder)
-- Ollama (local models)
-- Custom OpenAI-compatible API
-- Support custom model names
+Supports OpenAI, Anthropic, Google, DeepSeek, Ollama, and custom APIs
 
 ### Collaborate with AI
 
-**Reference File Context:**
-- Type `@` to show file selection list
-- Drag files from sidebar to input box
-- Use slash command `/file` to select files
+**Context References**: Type `@` to select files, or use `@codebase`, `@git`, `@terminal`, `@symbols`, `@web` for special references
 
-**Slash Commands:**
-- `/file` - Add file to context
-- `/clear` - Clear conversation
-- `/plan` - Switch to Plan mode and create task plan
-- `/chat` - Switch to Chat mode
-- `/agent` - Switch to Agent mode
-- More commands available by typing `/` in input box
+**Slash Commands**: `/file`, `/clear`, `/plan`, `/chat`, `/agent` and other quick commands
 
-**@ Context References:**
-- `@filename` - Add file to context
-- `@codebase` - Enable semantic search
-- `@git` - Reference Git changes
-- `@terminal` - Reference terminal output
-- `@symbols` - Reference current file symbols
-- `@web` - Enable web search
+**Code Modification**: Switch to Agent Mode, enter instruction, AI generates Diff preview then accept or reject
 
-**Let AI Modify Code:**
-1. Switch to **Agent Mode**
-2. Enter instruction (e.g., "Refactor this function, add error handling")
-3. AI generates Diff preview
-4. Click "Accept" to apply changes, or "Reject" to decline
-
-**Inline Edit:**
-1. Select code
-2. Press `Ctrl+K`
-3. Enter modification instruction
-4. Preview and apply
-
-**AI Custom Instructions:**
-In Settings → Agent, you can add custom instructions that AI will follow in every conversation.
+**Inline Edit**: Select code and press `Ctrl+K`, enter modification instruction
 
 ### Codebase Indexing
 
-Enable semantic search functionality:
-
-1. Open Settings → **Index** tab
-2. Select Embedding provider (Jina, Voyage, OpenAI, etc.)
-3. Configure API Key
-4. Click "Start Indexing" to begin
-
-After indexing completes, AI can use `codebase_search` tool for semantic search.
-
-Supported Embedding providers:
-- Jina AI (recommended, free tier available)
-- Voyage AI
-- OpenAI
-- Custom API (support any compatible API)
+Open Settings → Index tab, select Embedding provider (recommend Jina AI), configure API Key and start indexing. After completion, AI can use semantic search.
 
 ### Using Plan Mode
 
-Plan Mode is suitable for complex project-level development tasks:
-
-1. Switch to **Plan Mode** (click mode toggle button or type `/plan`)
-2. Describe your task goal
-3. AI will auto-create step-by-step plan
-4. AI executes plan step-by-step, auto-updates progress
-5. View plan status and progress anytime
-
-Plan Mode exclusive features:
-- Auto task decomposition
-- Progress tracking
-- Step status management
-- Plan visualization preview
-
-### Using Git
-
-1. Click **Source Control** icon in sidebar
-2. View file change list
-3. Click `+` to stage files
-4. Enter commit message
-5. Press `Ctrl+Enter` to commit
+Switch to Plan Mode, describe task goal, AI auto-creates step-by-step plan and executes progressively, supports progress tracking and visualization preview.
 
 ---
 
 ## ⌨️ Keyboard Shortcuts
 
-### General
+| Category | Shortcut | Function |
+|:---|:---|:---|
+| **General** | `Ctrl + P` | Quick open file |
+| | `Ctrl + Shift + P` | Command palette |
+| | `Ctrl + ,` | Open settings |
+| | `Ctrl + B` | Toggle sidebar |
+| **Editor** | `Ctrl + S` | Save file |
+| | `Ctrl + K` | Inline AI edit |
+| | `F12` | Go to definition |
+| | `Shift + F12` | Find references |
+| **Search** | `Ctrl + F` | In-file search |
+| | `Ctrl + Shift + F` | Global search |
+| **AI Chat** | `Enter` | Send message |
+| | `@` | Reference context |
+| | `/` | Slash commands |
 
-| Shortcut | Function |
-|:---|:---|
-| `Ctrl + P` | Quick open file |
-| `Ctrl + Shift + P` | Command palette |
-| `Ctrl + ,` | Open settings |
-| `Ctrl + \`` | Toggle terminal |
-| `Ctrl + B` | Toggle sidebar |
-| `Ctrl + J` | Toggle bottom panel |
-| `Ctrl + Shift + ?` | Keyboard shortcuts help |
-| `F12` | Developer tools |
-
-### Editor
-
-| Shortcut | Function |
-|:---|:---|
-| `Ctrl + S` | Save file |
-| `Ctrl + W` | Close current tab |
-| `Ctrl + Z` | Undo |
-| `Ctrl + Shift + Z` | Redo |
-| `Ctrl + D` | Select next match |
-| `Ctrl + /` | Toggle comment |
-| `Ctrl + Shift + K` | Delete line |
-| `Ctrl + K` | Inline AI edit |
-| `F12` | Go to definition |
-| `Shift + F12` | Find references |
-| `Ctrl + Space` | Trigger completion |
-
-### Search
-
-| Shortcut | Function |
-|:---|:---|
-| `Ctrl + F` | In-file search |
-| `Ctrl + H` | In-file replace |
-| `Ctrl + Shift + F` | Global search |
-
-### Terminal
-
-| Shortcut | Function |
-|:---|:---|
-| `Ctrl + C` | Copy selection / Interrupt command |
-| `Ctrl + V` | Paste |
-| `Ctrl + Shift + C` | Copy (backup) |
-| `Ctrl + Shift + V` | Paste (backup) |
-
-### AI Chat
-
-| Shortcut | Function |
-|:---|:---|
-| `Enter` | Send message |
-| `Shift + Enter` | New line |
-| `@` | Reference file/context |
-| `/` | Slash commands |
-| `Escape` | Stop generation |
-
-### Mode Switching
-
-| Mode | Description |
-|:---|:---|
-| Chat 💬 | Pure conversation, no tool calls |
-| Agent 🤖 | Single task, tool calls |
-| Plan 📋 | Project-level development, step-by-step planning |
+**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (tool calls) / Plan 📋 (project-level development)
 
 ---
 
@@ -611,6 +583,19 @@ adnify/
 Issues and Pull Requests are welcome!
 
 If you like this project, please give it a ⭐️ Star!
+
+---
+
+## 💖 Support the Project
+
+If Adnify helps you, feel free to buy the author a coffee ☕️
+
+<div align="center">
+  <img src="images/donate-wechat.png" alt="WeChat Donation QR Code" width="300" />
+  <p><em>Scan to support, thank you for your encouragement!</em></p>
+</div>
+
+Your support is my motivation to keep developing ❤️
 
 ---
 
