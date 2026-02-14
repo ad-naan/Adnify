@@ -1,17 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 
 interface UseFluidTypewriterOptions {
-    /** Base speed (chars per frame) */
+    /** Base speed (chars per frame) - typical frame is ~16ms */
     baseSpeed?: number
-    /** Speed multiplier based on queue length */
+    /** Speed multiplier based on remaining distance */
     accelerationFactor?: number
     /** Whether to enable fluid effect */
     enabled?: boolean
 }
 
 /**
- * A hook that simulates a fluid typewriter effect.
- * It buffers incoming content and releases it at a variable speed.
+ * A refined fluid typewriter hook.
+ * Uses floating point arithmetic for sub-character smoothness and time-delta normalization.
  */
 export const useFluidTypewriter = (
     content: string,
@@ -19,69 +19,103 @@ export const useFluidTypewriter = (
     options: UseFluidTypewriterOptions = {}
 ) => {
     const {
-        baseSpeed = 1,
-        accelerationFactor = 50,
+        baseSpeed = 0.5, // slightly slower base speed for smoother feel
+        accelerationFactor = 0.1, // Adjusted for the new algorithm
         enabled = true
     } = options
 
-    // If disabled, just return content directly
-    if (!enabled) return content
+    // If disabled, short-circuit
+    if (!enabled) {
+        return {
+            displayedContent: content,
+            isTyping: false
+        }
+    }
 
-    const [displayedContent, setDisplayedContent] = useState(isStreaming ? '' : content)
-    const queue = useRef<string[]>([])
-    const lastContentLength = useRef(isStreaming ? 0 : content.length)
-    const animationRef = useRef<number>()
+    // State
+    const [displayedLength, setDisplayedLength] = useState(() => {
+        // If not streaming, or content is empty, show full/empty immediately
+        if (!isStreaming) return content.length
+        // If content is very short (just starting), show immediately to avoid lag
+        if (content.length < 5) return content.length
+        return 0
+    })
+
+
     const lastFrameTime = useRef<number>(0)
+    const animationFrameId = useRef<number>()
+    const isStreamingRef = useRef(isStreaming)
 
-    // Reset when not streaming or content changes significantly (e.g. new message)
+    // Update ref for use in animation loop
+    useEffect(() => {
+        isStreamingRef.current = isStreaming
+    }, [isStreaming])
+
+    // If streaming stops, ensure we snap to end eventually, or immediately?
+    // User wants "silky", so let's let it finish typing even if stream stops, 
+    // unless the jump is huge.
     useEffect(() => {
         if (!isStreaming) {
-            setDisplayedContent(content)
-            queue.current = []
-            lastContentLength.current = content.length
-            return
+            // If we were typing and stream stopped, we might want to fast-forward
+            // but for now, let's just snap to ensure consistency like original logic
+            // providing a "settled" state.
+            setDisplayedLength(content.length)
         }
-    }, [isStreaming, content])
-
-    // Push new content to queue
-    useEffect(() => {
-        if (!isStreaming) return
-
-        const currentLength = content.length
-        if (currentLength > lastContentLength.current) {
-            const newText = content.slice(lastContentLength.current)
-            queue.current.push(...newText.split(''))
-            lastContentLength.current = currentLength
-        }
-    }, [content, isStreaming])
+    }, [isStreaming, content.length])
 
     // Animation Loop
     useEffect(() => {
-        if (!isStreaming) return
+        // Only animate if we are behind
+        if (displayedLength >= content.length) {
+            return
+        }
 
         const animate = (time: number) => {
             if (!lastFrameTime.current) lastFrameTime.current = time
-
-            // Consume queue
-            if (queue.current.length > 0) {
-                // Variable speed: baseSpeed + queue/accelerationFactor chars per frame
-                // Example: if queue has 100 chars, speed = 1 + 2 = 3 chars/frame
-                const speed = baseSpeed + Math.floor(queue.current.length / accelerationFactor)
-                const charsToTake = Math.min(queue.current.length, speed)
-
-                const nextChars = queue.current.splice(0, charsToTake).join('')
-                setDisplayedContent(prev => prev + nextChars)
-            }
-
+            const delta = time - lastFrameTime.current
             lastFrameTime.current = time
-            animationRef.current = requestAnimationFrame(animate)
+
+            // Calculate dynamic speed
+            // If we are far behind, speed up significantly
+            const remaining = content.length - displayedLength
+
+            // Speed = Base + (Remaining * Factor)
+            // Using time-based delta (assuming ~60fps, delta ~16.6ms)
+            // Normalize speed to "chars per 16ms frame"
+            const currentSpeed = baseSpeed + (remaining * accelerationFactor)
+
+            // Increment length based on time delta to be framerate independent
+            // (delta / 16.6) is the ratio of a "standard frame"
+            const increment = currentSpeed * (delta / 16.6)
+
+            setDisplayedLength(prev => {
+                const next = prev + increment
+                if (next >= content.length) {
+                    return content.length
+                }
+                return next
+            })
+
+            if (displayedLength < content.length) {
+                animationFrameId.current = requestAnimationFrame(animate)
+            }
         }
 
-        animationRef.current = requestAnimationFrame(animate)
+        animationFrameId.current = requestAnimationFrame(animate)
         return () => {
-            if (animationRef.current) cancelAnimationFrame(animationRef.current)
+            if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current)
+            lastFrameTime.current = 0
         }
-    }, [isStreaming, baseSpeed, accelerationFactor])
+    }, [content.length, displayedLength, baseSpeed, accelerationFactor])
 
-    return displayedContent
+    // Derive string from length
+    const displayedContent = useMemo(() => {
+        if (displayedLength >= content.length) return content
+        return content.slice(0, Math.floor(displayedLength))
+    }, [content, displayedLength])
+
+    return {
+        displayedContent,
+        isTyping: isStreamingRef.current && displayedLength < content.length
+    }
 }

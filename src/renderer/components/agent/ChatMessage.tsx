@@ -152,13 +152,14 @@ interface ThinkingBlockProps {
   startTime?: number
   isStreaming: boolean
   fontSize: number
+  onTypingComplete?: () => void
 }
 
 // 搜索块组件 - 专门用于显示 Auto-Context 结果
+// ... SearchBlock implementation remains same, skipping specific lines to avoid duplication if possible ...
 const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isStreaming?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true)
   const { language } = useStore()
-
   return (
     <div className="my-3 overflow-hidden rounded-xl border border-accent/10 bg-accent/5">
       <button
@@ -207,7 +208,7 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
 })
 SearchBlock.displayName = 'SearchBlock'
 
-const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
+const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, onTypingComplete }: ThinkingBlockProps) => {
   const [isExpanded, setIsExpanded] = useState(isStreaming)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
@@ -215,10 +216,17 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
   const [shadowClass, setShadowClass] = useState('')
 
   // Fluid effect for thinking content
-  const fluidContent = useFluidTypewriter(content, isStreaming, {
-    baseSpeed: 2,
-    accelerationFactor: 30
+  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(content, isStreaming, {
+    baseSpeed: 1,
+    accelerationFactor: 0.1
   })
+
+  // Notify parent when typing completes
+  useEffect(() => {
+    if (!isTyping && onTypingComplete) {
+      onTypingComplete()
+    }
+  }, [isTyping, onTypingComplete])
 
   useEffect(() => {
     setIsExpanded(isStreaming)
@@ -300,15 +308,22 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
 })
 ThinkingBlock.displayName = 'ThinkingBlock'
 
-// Fluid Rendering Hook Removed (Extracted to hooks/useFluidTypewriter.ts)
-
 // Markdown 渲染组件
-const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
+const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
   const cleanedContent = React.useMemo(() => {
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
 
-  const fluidContent = useFluidTypewriter(cleanedContent, !!isStreaming)
+  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(cleanedContent, !!isStreaming)
+
+  // Notify parent when typing finishes
+  useEffect(() => {
+    if (!isTyping && onTypingComplete) {
+      // 这里的 defer 是因为 React 状态更新可能是同步的，稍微延后以确保渲染稳定
+      const timer = setTimeout(onTypingComplete, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [isTyping, onTypingComplete])
 
   // Add cursor to the last text node if streaming
   // Note: This is a simplified approach. Ideally we'd inject it into the AST.
@@ -355,11 +370,17 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming }: { conten
     thead: ({ children }: any) => <thead className="bg-surface/50">{children}</thead>,
     tbody: ({ children }: any) => <tbody>{children}</tbody>,
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
-    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-left font-semibold text-text-primary">{children}</th>,
+    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
     td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
   }), [fontSize])
 
-  if (!cleanedContent) return null
+  if (!cleanedContent) {
+    // If content is empty but we're here, signaling complete immediately to avoid blocking
+    if (!isTyping && onTypingComplete) {
+      setTimeout(onTypingComplete, 0)
+    }
+    return null
+  }
 
   return (
     <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}>
@@ -386,10 +407,19 @@ const RenderPart = React.memo(({
   fontSize,
   isStreaming,
   messageId,
-}: RenderPartProps) => {
+  onTypingComplete,
+}: RenderPartProps & { onTypingComplete?: () => void }) => {
   if (isTextPart(part)) {
     if (!part.content.trim()) return null
-    return <MarkdownContent key={`text-${index}`} content={part.content} fontSize={fontSize} isStreaming={isStreaming} />
+    return (
+      <MarkdownContent
+        key={`text-${index}`}
+        content={part.content}
+        fontSize={fontSize}
+        isStreaming={isStreaming}
+        onTypingComplete={onTypingComplete}
+      />
+    )
   }
 
   if (isReasoningPart(part)) {
@@ -402,11 +432,18 @@ const RenderPart = React.memo(({
         startTime={reasoningPart.startTime}
         isStreaming={!!reasoningPart.isStreaming}
         fontSize={fontSize}
+        onTypingComplete={onTypingComplete}
       />
     )
   }
 
+  // Search results are static for now, finish immediately
   if (isSearchPart(part)) {
+    // Call complete immediately on mount
+    React.useEffect(() => {
+      onTypingComplete?.()
+    }, [])
+
     return (
       <SearchBlock
         key={`search-${index}`}
@@ -416,14 +453,22 @@ const RenderPart = React.memo(({
     )
   }
 
+  // Tool calls handled by RenderPart (single)
   if (isToolCallPart(part)) {
+    // Call complete immediately on mount for tools, 
+    // but maybe with a slight delay for better visual rhythm
+    React.useEffect(() => {
+      const timer = setTimeout(() => onTypingComplete?.(), 100)
+      return () => clearTimeout(timer)
+    }, [])
+
     const tc = part.toolCall
     const isPending = tc.id === pendingToolId
 
     // 需要 Diff 预览的工具使用 FileChangeCard
     if (needsDiffPreview(tc.name)) {
       return (
-        <div className="my-3">
+        <div className="my-3 animate-fade-in">
           <FileChangeCard
             key={`tool-${tc.id}-${index}`}
             toolCall={tc}
@@ -437,7 +482,7 @@ const RenderPart = React.memo(({
       )
     }
 
-    // AI 记忆提议使用极简内联渲染
+    // AI 记忆提议
     if (tc.name === 'remember') {
       return (
         <MemoryApprovalInline
@@ -454,7 +499,7 @@ const RenderPart = React.memo(({
 
     // 其他工具使用 ToolCallCard
     return (
-      <div className="my-3">
+      <div className="my-3 animate-fade-in">
         <ToolCallCard
           key={`tool-${tc.id}-${index}`}
           toolCall={tc}
@@ -470,6 +515,21 @@ const RenderPart = React.memo(({
 })
 
 RenderPart.displayName = 'RenderPart'
+
+// Helper for Sequential Group Rendering
+const SequentialToolGroup = ({
+  children,
+  onComplete
+}: {
+  children: React.ReactNode,
+  onComplete?: () => void
+}) => {
+  useEffect(() => {
+    const timer = setTimeout(() => onComplete?.(), 100)
+    return () => clearTimeout(timer)
+  }, [])
+  return <>{children}</>
+}
 
 // 助手消息内容组件 - 将分组逻辑提取出来并 memoize
 const AssistantMessageContent = React.memo(({
@@ -521,9 +581,37 @@ const AssistantMessageContent = React.memo(({
     return result
   }, [parts])
 
+  // Sequential Reveal State
+  const [visibleIndex, setVisibleIndex] = useState(() => {
+    // If streaming, start from 0. If history, show all.
+    // Note: isStreaming prop is for the message status. 
+    return isStreaming ? 0 : 9999
+  })
+
+  // Watch for streaming restart
+  useEffect(() => {
+    if (isStreaming) {
+      // Reset if starting fresh? 
+      // Actually, relying on initial state is safer to avoid flashing content on re-renders.
+      // If we need to support "regenerate" clearing this, key change handles it.
+    } else {
+      // If streaming finishes, show everything immediately
+      setVisibleIndex(9999)
+    }
+  }, [isStreaming])
+
+  const handleGroupComplete = useCallback((index: number) => {
+    setVisibleIndex(prev => Math.max(prev, index + 1))
+  }, [])
+
   return (
     <>
-      {groups.map((group) => {
+      {groups.map((group, groupIdx) => {
+        // Simple visibility check
+        if (groupIdx > visibleIndex) return null
+
+        const isLastVisible = groupIdx === visibleIndex
+
         if (group.type === 'part') {
           return (
             <RenderPart
@@ -537,26 +625,11 @@ const AssistantMessageContent = React.memo(({
               fontSize={fontSize}
               isStreaming={isStreaming}
               messageId={messageId}
+              onTypingComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}
             />
           )
         } else {
-          if (group.toolCalls.length === 1) {
-            return (
-              <RenderPart
-                key={`part-${group.startIndex}`}
-                part={parts[group.startIndex]}
-                index={group.startIndex}
-                pendingToolId={pendingToolId}
-                onApproveTool={onApproveTool}
-                onRejectTool={onRejectTool}
-                onOpenDiff={onOpenDiff}
-                fontSize={fontSize}
-                isStreaming={isStreaming}
-                messageId={messageId}
-              />
-            )
-          }
-          return (
+          const content = (
             <ToolCallGroup
               key={`group-${group.startIndex}`}
               toolCalls={group.toolCalls}
@@ -566,6 +639,37 @@ const AssistantMessageContent = React.memo(({
               onOpenDiff={onOpenDiff}
               messageId={messageId}
             />
+          )
+
+          if (group.toolCalls.length === 1) {
+            // For single tool call, RenderPart handles it (via recursive AssistantMessageContent logic? No, wait)
+            // The grouping logic puts single tool call in 'tool_group' if it was bunched?
+            // Ah, previous logic: "if (group.toolCalls.length === 1) return RenderPart..."
+            // Let's stick to that but wrapped for timing.
+            return (
+              <SequentialToolGroup key={`seq-${group.startIndex}`} onComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}>
+                <RenderPart
+                  key={`part-${group.startIndex}`}
+                  part={parts[group.startIndex]}
+                  index={group.startIndex}
+                  pendingToolId={pendingToolId}
+                  onApproveTool={onApproveTool}
+                  onRejectTool={onRejectTool}
+                  onOpenDiff={onOpenDiff}
+                  fontSize={fontSize}
+                  isStreaming={isStreaming}
+                  messageId={messageId}
+                  // Note: RenderPart for tool call handles onTypingComplete internally via useEffect!
+                  onTypingComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}
+                />
+              </SequentialToolGroup>
+            )
+          }
+
+          return (
+            <SequentialToolGroup key={`seq-${group.startIndex}`} onComplete={isLastVisible ? () => handleGroupComplete(groupIdx) : undefined}>
+              {content}
+            </SequentialToolGroup>
           )
         }
       })}

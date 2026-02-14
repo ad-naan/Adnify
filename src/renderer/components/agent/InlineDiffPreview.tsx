@@ -12,7 +12,8 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { oneDark, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { useStore } from '@store'
 import * as Diff from 'diff'
 import { CodeSkeleton } from '../ui/Loading'
 import { logger } from '@shared/utils/Logger'
@@ -61,7 +62,7 @@ function getLanguageFromPath(path: string): string {
  */
 function createStreamingDiff(newContent: string, maxLines = 100): DiffLine[] {
     if (!newContent) return []
-    
+
     const lines = newContent.split('\n').slice(0, maxLines)
     return lines.map((content, idx) => ({
         type: 'add' as const,
@@ -76,7 +77,7 @@ function createStreamingDiff(newContent: string, maxLines = 100): DiffLine[] {
 function computeFullDiff(oldContent: string, newContent: string): DiffLine[] {
     const changes = Diff.diffLines(oldContent, newContent)
     const result: DiffLine[] = []
-    
+
     let oldLineNum = 1
     let newLineNum = 1
 
@@ -115,15 +116,15 @@ function computeFullDiff(oldContent: string, newContent: string): DiffLine[] {
 
 // 异步计算 diff（支持流式模式优化）
 function useAsyncDiff(
-    oldContent: string, 
-    newContent: string, 
+    oldContent: string,
+    newContent: string,
     isStreaming: boolean,
     enabled: boolean
 ) {
     const [diffLines, setDiffLines] = useState<DiffLine[] | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    
+
     // 节流控制
     const lastUpdateRef = useRef<number>(0)
     const pendingUpdateRef = useRef<NodeJS.Timeout | null>(null)
@@ -166,7 +167,7 @@ function useAsyncDiff(
             } else {
                 // 节流：延迟更新
                 pendingUpdateRef.current = setTimeout(
-                    doStreamingUpdate, 
+                    doStreamingUpdate,
                     STREAMING_THROTTLE_MS - timeSinceLastUpdate
                 )
             }
@@ -212,26 +213,37 @@ function useAsyncDiff(
     return { diffLines, isLoading, error }
 }
 
-// 自定义 SyntaxHighlighter 样式
-const customStyle = {
-    ...oneDark,
-    'pre[class*="language-"]': {
-        ...oneDark['pre[class*="language-"]'],
-        margin: 0,
-        padding: 0,
-        background: 'transparent',
-        fontSize: '11px',
-        lineHeight: '1.4',
-    },
-    'code[class*="language-"]': {
-        ...oneDark['code[class*="language-"]'],
-        background: 'transparent',
-        fontSize: '11px',
-    },
+// 自定义 SyntaxHighlighter 样式生成函数
+const getCustomStyle = (isLight: boolean) => {
+    const baseStyle = isLight ? vs : oneDark
+    return {
+        ...baseStyle,
+        'pre[class*="language-"]': {
+            ...baseStyle['pre[class*="language-"]'],
+            margin: 0,
+            padding: 0,
+            background: 'transparent',
+            backgroundColor: 'transparent', // 强制覆盖背景色
+            border: 'none',
+            boxShadow: 'none',
+            fontSize: '11px',
+            lineHeight: '1.4',
+            textShadow: 'none',
+        },
+        'code[class*="language-"]': {
+            ...baseStyle['code[class*="language-"]'],
+            background: 'transparent',
+            backgroundColor: 'transparent', // 强制覆盖背景色
+            border: 'none',
+            boxShadow: 'none',
+            fontSize: '11px',
+            textShadow: 'none',
+        },
+    }
 }
 
 // 提取单个行组件并使用 React.memo 优化性能
-const DiffLineItem = React.memo(({ line, language }: { line: DiffLine, language: string }) => {
+const DiffLineItem = React.memo(({ line, language, style }: { line: DiffLine, language: string, style: any }) => {
     const bgClass = line.type === 'add'
         ? 'bg-green-500/15 border-l-2 border-green-500/50'
         : line.type === 'remove'
@@ -239,16 +251,16 @@ const DiffLineItem = React.memo(({ line, language }: { line: DiffLine, language:
             : 'border-l-2 border-transparent'
 
     const symbolClass = line.type === 'add'
-        ? 'text-green-400'
+        ? 'text-green-500 dark:text-green-400'
         : line.type === 'remove'
-            ? 'text-red-400'
+            ? 'text-red-500 dark:text-red-400'
             : 'text-text-muted/30'
 
     const symbol = line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '
     const lineNum = line.type === 'remove' ? line.oldLineNumber : line.newLineNumber
 
     return (
-        <div className={`flex ${bgClass} hover:brightness-110 transition-all`}>
+        <div className={`flex ${bgClass} hover:brightness-95 dark:hover:brightness-110 transition-all`}>
             {/* 行号 */}
             <span className="w-8 shrink-0 text-right pr-2 text-text-muted/40 select-none text-[10px]">
                 {lineNum || ''}
@@ -262,17 +274,19 @@ const DiffLineItem = React.memo(({ line, language }: { line: DiffLine, language:
             {/* 代码内容 - 如果行超长，截断它以保护渲染性能 */}
             <div className="flex-1 overflow-hidden">
                 {line.content.length > 500 ? (
-                     <div className="whitespace-pre text-text-muted truncate">
+                    <div className="whitespace-pre text-text-muted truncate">
                         {line.content.slice(0, 500)}... (line too long)
-                     </div>
+                    </div>
                 ) : (
                     <SyntaxHighlighter
                         language={language}
-                        style={customStyle}
+                        style={style}
                         customStyle={{
                             margin: 0,
                             padding: 0,
                             background: 'transparent',
+                            border: 'none',
+                            boxShadow: 'none',
                             whiteSpace: 'pre',
                             overflow: 'visible',
                         }}
@@ -301,11 +315,16 @@ export default function InlineDiffPreview({
     maxLines = 100,
 }: InlineDiffPreviewProps) {
     const language = useMemo(() => getLanguageFromPath(filePath), [filePath])
-    
+    const { currentTheme } = useStore() // 获取当前主题
+    const isLight = currentTheme === 'dawn'
+
+    // 生成主题相关的代码样式
+    const codeStyle = useMemo(() => getCustomStyle(isLight), [isLight])
+
     // 使用优化后的异步 diff hook
     const { diffLines, isLoading, error } = useAsyncDiff(
-        oldContent, 
-        newContent, 
+        oldContent,
+        newContent,
         isStreaming,
         true
     )
@@ -337,7 +356,7 @@ export default function InlineDiffPreview({
         }
 
         // 4. 常规 Diff：计算上下文
-        const contextSize = 3 
+        const contextSize = 3
         const changedIndices = new Set<number>()
 
         diffLines.forEach((line, idx) => {
@@ -358,7 +377,7 @@ export default function InlineDiffPreview({
             }
             result.push(diffLines[idx])
             lastIdx = idx
-            
+
             if (result.length >= maxLines) {
                 result.push({ type: 'ellipsis', count: diffLines.length - idx - 1 })
                 return result
@@ -402,11 +421,11 @@ export default function InlineDiffPreview({
                     <span>Streaming changes...</span>
                 </div>
             )}
-            
+
             {displayLines.map((line, idx) => {
                 if ('count' in line && line.type === 'ellipsis') {
                     return (
-                        <div key={`ellipsis-${idx}`} className="text-text-muted/40 text-center py-1 text-[10px] bg-white/5">
+                        <div key={`ellipsis-${idx}`} className="text-text-muted/40 text-center py-1 text-[10px] bg-surface-active/30">
                             ··· {line.count} {isStreaming ? 'more' : 'unchanged'} lines ···
                         </div>
                     )
@@ -417,6 +436,7 @@ export default function InlineDiffPreview({
                         key={`${(line as DiffLine).type}-${idx}-${(line as DiffLine).oldLineNumber || (line as DiffLine).newLineNumber}`}
                         line={line as DiffLine}
                         language={language}
+                        style={codeStyle}
                     />
                 )
             })}
@@ -432,20 +452,20 @@ export function getDiffStats(oldContent: string, newContent: string): { added: n
 
     try {
         const changes = Diff.diffLines(oldContent, newContent)
-        
+
         let added = 0
         let removed = 0
-        
+
         for (const change of changes) {
             const lineCount = change.value.split('\n').filter(l => l !== '' || change.value === '\n').length
-            
+
             if (change.added) {
                 added += lineCount
             } else if (change.removed) {
                 removed += lineCount
             }
         }
-    
+
         return { added, removed }
     } catch {
         return { added: 0, removed: 0 }
