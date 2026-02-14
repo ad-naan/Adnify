@@ -692,10 +692,18 @@ export default function ChatPanel() {
       const userMsg = messages[userMsgIndex]
       if (!isUserMessage(userMsg)) return
 
-      deleteMessagesAfter(userMsg.id)
+      // 找到用户消息的前一条消息，删除它之后的所有消息（包括用户消息本身）
+      if (userMsgIndex > 0) {
+        const prevMsg = messages[userMsgIndex - 1]
+        deleteMessagesAfter(prevMsg.id)
+      } else {
+        // 如果用户消息是第一条，清空所有消息
+        clearMessages()
+      }
+      
       await sendMessage(userMsg.content)
     }
-  }, [messages, deleteMessagesAfter, sendMessage, regenerateFromMessage, toast, language])
+  }, [messages, deleteMessagesAfter, clearMessages, sendMessage, regenerateFromMessage, toast, language])
 
   // 添加当前文件
   const handleAddCurrentFile = useCallback(() => {
