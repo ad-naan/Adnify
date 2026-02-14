@@ -452,12 +452,6 @@ export const selectIsCompacting = (state: AgentStore): boolean => {
 }
 
 // ===== StreamingBuffer 初始化 =====
-
-streamingBuffer.setFlushCallback((messageId: string, content: string) => {
-    const store = useAgentStore.getState()
-    store._doAppendToAssistant(messageId, content)
-})
-
 // ===== Store 初始化 =====
 
 export async function initializeAgentStore(): Promise<void> {
