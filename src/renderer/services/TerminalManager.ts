@@ -335,7 +335,7 @@ class TerminalManagerClass {
     terminal.onData((data) => {
       api.terminal.write(id, data);
     });
-
+    // 处理粘贴文本
     const handlePasteText = (text: string) => {
       api.terminal.write(id, text);
     };
@@ -354,16 +354,16 @@ class TerminalManagerClass {
       }
 
       // Only handle keydown events to prevent duplicate execution
-  if (event.type !== 'keydown') return true
+      if (event.type !== "keydown") return true;
 
-  // Ctrl+V for paste
-  if (event.ctrlKey && !event.shiftKey && event.key === 'v') {
-    event.preventDefault()
-    navigator.clipboard.readText().then((text) => {
-      handlePasteText(text)
-    })
-    return false
-  }
+      // Ctrl+V for paste
+      if (event.ctrlKey && !event.shiftKey && event.key === "v") {
+        event.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+          handlePasteText(text);
+        });
+        return false;
+      }
 
       // Ctrl+Shift+C 复制（备用）
       if (
