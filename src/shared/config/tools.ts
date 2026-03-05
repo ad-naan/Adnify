@@ -169,13 +169,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: 'Edit file by replacing text or line ranges. Two modes: 1) String replacement: provide old_string and new_string. 2) Line replacement: provide start_line, end_line, and content. CRITICAL: Must read_file first.',
-        detailedDescription: `Two editing modes:
+        description: 'Edit file by replacing text or line ranges. Three modes: 1) String replacement: old_string + new_string. 2) Line replacement: start_line + end_line + content. 3) Batch mode: edits array for multiple changes. CRITICAL: Must read_file first.',
+        detailedDescription: `Three editing modes:
 - String mode: old_string + new_string (include 3-5 lines context)
-- Line mode: start_line + end_line + content (use line numbers from read_file)`,
+- Line mode: start_line + end_line + content (use line numbers from read_file)
+- Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)`,
         commonErrors: [
             { error: 'old_string not found', solution: 'Read file again, copy exact content' },
             { error: 'Multiple matches', solution: 'Include more context lines' },
+            { error: 'Overlapping edits', solution: 'Ensure edit ranges do not overlap' },
         ],
         category: 'write',
         approvalType: 'none',
@@ -190,18 +192,24 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             end_line: { type: 'number', description: 'End line (line mode, inclusive)' },
             content: { type: 'string', description: 'New content (line mode)' },
             replace_all: { type: 'boolean', description: 'Replace all occurrences (string mode)', default: false },
+            edits: { 
+                type: 'array', 
+                description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.' 
+            },
         },
         validate: (data) => {
             // 验证模式选择
             const hasStringMode = data.old_string || data.new_string
             const hasLineMode = data.start_line || data.end_line || data.content
+            const hasBatchMode = data.edits
 
-            if (hasStringMode && hasLineMode) {
-                return { valid: false, error: 'Cannot mix string mode and line mode parameters' }
+            const modeCount = [hasStringMode, hasLineMode, hasBatchMode].filter(Boolean).length
+            if (modeCount > 1) {
+                return { valid: false, error: 'Cannot mix string mode, line mode, and batch mode parameters' }
             }
 
-            if (!hasStringMode && !hasLineMode) {
-                return { valid: false, error: 'Must provide either (old_string + new_string) or (start_line + end_line + content)' }
+            if (modeCount === 0) {
+                return { valid: false, error: 'Must provide either (old_string + new_string), (start_line + end_line + content), or (edits array)' }
             }
 
             // 验证字符串模式
@@ -211,11 +219,44 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 
             // 验证行模式
             if (hasLineMode) {
-                if (!data.start_line || !data.end_line || !data.content) {
+                if (!data.start_line || !data.end_line || data.content === undefined) {
                     return { valid: false, error: 'Line mode requires start_line, end_line, and content' }
                 }
                 if ((data.start_line as number) > (data.end_line as number)) {
                     return { valid: false, error: 'start_line must be <= end_line' }
+                }
+            }
+
+            // 验证批量模式
+            if (hasBatchMode) {
+                if (!Array.isArray(data.edits) || data.edits.length === 0) {
+                    return { valid: false, error: 'Batch mode requires non-empty edits array' }
+                }
+                
+                for (let i = 0; i < data.edits.length; i++) {
+                    const edit = data.edits[i]
+                    if (!edit.action || !['replace', 'insert', 'delete'].includes(edit.action)) {
+                        return { valid: false, error: `Edit ${i}: action must be "replace", "insert", or "delete"` }
+                    }
+                    
+                    if (edit.action === 'replace' || edit.action === 'delete') {
+                        if (!edit.start_line || !edit.end_line) {
+                            return { valid: false, error: `Edit ${i}: ${edit.action} requires start_line and end_line` }
+                        }
+                        if (edit.start_line > edit.end_line) {
+                            return { valid: false, error: `Edit ${i}: start_line must be <= end_line` }
+                        }
+                    }
+                    
+                    if (edit.action === 'insert') {
+                        if (edit.after_line === undefined) {
+                            return { valid: false, error: `Edit ${i}: insert requires after_line` }
+                        }
+                    }
+                    
+                    if ((edit.action === 'replace' || edit.action === 'insert') && edit.content === undefined) {
+                        return { valid: false, error: `Edit ${i}: ${edit.action} requires content` }
+                    }
                 }
             }
 
