@@ -242,8 +242,176 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
         // 判断使用哪种模式
-        // const hasStringMode = args.old_string || args.new_string
+        const hasBatchMode = args.edits && Array.isArray(args.edits)
         const hasLineMode = args.start_line || args.end_line || args.content
+
+        // 🎯 Fast-Edit 精华：批量编辑模式
+        if (hasBatchMode) {
+            const edits = args.edits as Array<{
+                action: 'replace' | 'insert' | 'delete'
+                start_line?: number
+                end_line?: number
+                after_line?: number
+                content?: string
+            }>
+
+            // 验证缓存
+            if (!fileCacheService.hasValidCache(path)) {
+                logger.agent.warn(`[edit_file] File ${path} not in cache, line numbers may be inaccurate`)
+            }
+
+            let lines = originalContent.split('\n')
+            const originalLineCount = lines.length
+
+            // 🎯 关键优化：从后往前排序，避免行号偏移
+            const sortedEdits = [...edits].sort((a, b) => {
+                const aLine = a.start_line || a.after_line || 0
+                const bLine = b.start_line || b.after_line || 0
+                return bLine - aLine
+            })
+
+            // 🎯 检测重叠编辑
+            const getEditRange = (edit: typeof edits[0]): [number, number] => {
+                if (edit.action === 'replace' || edit.action === 'delete') {
+                    return [edit.start_line!, edit.end_line!]
+                } else if (edit.action === 'insert') {
+                    return [edit.after_line!, edit.after_line!]
+                }
+                return [0, 0]
+            }
+
+            const ranges: Array<[number, number, number, string]> = []
+            sortedEdits.forEach((edit, idx) => {
+                const [start, end] = getEditRange(edit)
+                if (start > 0) {
+                    ranges.push([start, end, idx, edit.action])
+                }
+            })
+
+            ranges.sort((a, b) => a[0] - b[0])
+
+            for (let i = 0; i < ranges.length - 1; i++) {
+                const [s1, e1, , act1] = ranges[i]
+                const [s2, e2, , act2] = ranges[i + 1]
+                
+                if (act1 === 'insert' && act2 === 'insert') continue
+                
+                if (s2 <= e1) {
+                    return {
+                        success: false,
+                        result: '',
+                        error: `Overlapping edits detected: ${act1} [${s1}-${e1}] overlaps with ${act2} [${s2}-${e2}]. Split into separate calls or adjust line ranges.`
+                    }
+                }
+            }
+
+            const allWarnings: any[] = []
+            let linesAdded = 0
+            let linesRemoved = 0
+
+            // 应用所有编辑
+            for (const edit of sortedEdits) {
+                if (edit.action === 'replace') {
+                    const { start_line, end_line, content } = edit
+                    
+                    if (start_line! < 1 || end_line! > lines.length || start_line! > end_line!) {
+                        return {
+                            success: false,
+                            result: '',
+                            error: `Invalid line range: ${start_line}-${end_line}. File has ${lines.length} lines.`
+                        }
+                    }
+
+                    const oldLines = lines.slice(start_line! - 1, end_line)
+                    const newLines = content!.split('\n')
+                    
+                    lines = [
+                        ...lines.slice(0, start_line! - 1),
+                        ...newLines,
+                        ...lines.slice(end_line)
+                    ]
+
+                    linesRemoved += oldLines.length
+                    linesAdded += newLines.length
+
+                    // 检测警告
+                    const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
+                    const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, start_line!, end_line!)
+                    allWarnings.push(...warnings)
+
+                } else if (edit.action === 'insert') {
+                    const { after_line, content } = edit
+                    
+                    if (after_line! < 0 || after_line! > lines.length) {
+                        return {
+                            success: false,
+                            result: '',
+                            error: `Invalid after_line: ${after_line}. File has ${lines.length} lines.`
+                        }
+                    }
+
+                    const newLines = content!.split('\n')
+                    lines = [
+                        ...lines.slice(0, after_line),
+                        ...newLines,
+                        ...lines.slice(after_line)
+                    ]
+
+                    linesAdded += newLines.length
+
+                } else if (edit.action === 'delete') {
+                    const { start_line, end_line } = edit
+                    
+                    if (start_line! < 1 || end_line! > lines.length || start_line! > end_line!) {
+                        return {
+                            success: false,
+                            result: '',
+                            error: `Invalid line range: ${start_line}-${end_line}. File has ${lines.length} lines.`
+                        }
+                    }
+
+                    const removed = end_line! - start_line! + 1
+                    lines = [
+                        ...lines.slice(0, start_line! - 1),
+                        ...lines.slice(end_line)
+                    ]
+
+                    linesRemoved += removed
+                }
+            }
+
+            const newContent = lines.join('\n')
+            const success = await api.file.write(path, newContent)
+            if (!success) return { success: false, result: '', error: 'Failed to write file' }
+
+            fileCacheService.markFileAsRead(path, newContent)
+            await notifyLspAfterWrite(path)
+
+            if (allWarnings.length > 0) {
+                logger.agent.warn(`[edit_file] ${path}: Detected ${allWarnings.length} potential issues in batch`, allWarnings)
+            }
+
+            const result: any = {
+                success: true,
+                result: `File updated successfully (batch mode: ${edits.length} edits applied)`,
+                meta: {
+                    filePath: path,
+                    oldContent: originalContent,
+                    newContent,
+                    linesAdded,
+                    linesRemoved,
+                    totalLines: lines.length,
+                    editsApplied: edits.length
+                }
+            }
+
+            if (allWarnings.length > 0) {
+                result.meta.warnings = allWarnings
+                result.result += ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)`
+            }
+
+            return result
+        }
 
         if (hasLineMode) {
             // 行模式（原 replace_file_content）
@@ -275,8 +443,21 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 }
             }
 
-            lines.splice(startLine - 1, endLine - startLine + 1, ...content.split('\n'))
+            // 提取被替换的行（用于警告检测）
+            const oldLines = lines.slice(startLine - 1, endLine)
+            const newLines = content.split('\n')
+            
+            // 执行替换
+            lines.splice(startLine - 1, endLine - startLine + 1, ...newLines)
             const newContent = lines.join('\n')
+
+            // 🎯 Fast-Edit 精华：智能警告检测
+            const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
+            const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, startLine, endLine)
+            
+            if (warnings.length > 0) {
+                logger.agent.warn(`[edit_file] ${path}: Detected ${warnings.length} potential issues`, warnings)
+            }
 
             const success = await api.file.write(path, newContent)
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
@@ -285,7 +466,26 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             await notifyLspAfterWrite(path)
 
             const lineChanges = calculateLineChanges(originalContent, newContent)
-            return { success: true, result: 'File updated successfully (line mode)', meta: { filePath: path, oldContent: originalContent, newContent, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
+            
+            const result: any = { 
+                success: true, 
+                result: 'File updated successfully (line mode)', 
+                meta: { 
+                    filePath: path, 
+                    oldContent: originalContent, 
+                    newContent, 
+                    linesAdded: lineChanges.added, 
+                    linesRemoved: lineChanges.removed 
+                } 
+            }
+            
+            // 如果有警告，添加到结果中
+            if (warnings.length > 0) {
+                result.meta.warnings = warnings
+                result.result += ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)`
+            }
+            
+            return result
         } else {
             // 字符串模式（原 edit_file）
             const oldString = args.old_string as string
