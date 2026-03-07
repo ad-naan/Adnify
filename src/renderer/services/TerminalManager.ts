@@ -36,6 +36,7 @@ export interface TerminalManagerState {
 interface XTermInstance {
   terminal: XTerminal;
   fitAddon: FitAddon;
+  webglAddon?: WebglAddon;
   container: HTMLDivElement | null;
 }
 
@@ -312,6 +313,16 @@ class TerminalManagerClass {
         existing.terminal.open(container);
         existing.container = container;
         try {
+          // 如果之前被卸载了 WebGL，则重新挂载
+          if (!existing.webglAddon) {
+            const webglAddon = new WebglAddon();
+            existing.terminal.loadAddon(webglAddon);
+            existing.webglAddon = webglAddon;
+            webglAddon.onContextLoss(() => {
+              webglAddon.dispose();
+              existing.webglAddon = undefined;
+            });
+          }
           existing.fitAddon.fit();
         } catch { }
       }
@@ -334,10 +345,17 @@ class TerminalManagerClass {
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(container);
 
+    let webglAddon: WebglAddon | undefined;
     try {
-      const webglAddon = new WebglAddon();
+      webglAddon = new WebglAddon();
       terminal.loadAddon(webglAddon);
-      webglAddon.onContextLoss(() => webglAddon.dispose());
+      webglAddon.onContextLoss(() => {
+        webglAddon?.dispose();
+        webglAddon = undefined;
+        if (this.xtermInstances.has(id)) {
+          this.xtermInstances.get(id)!.webglAddon = undefined;
+        }
+      });
     } catch { }
 
     // 处理终端输入
@@ -409,7 +427,7 @@ class TerminalManagerClass {
       return true; // 其他按键正常处理
     });
 
-    this.xtermInstances.set(id, { terminal, fitAddon, container });
+    this.xtermInstances.set(id, { terminal, fitAddon, webglAddon, container });
 
     try {
       fitAddon.fit();
@@ -421,6 +439,27 @@ class TerminalManagerClass {
     }
 
     return true;
+  }
+
+  /**
+   * 当终端隐藏时，卸载 DOM 和 WebGL 以释放内存，但保持 xterm 实例与状态
+   */
+  unmountTerminal(id: string) {
+    const existing = this.xtermInstances.get(id);
+    if (!existing) return;
+
+    if (existing.webglAddon) {
+      try {
+        existing.webglAddon.dispose();
+      } catch { }
+      existing.webglAddon = undefined;
+    }
+
+    if (existing.container) {
+      // 移除 DOM 挂载点以触发 xterm 的内部清理 (它会保留 buffer)
+      existing.terminal.dispose(); // 注意这是内部 DOM 清理，不会真正销毁内存中的 Terminal 数据结构如果保留引用
+      existing.container = null;
+    }
   }
 
   fitTerminal(id: string) {

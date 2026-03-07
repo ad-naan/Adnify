@@ -20,7 +20,6 @@ function getModelVersionId(filePath: string): number | undefined {
 
 export function useFileSave() {
   const { openFiles, markFileSaved, closeFile, language } = useStore()
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // 保存单个文件
   const saveFile = useCallback(async (filePath: string): Promise<boolean> => {
@@ -105,28 +104,43 @@ export function useFileSave() {
   }, [openFiles, closeFileWithConfirm])
 
   // 触发自动保存
+  // 触发自动保存 (使用 debounce 重构)
+  const debouncedAutoSave = useRef<{ func: (filePath: string) => void, cancel: () => void } | null>(null)
+
   const triggerAutoSave = useCallback((filePath: string) => {
     const config = getEditorConfig()
     if (config.autoSave === 'off') return
 
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current)
-      autoSaveTimerRef.current = null
-    }
-
     if (config.autoSave === 'afterDelay') {
-      autoSaveTimerRef.current = setTimeout(async () => {
-        const file = openFiles.find(f => f.path === filePath)
-        if (file?.isDirty) {
-          const success = await api.file.write(file.path, file.content)
-          if (success) {
-            const versionId = getModelVersionId(file.path)
-            markFileSaved(file.path, versionId)
+      if (!debouncedAutoSave.current) {
+        const doSave = async (fPath: string) => {
+          const { openFiles: currentFiles, markFileSaved: currentMarkSaved } = useStore.getState()
+          const file = currentFiles.find(f => f.path === fPath)
+          if (file?.isDirty) {
+            const success = await api.file.write(file.path, file.content)
+            if (success) {
+              const versionId = getModelVersionId(file.path)
+              currentMarkSaved(file.path, versionId)
+            }
           }
         }
-      }, config.autoSaveDelay)
+
+        // 创建带有取消方法的 debounce
+        let timer: NodeJS.Timeout | null = null
+        debouncedAutoSave.current = {
+          func: (fPath: string) => {
+            if (timer) clearTimeout(timer)
+            timer = setTimeout(() => doSave(fPath), config.autoSaveDelay)
+          },
+          cancel: () => {
+            if (timer) clearTimeout(timer)
+          }
+        }
+      }
+
+      debouncedAutoSave.current.func(filePath)
     }
-  }, [openFiles, markFileSaved])
+  }, [])
 
   // 失去焦点时自动保存
   useEffect(() => {
@@ -152,8 +166,8 @@ export function useFileSave() {
   // 清理定时器
   useEffect(() => {
     return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current)
+      if (debouncedAutoSave.current) {
+        debouncedAutoSave.current.cancel()
       }
     }
   }, [])
