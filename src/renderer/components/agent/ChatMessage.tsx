@@ -36,6 +36,8 @@ import { useStore } from '@store'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
+import { Modal } from '../ui/Modal'
+import { LazyImage } from '../common/LazyImage'
 import { useFluidTypewriter } from '@renderer/hooks/useFluidTypewriter'
 
 interface ChatMessageProps {
@@ -803,6 +805,7 @@ const ChatMessage = React.memo(({
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const { editorConfig, language } = useStore()
   const fontSize = editorConfig.fontSize
 
@@ -910,17 +913,40 @@ const ChatMessage = React.memo(({
                   {/* Images */}
                   {images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 justify-end">
-                      {images.map((img, i) => (
-                        <div key={i} className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 group/img relative cursor-zoom-in">
-                          <img
-                            src={`data:${img.source.media_type};base64,${img.source.data}`}
-                            alt="Upload"
-                            className="h-full w-auto object-cover"
-                          />
-                        </div>
-                      ))}
+                      {images.map((img, i) => {
+                        const imgSrc = `data:${img.source.media_type};base64,${img.source.data}`
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => setPreviewImage(imgSrc)}
+                            className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
+                          >
+                            <LazyImage
+                              src={imgSrc}
+                              alt="Upload"
+                              className="h-full w-auto object-cover"
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
+
+                  <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} size="full" noPadding showCloseButton={false}>
+                    <div
+                      className="w-full h-full flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-zoom-out"
+                      onClick={() => setPreviewImage(null)}
+                    >
+                      {previewImage && (
+                        <img
+                          src={previewImage}
+                          alt="Preview"
+                          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                        />
+                      )}
+                    </div>
+                  </Modal>
+
                   <div className="text-[14px] leading-relaxed">
                     <MarkdownContent content={textContent} fontSize={fontSize} />
                   </div>

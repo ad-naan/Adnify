@@ -122,24 +122,44 @@ const TerminalPanel = memo(function TerminalPanel() {
         terminalManager.setTheme(theme)
     }, [currentTheme])
 
-    // ===== 挂载 xterm 到容器 =====
+    // ===== 挂载/卸载 xterm 到/从 容器 =====
 
     useEffect(() => {
+        // 当整个终端面板不可见时，卸载所有终端
+        if (!terminalVisible) {
+            for (const id of mountedTerminals.current) {
+                terminalManager.unmountTerminal(id)
+                mountedTerminals.current.delete(id)
+            }
+            return
+        }
+
+        // 遍历所有终端实例
         for (const terminal of managerState.terminals) {
             const container = containerRefs.current.get(terminal.id)
-            if (container && !mountedTerminals.current.has(terminal.id)) {
+
+            // 终端是否在当前 UI 状态下应该可见：
+            // 1. 如果是 Split 视图，所有存在的容器都可见
+            // 2. 如果是 Tabs 视图，只有当前 activeId 可见
+            const shouldBeVisible = isSplitView || terminal.id === managerState.activeId
+
+            if (container && shouldBeVisible && !mountedTerminals.current.has(terminal.id)) {
                 terminalManager.mountTerminal(terminal.id, container)
                 mountedTerminals.current.add(terminal.id)
+            } else if (!shouldBeVisible && mountedTerminals.current.has(terminal.id)) {
+                // 如果当前为 Tabs 视图且该终端不 active，进行卸载回收
+                terminalManager.unmountTerminal(terminal.id)
+                mountedTerminals.current.delete(terminal.id)
             }
         }
 
-        // 清理已删除的终端
+        // 清理已被关闭/删除的终端引用
         for (const id of mountedTerminals.current) {
             if (!managerState.terminals.find(t => t.id === id)) {
                 mountedTerminals.current.delete(id)
             }
         }
-    }, [managerState.terminals])
+    }, [managerState.terminals, managerState.activeId, terminalVisible, isSplitView])
 
     // ===== 初始化 =====
 
