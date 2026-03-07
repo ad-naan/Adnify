@@ -624,14 +624,15 @@ If Adnify helps you, feel free to buy the author a coffee ☕️
 
 Your support is my motivation to keep developing ❤️
 
-### ☕️ Supporters Wall
+### 🏆 Hall of Fame: Supporters Wall
 
-Thank you to the following supporters for the coffee/milk tea. Your support is vital to Adnify!
+> "Behind every line of code in Adnify, there's a spark of energy from our community!" ⚡️
 
-| Supporter | Method | Date | Message |
-| :--- | :--- | :--- | :--- |
-| Example Supporter | ☕️ Coffee | 2026-03-07 | Hope the project gets better and better! |
-| (To be added) | | | |
+A huge thank you to our generous supporters. Your coffee, milk tea, and energy drinks are what keep Adnify evolving!
+
+| Supporter | Method | Honorary Title | Date | Message |
+| :--- | :--- | :--- | :--- | :--- |
+| okay. | 🧋 Milk Tea | **Joy Source Injector** | 2026-03-07 | A cup of joy for bug-free code! ✨ |
 
 ---
 
