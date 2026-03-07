@@ -75,6 +75,7 @@ class TerminalManagerClass {
 
   // 监听器
   private stateListeners = new Set<StateListener>();
+  private dataListeners = new Set<(id: string, data: string) => void>();
 
   // 主题配置
   private currentTheme: Record<string, string> = {};
@@ -96,6 +97,9 @@ class TerminalManagerClass {
 
         // 缓存输出
         this.appendToBuffer(id, data);
+
+        // 触发数据事件
+        this.dataListeners.forEach(listener => listener(id, data));
       },
     );
 
@@ -191,6 +195,11 @@ class TerminalManagerClass {
     this.stateListeners.add(listener);
     listener(this.getState());
     return () => this.stateListeners.delete(listener);
+  }
+
+  onData(listener: (id: string, data: string) => void): () => void {
+    this.dataListeners.add(listener);
+    return () => this.dataListeners.delete(listener);
   }
 
   private notify() {
@@ -304,7 +313,7 @@ class TerminalManagerClass {
         existing.container = container;
         try {
           existing.fitAddon.fit();
-        } catch {}
+        } catch { }
       }
       return true;
     }
@@ -329,7 +338,7 @@ class TerminalManagerClass {
       const webglAddon = new WebglAddon();
       terminal.loadAddon(webglAddon);
       webglAddon.onContextLoss(() => webglAddon.dispose());
-    } catch {}
+    } catch { }
 
     // 处理终端输入
     terminal.onData((data) => {
@@ -393,7 +402,7 @@ class TerminalManagerClass {
               api.terminal.write(id, text);
             }
           })
-          .catch(() => {});
+          .catch(() => { });
         return false;
       }
 
@@ -404,7 +413,7 @@ class TerminalManagerClass {
 
     try {
       fitAddon.fit();
-    } catch {}
+    } catch { }
 
     const dims = fitAddon.proposeDimensions();
     if (dims && dims.cols > 0 && dims.rows > 0) {
@@ -424,7 +433,7 @@ class TerminalManagerClass {
       if (dims && dims.cols > 0 && dims.rows > 0) {
         api.terminal.resize(id, dims.cols, dims.rows);
       }
-    } catch {}
+    } catch { }
   }
 
   closeTerminal(id: string) {
