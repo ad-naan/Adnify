@@ -9,7 +9,7 @@ import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
-import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, EyeOff } from 'lucide-react'
+import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, EyeOff, RefreshCw } from 'lucide-react'
 
 export function AgentSettings({
     autoApprove, setAutoApprove, aiInstructions, setAiInstructions,
@@ -358,71 +358,85 @@ export function AgentSettings({
                                 </div>
 
                                 {/* 上下文压缩 */}
-                                <div className="space-y-2">
-                                    <label className="text-xs font-medium text-text-secondary">{t('上下文压缩', 'Context Compression')}</label>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('保留最近轮次', 'Keep Recent Turns')}</label>
+                                <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                                        <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{t('上下文压缩', 'Context Compression')}</label>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('保留最近轮次', 'Keep Recent Turns')}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.keepRecentTurns ?? 5}
                                                 onChange={(e) => setAgentConfig({ ...agentConfig, keepRecentTurns: parseInt(e.target.value) || 5 })}
                                                 min={2}
                                                 max={20}
-                                                className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                                className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('深度压缩轮次', 'Deep Compression Turns')}</label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('深度压缩轮次', 'Deep Compression')}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.deepCompressionTurns ?? 2}
                                                 onChange={(e) => setAgentConfig({ ...agentConfig, deepCompressionTurns: parseInt(e.target.value) || 2 })}
                                                 min={1}
                                                 max={5}
-                                                className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                                className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('重要旧轮次', 'Important Old Turns')}</label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('重要旧轮次', 'Important Old')}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.maxImportantOldTurns ?? 3}
                                                 onChange={(e) => setAgentConfig({ ...agentConfig, maxImportantOldTurns: parseInt(e.target.value) || 3 })}
                                                 min={0}
                                                 max={10}
-                                                className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                                className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
                                         </div>
                                     </div>
-                                    <div className="flex gap-4 mt-2">
-                                        <Switch
-                                            label={t('启用 LLM 摘要', 'Enable LLM Summary')}
-                                            checked={agentConfig.enableLLMSummary ?? true}
-                                            onChange={(e) => setAgentConfig({ ...agentConfig, enableLLMSummary: e.target.checked })}
-                                        />
-                                        <Switch
-                                            label={t('自动会话交接', 'Auto Handoff')}
-                                            checked={agentConfig.autoHandoff ?? true}
-                                            onChange={(e) => setAgentConfig({ ...agentConfig, autoHandoff: e.target.checked })}
-                                        />
-                                        <Switch
-                                            label={t('自动上下文 (隐式检索)', 'Auto-Context (Implicit RAG)')}
-                                            checked={agentConfig.enableAutoContext ?? true}
-                                            onChange={(e) => setAgentConfig({ ...agentConfig, enableAutoContext: e.target.checked })}
-                                        />
+
+                                    <div className="flex flex-col gap-3 pt-2 border-t border-border/30">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <Switch
+                                                label={t('启用 LLM 摘要', 'Enable LLM Summary')}
+                                                checked={agentConfig.enableLLMSummary ?? true}
+                                                onChange={(e) => setAgentConfig({ ...agentConfig, enableLLMSummary: e.target.checked })}
+                                                className="text-[11px]"
+                                            />
+                                            <Switch
+                                                label={t('自动会话交接', 'Auto Handoff')}
+                                                checked={agentConfig.autoHandoff ?? true}
+                                                onChange={(e) => setAgentConfig({ ...agentConfig, autoHandoff: e.target.checked })}
+                                                className="text-[11px]"
+                                            />
+                                            <Switch
+                                                label={t('智能上下文 (隐式检索)', 'Auto-Context (RAG)')}
+                                                checked={agentConfig.enableAutoContext ?? true}
+                                                onChange={(e) => setAgentConfig({ ...agentConfig, enableAutoContext: e.target.checked })}
+                                                className="text-[11px]"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* 循环检测 */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-xs font-medium text-text-secondary">{t('循环检测', 'Loop Detection')}</label>
-                                        <span className="text-[10px] text-text-muted">{t('仅警告，不中断', 'Warning only, no interruption')}</span>
+                                <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-4">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                                            <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{t('循环检测', 'Loop Detection')}</label>
+                                        </div>
+                                        <span className="text-[9px] text-text-muted bg-surface/50 px-2 py-0.5 rounded-full border border-border/30">{t('仅警告，不中断', 'Warning only')}</span>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('历史记录', 'History')}</label>
+
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('历史记录', 'History')}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.loopDetection?.maxHistory ?? 50}
@@ -435,11 +449,11 @@ export function AgentSettings({
                                                 })}
                                                 min={10}
                                                 max={100}
-                                                className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                                className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('精确重复阈值', 'Exact Repeats')}</label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('重复阈值', 'Exact Repeats')}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.loopDetection?.maxExactRepeats ?? 5}
@@ -452,11 +466,11 @@ export function AgentSettings({
                                                 })}
                                                 min={3}
                                                 max={20}
-                                                className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                                className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] text-text-muted">{t('同文件编辑阈值', 'Same File Edits')}</label>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('编辑阈值', 'File Edits')}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.loopDetection?.maxSameTargetRepeats ?? 8}
@@ -469,24 +483,32 @@ export function AgentSettings({
                                                 })}
                                                 min={3}
                                                 max={20}
-                                                className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
+                                                className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* 忽略目录 */}
-                                <div className="space-y-2">
+                                <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-3">
                                     <div className="flex items-center justify-between">
-                                        <label className="text-xs font-medium text-text-secondary">{t('忽略目录', 'Ignored Dirs')}</label>
-                                        <button onClick={resetIgnoredDirs} className="text-[10px] text-accent hover:underline">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                                            <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{t('忽略目录', 'Ignored Dirs')}</label>
+                                        </div>
+                                        <button
+                                            onClick={resetIgnoredDirs}
+                                            className="text-[10px] font-bold text-accent hover:text-accent-hover transition-colors flex items-center gap-1 bg-accent/5 px-2 py-0.5 rounded border border-accent/20"
+                                        >
+                                            <RefreshCw className="w-2.5 h-2.5" />
                                             {t('重置', 'Reset')}
                                         </button>
                                     </div>
                                     <textarea
                                         value={ignoredDirsInput}
                                         onChange={(e) => handleIgnoredDirsChange(e.target.value)}
-                                        className="w-full h-20 p-2 bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg rounded-lg border border-border focus:border-accent/50 outline-none text-xs font-mono resize-none text-text-secondary"
+                                        className="w-full h-24 p-3 bg-background/40 focus:border-accent/50 focus:ring-1 focus:ring-accent/20 transition-all rounded-lg border border-border/60 outline-none text-xs font-mono resize-none text-text-secondary custom-scrollbar"
+                                        placeholder="node_modules, .git, ..."
                                     />
                                 </div>
                             </div>
