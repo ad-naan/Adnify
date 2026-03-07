@@ -43,12 +43,19 @@ export default function FileChangeCard({
         ...(toolCall.arguments || {}),
         ...(toolCall.streamingState?.partialArgs || {}),
     }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
+
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
-    const isStreaming = !!toolCall.streamingState?.isStreaming || args._streaming === true
-    const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
-    const isSuccess = toolCall.status === 'success'
-    const isError = toolCall.status === 'error'
+
+    const { status } = toolCall
+    const isSuccess = status === 'success'
+    const isError = status === 'error'
+    const isRejected = status === 'rejected'
+    const isRunning = status === 'running' || status === 'pending'
+
+    // 是否正在流式输出（强制在非终态时才允许，防止残留字段导致一直 loading）
+    const isFinalState = isSuccess || isError || isRejected
+    const isStreaming = !isFinalState && (!!toolCall.streamingState?.isStreaming || args._streaming === true)
 
     // 流式内容状态 - 订阅 streamingEditService 获取实时更新
     const [streamingContent, setStreamingContent] = useState<string | null>(null)
