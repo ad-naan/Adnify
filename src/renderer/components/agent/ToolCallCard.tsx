@@ -86,11 +86,16 @@ const ToolCallCard = memo(function ToolCallCard({
         ...(toolCall.arguments || {}),
         ...(toolCall.streamingState?.partialArgs || {}),
     }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
-    const isStreaming = !!toolCall.streamingState?.isStreaming || args._streaming === true
-    const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
-    const isSuccess = toolCall.status === 'success'
-    const isError = toolCall.status === 'error'
-    const isRejected = toolCall.status === 'rejected'
+
+    const { status } = toolCall
+    const isSuccess = status === 'success'
+    const isError = status === 'error'
+    const isRejected = status === 'rejected'
+    const isRunning = status === 'running' || status === 'pending'
+
+    // 是否正在流式输出（强制在非终态时才允许，防止残留字段导致一直 loading）
+    const isFinalState = isSuccess || isError || isRejected
+    const isStreaming = !isFinalState && (!!toolCall.streamingState?.isStreaming || args._streaming === true)
 
     // 运行中自动展开
     useEffect(() => {
@@ -628,34 +633,34 @@ const ToolCallCard = memo(function ToolCallCard({
     )
 },
     (prevProps, nextProps) => {
-        // 名称变化时必须重新渲染
-        if (prevProps.toolCall.name !== nextProps.toolCall.name) {
-            return false
+        // 先比较基本属性
+        if (
+            prevProps.toolCall.id !== nextProps.toolCall.id ||
+            prevProps.toolCall.name !== nextProps.toolCall.name ||
+            prevProps.toolCall.status !== nextProps.toolCall.status ||
+            prevProps.toolCall.error !== nextProps.toolCall.error ||
+            prevProps.toolCall.result !== nextProps.toolCall.result ||
+            prevProps.isAwaitingApproval !== nextProps.isAwaitingApproval ||
+            prevProps.defaultExpanded !== nextProps.defaultExpanded
+        ) {
+            return false // 依赖属性变化 -> 重绘
         }
 
+        // 状态相同情况下（比如均为 running），进一步检查展示的参数内容是否发生变化
+        // （为了性能，仅合并可能实时更新的重要参数做检查）
+        const prevArgs = { ...prevProps.toolCall.arguments, ...prevProps.toolCall.streamingState?.partialArgs }
+        const nextArgs = { ...nextProps.toolCall.arguments, ...nextProps.toolCall.streamingState?.partialArgs }
+
+        const monitorKeys = ['path', 'command', 'query', 'pattern', 'new_string', 'content', 'url']
+        for (const key of monitorKeys) {
+            if (prevArgs[key] !== nextArgs[key]) return false
+        }
+
+        // 最后比较 streaming 标志位的变化（如从 false 变 true 等）
         const prevStreaming = prevProps.toolCall.streamingState?.isStreaming || prevProps.toolCall.arguments?._streaming
         const nextStreaming = nextProps.toolCall.streamingState?.isStreaming || nextProps.toolCall.arguments?._streaming
 
-        // 流式传输中，检查 partialArgs 或关键参数是否变化
-        if (prevStreaming || nextStreaming) {
-            const prevArgs = { ...prevProps.toolCall.arguments, ...prevProps.toolCall.streamingState?.partialArgs }
-            const nextArgs = { ...nextProps.toolCall.arguments, ...nextProps.toolCall.streamingState?.partialArgs }
-            if (prevArgs?.path !== nextArgs?.path) return false
-            if (prevArgs?.command !== nextArgs?.command) return false
-            if (prevArgs?.query !== nextArgs?.query) return false
-            if (prevArgs?.pattern !== nextArgs?.pattern) return false
-            if (prevArgs?.new_string !== nextArgs?.new_string) return false
-            if (prevArgs?.content !== nextArgs?.content) return false
-            return prevProps.toolCall.id === nextProps.toolCall.id && prevStreaming === nextStreaming
-        }
-
-        return (
-            prevProps.toolCall.id === nextProps.toolCall.id &&
-            prevProps.toolCall.status === nextProps.toolCall.status &&
-            prevProps.isAwaitingApproval === nextProps.isAwaitingApproval &&
-            prevProps.toolCall.result === nextProps.toolCall.result &&
-            prevProps.defaultExpanded === nextProps.defaultExpanded
-        )
+        return prevStreaming === nextStreaming
     })
 
 export default ToolCallCard
