@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from './store'
 import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize } from './hooks'
 import TitleBar from './components/layout/TitleBar'
@@ -12,6 +12,7 @@ import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
 import { emotionAdapter } from './agent/services/emotionAdapter'
+import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 
 startupMetrics.mark('app-module-loaded')
@@ -47,9 +48,11 @@ function ToastInitializer() {
 
 // 主应用内容
 function AppContent() {
-  // 初始化情绪适配器（应用级别，只初始化一次）
+  // 初始化情绪适配器和终端监听器（应用级别，只初始化一次）
   useEffect(() => {
     emotionAdapter.initialize()
+    terminalWatcher.start()
+    return () => terminalWatcher.stop()
   }, [])
 
   // 使用 selector 优化性能，避免不必要的重渲染
@@ -99,8 +102,11 @@ function AppContent() {
   useGlobalShortcuts()
 
   // 面板拖拽
-  const { startResize: startSidebarResize } = useSidebarResize(setSidebarWidth)
-  const { startResize: startChatResize } = useChatResize(setChatWidth)
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const chatRef = useRef<HTMLDivElement>(null)
+
+  const { startResize: startSidebarResize } = useSidebarResize(setSidebarWidth, sidebarRef)
+  const { startResize: startChatResize } = useChatResize(setChatWidth, chatRef)
 
   const handleCloseKeyboardShortcuts = useCallback(() => setShowKeyboardShortcuts(false), [])
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
@@ -119,7 +125,7 @@ function AppContent() {
               <ActivityBar />
 
               {activeSidePanel && (
-                <div style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
+                <div ref={sidebarRef} style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
                   <Suspense fallback={<PanelSkeleton />}>
                     <Sidebar />
                   </Suspense>
@@ -154,7 +160,7 @@ function AppContent() {
                   </ErrorBoundary>
                 </div>
 
-                <div style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border">
+                <div ref={chatRef} style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border">
                   <div
                     className="absolute top-0 left-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 -translate-x-[2px]"
                     onMouseDown={startChatResize}
