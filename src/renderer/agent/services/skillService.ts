@@ -465,8 +465,9 @@ Add your skill instructions here.
 The following project-specific skills are available. 
 
 ### Usage Guidelines
-- **Path Awareness**: Each skill's installation path is provided in its \`path\` attribute. If a skill's instructions mention a path like "skills/..." or ".claude/skills/...", map it to the actual installation path.
-- **Environment Adaptation**: Adapt commands (e.g., shell syntax, executable names like "python" vs "python3") to your current environment (Windows).
+- **Execution Directory (CRITICAL)**: When executing ANY shell commands (e.g., via \`run_command\`) associated with a skill, you MUST set the \`cwd\` parameter to the skill's installation \`path\`. DO NOT execute skill commands in the project root unless explicitly instructed by the user.
+- **Path Awareness**: Each skill's installation path is provided in its \`path\` attribute. If a skill's instructions mention relative paths like "./data.json", they are relative to the skill's \`path\`.
+- **Environment Adaptation**: Adapt commands (e.g., shell syntax, executable names like "python" vs "python3") to your current environment (Windows). Translate shell scripts to \`.bat\`/\`.cmd\` commands if necessary, and handle path separators correctly.
 - **Tool Integration**: Use the provided tools (shell, file, etc.) to execute these skills as instructed.
 
 ${sections}`
