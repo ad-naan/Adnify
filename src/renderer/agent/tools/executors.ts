@@ -957,7 +957,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async web_search(args) {
-        const result = await api.http.webSearch(args.query as string, args.max_results as number)
+        const timeout = (args.timeout as number) || 30
+        const result = await api.http.webSearch(args.query as string, args.max_results as number, timeout * 1000)
         if (!result.success || !result.results) return { success: false, result: '', error: result.error || 'Search failed' }
         return { success: true, result: result.results.map((r: { title: string; url: string; snippet: string }) => `[${r.title}](${r.url})\n${r.snippet}`).join('\n\n') }
     },

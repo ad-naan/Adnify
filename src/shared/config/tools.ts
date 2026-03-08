@@ -551,6 +551,7 @@ BAD: Separate searches for "Python asyncio" and "Python threading"`,
                 required: true,
             },
             max_results: { type: 'number', description: 'Maximum results to return (default: 5, max: 10)', default: 5 },
+            timeout: { type: 'number', description: 'Timeout in seconds (default: 30, minimum: 15). Increase for slow networks.', default: 30 },
         },
     },
 
