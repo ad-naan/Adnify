@@ -607,6 +607,11 @@ const RenderPart = React.memo(({
       )
     }
 
+    // ask_user 由 InteractiveCard 独立渲染，跳过原始工具卡片
+    if (tc.name === 'ask_user') {
+      return null
+    }
+
     // 其他工具使用 ToolCallCard
     return (
       <div className="my-3 animate-fade-in">
@@ -1038,11 +1043,12 @@ const ChatMessage = React.memo(({
                 <div className="mt-2 w-full">
                   <InteractiveCard
                     content={message.interactive}
-                    onSelect={(selectedIds) => {
+                    onSelect={(selectedIds, customText) => {
                       const selectedLabels = message.interactive!.options
                         .filter(opt => selectedIds.includes(opt.id))
                         .map(opt => opt.label)
-                      const response = selectedLabels.join(', ')
+                      // 有自定义文本时，用自定义文本作为消息内容
+                      const response = customText || selectedLabels.join(', ')
                       window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds } }))
                       window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: message.id } }))
                     }}

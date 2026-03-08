@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle2, ChevronDown, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useStore } from '@store'
 
 interface MemoryApprovalInlineProps {
@@ -17,29 +16,15 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     content,
     isAwaitingApproval,
     isSuccess,
-    messageId,
-    toolCallId,
-    args
 }) => {
     const [isExpanded, setIsExpanded] = useState(!isSuccess)
-    const [editedContent, setEditedContent] = useState(content)
     const { language } = useStore()
-
-    useEffect(() => {
-        setEditedContent(content)
-    }, [content])
 
     useEffect(() => {
         if (isSuccess) {
             setIsExpanded(false)
         }
     }, [isSuccess])
-
-    const handleSave = () => {
-        useAgentStore.getState().updateToolCall(messageId, toolCallId, {
-            arguments: { ...args, content: editedContent }
-        })
-    }
 
     const statusText = isSuccess
         ? (language === 'zh' ? '已存入项目记忆' : 'Project Memory Stored')

@@ -93,6 +93,11 @@ export default function ToolCallGroup({
                 )
             }
 
+            // ask_user 由 InteractiveCard 独立渲染，跳过原始工具卡片
+            if (tc.name === 'ask_user') {
+                return null
+            }
+
             // 其他工具使用 ToolCallCard
             return (
                 <ToolCallCard
