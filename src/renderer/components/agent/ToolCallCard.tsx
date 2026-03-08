@@ -55,13 +55,11 @@ const TOOL_LABELS: Record<string, string> = {
     read_file: 'Read File',
     read_multiple_files: 'Read Files',
     list_directory: 'List Directory',
-    get_dir_tree: 'Directory Tree',
     // 搜索类
     search_files: 'Search Files',
     codebase_search: 'Semantic Search',
     // 编辑类
     edit_file: 'Edit File',
-    replace_file_content: 'Replace Lines',
     write_file: 'Write File',
     create_file: 'Create File',
     create_file_or_folder: 'Create',
@@ -159,7 +157,7 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 读取单文件或目录
-        if (['read_file', 'list_directory', 'get_dir_tree'].includes(name)) {
+        if (['read_file', 'list_directory'].includes(name)) {
             const target = formatPath(args.path)
             if (!target) return isRunning ? 'Reading...' : ''
             if (isRunning) return `Reading ${target}...`
@@ -179,7 +177,7 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 编辑
-        if (['edit_file', 'replace_file_content'].includes(name)) {
+        if (name === 'edit_file') {
             const target = formatPath(args.path)
             if (!target) return isRunning ? 'Editing...' : ''
             if (isRunning) return `Editing ${target}...`
@@ -379,7 +377,7 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 目录类工具
-        if (['list_directory', 'get_dir_tree'].includes(name)) {
+        if (name === 'list_directory') {
             const path = args.path as string
             const displayName = getFileName(path) || path || '.'
             return (
@@ -399,7 +397,7 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 文件编辑类工具（带 diff 预览）
-        if (['edit_file', 'write_file', 'create_file', 'replace_file_content'].includes(name)) {
+        if (['edit_file', 'write_file'].includes(name)) {
             const filePath = (args.path as string) || ''
             const MAX_CHARS = 5000
             const rawNew = ((args.content || args.new_string || '') as string)

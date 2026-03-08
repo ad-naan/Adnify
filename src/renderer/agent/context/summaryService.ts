@@ -74,7 +74,7 @@ function extractFileChanges(messages: ChatMessage[]): FileChangeRecord[] {
               summary: `Created ${path}`,
               turnIndex,
             })
-          } else if (tc.name === 'edit_file' || tc.name === 'replace_file_content') {
+          } else if (tc.name === 'edit_file') {
             changes.push({
               path,
               action: 'modify',
@@ -387,7 +387,6 @@ function extractCompletedSteps(messages: ChatMessage[]): string[] {
               steps.push(`Created file: ${args.path}`)
               break
             case 'edit_file':
-            case 'replace_file_content':
               steps.push(`Modified file: ${args.path}`)
               break
             case 'execute_command':
