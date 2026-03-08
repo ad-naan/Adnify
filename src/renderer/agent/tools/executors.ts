@@ -693,11 +693,53 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     async run_command(args, ctx) {
         const command = args.command as string
         const cwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : ctx.workspacePath
-        // 从配置获取超时时间，args.timeout 可以覆盖
+        const isBackground = args.is_background as boolean
         const config = getAgentConfig()
         const timeout = args.timeout
             ? (args.timeout as number) * 1000
             : config.toolTimeoutMs
+
+        // 智能判定长进程
+        const isLongRunningProcess = isBackground || /^(npm|yarn|pnpm|bun)\s+(run\s+)?(dev|start|serve|watch)|python\s+-m\s+(http\.server|flask)|uvicorn|nodemon|webpack|vite/.test(command)
+
+        if (isLongRunningProcess) {
+            try {
+                // 1. 初始化终端并在 UI 里展示
+                const { terminalManager } = await import('@/renderer/services/TerminalManager')
+
+                // 确保我们在主进程上下文中
+                const termId = await terminalManager.createTerminal({
+                    name: command.split(' ')[0] || 'Task',
+                    cwd: cwd || ctx.workspacePath || process.cwd()
+                })
+
+                // 这边给终端发送换行使其执行
+                terminalManager.writeToTerminal(termId, `${command}\r`)
+
+                // 2. 唤出面板，让用户可见 (如果在渲染器中可获取的话)
+                useStore.getState().setTerminalVisible(true)
+                terminalManager.setActiveTerminal(termId)
+
+                return {
+                    success: true,
+                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is now running interactively in the UI terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check its startup logs. Use 'send_terminal_input' if you need to answer prompts or type Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
+                    meta: {
+                        command,
+                        cwd,
+                        terminalId: termId,
+                        isBackground: true
+                    }
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error)
+                logger.agent.error('[run_command] Interactive execution failed:', errorMsg)
+                return {
+                    success: false,
+                    result: `Error: Failed to start interactive terminal: ${errorMsg}`,
+                    error: errorMsg
+                }
+            }
+        }
 
         try {
             // 使用后台执行（不依赖 PTY，更可靠）
@@ -747,6 +789,86 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 result: `Error: Failed to execute command: ${errorMsg}`,
                 error: errorMsg
             }
+        }
+    },
+
+    async read_terminal_output(args) {
+        const terminalId = args.terminal_id as string
+        const linesCount = (args.lines as number) || 100
+
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+            const lines = terminalManager.getOutputBuffer(terminalId)
+
+            if (!lines || lines.length === 0) {
+                return {
+                    success: true,
+                    result: '[Empty buffer. Either the terminal was closed, invalid, or it has not produced output yet]'
+                }
+            }
+
+            // 返回清理掉 ANSI 色彩字符的内容以便 AI 解析
+            const rawOutput = lines.slice(-linesCount).join('')
+            const cleanOutput = rawOutput
+                .replace(/\x1b\[[0-9;]*[mGK]/g, '')
+                .replace(/\r\n/g, '\n')
+                .trim()
+
+            return {
+                success: true,
+                result: cleanOutput || '[Terminal produced no printable output]',
+                meta: { terminalId }
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return { success: false, result: `Failed to read terminal output: ${errorMsg}`, error: errorMsg }
+        }
+    },
+
+    async send_terminal_input(args) {
+        const terminalId = args.terminal_id as string
+        const input = args.input as string
+        const isCtrl = args.is_ctrl as boolean
+
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+
+            let dataToSend = input
+            if (isCtrl) {
+                // 将诸如 'c' 转换为 \x03 (Ctrl+C)
+                const charCode = input.toLowerCase().charCodeAt(0)
+                if (charCode >= 97 && charCode <= 122) { // 'a' - 'z'
+                    dataToSend = String.fromCharCode(charCode - 96)
+                }
+            }
+
+            terminalManager.writeToTerminal(terminalId, dataToSend)
+
+            return {
+                success: true,
+                result: `Successfully sent ${isCtrl ? 'Ctrl+' + input.toUpperCase() : 'input'} to terminal ${terminalId}`,
+                meta: { terminalId, sentCtrl: isCtrl }
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return { success: false, result: `Failed to send terminal input: ${errorMsg}`, error: errorMsg }
+        }
+    },
+
+    async stop_terminal(args) {
+        const terminalId = args.terminal_id as string
+
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+            terminalManager.closeTerminal(terminalId)
+            return {
+                success: true,
+                result: `Terminal ${terminalId} stopped and closed successfully.`,
+                meta: { terminalId }
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return { success: false, result: `Failed to stop terminal: ${errorMsg}`, error: errorMsg }
         }
     },
 

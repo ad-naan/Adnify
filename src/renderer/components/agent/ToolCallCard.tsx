@@ -12,6 +12,7 @@ import {
     Copy,
     AlertTriangle,
     FileCode,
+    Terminal,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
@@ -247,6 +248,10 @@ const ToolCallCard = memo(function ToolCallCard({
         // 终端命令
         if (name === 'run_command') {
             const cmd = args.command as string
+            const metaInfo = (toolCall as any).meta || {}
+            const terminalId = metaInfo.terminalId
+            const hasActiveTerminal = terminalId && terminalManager.getXterm(terminalId)
+
             return (
                 <div className="font-mono text-[11px] space-y-1">
                     <div className="flex items-center justify-between">
@@ -258,26 +263,92 @@ const ToolCallCard = memo(function ToolCallCard({
                             <button
                                 onClick={async e => {
                                     e.stopPropagation()
-                                    const cwd = (toolCall as any).meta?.cwd || (args.cwd as string) || ''
                                     setTerminalVisible(true)
-                                    const state = terminalManager.getState()
-                                    let terminalId = state.activeId
-                                    if (!terminalId) {
-                                        terminalId = await terminalManager.createTerminal({ cwd, name: 'Terminal' })
+
+                                    if (hasActiveTerminal) {
+                                        // 切换到已有的常驻终端
+                                        terminalManager.setActiveTerminal(terminalId)
+                                    } else {
+                                        // 重新运行静默命令或已关闭的进程
+                                        let cwd = metaInfo.cwd || (args.cwd as string) || ''
+                                        const workspacePath = useStore.getState().workspacePath
+                                        if (!cwd && workspacePath) cwd = workspacePath
+                                        else if (cwd && !cwd.includes(':') && !cwd.startsWith('/') && workspacePath) {
+                                            // Handle relative args.cwd by prefixing workspace path
+                                            cwd = `${workspacePath.replace(/\\/g, '/')}/${cwd}`
+                                        }
+
+                                        let currentTermId = terminalManager.getState().activeId
+                                        if (!currentTermId) {
+                                            currentTermId = await terminalManager.createTerminal({ cwd, name: 'Terminal' })
+                                        }
+                                        terminalManager.writeToTerminal(currentTermId, cmd + '\r')
+                                        terminalManager.focusTerminal(currentTermId)
                                     }
-                                    terminalManager.writeToTerminal(terminalId, cmd)
-                                    terminalManager.focusTerminal(terminalId)
                                 }}
                                 className="text-[10px] px-1.5 py-0.5 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors flex-shrink-0 ml-2"
+                                title={hasActiveTerminal ? 'Switch to this running terminal' : 'Run this command in the terminal again'}
                             >
-                                Open
+                                {hasActiveTerminal ? 'View' : 'Run'}
                             </button>
                         )}
                     </div>
                     {toolCall.result && (
-                        <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-border/30 pl-2 ml-1">
-                            {toolCall.result.slice(0, 500)}
-                            {toolCall.result.length > 500 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-border/30 pl-2 ml-1 mt-1">
+                            {(toolCall.result as string).slice(0, 500)}
+                            {(toolCall.result as string).length > 500 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        // --- 新增 Terminal 控制类工具 UI ---
+
+        // 发送终端输入
+        if (name === 'send_terminal_input') {
+            const isCtrl = args.is_ctrl
+            const bgClass = isCtrl ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-surface-elevated text-text-secondary border border-border/50'
+            const displayStr = isCtrl ? `Ctrl+${(args.input as string).toUpperCase()}` : (args.input as string).replace(/\n|\r/g, '\\n')
+            return (
+                <div className="font-mono text-[11px] space-y-1">
+                    <div className="flex items-center gap-2">
+                        <Terminal className="w-3.5 h-3.5 text-text-muted" />
+                        <span className="text-text-muted">Sent input:</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${bgClass}`}>
+                            {displayStr}
+                        </span>
+                        <span className="text-text-muted/50 text-[10px] ml-1">to {(args.terminal_id as string)}</span>
+                    </div>
+                </div>
+            )
+        }
+
+        // 停止终端进程
+        if (name === 'stop_terminal') {
+            return (
+                <div className="font-mono text-[11px] space-y-1 text-red-400">
+                    <div className="flex items-center gap-2">
+                        <Terminal className="w-3.5 h-3.5 opacity-80" />
+                        <span className="font-medium">Force terminated process</span>
+                        <span className="opacity-50 text-[10px]">{(args.terminal_id as string)}</span>
+                    </div>
+                </div>
+            )
+        }
+
+        // 读取终端输出
+        if (name === 'read_terminal_output') {
+            return (
+                <div className="font-mono text-[11px] space-y-1">
+                    <div className="flex items-center gap-2 text-text-muted">
+                        <Terminal className="w-3.5 h-3.5 text-accent/70" />
+                        <span>Read terminal logs</span>
+                        <span className="opacity-50 text-[10px]">{(args.terminal_id as string)}</span>
+                    </div>
+                    {toolCall.result && typeof toolCall.result === 'string' && toolCall.result.length > 0 && (
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-accent/30 pl-2 ml-1 mt-1 max-h-32 overflow-y-auto custom-scrollbar bg-surface/50 p-1.5 rounded-r">
+                            {toolCall.result}
                         </div>
                     )}
                 </div>

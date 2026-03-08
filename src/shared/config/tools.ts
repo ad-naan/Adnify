@@ -346,14 +346,22 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         description: 'Execute shell command. Requires user approval. Use cwd parameter to set working directory. Do NOT use for reading files (use read_file), searching (use search_files), or editing (use edit_file).',
         detailedDescription: `Execute shell commands in workspace.
 - Requires user approval
-- Use cwd parameter instead of cd commands`,
+- Use cwd parameter instead of cd commands
+For long-running servers or watch tasks:
+- Set is_background=true to run in a UI terminal panel
+- The command returns a terminal ID immediately
+- Use read_terminal_output to check logs
+- Use send_terminal_input to interact (e.g. typing 'y' or sending Ctrl+C)
+- Use stop_terminal to kill it later`,
         examples: [
             'run_command command="npm install"',
             'run_command command="npm test" cwd="packages/core"',
+            'run_command command="npm run dev" is_background=true',
         ],
         criticalRules: [
             'NEVER use cat/grep/sed - use dedicated tools',
             'Use cwd parameter instead of cd',
+            'Always use is_background=true for servers and dev tasks',
         ],
         category: 'terminal',
         approvalType: 'terminal',
@@ -364,7 +372,61 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             command: { type: 'string', description: 'Shell command', required: true },
             cwd: { type: 'string', description: 'Working directory relative to workspace root (e.g., "packages/core", NOT "./packages/core")', },
             timeout: { type: 'number', description: 'Timeout seconds (default: 30)', default: 30 },
-            is_background: { type: 'boolean', description: 'Run in background', default: false },
+            is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
+        },
+    },
+
+    read_terminal_output: {
+        name: 'read_terminal_output',
+        displayName: 'Read Terminal',
+        description: 'Read the output buffer of a background UI terminal.',
+        detailedDescription: `Get the recent output lines of a running terminal.
+- Use the terminal ID returned from a background run_command
+- By default returns the last 100 lines`,
+        category: 'terminal',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            terminal_id: { type: 'string', description: 'The ID of the terminal to read from', required: true },
+            lines: { type: 'number', description: 'Number of recent lines to read (default 100)', default: 100 },
+        },
+    },
+
+    send_terminal_input: {
+        name: 'send_terminal_input',
+        displayName: 'Terminal Input',
+        description: 'Send text input or keystrokes to a background UI terminal.',
+        detailedDescription: `Send keystrokes to an interactive terminal.
+- Supports raw text or special keys
+- Required for answering prompts (e.g., Y/N) in commands
+- Set is_ctrl=true to send combinations like Ctrl+C`,
+        category: 'terminal',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            terminal_id: { type: 'string', description: 'The ID of the terminal to send input to', required: true },
+            input: { type: 'string', description: 'The string/key to send (e.g. "yes\\n", "c" for Ctrl+C)', required: true },
+            is_ctrl: { type: 'boolean', description: 'If true, treats input as a control character (e.g. "c" becomes Ctrl+C)', default: false },
+        },
+    },
+
+    stop_terminal: {
+        name: 'stop_terminal',
+        displayName: 'Stop Terminal',
+        description: 'Stop a background UI terminal process and close its panel.',
+        detailedDescription: `Kill a terminal process and cleanup UI.
+- Use this when a dev server or watcher is no longer needed`,
+        category: 'terminal',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            terminal_id: { type: 'string', description: 'The ID of the terminal to stop', required: true },
         },
     },
 
