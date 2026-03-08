@@ -192,9 +192,20 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             end_line: { type: 'number', description: 'End line (line mode, inclusive)' },
             content: { type: 'string', description: 'New content (line mode)' },
             replace_all: { type: 'boolean', description: 'Replace all occurrences (string mode)', default: false },
-            edits: { 
-                type: 'array', 
-                description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.' 
+            edits: {
+                type: 'array',
+                description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.',
+                items: {
+                    type: 'object',
+                    description: 'Individual edit operation',
+                    properties: {
+                        action: { type: 'string', description: 'Action type ("replace", "insert", "delete")', enum: ['replace', 'insert', 'delete'] },
+                        start_line: { type: 'number', description: 'Start line (1-indexed, required for replace/delete)' },
+                        end_line: { type: 'number', description: 'End line (inclusive, required for replace/delete)' },
+                        after_line: { type: 'number', description: 'Line after which to insert (required for insert)' },
+                        content: { type: 'string', description: 'New content (required for replace/insert)' }
+                    }
+                }
             },
         },
         validate: (data) => {
@@ -232,13 +243,13 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
                 if (!Array.isArray(data.edits) || data.edits.length === 0) {
                     return { valid: false, error: 'Batch mode requires non-empty edits array' }
                 }
-                
+
                 for (let i = 0; i < data.edits.length; i++) {
                     const edit = data.edits[i]
                     if (!edit.action || !['replace', 'insert', 'delete'].includes(edit.action)) {
                         return { valid: false, error: `Edit ${i}: action must be "replace", "insert", or "delete"` }
                     }
-                    
+
                     if (edit.action === 'replace' || edit.action === 'delete') {
                         if (!edit.start_line || !edit.end_line) {
                             return { valid: false, error: `Edit ${i}: ${edit.action} requires start_line and end_line` }
@@ -247,13 +258,13 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
                             return { valid: false, error: `Edit ${i}: start_line must be <= end_line` }
                         }
                     }
-                    
+
                     if (edit.action === 'insert') {
                         if (edit.after_line === undefined) {
                             return { valid: false, error: `Edit ${i}: insert requires after_line` }
                         }
                     }
-                    
+
                     if ((edit.action === 'replace' || edit.action === 'insert') && edit.content === undefined) {
                         return { valid: false, error: `Edit ${i}: ${edit.action} requires content` }
                     }
