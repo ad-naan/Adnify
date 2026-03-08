@@ -558,37 +558,48 @@ const ToolCallCard = memo(function ToolCallCard({
         // 默认：显示参数和结果
         const hasArgs = Object.keys(args).filter(k => !k.startsWith('_')).length > 0
         return (
-            <div className="space-y-2 border-l-2 border-border/30 pl-2 ml-1">
+            <div className="space-y-1 mt-1 text-[11px]">
                 {hasArgs && (
-                    <div className="rounded border border-border/50 p-1.5">
-                        <JsonHighlight
-                            data={Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('_')))}
-                            maxHeight="max-h-32"
-                            maxLength={1500}
-                        />
-                    </div>
+                    <>
+                        <div className="flex items-center gap-1.5 text-text-muted">
+                            <FileCode className="w-3 h-3" />
+                            <span>Arguments:</span>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight
+                                data={Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('_')))}
+                                className="py-1"
+                                maxHeight="max-h-32"
+                                maxLength={1500}
+                            />
+                        </div>
+                    </>
                 )}
                 {toolCall.richContent && toolCall.richContent.length > 0 && (
                     <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-64" />
                 )}
                 {toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (
-                    <div className="rounded border border-border/50 overflow-hidden relative group/result">
-                        <div className="absolute right-1 top-1 opacity-0 group-hover/result:opacity-100 transition-opacity">
+                    <>
+                        <div className="flex items-center justify-between gap-1.5 text-text-muted mt-2 group/title">
+                            <div className="flex items-center gap-1.5">
+                                <Terminal className="w-3 h-3" />
+                                <span>Result:</span>
+                            </div>
                             <button
                                 onClick={e => {
                                     e.stopPropagation()
                                     handleCopyResult()
                                 }}
-                                className="p-1 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors bg-surface backdrop-blur-sm shadow-sm"
+                                className="opacity-0 group-hover/title:opacity-100 transition-opacity p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary"
                                 title="Copy Result"
                             >
                                 <Copy className="w-3 h-3" />
                             </button>
                         </div>
-                        <div className="max-h-48 overflow-auto custom-scrollbar p-1.5 pt-4">
-                            <JsonHighlight data={toolCall.result} maxHeight="max-h-48" maxLength={3000} />
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={3000} />
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
         )
@@ -596,10 +607,10 @@ const ToolCallCard = memo(function ToolCallCard({
 
     // 极简卡片样式
     const cardStyle = useMemo(() => {
-        if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
-        if (isError) return 'bg-red-500/5'
-        if (isStreaming || isRunning) return 'bg-accent/5'
-        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg'
+        if (isAwaitingApproval) return 'border border-yellow-500/20 bg-yellow-500/5 rounded-lg shadow-sm shadow-yellow-500/5 overflow-hidden'
+        if (isError) return 'bg-red-500/5 rounded-lg overflow-hidden'
+        if (isStreaming || isRunning) return 'bg-accent/5 rounded-lg overflow-hidden'
+        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (

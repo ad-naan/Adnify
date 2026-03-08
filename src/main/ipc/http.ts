@@ -327,9 +327,22 @@ async function webSearch(query: string, maxResults = 5, timeout?: number): Promi
             if (result.success && result.results && result.results.length > 0) {
                 return result
             }
-            logger.ipc.warn('[HTTP] Google PSE returned no results, falling back to DuckDuckGo')
+            // 如果是因为报错导致的失败（比如 API key 无效、额度用尽），不再静默回退，直接返回给 AI 让它告诉用户
+            if (!result.success && result.error) {
+                logger.ipc.error(`[HTTP] Google PSE failed with error: ${result.error}`)
+                return {
+                    success: false,
+                    error: `Google API Error: ${result.error}. Please check your Google API Key and CX in settings.`
+                }
+            }
+            // 只有当成功请求但 0 结果时，才回退
+            logger.ipc.warn('[HTTP] Google PSE returned 0 results, falling back to DuckDuckGo')
         } catch (error) {
-            logger.ipc.error('[HTTP] Google PSE failed, falling back to DuckDuckGo:', error)
+            logger.ipc.error('[HTTP] Google PSE failed with exception:', error)
+            return {
+                success: false,
+                error: `Google Search API Exception: ${error}. Please check your network or proxy settings.`
+            }
         }
     }
 
