@@ -35,49 +35,61 @@ export class StandardThinkingStrategy extends ThinkingStrategy {
   // AI SDK 6.0 原生支持 reasoning-delta，无需额外处理
 }
 
-/**
- * XML Tag 策略 (如 MiniMax, DeepSeek-R1, 本地 Ollama 推理模型)
- * 使用 <think> 标签包裹思考内容，需要手动解析
- */
 export class XmlTagThinkingStrategy extends ThinkingStrategy {
-  private thinkingBuffer = ''
+  private buffer = ''
   private inThinkingTag = false
 
   reset(): void {
-    this.thinkingBuffer = ''
+    this.buffer = ''
     this.inThinkingTag = false
   }
 
   parseStreamText(text: string): ThinkingParseResult {
     let thinking = ''
     let content = ''
-    let remaining = text
 
-    while (remaining.length > 0) {
+    this.buffer += text
+
+    while (this.buffer.length > 0) {
       if (this.inThinkingTag) {
-        const endIndex = remaining.indexOf('</think>')
+        const endIndex = this.buffer.indexOf('</think>')
         if (endIndex !== -1) {
-          thinking = remaining.substring(0, endIndex)
-          this.thinkingBuffer += thinking
+          thinking += this.buffer.substring(0, endIndex)
           this.inThinkingTag = false
-          remaining = remaining.substring(endIndex + 8)
+          this.buffer = this.buffer.substring(endIndex + 8)
         } else {
-          this.thinkingBuffer += remaining
-          thinking = remaining
-          remaining = ''
+          // Check if </think> might be partially arriving at the end of the buffer
+          const lastLessThan = this.buffer.lastIndexOf('<')
+          if (lastLessThan !== -1 && this.buffer.length - lastLessThan < 8 && '</think>'.startsWith(this.buffer.substring(lastLessThan))) {
+            // Buffer ends with a potential </think> prefix
+            thinking += this.buffer.substring(0, lastLessThan)
+            this.buffer = this.buffer.substring(lastLessThan)
+            break // Wait for more chunks to complete the tag
+          } else {
+            // Safe to flush the entire buffer
+            thinking += this.buffer
+            this.buffer = ''
+          }
         }
       } else {
-        const startIndex = remaining.indexOf('<think>')
+        const startIndex = this.buffer.indexOf('<think>')
         if (startIndex !== -1) {
-          if (startIndex > 0) {
-            content = remaining.substring(0, startIndex)
-          }
+          content += this.buffer.substring(0, startIndex)
           this.inThinkingTag = true
-          this.thinkingBuffer = ''
-          remaining = remaining.substring(startIndex + 7)
+          this.buffer = this.buffer.substring(startIndex + 7)
         } else {
-          content = remaining
-          remaining = ''
+          // Check if <think> might be partially arriving at the end of the buffer
+          const lastLessThan = this.buffer.lastIndexOf('<')
+          if (lastLessThan !== -1 && this.buffer.length - lastLessThan < 7 && '<think>'.startsWith(this.buffer.substring(lastLessThan))) {
+            // Buffer ends with a potential <think> prefix
+            content += this.buffer.substring(0, lastLessThan)
+            this.buffer = this.buffer.substring(lastLessThan)
+            break // Wait for more chunks to complete the tag
+          } else {
+            // Safe to flush the entire buffer
+            content += this.buffer
+            this.buffer = ''
+          }
         }
       }
     }
@@ -86,16 +98,25 @@ export class XmlTagThinkingStrategy extends ThinkingStrategy {
   }
 
   extractThinking(text: string): ThinkingParseResult {
+    // Also include any buffered content from the end of the stream
+    const fullText = text + this.buffer
     const thinkRegex = /<think>([\s\S]*?)<\/think>/g
     const thinkingParts: string[] = []
     let match: RegExpExecArray | null
 
-    while ((match = thinkRegex.exec(text)) !== null) {
+    while ((match = thinkRegex.exec(fullText)) !== null) {
       thinkingParts.push(match[1])
     }
 
+    // Check for unclosed <think> tags specifically
+    const unclosedMatch = /<think>([\s\S]*)$/.exec(fullText)
+    if (unclosedMatch && !fullText.substring(unclosedMatch.index).includes('</think>')) {
+      thinkingParts.push(unclosedMatch[1])
+    }
+
     const thinking = thinkingParts.join('\n')
-    const content = text.replace(thinkRegex, '').trim()
+    let content = fullText.replace(/<think>[\s\S]*?<\/think>/g, '')
+    content = content.replace(/<think>[\s\S]*$/g, '').trim()
 
     return { thinking, content }
   }
@@ -113,8 +134,8 @@ export class ThinkingStrategyFactory {
   static create(model: string): ThinkingStrategy {
     const modelLower = model.toLowerCase()
 
-    // 需要解析 XML 标签的模型（包括 MiniMax 2.1, DeepSeek-R1, 本地 Ollama, 第三方中转）
-    if (/minimax.*2\.1|abab.*7|deepseek|r1|reason/i.test(modelLower)) {
+    // 需要解析 XML 标签的模型（包括 MiniMax, DeepSeek-R1, 本地 Ollama, 第三方中转）
+    if (/minimax|abab|deepseek|r1|reason/i.test(modelLower)) {
       return new XmlTagThinkingStrategy()
     }
 

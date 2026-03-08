@@ -69,17 +69,17 @@ const RichContentItem = memo(function RichContentItem({
 
 // =================== 内部工具：通用容器 ===================
 const ContentCard = ({ title, icon: Icon, actions, children, noPadding = false }: { title: string, icon: any, actions?: React.ReactNode, children: React.ReactNode, noPadding?: boolean }) => (
-  <div className="bg-surface/20 backdrop-blur-md rounded-2xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
-    <div className="flex items-center justify-between px-4 py-2.5 bg-white/[0.03] border-b border-border">
-      <span className="text-[11px] font-bold text-text-muted uppercase tracking-widest flex items-center gap-2">
-        <Icon className="w-3.5 h-3.5 text-accent opacity-80" />
-        {title}
-      </span>
-      <div className="flex items-center gap-1">
+  <div className="mt-2 text-[11px]">
+    <div className="flex items-center justify-between gap-1.5 text-text-muted mb-1 group/title">
+      <div className="flex items-center gap-1.5">
+        <Icon className="w-3 h-3" />
+        <span>{title}</span>
+      </div>
+      <div className="flex items-center gap-1 opacity-0 group-hover/title:opacity-100 transition-opacity">
         {actions}
       </div>
     </div>
-    <div className={noPadding ? '' : 'p-4'}>
+    <div className={`border-l-2 border-border/30 pl-2 ml-1 ${noPadding ? '' : 'py-1'}`}>
       {children}
     </div>
   </div>
@@ -99,28 +99,28 @@ function ImageContent({ item }: { item: ToolRichContent }) {
 
   const modal = isExpanded ? createPortal(
     <AnimatePresence>
-      <motion.div 
-        initial={{ opacity: 0 }} 
-        animate={{ opacity: 1 }} 
-        exit={{ opacity: 0 }} 
-        className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/95 backdrop-blur-lg p-8" 
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/95 backdrop-blur-lg p-8"
         onClick={() => setIsExpanded(false)}
         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
       >
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }} 
-          animate={{ scale: 1, opacity: 1 }} 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
           className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center"
           onClick={(e) => e.stopPropagation()}
         >
-          <img 
-            src={imageSrc} 
+          <img
+            src={imageSrc}
             alt={item.title || 'Image'}
             className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl"
           />
         </motion.div>
-        <button 
+        <button
           onClick={() => setIsExpanded(false)}
           className="absolute top-6 right-6 p-3 rounded-full bg-white/10 text-white hover:bg-white/20 transition-all z-[100000]"
         >
@@ -133,24 +133,24 @@ function ImageContent({ item }: { item: ToolRichContent }) {
 
   return (
     <>
-      <ContentCard 
-        title={item.title || 'Image Preview'} 
+      <ContentCard
+        title={item.title || 'Image Preview'}
         icon={ImageIcon}
         noPadding
         actions={
           <>
-            <button 
-              onClick={() => { 
-                navigator.clipboard.writeText(imageSrc); 
-                setCopied(true); 
-                setTimeout(() => setCopied(false), 2000); 
-              }} 
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(imageSrc);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
               className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted transition-colors"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
-            <button 
-              onClick={() => setIsExpanded(true)} 
+            <button
+              onClick={() => setIsExpanded(true)}
               className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted transition-colors"
             >
               <Maximize2 className="w-3.5 h-3.5" />
@@ -158,12 +158,12 @@ function ImageContent({ item }: { item: ToolRichContent }) {
           </>
         }
       >
-        <div className="flex justify-center bg-black/40 group relative">
-          <img 
-            src={imageSrc} 
+        <div className="flex flex-col group relative mt-1">
+          <img
+            src={imageSrc}
             alt={item.title || 'Image'}
-            className="max-w-full max-h-80 object-contain cursor-zoom-in" 
-            onClick={() => setIsExpanded(true)} 
+            className="max-w-full max-h-64 object-contain cursor-zoom-in rounded border border-border/30"
+            onClick={() => setIsExpanded(true)}
           />
         </div>
       </ContentCard>
@@ -176,17 +176,17 @@ function ImageContent({ item }: { item: ToolRichContent }) {
 function CodeContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: string }) {
   const [copied, setCopied] = useState(false)
   return (
-    <ContentCard 
-      title={item.language || 'Source Code'} 
+    <ContentCard
+      title={item.language || 'Source Code'}
       icon={Code}
       noPadding
       actions={
-        <button onClick={() => { navigator.clipboard.writeText(item.text || ''); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted transition-colors">
-          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+        <button onClick={() => { navigator.clipboard.writeText(item.text || ''); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary">
+          {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
         </button>
       }
     >
-      <pre className={`p-4 overflow-auto ${maxHeight} text-[13px] font-mono text-text-secondary bg-black/40 custom-scrollbar`}>
+      <pre className={`overflow-auto ${maxHeight} text-[11px] font-mono text-text-secondary custom-scrollbar`}>
         <code>{item.text}</code>
       </pre>
     </ContentCard>
@@ -199,17 +199,17 @@ function TableContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: s
   const { headers, rows } = item.tableData
   return (
     <ContentCard title={`Data Table (${rows.length})`} icon={Table} noPadding>
-      <div className={`overflow-auto ${maxHeight} custom-scrollbar`}>
+      <div className={`overflow-auto ${maxHeight} custom-scrollbar rounded border border-border/30`}>
         <table className="w-full text-xs border-collapse">
           <thead>
-            <tr className="bg-white/5 sticky top-0 z-10 backdrop-blur-sm">
-              {headers.map((h, i) => <th key={i} className="px-4 py-3 text-left font-bold text-text-primary border-b border-border uppercase tracking-tighter">{h}</th>)}
+            <tr className="bg-surface/50 sticky top-0 z-10">
+              {headers.map((h, i) => <th key={i} className="px-3 py-2 text-left font-bold text-text-primary border-b border-border/50 uppercase tracking-tighter">{h}</th>)}
             </tr>
           </thead>
-          <tbody className="bg-black/20">
+          <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="hover:bg-white/[0.03] transition-colors group">
-                {row.map((cell, j) => <td key={j} className="px-4 py-2.5 text-text-secondary border-b border-border/50 group-last:border-0">{cell}</td>)}
+              <tr key={i} className="hover:bg-surface/30 transition-colors group">
+                {row.map((cell, j) => <td key={j} className="px-3 py-2 text-text-secondary border-b border-border/20 group-last:border-0">{cell}</td>)}
               </tr>
             ))}
           </tbody>
@@ -223,30 +223,20 @@ function TableContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: s
 function FileContent({ item }: { item: ToolRichContent }) {
   const fileName = item.title || (item.uri ? getFileName(item.uri) : 'File')
   return (
-    <div className="flex items-center gap-4 p-4 bg-surface/20 backdrop-blur-md rounded-2xl border border-border hover:bg-surface/40 hover:border-accent/30 transition-all group cursor-pointer shadow-sm">
-      <div className="p-2.5 rounded-xl bg-accent/10 text-accent group-hover:bg-accent group-hover:text-white transition-all duration-300">
-        <FileText className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-text-primary truncate">{fileName}</div>
-        {item.uri && <div className="text-[11px] text-text-muted truncate opacity-60 font-mono mt-0.5">{item.uri}</div>}
-      </div>
-      <ExternalLink className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors" />
+    <div className="flex items-center gap-1.5 text-[11px] group mt-1">
+      <FileText className="w-3 h-3 text-text-muted" />
+      <span className="font-medium text-text-primary transition-colors cursor-pointer hover:underline" title={item.uri}>{fileName}</span>
+      <ExternalLink className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-accent" />
     </div>
   )
 }
 
 function LinkContent({ item }: { item: ToolRichContent }) {
   return (
-    <a href={item.url} target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 bg-surface/20 backdrop-blur-md rounded-2xl border border-border hover:bg-surface/40 hover:border-accent/30 transition-all group shadow-sm">
-      <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-all duration-300">
-        <LinkIcon className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-text-primary group-hover:text-blue-400 truncate transition-colors">{item.title || item.url}</div>
-        <div className="text-[11px] text-text-muted truncate opacity-60 font-mono mt-0.5">{item.url}</div>
-      </div>
-      <ExternalLink className="w-4 h-4 text-text-muted group-hover:text-blue-400 transition-colors" />
+    <a href={item.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[11px] group mt-1">
+      <LinkIcon className="w-3 h-3 text-text-muted" />
+      <span className="font-medium text-text-primary hover:text-accent truncate transition-colors cursor-pointer hover:underline">{item.title || item.url}</span>
+      <ExternalLink className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
     </a>
   )
 }
@@ -255,7 +245,7 @@ function LinkContent({ item }: { item: ToolRichContent }) {
 function JsonContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: string }) {
   return (
     <ContentCard title="JSON Data" icon={Code} noPadding>
-      <div className={`p-2 bg-black/40 ${maxHeight} overflow-auto custom-scrollbar`}>
+      <div className={`font-mono text-[11px] ${maxHeight} overflow-auto custom-scrollbar`}>
         <JsonHighlight data={item.text} maxHeight="none" />
       </div>
     </ContentCard>
@@ -265,7 +255,7 @@ function JsonContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: st
 function MarkdownContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: string }) {
   return (
     <ContentCard title="Markdown" icon={FileText} noPadding>
-      <div className={`p-4 bg-black/20 ${maxHeight} overflow-auto custom-scrollbar prose prose-invert prose-sm max-w-none`}>
+      <div className={`${maxHeight} overflow-auto custom-scrollbar prose prose-invert prose-sm max-w-none text-[12px]`}>
         <SafeMarkdownHTML html={item.text} />
       </div>
     </ContentCard>
@@ -275,7 +265,7 @@ function MarkdownContent({ item, maxHeight }: { item: ToolRichContent; maxHeight
 function HtmlContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: string }) {
   return (
     <ContentCard title="HTML Preview" icon={Code} noPadding>
-      <SafeHTML 
+      <SafeHTML
         html={item.text}
         className={`p-4 bg-white/5 ${maxHeight} overflow-auto custom-scrollbar`}
       />
