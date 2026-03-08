@@ -841,7 +841,7 @@ This will trigger the task executor to run through the plan.`,
 - User preferences for code style or behavior
 - Project-specific terminology`,
         category: 'interaction',
-        approvalType: 'interaction',
+        approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
         enabled: true,
