@@ -102,7 +102,7 @@ export default function FileChangeCard({
         // 且还没有 meta 结果（即工具未完成），暂时忽略旧内容，
         // 避免将 patch 片段与完整旧文件对比导致显示大面积删除。
         if ((isRunning || isStreaming) && !meta?.oldContent && !args.old_string) {
-            const isPartialEdit = ['edit_file', 'replace_file_content'].includes(toolCall.name)
+            const isPartialEdit = toolCall.name === 'edit_file'
             if (isPartialEdit) return ''
         }
 

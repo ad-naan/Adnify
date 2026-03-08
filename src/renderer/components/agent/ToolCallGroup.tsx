@@ -128,7 +128,7 @@ export default function ToolCallGroup({
         }
 
         // 文件读写
-        if (['read_single_file', 'read_file', 'read_multiple_files', 'list_directory', 'get_dir_tree'].includes(name)) {
+        if (['read_file', 'read_multiple_files', 'list_directory'].includes(name)) {
             const pathInfo = args.path || args.paths
             const target = Array.isArray(pathInfo)
                 ? `[${pathInfo.length} files]`
@@ -140,7 +140,7 @@ export default function ToolCallGroup({
             return `Reading ${target}`
         }
 
-        if (['edit_file', 'write_file', 'create_file', 'create_file_or_folder', 'replace_file_content'].includes(name)) {
+        if (['edit_file', 'write_file', 'create_file_or_folder'].includes(name)) {
             const target = formatPath(args.path)
             if (!target) return ''
             const action = name.includes('create') ? 'Created' : 'Updated'
@@ -171,7 +171,7 @@ export default function ToolCallGroup({
             args = typeof argsStr === 'string' ? JSON.parse(argsStr) : argsStr
         } catch { return }
 
-        if (['read_file', 'edit_file', 'write_file', 'create_file', 'create_file_or_folder', 'replace_file_content', 'get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(tc.name)) {
+        if (['read_file', 'edit_file', 'write_file', 'create_file_or_folder', 'get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(tc.name)) {
             pathStr = args.path
         } else if (tc.name === 'read_multiple_files') {
             pathStr = args.paths?.[0]

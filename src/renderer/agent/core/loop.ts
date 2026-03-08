@@ -103,22 +103,14 @@ async function callLLM(
       // 场景1: Chat 模式 - 禁用所有工具（已在上面处理）
       // 场景2: Agent 模式 - 根据压缩等级动态调整
 
-      // 当上下文压缩等级较高时，限制工具以减少 token 使用
       const currentThread = store.getCurrentThread()
       const compressionLevel = currentThread?.compressionStats?.level || 0
       if (compressionLevel >= 3) {
         // L3/L4: 只保留核心工具，移除 AI 辅助工具（节省 token）
-        const coreTools = allToolNames.filter(name =>
-          !['analyze_code', 'suggest_refactoring', 'suggest_fixes', 'generate_tests'].includes(name)
-        )
-        activeTools = coreTools
+        // 原 analyze_code, suggest_refactoring 等已删除
+        activeTools = allToolNames
         logger.agent.info(`[Loop] Compression L${compressionLevel}: ${activeTools.length}/${allToolNames.length} tools active (AI tools disabled)`)
       }
-
-      // 未来可扩展的场景：
-      // - 只读模式：activeTools = allToolNames.filter(name => getReadOnlyTools().includes(name))
-      // - 安全模式：activeTools = allToolNames.filter(name => !getDangerousTools().includes(name))
-      // - 特定任务：activeTools = getToolsForTask(taskType)
     }
 
     // 发送请求（携带 requestId 用于多对话隔离）
