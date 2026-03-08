@@ -133,12 +133,12 @@ export default function ChatInput({
     <div ref={inputContainerRef} className="p-4 z-20">
       <div
         className={`
-            relative group flex flex-col rounded-[24px] transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] border backdrop-blur-2xl
+            relative group flex flex-col rounded-xl transition-all duration-500 ease-out border backdrop-blur-md
             ${isStreaming
-            ? 'bg-surface/60 border-accent/20 ring-1 ring-accent/10 shadow-[0_8px_32px_-8px_rgba(var(--accent)/0.15)]'
+            ? 'bg-surface/30 border-accent/20 shadow-[0_4px_24px_-12px_rgba(var(--accent)/0.15)]'
             : isFocused
-              ? 'bg-background/90 border-accent/40 shadow-[0_8px_40px_-12px_rgba(var(--accent)/0.25)] translate-y-[-1px] ring-1 ring-accent/20'
-              : 'bg-surface/50 border-text-primary/[0.08] hover:border-text-primary/[0.15] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.1)] hover:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.15)]'
+              ? 'bg-background/80 border-accent/30 shadow-[0_8px_32px_-16px_rgba(var(--accent)/0.2)] ring-1 ring-accent/10 translate-y-[-1px]'
+              : 'bg-surface/40 border-border/50 hover:border-text-primary/10 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)]'
           }
         `}
       >
@@ -176,7 +176,7 @@ export default function ChatInput({
                     onAddFile(activeFilePath)
                     // 这里如果能自动清除输入框里的失焦状态体验会更好，暂通过 state 刷新实现
                   }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent/5 text-accent text-[11px] font-bold rounded-full border border-accent/10 select-none hover:bg-accent/15 transition-colors hover:border-accent/30"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-accent/5 text-accent text-[11px] font-medium rounded-lg border border-accent/10 select-none hover:bg-accent/10 transition-colors"
                 >
                   <Plus className="w-3 h-3" strokeWidth={3} />
                   <span>{getFileName(activeFilePath)}</span>
@@ -223,7 +223,7 @@ export default function ChatInput({
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8, filter: 'blur(4px)' }}
                     transition={{ duration: 0.15 }}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${style.bg} ${style.text} text-[11px] font-medium rounded-full border ${style.border} select-none group/chip transition-all hover:border-opacity-100 hover:shadow-sm`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${style.bg} ${style.text} text-[11px] font-medium rounded-lg border ${style.border} select-none group/chip transition-all hover:border-opacity-100 hover:shadow-sm`}
                   >
                     <style.Icon className="w-3 h-3 opacity-70" />
                     <span className="max-w-[120px] truncate">{label}</span>
@@ -295,11 +295,11 @@ export default function ChatInput({
               disabled={
                 !hasApiKey || ((!input.trim() && images.length === 0) && !isStreaming) || hasPendingToolCall
               }
-              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300
                   ${isStreaming
                   ? 'bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
                   : isSendable
-                    ? 'bg-accent text-white shadow-lg shadow-accent/30 hover:shadow-accent/50 hover:scale-105 active:scale-95 border border-text-primary/10'
+                    ? 'bg-accent text-white shadow-md shadow-accent/20 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 border border-transparent'
                     : 'bg-text-primary/5 text-text-muted/30 cursor-not-allowed border border-transparent'
                 }
                   `}
@@ -341,7 +341,7 @@ function ContextChip({ icon: Icon, label, color }: { icon: any, label: string, c
   }
 
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${colorMap[color]} text-[11px] font-bold rounded-full border animate-fade-in select-none`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 ${colorMap[color]} text-[11px] font-medium rounded-lg border animate-fade-in select-none`}>
       <Icon className="w-3 h-3" />
       {label}
     </span>

@@ -663,9 +663,6 @@ const ToolCallCard = memo(function ToolCallCard({
                             </span>
                         }
                     </span>
-                    {(isStreaming || isRunning) && !statusText && (
-                        <span className="text-[11px] text-shimmer/80 italic">Processing...</span>
-                    )}
                 </div>
             </div>
 
