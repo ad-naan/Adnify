@@ -36,10 +36,10 @@ export class StandardThinkingStrategy extends ThinkingStrategy {
 }
 
 /**
- * MiniMax 2.1 策略
+ * XML Tag 策略 (如 MiniMax, DeepSeek-R1, 本地 Ollama 推理模型)
  * 使用 <think> 标签包裹思考内容，需要手动解析
  */
-export class MiniMaxThinkingStrategy extends ThinkingStrategy {
+export class XmlTagThinkingStrategy extends ThinkingStrategy {
   private thinkingBuffer = ''
   private inThinkingTag = false
 
@@ -113,9 +113,9 @@ export class ThinkingStrategyFactory {
   static create(model: string): ThinkingStrategy {
     const modelLower = model.toLowerCase()
 
-    // MiniMax 2.1 - 需要解析 XML 标签
-    if (/minimax.*2\.1|abab.*7/i.test(modelLower)) {
-      return new MiniMaxThinkingStrategy()
+    // 需要解析 XML 标签的模型（包括 MiniMax 2.1, DeepSeek-R1, 本地 Ollama, 第三方中转）
+    if (/minimax.*2\.1|abab.*7|deepseek|r1|reason/i.test(modelLower)) {
+      return new XmlTagThinkingStrategy()
     }
 
     // 其他所有模型使用标准策略（AI SDK 原生支持）
