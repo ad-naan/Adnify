@@ -220,11 +220,7 @@ export class McpToolProvider implements ToolProvider {
     const properties: Record<string, any> = {}
     if (tool.inputSchema.properties) {
       for (const [key, prop] of Object.entries(tool.inputSchema.properties)) {
-        properties[key] = {
-          type: prop.type,
-          description: prop.description || '',
-          ...(prop.enum && { enum: prop.enum }),
-        }
+        properties[key] = this.convertMcpProperty(prop)
       }
     }
 
@@ -237,6 +233,38 @@ export class McpToolProvider implements ToolProvider {
         required: tool.inputSchema.required,
       },
     }
+  }
+
+  /**
+   * 递归转换 MCP 属性到 OpenAI/LLM 兼容格式
+   * 修复 "array schema missing items" 等验证错误
+   */
+  private convertMcpProperty(prop: any): any {
+    const result: any = {
+      type: prop.type,
+      description: prop.description || '',
+    }
+
+    if (prop.enum) {
+      result.enum = prop.enum
+    }
+
+    // 核心修复：处理数组类型，必须包含 items
+    if (prop.type === 'array') {
+      result.items = prop.items ? this.convertMcpProperty(prop.items) : { type: 'string' }
+    }
+    // 处理嵌套对象
+    else if (prop.type === 'object' && prop.properties) {
+      result.properties = {}
+      for (const [key, value] of Object.entries(prop.properties)) {
+        result.properties[key] = this.convertMcpProperty(value)
+      }
+      if (prop.required) {
+        result.required = prop.required
+      }
+    }
+
+    return result
   }
 
   /**

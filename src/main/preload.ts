@@ -308,7 +308,7 @@ export interface ElectronAPI {
     contentType?: string
     statusCode?: number
   }>
-  httpWebSearch: (query: string, maxResults?: number) => Promise<{
+  httpWebSearch: (query: string, maxResults?: number, timeout?: number) => Promise<{
     success: boolean
     results?: { title: string; url: string; snippet: string }[]
     error?: string
@@ -590,7 +590,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // HTTP API
   httpReadUrl: (url: string, timeout?: number) => ipcRenderer.invoke('http:readUrl', url, timeout),
-  httpWebSearch: (query: string, maxResults?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults),
+  httpWebSearch: (query: string, maxResults?: number, timeout?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults, timeout),
   httpSetGoogleSearch: (apiKey: string, cx: string) => ipcRenderer.invoke('http:setGoogleSearch', apiKey, cx),
 
   // Health Check API

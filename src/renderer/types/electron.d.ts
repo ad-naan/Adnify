@@ -507,7 +507,7 @@ export interface ElectronAPI {
   httpReadUrl: (url: string, timeout?: number) => Promise<{
     success: boolean; content?: string; title?: string; error?: string; contentType?: string; statusCode?: number
   }>
-  httpWebSearch: (query: string, maxResults?: number) => Promise<{
+  httpWebSearch: (query: string, maxResults?: number, timeout?: number) => Promise<{
     success: boolean; results?: Array<{ title: string; url: string; snippet: string }>; error?: string
   }>
   httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>

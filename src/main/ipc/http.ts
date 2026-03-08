@@ -311,14 +311,19 @@ export function setGoogleSearchConfig(apiKey: string, cx: string) {
     logger.ipc.info('[HTTP] Google PSE configured')
 }
 
-async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult> {
+async function webSearch(query: string, maxResults = 5, timeout?: number): Promise<WebSearchResult> {
     // 优先使用 Google PSE（如果配置了）
     const googleApiKey = cachedGoogleApiKey || process.env.GOOGLE_API_KEY || ''
     const googleCx = cachedGoogleCx || process.env.GOOGLE_CX || ''
 
+    // 分配超时时间：Google 占 40%，DDG 占 60%（作为回退通常需要更久）
+    const totalTimeout = timeout || 30000
+    const googleTimeout = Math.floor(totalTimeout * 0.4)
+    const ddgTimeout = Math.floor(totalTimeout * 0.6)
+
     if (googleApiKey && googleCx) {
         try {
-            const result = await searchWithGoogle(query, googleApiKey, googleCx, maxResults)
+            const result = await searchWithGoogle(query, googleApiKey, googleCx, maxResults, googleTimeout)
             if (result.success && result.results && result.results.length > 0) {
                 return result
             }
@@ -330,7 +335,7 @@ async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult
 
     // 回退到 DuckDuckGo
     try {
-        return await searchWithDuckDuckGo(query, maxResults)
+        return await searchWithDuckDuckGo(query, maxResults, ddgTimeout)
     } catch (error) {
         logger.ipc.error('[HTTP] DuckDuckGo search failed:', error)
         return {
@@ -341,7 +346,7 @@ async function webSearch(query: string, maxResults = 5): Promise<WebSearchResult
 }
 
 // Google Programmable Search Engine API
-async function searchWithGoogle(query: string, apiKey: string, cx: string, maxResults: number): Promise<WebSearchResult> {
+async function searchWithGoogle(query: string, apiKey: string, cx: string, maxResults: number, timeout = 15000): Promise<WebSearchResult> {
     return new Promise((resolve) => {
         const encodedQuery = encodeURIComponent(query)
         const url = `/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodedQuery}&num=${Math.min(maxResults, 10)}`
@@ -394,7 +399,7 @@ async function searchWithGoogle(query: string, apiKey: string, cx: string, maxRe
             resolve({ success: false, error: `Google request failed: ${error.message}` })
         })
 
-        req.setTimeout(10000, () => {
+        req.setTimeout(timeout, () => {
             req.destroy()
             resolve({ success: false, error: 'Google request timed out' })
         })
@@ -404,7 +409,7 @@ async function searchWithGoogle(query: string, apiKey: string, cx: string, maxRe
 }
 
 // DuckDuckGo HTML 抓取
-async function searchWithDuckDuckGo(query: string, maxResults: number): Promise<WebSearchResult> {
+async function searchWithDuckDuckGo(query: string, maxResults: number, timeout = 25000): Promise<WebSearchResult> {
     return new Promise((resolve) => {
         const encodedQuery = encodeURIComponent(query)
         // 使用 DuckDuckGo 的 HTML 版本，更容易抓取
@@ -440,7 +445,7 @@ async function searchWithDuckDuckGo(query: string, maxResults: number): Promise<
             resolve({ success: false, error: `DuckDuckGo request failed: ${error.message}` })
         })
 
-        req.setTimeout(15000, () => {
+        req.setTimeout(timeout, () => {
             req.destroy()
             resolve({ success: false, error: 'DuckDuckGo request timed out' })
         })
@@ -535,9 +540,9 @@ export function registerHttpHandlers() {
     })
 
     // 网络搜索
-    safeIpcHandle('http:webSearch', async (_event, query: string, maxResults?: number) => {
-        logger.ipc.info('[HTTP] Web search:', query)
-        return webSearch(query, maxResults)
+    safeIpcHandle('http:webSearch', async (_event, query: string, maxResults?: number, timeout?: number) => {
+        logger.ipc.info('[HTTP] Web search:', query, 'timeout:', timeout)
+        return webSearch(query, maxResults, timeout)
     })
 
     // 配置 Google PSE
