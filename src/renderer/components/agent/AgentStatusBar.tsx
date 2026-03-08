@@ -126,7 +126,7 @@ export default function AgentStatusBar({
       className="mb-3"
     >
       {/* 主容器 - 与输入框风格统一 */}
-      <div className="rounded-2xl border border-border bg-surface/30 backdrop-blur-xl overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-border/50 bg-surface/40 backdrop-blur-md overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] transition-all">
         {/* 流式状态 / 等待审批 */}
         {(isStreaming || isAwaitingApproval) && (
           <div className={`flex items-center justify-between px-4 py-2 ${hasChanges ? 'border-b border-border/50' : ''}`}>
@@ -152,9 +152,9 @@ export default function AgentStatusBar({
             {isStreaming && (
               <button
                 onClick={onStop}
-                className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-text-muted/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-text-muted/60 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all border border-transparent hover:border-red-500/20"
               >
-                <Square className="w-2.5 h-2.5 fill-current" />
+                <Square className="w-2 h-2 fill-current" />
                 <span>Stop</span>
               </button>
             )}

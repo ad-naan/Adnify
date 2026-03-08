@@ -1032,7 +1032,6 @@ const ChatMessage = React.memo(({
                     messageId={message.id}
                   />
                 )}
-                {message.isStreaming && <StreamingIndicator />}
               </div>
 
               {message.interactive && !message.isStreaming && (
@@ -1059,41 +1058,7 @@ const ChatMessage = React.memo(({
   )
 })
 
-// 流式指示器组件
-const THINKING_TEXTS = ['Thinking', 'Analyzing', 'Processing', 'Generating', 'Composing', 'Crafting']
-const THINKING_TEXTS_ZH = ['思考中', '分析中', '处理中', '生成中', '编写中', '构思中']
 
-const StreamingIndicator = React.memo(function StreamingIndicator() {
-  const { language } = useStore()
-  const [textIndex, setTextIndex] = useState(() => Math.floor(Math.random() * THINKING_TEXTS.length))
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTextIndex(prev => {
-        let next = Math.floor(Math.random() * THINKING_TEXTS.length)
-        while (next === prev) next = Math.floor(Math.random() * THINKING_TEXTS.length)
-        return next
-      })
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const texts = language === 'zh' ? THINKING_TEXTS_ZH : THINKING_TEXTS
-  const currentText = texts[textIndex]
-
-  return (
-    <div className="flex items-center gap-2 mt-2 ml-1 opacity-80">
-      <div className="flex gap-1">
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
-      </div>
-      <span className="text-xs font-bold text-accent tracking-wide animate-pulse">
-        {currentText}...
-      </span>
-    </div>
-  )
-})
 
 ChatMessage.displayName = 'ChatMessage'
 

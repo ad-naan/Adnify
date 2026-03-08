@@ -268,9 +268,6 @@ export default function FileChangeCard({
                         ) : (
                             <span className="font-medium text-[11px] text-text-primary opacity-50">&lt;empty path&gt;</span>
                         )}
-                        {(isStreaming || isRunning) && (
-                            <span className="text-[11px] text-shimmer/80 italic ml-2">Processing...</span>
-                        )}
                     </div>
 
                     <div className="flex items-center gap-2">
