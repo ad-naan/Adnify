@@ -312,20 +312,21 @@ graph TB
 
 ### 🤖 Deep AI Agent Integration
 
-- **Three Working Modes**:
-  - **Chat Mode** 💬: Pure conversation mode, quick Q&A, no tool calls
-  - **Agent Mode** 🤖: Intelligent agent mode, single-task execution with full file system and terminal operation permissions
-  - **Plan Mode** 📋: Project-level development mode, step-by-step planning with automatic task progress tracking
+- **Three Core Working Modes**:
+  - **Chat Mode** 💬: Pure conversation mode, quick Q&A, direct response, no active tool calls
+  - **Agent Mode** 🤖: Intelligent agent mode, single-thread task focus, full file system and terminal permissions
+  - **Orchestrator Mode** 🧠: **[NEW]** All-new orchestrator mode supporting multi-turn interactive requirements gathering. Automatically slices high-complexity tasks and distributes them to **8 exclusive core AI expert modules** (including: Balanced, Concise, Coder, Architect, Code Reviewer, Analyst, UI/UX Designer, Orchestrator) for ultimate precision.
 
-- **23 Built-in Tools**: Complete toolset for AI autonomous invocation
-  - File Reading: `read_file`, `read_multiple_files`, `list_directory`, `get_dir_tree`
-  - File Writing: `write_file`, `edit_file`, `replace_file_content`, `create_file_or_folder`, `delete_file_or_folder`
-  - Search: `search_files`, `codebase_search`
-  - LSP Analysis: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors`
-  - Terminal: `run_command`
-  - Network: `web_search`, `read_url`
-  - Task Planning: `create_plan`, `update_plan` (Plan Mode exclusive)
-  - UI/UX Design: `uiux_search` (Design knowledge base search)
+- **24 Built-in Native Core Tools**: Building a universal foundation allowing AI to fully take over projects
+  - 📂 **File System**: `read_file`, `list_directory`
+  - ✍️ **Polymorphic Writes**: `write_file`, `edit_file`, `create_file_or_folder`, `delete_file_or_folder`
+  - 🔎 **Full-scale Search Engine**: `search_files` (ultra-fast regex scan), `codebase_search` (LanceDB vector semantic insight)
+  - 🧠 **Language Service (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors`
+  - 💻 **Sandbox Terminal**: `run_command`, `read_terminal_output`, `send_terminal_input`, `stop_terminal`
+  - 🌐 **Knowledge Networking**: `web_search` (multi-strategy fusion), `read_url` (Jina deep parsing)
+  - 🤝 **Human-like Interaction**: `ask_user`
+  - ✨ **Super-smart Planning**: `create_task_plan`, `update_task_plan`, `start_task_execution`
+  - 🎨 **Cutting-edge Design Search**: `uiux_search` (global design aesthetics and best practices)
 
 - **Smart Context**:
   - `@filename` Reference file context
@@ -464,7 +465,7 @@ Supports OpenAI, Anthropic, Google, DeepSeek, Ollama, and custom APIs
 
 **Context References**: Type `@` to select files, or use `@codebase`, `@git`, `@terminal`, `@symbols`, `@web` for special references
 
-**Slash Commands**: `/file`, `/clear`, `/plan`, `/chat`, `/agent` and other quick commands
+**Slash Commands**: `/file`, `/clear`, `/chat`, `/agent` and other quick commands
 
 **Code Modification**: Switch to Agent Mode, enter instruction, AI generates Diff preview then accept or reject
 
@@ -474,9 +475,11 @@ Supports OpenAI, Anthropic, Google, DeepSeek, Ollama, and custom APIs
 
 Open Settings → Index tab, select Embedding provider (recommend Jina AI), configure API Key and start indexing. After completion, AI can use semantic search.
 
-### Using Plan Mode
+### Using Orchestrator Mode
 
-Switch to Plan Mode, describe task goal, AI auto-creates step-by-step plan and executes progressively, supports progress tracking and visualization preview.
+Switch to Orchestrator Mode and engage in multi-turn conversations with the AI to clarify requirements. The AI will automatically create an in-depth step-by-step execution plan and distribute tasks to the most appropriate expert modules.
+
+![Orchestrator Mode](images/orchestrator.png)
 
 ### ⚡ Skills System Usage
 
@@ -513,7 +516,7 @@ Skills are instruction packages that give AI specialized capabilities (e.g., opt
 | | `@` | Reference context |
 | | `/` | Slash commands |
 
-**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (tool calls) / Plan 📋 (project-level development)
+**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (general task agent) / Orchestrator 🧠 (expert orchestration)
 
 ---
 
@@ -525,55 +528,26 @@ adnify/
 ├── scripts/             # Build scripts
 ├── src/
 │   ├── main/            # Electron main process
-│   │   ├── ipc/         # IPC handlers
-│   │   │   ├── http.ts      # HTTP requests
-│   │   │   ├── indexing.ts  # Code indexing
-│   │   │   ├── llm.ts       # LLM communication
-│   │   │   ├── lsp.ts       # LSP service
-│   │   │   ├── search.ts    # Search functionality
-│   │   │   └── settings.ts  # Settings management
-│   │   ├── indexing/    # Codebase indexing service
-│   │   │   ├── chunker.ts       # Code chunking
-│   │   │   ├── embedder.ts      # Embedding generation
-│   │   │   ├── indexService.ts  # Index service
-│   │   │   └── vectorStore.ts   # Vector storage
-│   │   ├── services/llm/# LLM communication layer
-│   │   └── security/    # Security module
-│   │       ├── securityModule.ts    # Security manager
-│   │       ├── secureTerminal.ts    # Terminal security
-│   │       └── workspaceHandlers.ts # Workspace handlers
+│   │   ├── ipc/         # IPC unified security intercept layer
+│   │   ├── lsp/         # LSP service gateway and lifecycle governance
+│   │   ├── memory/      # AI memory pool and multi-level caching engine
+│   │   ├── security/    # Sandbox isolation and terminal whitelist defense net
+│   │   ├── indexing/    # Global codebase parsing chain (Chunker, Embedding, LanceDB)
+│   │   └── services/    # Core main stack subsystems
+│   │       ├── agent/   # Agent log analysis and auto-correction
+│   │       ├── debugger/# Node/VSCode protocol deep debugging core
+│   │       ├── llm/     # LLM dynamic distribution gateway (routing, proxies)
+│   │       ├── mcp/     # Model Context Protocol backend registry and auth
+│   │       └── updater/ # Highly controllable silent updater module
 │   ├── renderer/        # Frontend render process
-│   │   ├── agent/       # AI Agent core
-│   │   │   ├── llm/     # LLM client adapters
-│   │   │   ├── tools/   # Tool definitions & execution
-│   │   │   ├── services/# Agent services
-│   │   │   └── prompts/ # Prompt templates
-│   │   ├── components/  # UI components
-│   │   │   ├── agent/   # Agent-related components
-│   │   │   │   ├── ChatPanel.tsx      # Chat panel
-│   │   │   │   ├── ToolCallCard.tsx   # Tool call card
-│   │   │   │   ├── InlineDiffPreview.tsx # Diff preview
-│   │   │   │   └── PlanPreview.tsx    # Plan preview
+│   │   ├── agent/       # Client AI brain core (engine queue, tools, instruction flow)
+│   │   ├── components/  # Fully decoupled, modular UI component blocks
 │   │   │   ├── editor/  # Editor components
-│   │   │   │   ├── Editor.tsx         # Monaco editor
-│   │   │   │   ├── DiffViewer.tsx     # Diff viewer
-│   │   │   │   └── InlineEdit.tsx     # Inline edit
 │   │   │   ├── sidebar/ # Sidebar components
-│   │   │   │   └── panels/
-│   │   │   │       ├── ExplorerView.tsx  # File explorer
-│   │   │   │       ├── SearchView.tsx    # Search panel
-│   │   │   │       ├── GitView.tsx       # Git panel
-│   │   │   │       ├── OutlineView.tsx   # Outline view
-│   │   │   │       └── ProblemsView.tsx  # Problems panel
 │   │   │   ├── panels/  # Bottom panels
-│   │   │   │   ├── TerminalPanel.tsx  # Terminal panel
-│   │   │   │   ├── SessionList.tsx    # Session list
-│   │   │   │   └── CheckpointPanel.tsx# Checkpoint panel
 │   │   │   ├── dialogs/ # Dialogs
-│   │   │   │   ├── CommandPalette.tsx # Command palette
-│   │   │   │   ├── QuickOpen.tsx      # Quick open
-│   │   │   │   └── OnboardingWizard.tsx # Onboarding wizard
 │   │   │   └── settings/# Settings components
+│   │   ├── modes/       # Multi-mode state machines (Agent, Chat, Orchestrator)
 │   │   ├── services/    # Frontend services
 │   │   │   └── TerminalManager.ts # Terminal manager
 │   │   ├── store/       # Zustand state management
