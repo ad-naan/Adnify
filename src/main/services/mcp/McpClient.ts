@@ -9,6 +9,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import * as cp from 'child_process'
 import {
   CallToolResultSchema,
   ToolListChangedNotificationSchema,
@@ -32,6 +33,7 @@ import type {
 import { isRemoteConfig } from '@shared/types/mcp'
 
 const DEFAULT_TIMEOUT = 30000
+const NPX_TIMEOUT = 60000  // npx 首次需要下载包，给更长超时
 
 type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -118,7 +120,17 @@ export class McpClient extends EventEmitter {
       args: config.args || [],
       env: { ...process.env, ...config.env } as Record<string, string>,
       cwd: config.cwd,
-      stderr: 'ignore',
+      stderr: 'pipe',
+    })
+
+    // 捕获子进程 stderr 输出，用于诊断启动失败原因
+    let stderrOutput = ''
+    transport.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString().trim()
+      if (text) {
+        stderrOutput += text + '\n'
+        logger.mcp?.warn(`[MCP:${config.id}] stderr: ${text}`)
+      }
     })
 
     const client = new Client({
@@ -128,8 +140,18 @@ export class McpClient extends EventEmitter {
 
     this.registerNotificationHandlers(client)
 
-    const timeout = config.timeout || DEFAULT_TIMEOUT
-    await this.withTimeout(client.connect(transport), timeout)
+    // 智能超时：npx/uvx 命令给更长超时（首次需要下载包）
+    const isPackageRunner = ['npx', 'uvx', 'bunx'].includes(config.command)
+    const timeout = config.timeout || (isPackageRunner ? NPX_TIMEOUT : DEFAULT_TIMEOUT)
+    try {
+      await this.withTimeout(client.connect(transport), timeout)
+    } catch (err) {
+      // 连接失败时，附带 stderr 信息以便诊断
+      if (stderrOutput) {
+        logger.mcp?.error(`[MCP:${config.id}] Process stderr output:\n${stderrOutput}`)
+      }
+      throw err
+    }
 
     this.state.client = client
     this.state.transport = transport
@@ -237,7 +259,35 @@ export class McpClient extends EventEmitter {
       this.state.client = null
     }
 
-    this.state.transport = null
+    // 显式关闭 transport 确保子进程被终止
+    if (this.state.transport) {
+      if (this.state.transport instanceof StdioClientTransport) {
+        try {
+          // StdioClientTransport 的 _process 是私有的，但我们可以通过这种方式获取
+          // @ts-ignore
+          const subProcess = this.state.transport._process
+          if (subProcess && subProcess.pid) {
+            logger.mcp?.info(`[MCP:${this.id}] Force killing process tree for PID ${subProcess.pid}`)
+            if (process.platform === 'win32') {
+              // Windows: 使用 taskkill /F /T 杀死整个进程树
+              cp.execSync(`taskkill /F /T /PID ${subProcess.pid}`, { stdio: 'ignore' })
+            } else {
+              subProcess.kill('SIGKILL')
+            }
+          }
+        } catch (err) {
+          logger.mcp?.warn(`[MCP:${this.id}] Force kill error:`, err)
+        }
+      }
+
+      try {
+        await this.state.transport.close()
+      } catch {
+        // ignore close errors
+      }
+      this.state.transport = null
+    }
+
     this.state.tools = []
     this.state.resources = []
     this.state.prompts = []
@@ -379,17 +429,17 @@ export class McpClient extends EventEmitter {
   private registerNotificationHandlers(client: Client): void {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       logger.mcp?.info(`[MCP:${this.id}] Tools list changed`)
-      await this.refreshCapabilities().catch(() => {})
+      await this.refreshCapabilities().catch(() => { })
     })
 
     client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => {
       logger.mcp?.info(`[MCP:${this.id}] Resources list changed`)
-      await this.refreshCapabilities().catch(() => {})
+      await this.refreshCapabilities().catch(() => { })
     })
 
     client.setNotificationHandler(PromptListChangedNotificationSchema, async () => {
       logger.mcp?.info(`[MCP:${this.id}] Prompts list changed`)
-      await this.refreshCapabilities().catch(() => {})
+      await this.refreshCapabilities().catch(() => { })
     })
   }
 

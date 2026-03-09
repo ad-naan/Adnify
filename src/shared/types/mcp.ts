@@ -91,10 +91,10 @@ export interface McpConfig {
 // 服务器状态
 // ============================================
 
-export type McpServerStatus = 
-  | 'disconnected' 
-  | 'connecting' 
-  | 'connected' 
+export type McpServerStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
   | 'error'
   | 'needs_auth'           // 需要 OAuth 认证
   | 'needs_registration'   // 需要客户端注册
@@ -292,3 +292,129 @@ export interface McpOAuthTokens {
   tokenType?: string
   scope?: string
 }
+// ============================================
+// 预设类型（用于内置服务器和 Registry）
+// ============================================
+
+/** 支持的平台 */
+export type McpPlatform = 'windows' | 'macos' | 'linux'
+
+/** 依赖类型 */
+export type McpDependencyType = 'node' | 'python' | 'uv' | 'bun' | 'docker'
+
+/** 依赖配置 */
+export interface McpDependency {
+  /** 依赖类型 */
+  type: McpDependencyType
+  /** 最低版本（可选） */
+  minVersion?: string
+  /** 检查命令（用于验证是否安装） */
+  checkCommand?: string
+  /** 安装说明 */
+  installNote?: string
+  /** 安装说明（中文） */
+  installNoteZh?: string
+}
+
+/** 环境变量配置 */
+export interface McpEnvConfig {
+  /** 环境变量名 */
+  key: string
+  /** 显示名称 */
+  label: string
+  /** 显示名称（中文） */
+  labelZh: string
+  /** 描述 */
+  description?: string
+  /** 描述（中文） */
+  descriptionZh?: string
+  /** 是否必填 */
+  required: boolean
+  /** 是否为密钥（显示为密码输入框） */
+  secret?: boolean
+  /** 默认值 */
+  defaultValue?: string
+  /** 占位符 */
+  placeholder?: string
+}
+
+/** 分类类型 */
+export type McpPresetCategory =
+  | 'search'      // 搜索
+  | 'database'    // 数据库
+  | 'filesystem'  // 文件系统
+  | 'development' // 开发工具
+  | 'design'      // 设计工具
+  | 'productivity'// 生产力
+  | 'ai'          // AI 服务
+  | 'cloud'       // 云服务
+  | 'other'       // 其他
+
+/** 基础预设定义 */
+export interface McpBasePreset {
+  /** 预设 ID */
+  id: string
+  /** 显示名称 */
+  name: string
+  /** 描述 */
+  description: string
+  /** 描述（中文） */
+  descriptionZh: string
+  /** 分类 */
+  category: McpPresetCategory
+  /** 图标（lucide 图标名） */
+  icon: string
+  /** 环境变量配置 */
+  envConfig?: McpEnvConfig[]
+  /** 默认自动批准的工具 */
+  defaultAutoApprove?: string[]
+  /** 是否需要额外配置 */
+  requiresConfig: boolean
+  /** 官方文档链接 */
+  docsUrl?: string
+  /** 是否为官方 MCP 服务器 */
+  official?: boolean
+  /** 标签 */
+  tags?: string[]
+  /** 安装前置命令（首次使用时需要执行） */
+  setupCommand?: string
+  /** 安装说明 */
+  setupNote?: string
+  /** 安装说明（中文） */
+  setupNoteZh?: string
+  /** 使用示例（告诉用户怎么触发） */
+  usageExamples?: string[]
+  /** 使用示例（中文） */
+  usageExamplesZh?: string[]
+  /** 支持的平台（不指定则支持所有平台） */
+  platforms?: McpPlatform[]
+  /** 依赖要求 */
+  dependencies?: McpDependency[]
+  /** 最低版本要求（MCP 服务器版本） */
+  minVersion?: string
+  /** 是否已废弃 */
+  deprecated?: boolean
+  /** 废弃说明 */
+  deprecatedNote?: string
+}
+
+/** 本地 MCP 预设 */
+export interface McpLocalPreset extends McpBasePreset {
+  /** 预设类型 */
+  type: 'local'
+  /** 启动命令 */
+  command: string
+  /** 命令参数 */
+  args?: string[]
+}
+
+/** 远程 MCP 预设 */
+export interface McpRemotePreset extends McpBasePreset {
+  /** 预设类型 */
+  type: 'remote'
+  /** 远程 URL */
+  url: string
+}
+
+/** MCP 服务器预设（辨别联合类型） */
+export type McpPreset = McpLocalPreset | McpRemotePreset

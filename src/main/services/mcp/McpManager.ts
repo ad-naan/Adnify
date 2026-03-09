@@ -174,6 +174,9 @@ export class McpManager extends EventEmitter {
     } catch (err) {
       const error = toAppError(err)
       logger.mcp?.error(`[McpManager] Failed to connect ${config.id}: ${error.code}`, error)
+      // 连接失败时必须清理子进程，防止子进程残留占用端口
+      await client.disconnect().catch(() => { })
+      this.clients.delete(config.id)
     }
 
     this.notifyStateChange()

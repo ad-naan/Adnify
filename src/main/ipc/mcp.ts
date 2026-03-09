@@ -7,7 +7,7 @@
 import { BrowserWindow } from 'electron'
 import { safeIpcHandle } from './safeHandle'
 import { logger } from '@shared/utils/Logger'
-import { mcpManager } from '../services/mcp'
+import { mcpManager, mcpRegistry } from '../services/mcp'
 import type {
   McpToolCallRequest,
   McpResourceReadRequest,
@@ -136,6 +136,47 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     mcpManager.setAutoConnectEnabled(enabled)
     return { success: true }
   })
+
+  // =================== Registry 相关处理器 ===================
+
+  // 搜索 Registry 中的 MCP 服务器
+  safeIpcHandle('mcp:registrySearch', async (_, query?: string) => {
+    const results = await mcpRegistry.search(query)
+    return { success: true, servers: results }
+  })
+
+  // 获取 Registry 服务器详情
+  safeIpcHandle('mcp:registryGetDetails', async (_, serverName: string) => {
+    const server = await mcpRegistry.getServerDetails(serverName)
+    if (!server) return { success: false, error: 'Server not found' }
+    return {
+      success: true,
+      server,
+      requiredEnvVars: mcpRegistry.getRequiredEnvVars(server),
+      localConfig: mcpRegistry.toLocalConfig(server),
+    }
+  })
+
+  // 从 Registry 安装 MCP 服务器
+  safeIpcHandle(
+    'mcp:registryInstall',
+    async (_, serverName: string, envValues?: Record<string, string>) => {
+      const server = await mcpRegistry.getServerDetails(serverName)
+      if (!server) return { success: false, error: 'Server not found in registry' }
+
+      const config = mcpRegistry.toLocalConfig(server)
+      if (!config) return { success: false, error: 'Cannot generate config for this server' }
+
+      // 合并用户提供的环境变量
+      if (envValues && 'command' in config) {
+        config.env = { ...config.env, ...envValues }
+      }
+
+      await mcpManager.addServer(config)
+      logger.mcp?.info(`[McpRegistry] Installed server from registry: ${serverName}`)
+      return { success: true, config }
+    }
+  )
 
   logger.mcp?.info('[MCP IPC] Handlers registered')
 }
