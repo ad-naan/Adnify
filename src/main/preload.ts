@@ -374,6 +374,10 @@ export interface ElectronAPI {
   mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  // Registry
+  mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
+  mcpRegistryGetDetails: (serverName: string) => Promise<{ success: boolean; server?: any; requiredEnvVars?: any[]; localConfig?: any; error?: string }>
+  mcpRegistryInstall: (serverName: string, envValues?: Record<string, string>) => Promise<{ success: boolean; config?: any; error?: string }>
   onMcpServerStatus: (callback: (event: { serverId: string; status: string; error?: string }) => void) => () => void
   onMcpToolsUpdated: (callback: (event: { serverId: string; tools: any[] }) => void) => () => void
   onMcpResourcesUpdated: (callback: (event: { serverId: string; resources: any[] }) => void) => () => void
@@ -633,6 +637,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mcpRemoveServer: (serverId: string) => ipcRenderer.invoke('mcp:removeServer', serverId),
   mcpToggleServer: (serverId: string, disabled: boolean) => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled),
   mcpSetAutoConnect: (enabled: boolean) => ipcRenderer.invoke('mcp:setAutoConnect', enabled),
+  // Registry
+  mcpRegistrySearch: (query?: string) => ipcRenderer.invoke('mcp:registrySearch', query),
+  mcpRegistryGetDetails: (serverName: string) => ipcRenderer.invoke('mcp:registryGetDetails', serverName),
+  mcpRegistryInstall: (serverName: string, envValues?: Record<string, string>) =>
+    ipcRenderer.invoke('mcp:registryInstall', serverName, envValues),
   // OAuth 相关
   mcpStartOAuth: (serverId: string) => ipcRenderer.invoke('mcp:startOAuth', serverId),
   mcpFinishOAuth: (serverId: string, authorizationCode: string) => ipcRenderer.invoke('mcp:finishOAuth', serverId, authorizationCode),
