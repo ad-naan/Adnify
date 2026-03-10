@@ -20,6 +20,8 @@ export function useGlobalShortcuts() {
     showComposer,
     showQuickOpen,
     showAbout,
+    activeFilePath,
+    closeFile,
   } = useStore()
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -100,10 +102,27 @@ export function useGlobalShortcuts() {
       window.dispatchEvent(new CustomEvent('explorer:reveal-active-file'))
       return
     }
+
+    // Reveal active file in sidebar: Alt+Shift+L
+    if (e.altKey && e.shiftKey && e.key.toLowerCase() === 'l') {
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('explorer:reveal-active-file'))
+      return
+    }
+
+    // Close active file: Ctrl+W
+    if (e.ctrlKey && e.key.toLowerCase() === 'w') {
+      e.preventDefault()
+      if (activeFilePath) {
+        closeFile(activeFilePath)
+      }
+      return
+    }
   }, [
     setShowSettings, setShowCommandPalette, setShowComposer, setShowQuickOpen, setShowAbout,
     terminalVisible, setTerminalVisible, debugVisible, setDebugVisible,
-    showCommandPalette, showComposer, showQuickOpen, showAbout
+    showCommandPalette, showComposer, showQuickOpen, showAbout,
+    activeFilePath, closeFile
   ])
 
   useEffect(() => {

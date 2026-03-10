@@ -3,108 +3,12 @@
  * 内置常用的 MCP 服务器，用户可以一键添加
  */
 
-/** 支持的平台 */
-export type McpPlatform = 'windows' | 'macos' | 'linux'
-
-/** 依赖类型 */
-export type McpDependencyType = 'node' | 'python' | 'uv' | 'bun' | 'docker'
-
-/** 依赖配置 */
-export interface McpDependency {
-  /** 依赖类型 */
-  type: McpDependencyType
-  /** 最低版本（可选） */
-  minVersion?: string
-  /** 检查命令（用于验证是否安装） */
-  checkCommand?: string
-  /** 安装说明 */
-  installNote?: string
-  /** 安装说明（中文） */
-  installNoteZh?: string
-}
-
-export interface McpPreset {
-  /** 预设 ID */
-  id: string
-  /** 显示名称 */
-  name: string
-  /** 描述 */
-  description: string
-  /** 描述（中文） */
-  descriptionZh: string
-  /** 分类 */
-  category: McpPresetCategory
-  /** 图标（lucide 图标名） */
-  icon: string
-  /** 启动命令 */
-  command: string
-  /** 命令参数 */
-  args?: string[]
-  /** 环境变量配置 */
-  envConfig?: McpEnvConfig[]
-  /** 默认自动批准的工具 */
-  defaultAutoApprove?: string[]
-  /** 是否需要额外配置 */
-  requiresConfig: boolean
-  /** 官方文档链接 */
-  docsUrl?: string
-  /** 是否为官方 MCP 服务器 */
-  official?: boolean
-  /** 标签 */
-  tags?: string[]
-  /** 安装前置命令（首次使用时需要执行） */
-  setupCommand?: string
-  /** 安装说明 */
-  setupNote?: string
-  /** 安装说明（中文） */
-  setupNoteZh?: string
-  /** 使用示例（告诉用户怎么触发） */
-  usageExamples?: string[]
-  /** 使用示例（中文） */
-  usageExamplesZh?: string[]
-  /** 支持的平台（不指定则支持所有平台） */
-  platforms?: McpPlatform[]
-  /** 依赖要求 */
-  dependencies?: McpDependency[]
-  /** 最低版本要求（MCP 服务器版本） */
-  minVersion?: string
-  /** 是否已废弃 */
-  deprecated?: boolean
-  /** 废弃说明 */
-  deprecatedNote?: string
-}
-
-export interface McpEnvConfig {
-  /** 环境变量名 */
-  key: string
-  /** 显示名称 */
-  label: string
-  /** 显示名称（中文） */
-  labelZh: string
-  /** 描述 */
-  description?: string
-  /** 描述（中文） */
-  descriptionZh?: string
-  /** 是否必填 */
-  required: boolean
-  /** 是否为密钥（显示为密码输入框） */
-  secret?: boolean
-  /** 默认值 */
-  defaultValue?: string
-  /** 占位符 */
-  placeholder?: string
-}
-
-export type McpPresetCategory = 
-  | 'search'      // 搜索
-  | 'database'    // 数据库
-  | 'filesystem'  // 文件系统
-  | 'development' // 开发工具
-  | 'design'      // 设计工具
-  | 'productivity'// 生产力
-  | 'ai'          // AI 服务
-  | 'cloud'       // 云服务
-  | 'other'       // 其他
+import {
+  type McpPlatform,
+  type McpDependencyType,
+  type McpPreset,
+  type McpPresetCategory,
+} from '@shared/types/mcp'
 
 /** 分类显示名称 */
 export const MCP_CATEGORY_NAMES: Record<McpPresetCategory, { en: string; zh: string }> = {
@@ -123,6 +27,7 @@ export const MCP_CATEGORY_NAMES: Record<McpPresetCategory, { en: string; zh: str
 export const MCP_PRESETS: McpPreset[] = [
   // ===== 搜索类 =====
   {
+    type: 'local',
     id: 'brave-search',
     name: 'Brave Search',
     description: 'Web search using Brave Search API',
@@ -152,6 +57,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['搜索 React 19 的最新特性', '查找 TypeScript 泛型教程'],
   },
   {
+    type: 'local',
     id: 'tavily-search',
     name: 'Tavily Search',
     description: 'AI-powered search engine optimized for LLMs with real-time data',
@@ -180,6 +86,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['搜索今天的科技新闻', '查找最新的 AI 研究论文'],
   },
   {
+    type: 'local',
     id: 'exa-search',
     name: 'Exa Search',
     description: 'Neural search engine with semantic understanding',
@@ -210,6 +117,7 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== 数据库类 =====
   {
+    type: 'local',
     id: 'sqlite',
     name: 'SQLite',
     description: 'Query and manage SQLite databases',
@@ -242,6 +150,7 @@ export const MCP_PRESETS: McpPreset[] = [
     ],
   },
   {
+    type: 'local',
     id: 'postgres',
     name: 'PostgreSQL',
     description: 'Connect to PostgreSQL databases with full SQL support',
@@ -271,6 +180,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['列出所有表', '查询前 10 个用户', '显示 products 表的结构'],
   },
   {
+    type: 'local',
     id: 'mysql',
     name: 'MySQL',
     description: 'Connect to MySQL/MariaDB databases',
@@ -294,6 +204,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['显示所有表', '查询上周的订单', '描述 customers 表'],
   },
   {
+    type: 'local',
     id: 'mongodb',
     name: 'MongoDB',
     description: 'Query and manage MongoDB databases',
@@ -322,6 +233,7 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== 开发工具类 =====
   {
+    type: 'local',
     id: 'github',
     name: 'GitHub',
     description: 'Full GitHub integration: repos, issues, PRs, actions, and more',
@@ -351,6 +263,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['在 GitHub 上搜索 React 组件库', '获取 facebook/react 的 README', '列出我仓库的最近提交'],
   },
   {
+    type: 'local',
     id: 'gitlab',
     name: 'GitLab',
     description: 'GitLab integration with CI/CD pipeline support',
@@ -372,6 +285,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['在我的 GitLab 中搜索项目', '获取我项目的流水线状态'],
   },
   {
+    type: 'local',
     id: 'linear',
     name: 'Linear',
     description: 'Project management with Linear: issues, projects, and teams',
@@ -391,6 +305,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['显示分配给我的问题', '创建一个新的 bug 问题', '搜索关于认证的问题'],
   },
   {
+    type: 'local',
     id: 'sentry',
     name: 'Sentry',
     description: 'Error tracking and performance monitoring with Sentry',
@@ -413,6 +328,7 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== 云服务类 =====
   {
+    type: 'local',
     id: 'aws-docs',
     name: 'AWS Documentation',
     description: 'Search and read AWS documentation',
@@ -430,6 +346,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['如何创建 S3 存储桶？', '解释 AWS Lambda 冷启动', '搜索 DynamoDB 最佳实践'],
   },
   {
+    type: 'local',
     id: 'cloudflare',
     name: 'Cloudflare',
     description: 'Manage Cloudflare Workers, KV, R2, and D1',
@@ -451,6 +368,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['列出我所有的 Workers', '获取 my-worker 的代码', '列出 KV 命名空间'],
   },
   {
+    type: 'local',
     id: 'vercel',
     name: 'Vercel',
     description: 'Manage Vercel deployments and projects',
@@ -470,6 +388,7 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== AI 服务类 =====
   {
+    type: 'local',
     id: 'fetch',
     name: 'Fetch',
     description: 'Fetch web content and convert to markdown for LLM consumption',
@@ -491,6 +410,7 @@ export const MCP_PRESETS: McpPreset[] = [
     ],
   },
   {
+    type: 'local',
     id: 'puppeteer',
     name: 'Puppeteer',
     description: 'Browser automation: screenshots, scraping, and interaction',
@@ -512,6 +432,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['截取 https://example.com 的屏幕截图', '点击页面上的登录按钮', '填写搜索表单并提交'],
   },
   {
+    type: 'local',
     id: 'playwright',
     name: 'Playwright',
     description: 'Cross-browser automation with Playwright',
@@ -535,6 +456,7 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== 生产力类 =====
   {
+    type: 'local',
     id: 'memory',
     name: 'Memory',
     description: 'Persistent memory using knowledge graph for context retention',
@@ -553,6 +475,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['记住我的项目使用 React 18', '你知道我的哪些偏好？', '保存这个 API 端点以便后用'],
   },
   {
+    type: 'local',
     id: 'notion',
     name: 'Notion',
     description: 'Read and search Notion pages and databases',
@@ -573,6 +496,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['在 Notion 中搜索会议记录', '获取我的项目路线图页面', '列出任务数据库中的项目'],
   },
   {
+    type: 'local',
     id: 'slack',
     name: 'Slack',
     description: 'Read and send Slack messages, manage channels',
@@ -594,6 +518,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamplesZh: ['显示 #general 的最近消息', '搜索关于部署的消息', '列出所有频道'],
   },
   {
+    type: 'local',
     id: 'google-drive',
     name: 'Google Drive',
     description: 'Search and read files from Google Drive',
@@ -616,14 +541,15 @@ export const MCP_PRESETS: McpPreset[] = [
 
   // ===== 设计工具类 =====
   {
+    type: 'local',
     id: 'figma',
     name: 'Figma',
-    description: 'Convert Figma designs to code, inspect design tokens and components',
-    descriptionZh: '将 Figma 设计稿转换为代码，检查设计令牌和组件',
+    description: 'Connect to Figma API to inspect design tokens, nodes, and more using stdio',
+    descriptionZh: '连接 Figma API 以检查设计令牌、节点等内容（使用标准 IO 传输）',
     category: 'design',
     icon: 'Figma',
     command: 'npx',
-    args: ['-y', 'figma-developer-mcp'],
+    args: ['-y', 'figma-mcp'],
     envConfig: [
       {
         key: 'FIGMA_API_KEY',
@@ -636,40 +562,15 @@ export const MCP_PRESETS: McpPreset[] = [
         placeholder: 'figd_...',
       },
     ],
-    defaultAutoApprove: ['get_figma_data', 'download_figma_images'],
+    defaultAutoApprove: ['get_file', 'get_nodes'],
     requiresConfig: true,
-    docsUrl: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/figma-mcp',
+    docsUrl: 'https://github.com/figma/mcp-server',
     tags: ['figma', 'design', 'ui', 'code-generation'],
-    usageExamples: ['Convert this Figma design to React: [Figma URL]', 'Extract colors and fonts from my Figma file', 'Generate HTML/CSS from this frame'],
-    usageExamplesZh: ['将这个 Figma 设计转换为 React：[Figma URL]', '从我的 Figma 文件中提取颜色和字体', '从这个 frame 生成 HTML/CSS'],
+    usageExamples: ['Connect to my Figma file: [Figma URL]', 'Get the nodes from my Figma file', 'Inspect design tokens'],
+    usageExamplesZh: ['连接我的 Figma 文件：[Figma URL]', '获取 Figma 文件中的节点信息', '检查设计令牌'],
   },
   {
-    id: 'framelink-figma',
-    name: 'Framelink Figma',
-    description: 'Enhanced Figma integration with layout analysis and code generation',
-    descriptionZh: '增强的 Figma 集成，支持布局分析和代码生成',
-    category: 'design',
-    icon: 'Figma',
-    command: 'npx',
-    args: ['-y', '@anthropic/framelink-figma-mcp'],
-    envConfig: [
-      {
-        key: 'FIGMA_ACCESS_TOKEN',
-        label: 'Figma Access Token',
-        labelZh: 'Figma 访问令牌',
-        required: true,
-        secret: true,
-        placeholder: 'figd_...',
-      },
-    ],
-    defaultAutoApprove: ['get_figma_data', 'get_figma_styles'],
-    requiresConfig: true,
-    docsUrl: 'https://github.com/anthropics/anthropic-quickstarts/tree/main/framelink-figma-mcp',
-    tags: ['figma', 'design', 'layout', 'code-generation'],
-    usageExamples: ['Analyze the layout of this Figma page', 'Generate responsive CSS from this design', 'Extract component structure from Figma'],
-    usageExamplesZh: ['分析这个 Figma 页面的布局', '从这个设计生成响应式 CSS', '从 Figma 提取组件结构'],
-  },
-  {
+    type: 'local',
     id: 'context7',
     name: 'Context7',
     description: 'Get up-to-date documentation for any library directly in your prompts',
@@ -686,36 +587,10 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['How to use React Query useQuery hook?', 'Show me Tailwind CSS flexbox utilities', 'Get Next.js App Router documentation'],
     usageExamplesZh: ['如何使用 React Query 的 useQuery hook？', '显示 Tailwind CSS 的 flexbox 工具类', '获取 Next.js App Router 文档'],
   },
-  {
-    id: 'magic-mcp',
-    name: 'Magic MCP (21st.dev)',
-    description: 'AI-powered UI component generation with modern design patterns',
-    descriptionZh: 'AI 驱动的 UI 组件生成，采用现代设计模式',
-    category: 'design',
-    icon: 'Wand2',
-    command: 'npx',
-    args: ['-y', '@anthropic/magic-mcp'],
-    envConfig: [
-      {
-        key: 'TWENTY_FIRST_API_KEY',
-        label: '21st.dev API Key',
-        labelZh: '21st.dev API 密钥',
-        description: 'Get from https://21st.dev',
-        descriptionZh: '从 https://21st.dev 获取',
-        required: true,
-        secret: true,
-      },
-    ],
-    defaultAutoApprove: ['generate_component', 'search_components'],
-    requiresConfig: true,
-    docsUrl: 'https://github.com/21st-dev/magic-mcp',
-    tags: ['ui', 'components', 'ai', 'generation'],
-    usageExamples: ['Generate a pricing card component', 'Create a modern navigation bar', 'Build a dashboard layout with sidebar'],
-    usageExamplesZh: ['生成一个定价卡片组件', '创建一个现代导航栏', '构建一个带侧边栏的仪表盘布局'],
-  },
 
   // ===== 文件系统类 =====
   {
+    type: 'local',
     id: 'filesystem',
     name: 'Filesystem',
     description: 'Secure file operations with configurable access control',
@@ -756,7 +631,7 @@ export function getAllCategories(): McpPresetCategory[] {
 /** 搜索预设 */
 export function searchPresets(query: string): McpPreset[] {
   const lowerQuery = query.toLowerCase()
-  return MCP_PRESETS.filter(p => 
+  return MCP_PRESETS.filter(p =>
     p.name.toLowerCase().includes(lowerQuery) ||
     p.description.toLowerCase().includes(lowerQuery) ||
     p.descriptionZh.includes(query) ||
@@ -783,7 +658,7 @@ export function isPresetSupportedOnCurrentPlatform(preset: McpPreset): boolean {
 /** 获取预设的依赖检查命令 */
 export function getPresetDependencyChecks(preset: McpPreset): Array<{ type: McpDependencyType; command: string }> {
   if (!preset.dependencies) return []
-  
+
   return preset.dependencies
     .filter(dep => dep.checkCommand)
     .map(dep => ({

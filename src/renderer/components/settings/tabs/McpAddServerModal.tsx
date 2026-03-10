@@ -3,7 +3,7 @@
  * 支持从预设添加或自定义配置
  */
 
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Search,
   Plus,
@@ -35,10 +35,12 @@ import {
   MCP_PRESETS,
   MCP_CATEGORY_NAMES,
   searchPresets,
+} from '@shared/config/mcpPresets'
+import {
   type McpPreset,
   type McpPresetCategory,
   type McpEnvConfig,
-} from '@shared/config/mcpPresets'
+} from '@shared/types/mcp'
 
 interface McpAddServerModalProps {
   isOpen: boolean
@@ -67,7 +69,7 @@ export interface McpServerFormData {
   presetId?: string
 }
 
-type ViewMode = 'presets' | 'custom' | 'configure'
+type ViewMode = 'presets' | 'registry' | 'custom' | 'configure'
 type ServerType = 'local' | 'remote'
 
 // 图标映射
@@ -123,6 +125,16 @@ export default function McpAddServerModal({
   const [oauthScope, setOauthScope] = useState('')
   const [enableOAuth, setEnableOAuth] = useState(true)
 
+  const [registryServers, setRegistryServers] = useState<McpPreset[]>([])
+  const [isLoadingRegistry, setIsLoadingRegistry] = useState(false)
+
+  // 当切换到 Registry 视图时，如果列表为空则触发搜索
+  useEffect(() => {
+    if (viewMode === 'registry' && registryServers.length === 0) {
+      handleRegistrySearch()
+    }
+  }, [viewMode])
+
   // 过滤预设
   const filteredPresets = useMemo(() => {
     let presets = searchQuery ? searchPresets(searchQuery) : MCP_PRESETS
@@ -147,7 +159,7 @@ export default function McpAddServerModal({
     setSelectedPreset(preset)
     setEnvValues({})
     setShowSecrets({})
-    
+
     // 如果不需要配置，直接进入配置页面
     if (!preset.requiresConfig) {
       setViewMode('configure')
@@ -180,6 +192,47 @@ export default function McpAddServerModal({
     setViewMode('custom')
   }
 
+  // 搜索 Registry
+  const handleRegistrySearch = async () => {
+    setIsLoadingRegistry(true)
+    setError(null)
+    try {
+      const result = await window.electronAPI.mcpRegistrySearch(searchQuery)
+      if (result.success) {
+        setRegistryServers(result.servers || [])
+      } else {
+        setError(result.error || (language === 'zh' ? '搜索失败' : 'Search failed'))
+      }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsLoadingRegistry(false)
+    }
+  }
+
+  // 从 Registry 选择
+  const handleSelectRegistryServer = async (serverName: string) => {
+    setIsLoadingRegistry(true)
+    setError(null)
+    try {
+      const result = await window.electronAPI.mcpRegistryGetDetails(serverName)
+      if (result.success) {
+        // 将 Registry 详情转换并应用到配置界面
+        const preset = result.localConfig as McpPreset
+        setSelectedPreset(preset)
+        setEnvValues({})
+        setShowSecrets({})
+        setViewMode('configure')
+      } else {
+        setError(result.error || (language === 'zh' ? '获取详情失败' : 'Failed to get details'))
+      }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setIsLoadingRegistry(false)
+    }
+  }
+
   // 返回预设列表
   const handleBack = () => {
     setSelectedPreset(null)
@@ -196,17 +249,18 @@ export default function McpAddServerModal({
       let config: McpServerFormData
 
       if (selectedPreset) {
-        // 从预设创建（本地服务器）
+        // 从预设创建
         const env: Record<string, string> = {}
-        
+        const presetType = selectedPreset.type || 'local'
+
         // 处理环境变量
-        for (const envConfig of selectedPreset.envConfig || []) {
+        for (const envConfig of (selectedPreset.envConfig || [])) {
           const value = envValues[envConfig.key]
           if (envConfig.required && !value) {
             throw new Error(
               language === 'zh'
-                ? `请填写 ${envConfig.labelZh}`
-                : `Please fill in ${envConfig.label}`
+                ? `请填写 ${envConfig.labelZh} `
+                : `Please fill in ${envConfig.label} `
             )
           }
           if (value) {
@@ -216,24 +270,37 @@ export default function McpAddServerModal({
           }
         }
 
-        // 处理 args 中的变量替换
-        const args = (selectedPreset.args || []).map(arg => {
-          // 替换 ${VAR_NAME} 格式的变量
-          return arg.replace(/\$\{(\w+)\}/g, (_, varName) => {
-            return envValues[varName] || env[varName] || ''
-          })
-        }).filter(arg => arg !== '')
+        if (presetType === 'remote') {
+          const remotePreset = selectedPreset as any
+          config = {
+            type: 'remote',
+            id: selectedPreset.id,
+            name: selectedPreset.name,
+            url: remotePreset.url || '',
+            autoApprove: selectedPreset.defaultAutoApprove || [],
+            disabled: false,
+            presetId: selectedPreset.id,
+          }
+        } else {
+          const localPreset = selectedPreset as any
+          // 处理 args 中的变量替换
+          const args = (localPreset.args || []).map((arg: string) => {
+            return arg.replace(/\$\{(\w+)\}/g, (_: string, varName: string) => {
+              return envValues[varName] || env[varName] || ''
+            })
+          }).filter((arg: string) => arg !== '')
 
-        config = {
-          type: 'local',
-          id: selectedPreset.id,
-          name: selectedPreset.name,
-          command: selectedPreset.command,
-          args,
-          env,
-          autoApprove: selectedPreset.defaultAutoApprove || [],
-          disabled: false,
-          presetId: selectedPreset.id,
+          config = {
+            type: 'local',
+            id: selectedPreset.id,
+            name: selectedPreset.name,
+            command: localPreset.command || '',
+            args,
+            env,
+            autoApprove: selectedPreset.defaultAutoApprove || [],
+            disabled: false,
+            presetId: selectedPreset.id,
+          }
         }
       } else if (serverType === 'remote') {
         // 远程服务器配置
@@ -257,10 +324,10 @@ export default function McpAddServerModal({
           url: remoteUrl,
           oauth: enableOAuth
             ? {
-                clientId: oauthClientId || undefined,
-                clientSecret: oauthClientSecret || undefined,
-                scope: oauthScope || undefined,
-              }
+              clientId: oauthClientId || undefined,
+              clientSecret: oauthClientSecret || undefined,
+              scope: oauthScope || undefined,
+            }
             : false,
           autoApprove: autoApproveInput.split(/[,\s]+/).filter(Boolean),
           disabled: false,
@@ -342,15 +409,14 @@ export default function McpAddServerModal({
   // 渲染预设卡片
   const renderPresetCard = (preset: McpPreset) => {
     const isAdded = existingServerIds.includes(preset.id)
-    
+
     return (
       <div
         key={preset.id}
-        className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer group ${
-          isAdded
-            ? 'bg-surface/10 border-border opacity-50 cursor-not-allowed grayscale'
-            : 'bg-surface/20 backdrop-blur-md border-border hover:border-accent/30 hover:bg-surface/40 hover:shadow-md'
-        }`}
+        className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer group ${isAdded
+          ? 'bg-surface/10 border-border opacity-50 cursor-not-allowed grayscale'
+          : 'bg-surface/20 backdrop-blur-md border-border hover:border-accent/30 hover:bg-surface/40 hover:shadow-md'
+          }`}
         onClick={() => !isAdded && handleSelectPreset(preset)}
       >
         <div className="flex items-start gap-4">
@@ -437,10 +503,10 @@ export default function McpAddServerModal({
         viewMode === 'presets'
           ? (language === 'zh' ? '添加 MCP 服务器' : 'Add MCP Server')
           : viewMode === 'custom'
-          ? (language === 'zh' ? '自定义服务器' : 'Custom Server')
-          : selectedPreset
-          ? (language === 'zh' ? `配置 ${selectedPreset.name}` : `Configure ${selectedPreset.name}`)
-          : ''
+            ? (language === 'zh' ? '自定义服务器' : 'Custom Server')
+            : selectedPreset
+              ? (language === 'zh' ? `配置 ${selectedPreset.name} ` : `Configure ${selectedPreset.name} `)
+              : ''
       }
       size="2xl"
     >
@@ -448,33 +514,118 @@ export default function McpAddServerModal({
         {/* 预设列表视图 */}
         {viewMode === 'presets' && (
           <>
-            {/* 搜索和分类 */}
-            <div className="flex gap-3">
+            {/* 标签切换 */}
+            <div className="flex p-1 bg-surface/30 rounded-xl mb-4">
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${(viewMode as string) === 'presets' ? 'bg-accent text-white shadow-md' : 'text-text-muted hover:text-text-primary'}`}
+                onClick={() => setViewMode('presets')}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {language === 'zh' ? '内置预设' : 'Built-in Presets'}
+              </button>
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${(viewMode as string) === 'registry' ? 'bg-accent text-white shadow-md' : 'text-text-muted hover:text-text-primary'}`}
+                onClick={() => setViewMode('registry')}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                {language === 'zh' ? '探索在线' : 'Explore Registry'}
+              </button>
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${(viewMode as string) === 'custom' ? 'bg-accent text-white shadow-md' : 'text-text-muted hover:text-text-primary'}`}
+                onClick={handleCustomMode}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {language === 'zh' ? '手动自定义' : 'Manual Custom'}
+              </button>
+            </div>
+
+            {/* 搜索和分类 (仅预设) */}
+            {viewMode === 'presets' && (
+              <div className="flex gap-3 mb-2">
+                <div className="relative flex-1 group">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-accent transition-colors" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={language === 'zh' ? '在内置预设中搜索...' : 'Search in built-in presets...'}
+                    className="pl-10 h-10 rounded-xl bg-surface/20 border-border focus:bg-surface/40"
+                  />
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Registry 视图 */}
+        {viewMode === 'registry' && (
+          <>
+            <div className="flex gap-3 mb-4">
               <div className="relative flex-1 group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted group-focus-within:text-accent transition-colors" />
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={language === 'zh' ? '搜索服务器...' : 'Search servers...'}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRegistrySearch()}
+                  placeholder={language === 'zh' ? '搜索官方 MCP Registry...' : 'Search Official MCP Registry...'}
                   className="pl-10 h-10 rounded-xl bg-surface/20 border-border focus:bg-surface/40"
                 />
               </div>
-              <Button variant="secondary" onClick={handleCustomMode} className="rounded-xl h-10 px-4 hover:border-accent/30 hover:bg-surface/40">
-                <Plus className="w-4 h-4 mr-2" />
-                {language === 'zh' ? '自定义' : 'Custom'}
+              <Button
+                variant="primary"
+                onClick={handleRegistrySearch}
+                disabled={isLoadingRegistry}
+                className="h-10 rounded-xl px-6"
+              >
+                {isLoadingRegistry ? <Loader2 className="w-4 h-4 animate-spin" /> : (language === 'zh' ? '搜索' : 'Search')}
               </Button>
             </div>
 
+            <div className="grid grid-cols-1 gap-3 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
+              {registryServers.length === 0 ? (
+                <div className="text-center py-12 text-text-muted bg-surface/10 rounded-xl border border-dashed border-border">
+                  <Globe className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">{language === 'zh' ? '输入关键词搜索全球 MCP 服务器' : 'Search the world for MCP servers'}</p>
+                </div>
+              ) : (
+                registryServers.map(server => (
+                  <div
+                    key={server.id}
+                    className="p-4 rounded-xl border border-border bg-surface/20 hover:bg-surface/40 transition-all cursor-pointer group"
+                    onClick={() => handleSelectRegistryServer(server.name)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-accent/10 text-accent">
+                          <Server className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-text-primary">{server.name}</h4>
+                          <p className="text-xs text-text-muted mt-0.5 line-clamp-1">{server.description}</p>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        {language === 'zh' ? '安装' : 'Install'}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {/* 预设列表视图补全（分类部分） */}
+        {viewMode === 'presets' && (
+          <>
             {/* 分类标签 */}
             <div className="flex flex-wrap gap-2 mb-2">
               {categories.map(cat => (
                 <button
                   key={cat.id}
-                  className={`px-4 py-1.5 text-[11px] font-bold rounded-xl transition-all duration-300 border uppercase tracking-tight ${
-                    selectedCategory === cat.id
-                      ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20 scale-105 z-10'
-                      : 'bg-surface/20 text-text-secondary border-transparent hover:border-border hover:bg-surface/40'
-                  }`}
+                  className={`px-4 py-1.5 text-[11px] font-bold rounded-xl transition-all duration-300 border uppercase tracking-tight ${selectedCategory === cat.id
+                    ? 'bg-accent text-white border-accent shadow-lg shadow-accent/20 scale-105 z-10'
+                    : 'bg-surface/20 text-text-secondary border-transparent hover:border-border hover:bg-surface/40'
+                    }`}
                   onClick={() => setSelectedCategory(cat.id)}
                 >
                   {cat.name}
@@ -587,7 +738,15 @@ export default function McpAddServerModal({
                 {language === 'zh' ? '启动命令' : 'Command'}
               </h4>
               <div className="p-3 bg-black/30 rounded font-mono text-xs text-text-muted">
-                {selectedPreset.command} {(selectedPreset.args || []).join(' ')}
+                {selectedPreset.type === 'local' ? (
+                  <>
+                    {(selectedPreset as any).command} {((selectedPreset as any).args || []).join(' ')}
+                  </>
+                ) : (
+                  <>
+                    URL: {(selectedPreset as any).url}
+                  </>
+                )}
               </div>
             </div>
           </>
@@ -599,21 +758,19 @@ export default function McpAddServerModal({
             {/* 服务器类型选择 */}
             <div className="flex gap-2 p-1 bg-surface/30 rounded-lg">
               <button
-                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${
-                  serverType === 'local'
-                    ? 'bg-accent text-white'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${serverType === 'local'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
                 onClick={() => setServerType('local')}
               >
                 {language === 'zh' ? '本地服务器' : 'Local Server'}
               </button>
               <button
-                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${
-                  serverType === 'remote'
-                    ? 'bg-accent text-white'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${serverType === 'remote'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
                 onClick={() => setServerType('remote')}
               >
                 {language === 'zh' ? '远程服务器' : 'Remote Server'}
@@ -694,15 +851,13 @@ export default function McpAddServerModal({
                       {language === 'zh' ? 'OAuth 认证' : 'OAuth Authentication'}
                     </label>
                     <button
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        enableOAuth ? 'bg-accent' : 'bg-white/10'
-                      }`}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${enableOAuth ? 'bg-accent' : 'bg-white/10'
+                        }`}
                       onClick={() => setEnableOAuth(!enableOAuth)}
                     >
                       <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          enableOAuth ? 'left-5' : 'left-0.5'
-                        }`}
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${enableOAuth ? 'left-5' : 'left-0.5'
+                          }`}
                       />
                     </button>
                   </div>

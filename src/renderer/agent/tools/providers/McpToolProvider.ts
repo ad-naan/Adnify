@@ -28,9 +28,27 @@ export class McpToolProvider implements ToolProvider {
   readonly id = 'mcp'
   readonly name = 'MCP Tools'
 
+  private static nameMap = new Map<string, { serverId: string; toolName: string }>()
+
   /** 生成 MCP 工具的完整名称 */
   static getFullToolName(serverId: string, toolName: string): string {
-    return `${MCP_TOOL_PREFIX}${serverId}${MCP_TOOL_SEPARATOR}${toolName}`
+    const rawName = `${MCP_TOOL_PREFIX}${serverId}${MCP_TOOL_SEPARATOR}${toolName}`
+    let sanitized = rawName.replace(/[^a-zA-Z0-9_-]/g, '_')
+
+    // 如果该名称已经被别的工具占用，通过加后缀确保唯一性
+    if (this.nameMap.has(sanitized)) {
+      const existing = this.nameMap.get(sanitized)!
+      if (existing.serverId !== serverId || existing.toolName !== toolName) {
+        let index = 1
+        while (this.nameMap.has(`${sanitized}_${index}`)) {
+          index++
+        }
+        sanitized = `${sanitized}_${index}`
+      }
+    }
+
+    this.nameMap.set(sanitized, { serverId, toolName })
+    return sanitized
   }
 
   /** 解析 MCP 工具名称 */
@@ -38,15 +56,7 @@ export class McpToolProvider implements ToolProvider {
     if (!fullName.startsWith(MCP_TOOL_PREFIX)) {
       return null
     }
-    const rest = fullName.slice(MCP_TOOL_PREFIX.length)
-    const separatorIndex = rest.indexOf(MCP_TOOL_SEPARATOR)
-    if (separatorIndex === -1) {
-      return null
-    }
-    return {
-      serverId: rest.slice(0, separatorIndex),
-      toolName: rest.slice(separatorIndex + MCP_TOOL_SEPARATOR.length),
-    }
+    return this.nameMap.get(fullName) || null
   }
 
   /** 检查是否为 MCP 工具 */
@@ -58,7 +68,7 @@ export class McpToolProvider implements ToolProvider {
     if (!McpToolProvider.isMcpTool(toolName)) {
       return false
     }
-    
+
     const parsed = McpToolProvider.parseToolName(toolName)
     if (!parsed) {
       return false
@@ -130,7 +140,7 @@ export class McpToolProvider implements ToolProvider {
     // 检查必填参数
     const required = tool.inputSchema.required || []
     const argObj = (args || {}) as Record<string, unknown>
-    
+
     for (const key of required) {
       if (!(key in argObj)) {
         return { valid: false, error: `Missing required parameter: ${key}` }
@@ -210,11 +220,7 @@ export class McpToolProvider implements ToolProvider {
     const properties: Record<string, any> = {}
     if (tool.inputSchema.properties) {
       for (const [key, prop] of Object.entries(tool.inputSchema.properties)) {
-        properties[key] = {
-          type: prop.type,
-          description: prop.description || '',
-          ...(prop.enum && { enum: prop.enum }),
-        }
+        properties[key] = this.convertMcpProperty(prop)
       }
     }
 
@@ -227,6 +233,38 @@ export class McpToolProvider implements ToolProvider {
         required: tool.inputSchema.required,
       },
     }
+  }
+
+  /**
+   * 递归转换 MCP 属性到 OpenAI/LLM 兼容格式
+   * 修复 "array schema missing items" 等验证错误
+   */
+  private convertMcpProperty(prop: any): any {
+    const result: any = {
+      type: prop.type,
+      description: prop.description || '',
+    }
+
+    if (prop.enum) {
+      result.enum = prop.enum
+    }
+
+    // 核心修复：处理数组类型，必须包含 items
+    if (prop.type === 'array') {
+      result.items = prop.items ? this.convertMcpProperty(prop.items) : { type: 'string' }
+    }
+    // 处理嵌套对象
+    else if (prop.type === 'object' && prop.properties) {
+      result.properties = {}
+      for (const [key, value] of Object.entries(prop.properties)) {
+        result.properties[key] = this.convertMcpProperty(value)
+      }
+      if (prop.required) {
+        result.required = prop.required
+      }
+    }
+
+    return result
   }
 
   /**
@@ -310,7 +348,7 @@ export class McpToolProvider implements ToolProvider {
    */
   private convertImageContent(item: McpContent): { text?: string; rich?: ToolRichContent } {
     const mimeType = item.mimeType || 'image/png'
-    
+
     if (item.data) {
       return {
         text: `[Image: ${mimeType}]`,
@@ -333,7 +371,7 @@ export class McpToolProvider implements ToolProvider {
    */
   private convertResourceContent(item: McpContent): { text?: string; rich?: ToolRichContent } {
     const uri = item.uri || 'unknown'
-    
+
     // 检查是否是文件链接
     if (uri.startsWith('file://') || uri.match(/^[a-zA-Z]:\\/)) {
       return {

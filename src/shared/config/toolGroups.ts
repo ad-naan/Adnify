@@ -67,11 +67,7 @@ const CORE_TOOLS: string[] = [
   'go_to_definition',
   'get_hover_info',
   'get_document_symbols',
-  // AI 辅助
-  'analyze_code',
-  'suggest_refactoring',
-  'suggest_fixes',
-  'generate_tests',
+
   // 搜索
   'codebase_search',
   // 网络

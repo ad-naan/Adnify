@@ -120,12 +120,23 @@ export class MessageConverter {
     }
     if (source.type === 'base64' && source.data) {
       const mediaType = source.media_type || 'image/png' // 默认 PNG
+      // 直接传递纯 base64 字符串，不要拼成 data: URL
+      // AI SDK 内部的 downloadAssets 会将 data: URL 字符串解析为 URL 对象并用 fetch 下载
+      // 而 Electron 打包后 Node.js 原生 fetch 不支持 data: scheme，导致报错
       return {
-        image: `data:${mediaType};base64,${source.data}`,
+        image: source.data,
         mediaType,
       }
     }
     return null
+  }
+
+  /**
+   * 清理 tool call ID，确保符合 Claude API 的格式要求
+   * Claude 要求 tool_use.id 匹配 [a-zA-Z0-9_-]+
+   */
+  private sanitizeToolCallId(id: string): string {
+    return id.replace(/[^a-zA-Z0-9_-]/g, '_')
   }
 
   /**
@@ -158,7 +169,7 @@ export class MessageConverter {
       for (const toolCall of msg.tool_calls) {
         content.push({
           type: 'tool-call',
-          toolCallId: toolCall.id,
+          toolCallId: this.sanitizeToolCallId(toolCall.id),
           toolName: toolCall.function.name,
           input: JSON.parse(toolCall.function.arguments),
         })
@@ -186,7 +197,7 @@ export class MessageConverter {
       content: [
         {
           type: 'tool-result',
-          toolCallId: msg.tool_call_id,
+          toolCallId: this.sanitizeToolCallId(msg.tool_call_id),
           toolName: msg.name || 'unknown',
           output,
         },

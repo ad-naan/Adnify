@@ -36,6 +36,8 @@ import { useStore } from '@store'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
+import { Modal } from '../ui/Modal'
+import { LazyImage } from '../common/LazyImage'
 import { useFluidTypewriter } from '@renderer/hooks/useFluidTypewriter'
 
 interface ChatMessageProps {
@@ -122,7 +124,7 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
           language={language}
           PreTag="div"
           className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
-          customStyle={{ background: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
+          customStyle={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
           wrapLines
           wrapLongLines
         >
@@ -159,25 +161,29 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
   const [isExpanded, setIsExpanded] = useState(true)
   const { language } = useStore()
   return (
-    <div className="overflow-hidden w-full">
-      <button
+    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
+      <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center justify-between px-3 py-2 text-text-secondary hover:bg-surface-hover/50 transition-colors"
+        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
       >
-        <div className="flex items-center gap-2">
-          {isStreaming ? (
-            <Search className="w-3.5 h-3.5 text-accent animate-pulse" />
-          ) : (
-            <Search className="w-3.5 h-3.5" />
-          )}
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${isStreaming ? 'text-shimmer' : ''}`}>
-            {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
-          </span>
-        </div>
-        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }}>
-          <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+        <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} className="shrink-0 text-text-muted/40 hover:text-text-muted transition-colors">
+          <ChevronDown className="w-3.5 h-3.5" />
         </motion.div>
-      </button>
+
+        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
+          {isStreaming ? (
+            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            </div>
+          ) : (
+            <Search className="w-3 h-3 text-text-muted/70" />
+          )}
+        </div>
+
+        <span className={`text-[12px] truncate ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+          {language === 'zh' ? '自动关联上下文' : 'Auto-Context'}
+        </span>
+      </div>
 
       <AnimatePresence>
         {isExpanded && (
@@ -187,16 +193,19 @@ const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isS
             exit={{ height: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 pt-1">
-              {content ? (
-                <div className="text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
-                  {content}
-                </div>
-              ) : (
-                <div className="text-[11px] italic text-text-muted/40 py-1">
-                  {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
-                </div>
-              )}
+            <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
+              <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+              <div className="relative z-10 ms-1 border-l-2 border-border/30 pl-2">
+                {content ? (
+                  <div className="max-h-64 overflow-auto custom-scrollbar text-[11px] text-text-muted/80 leading-relaxed font-sans whitespace-pre-wrap">
+                    {content}
+                  </div>
+                ) : (
+                  <div className="text-[11px] italic text-text-muted/40 py-1">
+                    {language === 'zh' ? '正在分析检索出的代码...' : 'Analyzing retrieved code...'}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -224,24 +233,29 @@ const SkillBlock = React.memo(({ items }: { items: any[] }) => {
   }
 
   return (
-    <div className="flex w-full items-center gap-2 px-3 py-2 text-text-secondary hover:bg-surface-hover/50 transition-colors select-none">
-      <div className="flex items-center gap-1.5 flex-shrink-0">
-        <Wrench className="w-3.5 h-3.5" />
-        <span className="text-[10px] font-bold uppercase tracking-wider">
+    <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
+      <div className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer text-text-secondary transition-colors select-none">
+        <div className="shrink-0 text-transparent w-3.5 h-3.5" /> {/* Spacer for alignment */}
+
+        <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
+          <Wrench className="w-3 h-3 text-text-muted/70" />
+        </div>
+
+        <span className="text-[12px] whitespace-nowrap group-hover:text-text-primary transition-colors">
           {language === 'zh' ? '应用技能' : 'Applied Skills'}:
         </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
-        {items.map((item, i) => (
-          <button
-            key={item.skillId || i}
-            onClick={() => handleOpenSkill(item.skillId)}
-            className="text-[11px] font-mono font-medium text-accent hover:underline underline-offset-2 transition-all focus:outline-none truncate shadow-sm"
-            title={item.description}
-          >
-            {item.skillId}
-          </button>
-        ))}
+        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0 ml-1">
+          {items.map((item, i) => (
+            <button
+              key={item.skillId || i}
+              onClick={() => handleOpenSkill(item.skillId)}
+              className="text-[11px] font-mono font-medium text-text-muted hover:text-accent hover:underline underline-offset-2 transition-all focus:outline-none truncate shadow-sm py-0.5 rounded"
+              title={item.description}
+            >
+              {item.skillId}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -262,9 +276,8 @@ const MessageMetaGroup = React.memo(({ skills, searchContent, isSearchStreaming 
   if (!hasSkills && !hasSearch) return null
 
   return (
-    <div className="my-3 w-full rounded-lg border border-border/60 bg-surface/40 shadow-sm overflow-hidden flex flex-col backdrop-blur-sm animate-fade-in mx-1">
+    <div className="my-1 w-full flex flex-col animate-fade-in relative z-10">
       {hasSkills && <SkillBlock items={skills} />}
-      {hasSkills && hasSearch && <div className="h-px w-full bg-border/40" />}
       {hasSearch && <SearchBlock content={searchContent || ''} isStreaming={isSearchStreaming} />}
     </div>
   )
@@ -331,7 +344,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
     : `Thinking for ${elapsed}s...`
 
   return (
-    <div className="my-3 group/think rounded-xl overflow-hidden border border-text-primary/[0.05] bg-text-primary/[0.02]">
+    <div className="my-3 group/think overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="flex w-full items-center gap-2 px-3 py-2 text-text-muted/50 hover:text-text-muted hover:bg-surface-hover transition-colors select-none"
@@ -378,6 +391,26 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
 
   const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(cleanedContent, !!isStreaming)
 
+  const { workspacePath, openFile, setActiveFile } = useStore()
+
+  const handleOpenFile = React.useCallback(async (filePath: string) => {
+    if (!workspacePath) return
+    const { toFullPath } = await import('@shared/utils/pathUtils')
+    const { api } = await import('@/renderer/services/electronAPI')
+
+    const resolvedPath = toFullPath(filePath, workspacePath)
+
+    try {
+      const content = await api.file.read(resolvedPath)
+      if (content !== null) {
+        openFile(resolvedPath, content)
+        setActiveFile(resolvedPath)
+      }
+    } catch (err) {
+      console.warn('Failed to open file from markdown:', err)
+    }
+  }, [workspacePath, openFile, setActiveFile])
+
   // Notify parent when typing finishes
   useEffect(() => {
     if (!isTyping && onTypingComplete) {
@@ -399,6 +432,28 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
       const codeContent = String(children)
       const isCodeBlock = match || node?.position?.start?.line !== node?.position?.end?.line
       const isInline = !isCodeBlock && !codeContent.includes('\n')
+
+      const looksLikePath = isInline && (
+        codeContent.includes('/') ||
+        codeContent.includes('\\') ||
+        codeContent.match(/\.(ts|tsx|js|jsx|vue|uvue|md|json|css|scss|less|html|go|rs|py|java|c|cpp|h|hpp)$/i)
+      ) && !codeContent.includes(' ') && codeContent.length > 2
+
+      if (isInline && looksLikePath) {
+        return (
+          <code
+            className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all animate-fluid-text cursor-pointer hover:underline decoration-accent/50 underline-offset-2 transition-all"
+            onClick={(e) => {
+              e.preventDefault()
+              handleOpenFile(codeContent)
+            }}
+            title="Click to open file"
+            {...props}
+          >
+            {children}
+          </code>
+        )
+      }
 
       return isInline ? (
         <code className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all animate-fluid-text" {...props}>
@@ -434,7 +489,7 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
     th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
     td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
-  }), [fontSize])
+  }), [fontSize, handleOpenFile])
 
   if (!cleanedContent) {
     // If content is empty but we're here, signaling complete immediately to avoid blocking
@@ -550,6 +605,11 @@ const RenderPart = React.memo(({
           args={tc.arguments}
         />
       )
+    }
+
+    // ask_user 由 InteractiveCard 独立渲染，跳过原始工具卡片
+    if (tc.name === 'ask_user') {
+      return null
     }
 
     // 其他工具使用 ToolCallCard
@@ -750,6 +810,7 @@ const ChatMessage = React.memo(({
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const { editorConfig, language } = useStore()
   const fontSize = editorConfig.fontSize
 
@@ -790,7 +851,7 @@ const ChatMessage = React.memo(({
   return (
     <div className={`
       w-full group/msg transition-colors duration-300
-      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-y border-border bg-surface hover:bg-surface-hover'}
+      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface hover:bg-surface-hover'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
 
@@ -857,17 +918,40 @@ const ChatMessage = React.memo(({
                   {/* Images */}
                   {images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 justify-end">
-                      {images.map((img, i) => (
-                        <div key={i} className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 group/img relative cursor-zoom-in">
-                          <img
-                            src={`data:${img.source.media_type};base64,${img.source.data}`}
-                            alt="Upload"
-                            className="h-full w-auto object-cover"
-                          />
-                        </div>
-                      ))}
+                      {images.map((img, i) => {
+                        const imgSrc = `data:${img.source.media_type};base64,${img.source.data}`
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => setPreviewImage(imgSrc)}
+                            className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
+                          >
+                            <LazyImage
+                              src={imgSrc}
+                              alt="Upload"
+                              className="h-full w-auto object-cover"
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
+
+                  <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} size="full" noPadding showCloseButton={false}>
+                    <div
+                      className="w-full h-full flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-zoom-out"
+                      onClick={() => setPreviewImage(null)}
+                    >
+                      {previewImage && (
+                        <img
+                          src={previewImage}
+                          alt="Preview"
+                          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                        />
+                      )}
+                    </div>
+                  </Modal>
+
                   <div className="text-[14px] leading-relaxed">
                     <MarkdownContent content={textContent} fontSize={fontSize} />
                   </div>
@@ -953,18 +1037,18 @@ const ChatMessage = React.memo(({
                     messageId={message.id}
                   />
                 )}
-                {message.isStreaming && <StreamingIndicator />}
               </div>
 
               {message.interactive && !message.isStreaming && (
                 <div className="mt-2 w-full">
                   <InteractiveCard
                     content={message.interactive}
-                    onSelect={(selectedIds) => {
+                    onSelect={(selectedIds, customText) => {
                       const selectedLabels = message.interactive!.options
                         .filter(opt => selectedIds.includes(opt.id))
                         .map(opt => opt.label)
-                      const response = selectedLabels.join(', ')
+                      // 有自定义文本时，用自定义文本作为消息内容
+                      const response = customText || selectedLabels.join(', ')
                       window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds } }))
                       window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: message.id } }))
                     }}
@@ -980,41 +1064,7 @@ const ChatMessage = React.memo(({
   )
 })
 
-// 流式指示器组件
-const THINKING_TEXTS = ['Thinking', 'Analyzing', 'Processing', 'Generating', 'Composing', 'Crafting']
-const THINKING_TEXTS_ZH = ['思考中', '分析中', '处理中', '生成中', '编写中', '构思中']
 
-const StreamingIndicator = React.memo(function StreamingIndicator() {
-  const { language } = useStore()
-  const [textIndex, setTextIndex] = useState(() => Math.floor(Math.random() * THINKING_TEXTS.length))
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTextIndex(prev => {
-        let next = Math.floor(Math.random() * THINKING_TEXTS.length)
-        while (next === prev) next = Math.floor(Math.random() * THINKING_TEXTS.length)
-        return next
-      })
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [])
-
-  const texts = language === 'zh' ? THINKING_TEXTS_ZH : THINKING_TEXTS
-  const currentText = texts[textIndex]
-
-  return (
-    <div className="flex items-center gap-2 mt-2 ml-1 opacity-80">
-      <div className="flex gap-1">
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
-        <div className="w-1.5 h-1.5 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
-      </div>
-      <span className="text-xs font-bold text-accent tracking-wide animate-pulse">
-        {currentText}...
-      </span>
-    </div>
-  )
-})
 
 ChatMessage.displayName = 'ChatMessage'
 

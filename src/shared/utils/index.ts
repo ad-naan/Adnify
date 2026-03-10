@@ -75,3 +75,9 @@ export {
 export {
   getRelativeTime,
 } from './dateUtils'
+
+// 防抖与节流
+export {
+  debounce,
+  throttle
+} from './debounce'

@@ -148,13 +148,14 @@ function createGroupedAPI() {
         raw.indexUpdateEmbeddingConfig(workspacePath, config),
       testConnection: (workspacePath: string) => raw.indexTestConnection(workspacePath),
       getProviders: () => raw.indexGetProviders(),
+      parseCallGraph: (filePath: string, content: string) => raw.indexParseCallGraph(filePath, content),
       onProgress: (callback: Parameters<typeof raw.onIndexProgress>[0]) => raw.onIndexProgress(callback),
     },
 
     // HTTP
     http: {
       readUrl: (url: string, timeout?: number) => raw.httpReadUrl(url, timeout),
-      webSearch: (query: string, maxResults?: number) => raw.httpWebSearch(query, maxResults),
+      webSearch: (query: string, maxResults?: number, timeout?: number) => raw.httpWebSearch(query, maxResults, timeout),
       setGoogleSearch: (apiKey: string, cx: string) => raw.httpSetGoogleSearch(apiKey, cx),
     },
 

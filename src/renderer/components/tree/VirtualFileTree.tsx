@@ -74,6 +74,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     workspacePath
   } = useStore()
 
+  // 焦点状态
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
+
+  // 定位高亮状态（闪烁动画）
+  const [highlightPath, setHighlightPath] = useState<string | null>(null)
+
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -208,6 +214,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       }
     }
 
+    setFocusedPath(filePath)
     setScrollToFile(filePath)
   }, [workspacePath, items, expandedFolders, expandFolder, loadDirectoryChildren])
 
@@ -218,8 +225,19 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         revealFile(activeFilePath)
       }
     }
+    // 支持定位任意文件（通过 detail.filePath 传入）
+    const handleRevealFile = (e: Event) => {
+      const customEvent = e as CustomEvent<{ filePath: string }>
+      if (customEvent.detail?.filePath && workspacePath) {
+        revealFile(customEvent.detail.filePath)
+      }
+    }
     window.addEventListener('explorer:reveal-active-file', handleReveal)
-    return () => window.removeEventListener('explorer:reveal-active-file', handleReveal)
+    window.addEventListener('explorer:reveal-file', handleRevealFile)
+    return () => {
+      window.removeEventListener('explorer:reveal-active-file', handleReveal)
+      window.removeEventListener('explorer:reveal-file', handleRevealFile)
+    }
   }, [activeFilePath, workspacePath, revealFile])
 
   // 扁平化树结构（只包含可见节点）
@@ -283,6 +301,10 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         top: Math.max(0, top - containerHeight / 2),
         behavior: 'smooth'
       })
+
+      // 触发闪烁高亮动画
+      setHighlightPath(scrollToFile)
+      setTimeout(() => setHighlightPath(null), 2000)
     }
 
     setScrollToFile(null)
@@ -313,6 +335,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   // 点击节点
   const handleNodeClick = useCallback(async (node: FlattenedNode) => {
+    setFocusedPath(node.item.path)
+
     if (renamingPath === node.item.path) return
 
     if (node.item.isDirectory) {
@@ -346,6 +370,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     e.preventDefault()
     e.stopPropagation()
     if (node.item.name === '__creating__') return
+    setFocusedPath(node.item.path)
     setContextMenu({ x: e.clientX, y: e.clientY, node })
   }, [])
 
@@ -399,6 +424,17 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
     setRenamingPath(null)
   }, [renamingPath, renameValue, flattenedNodes, onRefresh])
+
+  // 全局快捷键处理 (F2 重命名)
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'F2' && focusedPath && !renamingPath) {
+      e.preventDefault()
+      const node = flattenedNodes.find(n => pathEquals(n.item.path, focusedPath))
+      if (node) {
+        handleRenameStart(node)
+      }
+    }
+  }, [focusedPath, renamingPath, flattenedNodes, handleRenameStart])
 
   const handleCopyPath = useCallback((node: FlattenedNode) => {
     navigator.clipboard.writeText(node.item.path)
@@ -487,7 +523,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {
     const { item, depth, isExpanded } = node
-    const isActive = activeFilePath === item.path
+    const isActive = pathEquals(activeFilePath || '', item.path)
+    const isFocused = focusedPath ? pathEquals(focusedPath, item.path) && !isActive : false
+    const isHighlighted = highlightPath ? pathEquals(highlightPath, item.path) : false
     const isRenaming = renamingPath === item.path
     const isLoading = loadingDirs.has(item.path)
     const isCreatingInput = item.name === '__creating__'
@@ -563,8 +601,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-0
           ${isActive
             ? 'bg-accent/15 text-text-primary font-medium'
-            : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+            : isFocused
+              ? 'bg-surface-hover border border-accent/30 text-text-primary'
+              : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
           }
+          ${isHighlighted ? 'animate-reveal-highlight' : ''}
         `}
         style={{
           height: ITEM_HEIGHT,
@@ -641,8 +682,16 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar"
+      className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar focus:outline-none"
       onScroll={handleScroll}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      onBlur={() => {
+        // Only clear focus if not renaming and not opening context menu
+        if (!renamingPath && !contextMenu) {
+          setFocusedPath(null)
+        }
+      }}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
         {visibleNodes.map((node, index) => renderNode(node, index))}

@@ -12,10 +12,11 @@ import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useAgentStore } from '@/renderer/agent'
-import { themes } from '../editor/ThemeManager'
+import { themeManager } from '@/renderer/config/themeConfig'
 import { Button } from '../ui'
 import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
+import { t } from '@renderer/i18n'
 
 // xterm 样式
 const XTERM_STYLE = `
@@ -42,34 +43,34 @@ const XTERM_STYLE = `
 .xterm-link-layer { position: absolute; top: 0; left: 0; z-index: 11; pointer-events: none; }
 .xterm-link-layer a { cursor: pointer; color: rgb(var(--accent)); text-decoration: underline; }
 `
-
 // 生成终端主题
 function getTerminalTheme(themeName: string) {
-    const themeVars = themes[themeName as keyof typeof themes] || themes['adnify-dark']
+    const theme = themeManager.getThemeById(themeName) || themeManager.getThemeById('adnify-dark')!
+    const themeVars = theme.colors
     const rgbToHex = (rgb: string) => {
         if (!rgb) return '#000000'
         const [r, g, b] = rgb.split(' ').map(Number)
         return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
     }
     return {
-        background: rgbToHex(themeVars['--background']),
-        foreground: rgbToHex(themeVars['--text-primary']),
-        cursor: rgbToHex(themeVars['--text-secondary']),
-        selectionBackground: rgbToHex(themeVars['--accent']),
-        selectionForeground: rgbToHex(themeVars['--text-inverted']),
-        black: rgbToHex(themeVars['--surface']),
-        red: rgbToHex(themeVars['--status-error']),
-        green: rgbToHex(themeVars['--status-success']),
-        yellow: rgbToHex(themeVars['--status-warning']),
-        blue: rgbToHex(themeVars['--status-info']),
-        magenta: rgbToHex(themeVars['--accent-subtle']),
-        cyan: rgbToHex(themeVars['--accent']),
-        white: rgbToHex(themeVars['--text-primary']),
+        background: rgbToHex(themeVars.background),
+        foreground: rgbToHex(themeVars.textPrimary),
+        cursor: rgbToHex(themeVars.textSecondary),
+        selectionBackground: rgbToHex(themeVars.accent),
+        selectionForeground: rgbToHex(themeVars.textInverted),
+        black: rgbToHex(themeVars.surface),
+        red: rgbToHex(themeVars.statusError),
+        green: rgbToHex(themeVars.statusSuccess),
+        yellow: rgbToHex(themeVars.statusWarning),
+        blue: rgbToHex(themeVars.statusInfo),
+        magenta: rgbToHex(themeVars.accentSubtle),
+        cyan: rgbToHex(themeVars.accent),
+        white: rgbToHex(themeVars.textPrimary),
     }
 }
 
 const TerminalPanel = memo(function TerminalPanel() {
-    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout } = useStore()
+    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore()
     const { setMode } = useModeStore()
     // 从 AgentStore 获取 setInputPrompt
     const setInputPrompt = useAgentStore(state => state.setInputPrompt)
@@ -83,6 +84,17 @@ const TerminalPanel = memo(function TerminalPanel() {
     const [selectedRoot, setSelectedRoot] = useState<string>('')
     const [scripts, setScripts] = useState<Record<string, string>>({})
     const [showScriptMenu, setShowScriptMenu] = useState(false)
+    const [contextMenu, setContextMenu] = useState<{
+        visible: boolean
+        x: number
+        y: number
+        termId: string | null
+    }>({
+        visible: false,
+        x: 0,
+        y: 0,
+        termId: null,
+    })
 
     // 终端状态（来自 terminalManager）
     const [managerState, setManagerState] = useState<TerminalManagerState>(() => terminalManager.getState())
@@ -110,24 +122,44 @@ const TerminalPanel = memo(function TerminalPanel() {
         terminalManager.setTheme(theme)
     }, [currentTheme])
 
-    // ===== 挂载 xterm 到容器 =====
+    // ===== 挂载/卸载 xterm 到/从 容器 =====
 
     useEffect(() => {
+        // 当整个终端面板不可见时，卸载所有终端
+        if (!terminalVisible) {
+            for (const id of mountedTerminals.current) {
+                terminalManager.unmountTerminal(id)
+                mountedTerminals.current.delete(id)
+            }
+            return
+        }
+
+        // 遍历所有终端实例
         for (const terminal of managerState.terminals) {
             const container = containerRefs.current.get(terminal.id)
-            if (container && !mountedTerminals.current.has(terminal.id)) {
+
+            // 终端是否在当前 UI 状态下应该可见：
+            // 1. 如果是 Split 视图，所有存在的容器都可见
+            // 2. 如果是 Tabs 视图，只有当前 activeId 可见
+            const shouldBeVisible = isSplitView || terminal.id === managerState.activeId
+
+            if (container && shouldBeVisible && !mountedTerminals.current.has(terminal.id)) {
                 terminalManager.mountTerminal(terminal.id, container)
                 mountedTerminals.current.add(terminal.id)
+            } else if (!shouldBeVisible && mountedTerminals.current.has(terminal.id)) {
+                // 如果当前为 Tabs 视图且该终端不 active，进行卸载回收
+                terminalManager.unmountTerminal(terminal.id)
+                mountedTerminals.current.delete(terminal.id)
             }
         }
 
-        // 清理已删除的终端
+        // 清理已被关闭/删除的终端引用
         for (const id of mountedTerminals.current) {
             if (!managerState.terminals.find(t => t.id === id)) {
                 mountedTerminals.current.delete(id)
             }
         }
-    }, [managerState.terminals])
+    }, [managerState.terminals, managerState.activeId, terminalVisible, isSplitView])
 
     // ===== 初始化 =====
 
@@ -230,6 +262,16 @@ const TerminalPanel = memo(function TerminalPanel() {
     // ===== 菜单点击外部关闭 =====
     useClickOutside(() => setShowShellMenu(false), showShellMenu, [shellMenuRef, shellButtonRef])
     useClickOutside(() => setShowScriptMenu(false), showScriptMenu, [scriptMenuRef, scriptButtonRef])
+
+    // 终端右键菜单点击外部关闭
+    useEffect(() => {
+        if (!contextMenu.visible) return
+        const handleClick = () => {
+            setContextMenu(prev => ({ ...prev, visible: false }))
+        }
+        window.addEventListener('click', handleClick)
+        return () => window.removeEventListener('click', handleClick)
+    }, [contextMenu.visible])
 
     // ===== 操作函数 =====
 
@@ -393,6 +435,16 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 ref={el => { if (el) containerRefs.current.set(term.id, el) }}
                                 className={`h-full w-full pl-2 pt-1 relative group/term ${isSplitView ? 'border border-border' : (activeId === term.id ? 'block' : 'hidden')} ${isSplitView && activeId === term.id ? 'ring-1 ring-accent' : ''}`}
                                 onClick={() => terminalManager.setActiveTerminal(term.id)}
+                                onContextMenu={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setContextMenu({
+                                        visible: true,
+                                        x: e.clientX,
+                                        y: e.clientY,
+                                        termId: term.id,
+                                    })
+                                }}
                             >
                                 {isSplitView && (
                                     <div className="absolute top-0 right-0 p-1 z-10 opacity-0 group-hover/term:opacity-100 transition-opacity">
@@ -405,6 +457,107 @@ const TerminalPanel = memo(function TerminalPanel() {
                         ))}
                     </div>
                 </div>
+                {contextMenu.visible && contextMenu.termId && (
+                    <div
+                        className="fixed z-[200] min-w-[200px] bg-surface border border-border rounded-md shadow-xl py-1 text-xs select-none"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={() => {
+                                createTerminal()
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('newTerminal', language)}</span>
+                            <span className="text-[10px] text-text-muted">Ctrl+Shift+`</span>
+                        </button>
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={() => {
+                                createTerminal()
+                                setTerminalLayout('split')
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('splitTerminal', language)}</span>
+                            <span className="text-[10px] text-text-muted">Ctrl+Shift+5</span>
+                        </button>
+
+                        <div className="my-1 h-px bg-border/60" />
+
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={async () => {
+                                const term = contextMenu.termId ? terminalManager.getXterm(contextMenu.termId) : null
+                                const sel = term?.getSelection()
+                                if (sel) {
+                                    try {
+                                        await navigator.clipboard.writeText(sel)
+                                    } catch {
+                                        // ignore
+                                    }
+                                }
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('ctxCopy', language)}</span>
+                            <span className="text-[10px] text-text-muted">Ctrl+Shift+C</span>
+                        </button>
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={async () => {
+                                try {
+                                    const text = await navigator.clipboard.readText()
+                                    if (text && contextMenu.termId) {
+                                        terminalManager.writeToTerminal(contextMenu.termId, text)
+                                    }
+                                } catch {
+                                    // ignore
+                                }
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('ctxPaste', language)}</span>
+                            <span className="text-[10px] text-text-muted">Ctrl+Shift+V</span>
+                        </button>
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={() => {
+                                const term = contextMenu.termId ? terminalManager.getXterm(contextMenu.termId) : null
+                                term?.selectAll()
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('selectAll', language)}</span>
+                        </button>
+
+                        <div className="my-1 h-px bg-border/60" />
+
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
+                            onClick={() => {
+                                const term = contextMenu.termId ? terminalManager.getXterm(contextMenu.termId) : null
+                                term?.clear()
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('clearTerminal', language)}</span>
+                        </button>
+                        <button
+                            className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-red-500/10 text-status-error"
+                            onClick={() => {
+                                if (contextMenu.termId) {
+                                    closeTerminal(contextMenu.termId)
+                                }
+                                setContextMenu(prev => ({ ...prev, visible: false }))
+                            }}
+                        >
+                            <span>{t('killTerminal', language)}</span>
+                        </button>
+                    </div>
+                )}
             </div>
         </>
     )

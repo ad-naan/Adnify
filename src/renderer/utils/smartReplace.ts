@@ -521,3 +521,114 @@ export function trimDiff(diff: string): string {
 
     return trimmedLines.join('\n')
 }
+
+// ============================================
+// Fast-Edit 精华：智能警告系统
+// ============================================
+
+export interface EditWarning {
+    type: 'DUPLICATE_LINE' | 'BRACKET_BALANCE' | 'INDENTATION_MISMATCH'
+    message: string
+    line?: number
+}
+
+/**
+ * 括号平衡检测（借鉴 fast-edit）
+ * 检测替换操作是否改变了括号平衡
+ */
+function checkBracketBalance(text: string): Record<string, number> {
+    const brackets: Record<string, string> = { '(': ')', '[': ']', '{': '}' }
+    const opens = new Set(Object.keys(brackets))
+    const closes = new Set(Object.values(brackets))
+    
+    const counts: Record<string, number> = {}
+    let inString: string | null = null
+    let escape = false
+    
+    for (const ch of text) {
+        if (escape) {
+            escape = false
+            continue
+        }
+        if (ch === '\\') {
+            escape = true
+            continue
+        }
+        if (ch === '"' || ch === "'" || ch === '`') {
+            if (inString === ch) {
+                inString = null
+            } else if (inString === null) {
+                inString = ch
+            }
+            continue
+        }
+        if (inString) continue
+        
+        if (opens.has(ch) || closes.has(ch)) {
+            counts[ch] = (counts[ch] || 0) + 1
+        }
+    }
+    
+    // 计算净平衡
+    const balance: Record<string, number> = {}
+    for (const [open, close] of Object.entries(brackets)) {
+        balance[`${open}${close}`] = (counts[open] || 0) - (counts[close] || 0)
+    }
+    
+    return balance
+}
+
+/**
+ * 检测行替换操作的常见 AI 错误（借鉴 fast-edit）
+ * 
+ * 检测项：
+ * 1. 重复行：替换后的最后一行与下一行相同（off-by-one 错误）
+ * 2. 括号不平衡：替换改变了括号的平衡状态
+ */
+export function checkLineReplaceWarnings(
+    oldLines: string[],
+    newLines: string[],
+    resultLines: string[],
+    startLine: number,
+    endLine: number
+): EditWarning[] {
+    const warnings: EditWarning[] = []
+    
+    // 1. 检测重复行（AI 常犯的 off-by-one 错误）
+    if (newLines.length > 0 && endLine <= resultLines.length) {
+        const lastNew = newLines[newLines.length - 1].trim()
+        const survivingIdx = (startLine - 1) + newLines.length
+        
+        if (survivingIdx < resultLines.length) {
+            const firstSurviving = resultLines[survivingIdx].trim()
+            if (lastNew && lastNew === firstSurviving && lastNew.length > 10) {
+                warnings.push({
+                    type: 'DUPLICATE_LINE',
+                    message: `Line ${survivingIdx + 1} is identical to the last replaced line. This may indicate an off-by-one error in end_line.`,
+                    line: survivingIdx + 1
+                })
+            }
+        }
+    }
+    
+    // 2. 检测括号平衡变化
+    const oldText = oldLines.join('\n')
+    const newText = newLines.join('\n')
+    const oldBalance = checkBracketBalance(oldText)
+    const newBalance = checkBracketBalance(newText)
+    
+    for (const [pair, oldNet] of Object.entries(oldBalance)) {
+        const newNet = newBalance[pair] || 0
+        const diff = newNet - oldNet
+        if (diff !== 0) {
+            const direction = diff > 0 ? 'more opens' : 'more closes'
+            warnings.push({
+                type: 'BRACKET_BALANCE',
+                message: `Bracket balance changed: ${pair[0]}...${pair[1]} ${diff > 0 ? '+' : ''}${diff} (${Math.abs(diff)} ${direction}). Replacement may have mismatched brackets.`,
+                line: startLine
+            })
+        }
+    }
+    
+    return warnings
+}
