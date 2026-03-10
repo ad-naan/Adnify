@@ -10,6 +10,7 @@ import { EventEmitter } from 'events'
 import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
+import { normalizePipeTerminalInput } from './terminalInput'
 
 
 interface SecureShellRequest {
@@ -485,7 +486,7 @@ export function registerSecureTerminalHandlers(
       }
 
       if (!this.child.stdin.destroyed) {
-        this.child.stdin.write(data)
+        this.child.stdin.write(normalizePipeTerminalInput(data))
       }
     }
 
