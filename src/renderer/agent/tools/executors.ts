@@ -20,6 +20,7 @@ import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
 import { toRelativePath } from '@shared/utils/pathUtils'
+import { getInteractiveTerminalBackend, isLongRunningCommand } from './commandRuntime'
 
 // ===== 辅助函数 =====
 
@@ -700,7 +701,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             : config.toolTimeoutMs
 
         // 智能判定长进程
-        const isLongRunningProcess = isBackground || /^(npm|yarn|pnpm|bun)\s+(run\s+)?(dev|start|serve|watch)|python\s+-m\s+(http\.server|flask)|uvicorn|nodemon|webpack|vite/.test(command)
+        const isLongRunningProcess = isLongRunningCommand(command, isBackground)
 
         if (isLongRunningProcess) {
             try {
@@ -710,7 +711,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 // 确保我们在主进程上下文中
                 const termId = await terminalManager.createTerminal({
                     name: command.split(' ')[0] || 'Task',
-                    cwd: cwd || ctx.workspacePath || process.cwd()
+                    cwd: cwd || ctx.workspacePath || process.cwd(),
+                    backend: getInteractiveTerminalBackend()
                 })
 
                 // 这边给终端发送换行使其执行

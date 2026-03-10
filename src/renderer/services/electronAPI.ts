@@ -100,7 +100,7 @@ function createGroupedAPI() {
 
     // 终端
     terminal: {
-      create: (options: { id: string; cwd?: string; shell?: string }) => raw.createTerminal(options),
+      create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe' }) => raw.createTerminal(options),
       write: (id: string, data: string) => raw.writeTerminal(id, data),
       resize: (id: string, cols: number, rows: number) => raw.resizeTerminal(id, cols, rows),
       kill: (id?: string) => raw.killTerminal(id),
