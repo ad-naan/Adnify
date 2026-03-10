@@ -8,13 +8,16 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
-import { Check, X, ChevronDown, ExternalLink, FileCode } from 'lucide-react'
+import { Check, X, ChevronDown, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { CodeSkeleton } from '../ui/Loading'
+import { useStore } from '@store'
+import { api } from '@/renderer/services/electronAPI'
+import { toast } from '@components/common/ToastProvider'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -33,14 +36,26 @@ export default function FileChangeCard({
     onOpenInEditor,
 }: FileChangeCardProps) {
     const [isExpanded, setIsExpanded] = useState(false)
+    const { openFile, setActiveFile, workspacePath } = useStore()
 
-    const args = toolCall.arguments as Record<string, unknown>
+    // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
+    const args = useMemo(() => ({
+        ...(toolCall.arguments || {}),
+        ...(toolCall.streamingState?.partialArgs || {}),
+    }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
+
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
-    const isStreaming = args._streaming === true
-    const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
-    const isSuccess = toolCall.status === 'success'
-    const isError = toolCall.status === 'error'
+
+    const { status } = toolCall
+    const isSuccess = status === 'success'
+    const isError = status === 'error'
+    const isRejected = status === 'rejected'
+    const isRunning = status === 'running' || status === 'pending'
+
+    // 是否正在流式输出（强制在非终态时才允许，防止残留字段导致一直 loading）
+    const isFinalState = isSuccess || isError || isRejected
+    const isStreaming = !isFinalState && (!!toolCall.streamingState?.isStreaming || args._streaming === true)
 
     // 流式内容状态 - 订阅 streamingEditService 获取实时更新
     const [streamingContent, setStreamingContent] = useState<string | null>(null)
@@ -78,17 +93,21 @@ export default function FileChangeCard({
             return meta.oldContent as string
         }
 
+        // 流式模式下 edit_file：用 old_string 作为旧内容，实现 patch 风格实时 diff
+        if ((isRunning || isStreaming) && args.old_string) {
+            return args.old_string as string
+        }
+
         // 在流式传输或运行阶段，如果工具是局部编辑类（非全量覆盖），
         // 且还没有 meta 结果（即工具未完成），暂时忽略旧内容，
         // 避免将 patch 片段与完整旧文件对比导致显示大面积删除。
-        // 这样预览会显示为纯新增（绿色），更符合 patch 的直观感受。
-        if ((isRunning || isStreaming) && !meta?.oldContent) {
-            const isPartialEdit = ['edit_file', 'replace_file_content'].includes(toolCall.name)
+        if ((isRunning || isStreaming) && !meta?.oldContent && !args.old_string) {
+            const isPartialEdit = toolCall.name === 'edit_file'
             if (isPartialEdit) return ''
         }
 
         return ''
-    }, [meta, isRunning, isStreaming, toolCall.name])
+    }, [meta, args.old_string, isRunning, isStreaming, toolCall.name])
 
     const newContent = useMemo(() => {
         // 优先使用流式内容（实时更新）
@@ -145,30 +164,14 @@ export default function FileChangeCard({
     const isNewFile = ['create_file', 'create_file_or_folder'].includes(toolCall.name) ||
         (!oldContent && !!newContent && !['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name))
 
-    // 获取动态状态文案（例如：Creating xxx...）
-    const actionText = useMemo(() => {
-        if (!filePath) return ''
-        const name = getFileName(filePath)
 
-        // 如果工具名明确是编辑类，强制使用 Editing
-        const isEditingTool = ['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name)
-        const isCreating = !isEditingTool && (['create_file', 'create_file_or_folder'].includes(toolCall.name) || isNewFile)
-
-        const action = isCreating ? 'Creating' : 'Editing'
-        const actionPast = isCreating ? 'Created' : 'Updated'
-
-        if (isRunning || isStreaming) return `${action} ${name}...`
-        if (isSuccess) return `${actionPast} ${name}`
-        if (isError) return `Failed to ${action.toLowerCase()} ${name}`
-        return `${action} ${name}`
-    }, [filePath, isRunning, isStreaming, isSuccess, isError, toolCall.name, isNewFile])
 
     // 计算卡片样式
     const cardStyle = useMemo(() => {
-        if (isAwaitingApproval) return 'border-status-warning/30 bg-status-warning/5 shadow-[0_0_15px_-3px_rgba(var(--status-warning),0.1)]'
-        if (isError) return 'border-status-error/20 bg-status-error/5 shadow-[0_0_15px_-3px_rgba(var(--status-error),0.1)]'
-        if (isStreaming || isRunning) return 'border-accent/50 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent),0.15)] outline outline-1 outline-offset-1 outline-accent/20 animate-pulse-subtle'
-        return 'border-border bg-surface/30 backdrop-blur-sm hover:bg-surface/50 hover:border-border hover:shadow-lg hover:shadow-black/20'
+        if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
+        if (isError) return 'bg-red-500/5'
+        if (isStreaming || isRunning) return 'bg-accent/5'
+        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
@@ -178,48 +181,44 @@ export default function FileChangeCard({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className={`
-                group my-2 rounded-xl border transition-colors duration-300 overflow-hidden relative
-                ${cardStyle}
-            `}
+            className={`group my-0.5 relative ${cardStyle} overflow-hidden`}
         >
             {/* ToolCall Card Background Sweeping Effect */}
             {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/20 to-transparent animate-shimmer" />
+                <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent animate-shimmer" />
                 </div>
             )}
-            {/* Header */}
+            {/* Header - Flat Outline Style */}
             <div
-                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none relative"
+                className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                {/* Active Indicator Line */}
-                {(isStreaming || isRunning) && (
-                    <motion.div
-                        layoutId="active-indicator-file"
-                        className="absolute left-0 top-0 bottom-0 w-0.5 bg-accent"
-                    />
-                )}
+                {/* Expand Toggle (Moved to far left) */}
+                <motion.div
+                    animate={{ rotate: isExpanded ? 90 : 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="shrink-0 text-text-muted/40 hover:text-text-muted transition-colors"
+                >
+                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+                </motion.div>
 
                 {/* Status Icon */}
-                <div className="shrink-0 relative z-10">
+                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
                     {isStreaming || isRunning ? (
-                        <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center border border-accent/20">
-                            <FileCode className="w-3 h-3 text-accent" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
+                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                         </div>
                     ) : isSuccess ? (
-                        <div className="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center border border-green-500/20">
-                            <Check className="w-3 h-3 text-green-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-green-500" />
                         </div>
                     ) : isError ? (
-                        <div className="w-5 h-5 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/20">
-                            <X className="w-3 h-3 text-red-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/10 flex items-center justify-center">
+                            <X className="w-2.5 h-2.5 text-red-500" />
                         </div>
                     ) : (
-                        <div className="w-5 h-5 rounded-full bg-text-primary/[0.05] flex items-center justify-center border border-border">
-                            <FileCode className="w-3 h-3 text-text-muted" />
-                        </div>
+                        <div className="w-3.5 h-3.5 rounded-full border border-text-muted/30" />
                     )}
                 </div>
 
@@ -227,56 +226,81 @@ export default function FileChangeCard({
                 <div className="flex-1 min-w-0 flex items-center justify-between relative z-10">
                     <div className="flex items-center gap-2 truncate">
                         {filePath ? (
-                            <span className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-sm font-medium' : 'font-medium text-sm'}`}>
-                                {actionText}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <span
+                                    className={`text-[12px] truncate transition-colors ${isStreaming || isRunning ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}
+                                >
+                                    {isNewFile ? 'Create ' : 'Update '}
+                                </span>
+                                <span
+                                    className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-[12px] font-medium' : 'font-medium text-[12px]'} hover:underline hover:text-accent cursor-pointer transition-colors break-all`}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        if (onOpenInEditor && newContent) {
+                                            onOpenInEditor(filePath, oldContent, newContent)
+                                        } else {
+                                            let absPath = filePath
+                                            const isAbsolute = /^([a-zA-Z]:[\\/]|[/])/.test(absPath)
+                                            if (!isAbsolute && workspacePath) {
+                                                absPath = joinPath(workspacePath, absPath)
+                                            }
+
+                                            api.file.read(absPath).then(content => {
+                                                if (content !== null) {
+                                                    const diffUri = `diff://${absPath}`
+                                                    openFile(diffUri, newContent, oldContent)
+                                                    setActiveFile(diffUri)
+                                                } else {
+                                                    toast.error(`Failed to open file: ${getFileName(absPath)}`)
+                                                }
+                                            }).catch(() => {
+                                                toast.error(`Failed to open file: ${getFileName(absPath)}`)
+                                            })
+                                        }
+                                    }}
+                                    title={filePath}
+                                >
+                                    {getFileName(filePath)}
+                                </span>
+                            </div>
                         ) : (isStreaming || isRunning) ? (
-                            <span className="font-medium text-sm italic text-shimmer">editing...</span>
+                            <span className="font-medium text-[11px] italic text-shimmer">editing...</span>
                         ) : (
-                            <span className="font-medium text-sm text-text-primary opacity-50">&lt;empty path&gt;</span>
+                            <span className="font-medium text-[11px] text-text-primary opacity-50">&lt;empty path&gt;</span>
                         )}
                     </div>
 
-                    {(isSuccess || newContent) && (
-                        <motion.span
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-text-primary/[0.05] rounded border border-border"
-                        >
-                            {diffStats.added > 0 && (
-                                <span className="text-green-400">+{diffStats.added}</span>
-                            )}
-                            {diffStats.removed > 0 && (
-                                <span className="text-red-400">-{diffStats.removed}</span>
-                            )}
-                            {isNewFile && diffStats.added === 0 && (
-                                <span className="text-blue-400">new</span>
-                            )}
-                        </motion.span>
-                    )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                    {isSuccess && onOpenInEditor && (
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation()
-                                onOpenInEditor(filePath, oldContent, newContent)
-                            }}
-                            className="p-1.5 text-text-muted hover:text-accent hover:bg-surface-hover rounded-md transition-colors"
-                            title="Open in Editor"
-                        >
-                            <ExternalLink className="w-4 h-4" />
-                        </button>
-                    )}
-                    <motion.div
-                        animate={{ rotate: isExpanded ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="text-text-muted/50 group-hover:text-text-muted transition-colors"
-                    >
-                        <ChevronDown className="w-4 h-4" />
-                    </motion.div>
+                    <div className="flex items-center gap-2">
+                        {(isSuccess || newContent) && (
+                            <motion.span
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-text-primary/[0.05] rounded border border-border"
+                            >
+                                {diffStats.added > 0 && (
+                                    <span className="text-green-400">+{diffStats.added}</span>
+                                )}
+                                {diffStats.removed > 0 && (
+                                    <span className="text-red-400">-{diffStats.removed}</span>
+                                )}
+                                {isNewFile && diffStats.added === 0 && (
+                                    <span className="text-blue-400">new</span>
+                                )}
+                            </motion.span>
+                        )}
+                        {isSuccess && onOpenInEditor && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    onOpenInEditor(filePath, oldContent, newContent)
+                                }}
+                                className="p-1 text-text-muted hover:text-accent hover:bg-surface-hover rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                                title="Open in Editor"
+                            >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -291,25 +315,26 @@ export default function FileChangeCard({
                         transition={{ duration: 0.25, ease: "easeInOut" }}
                         className="overflow-hidden"
                     >
-                        <div className="px-3 pb-3 pt-0">
-                            <div>
-                                <div className="rounded-lg border border-border bg-surface/50 overflow-hidden shadow-inner">
-                                    <div className="max-h-64 overflow-auto custom-scrollbar relative min-h-[60px]">
-                                        {showContent || isRunning || isStreaming ? (
-                                            <InlineDiffPreview
-                                                oldContent={oldContent}
-                                                newContent={newContent}
-                                                filePath={filePath}
-                                                isStreaming={isStreaming || isRunning}
-                                                maxLines={50}
-                                            />
-                                        ) : (
-                                            // 使用统一的代码骨架屏
-                                            <div className="min-h-[160px] opacity-50">
-                                                <CodeSkeleton lines={5} />
-                                            </div>
-                                        )}
-                                    </div>
+                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
+                            {/* Visual Threading Line */}
+                            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+
+                            <div className="relative z-10 ms-1">
+                                <div className="max-h-64 overflow-auto custom-scrollbar relative min-h-[60px] border-l-2 border-border/30 pl-2">
+                                    {showContent || isRunning || isStreaming ? (
+                                        <InlineDiffPreview
+                                            oldContent={oldContent}
+                                            newContent={newContent}
+                                            filePath={filePath}
+                                            isStreaming={isStreaming || isRunning}
+                                            maxLines={50}
+                                        />
+                                    ) : (
+                                        // 使用统一的代码骨架屏
+                                        <div className="min-h-[160px] opacity-50 pt-2">
+                                            <CodeSkeleton lines={5} />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -319,7 +344,7 @@ export default function FileChangeCard({
 
             {/* Error Message */}
             {toolCall.error && isExpanded && (
-                <div className="px-3 pb-3 pl-9.5">
+                <div className="px-3 pb-3 pl-9">
                     <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
                         <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
                     </div>

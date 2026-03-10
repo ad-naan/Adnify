@@ -8,13 +8,13 @@ import {
     Check,
     X,
     ChevronDown,
-    Terminal,
     Search,
     Copy,
     AlertTriangle,
     FileCode,
+    Terminal,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { ToolCall } from '@renderer/agent/types'
@@ -23,7 +23,22 @@ import { terminalManager } from '@/renderer/services/TerminalManager'
 import { RichContentRenderer } from './RichContentRenderer'
 import InlineDiffPreview from './InlineDiffPreview'
 import { getFileName } from '@shared/utils/pathUtils'
-import { CodeSkeleton } from '../ui/Loading'
+import { TextWithFileLinks } from '../common/TextWithFileLinks'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { themeManager } from '../../config/themeConfig'
+
+const guessLanguage = (filename: string) => {
+    const ext = filename.split('.').pop()?.toLowerCase() || ''
+    const map: Record<string, string> = {
+        js: 'javascript', jsx: 'javascript',
+        ts: 'typescript', tsx: 'typescript',
+        json: 'json', css: 'css', html: 'html', md: 'markdown',
+        py: 'python', rs: 'rust', go: 'go', sh: 'bash',
+        yml: 'yaml', yaml: 'yaml', xml: 'xml'
+    }
+    return map[ext] || 'typescript'
+}
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -40,13 +55,11 @@ const TOOL_LABELS: Record<string, string> = {
     read_file: 'Read File',
     read_multiple_files: 'Read Files',
     list_directory: 'List Directory',
-    get_dir_tree: 'Directory Tree',
     // 搜索类
     search_files: 'Search Files',
     codebase_search: 'Semantic Search',
     // 编辑类
     edit_file: 'Edit File',
-    replace_file_content: 'Replace Lines',
     write_file: 'Write File',
     create_file: 'Create File',
     create_file_or_folder: 'Create',
@@ -78,14 +91,23 @@ const ToolCallCard = memo(function ToolCallCard({
     defaultExpanded = false,
 }: ToolCallCardProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-    const { language, setTerminalVisible } = useStore()
+    const { language, setTerminalVisible, currentTheme } = useStore()
 
-    const args = (toolCall.arguments || {}) as Record<string, unknown>
-    const isStreaming = args._streaming === true
-    const isRunning = toolCall.status === 'running' || toolCall.status === 'pending'
-    const isSuccess = toolCall.status === 'success'
-    const isError = toolCall.status === 'error'
-    const isRejected = toolCall.status === 'rejected'
+    // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
+    const args = useMemo(() => ({
+        ...(toolCall.arguments || {}),
+        ...(toolCall.streamingState?.partialArgs || {}),
+    }), [toolCall.arguments, toolCall.streamingState?.partialArgs]) as Record<string, unknown>
+
+    const { status } = toolCall
+    const isSuccess = status === 'success'
+    const isError = status === 'error'
+    const isRejected = status === 'rejected'
+    const isRunning = status === 'running' || status === 'pending'
+
+    // 是否正在流式输出（强制在非终态时才允许，防止残留字段导致一直 loading）
+    const isFinalState = isSuccess || isError || isRejected
+    const isStreaming = !isFinalState && (!!toolCall.streamingState?.isStreaming || args._streaming === true)
 
     // 运行中自动展开
     useEffect(() => {
@@ -116,15 +138,26 @@ const ToolCallCard = memo(function ToolCallCard({
 
         // 读取多文件
         if (name === 'read_multiple_files') {
-            const count = (args.paths as string[])?.length || 0
-            if (isRunning) return `Reading ${count} files...`
-            if (isSuccess) return `Read ${count} files`
-            if (isError) return `Failed to read files`
+            const paths = args.paths
+            if (Array.isArray(paths)) {
+                const count = paths.length
+                const preview = paths.slice(0, 3).map(p => `"${getFileName(p)}"`).join(', ') + (count > 3 ? '...' : '')
+                if (isRunning) return `Reading [${preview}]...`
+                if (isSuccess) return `Read [${preview}]`
+                if (isError) return `Failed to read files`
+                return `Reading [${preview}]`
+            }
+            if (typeof paths === 'string') {
+                if (isRunning) return `Reading ${paths}...`
+                if (isSuccess) return `Read ${paths}`
+                if (isError) return `Failed to read ${paths}`
+                return `Reading ${paths}`
+            }
             return `Reading files`
         }
 
         // 读取单文件或目录
-        if (['read_file', 'list_directory', 'get_dir_tree'].includes(name)) {
+        if (['read_file', 'list_directory'].includes(name)) {
             const target = formatPath(args.path)
             if (!target) return isRunning ? 'Reading...' : ''
             if (isRunning) return `Reading ${target}...`
@@ -144,7 +177,7 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 编辑
-        if (['edit_file', 'replace_file_content'].includes(name)) {
+        if (name === 'edit_file') {
             const target = formatPath(args.path)
             if (!target) return isRunning ? 'Editing...' : ''
             if (isRunning) return `Editing ${target}...`
@@ -210,59 +243,112 @@ const ToolCallCard = memo(function ToolCallCard({
     const renderPreview = () => {
         const name = toolCall.name
 
-        // 运行中显示骨架屏
-        if (isRunning && !toolCall.result && Object.keys(args).filter(k => !k.startsWith('_')).length === 0) {
+        // 终端命令
+        if (name === 'run_command') {
+            const cmd = args.command as string
+            const metaInfo = (toolCall as any).meta || {}
+            const terminalId = metaInfo.terminalId
+            const hasActiveTerminal = terminalId && terminalManager.getXterm(terminalId)
+
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="min-h-[100px] opacity-60">
-                        <CodeSkeleton lines={3} />
+                <div className="font-mono text-[11px] space-y-1">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-text-muted">
+                            <span className="text-accent/60 select-none">$</span>
+                            <span className="text-text-primary break-all">{cmd}</span>
+                        </div>
+                        {isSuccess && (
+                            <button
+                                onClick={async e => {
+                                    e.stopPropagation()
+                                    setTerminalVisible(true)
+
+                                    if (hasActiveTerminal) {
+                                        // 切换到已有的常驻终端
+                                        terminalManager.setActiveTerminal(terminalId)
+                                    } else {
+                                        // 重新运行静默命令或已关闭的进程
+                                        let cwd = metaInfo.cwd || (args.cwd as string) || ''
+                                        const workspacePath = useStore.getState().workspacePath
+                                        if (!cwd && workspacePath) cwd = workspacePath
+                                        else if (cwd && !cwd.includes(':') && !cwd.startsWith('/') && workspacePath) {
+                                            // Handle relative args.cwd by prefixing workspace path
+                                            cwd = `${workspacePath.replace(/\\/g, '/')}/${cwd}`
+                                        }
+
+                                        let currentTermId = terminalManager.getState().activeId
+                                        if (!currentTermId) {
+                                            currentTermId = await terminalManager.createTerminal({ cwd, name: 'Terminal' })
+                                        }
+                                        terminalManager.writeToTerminal(currentTermId, cmd + '\r')
+                                        terminalManager.focusTerminal(currentTermId)
+                                    }
+                                }}
+                                className="text-[10px] px-1.5 py-0.5 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors flex-shrink-0 ml-2"
+                                title={hasActiveTerminal ? 'Switch to this running terminal' : 'Run this command in the terminal again'}
+                            >
+                                {hasActiveTerminal ? 'View' : 'Run'}
+                            </button>
+                        )}
+                    </div>
+                    {toolCall.result && (
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-border/30 pl-2 ml-1 mt-1">
+                            {(toolCall.result as string).slice(0, 500)}
+                            {(toolCall.result as string).length > 500 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
+                        </div>
+                    )}
+                </div>
+            )
+        }
+
+        // --- 新增 Terminal 控制类工具 UI ---
+
+        // 发送终端输入
+        if (name === 'send_terminal_input') {
+            const isCtrl = args.is_ctrl
+            const bgClass = isCtrl ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-surface-elevated text-text-secondary border border-border/50'
+            const displayStr = isCtrl ? `Ctrl+${(args.input as string).toUpperCase()}` : (args.input as string).replace(/\n|\r/g, '\\n')
+            return (
+                <div className="font-mono text-[11px] space-y-1">
+                    <div className="flex items-center gap-2">
+                        <Terminal className="w-3.5 h-3.5 text-text-muted" />
+                        <span className="text-text-muted">Sent input:</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${bgClass}`}>
+                            {displayStr}
+                        </span>
+                        <span className="text-text-muted/50 text-[10px] ml-1">to {(args.terminal_id as string)}</span>
                     </div>
                 </div>
             )
         }
 
-        // 终端命令
-        if (name === 'run_command') {
-            const cmd = args.command as string
+        // 停止终端进程
+        if (name === 'stop_terminal') {
             return (
-                <div className="bg-surface-active/30 rounded-md border border-border overflow-hidden font-mono text-xs">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-surface/50 border-b border-border">
-                        <span className="text-text-muted flex items-center gap-2">
-                            <Terminal className="w-3 h-3" />
-                            Terminal
-                        </span>
-                        {isSuccess && (
-                            <button
-                                onClick={async e => {
-                                    e.stopPropagation()
-                                    const cwd = (toolCall as any).meta?.cwd || (args.cwd as string) || ''
-                                    setTerminalVisible(true)
-                                    const state = terminalManager.getState()
-                                    let terminalId = state.activeId
-                                    if (!terminalId) {
-                                        terminalId = await terminalManager.createTerminal({ cwd, name: 'Terminal' })
-                                    }
-                                    terminalManager.writeToTerminal(terminalId, cmd)
-                                    terminalManager.focusTerminal(terminalId)
-                                }}
-                                className="text-[10px] px-1.5 py-0.5 bg-accent/10 hover:bg-accent/20 rounded text-accent transition-colors"
-                            >
-                                Open
-                            </button>
-                        )}
+                <div className="font-mono text-[11px] space-y-1 text-red-400">
+                    <div className="flex items-center gap-2">
+                        <Terminal className="w-3.5 h-3.5 opacity-80" />
+                        <span className="font-medium">Force terminated process</span>
+                        <span className="opacity-50 text-[10px]">{(args.terminal_id as string)}</span>
                     </div>
-                    <div className="p-3 text-text-secondary overflow-x-auto custom-scrollbar">
-                        <div className="flex gap-2">
-                            <span className="text-accent select-none">$</span>
-                            <span className="text-text-primary">{cmd}</span>
+                </div>
+            )
+        }
+
+        // 读取终端输出
+        if (name === 'read_terminal_output') {
+            return (
+                <div className="font-mono text-[11px] space-y-1">
+                    <div className="flex items-center gap-2 text-text-muted">
+                        <Terminal className="w-3.5 h-3.5 text-accent/70" />
+                        <span>Read terminal logs</span>
+                        <span className="opacity-50 text-[10px]">{(args.terminal_id as string)}</span>
+                    </div>
+                    {toolCall.result && typeof toolCall.result === 'string' && toolCall.result.length > 0 && (
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-accent/30 pl-2 ml-1 mt-1 max-h-32 overflow-y-auto custom-scrollbar bg-surface/50 p-1.5 rounded-r">
+                            {toolCall.result}
                         </div>
-                        {toolCall.result && (
-                            <div className="mt-2 text-text-muted opacity-80 whitespace-pre-wrap break-all border-t border-border/50 pt-2">
-                                {toolCall.result.slice(0, 500)}
-                                {toolCall.result.length > 500 && <span className="opacity-50">... (truncated)</span>}
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
             )
         }
@@ -275,15 +361,15 @@ const ToolCallCard = memo(function ToolCallCard({
                     : name === 'uiux_search' ? 'UI/UX'
                         : 'Files'
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-text-muted">
                         <Search className="w-3 h-3" />
-                        <span className="text-text-muted/60">{searchType}:</span>
+                        <span>{searchType}:</span>
                         <span className="text-text-primary font-medium truncate">"{query}"</span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-1">
-                            <JsonHighlight data={toolCall.result} className="p-2" maxHeight="max-h-48" maxLength={3000} />
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={3000} />
                         </div>
                     )}
                 </div>
@@ -291,19 +377,19 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 目录类工具
-        if (['list_directory', 'get_dir_tree'].includes(name)) {
+        if (name === 'list_directory') {
             const path = args.path as string
             const displayName = getFileName(path) || path || '.'
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1 text-[11px]">
+                    <div className="flex items-center gap-1.5 text-text-muted">
                         <FileCode className="w-3 h-3" />
                         <span className="text-text-primary font-medium" title={path}>{displayName}</span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-64 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre">
+                        <div className="max-h-64 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 font-mono text-text-secondary whitespace-pre">
                             {toolCall.result.slice(0, 3000)}
-                            {toolCall.result.length > 3000 && <span className="opacity-50">... (truncated)</span>}
+                            {toolCall.result.length > 3000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     )}
                 </div>
@@ -311,7 +397,7 @@ const ToolCallCard = memo(function ToolCallCard({
         }
 
         // 文件编辑类工具（带 diff 预览）
-        if (['edit_file', 'write_file', 'create_file', 'replace_file_content'].includes(name)) {
+        if (['edit_file', 'write_file'].includes(name)) {
             const filePath = (args.path as string) || ''
             const MAX_CHARS = 5000
             const rawNew = ((args.content || args.new_string || '') as string)
@@ -322,27 +408,27 @@ const ToolCallCard = memo(function ToolCallCard({
 
             if (newContent || isStreaming) {
                 return (
-                    <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-1.5 bg-surface/30 border-b border-border">
-                            <span className="text-text-muted flex items-center gap-2 text-xs">
-                                <FileCode className="w-3 h-3" />
-                                {filePath ? (
-                                    <span className="font-medium text-text-primary">{getFileName(filePath)}</span>
-                                ) : (isStreaming || isRunning) ? (
-                                    <span className="font-medium text-shimmer italic">editing...</span>
-                                ) : (
-                                    <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
-                                )}
-                                {isStreaming && (
-                                    <span className="text-accent text-[10px] flex items-center gap-1 ml-2">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                                        Writing...
-                                    </span>
-                                )}
-                                {isTruncated && !isStreaming && <span className="text-amber-500 text-[10px]">(truncated)</span>}
-                            </span>
+                    <div className="space-y-1">
+                        <div className="flex items-center flex-wrap gap-2 text-[11px] text-text-muted">
+                            <FileCode className="w-3 h-3 flex-shrink-0" />
+                            {filePath ? (
+                                <span className="font-medium text-text-primary transition-colors break-all" title={typeof filePath === 'string' ? filePath : JSON.stringify(filePath)}>
+                                    <TextWithFileLinks text={typeof filePath === 'string' ? getFileName(filePath) : JSON.stringify(filePath)} />
+                                </span>
+                            ) : (isStreaming || isRunning) ? (
+                                <span className="font-medium text-shimmer italic">editing...</span>
+                            ) : (
+                                <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
+                            )}
+                            {isStreaming && (
+                                <span className="text-accent flex items-center gap-1">
+                                    <span className="w-1 h-1 rounded-full bg-accent animate-pulse" />
+                                    Writing...
+                                </span>
+                            )}
+                            {isTruncated && !isStreaming && <span className="text-amber-500">(truncated)</span>}
                         </div>
-                        <div className="max-h-64 overflow-auto custom-scrollbar">
+                        <div className="max-h-64 overflow-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
                             <InlineDiffPreview
                                 oldContent={oldContent}
                                 newContent={newContent}
@@ -352,7 +438,7 @@ const ToolCallCard = memo(function ToolCallCard({
                             />
                         </div>
                         {toolCall.result && !isStreaming && (
-                            <div className="px-3 py-2 border-t border-border text-xs text-text-muted">{toolCall.result.slice(0, 200)}</div>
+                            <div className="text-[11px] text-text-muted border-l-2 border-border/30 pl-2 ml-1 mt-1">{toolCall.result.slice(0, 200)}</div>
                         )}
                     </div>
                 )
@@ -366,17 +452,17 @@ const ToolCallCard = memo(function ToolCallCard({
             const isFolder = path?.endsWith('/')
             const displayName = path ? (getFileName(path) || path) : '<no path>'
             return (
-                <div className={`bg-surface/50 rounded-md border overflow-hidden ${isDelete ? 'border-status-error/30' : 'border-border'}`}>
-                    <div className="px-3 py-2 flex items-center gap-2 text-xs">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px]">
                         <FileCode className={`w-3 h-3 ${isDelete ? 'text-status-error' : 'text-status-success'}`} />
                         <span className={`font-medium ${isDelete ? 'text-status-error' : 'text-status-success'}`}>
                             {isDelete ? 'Delete' : 'Create'} {isFolder ? 'folder' : 'file'}:
                         </span>
-                        <span className="text-text-primary font-mono truncate" title={path}>{displayName}</span>
+                        <span className="text-text-primary break-all" title={path}>{displayName}</span>
                     </div>
                     {toolCall.result && (
-                        <div className="px-3 py-2 border-t border-border text-xs text-text-muted">
-                            {toolCall.result.slice(0, 200)}
+                        <div className="text-[11px] text-text-muted border-l-2 border-border/30 pl-2 ml-1">
+                            <TextWithFileLinks text={toolCall.result.slice(0, 200)} />
                         </div>
                     )}
                 </div>
@@ -389,16 +475,33 @@ const ToolCallCard = memo(function ToolCallCard({
             const displayName = name === 'read_file'
                 ? (filePath ? getFileName(filePath) : '<no path>')
                 : `${(args.paths as string[])?.length || 0} files`
+            const theme = themeManager.getThemeById(currentTheme)
+            const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
+
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1 mt-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <FileCode className="w-3 h-3" />
-                        <span className="text-text-primary font-medium" title={filePath}>{displayName}</span>
+                        <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={typeof args.path === 'string' ? args.path : undefined}>
+                            <TextWithFileLinks text={displayName} />
+                        </span>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 font-mono text-xs text-text-secondary whitespace-pre-wrap">
-                            {toolCall.result.slice(0, 2000)}
-                            {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
+                        <div className="mt-1 relative rounded-lg border border-border/40 bg-background-tertiary overflow-hidden shadow-sm">
+                            <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                                <SyntaxHighlighter
+                                    style={syntaxStyle}
+                                    language={filePath ? guessLanguage(filePath) : 'typescript'}
+                                    PreTag="div"
+                                    className="!bg-transparent !p-3 !m-0 !text-[11px] leading-relaxed font-mono"
+                                    customStyle={{ background: 'transparent', margin: 0 }}
+                                    wrapLines
+                                    wrapLongLines
+                                >
+                                    {toolCall.result.slice(0, 3000)}
+                                </SyntaxHighlighter>
+                            </div>
+                            {toolCall.result.length > 3000 && <div className="px-3 py-1.5 border-t border-border/50 text-[10px] text-text-muted bg-surface/30 italic drop-shadow-sm truncate">... (Content truncated for preview length limits)</div>}
                         </div>
                     )}
                 </div>
@@ -415,15 +518,15 @@ const ToolCallCard = memo(function ToolCallCard({
                 hostname = '<no url>'
             }
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <Search className="w-3 h-3" />
-                        <span className="text-text-primary font-medium truncate">{hostname}</span>
+                        <a href={url} target="_blank" rel="noreferrer" className="text-text-primary font-medium hover:underline truncate hover:text-accent transition-colors">{hostname}</a>
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-3 text-xs text-text-secondary">
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 text-[11px] text-text-secondary">
                             {toolCall.result.slice(0, 2000)}
-                            {toolCall.result.length > 2000 && <span className="opacity-50">... (truncated)</span>}
+                            {toolCall.result.length > 2000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     )}
                 </div>
@@ -434,17 +537,18 @@ const ToolCallCard = memo(function ToolCallCard({
         if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(name)) {
             const path = args.path as string | undefined
             const line = args.line as number | undefined
-            const displayName = path ? getFileName(path) : '<no path>'
             return (
-                <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                    <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-text-muted">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                         <FileCode className="w-3 h-3" />
-                        <span className="text-text-primary font-medium">{displayName}</span>
+                        <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={typeof path === 'string' ? path : JSON.stringify(path)}>
+                            <TextWithFileLinks text={typeof path === 'string' ? getFileName(path) : JSON.stringify(path)} />
+                        </span>
                         {line && <span className="text-text-muted/60">:{line}</span>}
                     </div>
                     {toolCall.result && (
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar p-2">
-                            <JsonHighlight data={toolCall.result} maxHeight="max-h-48" maxLength={2000} />
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={2000} />
                         </div>
                     )}
                 </div>
@@ -454,126 +558,145 @@ const ToolCallCard = memo(function ToolCallCard({
         // 默认：显示参数和结果
         const hasArgs = Object.keys(args).filter(k => !k.startsWith('_')).length > 0
         return (
-            <div className="space-y-2">
+            <div className="space-y-1 mt-1 text-[11px]">
                 {hasArgs && (
-                    <div className="bg-surface/50 rounded-md border border-border p-2">
-                        <JsonHighlight
-                            data={Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('_')))}
-                            maxHeight="max-h-32"
-                            maxLength={1500}
-                        />
-                    </div>
+                    <>
+                        <div className="flex items-center gap-1.5 text-text-muted">
+                            <FileCode className="w-3 h-3" />
+                            <span>Arguments:</span>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight
+                                data={Object.fromEntries(Object.entries(args).filter(([k]) => !k.startsWith('_')))}
+                                className="py-1"
+                                maxHeight="max-h-32"
+                                maxLength={1500}
+                            />
+                        </div>
+                    </>
                 )}
                 {toolCall.richContent && toolCall.richContent.length > 0 && (
                     <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-64" />
                 )}
                 {toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (
-                    <div className="bg-surface/50 rounded-md border border-border overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-1.5 bg-surface/30 border-b border-border">
-                            <span className="text-[10px] text-text-muted uppercase tracking-wider font-medium">Result</span>
+                    <>
+                        <div className="flex items-center justify-between gap-1.5 text-text-muted mt-2 group/title">
+                            <div className="flex items-center gap-1.5">
+                                <Terminal className="w-3 h-3" />
+                                <span>Result:</span>
+                            </div>
                             <button
                                 onClick={e => {
                                     e.stopPropagation()
                                     handleCopyResult()
                                 }}
-                                className="p-1 hover:bg-surface-hover rounded text-text-muted hover:text-text-primary transition-colors"
+                                className="opacity-0 group-hover/title:opacity-100 transition-opacity p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary"
+                                title="Copy Result"
                             >
                                 <Copy className="w-3 h-3" />
                             </button>
                         </div>
-                        <div className="max-h-48 overflow-auto custom-scrollbar p-2">
-                            <JsonHighlight data={toolCall.result} maxHeight="max-h-48" maxLength={3000} />
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                            <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={3000} />
                         </div>
-                    </div>
+                    </>
                 )}
             </div>
         )
     }
 
-    // 卡片样式
+    // 极简卡片样式
     const cardStyle = useMemo(() => {
-        if (isAwaitingApproval) return 'border-yellow-500/30 bg-yellow-500/5'
-        if (isError) return 'border-red-500/20 bg-red-500/5'
-        if (isStreaming || isRunning) return 'border-accent/50 bg-accent/5 shadow-[0_0_15px_-3px_rgba(var(--accent),0.15)] outline outline-1 outline-offset-1 outline-accent/20 animate-pulse-subtle'
-        return 'border-border bg-surface/30 hover:bg-surface/50 transition-colors'
+        if (isAwaitingApproval) return 'border border-yellow-500/20 bg-yellow-500/5 rounded-lg shadow-sm shadow-yellow-500/5 overflow-hidden'
+        if (isError) return 'bg-red-500/5 rounded-lg overflow-hidden'
+        if (isStreaming || isRunning) return 'bg-accent/5 rounded-lg overflow-hidden'
+        return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
     return (
-        <div className={`group my-1 rounded-xl border overflow-hidden ${cardStyle} animate-slide-in-right relative`}>
+        <div className={`group my-0.5 relative ${cardStyle}`}>
             {/* Sweeping Light Effect for running state */}
             {(isStreaming || isRunning) && (
-                <div className="absolute inset-0 pointer-events-none rounded-xl overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/20 to-transparent animate-shimmer" />
+                <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent animate-shimmer" />
                 </div>
             )}
 
-            {/* Header */}
-            <div className="flex items-center gap-3 px-3 py-2 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+            {/* Header - Flat Outline Style */}
+            <div className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+                {/* Expand Toggle (Moved to far left) */}
+                <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 hover:text-text-muted">
+                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+                </motion.div>
+
                 {/* Status Icon */}
-                <div className="shrink-0">
+                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
                     {isStreaming || isRunning ? (
-                        <div className="w-4 h-4 rounded-full bg-accent/10 flex items-center justify-center border border-accent/20">
+                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
                             <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                         </div>
                     ) : isSuccess ? (
-                        <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                            <Check className="w-2.5 h-2.5 text-green-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-green-500" />
                         </div>
                     ) : isError ? (
-                        <div className="w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-red-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/10 flex items-center justify-center">
+                            <X className="w-2.5 h-2.5 text-red-500" />
                         </div>
                     ) : isRejected ? (
-                        <div className="w-4 h-4 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                            <X className="w-2.5 h-2.5 text-yellow-400" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                            <X className="w-2.5 h-2.5 text-yellow-500" />
                         </div>
                     ) : (
-                        <div className="w-4 h-4 rounded-full border border-text-muted/30" />
+                        <div className="w-3.5 h-3.5 rounded-full border border-text-muted/30" />
                     )}
                 </div>
 
-                {/* Title & Description */}
+                {/* Flat Action Text */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
-                    <span
-                        className={`text-sm font-medium whitespace-nowrap ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-secondary'}`}
-                    >
-                        {TOOL_LABELS[toolCall.name] || toolCall.name}
+                    <span className={`text-[12px] truncate ${isStreaming || isRunning ? 'text-text-primary text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+                        {statusText ||
+                            <span className="opacity-50 inline-flex items-center gap-1.5">
+                                <span>
+                                    {TOOL_LABELS[toolCall.name] || toolCall.name}
+                                </span>
+                            </span>
+                        }
                     </span>
-                    {statusText ? (
-                        <>
-                            <span className="text-text-muted/30">|</span>
-                            <span className={`text-xs truncate ${isStreaming || isRunning ? 'text-shimmer' : 'text-text-muted'}`}>{statusText}</span>
-                        </>
-                    ) : (isStreaming || isRunning) && (
-                        <span className="text-xs text-shimmer italic ml-2">Processing...</span>
-                    )}
                 </div>
-
-                {/* Expand Toggle */}
-                <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/50">
-                    <ChevronDown className="w-4 h-4" />
-                </motion.div>
             </div>
 
-            {/* Expanded Content (CSS Grid Transition) */}
-            <div
-                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-            >
-                <div className="overflow-hidden">
-                    <div className="px-3 pb-3">
-                        {renderPreview()}
-                        {toolCall.error && (
-                            <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
-                                <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    Error
-                                </div>
-                                <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+            {/* Expanded Content (Framer Motion) */}
+            <AnimatePresence initial={false}>
+                {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
+                        className="overflow-hidden"
+                    >
+                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
+                            {/* Visual Threading Line */}
+                            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+
+                            {/* Nested Content Wrapper */}
+                            <div className="relative z-10 space-y-2 mt-1">
+                                {renderPreview()}
+                                {toolCall.error && (
+                                    <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
+                                        <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
+                                            <AlertTriangle className="w-3 h-3" />
+                                            Error
+                                        </div>
+                                        <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Approval Actions */}
             {isAwaitingApproval && (
@@ -596,33 +719,34 @@ const ToolCallCard = memo(function ToolCallCard({
     )
 },
     (prevProps, nextProps) => {
-        // 名称变化时必须重新渲染
-        if (prevProps.toolCall.name !== nextProps.toolCall.name) {
-            return false
+        // 先比较基本属性
+        if (
+            prevProps.toolCall.id !== nextProps.toolCall.id ||
+            prevProps.toolCall.name !== nextProps.toolCall.name ||
+            prevProps.toolCall.status !== nextProps.toolCall.status ||
+            prevProps.toolCall.error !== nextProps.toolCall.error ||
+            prevProps.toolCall.result !== nextProps.toolCall.result ||
+            prevProps.isAwaitingApproval !== nextProps.isAwaitingApproval ||
+            prevProps.defaultExpanded !== nextProps.defaultExpanded
+        ) {
+            return false // 依赖属性变化 -> 重绘
         }
 
-        const prevArgs = prevProps.toolCall.arguments as Record<string, unknown>
-        const nextArgs = nextProps.toolCall.arguments as Record<string, unknown>
-        const prevStreaming = prevArgs?._streaming
-        const nextStreaming = nextArgs?._streaming
+        // 状态相同情况下（比如均为 running），进一步检查展示的参数内容是否发生变化
+        // （为了性能，仅合并可能实时更新的重要参数做检查）
+        const prevArgs = { ...prevProps.toolCall.arguments, ...prevProps.toolCall.streamingState?.partialArgs }
+        const nextArgs = { ...nextProps.toolCall.arguments, ...nextProps.toolCall.streamingState?.partialArgs }
 
-        // 流式传输中，检查关键参数是否变化
-        if (prevStreaming || nextStreaming) {
-            // 检查 path 等关键字段是否变化
-            if (prevArgs?.path !== nextArgs?.path) return false
-            if (prevArgs?.command !== nextArgs?.command) return false
-            if (prevArgs?.query !== nextArgs?.query) return false
-            if (prevArgs?.pattern !== nextArgs?.pattern) return false
-            return prevProps.toolCall.id === nextProps.toolCall.id && prevStreaming === nextStreaming
+        const monitorKeys = ['path', 'command', 'query', 'pattern', 'new_string', 'content', 'url']
+        for (const key of monitorKeys) {
+            if (prevArgs[key] !== nextArgs[key]) return false
         }
 
-        return (
-            prevProps.toolCall.id === nextProps.toolCall.id &&
-            prevProps.toolCall.status === nextProps.toolCall.status &&
-            prevProps.isAwaitingApproval === nextProps.isAwaitingApproval &&
-            prevProps.toolCall.result === nextProps.toolCall.result &&
-            prevProps.defaultExpanded === nextProps.defaultExpanded
-        )
+        // 最后比较 streaming 标志位的变化（如从 false 变 true 等）
+        const prevStreaming = prevProps.toolCall.streamingState?.isStreaming || prevProps.toolCall.arguments?._streaming
+        const nextStreaming = nextProps.toolCall.streamingState?.isStreaming || nextProps.toolCall.arguments?._streaming
+
+        return prevStreaming === nextStreaming
     })
 
 export default ToolCallCard

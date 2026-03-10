@@ -169,13 +169,15 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: 'Edit file by replacing text or line ranges. Two modes: 1) String replacement: provide old_string and new_string. 2) Line replacement: provide start_line, end_line, and content. CRITICAL: Must read_file first.',
-        detailedDescription: `Two editing modes:
+        description: 'Edit file by replacing text or line ranges. Three modes: 1) String replacement: old_string + new_string. 2) Line replacement: start_line + end_line + content. 3) Batch mode: edits array for multiple changes. CRITICAL: Must read_file first.',
+        detailedDescription: `Three editing modes:
 - String mode: old_string + new_string (include 3-5 lines context)
-- Line mode: start_line + end_line + content (use line numbers from read_file)`,
+- Line mode: start_line + end_line + content (use line numbers from read_file)
+- Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)`,
         commonErrors: [
             { error: 'old_string not found', solution: 'Read file again, copy exact content' },
             { error: 'Multiple matches', solution: 'Include more context lines' },
+            { error: 'Overlapping edits', solution: 'Ensure edit ranges do not overlap' },
         ],
         category: 'write',
         approvalType: 'none',
@@ -190,18 +192,35 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             end_line: { type: 'number', description: 'End line (line mode, inclusive)' },
             content: { type: 'string', description: 'New content (line mode)' },
             replace_all: { type: 'boolean', description: 'Replace all occurrences (string mode)', default: false },
+            edits: {
+                type: 'array',
+                description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.',
+                items: {
+                    type: 'object',
+                    description: 'Individual edit operation',
+                    properties: {
+                        action: { type: 'string', description: 'Action type ("replace", "insert", "delete")', enum: ['replace', 'insert', 'delete'] },
+                        start_line: { type: 'number', description: 'Start line (1-indexed, required for replace/delete)' },
+                        end_line: { type: 'number', description: 'End line (inclusive, required for replace/delete)' },
+                        after_line: { type: 'number', description: 'Line after which to insert (required for insert)' },
+                        content: { type: 'string', description: 'New content (required for replace/insert)' }
+                    }
+                }
+            },
         },
         validate: (data) => {
             // 验证模式选择
             const hasStringMode = data.old_string || data.new_string
             const hasLineMode = data.start_line || data.end_line || data.content
+            const hasBatchMode = data.edits
 
-            if (hasStringMode && hasLineMode) {
-                return { valid: false, error: 'Cannot mix string mode and line mode parameters' }
+            const modeCount = [hasStringMode, hasLineMode, hasBatchMode].filter(Boolean).length
+            if (modeCount > 1) {
+                return { valid: false, error: 'Cannot mix string mode, line mode, and batch mode parameters' }
             }
 
-            if (!hasStringMode && !hasLineMode) {
-                return { valid: false, error: 'Must provide either (old_string + new_string) or (start_line + end_line + content)' }
+            if (modeCount === 0) {
+                return { valid: false, error: 'Must provide either (old_string + new_string), (start_line + end_line + content), or (edits array)' }
             }
 
             // 验证字符串模式
@@ -211,11 +230,44 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 
             // 验证行模式
             if (hasLineMode) {
-                if (!data.start_line || !data.end_line || !data.content) {
+                if (!data.start_line || !data.end_line || data.content === undefined) {
                     return { valid: false, error: 'Line mode requires start_line, end_line, and content' }
                 }
                 if ((data.start_line as number) > (data.end_line as number)) {
                     return { valid: false, error: 'start_line must be <= end_line' }
+                }
+            }
+
+            // 验证批量模式
+            if (hasBatchMode) {
+                if (!Array.isArray(data.edits) || data.edits.length === 0) {
+                    return { valid: false, error: 'Batch mode requires non-empty edits array' }
+                }
+
+                for (let i = 0; i < data.edits.length; i++) {
+                    const edit = data.edits[i]
+                    if (!edit.action || !['replace', 'insert', 'delete'].includes(edit.action)) {
+                        return { valid: false, error: `Edit ${i}: action must be "replace", "insert", or "delete"` }
+                    }
+
+                    if (edit.action === 'replace' || edit.action === 'delete') {
+                        if (!edit.start_line || !edit.end_line) {
+                            return { valid: false, error: `Edit ${i}: ${edit.action} requires start_line and end_line` }
+                        }
+                        if (edit.start_line > edit.end_line) {
+                            return { valid: false, error: `Edit ${i}: start_line must be <= end_line` }
+                        }
+                    }
+
+                    if (edit.action === 'insert') {
+                        if (edit.after_line === undefined) {
+                            return { valid: false, error: `Edit ${i}: insert requires after_line` }
+                        }
+                    }
+
+                    if ((edit.action === 'replace' || edit.action === 'insert') && edit.content === undefined) {
+                        return { valid: false, error: `Edit ${i}: ${edit.action} requires content` }
+                    }
                 }
             }
 
@@ -294,14 +346,22 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         description: 'Execute shell command. Requires user approval. Use cwd parameter to set working directory. Do NOT use for reading files (use read_file), searching (use search_files), or editing (use edit_file).',
         detailedDescription: `Execute shell commands in workspace.
 - Requires user approval
-- Use cwd parameter instead of cd commands`,
+- Use cwd parameter instead of cd commands
+For long-running servers or watch tasks:
+- Set is_background=true to run in a UI terminal panel
+- The command returns a terminal ID immediately
+- Use read_terminal_output to check logs
+- Use send_terminal_input to interact (e.g. typing 'y' or sending Ctrl+C)
+- Use stop_terminal to kill it later`,
         examples: [
             'run_command command="npm install"',
             'run_command command="npm test" cwd="packages/core"',
+            'run_command command="npm run dev" is_background=true',
         ],
         criticalRules: [
             'NEVER use cat/grep/sed - use dedicated tools',
             'Use cwd parameter instead of cd',
+            'Always use is_background=true for servers and dev tasks',
         ],
         category: 'terminal',
         approvalType: 'terminal',
@@ -312,7 +372,61 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             command: { type: 'string', description: 'Shell command', required: true },
             cwd: { type: 'string', description: 'Working directory relative to workspace root (e.g., "packages/core", NOT "./packages/core")', },
             timeout: { type: 'number', description: 'Timeout seconds (default: 30)', default: 30 },
-            is_background: { type: 'boolean', description: 'Run in background', default: false },
+            is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
+        },
+    },
+
+    read_terminal_output: {
+        name: 'read_terminal_output',
+        displayName: 'Read Terminal',
+        description: 'Read the output buffer of a background UI terminal.',
+        detailedDescription: `Get the recent output lines of a running terminal.
+- Use the terminal ID returned from a background run_command
+- By default returns the last 100 lines`,
+        category: 'terminal',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            terminal_id: { type: 'string', description: 'The ID of the terminal to read from', required: true },
+            lines: { type: 'number', description: 'Number of recent lines to read (default 100)', default: 100 },
+        },
+    },
+
+    send_terminal_input: {
+        name: 'send_terminal_input',
+        displayName: 'Terminal Input',
+        description: 'Send text input or keystrokes to a background UI terminal.',
+        detailedDescription: `Send keystrokes to an interactive terminal.
+- Supports raw text or special keys
+- Required for answering prompts (e.g., Y/N) in commands
+- Set is_ctrl=true to send combinations like Ctrl+C`,
+        category: 'terminal',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            terminal_id: { type: 'string', description: 'The ID of the terminal to send input to', required: true },
+            input: { type: 'string', description: 'The string/key to send (e.g. "yes\\n", "c" for Ctrl+C)', required: true },
+            is_ctrl: { type: 'boolean', description: 'If true, treats input as a control character (e.g. "c" becomes Ctrl+C)', default: false },
+        },
+    },
+
+    stop_terminal: {
+        name: 'stop_terminal',
+        displayName: 'Stop Terminal',
+        description: 'Stop a background UI terminal process and close its panel.',
+        detailedDescription: `Kill a terminal process and cleanup UI.
+- Use this when a dev server or watcher is no longer needed`,
+        category: 'terminal',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            terminal_id: { type: 'string', description: 'The ID of the terminal to stop', required: true },
         },
     },
 
@@ -404,131 +518,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         },
     },
 
-    // ===== AI 辅助工具 =====
-    analyze_code: {
-        name: 'analyze_code',
-        displayName: 'AI Code Analysis',
-        description: `Use AI to analyze code and get structured diagnostics, suggestions, and insights.
 
-### 🎯 WHEN TO USE
-- Before refactoring: understand code structure and potential issues
-- After reading complex code: get AI insights on quality and patterns
-- When planning changes: identify risks and dependencies
-
-### ⚠️ IMPORTANT
-- This uses AI analysis (costs tokens), use sparingly
-- For compile errors, use get_lint_errors instead (faster, free)
-- Best for: architecture review, code quality, refactoring planning`,
-        detailedDescription: `AI-powered code analysis that returns structured results:
-- Issues: errors, warnings, code smells with severity and location
-- Suggestions: refactoring opportunities with priority
-- Summary: overall code quality assessment
-
-Use this for deeper insights beyond what LSP provides.`,
-        category: 'lsp',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            path: { type: 'string', description: 'File path to analyze', required: true },
-        },
-    },
-
-    suggest_refactoring: {
-        name: 'suggest_refactoring',
-        displayName: 'AI Refactoring Suggestions',
-        description: `Get AI-powered refactoring suggestions for code improvement.
-
-### 🎯 WHEN TO USE
-- When you want to improve code quality
-- Before making complex changes
-- To explore different implementation approaches
-
-### ⚠️ IMPORTANT
-- Specify clear intent (e.g., "simplify nested conditions", "extract reusable logic")
-- Review suggestions carefully before applying
-- This uses AI (costs tokens)`,
-        detailedDescription: `Get structured refactoring suggestions:
-- Title and description of the refactoring
-- Detailed changes with line numbers
-- Benefits and potential risks
-- Confidence level
-
-Helps plan refactoring before making changes.`,
-        category: 'lsp',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            path: { type: 'string', description: 'File path to refactor', required: true },
-            intent: { type: 'string', description: 'What you want to improve (e.g., "simplify nested if statements")', required: true },
-        },
-    },
-
-    suggest_fixes: {
-        name: 'suggest_fixes',
-        displayName: 'AI Error Fixes',
-        description: `Get AI-powered fix suggestions for code errors.
-
-### 🎯 WHEN TO USE
-- After get_lint_errors shows errors you don't know how to fix
-- For complex type errors or compilation issues
-- When you need multiple fix options
-
-### ⚠️ IMPORTANT
-- Run get_lint_errors first to get diagnostics
-- This uses AI (costs tokens)
-- Review fixes before applying`,
-        detailedDescription: `Get structured fix suggestions for errors:
-- Multiple solution options per error
-- Detailed changes with line numbers
-- Confidence level for each solution
-- Explanation of what caused the error
-
-Use after get_lint_errors to get AI help fixing issues.`,
-        category: 'lsp',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            path: { type: 'string', description: 'File path with errors', required: true },
-        },
-    },
-
-    generate_tests: {
-        name: 'generate_tests',
-        displayName: 'AI Test Generation',
-        description: `Generate test cases for code using AI.
-
-### 🎯 WHEN TO USE
-- After implementing new functions/classes
-- When adding test coverage
-- To get test structure examples
-
-### ⚠️ IMPORTANT
-- Specify test framework if known (e.g., "vitest", "jest")
-- Review and adapt generated tests
-- This uses AI (costs tokens)`,
-        detailedDescription: `Generate structured test cases:
-- Test framework setup
-- Multiple test cases (unit, integration, e2e)
-- Setup and teardown code
-- Required imports
-
-Helps bootstrap test files quickly.`,
-        category: 'lsp',
-        approvalType: 'none',
-        parallel: false,
-        requiresWorkspace: true,
-        enabled: true,
-        parameters: {
-            path: { type: 'string', description: 'File path to generate tests for', required: true },
-            framework: { type: 'string', description: 'Test framework (e.g., "vitest", "jest", "mocha")', required: false },
-        },
-    },
 
     // ===== 网络工具 =====
     web_search: {
@@ -561,6 +551,7 @@ BAD: Separate searches for "Python asyncio" and "Python threading"`,
                 required: true,
             },
             max_results: { type: 'number', description: 'Maximum results to return (default: 5, max: 10)', default: 5 },
+            timeout: { type: 'number', description: 'Timeout in seconds (default: 30, minimum: 15). Increase for slow networks.', default: 30 },
         },
     },
 
@@ -850,7 +841,7 @@ This will trigger the task executor to run through the plan.`,
 - User preferences for code style or behavior
 - Project-specific terminology`,
         category: 'interaction',
-        approvalType: 'interaction',
+        approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
         enabled: true,

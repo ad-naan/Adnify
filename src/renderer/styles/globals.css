@@ -455,3 +455,43 @@ textarea,
 .streaming-ink-effect>*:last-child {
   animation: ink-fade-in 0.3s ease-out;
 }
+
+/* Reveal in Explorer - File highlight flash */
+@keyframes reveal-highlight {
+  0% {
+    background-color: rgb(var(--accent) / 0.3);
+    box-shadow: 0 0 8px rgb(var(--accent) / 0.4);
+  }
+
+  50% {
+    background-color: rgb(var(--accent) / 0.15);
+    box-shadow: 0 0 4px rgb(var(--accent) / 0.2);
+  }
+
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.animate-reveal-highlight {
+  animation: reveal-highlight 2s ease-out forwards;
+}
+
+/* --- Inline Diff Styles (Composer) --- */
+.inline-diff-add-line {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+}
+
+.inline-diff-add-margin {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+  border-left: 3px solid rgb(34, 197, 94) !important;
+}
+
+.inline-diff-remove-zone {
+  position: relative;
+  z-index: 10;
+  border-top: 1px dashed rgba(239, 68, 68, 0.3);
+  border-bottom: 1px dashed rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.05);
+}

@@ -18,6 +18,8 @@ import { fileCacheService } from '../services/fileCacheService'
 import { lintService } from '../services/lintService'
 import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
+import { composerService } from '../services/composerService'
+import { toRelativePath } from '@shared/utils/pathUtils'
 
 // ===== 辅助函数 =====
 
@@ -95,7 +97,7 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
 
 // ===== 工具执行器 =====
 
-export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
+const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
         // 支持单个文件或多个文件
         let pathArg = args.path
@@ -126,7 +128,21 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                         const content = await api.file.read(validPath)
                         if (content !== null) {
                             fileCacheService.markFileAsRead(validPath, content)
-                            return `\n--- File: ${p} ---\n${content}\n`
+                            let graphContent = ''
+                            try {
+                                const nodes = await api.index.parseCallGraph(validPath, content)
+                                if (nodes && nodes.length > 0) {
+                                    graphContent = '\n--- AST Call Graph Summary ---\n'
+                                    const defs: any[] = nodes.filter(n => n.type === 'definition')
+                                    const calls: any[] = nodes.filter(n => n.type === 'call')
+                                    for (const def of defs) {
+                                        const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
+                                        const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
+                                        graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
+                                    }
+                                }
+                            } catch (e) { }
+                            return `\n--- File: ${p} ---\n${content}\n${graphContent}\n`
                         }
                         return `\n--- File: ${p} ---\n[File not found]\n`
                     } catch (e: unknown) {
@@ -145,6 +161,21 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
 
         fileCacheService.markFileAsRead(path, content)
 
+        let graphContent = ''
+        try {
+            const nodes = await api.index.parseCallGraph(path, content)
+            if (nodes && nodes.length > 0) {
+                graphContent = '\n\n--- AST Call Graph Summary ---\n'
+                const defs: any[] = nodes.filter(n => n.type === 'definition')
+                const calls: any[] = nodes.filter(n => n.type === 'call')
+                for (const def of defs) {
+                    const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
+                    const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
+                    graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
+                }
+            }
+        } catch (e) { }
+
         const lines = content.split('\n')
         const startLine = typeof args.start_line === 'number' ? Math.max(1, args.start_line) : 1
         const endLine = typeof args.end_line === 'number' ? Math.min(lines.length, args.end_line) : lines.length
@@ -160,7 +191,7 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 `To read more: use search_files to find target location, then read_file with start_line/end_line`
         }
 
-        return { success: true, result: numberedContent, meta: { filePath: path } }
+        return { success: true, result: numberedContent + graphContent, meta: { filePath: path } }
     },
 
     async list_directory(args, ctx) {
@@ -242,8 +273,189 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
         // 判断使用哪种模式
-        // const hasStringMode = args.old_string || args.new_string
+        const hasBatchMode = args.edits && Array.isArray(args.edits)
         const hasLineMode = args.start_line || args.end_line || args.content
+
+        // 🎯 Fast-Edit 精华：批量编辑模式
+        if (hasBatchMode) {
+            const edits = args.edits as Array<{
+                action: 'replace' | 'insert' | 'delete'
+                start_line?: number
+                end_line?: number
+                after_line?: number
+                content?: string
+            }>
+
+            // 验证缓存
+            if (!fileCacheService.hasValidCache(path)) {
+                logger.agent.warn(`[edit_file] File ${path} not in cache, line numbers may be inaccurate`)
+            }
+
+            let lines = originalContent.split('\n')
+
+            // 🎯 关键优化：从后往前排序，避免行号偏移
+            const sortedEdits = [...edits].sort((a, b) => {
+                const aLine = a.start_line || a.after_line || 0
+                const bLine = b.start_line || b.after_line || 0
+                return bLine - aLine
+            })
+
+            // 🎯 检测重叠编辑
+            const getEditRange = (edit: typeof edits[0]): [number, number] => {
+                if (edit.action === 'replace' || edit.action === 'delete') {
+                    return [edit.start_line!, edit.end_line!]
+                } else if (edit.action === 'insert') {
+                    return [edit.after_line!, edit.after_line!]
+                }
+                return [0, 0]
+            }
+
+            const ranges: Array<[number, number, number, string]> = []
+            sortedEdits.forEach((edit, idx) => {
+                const [start, end] = getEditRange(edit)
+                if (start > 0) {
+                    ranges.push([start, end, idx, edit.action])
+                }
+            })
+
+            ranges.sort((a, b) => a[0] - b[0])
+
+            for (let i = 0; i < ranges.length - 1; i++) {
+                const [s1, e1, , act1] = ranges[i]
+                const [s2, e2, , act2] = ranges[i + 1]
+
+                if (act1 === 'insert' && act2 === 'insert') continue
+
+                if (s2 <= e1) {
+                    return {
+                        success: false,
+                        result: '',
+                        error: `Overlapping edits detected: ${act1} [${s1}-${e1}] overlaps with ${act2} [${s2}-${e2}]. Split into separate calls or adjust line ranges.`
+                    }
+                }
+            }
+
+            const allWarnings: any[] = []
+            let linesAdded = 0
+            let linesRemoved = 0
+
+            // 应用所有编辑
+            for (const edit of sortedEdits) {
+                if (edit.action === 'replace') {
+                    const { start_line, end_line, content } = edit
+
+                    if (start_line! < 1 || end_line! > lines.length || start_line! > end_line!) {
+                        return {
+                            success: false,
+                            result: '',
+                            error: `Invalid line range: ${start_line}-${end_line}. File has ${lines.length} lines.`
+                        }
+                    }
+
+                    const oldLines = lines.slice(start_line! - 1, end_line)
+                    const newLines = content!.split('\n')
+
+                    lines = [
+                        ...lines.slice(0, start_line! - 1),
+                        ...newLines,
+                        ...lines.slice(end_line)
+                    ]
+
+                    linesRemoved += oldLines.length
+                    linesAdded += newLines.length
+
+                    // 检测警告
+                    const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
+                    const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, start_line!, end_line!)
+                    allWarnings.push(...warnings)
+
+                } else if (edit.action === 'insert') {
+                    const { after_line, content } = edit
+
+                    if (after_line! < 0 || after_line! > lines.length) {
+                        return {
+                            success: false,
+                            result: '',
+                            error: `Invalid after_line: ${after_line}. File has ${lines.length} lines.`
+                        }
+                    }
+
+                    const newLines = content!.split('\n')
+                    lines = [
+                        ...lines.slice(0, after_line),
+                        ...newLines,
+                        ...lines.slice(after_line)
+                    ]
+
+                    linesAdded += newLines.length
+
+                } else if (edit.action === 'delete') {
+                    const { start_line, end_line } = edit
+
+                    if (start_line! < 1 || end_line! > lines.length || start_line! > end_line!) {
+                        return {
+                            success: false,
+                            result: '',
+                            error: `Invalid line range: ${start_line}-${end_line}. File has ${lines.length} lines.`
+                        }
+                    }
+
+                    const removed = end_line! - start_line! + 1
+                    lines = [
+                        ...lines.slice(0, start_line! - 1),
+                        ...lines.slice(end_line)
+                    ]
+
+                    linesRemoved += removed
+                }
+            }
+
+            const newContent = lines.join('\n')
+            const success = await api.file.write(path, newContent)
+            if (!success) return { success: false, result: '', error: 'Failed to write file' }
+
+            fileCacheService.markFileAsRead(path, newContent)
+
+            // 🎯 集成行内预览：将变更记录到 composerService
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: originalContent,
+                newContent: newContent,
+                changeType: 'modify',
+                linesAdded,
+                linesRemoved,
+                toolCallId: (ctx as any).toolCallId
+            })
+
+            await notifyLspAfterWrite(path)
+
+            if (allWarnings.length > 0) {
+                logger.agent.warn(`[edit_file] ${path}: Detected ${allWarnings.length} potential issues in batch`, allWarnings)
+            }
+
+            const result: any = {
+                success: true,
+                result: `File updated successfully (batch mode: ${edits.length} edits applied)`,
+                meta: {
+                    filePath: path,
+                    oldContent: originalContent,
+                    newContent,
+                    linesAdded,
+                    linesRemoved,
+                    totalLines: lines.length,
+                    editsApplied: edits.length
+                }
+            }
+
+            if (allWarnings.length > 0) {
+                result.meta.warnings = allWarnings
+                result.result += ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)`
+            }
+
+            return result
+        }
 
         if (hasLineMode) {
             // 行模式（原 replace_file_content）
@@ -275,17 +487,62 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 }
             }
 
-            lines.splice(startLine - 1, endLine - startLine + 1, ...content.split('\n'))
+            // 提取被替换的行（用于警告检测）
+            const oldLines = lines.slice(startLine - 1, endLine)
+            const newLines = content.split('\n')
+
+            // 执行替换
+            lines.splice(startLine - 1, endLine - startLine + 1, ...newLines)
             const newContent = lines.join('\n')
+
+            // 🎯 Fast-Edit 精华：智能警告检测
+            const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
+            const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, startLine, endLine)
+
+            if (warnings.length > 0) {
+                logger.agent.warn(`[edit_file] ${path}: Detected ${warnings.length} potential issues`, warnings)
+            }
 
             const success = await api.file.write(path, newContent)
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
+
+            // 🎯 集成行内预览
+            const lineChanges = calculateLineChanges(originalContent, newContent)
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: originalContent,
+                newContent: newContent,
+                changeType: 'modify',
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
+                toolCallId: (ctx as any).toolCallId
+            })
+
             await notifyLspAfterWrite(path)
 
-            const lineChanges = calculateLineChanges(originalContent, newContent)
-            return { success: true, result: 'File updated successfully (line mode)', meta: { filePath: path, oldContent: originalContent, newContent, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
+            const result: any = {
+                success: true,
+                result: 'File updated successfully (line mode)',
+                meta: {
+                    filePath: path,
+                    oldContent: originalContent,
+                    newContent,
+                    linesAdded: lineChanges.added,
+                    linesRemoved: lineChanges.removed
+                }
+            }
+
+            // 如果有警告，添加到结果中
+            if (warnings.length > 0) {
+                result.meta.warnings = warnings
+                result.result += ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)`
+            }
+
+            return result
         } else {
             // 字符串模式（原 edit_file）
             const oldString = args.old_string as string
@@ -333,9 +590,22 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
             if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
 
             fileCacheService.markFileAsRead(path, newContent)
-            await notifyLspAfterWrite(path)
 
+            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: originalContent,
+                newContent: newContent,
+                changeType: 'modify',
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
+                toolCallId: (ctx as any).toolCallId
+            })
+
+            await notifyLspAfterWrite(path)
 
             const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
 
@@ -365,6 +635,19 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         await notifyLspAfterWrite(path)
 
         const lineChanges = calculateLineChanges(originalContent, content)
+
+        // 🎯 集成行内预览
+        composerService.ensureSession()
+        composerService.addChange({
+            filePath: path,
+            relativePath: toRelativePath(path, ctx.workspacePath || ''),
+            oldContent: originalContent,
+            newContent: content,
+            changeType: originalContent ? 'modify' : 'create',
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+            toolCallId: (ctx as any).toolCallId
+        })
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
     },
 
@@ -383,6 +666,19 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         if (success) {
             // 通知 LSP 并等待诊断
             await notifyLspAfterWrite(path)
+
+            // 🎯 集成行内预览
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: null,
+                newContent: content,
+                changeType: 'create',
+                linesAdded: content.split('\n').length,
+                linesRemoved: 0,
+                toolCallId: (ctx as any).toolCallId
+            })
         }
 
         return { success, result: success ? 'File created' : 'Failed to create file', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length } }
@@ -397,11 +693,53 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     async run_command(args, ctx) {
         const command = args.command as string
         const cwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : ctx.workspacePath
-        // 从配置获取超时时间，args.timeout 可以覆盖
+        const isBackground = args.is_background as boolean
         const config = getAgentConfig()
         const timeout = args.timeout
             ? (args.timeout as number) * 1000
             : config.toolTimeoutMs
+
+        // 智能判定长进程
+        const isLongRunningProcess = isBackground || /^(npm|yarn|pnpm|bun)\s+(run\s+)?(dev|start|serve|watch)|python\s+-m\s+(http\.server|flask)|uvicorn|nodemon|webpack|vite/.test(command)
+
+        if (isLongRunningProcess) {
+            try {
+                // 1. 初始化终端并在 UI 里展示
+                const { terminalManager } = await import('@/renderer/services/TerminalManager')
+
+                // 确保我们在主进程上下文中
+                const termId = await terminalManager.createTerminal({
+                    name: command.split(' ')[0] || 'Task',
+                    cwd: cwd || ctx.workspacePath || process.cwd()
+                })
+
+                // 这边给终端发送换行使其执行
+                terminalManager.writeToTerminal(termId, `${command}\r`)
+
+                // 2. 唤出面板，让用户可见 (如果在渲染器中可获取的话)
+                useStore.getState().setTerminalVisible(true)
+                terminalManager.setActiveTerminal(termId)
+
+                return {
+                    success: true,
+                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is now running interactively in the UI terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check its startup logs. Use 'send_terminal_input' if you need to answer prompts or type Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
+                    meta: {
+                        command,
+                        cwd,
+                        terminalId: termId,
+                        isBackground: true
+                    }
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : String(error)
+                logger.agent.error('[run_command] Interactive execution failed:', errorMsg)
+                return {
+                    success: false,
+                    result: `Error: Failed to start interactive terminal: ${errorMsg}`,
+                    error: errorMsg
+                }
+            }
+        }
 
         try {
             // 使用后台执行（不依赖 PTY，更可靠）
@@ -451,6 +789,86 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
                 result: `Error: Failed to execute command: ${errorMsg}`,
                 error: errorMsg
             }
+        }
+    },
+
+    async read_terminal_output(args) {
+        const terminalId = args.terminal_id as string
+        const linesCount = (args.lines as number) || 100
+
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+            const lines = terminalManager.getOutputBuffer(terminalId)
+
+            if (!lines || lines.length === 0) {
+                return {
+                    success: true,
+                    result: '[Empty buffer. Either the terminal was closed, invalid, or it has not produced output yet]'
+                }
+            }
+
+            // 返回清理掉 ANSI 色彩字符的内容以便 AI 解析
+            const rawOutput = lines.slice(-linesCount).join('')
+            const cleanOutput = rawOutput
+                .replace(/\x1b\[[0-9;]*[mGK]/g, '')
+                .replace(/\r\n/g, '\n')
+                .trim()
+
+            return {
+                success: true,
+                result: cleanOutput || '[Terminal produced no printable output]',
+                meta: { terminalId }
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return { success: false, result: `Failed to read terminal output: ${errorMsg}`, error: errorMsg }
+        }
+    },
+
+    async send_terminal_input(args) {
+        const terminalId = args.terminal_id as string
+        const input = args.input as string
+        const isCtrl = args.is_ctrl as boolean
+
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+
+            let dataToSend = input
+            if (isCtrl) {
+                // 将诸如 'c' 转换为 \x03 (Ctrl+C)
+                const charCode = input.toLowerCase().charCodeAt(0)
+                if (charCode >= 97 && charCode <= 122) { // 'a' - 'z'
+                    dataToSend = String.fromCharCode(charCode - 96)
+                }
+            }
+
+            terminalManager.writeToTerminal(terminalId, dataToSend)
+
+            return {
+                success: true,
+                result: `Successfully sent ${isCtrl ? 'Ctrl+' + input.toUpperCase() : 'input'} to terminal ${terminalId}`,
+                meta: { terminalId, sentCtrl: isCtrl }
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return { success: false, result: `Failed to send terminal input: ${errorMsg}`, error: errorMsg }
+        }
+    },
+
+    async stop_terminal(args) {
+        const terminalId = args.terminal_id as string
+
+        try {
+            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+            terminalManager.closeTerminal(terminalId)
+            return {
+                success: true,
+                result: `Terminal ${terminalId} stopped and closed successfully.`,
+                meta: { terminalId }
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return { success: false, result: `Failed to stop terminal: ${errorMsg}`, error: errorMsg }
         }
     },
 
@@ -539,7 +957,8 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
     },
 
     async web_search(args) {
-        const result = await api.http.webSearch(args.query as string, args.max_results as number)
+        const timeout = (args.timeout as number) || 30
+        const result = await api.http.webSearch(args.query as string, args.max_results as number, timeout * 1000)
         if (!result.success || !result.results) return { success: false, result: '', error: result.error || 'Search failed' }
         return { success: true, result: result.results.map((r: { title: string; url: string; snippet: string }) => `[${r.title}](${r.url})\n${r.snippet}`).join('\n\n') }
     },
@@ -921,262 +1340,6 @@ export const toolExecutors: Record<string, (args: Record<string, unknown>, ctx: 
         }
     },
 
-    // ===== AI 辅助工具 =====
-    async analyze_code(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const { llmConfig } = useStore.getState()
-
-        try {
-            // 读取文件内容
-            const code = await api.file.read(path)
-            if (code === null) {
-                return { success: false, result: '', error: `File not found: ${path}` }
-            }
-
-            const language = getLanguageId(path)
-
-            // 调用 AI 分析
-            const response = await api.llm.analyzeCode({
-                config: llmConfig,
-                code,
-                language,
-                filePath: path,
-            })
-
-            const result = response.data
-
-            // 格式化结果
-            const issues = result.issues.map(issue =>
-                `[${issue.severity}] Line ${issue.line}: ${issue.message}`
-            ).join('\n')
-
-            const suggestions = result.suggestions.map((sug, i) =>
-                `${i + 1}. [${sug.priority}] ${sug.title}\n   ${sug.description}`
-            ).join('\n\n')
-
-            const output = [
-                '=== AI Code Analysis ===',
-                '',
-                '## Issues:',
-                issues || 'No issues found',
-                '',
-                '## Suggestions:',
-                suggestions || 'No suggestions',
-                '',
-                '## Summary:',
-                result.summary,
-                '',
-                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
-            ].join('\n')
-
-            return {
-                success: true,
-                result: output,
-                richContent: [{
-                    type: 'json' as const,
-                    text: JSON.stringify(result, null, 2),
-                    title: 'Code Analysis Result',
-                }],
-            }
-        } catch (err) {
-            return {
-                success: false,
-                result: '',
-                error: `Code analysis failed: ${toAppError(err).message}`,
-            }
-        }
-    },
-
-    async suggest_refactoring(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const { llmConfig } = useStore.getState()
-
-        try {
-            // 读取文件内容
-            const code = await api.file.read(path)
-            if (code === null) {
-                return { success: false, result: '', error: `File not found: ${path}` }
-            }
-
-            const language = getLanguageId(path)
-
-            // 调用 AI 重构建议
-            const response = await api.llm.suggestRefactoring({
-                config: llmConfig,
-                code,
-                language,
-                intent: args.intent as string,
-            })
-
-            const result = response.data
-
-            // 格式化结果
-            const refactorings = result.refactorings.map((ref, i) =>
-                `${i + 1}. [${ref.confidence}] ${ref.title}\n` +
-                `   ${ref.description}\n` +
-                `   ${ref.explanation}\n` +
-                `   Changes: ${ref.changes.length} modification(s)`
-            ).join('\n\n')
-
-            const output = [
-                '=== Refactoring Suggestions ===',
-                '',
-                refactorings,
-                '',
-                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
-            ].join('\n')
-
-            return {
-                success: true,
-                result: output,
-                richContent: [{
-                    type: 'json' as const,
-                    text: JSON.stringify(result, null, 2),
-                    title: 'Refactoring Suggestions',
-                }],
-            }
-        } catch (err) {
-            return {
-                success: false,
-                result: '',
-                error: `Refactoring suggestion failed: ${toAppError(err).message}`,
-            }
-        }
-    },
-
-    async suggest_fixes(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const { llmConfig } = useStore.getState()
-
-        try {
-            // 读取文件内容
-            const code = await api.file.read(path)
-            if (code === null) {
-                return { success: false, result: '', error: `File not found: ${path}` }
-            }
-
-            const language = getLanguageId(path)
-
-            // 获取诊断信息
-            const lintErrors = await lintService.getLintErrors(path, true)
-            const diagnostics = lintErrors.map(err => ({
-                message: toAppError(err).message,
-                line: err.startLine ?? err.line ?? 1,
-                column: err.column ?? 1,
-                severity: err.severity === 'error' ? 1 : err.severity === 'warning' ? 2 : 3,
-            }))
-
-            if (diagnostics.length === 0) {
-                return {
-                    success: true,
-                    result: 'No errors found. File is clean!',
-                }
-            }
-
-            // 调用 AI 修复建议
-            const response = await api.llm.suggestFixes({
-                config: llmConfig,
-                code,
-                language,
-                diagnostics,
-            })
-
-            const result = response.data
-
-            // 格式化结果
-            const fixes = result.fixes.map((fix, i) =>
-                `${i + 1}. [${fix.confidence}] ${fix.title}\n` +
-                `   Diagnostic #${fix.diagnosticIndex}: ${diagnostics[fix.diagnosticIndex]?.message || 'Unknown'}\n` +
-                `   ${fix.description}\n` +
-                `   Changes: ${fix.changes.length} modification(s)`
-            ).join('\n\n')
-
-            const output = [
-                '=== AI Fix Suggestions ===',
-                '',
-                fixes,
-                '',
-                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
-            ].join('\n')
-
-            return {
-                success: true,
-                result: output,
-                richContent: [{
-                    type: 'json' as const,
-                    text: JSON.stringify(result, null, 2),
-                    title: 'Fix Suggestions',
-                }],
-            }
-        } catch (err) {
-            return {
-                success: false,
-                result: '',
-                error: `Fix suggestion failed: ${toAppError(err).message}`,
-            }
-        }
-    },
-
-    async generate_tests(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
-        const { llmConfig } = useStore.getState()
-
-        try {
-            // 读取文件内容
-            const code = await api.file.read(path)
-            if (code === null) {
-                return { success: false, result: '', error: `File not found: ${path}` }
-            }
-
-            const language = getLanguageId(path)
-
-            // 调用 AI 测试生成
-            const response = await api.llm.generateTests({
-                config: llmConfig,
-                code,
-                language,
-                framework: args.framework as string | undefined,
-            })
-
-            const result = response.data
-
-            // 格式化结果
-            const testCases = result.testCases.map((tc, i) =>
-                `${i + 1}. [${tc.type}] ${tc.name}\n` +
-                `   ${tc.description}\n` +
-                `   \`\`\`${language}\n${tc.code}\n\`\`\``
-            ).join('\n\n')
-
-            const output = [
-                '=== Generated Tests ===',
-                '',
-                result.setup ? `## Setup:\n\`\`\`${language}\n${result.setup}\n\`\`\`\n` : '',
-                '## Test Cases:',
-                testCases,
-                '',
-                result.teardown ? `## Teardown:\n\`\`\`${language}\n${result.teardown}\n\`\`\`` : '',
-                '',
-                response.usage ? `## Token Usage: ${response.usage.totalTokens} tokens (${response.usage.cachedInputTokens || 0} cached)` : '',
-            ].filter(Boolean).join('\n')
-
-            return {
-                success: true,
-                result: output,
-                richContent: [{
-                    type: 'json' as const,
-                    text: JSON.stringify(result, null, 2),
-                    title: 'Generated Tests',
-                }],
-            }
-        } catch (err) {
-            return {
-                success: false,
-                result: '',
-                error: `Test generation failed: ${toAppError(err).message}`,
-            }
-        }
-    },
-
     async remember(args, _ctx) {
         const content = args.content as string
         if (!content) return { success: false, result: '', error: 'Missing content' }
@@ -1311,6 +1474,32 @@ function formatRecommendation(
 
     return lines.join('\n')
 }
+
+export const toolExecutors = Object.fromEntries(
+    Object.entries(rawToolExecutors).map(([name, executor]) => [
+        name,
+        async (args: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
+            // 设置超时时间，对于可能耗时的工具给更长的时间
+            const timeoutMs = ['generate_tests', 'run_command', 'edit_file', 'replace_file_content', 'web_search'].includes(name) ? 120000 : 60000
+
+            try {
+                return await Promise.race([
+                    executor(args, ctx),
+                    new Promise<ToolExecutionResult>((_, reject) => {
+                        setTimeout(() => reject(new Error(`Tool [${name}] execution timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+                    })
+                ])
+            } catch (err) {
+                logger.agent.error(`[ToolExecutor] Error executing ${name}:`, err)
+                return {
+                    success: false,
+                    result: '',
+                    error: `Tool execution error: ${toAppError(err).message}`
+                }
+            }
+        }
+    ])
+) as Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>>
 
 /**
  * 初始化工具注册表

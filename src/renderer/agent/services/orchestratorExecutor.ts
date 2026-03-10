@@ -32,6 +32,41 @@ let scheduler: ExecutionScheduler | null = null
 let executionStartedAt = 0
 let isRunning = false
 
+/** 等待单次 Agent 执行完成 */
+function waitForAgentCompletion(): Promise<{ success: boolean; output: string; error?: string }> {
+    return new Promise((resolve) => {
+        const store = useAgentStore.getState()
+        const threadId = store.currentThreadId
+
+        if (!threadId) {
+            resolve({ success: false, output: '', error: 'Failed to create thread' })
+            return
+        }
+
+        const unsubscribe = EventBus.on('loop:end', (event) => {
+            const thread = store.threads[threadId]
+            if (!thread) {
+                unsubscribe()
+                resolve({ success: false, output: '', error: 'Thread not found after loop end' })
+                return
+            }
+
+            const lastAssistantMsg = thread.messages
+                .filter(m => m.role === 'assistant')
+                .pop() as import('../types').AssistantMessage
+
+            const output = lastAssistantMsg?.content || 'Task execution completed'
+            unsubscribe()
+
+            if (event.reason === 'error' || event.reason === 'aborted') {
+                resolve({ success: false, output: '', error: `Execution ended with reason: ${event.reason}` })
+            } else {
+                resolve({ success: true, output })
+            }
+        })
+    })
+}
+
 // ============================================
 // 公共 API
 // ============================================
@@ -344,29 +379,60 @@ async function runTaskWithAgent(
 ): Promise<{ success: boolean; output: string; error?: string }> {
 
     try {
-        // 1. 构建系统提示词（复用现有系统）
-        // task.role 就是 promptTemplateId
-        const promptTemplateId = task.role || 'default'
+        const isCoderTask = /coder|developer|engineer/i.test(task.role || '')
+        const maxReviewLoops = 3
+        let currentLoop = 0
+        let currentRole = task.role || 'default'
+        let feedbackMessage = buildTaskMessage(task, plan)
+        let finalOutput = ''
 
-        // 2. 构建任务消息
-        const taskMessage = buildTaskMessage(task, plan)
+        while (currentLoop < maxReviewLoops && isRunning) {
+            const llmConfig = await getLLMConfigForTask(task.provider, task.model)
+            if (!llmConfig) {
+                return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${task.model}` }
+            }
 
-        // 3. 获取完整的 LLM 配置（包括 apiKey）
-        const llmConfig = await getLLMConfigForTask(task.provider, task.model)
-        if (!llmConfig) {
-            return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${task.model}` }
+            const templateId = mapRoleToTemplateId(currentRole)
+            logger.agent.info(`[OrchestratorExecutor] Emitting subtask. Loop: ${currentLoop}, Role: ${currentRole} (Template: ${templateId})`)
+
+            await Agent.send(feedbackMessage, llmConfig, workspacePath, 'agent', {
+                promptTemplateId: templateId,
+                orchestratorPhase: 'executing',
+            })
+
+            const result = await waitForAgentCompletion()
+
+            if (!result.success) {
+                return result
+            }
+
+            finalOutput = result.output
+
+            if (isCoderTask) {
+                if (currentRole !== 'reviewer') {
+                    // Coder finished -> Switch to Reviewer
+                    currentRole = 'reviewer'
+                    feedbackMessage = `[System: Reviewer Phase]\nCoder has completed the sequence for task: "${task.title}".\nPlease verify the latest changes. Use reading tools if necessary. If everything is fully correct and meets requirements without regressions, output exactly <LGTM>. Otherwise, point out the exact logical flaws or remaining steps.`
+                    currentLoop++
+                } else {
+                    // Reviewer finished -> Check LGTM
+                    if (finalOutput.includes('<LGTM>')) {
+                        logger.agent.info('[OrchestratorExecutor] Reviewer approved the changes.')
+                        break
+                    } else {
+                        // Reviewer rejected -> Switch to Coder with feedback
+                        currentRole = task.role || 'coder'
+                        feedbackMessage = `[System: Coder Phase]\nReviewer found issues or missing steps:\n\n${finalOutput}\n\nPlease address these issues and continue working on the task.`
+                        currentLoop++
+                    }
+                }
+            } else {
+                // Regular single-shot task
+                break
+            }
         }
 
-        // 4. 使用 Agent.send() 执行任务
-        // 【性能优化】透传元数据，让 Agent 内部异步构建提示词，避免阻塞主流程
-        await Agent.send(taskMessage, llmConfig, workspacePath, 'agent', {
-            promptTemplateId,
-            orchestratorPhase: 'executing',
-        })
-
-        // TODO: 捕获 Agent 的执行结果
-        // 目前 Agent.send() 不返回结果，需要监听事件或从 Store 获取
-        return { success: true, output: 'Task execution completed' }
+        return { success: true, output: finalOutput }
 
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
@@ -433,4 +499,30 @@ function buildTaskMessage(task: OrchestratorTask, plan: TaskPlan): string {
     lines.push('- Be thorough and handle edge cases')
 
     return lines.join('\n')
+}
+
+/**
+ * 映射角色名到模板 ID
+ */
+function mapRoleToTemplateId(role: string): string {
+    const r = role.toLowerCase()
+    if (r.includes('frontend') || r.includes('backend') || r.includes('developer') || r.includes('coder') || r.includes('engineer')) {
+        return 'coder'
+    }
+    if (r.includes('architect') || r.includes('system design')) {
+        return 'architect'
+    }
+    if (r.includes('ui') || r.includes('ux') || r.includes('designer') || r.includes('visual')) {
+        return 'uiux-designer'
+    }
+    if (r.includes('analyst') || r.includes('research') || r.includes('gather') || r.includes('planning')) {
+        return 'analyst'
+    }
+    if (r.includes('review') || r.includes('audit') || r.includes('careful')) {
+        return 'reviewer'
+    }
+    if (r.includes('concise') || r.includes('efficient') || r.includes('minimal')) {
+        return 'concise'
+    }
+    return role // 如果已经是一个合法的 ID，直接返回
 }

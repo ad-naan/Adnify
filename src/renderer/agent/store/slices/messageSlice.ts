@@ -265,7 +265,28 @@ export const createMessageSlice: StateCreator<
 
             const messages = thread.messages.map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
-                    return { ...msg, isStreaming: false }
+                    const assistantMsg = msg as AssistantMessage
+
+                    // 清理幽灵工具调用：如果 LLM 已结束，但仍有处于非终态的工具，将它们标记为错误
+                    const cleanToolCall = (tc: ToolCall): ToolCall => {
+                        if (['pending', 'running', 'awaiting'].includes(tc.status)) {
+                            return { ...tc, status: 'error', result: 'Interrupted or failed to parse', streamingState: undefined }
+                        }
+                        if (tc.streamingState) {
+                            return { ...tc, streamingState: undefined }
+                        }
+                        return tc
+                    }
+
+                    const newToolCalls = assistantMsg.toolCalls?.map(cleanToolCall)
+                    const newParts = assistantMsg.parts.map(part => {
+                        if (part.type === 'tool_call') {
+                            return { ...part, toolCall: cleanToolCall(part.toolCall) }
+                        }
+                        return part
+                    })
+
+                    return { ...assistantMsg, isStreaming: false, toolCalls: newToolCalls, parts: newParts }
                 }
                 return msg
             })

@@ -103,22 +103,14 @@ async function callLLM(
       // 场景1: Chat 模式 - 禁用所有工具（已在上面处理）
       // 场景2: Agent 模式 - 根据压缩等级动态调整
 
-      // 当上下文压缩等级较高时，限制工具以减少 token 使用
       const currentThread = store.getCurrentThread()
       const compressionLevel = currentThread?.compressionStats?.level || 0
       if (compressionLevel >= 3) {
         // L3/L4: 只保留核心工具，移除 AI 辅助工具（节省 token）
-        const coreTools = allToolNames.filter(name =>
-          !['analyze_code', 'suggest_refactoring', 'suggest_fixes', 'generate_tests'].includes(name)
-        )
-        activeTools = coreTools
+        // 原 analyze_code, suggest_refactoring 等已删除
+        activeTools = allToolNames
         logger.agent.info(`[Loop] Compression L${compressionLevel}: ${activeTools.length}/${allToolNames.length} tools active (AI tools disabled)`)
       }
-
-      // 未来可扩展的场景：
-      // - 只读模式：activeTools = allToolNames.filter(name => getReadOnlyTools().includes(name))
-      // - 安全模式：activeTools = allToolNames.filter(name => !getDangerousTools().includes(name))
-      // - 特定任务：activeTools = getToolsForTask(taskType)
     }
 
     // 发送请求（携带 requestId 用于多对话隔离）
@@ -171,27 +163,47 @@ async function callLLMWithRetry(
     return await withRetry(
       async () => {
         if (abortSignal?.aborted) throw new Error('Aborted')
-        const result = await callLLM(config, messages, chatMode, assistantId, threadStore, reqId)
 
-        // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
-        // 只有真正的 LLM 错误（网络、API 等）才需要重试
-        if (result.error) {
-          const errorMsg = result.error.toLowerCase()
-          const isToolParseError = errorMsg.includes('tool call parse') ||
-            errorMsg.includes('invalid input for tool') ||
-            errorMsg.includes('type validation failed')
-
-          if (isToolParseError) {
-            // 工具解析错误：不重试，返回结果让 loop 处理
-            logger.agent.warn('[Loop] Tool parse error, will be handled in loop:', result.error)
-            return result
+        // 记录重试前的消息状态快照，用于在失败时回滚幽灵工具调用
+        let snapshot = null
+        if (assistantId) {
+          const msg = threadStore.getMessages().find(m => m.id === assistantId)
+          if (msg && msg.role === 'assistant') {
+            snapshot = {
+              content: msg.content,
+              parts: [...(msg.parts || [])],
+              toolCalls: [...(msg.toolCalls || [])],
+            }
           }
-
-          // 其他错误：抛出以触发重试
-          throw new Error(result.error)
         }
 
-        return result
+        try {
+          const result = await callLLM(config, messages, chatMode, assistantId, threadStore, reqId)
+
+          // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
+          if (result.error) {
+            const errorMsg = result.error.toLowerCase()
+            const isToolParseError = errorMsg.includes('tool call parse') ||
+              errorMsg.includes('invalid input for tool') ||
+              errorMsg.includes('type validation failed')
+
+            if (isToolParseError) {
+              logger.agent.warn('[Loop] Tool parse error, will be handled in loop:', result.error)
+              return result
+            }
+
+            // 其他错误：抛出以触发重试
+            throw new Error(result.error)
+          }
+
+          return result
+        } catch (err) {
+          // 发生错误准备重试时，恢复消息状态，清除残留的流式工具和文本
+          if (assistantId && snapshot) {
+            threadStore.updateMessage(assistantId, snapshot)
+          }
+          throw err
+        }
       },
       {
         maxRetries: retryConfig.maxRetries,

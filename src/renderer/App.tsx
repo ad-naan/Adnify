@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useMemo } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from './store'
 import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize } from './hooks'
 import TitleBar from './components/layout/TitleBar'
@@ -11,9 +11,8 @@ import { GlobalErrorHandler } from './components/common/GlobalErrorHandler'
 import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
-import { EmotionCompanion } from './components/agent/EmotionCompanion'
-import { EmotionStateNotice } from './components/agent/EmotionStateNotice'
 import { emotionAdapter } from './agent/services/emotionAdapter'
+import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 
 startupMetrics.mark('app-module-loaded')
@@ -49,9 +48,11 @@ function ToastInitializer() {
 
 // 主应用内容
 function AppContent() {
-  // 初始化情绪适配器（应用级别，只初始化一次）
+  // 初始化情绪适配器和终端监听器（应用级别，只初始化一次）
   useEffect(() => {
     emotionAdapter.initialize()
+    terminalWatcher.start()
+    return () => terminalWatcher.stop()
   }, [])
 
   // 使用 selector 优化性能，避免不必要的重渲染
@@ -101,8 +102,11 @@ function AppContent() {
   useGlobalShortcuts()
 
   // 面板拖拽
-  const { startResize: startSidebarResize } = useSidebarResize(setSidebarWidth)
-  const { startResize: startChatResize } = useChatResize(setChatWidth)
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const chatRef = useRef<HTMLDivElement>(null)
+
+  const { startResize: startSidebarResize } = useSidebarResize(setSidebarWidth, sidebarRef)
+  const { startResize: startChatResize } = useChatResize(setChatWidth, chatRef)
 
   const handleCloseKeyboardShortcuts = useCallback(() => setShowKeyboardShortcuts(false), [])
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
@@ -121,7 +125,7 @@ function AppContent() {
               <ActivityBar />
 
               {activeSidePanel && (
-                <div style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
+                <div ref={sidebarRef} style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
                   <Suspense fallback={<PanelSkeleton />}>
                     <Sidebar />
                   </Suspense>
@@ -135,8 +139,6 @@ function AppContent() {
               <div className="flex-1 flex min-w-0 bg-background relative">
                 {/* 情绪环境光效 */}
                 <EmotionAmbientGlow />
-                {/* 情绪状态变化通知 */}
-                <EmotionStateNotice />
 
                 <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                   <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
@@ -158,7 +160,7 @@ function AppContent() {
                   </ErrorBoundary>
                 </div>
 
-                <div style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border">
+                <div ref={chatRef} style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border">
                   <div
                     className="absolute top-0 left-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 -translate-x-[2px]"
                     onMouseDown={startChatResize}
@@ -227,8 +229,7 @@ function AppContent() {
       )}
       <GlobalConfirmDialog />
 
-      {/* 情绪伙伴浮窗 - 在合适时机弹出建议 */}
-      <EmotionCompanion />
+      {/* 情绪组件已合并至状态栏 */}
     </div>
   )
 }

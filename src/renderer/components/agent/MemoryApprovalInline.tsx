@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Sparkles, Edit2, Check, ChevronDown, CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useStore } from '@store'
 
 interface MemoryApprovalInlineProps {
@@ -17,20 +16,9 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     content,
     isAwaitingApproval,
     isSuccess,
-    messageId,
-    toolCallId,
-    args
 }) => {
-    const [isEditing, setIsEditing] = useState(false)
     const [isExpanded, setIsExpanded] = useState(!isSuccess)
-    const [editedContent, setEditedContent] = useState(content)
     const { language } = useStore()
-
-    useEffect(() => {
-        if (!isEditing) {
-            setEditedContent(content)
-        }
-    }, [content, isEditing])
 
     useEffect(() => {
         if (isSuccess) {
@@ -38,139 +26,78 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
         }
     }, [isSuccess])
 
-    const handleSave = () => {
-        useAgentStore.getState().updateToolCall(messageId, toolCallId, {
-            arguments: { ...args, content: editedContent }
-        })
-        setIsEditing(false)
-    }
-
-    const titleText = isSuccess
+    const statusText = isSuccess
         ? (language === 'zh' ? '已存入项目记忆' : 'Project Memory Stored')
-        : (language === 'zh' ? 'AI 记忆提议' : 'Memory Proposal')
+        : (language === 'zh' ? '记忆提议' : 'Memory Proposal')
+
+    const isRunning = !isSuccess && !isAwaitingApproval
 
     return (
-        <div className="my-3 group/memory-v5 select-none overflow-hidden">
-            {/* 顶部标题行 */}
+        <div className="group my-0.5 relative hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden">
+            {/* Header - 与 ToolCallCard 完全一致的扁平化结构 */}
             <div
-                onClick={() => !isEditing && setIsExpanded(!isExpanded)}
-                className="flex items-center gap-2.5 cursor-pointer group/header py-1.5"
+                className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
+                onClick={() => setIsExpanded(!isExpanded)}
             >
-                {/* 动态图标座 */}
-                <div className="relative flex items-center justify-center w-5 h-5">
-                    <AnimatePresence mode="wait">
-                        {isSuccess ? (
-                            <motion.div
-                                key="success"
-                                initial={{ scale: 0, rotate: -45 }}
-                                animate={{ scale: 1, rotate: 0 }}
-                                className="text-green-500/80"
-                            >
-                                <CheckCircle2 className="w-4 h-4" />
-                            </motion.div>
-                        ) : (
-                            <motion.div
-                                key="proposal"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="relative"
-                            >
-                                <div className="absolute inset-0 bg-accent/30 blur-md rounded-full animate-pulse" />
-                                <Sparkles className="relative w-4 h-4 text-accent" />
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
+                {/* Expand Toggle */}
+                <motion.div
+                    animate={{ rotate: isExpanded ? 90 : 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="shrink-0 text-text-muted/40 hover:text-text-muted"
+                >
+                    <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+                </motion.div>
 
-                {/* 描述文字 */}
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className={`text-[11px] font-bold tracking-tight uppercase whitespace-nowrap ${isSuccess ? 'text-text-muted/40' : 'text-accent/90'
-                        }`}>
-                        {titleText}
-                    </span>
-                    {!isExpanded && (
-                        <span className="text-[11px] text-text-muted/30 truncate font-sans tracking-wide">
-                            — {content.slice(0, 45)}...
-                        </span>
+                {/* Status Icon */}
+                <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
+                    {isRunning ? (
+                        <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
+                            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                        </div>
+                    ) : isSuccess ? (
+                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/10 flex items-center justify-center">
+                            <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />
+                        </div>
+                    ) : (
+                        <div className="w-3.5 h-3.5 rounded-full bg-purple-500/10 flex items-center justify-center">
+                            <Brain className="w-2.5 h-2.5 text-purple-400" />
+                        </div>
                     )}
                 </div>
 
-                {/* 状态指示器 */}
-                <div className={`transition-all duration-300 ${isExpanded ? 'rotate-0 opacity-100' : '-rotate-90 opacity-40'} text-text-muted group-hover/header:opacity-100`}>
-                    <ChevronDown className="w-3.5 h-3.5" />
+                {/* Status Text */}
+                <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
+                    <span className={`text-[12px] truncate ${isRunning ? 'text-text-primary text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+                        {statusText}
+                    </span>
+                    {!isExpanded && (
+                        <span className="text-[11px] text-text-muted/40 truncate">
+                            — {content.slice(0, 50)}{content.length > 50 ? '...' : ''}
+                        </span>
+                    )}
                 </div>
             </div>
 
-            {/* 展开内容区域 */}
-            <AnimatePresence>
+            {/* Expanded Content */}
+            <AnimatePresence initial={false}>
                 {isExpanded && (
                     <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ type: 'spring', damping: 28, stiffness: 220 }}
+                        transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
+                        className="overflow-hidden"
                     >
-                        <div className="relative mt-1 ml-[9px] pl-5 pb-2">
-                            {/* 线性渐变侧边装饰线 */}
-                            <div className={`absolute left-[-1px] top-0 bottom-2 w-[1.5px] rounded-full transition-all duration-700 ${isSuccess
-                                ? 'bg-gradient-to-b from-green-500/30 via-green-500/10 to-transparent'
-                                : 'bg-gradient-to-b from-accent/50 via-purple-500/30 to-transparent'
-                                }`} />
+                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
+                            {/* Visual Threading Line */}
+                            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
 
-                            {isEditing ? (
-                                <div className="space-y-3 py-2">
-                                    <textarea
-                                        value={editedContent}
-                                        onChange={(e) => setEditedContent(e.target.value)}
-                                        className="w-full h-28 p-3 bg-white/[0.03] rounded-xl border border-white/10 text-xs text-text-primary focus:border-accent/40 outline-none transition-all resize-none font-sans leading-relaxed shadow-inner"
-                                        autoFocus
-                                    />
-                                    <div className="flex justify-end gap-2.5">
-                                        <button
-                                            onClick={() => setIsEditing(false)}
-                                            className="px-3 py-1.5 text-[10px] font-semibold text-text-muted hover:text-text-primary transition-colors rounded-md hover:bg-white/5"
-                                        >
-                                            {language === 'zh' ? '放弃' : 'Discard'}
-                                        </button>
-                                        <button
-                                            onClick={handleSave}
-                                            className="flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-black bg-accent text-white rounded-lg shadow-xl shadow-accent/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                                        >
-                                            <Check className="w-3 h-3" />
-                                            {language === 'zh' ? '确认同步' : 'Sync Memory'}
-                                        </button>
-                                    </div>
+                            {/* Content */}
+                            <div className="relative z-10 mt-1">
+                                <div className="text-[11px] text-text-secondary/80 leading-relaxed font-sans whitespace-pre-wrap border-l-2 border-border/30 pl-2 ml-1">
+                                    {content}
                                 </div>
-                            ) : (
-                                <div className="group/content relative py-2">
-                                    <p className="text-[12.5px] text-text-secondary/90 leading-relaxed font-sans max-w-[95%]">
-                                        {content}
-                                    </p>
-
-                                    {isAwaitingApproval && !isSuccess && (
-                                        <motion.button
-                                            whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                setIsEditing(true)
-                                            }}
-                                            className="absolute right-0 top-2 opacity-0 group-hover/content:opacity-100 p-2 rounded-full transition-all border border-white/5 bg-white/5"
-                                        >
-                                            <Edit2 className="w-3.5 h-3.5 text-accent" />
-                                        </motion.button>
-                                    )}
-
-                                    {!isSuccess && isAwaitingApproval && (
-                                        <div className="mt-4 flex items-center gap-2 opacity-40 group-hover/content:opacity-70 transition-opacity">
-                                            <span className="w-1 h-1 rounded-full bg-accent" />
-                                            <span className="text-[9px] text-text-muted uppercase tracking-widest font-bold">
-                                                Waiting for project sync
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                            </div>
                         </div>
                     </motion.div>
                 )}

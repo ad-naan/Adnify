@@ -312,20 +312,21 @@ graph TB
 
 ### 🤖 AI Agent 深度集成
 
-- **三种工作模式**:
-  - **Chat Mode** 💬: 纯对话模式，快速问答，无工具调用
-  - **Agent Mode** 🤖: 智能代理模式，单次任务执行，拥有完整的文件系统和终端操作权限
-  - **Plan Mode** 📋: 项目级开发模式，分步规划，自动追踪任务进度
+- **三种核心工作模式**:
+  - **Chat Mode** 💬: 纯对话模式，快速问答，直接响应，无主动工具调用
+  - **Agent Mode** 🤖: 智能代理模式，单线程任务聚焦，拥有完整的文件系统读写和终端执行权限
+  - **Orchestrator Mode** 🧠: **[NEW]** 全新首创编排器模式，支持多轮交互式需求深度收集。自动根据语义意图将高复杂度任务前置切分并分发至 **8 大专属核心 AI 专家模块**（涵盖：均衡、简洁、程序员、架构师、代码审查、分析师、UI/UX 设计师、编排器），实现极致精准打击。
 
-- **23 个内置工具**: AI 可自主调用的完整工具集
-  - 文件读取: `read_file`, `read_multiple_files`, `list_directory`, `get_dir_tree`
-  - 文件写入: `write_file`, `edit_file`, `replace_file_content`, `create_file_or_folder`, `delete_file_or_folder`
-  - 搜索功能: `search_files`, `codebase_search`
-  - LSP 分析: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors`
-  - 终端执行: `run_command`
-  - 网络功能: `web_search`, `read_url`
-  - 任务规划: `create_plan`, `update_plan` (Plan Mode 专用)
-  - UI/UX 设计: `uiux_search` (设计知识库搜索)
+- **24 个内置原生核心工具**: 构建出让 AI 可以完全接管项目的泛用型底座能力
+  - 📂 **文件系统管理**: `read_file`, `list_directory`
+  - ✍️ **多态级增删改**: `write_file`, `edit_file`, `create_file_or_folder`, `delete_file_or_folder`
+  - 🔎 **全量检索引擎**: `search_files` (超高速正则扫描), `codebase_search` (基于 LanceDB 向量的语义洞察)
+  - 🧠 **语言服务层 (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors`
+  - 💻 **底层沙盒终端控制**: `run_command`, `read_terminal_output`, `send_terminal_input`, `stop_terminal`
+  - 🌐 **知识外延网络**: `web_search` (多策略融汇), `read_url` (Jina 深度解析)
+  - 🤝 **拟人态多维交互**: `ask_user`
+  - ✨ **超智型节点规划网络**: `create_task_plan`, `update_task_plan`, `start_task_execution`
+  - 🎨 **前沿垂域设计检索**: `uiux_search` (整合全球几十种设计美学知识库与行业最佳实践)
 
 - **智能上下文**:
   - `@文件名` 引用文件上下文
@@ -459,7 +460,7 @@ npm run dist
 
 **上下文引用**: 输入 `@` 选择文件，或使用 `@codebase`、`@git`、`@terminal`、`@symbols`、`@web` 等特殊引用
 
-**斜杠命令**: `/file`、`/clear`、`/plan`、`/chat`、`/agent` 等快捷命令
+**斜杠命令**: `/file`、`/clear`、`/chat`、`/agent` 等快捷命令
 
 **代码修改**: 切换到 Agent Mode，输入指令，AI 生成 Diff 预览后接受或拒绝
 
@@ -469,9 +470,11 @@ npm run dist
 
 打开设置 → Index 选项卡，选择 Embedding 提供商（推荐 Jina AI），配置 API Key 后开始索引。索引完成后 AI 可使用语义搜索。
 
-### 使用 Plan Mode
+### 使用 Orchestrator Mode
 
-切换到 Plan Mode，描述任务目标，AI 自动创建分步计划并逐步执行，支持进度追踪和可视化预览。
+切换到 Orchestrator Mode，在多轮对话中与 AI 共同明确需求，AI 将自动创建深度分步执行计划，并自动分发给最合适的专家模块进行处理。
+
+![Orchestrator Mode](images/orchestrator.png)
 
 ### ⚡ Skills 系统使用
 
@@ -508,7 +511,7 @@ Skills 是让 AI 获得特定领域（如特定框架优化、复杂测试编写
 | | `@` | 引用上下文 |
 | | `/` | 斜杠命令 |
 
-**工作模式**: Chat 💬 (纯对话) / Agent 🤖 (工具调用) / Plan 📋 (项目级开发)
+**工作模式**: Chat 💬 (纯对话) / Agent 🤖 (单次通用代理) / Orchestrator 🧠 (专家编排集群)
 
 ---
 
@@ -520,55 +523,26 @@ adnify/
 ├── scripts/             # 构建脚本
 ├── src/
 │   ├── main/            # Electron 主进程
-│   │   ├── ipc/         # IPC 处理器
-│   │   │   ├── http.ts      # HTTP 请求
-│   │   │   ├── indexing.ts  # 代码索引
-│   │   │   ├── llm.ts       # LLM 通信
-│   │   │   ├── lsp.ts       # LSP 服务
-│   │   │   ├── search.ts    # 搜索功能
-│   │   │   └── settings.ts  # 设置管理
-│   │   ├── indexing/    # 代码库索引服务
-│   │   │   ├── chunker.ts       # 代码分块
-│   │   │   ├── embedder.ts      # Embedding 生成
-│   │   │   ├── indexService.ts  # 索引服务
-│   │   │   └── vectorStore.ts   # 向量存储
-│   │   ├── services/llm/# LLM 通信层
-│   │   └── security/    # 安全模块
-│   │       ├── securityModule.ts    # 安全管理器
-│   │       ├── secureTerminal.ts    # 终端安全
-│   │       └── workspaceHandlers.ts # 工作区处理
+│   │   ├── ipc/         # IPC 通信统一安全拦截层
+│   │   ├── lsp/         # LSP 服务网关及生命周期治理
+│   │   ├── memory/      # AI 记忆池及长期/短期上下文缓存引擎
+│   │   ├── security/    # 沙盒越权拦截验证、多模态命令执行防御网
+│   │   ├── indexing/    # 全局代码库解析生成链 (Chunker、Embedding、LanceDB)
+│   │   └── services/    # 核心总栈子系统
+│   │       ├── agent/   # 辅控层：Agent 日志分析与拦截纠错处理
+│   │       ├── debugger/# Node、VSCode 协议层深度调试模块
+│   │       ├── llm/     # LLM 动态桥接分发网关 (请求构造、配置解析及跨模型流式代理)
+│   │       ├── mcp/     # Model Context Protocol 后端服务挂载注册及鉴权授权模块
+│   │       └── updater/ # 高可控自动静默静默更新探测与热切换模块
 │   ├── renderer/        # 前端渲染进程
-│   │   ├── agent/       # AI Agent 核心
-│   │   │   ├── llm/     # LLM 客户端适配器
-│   │   │   ├── tools/   # 工具定义与执行
-│   │   │   ├── services/# Agent 服务
-│   │   │   └── prompts/ # 提示词模板
-│   │   ├── components/  # UI 组件
-│   │   │   ├── agent/   # Agent 相关组件
-│   │   │   │   ├── ChatPanel.tsx      # 对话面板
-│   │   │   │   ├── ToolCallCard.tsx   # 工具调用卡片
-│   │   │   │   ├── InlineDiffPreview.tsx # Diff 预览
-│   │   │   │   └── PlanPreview.tsx    # 计划预览
+│   │   ├── agent/       # 客户端 AI 大脑核心驱动 (涵盖引擎队列、Tools执行及指令流)
+│   │   ├── components/  # 完全解耦聚合化复用UI组件块
 │   │   │   ├── editor/  # 编辑器组件
-│   │   │   │   ├── Editor.tsx         # Monaco 编辑器
-│   │   │   │   ├── DiffViewer.tsx     # Diff 查看器
-│   │   │   │   └── InlineEdit.tsx     # 内联编辑
 │   │   │   ├── sidebar/ # 侧边栏组件
-│   │   │   │   └── panels/
-│   │   │   │       ├── ExplorerView.tsx  # 文件浏览器
-│   │   │   │       ├── SearchView.tsx    # 搜索面板
-│   │   │   │       ├── GitView.tsx       # Git 面板
-│   │   │   │       ├── OutlineView.tsx   # 大纲视图
-│   │   │   │       └── ProblemsView.tsx  # 问题面板
 │   │   │   ├── panels/  # 底部面板
-│   │   │   │   ├── TerminalPanel.tsx  # 终端面板
-│   │   │   │   ├── SessionList.tsx    # 会话列表
-│   │   │   │   └── CheckpointPanel.tsx# 检查点面板
 │   │   │   ├── dialogs/ # 对话框
-│   │   │   │   ├── CommandPalette.tsx # 命令面板
-│   │   │   │   ├── QuickOpen.tsx      # 快速打开
-│   │   │   │   └── OnboardingWizard.tsx # 引导向导
 │   │   │   └── settings/# 设置组件
+│   │   ├── modes/       # 多模式运转的复杂微状态机 (Agent, Chat, Orchestrator)
 │   │   ├── services/    # 前端服务
 │   │   │   └── TerminalManager.ts # 终端管理
 │   │   ├── store/       # Zustand 状态管理
@@ -628,6 +602,18 @@ adnify/
 </div>
 
 你的支持是我持续开发的动力 ❤️
+
+### 🏆 荣誉奖杯：鸣谢墙
+
+> "Adnify 的每一行代码，都有大家投喂的能量注入！" ⚡️
+
+感谢以下慷慨的支持者，你们提供的咖啡、奶茶和能量饮料是 Adnify 进化最强劲的动力！
+
+| 支持者 | 投喂方式 | 荣誉称号 | 日期 | 留言 |
+| :--- | :--- | :--- | :--- | :--- |
+| okay. | 🧋 奶茶 | **快乐源泉注入者** | 2026-03-07 | 一杯快乐水，代码没 Bug！✨ |
+
+---
 
 ---
 

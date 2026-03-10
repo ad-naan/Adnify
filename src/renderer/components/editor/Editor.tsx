@@ -38,7 +38,7 @@ import { CodeSkeleton } from '../ui/Loading'
 import { TaskBoard } from '../orchestrator/TaskBoard'
 
 // Hooks
-import { useEditorActions, useAICompletion, useEditorEvents } from './hooks'
+import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDiff } from './hooks'
 import { getLanguage } from './utils/languageMap'
 import { defineMonacoTheme } from './utils/monacoTheme'
 
@@ -47,7 +47,7 @@ loader.config({ monaco })
 export default function Editor() {
   const {
     openFiles, activeFilePath, setActiveFile, updateFileContent, updateFileDirtyState, markFileSaved,
-    language, activeDiff, setActiveDiff
+    language, closeFile
   } = useStore()
   const { pendingChanges, acceptChange, undoChange } = useAgent()
 
@@ -60,6 +60,8 @@ export default function Editor() {
   const { saveFile, closeFileWithConfirm, closeOtherFiles, closeAllFiles, closeFilesToRight, triggerAutoSave } = useFileSave()
   const { isLinting, runLintCheck, clearLintErrors, errorCount, warningCount } = useLintCheck()
   const { setupCursorTracking } = useEditorEvents(editorRef)
+
+  useComposerInlineDiff(activeFilePath, editorRef.current, monacoRef.current)
 
   // 状态
   const [streamingEdit, setStreamingEdit] = useState<StreamingEditState | null>(null)
@@ -285,25 +287,6 @@ export default function Editor() {
         </div>
       )}
 
-      {/* Diff 预览 */}
-      {activeDiff && (
-        <DiffPreview
-          diff={activeDiff}
-          isPending={pendingChanges.some(c => c.filePath === activeDiff.filePath)}
-          language={language}
-          onClose={() => setActiveDiff(null)}
-          onAccept={() => {
-            acceptChange(activeDiff.filePath)
-            updateFileContent(activeDiff.filePath, activeDiff.modified)
-            setActiveDiff(null)
-          }}
-          onReject={async () => {
-            await undoChange(activeDiff.filePath)
-            setActiveDiff(null)
-          }}
-        />
-      )}
-
       {/* 内联编辑 */}
       {inlineEditState?.show && activeFile && (
         <InlineEdit
@@ -327,8 +310,31 @@ export default function Editor() {
       )}
 
       {/* 编辑器主体 */}
-      <div className="flex-1 relative min-h-0 overflow-hidden">
-        {activeFile && (
+      <div className="flex-1 relative min-h-0 overflow-hidden flex flex-col">
+        {activeFile?.path.startsWith('diff://') ? (
+          <DiffPreview
+            diff={{
+              original: activeFile.originalContent || '',
+              modified: activeFile.content || '',
+              filePath: activeFile.path.slice(7)
+            }}
+            isPending={pendingChanges.some(c => c.filePath === activeFile.path.slice(7))}
+            language={language}
+            onClose={() => closeFile(activeFile.path)}
+            onChange={(newContent) => updateFileContent(activeFile.path, newContent)}
+            onAccept={() => {
+              const realPath = activeFile.path.slice(7)
+              acceptChange(realPath)
+              updateFileContent(realPath, activeFile.content)
+              closeFile(activeFile.path)
+            }}
+            onReject={async () => {
+              const realPath = activeFile.path.slice(7)
+              await undoChange(realPath)
+              closeFile(activeFile.path)
+            }}
+          />
+        ) : activeFile && (
           <>
             {/* Markdown 工具栏 */}
             {activeFileType === 'markdown' && (

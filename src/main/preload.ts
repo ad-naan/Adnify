@@ -252,6 +252,7 @@ export interface ElectronAPI {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
   indexGetProviders: () => Promise<EmbeddingProvider[]>
+  indexParseCallGraph: (filePath: string, content: string) => Promise<any[]>
   onIndexProgress: (callback: (status: IndexStatusData) => void) => () => void
 
   // LSP
@@ -307,7 +308,7 @@ export interface ElectronAPI {
     contentType?: string
     statusCode?: number
   }>
-  httpWebSearch: (query: string, maxResults?: number) => Promise<{
+  httpWebSearch: (query: string, maxResults?: number, timeout?: number) => Promise<{
     success: boolean
     results?: { title: string; url: string; snippet: string }[]
     error?: string
@@ -373,6 +374,10 @@ export interface ElectronAPI {
   mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  // Registry
+  mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
+  mcpRegistryGetDetails: (serverName: string) => Promise<{ success: boolean; server?: any; requiredEnvVars?: any[]; localConfig?: any; error?: string }>
+  mcpRegistryInstall: (serverName: string, envValues?: Record<string, string>) => Promise<{ success: boolean; config?: any; error?: string }>
   onMcpServerStatus: (callback: (event: { serverId: string; status: string; error?: string }) => void) => () => void
   onMcpToolsUpdated: (callback: (event: { serverId: string; tools: any[] }) => void) => () => void
   onMcpResourcesUpdated: (callback: (event: { serverId: string; resources: any[] }) => void) => () => void
@@ -533,6 +538,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => ipcRenderer.invoke('index:updateEmbeddingConfig', workspacePath, config),
   indexTestConnection: (workspacePath: string) => ipcRenderer.invoke('index:testConnection', workspacePath),
   indexGetProviders: () => ipcRenderer.invoke('index:getProviders'),
+  indexParseCallGraph: (filePath: string, content: string) => ipcRenderer.invoke('index:parseCallGraph', filePath, content),
   onIndexProgress: (callback: (status: IndexStatusData) => void) => {
     const handler = (_: IpcRendererEvent, status: IndexStatusData) => callback(status)
     ipcRenderer.on('index:progress', handler)
@@ -588,7 +594,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // HTTP API
   httpReadUrl: (url: string, timeout?: number) => ipcRenderer.invoke('http:readUrl', url, timeout),
-  httpWebSearch: (query: string, maxResults?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults),
+  httpWebSearch: (query: string, maxResults?: number, timeout?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults, timeout),
   httpSetGoogleSearch: (apiKey: string, cx: string) => ipcRenderer.invoke('http:setGoogleSearch', apiKey, cx),
 
   // Health Check API
@@ -631,6 +637,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mcpRemoveServer: (serverId: string) => ipcRenderer.invoke('mcp:removeServer', serverId),
   mcpToggleServer: (serverId: string, disabled: boolean) => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled),
   mcpSetAutoConnect: (enabled: boolean) => ipcRenderer.invoke('mcp:setAutoConnect', enabled),
+  // Registry
+  mcpRegistrySearch: (query?: string) => ipcRenderer.invoke('mcp:registrySearch', query),
+  mcpRegistryGetDetails: (serverName: string) => ipcRenderer.invoke('mcp:registryGetDetails', serverName),
+  mcpRegistryInstall: (serverName: string, envValues?: Record<string, string>) =>
+    ipcRenderer.invoke('mcp:registryInstall', serverName, envValues),
   // OAuth 相关
   mcpStartOAuth: (serverId: string) => ipcRenderer.invoke('mcp:startOAuth', serverId),
   mcpFinishOAuth: (serverId: string, authorizationCode: string) => ipcRenderer.invoke('mcp:finishOAuth', serverId, authorizationCode),

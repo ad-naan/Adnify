@@ -31,44 +31,62 @@ export class ToolConverter {
    * 转换 JSON Schema 到 Zod Schema
    */
   private convertSchema(jsonSchema: Record<string, unknown>): z.ZodType {
-    const properties = (jsonSchema.properties as Record<string, unknown>) || {}
-    const required = (jsonSchema.required as string[]) || []
+    // 根级通常是一个 object schema
+    return this.buildZodType({
+      type: 'object',
+      properties: jsonSchema.properties,
+      required: jsonSchema.required
+    })
+  }
 
-    const shape: Record<string, z.ZodTypeAny> = {}
+  private buildZodType(prop: Record<string, any>): z.ZodTypeAny {
+    let zodType: z.ZodTypeAny
 
-    for (const [key, value] of Object.entries(properties)) {
-      const prop = value as { type?: string; description?: string }
-      const isRequired = required.includes(key)
-
-      let zodType: z.ZodTypeAny
-
-      switch (prop.type) {
-        case 'string':
+    switch (prop.type) {
+      case 'string':
+        if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+          zodType = z.enum(prop.enum as [string, ...string[]])
+        } else {
           zodType = z.string()
-          break
-        case 'number':
-          zodType = z.number()
-          break
-        case 'boolean':
-          zodType = z.boolean()
-          break
-        case 'array':
+        }
+        break
+      case 'number':
+      case 'integer':
+        zodType = z.number()
+        break
+      case 'boolean':
+        zodType = z.boolean()
+        break
+      case 'array':
+        if (prop.items) {
+          zodType = z.array(this.buildZodType(prop.items))
+        } else {
           zodType = z.array(z.any())
-          break
-        case 'object':
-          zodType = z.record(z.any())
-          break
-        default:
-          zodType = z.any()
-      }
+        }
+        break
+      case 'object':
+        const properties = prop.properties || {}
+        const requiredFields = Array.isArray(prop.required) ? prop.required : []
+        const shape: Record<string, z.ZodTypeAny> = {}
 
-      if (prop.description) {
-        zodType = zodType.describe(prop.description)
-      }
-
-      shape[key] = isRequired ? zodType : zodType.optional()
+        for (const [key, value] of Object.entries(properties)) {
+          const isRequired = requiredFields.includes(key)
+          let fieldSchema = this.buildZodType(value as Record<string, any>)
+          if (!isRequired) {
+            fieldSchema = fieldSchema.optional()
+          }
+          shape[key] = fieldSchema
+        }
+        zodType = z.object(shape)
+        break
+      default:
+        zodType = z.any()
     }
 
-    return z.object(shape)
+    if (prop.description) {
+      zodType = zodType.describe(prop.description)
+    }
+
+    return zodType
   }
 }

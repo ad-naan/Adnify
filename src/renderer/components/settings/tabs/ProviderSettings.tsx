@@ -1546,19 +1546,33 @@ export function ProviderSettings({
           </div>
 
           {/* 下方全宽：认证 & 网络配置 */}
-          <section className="p-6 bg-surface/30 rounded-xl border border-border">
-            <div className="flex items-center gap-2 mb-5">
-              <Server className="w-4 h-4 text-accent" />
-              <h5 className="text-sm font-medium text-text-primary">
-                {language === 'zh' ? '认证 & 网络配置' : 'Authentication & Network'}
-              </h5>
+          <section className="p-6 bg-surface/30 rounded-2xl border border-border shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-accent/10 rounded-lg text-accent">
+                  <Server className="w-4 h-4" />
+                </div>
+                <div>
+                  <h5 className="text-sm font-semibold text-text-primary">
+                    {language === 'zh' ? '认证 & 网络配置' : 'Authentication & Network'}
+                  </h5>
+                  <p className="text-[10px] text-text-muted mt-0.5">
+                    {language === 'zh' ? '配置 API 访问密钥和服务器连接参数' : 'Configure API keys and server connection parameters'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <TestConnectionButton localConfig={localConfig} language={language} />
+                <TestModelButton localConfig={localConfig} language={language} />
+              </div>
             </div>
 
             {/* 基础配置：三列布局 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6">
               {/* API Key */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-text-secondary">
+              <div className="md:col-span-5 space-y-2">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
                   API Key
                 </label>
                 <Input
@@ -1566,9 +1580,9 @@ export function ProviderSettings({
                   value={localConfig.apiKey}
                   onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
                   placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
-                  className="bg-background/50 border-border font-mono text-xs"
+                  className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 font-mono text-xs h-10 transition-all"
                   rightIcon={
-                    <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary">
+                    <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary p-1.5 hover:bg-surface/50 rounded-md transition-colors">
                       {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   }
@@ -1576,80 +1590,66 @@ export function ProviderSettings({
               </div>
 
               {/* API 端点 */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-text-secondary">
+              <div className="md:col-span-5 space-y-2">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
                   {language === 'zh' ? 'API 端点' : 'API Endpoint'}
                 </label>
                 <Input
                   value={localConfig.baseUrl || ''}
                   onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
                   placeholder="https://api.example.com/v1"
-                  className="bg-background/50 border-border text-xs font-mono"
+                  className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs font-mono h-10 transition-all"
                 />
               </div>
 
               {/* 超时时间 */}
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-text-secondary">
-                  {language === 'zh' ? '超时时间 (秒)' : 'Timeout (seconds)'}
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                  {language === 'zh' ? '超时 (秒)' : 'Timeout (s)'}
                 </label>
                 <Input
                   type="number"
                   value={(localConfig.timeout || 120000) / 1000}
                   onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
                   min={10}
-                  max={600}
-                  className="bg-background/50 border-border text-xs"
+                  className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs h-10 transition-all"
                 />
               </div>
             </div>
 
-            {/* OpenAI API 协议选择（仅内置 OpenAI provider 显示） */}
-            {localConfig.provider === 'openai' && (
-              <div className="mt-4 pt-4 border-t border-border/50">
-                <div className="space-y-2">
-                  <div className="space-y-0.5">
-                    <label className="text-xs font-medium text-text-secondary">
-                      {language === 'zh' ? 'API 协议' : 'API Protocol'}
-                    </label>
-                    <p className="text-[10px] text-text-muted">
-                      {language === 'zh'
-                        ? 'Chat Completions 适用于 GPT 系列，Responses API 适用于 o1/o3/o4 等推理模型'
-                        : 'Chat Completions for GPT series, Responses API for reasoning models like o1/o3/o4'}
-                    </p>
-                  </div>
+            {/* 底部功能栏：协议选择 + 提示信息 */}
+            <div className="flex flex-col md:flex-row items-start md:items-end justify-between pt-5 border-t border-border/50 gap-4">
+              <div className="space-y-2.5 max-w-sm">
+                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                  {language === 'zh' ? 'API 协议' : 'API Protocol'}
+                </label>
+                <div className="flex flex-col gap-1.5">
                   <Select
-                    value={localConfig.protocol || 'openai'}
-                    onChange={(value) => setLocalConfig({ ...localConfig, protocol: value as ApiProtocol })}
-                    options={[
-                      { value: 'openai', label: 'Chat Completions (/v1/chat/completions)' },
-                      { value: 'openai-responses', label: 'Responses API (/v1/responses)' },
-                    ]}
-                    className="w-full max-w-md bg-background/50 border-border"
+                    value={localConfig.protocol || (isCustomSelected ? selectedCustomConfig?.protocol : (selectedProvider as any)?.protocol) || 'openai'}
+                    onChange={(val) => setLocalConfig({ ...localConfig, protocol: val as ApiProtocol })}
+                    options={PROTOCOL_OPTIONS}
+                    className="w-56 bg-background/40 border-border/60 h-9 text-xs"
                   />
+                  <p className="text-[10px] text-text-muted leading-relaxed">
+                    {language === 'zh' ? '对于兼容模型，通常建议使用 OpenAI Compatible' : 'For compatible models, OpenAI Compatible is generally recommended'}
+                  </p>
                 </div>
               </div>
-            )}
 
-            {/* 操作按钮行 */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <TestConnectionButton localConfig={localConfig} language={language} />
-                <TestModelButton localConfig={localConfig} language={language} />
-                {!isCustomSelected && PROVIDERS[localConfig.provider]?.auth.helpUrl && (
-                  <a
-                    href={PROVIDERS[localConfig.provider]?.auth.helpUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-text-muted hover:text-accent hover:underline flex items-center gap-1"
-                  >
-                    {language === 'zh' ? '获取 Key' : 'Get Key'} <span className="opacity-50">↗</span>
-                  </a>
-                )}
+              {!isCustomSelected && PROVIDERS[localConfig.provider]?.auth.helpUrl && (
+                <a
+                  href={PROVIDERS[localConfig.provider]?.auth.helpUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-text-muted hover:text-accent hover:underline flex items-center gap-1.5 px-3 py-2 bg-surface/50 rounded-lg border border-border/50 transition-colors"
+                >
+                  {language === 'zh' ? '获取 API Key' : 'Get API Key'} <span className="opacity-50">↗</span>
+                </a>
+              )}
+
+              <div className="text-[10px] text-text-muted italic bg-surface/50 px-3 py-2 rounded-lg border border-border/50">
+                {language === 'zh' ? '留空端点使用默认值，超时建议 60-300 秒' : 'Leave endpoint blank for default, timeout 60-300s recommended'}
               </div>
-              <p className="text-[10px] text-text-muted">
-                {language === 'zh' ? '留空端点使用默认值，超时建议 60-300 秒' : 'Leave endpoint empty for default, timeout recommended 60-300s'}
-              </p>
             </div>
           </section>
         </div>

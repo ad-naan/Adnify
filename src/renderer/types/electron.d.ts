@@ -458,6 +458,7 @@ export interface ElectronAPI {
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
   indexGetProviders: () => Promise<EmbeddingProvider[]>
+  indexParseCallGraph: (filePath: string, content: string) => Promise<any[]>
   onIndexProgress: (callback: (status: IndexStatus) => void) => () => void
 
   // LSP
@@ -506,7 +507,7 @@ export interface ElectronAPI {
   httpReadUrl: (url: string, timeout?: number) => Promise<{
     success: boolean; content?: string; title?: string; error?: string; contentType?: string; statusCode?: number
   }>
-  httpWebSearch: (query: string, maxResults?: number) => Promise<{
+  httpWebSearch: (query: string, maxResults?: number, timeout?: number) => Promise<{
     success: boolean; results?: Array<{ title: string; url: string; snippet: string }>; error?: string
   }>
   httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>
@@ -560,6 +561,9 @@ export interface ElectronAPI {
   mcpRemoveServer: (serverId: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
+  mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
+  mcpRegistryGetDetails: (serverName: string) => Promise<{ success: boolean; server?: any; requiredEnvVars?: any[]; localConfig?: any; error?: string }>
+  mcpRegistryInstall: (serverName: string, envValues?: Record<string, string>) => Promise<{ success: boolean; config?: any; error?: string }>
   mcpStartOAuth: (serverId: string) => Promise<{ success: boolean; authorizationUrl?: string; error?: string }>
   mcpFinishOAuth: (serverId: string, authorizationCode: string) => Promise<{ success: boolean; error?: string }>
   mcpRefreshOAuthToken: (serverId: string) => Promise<{ success: boolean; error?: string }>

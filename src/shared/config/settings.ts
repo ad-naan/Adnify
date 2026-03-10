@@ -136,6 +136,7 @@ const defaultEditorConfig: EditorConfig = {
     completionTemperature: AI_COMPLETION_DEFAULTS.temperature,
     completionTriggerChars: [...AI_COMPLETION_DEFAULTS.triggerChars],
   },
+  enableInlineDiff: false
 }
 
 const defaultSecuritySettings: SecuritySettings = {

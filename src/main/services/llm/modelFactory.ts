@@ -50,6 +50,7 @@ function createBuiltinModel(
             const openai = createOpenAI({
                 apiKey,
                 baseURL: baseUrl || providerDef.baseUrl,
+                headers: config.headers,
             })
 
             // 基于 protocol 选择 API 端点
@@ -66,6 +67,7 @@ function createBuiltinModel(
             const anthropic = createAnthropic({
                 apiKey,
                 baseURL: baseUrl || undefined,
+                headers: config.headers,
             })
             // Anthropic 直接调用就是 messages API，无需 .chat()
             return anthropic(model)
@@ -75,6 +77,7 @@ function createBuiltinModel(
             const google = createGoogleGenerativeAI({
                 apiKey,
                 baseURL: baseUrl || undefined,
+                headers: config.headers,
             })
             // Google 直接调用就是 generateContent API，无需 .chat()
             return google(model)
@@ -93,7 +96,7 @@ function createCustomModel(
     model: string,
     apiKey: string,
     baseUrl?: string,
-    _options: ModelOptions = {}
+    options: ModelOptions & { headers?: Record<string, string> } = {}
 ): LanguageModel {
     if (!baseUrl) {
         throw new Error('Custom provider requires baseUrl')
@@ -105,6 +108,7 @@ function createCustomModel(
                 name: 'custom-openai',
                 apiKey,
                 baseURL: baseUrl,
+                headers: options.headers,
             })
             return provider(model)
         }
@@ -114,6 +118,7 @@ function createCustomModel(
             const openai = createOpenAI({
                 apiKey,
                 baseURL: baseUrl,
+                headers: options.headers,
             })
             return openai.responses(model)
         }
@@ -122,6 +127,7 @@ function createCustomModel(
             const anthropic = createAnthropic({
                 apiKey,
                 baseURL: baseUrl,
+                headers: options.headers,
             })
             return anthropic(model)
         }
@@ -130,6 +136,7 @@ function createCustomModel(
             const google = createGoogleGenerativeAI({
                 apiKey,
                 baseURL: baseUrl,
+                headers: options.headers,
             })
             return google(model)
         }
@@ -139,6 +146,7 @@ function createCustomModel(
                 name: 'custom',
                 apiKey,
                 baseURL: baseUrl,
+                headers: options.headers,
             })
             return fallback(model)
         }

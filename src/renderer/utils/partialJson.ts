@@ -249,7 +249,6 @@ function detectContentStrategy(
       return { headRatio: 0.6, tailRatio: 0.35 }
 
     case 'list_directory':
-    case 'get_dir_tree':
       // 目录列表：保持平衡
       return { headRatio: 0.6, tailRatio: 0.35 }
 
