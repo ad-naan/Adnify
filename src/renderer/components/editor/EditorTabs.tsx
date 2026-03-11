@@ -4,11 +4,10 @@
 import { memo } from 'react'
 import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff } from 'lucide-react'
 import { getFileName } from '@shared/utils/pathUtils'
+import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent'
-import type { OpenFile } from '@store'
 
 interface EditorTabsProps {
-  openFiles: OpenFile[]
   activeFilePath: string | null
   onSelectFile: (path: string) => void
   onCloseFile: (path: string) => void
@@ -27,7 +26,6 @@ function getTabDisplayName(filePath: string): string {
 }
 
 export const EditorTabs = memo(function EditorTabs({
-  openFiles,
   activeFilePath,
   onSelectFile,
   onCloseFile,
@@ -37,7 +35,8 @@ export const EditorTabs = memo(function EditorTabs({
   isLinting,
   onRunLint,
 }: EditorTabsProps) {
-  // 获取计划数据
+  // 获取数据
+  const openFiles = useStore(state => state.openFiles)
   const plans = useAgentStore(state => state.plans)
 
   return (

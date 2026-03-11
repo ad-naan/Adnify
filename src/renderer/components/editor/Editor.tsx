@@ -6,6 +6,7 @@ import MonacoEditor, { OnMount, BeforeMount, loader } from '@monaco-editor/react
 import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgent } from '@hooks/useAgent'
 import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
@@ -45,10 +46,28 @@ import { defineMonacoTheme } from './utils/monacoTheme'
 loader.config({ monaco })
 
 export default function Editor() {
-  const {
-    openFiles, activeFilePath, setActiveFile, updateFileContent, updateFileDirtyState, markFileSaved,
-    language, closeFile
-  } = useStore()
+  const activeFilePath = useStore((state) => state.activeFilePath)
+  const activeFile = useStore(useShallow(state => state.openFiles.find(f => f.path === state.activeFilePath)))
+  const openFileCount = useStore((state) => state.openFiles.length)
+
+  // 状态
+  const [streamingEdit, setStreamingEdit] = useState<StreamingEditState | null>(null)
+  const [showDiffPreview, setShowDiffPreview] = useState(false)
+  const [inlineEditState, setInlineEditState] = useState<{
+    show: boolean; position: { x: number; y: number }; selectedCode: string; lineRange: [number, number]
+  } | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; filePath: string } | null>(null)
+  const [markdownMode, setMarkdownMode] = useState<'edit' | 'preview' | 'split'>('edit')
+
+  const isContextMenuFileDirty = useStore(state => tabContextMenu ? state.openFiles.find(f => f.path === tabContextMenu.filePath)?.isDirty : false)
+  const setActiveFile = useStore((state) => state.setActiveFile)
+  const updateFileContent = useStore((state) => state.updateFileContent)
+  const updateFileDirtyState = useStore((state) => state.updateFileDirtyState)
+  const markFileSaved = useStore((state) => state.markFileSaved)
+  const language = useStore((state) => state.language)
+  const closeFile = useStore((state) => state.closeFile)
+
   const { pendingChanges, acceptChange, undoChange } = useAgent()
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
@@ -63,20 +82,9 @@ export default function Editor() {
 
   useComposerInlineDiff(activeFilePath, editorRef.current, monacoRef.current)
 
-  // 状态
-  const [streamingEdit, setStreamingEdit] = useState<StreamingEditState | null>(null)
-  const [showDiffPreview, setShowDiffPreview] = useState(false)
-  const [inlineEditState, setInlineEditState] = useState<{
-    show: boolean; position: { x: number; y: number }; selectedCode: string; lineRange: [number, number]
-  } | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
-  const [tabContextMenu, setTabContextMenu] = useState<{ x: number; y: number; filePath: string } | null>(null)
-  const [markdownMode, setMarkdownMode] = useState<'edit' | 'preview' | 'split'>('edit')
-
   const { registerActions } = useEditorActions(setInlineEditState)
   const { registerProvider: registerAIProvider } = useAICompletion(activeFilePath)
 
-  const activeFile = openFiles.find(f => f.path === activeFilePath)
   const activeLanguage = activeFile ? getLanguage(activeFile.path) : 'plaintext'
   const activeFileType = activeFile ? getFileType(activeFile.path) : 'text'
   const activeFileInfo = activeFile ? getFileInfo(activeFile.path, activeFile.content) : null
@@ -100,6 +108,29 @@ export default function Editor() {
       notifyFileOpened(activeFile.path, activeFile.content)
     }
   }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened])
+
+  // 清理不再打开的文件的 Monaco Models，防止内存泄漏
+  useEffect(() => {
+    if (!monacoRef.current) return
+    const monacoInstance = monacoRef.current
+    const models = monacoInstance.editor.getModels()
+
+    const validUris = new Set(
+      useStore.getState().openFiles.map(f => {
+        if (f.path.startsWith('diff://')) return ''
+        return monacoInstance.Uri.file(f.path).toString()
+      })
+    )
+
+    models.forEach(model => {
+      const uri = model.uri.toString()
+      if (uri.startsWith('inmemory://') || uri.startsWith('internal://')) return
+
+      if (!validUris.has(uri)) {
+        model.dispose()
+      }
+    })
+  }, [openFileCount])
 
   // 流式编辑监听
   useEffect(() => {
@@ -243,14 +274,13 @@ export default function Editor() {
     }
   }, [activeFilePath, runLintCheck])
 
-  if (openFiles.length === 0) {
+  if (openFileCount === 0) {
     return <EditorWelcome />
   }
 
   return (
     <div className="h-full flex flex-col bg-transparent" onKeyDown={handleKeyDown}>
       <EditorTabs
-        openFiles={openFiles}
         activeFilePath={activeFilePath}
         onSelectFile={setActiveFile}
         onCloseFile={closeFileWithConfirm}
@@ -440,7 +470,7 @@ export default function Editor() {
           onCloseAll={closeAllFiles}
           onCloseToRight={closeFilesToRight}
           onSave={saveFile}
-          isDirty={openFiles.find(f => f.path === tabContextMenu.filePath)?.isDirty || false}
+          isDirty={isContextMenuFileDirty || false}
           language={language}
         />
       )}
