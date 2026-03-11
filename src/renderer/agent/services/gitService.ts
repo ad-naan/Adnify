@@ -1,5 +1,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { toAppError } from '@shared/utils/errorHandler'
+import { logger } from '@utils/Logger'
+import { normalizePath, toRelativePath } from '@shared/utils/pathUtils'
 
 /**
  * Git 服务 (使用安全的 Git API)
@@ -88,11 +90,15 @@ class GitService {
         }
 
         try {
-            const result = await api.git.execSecure(args, targetPath)
+            const normalizedPath = normalizePath(targetPath)
+            // 注入 -c core.quotePath=false 来防止 Git 把中文路径转义和加引号（导致 stage/unstage 找不到文件）
+            const fullArgs = ['-c', 'core.quotePath=false', ...args]
+            const result = await api.git.execSecure(fullArgs, normalizedPath)
+            const exitCode = result.success === false ? (result.exitCode ?? 1) : (result.exitCode || 0)
             return {
                 stdout: result.stdout || '',
-                stderr: result.stderr || '',
-                exitCode: result.exitCode || 0
+                stderr: result.stderr || result.error || '',
+                exitCode
             }
         } catch (err) {
             return {
@@ -131,32 +137,26 @@ class GitService {
      * 获取 Git 状态
      */
     async getStatus(rootPath?: string): Promise<GitStatus | null> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) return null
+
         try {
-            // 获取分支信息 - 使用多种方式确保获取到分支名
+            // 获取分支信息
             let branch = 'HEAD'
-            
-            // 方法1: git branch --show-current (Git 2.22+)
-            const branchResult = await this.exec(['branch', '--show-current'], rootPath)
+            const branchResult = await this.exec(['branch', '--show-current'], targetRoot)
             if (branchResult.exitCode === 0 && branchResult.stdout.trim()) {
                 branch = branchResult.stdout.trim()
             } else {
-                // 方法2: git rev-parse --abbrev-ref HEAD (兼容旧版本)
-                const revParseResult = await this.exec(['rev-parse', '--abbrev-ref', 'HEAD'], rootPath)
+                const revParseResult = await this.exec(['rev-parse', '--abbrev-ref', 'HEAD'], targetRoot)
                 if (revParseResult.exitCode === 0 && revParseResult.stdout.trim()) {
                     branch = revParseResult.stdout.trim()
-                } else {
-                    // 方法3: git symbolic-ref --short HEAD (最后尝试)
-                    const symbolicResult = await this.exec(['symbolic-ref', '--short', 'HEAD'], rootPath)
-                    if (symbolicResult.exitCode === 0 && symbolicResult.stdout.trim()) {
-                        branch = symbolicResult.stdout.trim()
-                    }
                 }
             }
 
             // 获取 ahead/behind
             let ahead = 0, behind = 0
             try {
-                const aheadBehind = await this.exec(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], rootPath)
+                const aheadBehind = await this.exec(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], targetRoot)
                 if (aheadBehind.exitCode === 0) {
                     const parts = aheadBehind.stdout.trim().split(/\s+/)
                     if (parts.length >= 2) {
@@ -164,12 +164,10 @@ class GitService {
                         ahead = Number(parts[1]) || 0
                     }
                 }
-            } catch {
-                // 没有上游分支
-            }
+            } catch { /* 无上游 */ }
 
-            // 获取状态 (porcelain v1 格式, -uall 显示所有未跟踪文件而非目录)
-            const statusResult = await this.exec(['status', '--porcelain=v1', '-uall'], rootPath)
+            // 获取状态
+            const statusResult = await this.exec(['status', '--porcelain=v1', '-uall'], targetRoot)
 
             const staged: GitFileChange[] = []
             const unstaged: GitFileChange[] = []
@@ -178,48 +176,59 @@ class GitService {
             let hasConflicts = false
 
             if (statusResult.exitCode === 0 && statusResult.stdout) {
-                const lines = statusResult.stdout.trim().split('\n').filter(Boolean)
+                const lines = statusResult.stdout.split('\n').filter(Boolean)
 
                 for (const line of lines) {
-                    const indexStatus = line[0]
-                    const workTreeStatus = line[1]
-                    const filePath = line.slice(3).trim()
+                    if (line.length < 4) continue
 
-                    // 检测冲突文件
-                    if (indexStatus === 'U' || workTreeStatus === 'U' ||
-                        (indexStatus === 'A' && workTreeStatus === 'A') ||
-                        (indexStatus === 'D' && workTreeStatus === 'D')) {
+                    const X = line[0]
+                    const Y = line[1]
+                    let fullPathPart = line.slice(3)
+
+                    // 处理重命名 (format: R  old -> new)
+                    let currentPath = fullPathPart
+                    if (X === 'R' || Y === 'R') {
+                        const parts = fullPathPart.split(' -> ')
+                        currentPath = parts[parts.length - 1] // 获取新路径
+                    }
+
+                    // 1. 检测冲突 (indexStatus/workTreeStatus 为 U, 或特定的 AA, DD 等)
+                    const isConflict = (X === 'U' || Y === 'U' || (X === 'A' && Y === 'A') || (X === 'D' && Y === 'D'))
+                    if (isConflict) {
                         hasConflicts = true
-                        conflictFiles.push(filePath)
+                        conflictFiles.push(currentPath)
                         continue
                     }
 
-                    if (indexStatus === '?' && workTreeStatus === '?') {
-                        // 过滤掉文件夹（以 / 结尾的路径）
-                        if (!filePath.endsWith('/')) {
-                            untracked.push(filePath)
+                    // 2. 检测未跟踪
+                    if (X === '?' && Y === '?') {
+                        if (!currentPath.endsWith('/')) {
+                            untracked.push(currentPath)
                         }
                         continue
                     }
 
-                    if (indexStatus !== ' ' && indexStatus !== '?') {
+                    // 3. 暂存区状态 (X)
+                    if (X !== ' ' && X !== '?') {
                         staged.push({
-                            path: filePath,
-                            status: this.parseStatus(indexStatus),
+                            path: currentPath,
+                            status: this.parseStatus(X),
                         })
                     }
 
-                    if (workTreeStatus !== ' ' && workTreeStatus !== '?') {
+                    // 4. 工作区状态 (Y)
+                    if (Y !== ' ' && Y !== '?') {
                         unstaged.push({
-                            path: filePath,
-                            status: this.parseStatus(workTreeStatus),
+                            path: currentPath,
+                            status: this.parseStatus(Y),
                         })
                     }
                 }
             }
 
             return { branch, ahead, behind, staged, unstaged, untracked, hasConflicts, conflictFiles }
-        } catch {
+        } catch (err) {
+            logger.git.error('[GitService] getStatus failed:', err)
             return null
         }
     }
@@ -270,28 +279,35 @@ class GitService {
         const targetRoot = rootPath || this.primaryWorkspacePath
         if (!targetRoot) return null
 
-        // 转换为相对路径
-        let relativePath = absolutePath
-        // 标准化路径分隔符
-        const normalizedAbsPath = absolutePath.replace(/\\/g, '/')
-        const normalizedRoot = targetRoot.replace(/\\/g, '/')
-        
-        if (normalizedAbsPath.startsWith(normalizedRoot)) {
-            relativePath = normalizedAbsPath.slice(normalizedRoot.length)
-            if (relativePath.startsWith('/')) {
-                relativePath = relativePath.slice(1)
-            }
-        } else {
-            // 如果不是以 root 开头，尝试直接使用
-            relativePath = absolutePath.replace(/\\/g, '/')
-        }
+        const relativePath = toRelativePath(absolutePath, targetRoot)
 
         try {
-            const result = await this.exec(['show', `HEAD:${relativePath}`], targetRoot)
-            if (result.exitCode === 0) {
-                return result.stdout
+            const fullArgs = ['-c', 'core.quotePath=false', 'show', `HEAD:${relativePath}`]
+            const result = await api.git.execSecure(fullArgs, targetRoot)
+            if (result.success !== false && result.exitCode === 0) {
+                return result.stdout || ''
             }
-            // 文件可能是新文件，返回空字符串
+            return ''
+        } catch {
+            return ''
+        }
+    }
+
+    /**
+     * 获取暂存区(Index)版本的文件内容
+     */
+    async getIndexFileContent(absolutePath: string, rootPath?: string): Promise<string | null> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) return null
+
+        const relativePath = toRelativePath(absolutePath, targetRoot)
+
+        try {
+            const fullArgs = ['-c', 'core.quotePath=false', 'show', `:${relativePath}`]
+            const result = await api.git.execSecure(fullArgs, targetRoot)
+            if (result.success !== false && result.exitCode === 0) {
+                return result.stdout || ''
+            }
             return ''
         } catch {
             return ''
@@ -356,7 +372,7 @@ class GitService {
 
     async commitAmend(message?: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = message 
+            const args = message
                 ? ['commit', '--amend', '-m', message]
                 : ['commit', '--amend', '--no-edit']
             const result = await this.exec(args, rootPath)
@@ -452,12 +468,12 @@ class GitService {
             for (const line of lines) {
                 const current = line.startsWith('*')
                 const trimmed = line.replace(/^\*?\s+/, '')
-                
+
                 // 解析分支名和 commit hash
                 const parts = trimmed.split(/\s+/)
                 let name = parts[0]
                 const commitHash = parts[1] || ''
-                
+
                 // 跳过 HEAD 指针
                 if (name === 'HEAD' || name.includes('->')) continue
 
@@ -466,10 +482,10 @@ class GitService {
                     name = name.replace('remotes/', '')
                 }
 
-                branches.push({ 
-                    name, 
-                    current, 
-                    remote, 
+                branches.push({
+                    name,
+                    current,
+                    remote,
                     lastCommit: commitHash.slice(0, 7)
                 })
             }
@@ -511,7 +527,7 @@ class GitService {
 
     async createBranch(name: string, startPoint?: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = startPoint 
+            const args = startPoint
                 ? ['checkout', '-b', name, startPoint]
                 : ['checkout', '-b', name]
             const result = await this.exec(args, rootPath)
@@ -591,7 +607,7 @@ class GitService {
 
     async rebase(branch: string, interactive?: boolean, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = interactive 
+            const args = interactive
                 ? ['rebase', '-i', branch]
                 : ['rebase', branch]
             const result = await this.exec(args, rootPath)
@@ -709,7 +725,7 @@ class GitService {
 
     async stashPop(index?: number, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = index !== undefined 
+            const args = index !== undefined
                 ? ['stash', 'pop', `stash@{${index}}`]
                 : ['stash', 'pop']
             const result = await this.exec(args, rootPath)
@@ -757,7 +773,7 @@ class GitService {
                 const index = indexMatch ? parseInt(indexMatch[1]) : 0
                 const message = parts[1] || ''
                 const branchMatch = message.match(/^On\s+(\S+):\s*(.*)$/)
-                
+
                 return {
                     index,
                     branch: branchMatch?.[1] || 'unknown',
@@ -836,7 +852,7 @@ class GitService {
             // 解析文件变更
             const files: { path: string; status: string; additions: number; deletions: number }[] = []
             const numstatResult = await this.exec(['show', hash, '--numstat', '--format='], rootPath)
-            
+
             if (numstatResult.exitCode === 0 && numstatResult.stdout) {
                 const statLines = numstatResult.stdout.trim().split('\n').filter(Boolean)
                 for (const line of statLines) {
@@ -981,11 +997,11 @@ class GitService {
 
     async createTag(name: string, message?: string, commitHash?: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = message 
+            const args = message
                 ? ['tag', '-a', name, '-m', message]
                 : ['tag', name]
             if (commitHash) args.push(commitHash)
-            
+
             const result = await this.exec(args, rootPath)
             return {
                 success: result.exitCode === 0,
@@ -1021,7 +1037,7 @@ class GitService {
 
     async setGitConfig(key: string, value: string, global?: boolean, rootPath?: string): Promise<boolean> {
         try {
-            const args = global 
+            const args = global
                 ? ['config', '--global', key, value]
                 : ['config', key, value]
             const result = await this.exec(args, rootPath)
@@ -1087,7 +1103,7 @@ class GitService {
             for (let i = 0; i < chunks.length; i += 2) {
                 const hash = chunks[i]
                 const info = chunks[i + 1] || ''
-                
+
                 const authorMatch = info.match(/^author (.+)$/m)
                 const timeMatch = info.match(/^author-time (\d+)$/m)
                 const contentMatch = info.match(/^\t(.*)$/m)
