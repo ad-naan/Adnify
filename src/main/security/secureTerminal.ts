@@ -5,10 +5,12 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { BrowserWindow, ipcMain } from 'electron'
-import { spawn, execSync } from 'child_process'
+import { spawn, execSync, type ChildProcessWithoutNullStreams } from 'child_process'
+import { EventEmitter } from 'events'
 import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
+import { normalizePipeTerminalInput } from './terminalInput'
 
 
 interface SecureShellRequest {
@@ -444,30 +446,118 @@ export function registerSecureTerminalHandlers(
     pty = null
   }
 
+  type TerminalBackend = 'pty' | 'pipe'
+
+  class PipeShellSession extends EventEmitter {
+    constructor(private readonly child: ChildProcessWithoutNullStreams) {
+      super()
+
+      this.child.stdout.on('data', (data: Buffer) => {
+        this.emit('data', data.toString())
+      })
+
+      this.child.stderr.on('data', (data: Buffer) => {
+        this.emit('data', data.toString())
+      })
+
+      this.child.on('error', (err) => {
+        this.emit('error', err)
+      })
+
+      this.child.on('close', (code) => {
+        this.emit('exit', { exitCode: code ?? 0 })
+      })
+    }
+
+    onData(listener: (data: string) => void) {
+      this.on('data', listener)
+      return this
+    }
+
+    onExit(listener: (event: { exitCode: number; signal?: number }) => void) {
+      this.on('exit', listener)
+      return this
+    }
+
+    write(data: string) {
+      if (data === String.fromCharCode(3)) {
+        this.kill('SIGINT')
+        return
+      }
+
+      if (!this.child.stdin.destroyed) {
+        this.child.stdin.write(normalizePipeTerminalInput(data))
+      }
+    }
+
+    resize(_cols: number, _rows: number) {
+      // Pipe-backed sessions do not support PTY resizing.
+    }
+
+    kill(signal: NodeJS.Signals = 'SIGTERM') {
+      if (this.child.killed) {
+        return
+      }
+
+      if (process.platform !== 'win32' && this.child.pid) {
+        try {
+          process.kill(-this.child.pid, signal)
+          return
+        } catch {
+          // Fall back to killing the shell process directly.
+        }
+      }
+
+      this.child.kill(signal)
+    }
+  }
+
+  const bindTerminalProcess = (id: string, terminalProcess: any, mainWindow: BrowserWindow | null) => {
+    terminals.set(id, terminalProcess)
+
+    terminalProcess.onData((data: string) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:data', { id, data })
+      }
+    })
+
+    terminalProcess.on('error', (err: any) => {
+      logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:error', { id, error: toAppError(err).message })
+      }
+    })
+
+    terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
+      logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
+      terminals.delete(id)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:exit', { id, exitCode, signal })
+      }
+    })
+  }
+
   /**
-   * 交互式终端创建（使用 node-pty，加强路径限制）
+   * 交互式终端创建（默认使用 node-pty；Agent 在 macOS 上可切换为 pipe 会话）
    */
   safeIpcHandle('terminal:interactive', async (
     event,
-    options: { id: string; cwd?: string; shell?: string }
+    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend }
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
-    const { id, cwd, shell } = options
+    const { id, cwd, shell, backend = 'pty' } = options
 
-    if (!pty) {
+    if (backend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }
     }
 
-    // 检查终端数量限制
     if (terminals.size >= MAX_TERMINALS && !terminals.has(id)) {
       return { success: false, error: `Maximum number of terminals (${MAX_TERMINALS}) reached` }
     }
 
-    // 确定工作目录
     const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
 
-    // 验证工作区边界
     if (workspace && workspace.roots.length > 0 && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
         reason: '路径在工作区外',
@@ -480,7 +570,6 @@ export function registerSecureTerminalHandlers(
       const isWindows = process.platform === 'win32'
       const isMac = process.platform === 'darwin'
 
-      // macOS 特殊处理：使用登录 shell
       let shellPath: string
       let shellArgs: string[] = []
 
@@ -489,7 +578,6 @@ export function registerSecureTerminalHandlers(
       } else if (isWindows) {
         shellPath = 'powershell.exe'
       } else if (isMac) {
-        // macOS: 检测可用的 shell
         const fs = require('fs')
         const possibleShells = [
           process.env.SHELL,
@@ -508,114 +596,97 @@ export function registerSecureTerminalHandlers(
         }) || '/bin/bash'
 
         logger.security.info(`[Terminal] Using shell: ${shellPath}`)
-
-        // 使用 login shell 确保环境变量正确加载
-        shellArgs = ['-l']
+        shellArgs = backend === 'pipe' ? ['-il'] : ['-l']
       } else {
-        // Linux
         shellPath = process.env.SHELL || '/bin/bash'
       }
 
-      logger.security.info(`[Terminal] Spawning PTY: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
+      logger.security.info(`[Terminal] Spawning ${backend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
-      // 验证 shell 路径存在
       const fs = require('fs')
       const pathModule = require('path')
 
-      // 只验证绝对路径，系统命令（如 powershell.exe, cmd.exe）跳过验证
       if (pathModule.isAbsolute(shellPath) && !fs.existsSync(shellPath)) {
         const error = `Shell not found: ${shellPath}`
         logger.security.error(`[Terminal] ${error}`)
         return { success: false, error }
       }
 
-      // 验证工作目录存在
       if (!fs.existsSync(targetCwd)) {
         const error = `Working directory not found: ${targetCwd}`
         logger.security.error(`[Terminal] ${error}`)
         return { success: false, error }
       }
 
-      // 使用 Promise 包装 spawn，以便更好地处理可能的异步错误
-      let ptyProcess: any
-      try {
-        // 使用 setImmediate 确保在下一个事件循环中执行，给错误处理更多机会
-        await new Promise<void>((resolve, reject) => {
-          setImmediate(() => {
-            try {
-              ptyProcess = pty.spawn(shellPath, shellArgs, {
-                name: 'xterm-256color',
-                cols: 80,
-                rows: 24,
-                cwd: targetCwd,
-                env: {
-                  ...process.env,
-                  TERM: 'xterm-256color',
-                  COLORTERM: 'truecolor',
-                },
-              })
+      let terminalProcess: any
 
-              // 验证 ptyProcess 是否有效
-              if (!ptyProcess) {
-                reject(new Error('PTY process is null after spawn'))
-                return
+      if (backend === 'pipe') {
+        const child = spawn(shellPath, shellArgs, {
+          cwd: targetCwd,
+          env: {
+            ...process.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+          },
+          stdio: 'pipe',
+          detached: process.platform !== 'win32',
+          windowsHide: true,
+        }) as ChildProcessWithoutNullStreams
+
+        terminalProcess = new PipeShellSession(child)
+      } else {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            setImmediate(() => {
+              try {
+                terminalProcess = pty.spawn(shellPath, shellArgs, {
+                  name: 'xterm-256color',
+                  cols: 80,
+                  rows: 24,
+                  cwd: targetCwd,
+                  env: {
+                    ...process.env,
+                    TERM: 'xterm-256color',
+                    COLORTERM: 'truecolor',
+                  },
+                })
+
+                if (!terminalProcess) {
+                  reject(new Error('PTY process is null after spawn'))
+                  return
+                }
+
+                resolve()
+              } catch (err) {
+                reject(err)
               }
-
-              resolve()
-            } catch (err) {
-              reject(err)
-            }
+            })
           })
-        })
-      } catch (err) {
-        // 捕获原生模块异常
-        const errorMsg = toAppError(err).message || toAppError(err).message || 'Unknown spawn error'
-        logger.security.error(`[Terminal] PTY spawn failed: ${errorMsg}`, err)
+        } catch (err) {
+          const errorMsg = toAppError(err).message || toAppError(err).message || 'Unknown spawn error'
+          logger.security.error(`[Terminal] PTY spawn failed: ${errorMsg}`, err)
 
-        // 检查是否是原生模块问题
-        if (errorMsg.includes('Napi::Error') || errorMsg.includes('native') || errorMsg.includes('module') || errorMsg.includes('libc++abi')) {
-          return {
-            success: false,
-            error: 'node-pty native module error. The module may need to be rebuilt for this Electron version. Please run: npm run rebuild'
+          if (errorMsg.includes('Napi::Error') || errorMsg.includes('native') || errorMsg.includes('module') || errorMsg.includes('libc++abi')) {
+            return {
+              success: false,
+              error: 'node-pty native module error. The module may need to be rebuilt for this Electron version. Please run: npm run rebuild'
+            }
           }
-        }
 
-        return { success: false, error: `Failed to spawn terminal: ${errorMsg}` }
+          return { success: false, error: `Failed to spawn terminal: ${errorMsg}` }
+        }
       }
 
-      terminals.set(id, ptyProcess)
-
-      // Forward data to renderer
-      ptyProcess.onData((data: string) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('terminal:data', { id, data })
-        }
-      })
-
-      // Add error handler to prevent unhandled exceptions
-      ptyProcess.on('error', (err: any) => {
-        logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
-        // 通知渲染进程终端出错
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('terminal:error', { id, error: toAppError(err).message })
-        }
-      })
-
-      ptyProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
-        logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
-        terminals.delete(id)
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('terminal:exit', { id, exitCode, signal })
-        }
-      })
+      bindTerminalProcess(id, terminalProcess, mainWindow)
 
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
         id,
         cwd: targetCwd,
         shell: shellPath,
+        backend,
       })
 
-      logger.security.info(`[Terminal] Created terminal ${id} with shell ${shellPath}`)
+      logger.security.info(`[Terminal] Created ${backend} terminal ${id} with shell ${shellPath}`)
       return { success: true }
     } catch (err) {
       logger.security.error('[Terminal] Failed to create terminal:', err)
