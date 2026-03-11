@@ -317,7 +317,7 @@ export default function Editor() {
         </div>
       )}
 
-      {/* 内联编辑 */}
+      {/* 内联编辑器 - 极简悬浮胶囊 */}
       {inlineEditState?.show && activeFile && (
         <InlineEdit
           position={inlineEditState.position}
@@ -325,17 +325,6 @@ export default function Editor() {
           filePath={activeFile.path}
           lineRange={inlineEditState.lineRange}
           onClose={() => setInlineEditState(null)}
-          onApply={(newCode) => {
-            if (editorRef.current) {
-              const selection = editorRef.current.getSelection()
-              if (selection) {
-                editorRef.current.executeEdits('inline-edit', [{
-                  range: selection, text: newCode, forceMoveMarkers: true
-                }])
-              }
-            }
-            setInlineEditState(null)
-          }}
         />
       )}
 
