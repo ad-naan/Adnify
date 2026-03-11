@@ -330,25 +330,31 @@ export default function Editor() {
 
       {/* 编辑器主体 */}
       <div className="flex-1 relative min-h-0 overflow-hidden flex flex-col">
-        {activeFile?.path.startsWith('diff://') ? (
+        {activeFile?.path.startsWith('diff://') || activeFile?.path.startsWith('git-diff://') ? (
           <DiffPreview
             diff={{
               original: activeFile.originalContent || '',
               modified: activeFile.content || '',
-              filePath: activeFile.path.slice(7)
+              filePath: activeFile.path.replace(/^(git-)?diff:\/\//, '')
             }}
-            isPending={pendingChanges.some(c => c.filePath === activeFile.path.slice(7))}
+            isPending={activeFile.path.startsWith('diff://') && pendingChanges.some(c => c.filePath === activeFile.path.replace(/^(git-)?diff:\/\//, ''))}
+            readOnly={activeFile.path.startsWith('git-diff://')}
             language={language}
             onClose={() => closeFile(activeFile.path)}
-            onChange={(newContent) => updateFileContent(activeFile.path, newContent)}
+            onChange={(newContent) => {
+              if (activeFile.path.startsWith('git-diff://')) return;
+              updateFileContent(activeFile.path, newContent)
+            }}
             onAccept={() => {
-              const realPath = activeFile.path.slice(7)
+              if (activeFile.path.startsWith('git-diff://')) return;
+              const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               acceptChange(realPath)
               updateFileContent(realPath, activeFile.content)
               closeFile(activeFile.path)
             }}
             onReject={async () => {
-              const realPath = activeFile.path.slice(7)
+              if (activeFile.path.startsWith('git-diff://')) return;
+              const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               await undoChange(realPath)
               closeFile(activeFile.path)
             }}

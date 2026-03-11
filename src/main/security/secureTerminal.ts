@@ -333,7 +333,20 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: '缺少Git命令' }
     }
 
-    const gitSubCommand = args[0].toLowerCase()
+    // 跳过全局选项探测真正的子命令
+    let cmdIdx = 0
+    while (cmdIdx < args.length && args[cmdIdx].startsWith('-')) {
+      if (args[cmdIdx] === '-c' || args[cmdIdx] === '-C') {
+        cmdIdx += 2
+      } else {
+        cmdIdx += 1
+      }
+    }
+    if (cmdIdx >= args.length) {
+      return { success: false, error: '未找到Git子命令' }
+    }
+
+    const gitSubCommand = args[cmdIdx].toLowerCase()
     const whitelistCheck = SecureCommandParser.validateCommand(gitSubCommand, 'git')
 
     if (!whitelistCheck.safe) {
@@ -375,6 +388,10 @@ export function registerSecureTerminalHandlers(
         exitCode: result.exitCode,
       })
 
+      if (result.exitCode !== 0) {
+        logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
+      }
+
       return {
         success: result.exitCode === 0,
         stdout: result.stdout,
@@ -391,6 +408,10 @@ export function registerSecureTerminalHandlers(
         securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
           exitCode: result.exitCode,
         })
+
+        if (result.exitCode !== 0) {
+          logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
+        }
 
         return {
           success: result.exitCode === 0,
