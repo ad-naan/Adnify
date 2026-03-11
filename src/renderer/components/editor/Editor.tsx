@@ -279,7 +279,7 @@ export default function Editor() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-transparent" onKeyDown={handleKeyDown}>
+    <div className="h-full flex flex-col bg-background/50 relative overflow-hidden" onKeyDown={handleKeyDown}>
       <EditorTabs
         activeFilePath={activeFilePath}
         onSelectFile={setActiveFile}

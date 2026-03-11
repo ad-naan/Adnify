@@ -40,7 +40,7 @@ export const EditorTabs = memo(function EditorTabs({
   const plans = useAgentStore(state => state.plans)
 
   return (
-    <div className="h-9 flex items-center bg-background border-b border-border overflow-x-auto custom-scrollbar select-none">
+    <div className="h-[42px] flex items-center bg-background border-b border-border/50 overflow-x-auto custom-scrollbar select-none px-2 gap-1.5 py-1.5">
       {openFiles.map((file) => {
         const isActive = file.path === activeFilePath
 
@@ -65,10 +65,10 @@ export const EditorTabs = memo(function EditorTabs({
           <div
             key={file.path}
             className={`
-              group relative flex items-center gap-2 px-4 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-all duration-200 border-r border-border
+              group relative flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-colors duration-150 rounded-md
               ${isActive
-                ? 'bg-transparent text-text-primary font-medium'
-                : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-primary'}
+                ? 'bg-accent/15 text-accent font-medium'
+                : 'bg-transparent text-text-muted hover:bg-surface-hover/50 hover:text-text-primary'}
               ${file.isDeleted ? 'opacity-60' : ''}
             `}
             onClick={() => onSelectFile(file.path)}
@@ -77,9 +77,6 @@ export const EditorTabs = memo(function EditorTabs({
               onContextMenu(e, file.path)
             }}
           >
-            {isActive && (
-              <div className="absolute top-0 left-0 right-0 h-[2px] bg-accent shadow-[0_0_10px_rgba(var(--accent)/0.8)] z-10" />
-            )}
 
             {/* 已删除文件图标 */}
             {file.isDeleted && (

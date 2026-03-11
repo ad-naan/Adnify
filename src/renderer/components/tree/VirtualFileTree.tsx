@@ -598,12 +598,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           setTimeout(() => document.body.removeChild(dragImage), 0)
         }}
         className={`
-          group flex items-center gap-2 pr-2 cursor-pointer transition-all duration-150 relative select-none rounded-md mx-2 my-0
+          group flex items-center gap-2 pr-2 cursor-pointer transition-colors duration-150 relative select-none rounded-md mx-2 my-[2px]
           ${isActive
-            ? 'bg-accent/15 text-text-primary font-medium'
+            ? 'bg-accent/15 text-accent font-medium'
             : isFocused
-              ? 'bg-surface-hover border border-accent/30 text-text-primary'
-              : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+              ? 'bg-surface-hover/80 text-text-primary'
+              : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover/40'
           }
           ${isHighlighted ? 'animate-reveal-highlight' : ''}
         `}
@@ -616,11 +616,6 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           right: 0
         }}
       >
-        {/* Active Indicator - Premium Glow */}
-        {isActive && (
-          <div className="absolute left-[-8px] top-[6px] bottom-[6px] w-[3px] bg-accent rounded-r-full shadow-[0_0_12px_rgba(var(--accent),0.6)] z-10" />
-        )}
-
         {/* Indent Guide - Very subtle line */}
         {depth > 0 && Array.from({ length: depth }).map((_, i) => (
           <div
