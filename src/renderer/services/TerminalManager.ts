@@ -84,21 +84,6 @@ function stripAnsi(str: string): string {
     .replace(/\r/g, '')
 }
 
-const SENTINEL_PREFIX = 'ADNIFY_CMD_'
-
-/**
- * 从终端输出中过滤 sentinel 标记行（仅用于 xterm 显示和缓冲区，不影响数据监听器）。
- * 将含有 ADNIFY_CMD_ 的行（及其行尾换行符）整行移除，防止标记出现在终端面板中。
- */
-function filterSentinelLines(data: string): string {
-  if (!data.includes(SENTINEL_PREFIX)) return data
-  // 保留换行符以便 split 后能重建原始格式
-  const lines = data.split(/\r?\n/)
-  const filtered = lines.filter(line => !stripAnsi(line).includes(SENTINEL_PREFIX))
-  // 如果没过滤掉任何行，直接返回原始数据
-  if (filtered.length === lines.length) return data
-  return filtered.join('\r\n')
-}
 
 class TerminalManagerClass {
   private state: TerminalManagerState = {
@@ -139,18 +124,15 @@ class TerminalManagerClass {
   private setupIpcListeners() {
     const onData = api.terminal.onData(
       ({ id, data }: { id: string; data: string }) => {
-        // 过滤后的数据用于 xterm 显示和缓冲区（sentinel 行不展示给用户）
-        const displayData = filterSentinelLines(data)
-
         const xterm = this.xtermInstances.get(id);
         if (xterm?.terminal) {
-          xterm.terminal.write(displayData);
+          xterm.terminal.write(data);
         }
 
-        // 缓存过滤后的输出（buffer replay 也不应显示 sentinel 行）
-        this.appendToBuffer(id, displayData);
+        // 缓存输出
+        this.appendToBuffer(id, data);
 
-        // 数据监听器保留原始数据（sentinel 检测依赖完整标记）
+        // 触发数据事件
         this.dataListeners.forEach(listener => listener(id, data));
       },
     );
@@ -626,15 +608,24 @@ class TerminalManagerClass {
    */
   executeCommandWithOutput(termId: string, command: string, timeoutMs: number, cwd?: string): Promise<CommandResult> {
     const sentinelId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    const START = `ADNIFY_CMD_START_${sentinelId}`
-    const END_PREFIX = `ADNIFY_CMD_END_${sentinelId}_`
+    // OSC 序列格式：ESC ] 9001 ; <payload> BEL
+    // xterm.js 在序列解析阶段静默消耗未注册的 OSC 编号，完全不渲染任何文本。
+    // 这与 VS Code Shell Integration（OSC 133）采用相同机制。
+    const OSC = '\x1b]9001;'
+    const BEL = '\x07'
+    const START_PAYLOAD = `ADNIFY_CMD_START_${sentinelId}`
+    const END_PAYLOAD_PREFIX = `ADNIFY_CMD_END_${sentinelId}_`
+    // 用于在原始数据中检测 end sentinel
+    const RAW_END_MARKER = `${OSC}${END_PAYLOAD_PREFIX}`
 
     // 广播运行状态
     this.state.runningCommand = { terminalId: termId, command, startedAt: Date.now() }
     this.notify()
 
     return new Promise<CommandResult>((resolve) => {
-      let accumulator = ''
+      let rawAccumulator = ''   // 原始 PTY 数据，用于检测 OSC sentinel
+      let textAccumulator = ''  // stripAnsi 后的纯文本，用于返回给 AI
+      let textAtStart = -1      // 检测到 START sentinel 时 textAccumulator 的长度
       let settled = false
 
       const settle = (result: CommandResult) => {
@@ -648,69 +639,99 @@ class TerminalManagerClass {
       }
 
       const timer = setTimeout(() => {
-        settle({ output: this.extractSentinelOutput(accumulator, START, END_PREFIX).output, exitCode: -1, timedOut: true })
+        settle({ output: textAccumulator.trim(), exitCode: -1, timedOut: true })
       }, timeoutMs)
 
       const unsub = this.onData((id, data) => {
         if (id !== termId || settled) return
-        accumulator += stripAnsi(data)
+        rawAccumulator += data
+        textAccumulator += stripAnsi(data)
 
-        if (accumulator.includes(END_PREFIX)) {
-          const { output, exitCode } = this.extractSentinelOutput(accumulator, START, END_PREFIX)
-          settle({ output, exitCode, timedOut: false })
+        // OSC 序列被 stripAnsi 整体剥除，无文本残留。
+        // 在 raw 中检测到 START 时记录 textAccumulator 当前长度，
+        // 作为命令输出的起始游标（跳过 shell 回显、提示符等）
+        if (textAtStart === -1 && rawAccumulator.includes(`${OSC}${START_PAYLOAD}${BEL}`)) {
+          textAtStart = textAccumulator.length
+        }
+
+        // 在原始数据中检测 OSC end sentinel：ESC]9001;ADNIFY_CMD_END_..._N BEL
+        const endIdx = rawAccumulator.indexOf(RAW_END_MARKER)
+        if (endIdx !== -1) {
+          const afterMarker = rawAccumulator.slice(endIdx + RAW_END_MARKER.length)
+          const codeMatch = afterMarker.match(/^(\d+)\x07/)
+          if (codeMatch) {
+            const output = textAtStart !== -1
+              ? textAccumulator.slice(textAtStart).trim()
+              : textAccumulator.trim()
+            settle({ output, exitCode: parseInt(codeMatch[1], 10), timedOut: false })
+          }
         }
       })
 
       // 必须先订阅，再写命令（避免竞态）
       const isWindows = /windows/i.test(navigator.userAgent)
 
-      // ── 修复1：PowerShell 5.x（Windows 默认）不支持 && 运算符（PS 7+ 才支持）。
-      // 将 && 替换为 ; 以保证向后兼容，避免整行解析失败导致 END sentinel 永不触发。
-      const sanitizedCommand = isWindows ? command.replace(/\s*&&\s*/g, '; ') : command
+      // PowerShell 5.x 不支持 && 运算符；cmd.exe 的 cd /d 在 PS 里无效（/d 被当位置参数）
+      const sanitizedCommand = isWindows
+        ? command
+            .replace(/\s*&&\s*/g, '; ')
+            .replace(/\bcd\s+\/[dD]\s+(['"]?)([^;|&\n'"]+)\1/g, 'Push-Location "$2"')
+        : command
 
-      // ── 修复2：cwd 参数处理。
-      // Agent 终端跨调用复用，工作目录不会随 cwd 参数变化。
-      // 用 Push-Location/Pop-Location（PS）或子 shell（Unix）临时切换，避免污染后续命令。
+      // cwd 参数：Agent 终端复用，需临时切换目录
       const cmdWithCwd = cwd
         ? (isWindows
             ? `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`
             : `(cd "${cwd}" && ${sanitizedCommand})`)
         : sanitizedCommand
 
-      // ── Sentinel 策略：
-      // 以纯文本输出标记行，在 onData 写入 xterm 之前通过 filterSentinelLines() 整行过滤。
-      // 数据监听器仍收到原始数据，可正常检测 START/END 标记。
-      // Windows PowerShell：用 ; 分隔，$LASTEXITCODE 获取退出码
-      // Unix/macOS：bash/zsh 用 $? 获取退出码
-      const wrapped = isWindows
-        ? `Write-Host "${START}"; ${cmdWithCwd}; Write-Host "${END_PREFIX}$LASTEXITCODE"\r`
-        : `printf '${START}\\n'; ${cmdWithCwd}; printf '${END_PREFIX}'\"$?\"'\\n'\r`
+      // OSC sentinel 命令（Windows/Unix/macOS 三平台）
+      const sentinelStart = isWindows
+        ? `Write-Host -NoNewline "$([char]27)]9001;${START_PAYLOAD}$([char]7)"`
+        : `printf '\\033]9001;${START_PAYLOAD}\\007'`
+      const sentinelEnd = isWindows
+        ? `Write-Host -NoNewline "$([char]27)]9001;${END_PAYLOAD_PREFIX}$LASTEXITCODE$([char]7)"`
+        : `printf '\\033]9001;${END_PAYLOAD_PREFIX}'\"$?\"'\\007'`
+
+      const mainCommand = `${sentinelStart}; ${cmdWithCwd}; ${sentinelEnd}`
+
+      // ── 回显清除策略 ──
+      // PTY 行规程在内核层将发送的命令回显到终端（包装代码对用户可见），应用层无法阻止。
+      // 解决方案：命令开始执行时立刻输出 ANSI "上移+清除行" 序列，将回显抹掉。
+      //   \033[1A = 光标上移1行；\033[2K = 清除当前行。重复 N 次，N 为回显占用的行数。
+      // 这与 VS Code/Cursor Shell Integration 使用 PROMPT_COMMAND 钩子的终态效果相同
+      // （用户只看到命令输出，不看到包装代码），只是实现层级不同。
+      //
+      // N 的计算：ceil((提示符估算长度 + 完整命令长度) / 终端列数) + 1
+      const xtermInst = this.xtermInstances.get(termId)
+      const cols = xtermInst?.fitAddon?.proposeDimensions()?.cols ?? 80
+      const promptLen = isWindows ? 60 : 35
+      // 每个清除单元的字面长度（PS 使用 $([char]N) 表达式，Unix 使用 octal 转义）
+      const clearUnit = isWindows ? '$([char]27)[1A$([char]27)[2K' : '\\033[1A\\033[2K'
+      const clearWrapLen = isWindows ? 22 : 10  // "Write-Host -NoNewline ""; " 或 "printf ''; "
+      // 两次迭代逼近（消除循环依赖）
+      const roughLines = Math.ceil((promptLen + mainCommand.length) / cols)
+      const clearOverhead = clearWrapLen + clearUnit.length * roughLines
+      const echoLines = Math.ceil((promptLen + mainCommand.length + clearOverhead) / cols) + 1
+
+      const clearSeq = clearUnit.repeat(echoLines)
+
+      // 清除回显后，补打一行"伪提示符 + 原始命令"，让终端看起来像用户手动输入
+      // Windows PS double-quoted string 转义：` → ``，" → `"，$ → `$
+      // Unix double-quoted string 转义：\ → \\，" → \"，$ → \$，` → \`
+      const displayCmd = isWindows
+        ? command.replace(/`/g, '``').replace(/"/g, '`"').replace(/\$/g, '`$')
+        : command.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
+
+      // 提示符路径：有 cwd 时直接嵌入，否则运行时动态获取当前目录
+      const fakeEchoCmd = isWindows
+        ? `Write-Host -NoNewline "${clearSeq}"; Write-Host "PS ${cwd ?? '$(Get-Location)'}> ${displayCmd}"`
+        : `printf '${clearSeq}'; printf '%s\\n' "${cwd ? cwd.replace(/\\/g, '/') : '$(pwd)'}\\$ ${displayCmd}"`
+
+      const wrapped = `${fakeEchoCmd}; ${mainCommand}\r`
 
       this.writeToTerminal(termId, wrapped)
     })
-  }
-
-  private extractSentinelOutput(buffer: string, start: string, endPrefix: string): { output: string; exitCode: number } {
-    const startIdx = buffer.indexOf(start)
-    if (startIdx === -1) return { output: buffer.trim(), exitCode: 0 }
-
-    // 跳过 start 标记本身及其后的换行/空白
-    let contentStart = startIdx + start.length
-    while (contentStart < buffer.length && '\n \t\r'.includes(buffer[contentStart])) {
-      contentStart++
-    }
-
-    const endIdx = buffer.indexOf(endPrefix, contentStart)
-    if (endIdx === -1) return { output: buffer.slice(contentStart).trim(), exitCode: 0 }
-
-    const output = buffer.slice(contentStart, endIdx).trim()
-
-    // 提取退出码（数字紧跟在 endPrefix 后面）
-    const afterEnd = buffer.slice(endIdx + endPrefix.length)
-    const codeMatch = afterEnd.match(/(\d+)/)
-    const exitCode = codeMatch ? parseInt(codeMatch[1], 10) : 0
-
-    return { output, exitCode }
   }
 
   cleanup() {
