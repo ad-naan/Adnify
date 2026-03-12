@@ -273,9 +273,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const originalContent = await api.file.read(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
-        // 判断使用哪种模式
-        const hasBatchMode = args.edits && Array.isArray(args.edits)
-        const hasLineMode = args.start_line || args.end_line || args.content
+        // 判断使用哪种模式：content 单独存在时不触发 line mode（保持与 validate 逻辑一致）
+        const hasBatchMode = !!(args.edits && Array.isArray(args.edits))
+        const hasLineMode = !!(args.start_line !== undefined || args.end_line !== undefined)
 
         // 🎯 Fast-Edit 精华：批量编辑模式
         if (hasBatchMode) {
