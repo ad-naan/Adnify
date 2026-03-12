@@ -73,11 +73,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         parameters: {
             path: {
                 type: 'string',
-                description: 'File path (string) or multiple paths (array). Examples: "src/main.ts" or ["src/a.ts", "src/b.ts"]',
+                description: 'File path string OR JSON array of paths. Single: "src/main.ts". Multiple: ["src/a.ts", "src/b.ts"]. start_line/end_line only apply to single-file reads.',
                 required: true
             },
-            start_line: { type: 'number', description: 'Starting line for single file (1-indexed)' },
-            end_line: { type: 'number', description: 'Ending line for single file (inclusive)' },
+            start_line: { type: 'number', description: 'Starting line (1-indexed, single file only)' },
+            end_line: { type: 'number', description: 'Ending line inclusive (single file only)' },
         },
         validate: (data) => {
             if (data.start_line && data.end_line && (data.start_line as number) > (data.end_line as number)) {
@@ -283,12 +283,10 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
     write_file: {
         name: 'write_file',
         displayName: 'Write File',
-        description: 'Create new file or completely overwrite existing file. WARNING: This replaces entire file content. For partial edits, use edit_file instead.',
-        detailedDescription: `Write complete file content.
-- Creates new file if doesn't exist
-- OVERWRITES entire file if exists`,
+        description: 'Write complete content to a file. Use for: (1) creating a new file, (2) completely rewriting an existing file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead.',
         criticalRules: [
-            'OVERWRITES entire file - use edit_file for partial changes',
+            'OVERWRITES entire file — use edit_file for any partial change',
+            'Prefer over create_file_or_folder when you have file content ready',
         ],
         category: 'write',
         approvalType: 'none',
@@ -340,7 +338,7 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'Path relative to workspace root to delete (e.g., "src/old.ts")', required: true },
-            recursive: { type: 'boolean', description: 'Delete folder contents', default: false },
+            recursive: { type: 'boolean', description: 'REQUIRED for non-empty folders. If false (default) and the folder has contents, deletion will fail. Always set true when deleting a folder.', default: false },
         },
     },
 
@@ -365,7 +363,8 @@ For long-running servers or watch tasks:
         ],
         criticalRules: [
             'NEVER use cat/grep/sed - use dedicated tools',
-            'Use cwd parameter instead of cd',
+            'Use cwd parameter instead of cd — NEVER write "cd path && command" or "cd path; command" inside command field',
+            'NEVER use && in command — it is not supported on Windows PowerShell 5 (use cwd parameter for directory changes)',
             'Always use is_background=true for servers and dev tasks',
         ],
         category: 'terminal',
@@ -376,7 +375,7 @@ For long-running servers or watch tasks:
         parameters: {
             command: { type: 'string', description: 'Shell command', required: true },
             cwd: { type: 'string', description: 'Working directory relative to workspace root (e.g., "packages/core", NOT "./packages/core")', },
-            timeout: { type: 'number', description: 'Timeout seconds (default: 30)', default: 30 },
+            timeout: { type: 'number', description: 'Timeout seconds (default: 60). Increase for slow commands like installs.', default: 60 },
             is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
         },
     },
@@ -414,8 +413,8 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             terminal_id: { type: 'string', description: 'The ID of the terminal to send input to', required: true },
-            input: { type: 'string', description: 'The string/key to send (e.g. "yes\\n", "c" for Ctrl+C)', required: true },
-            is_ctrl: { type: 'boolean', description: 'If true, treats input as a control character (e.g. "c" becomes Ctrl+C)', default: false },
+            input: { type: 'string', description: 'Text to send. For regular text/answers: "yes\\n", "Y\\n". For Ctrl combos: MUST be a single letter (e.g. "c" for Ctrl+C, "d" for Ctrl+D, "z" for Ctrl+Z) — only used when is_ctrl=true.', required: true },
+            is_ctrl: { type: 'boolean', description: 'If true, sends input as a Ctrl key combo. input MUST be a single character (e.g. is_ctrl=true, input="c" → Ctrl+C). Default: false.', default: false },
         },
     },
 
@@ -439,12 +438,14 @@ For long-running servers or watch tasks:
     get_lint_errors: {
         name: 'get_lint_errors',
         displayName: 'Lint Errors',
-        description: 'Get TypeScript/ESLint errors for a file. Use after editing to verify code. Call once per file.',
+        description: 'Get TypeScript/ESLint errors for a file. Use after editing to verify code. If results seem stale, pass refresh=true to force re-check.',
         detailedDescription: `Get diagnostics (errors, warnings) for a file.
 - Shows TypeScript/ESLint errors
-- Use after editing to verify code`,
+- Use after editing to verify code
+- Use refresh=true if results seem outdated`,
         criticalRules: [
             'Call once after editing, not repeatedly',
+            'If errors persist after a fix, use refresh=true to force re-check',
         ],
         category: 'lsp',
         approvalType: 'none',
@@ -453,15 +454,18 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root to check (e.g., "src/main.ts")', required: true },
+            refresh: { type: 'boolean', description: 'Force re-check instead of using cached diagnostics (default: false)', default: false },
         },
     },
 
     find_references: {
         name: 'find_references',
         displayName: 'Find References',
-        description: 'Find all references to symbol at position.',
+        description: 'Find all references to a symbol across the codebase. TIP: Use read_file to see the line/column of the symbol first, or use get_document_symbols to find symbol positions.',
         detailedDescription: `Find all usages of a symbol across codebase.
 - Requires exact file position (line, column)
+- To find the position: use read_file and note the line number, column is the 1-indexed character offset within the line
+- Or use get_document_symbols to list all symbols with their positions
 - Useful for refactoring`,
         category: 'lsp',
         approvalType: 'none',
@@ -470,15 +474,18 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed)', required: true },
-            column: { type: 'number', description: 'Column number (1-indexed)', required: true },
+            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
+            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
         },
     },
 
     go_to_definition: {
         name: 'go_to_definition',
         displayName: 'Go to Definition',
-        description: 'Get definition location of symbol.',
+        description: 'Get the definition location of a symbol. TIP: Use read_file to find the line/column where the symbol is used, or use get_document_symbols to list positions.',
+        detailedDescription: `Navigate to where a symbol is defined.
+- To find position: read_file and note line number; column is 1-indexed character offset within the line
+- Or use get_document_symbols to find symbol positions in a file`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -486,15 +493,18 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed)', required: true },
-            column: { type: 'number', description: 'Column number (1-indexed)', required: true },
+            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
+            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
         },
     },
 
     get_hover_info: {
         name: 'get_hover_info',
         displayName: 'Hover Info',
-        description: 'Get type info and docs for symbol.',
+        description: 'Get type info and documentation for a symbol at a position. TIP: Use read_file to find the line/column, or get_document_symbols for symbol positions.',
+        detailedDescription: `Get TypeScript type info, signatures, and JSDoc for a symbol.
+- To find position: read_file and note line number; column is 1-indexed character offset within the line
+- Useful for understanding unfamiliar types or APIs`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -502,8 +512,8 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed)', required: true },
-            column: { type: 'number', description: 'Column number (1-indexed)', required: true },
+            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
+            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
         },
     },
 
@@ -597,7 +607,7 @@ TIPS:
 - The tool blocks until user makes a selection`,
         examples: [
             'ask_user question="What type of task?" options=[{id:"feature",label:"New Feature"},{id:"bugfix",label:"Bug Fix"}]',
-            'ask_user question="Which files to modify?" options=[...] multiSelect=true',
+            'ask_user question="Which files to modify?" options=[...] multi_select=true',
         ],
         criticalRules: [
             'Use to gather requirements, preferences, or confirmations',
@@ -627,7 +637,7 @@ TIPS:
                     },
                 },
             },
-            multiSelect: { type: 'boolean', description: 'Allow multiple selections (default: false)', default: false },
+            multi_select: { type: 'boolean', description: 'Allow selecting multiple options (default: false)', default: false },
         },
     },
 
@@ -667,9 +677,9 @@ TIPS:
                     properties: {
                         title: { type: 'string', description: 'Task title', required: true },
                         description: { type: 'string', description: 'Detailed task description', required: true },
-                        suggestedProvider: { type: 'string', description: 'Recommended provider (openai, anthropic, gemini)', required: true },
-                        suggestedModel: { type: 'string', description: 'Recommended model', required: true },
-                        suggestedRole: { type: 'string', description: 'Recommended role/persona', required: true },
+                        suggestedProvider: { type: 'string', description: 'Recommended provider', required: true, enum: ['anthropic', 'openai', 'gemini', 'ollama'] },
+                        suggestedModel: { type: 'string', description: 'Recommended model ID (e.g., "claude-sonnet-4-6", "gpt-4o", "gemini-2.0-flash")', required: true },
+                        suggestedRole: { type: 'string', description: 'Recommended role/persona (e.g., "coder", "reviewer", "planner", "tester")', required: true },
                         dependencies: { type: 'array', description: 'IDs of tasks this depends on', items: { type: 'string', description: 'Task ID' } },
                     },
                 },
@@ -839,19 +849,29 @@ This will trigger the task executor to run through the plan.`,
     remember: {
         name: 'remember',
         displayName: 'Remember',
-        description: 'Propose a new project-level memory (fact or preference) to be remembered across conversations. This will show a confirmation card to the user.',
-        detailedDescription: `Use this to persist important information about the project, such as:
-- Technical stack or architectural decisions
-- Recurring bugs and their fixes
-- User preferences for code style or behavior
-- Project-specific terminology`,
+        description: 'Save a project-level fact or preference so it persists across all future conversations. Use proactively when you discover something important that should not be re-discovered every session.',
+        detailedDescription: `Persist important project knowledge across conversations.
+
+PROACTIVELY use remember when you discover:
+- Architectural decisions ("Uses Zustand for global state, not Redux")
+- Tech stack specifics ("Node version pinned to 18.x in .nvmrc")
+- Recurring bugs and their root causes ("navigator.userAgent instead of process.platform in renderer")
+- User code style preferences ("Prefer functional components, no class components")
+- Project conventions ("All API calls go through src/services/, never directly in components")
+- Environment quirks ("Windows PowerShell is default shell, use ; not &&")
+
+Don't wait for the user to ask — if you learn something that would save time in future sessions, remember it.`,
+        examples: [
+            'remember content="Uses pnpm workspaces. Always run install from root, not individual packages."',
+            'remember content="User prefers snake_case for all tool/API parameter names."',
+        ],
         category: 'interaction',
         approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            content: { type: 'string', description: 'The fact or preference to remember', required: true },
+            content: { type: 'string', description: 'The fact, preference, or convention to remember. Write as a clear, standalone statement that will make sense without conversation context.', required: true },
         },
     },
 }
@@ -1082,9 +1102,24 @@ export function generateToolPromptDescription(config: ToolConfig): string {
     // 工具名
     lines.push(`### ${config.displayName} (\`${config.name}\`)`)
 
-    // 使用 description（包含反碎片化规则）作为主要描述
+    // 主描述（包含反碎片化规则）
     lines.push(config.description)
     lines.push('')
+
+    // 详细描述（补充使用细节）
+    if (config.detailedDescription) {
+        lines.push(config.detailedDescription)
+        lines.push('')
+    }
+
+    // 关键规则
+    if (config.criticalRules && config.criticalRules.length > 0) {
+        lines.push('**Rules:**')
+        for (const rule of config.criticalRules) {
+            lines.push(`- ${rule}`)
+        }
+        lines.push('')
+    }
 
     // 参数
     const params = Object.entries(config.parameters)
@@ -1098,7 +1133,7 @@ export function generateToolPromptDescription(config: ToolConfig): string {
         lines.push('')
     }
 
-    // 常见错误（保留，因为对用户有帮助）
+    // 常见错误
     if (config.commonErrors && config.commonErrors.length > 0) {
         lines.push('**Common Errors:**')
         for (const err of config.commonErrors) {

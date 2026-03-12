@@ -9,6 +9,7 @@
  * - 发布事件到 EventBus
  */
 
+import pLimit from 'p-limit'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
@@ -358,7 +359,6 @@ export async function executeTools(
   if (noApprovalRequired.length > 0) {
     store.setStreamState({ phase: 'tool_running' })
 
-    const pLimit = (await import('p-limit')).default
     const concurrency = getDynamicConcurrency()
     const limit = pLimit(concurrency)
 
