@@ -169,15 +169,20 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: 'Edit file by replacing text or line ranges. Three modes: 1) String replacement: old_string + new_string. 2) Line replacement: start_line + end_line + content. 3) Batch mode: edits array for multiple changes. CRITICAL: Must read_file first.',
-        detailedDescription: `Three editing modes:
-- String mode: old_string + new_string (include 3-5 lines context)
-- Line mode: start_line + end_line + content (use line numbers from read_file)
+        description: `Edit an existing file. Choose EXACTLY ONE mode — NEVER mix parameters from different modes:
+- **String mode**: provide \`old_string\` + \`new_string\` only. Do NOT add start_line/end_line/content.
+- **Line mode**: provide \`start_line\` + \`end_line\` + \`content\` only. Do NOT add old_string/new_string.
+- **Batch mode**: provide \`edits\` array only. Do NOT add any other mode parameters.
+CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call.`,
+        detailedDescription: `Three mutually exclusive editing modes:
+- String mode: old_string + new_string (include 3-5 lines context around the change)
+- Line mode: start_line + end_line + content (use exact line numbers from read_file)
 - Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)`,
         commonErrors: [
-            { error: 'old_string not found', solution: 'Read file again, copy exact content' },
-            { error: 'Multiple matches', solution: 'Include more context lines' },
+            { error: 'old_string not found', solution: 'Read file again, copy exact content including whitespace' },
+            { error: 'Multiple matches', solution: 'Include more surrounding context lines in old_string' },
             { error: 'Overlapping edits', solution: 'Ensure edit ranges do not overlap' },
+            { error: 'Cannot mix string mode, line mode, and batch mode', solution: 'Use ONLY one mode per call: either old_string+new_string OR start_line+end_line+content OR edits array' },
         ],
         category: 'write',
         approvalType: 'none',
@@ -186,12 +191,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root', required: true },
-            old_string: { type: 'string', description: 'Text to find (string mode, include 3-5 lines context)' },
-            new_string: { type: 'string', description: 'Replacement text (string mode)' },
-            start_line: { type: 'number', description: 'Start line (line mode, 1-indexed)' },
-            end_line: { type: 'number', description: 'End line (line mode, inclusive)' },
-            content: { type: 'string', description: 'New content (line mode)' },
-            replace_all: { type: 'boolean', description: 'Replace all occurrences (string mode)', default: false },
+            old_string: { type: 'string', description: '[STRING MODE ONLY] Exact text to find — include 3-5 lines of context. Do NOT use together with start_line/end_line/content/edits.' },
+            new_string: { type: 'string', description: '[STRING MODE ONLY] Replacement text. Do NOT use together with start_line/end_line/content/edits.' },
+            start_line: { type: 'number', description: '[LINE MODE ONLY] First line to replace (1-indexed). Do NOT use together with old_string/new_string/edits.' },
+            end_line: { type: 'number', description: '[LINE MODE ONLY] Last line to replace (inclusive). Do NOT use together with old_string/new_string/edits.' },
+            content: { type: 'string', description: '[LINE MODE ONLY] New content for the line range. Do NOT use together with old_string/new_string/edits.' },
+            replace_all: { type: 'boolean', description: '[STRING MODE ONLY] Replace all occurrences instead of just the first', default: false },
             edits: {
                 type: 'array',
                 description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.',
@@ -209,10 +214,10 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             },
         },
         validate: (data) => {
-            // 验证模式选择
-            const hasStringMode = data.old_string || data.new_string
-            const hasLineMode = data.start_line || data.end_line || data.content
-            const hasBatchMode = data.edits
+            // 模式判定：content 单独存在时不算 line mode，避免 AI 在 string mode 下顺带传 content 触发误报
+            const hasStringMode = !!(data.old_string !== undefined || data.new_string !== undefined)
+            const hasLineMode = !!(data.start_line !== undefined || data.end_line !== undefined)
+            const hasBatchMode = !!(data.edits)
 
             const modeCount = [hasStringMode, hasLineMode, hasBatchMode].filter(Boolean).length
             if (modeCount > 1) {
@@ -862,29 +867,24 @@ This will trigger the task executor to run through the plan.`,
  * 根据场景选择最合适的工具
  */
 export const FILE_EDIT_DECISION_GUIDE = `
-## File Editing Tool Selection
+## File Editing Decision Guide
 
-**Decision Tree:**
-1. Is this a NEW file that doesn't exist?
-   → Use \`write_file\` or \`create_file_or_folder\`
+**Which tool to use:**
+1. NEW file that doesn't exist → \`write_file\` or \`create_file_or_folder\`
+2. REPLACE ENTIRE file content → \`write_file\`
+3. Edit part of an existing file → \`edit_file\` (choose one mode below)
 
-2. Do you need to REPLACE THE ENTIRE file content?
-   → Use \`write_file\`
+**edit_file modes — pick EXACTLY ONE, NEVER mix:**
+| You have... | Use mode | Parameters |
+|-------------|----------|------------|
+| Exact text to find/replace | String mode | \`old_string\` + \`new_string\` |
+| Exact line numbers (from read_file) | Line mode | \`start_line\` + \`end_line\` + \`content\` |
+| Multiple non-overlapping edits | Batch mode | \`edits\` array |
 
-3. Do you know the EXACT LINE NUMBERS to change?
-   → Use \`replace_file_content\` (preferred for precision)
-
-4. Do you know the EXACT TEXT to find and replace?
-   → Use \`edit_file\` with old_string/new_string
-
-**Quick Reference:**
-| Scenario | Tool | Why |
-|----------|------|-----|
-| Create new file | write_file | Creates with full content |
-| Rewrite entire file | write_file | Complete replacement |
-| Change specific lines | replace_file_content | Line-based precision |
-| Replace exact text | edit_file | String matching |
-| Add to end of file | edit_file | Match last lines, add new |
+**⚠️ CRITICAL RULE: Each call to edit_file must use ONLY ONE mode.**
+- String mode: old_string + new_string → DO NOT add start_line/end_line/content
+- Line mode: start_line + end_line + content → DO NOT add old_string/new_string
+- Batch mode: edits array → DO NOT add any other parameters
 `
 
 /**
