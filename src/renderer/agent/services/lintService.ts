@@ -6,9 +6,10 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { LintError } from '../types'
-import { onDiagnostics, lspUriToPath } from '@services/lspService'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
+import { useDiagnosticsStore } from '@services/diagnosticsStore'
+import { normalizePath } from '@shared/utils/pathUtils'
 
 // 支持的语言和对应的 lint 命令
 const LINT_COMMANDS: Record<string, { command: string; parser: (output: string, file: string) => LintError[] }> = {
@@ -148,40 +149,52 @@ function parsePylintOutput(output: string, file: string): LintError[] {
 	return errors
 }
 
-class LintService {
-	private cache: CacheService<LintError[]>
-	private lspDiagnostics: CacheService<LintError[]>
-	private lspDisposer: (() => void) | null = null
+/**
+ * 从 useDiagnosticsStore 中查找指定文件路径对应的 LSP 诊断。
+ * 与 StatusBar/ProblemsView 使用完全相同的数据源和路径规范化逻辑。
+ */
+function getLspDiagnosticsForFile(filePath: string): LintError[] | null {
+	const { diagnostics } = useDiagnosticsStore.getState()
+	if (diagnostics.size === 0) return null
 
-	constructor() {
-		const cacheConfig = getCacheConfig('lint')
-		
-		// 使用统一的 CacheService
-		this.cache = new CacheService<LintError[]>('LintErrors', {
-			maxSize: cacheConfig.maxSize,
-			defaultTTL: cacheConfig.ttlMs,
-			cleanupInterval: 60000,
-		})
-		
-		this.lspDiagnostics = new CacheService<LintError[]>('LspDiagnostics', {
-			maxSize: cacheConfig.maxSize,
-			defaultTTL: 0, // LSP 诊断不过期，由 LSP 更新
-			cleanupInterval: 0,
-		})
+	const normalizedTarget = normalizePath(filePath).toLowerCase()
 
-		// 订阅 LSP 诊断信息
-		this.lspDisposer = onDiagnostics((uri, diagnostics) => {
-			const filePath = lspUriToPath(uri)
-			const errors: LintError[] = diagnostics.map((d: any) => ({
+	for (const [uri, diags] of diagnostics) {
+		// 与 diagnosticsStore.getFileStats 相同的 URI→path 转换
+		let uriPath = uri
+		if (uri.startsWith('file:///')) {
+			uriPath = decodeURIComponent(uri.slice(8))
+		} else if (uri.startsWith('file://')) {
+			uriPath = decodeURIComponent(uri.slice(7))
+		}
+
+		const normalizedUri = normalizePath(uriPath).toLowerCase()
+
+		if (normalizedUri === normalizedTarget || normalizedUri.endsWith(normalizedTarget)) {
+			return diags.map((d) => ({
 				code: d.code?.toString() || 'lsp',
 				message: d.message,
 				severity: d.severity === 1 ? 'error' : 'warning',
 				startLine: d.range.start.line + 1,
 				endLine: d.range.end.line + 1,
-				file: filePath,
+				file: uriPath,
 			}))
-			
-			this.lspDiagnostics.set(filePath, errors)
+		}
+	}
+
+	return null
+}
+
+class LintService {
+	private cache: CacheService<LintError[]>
+
+	constructor() {
+		const cacheConfig = getCacheConfig('lint')
+
+		this.cache = new CacheService<LintError[]>('LintErrors', {
+			maxSize: cacheConfig.maxSize,
+			defaultTTL: cacheConfig.ttlMs,
+			cleanupInterval: 60000,
 		})
 	}
 
@@ -189,13 +202,14 @@ class LintService {
 	 * 获取文件的 lint 错误
 	 */
 	async getLintErrors(filePath: string, forceRefresh: boolean = false): Promise<LintError[]> {
-		// 1. 优先使用 LSP 诊断信息（最准确）
-		const lspErrors = this.lspDiagnostics.get(filePath)
-		if (lspErrors && lspErrors.length > 0) {
+		// 1. 优先使用 LSP 诊断信息（与面板完全相同的数据源，支持所有 LSP 语言）
+		const lspErrors = getLspDiagnosticsForFile(filePath)
+		if (lspErrors !== null) {
+			// LSP 已就绪，直接返回（空数组表示该文件无错误）
 			return lspErrors
 		}
 
-		// 2. 检查缓存
+		// 2. 检查缓存（LSP 尚未推送诊断时的后备）
 		if (!forceRefresh) {
 			const cached = this.cache.get(filePath)
 			if (cached) {
@@ -343,10 +357,8 @@ class LintService {
 	clearCache(filePath?: string): void {
 		if (filePath) {
 			this.cache.delete(filePath)
-			this.lspDiagnostics.delete(filePath)
 		} else {
 			this.cache.clear()
-			this.lspDiagnostics.clear()
 		}
 	}
 
@@ -356,7 +368,6 @@ class LintService {
 	getCacheStats() {
 		return {
 			lint: this.cache.getStats(),
-			lsp: this.lspDiagnostics.getStats(),
 		}
 	}
 
@@ -389,12 +400,7 @@ class LintService {
 	 * 销毁服务
 	 */
 	dispose() {
-		if (this.lspDisposer) {
-			this.lspDisposer()
-			this.lspDisposer = null
-		}
 		this.cache.destroy()
-		this.lspDiagnostics.destroy()
 	}
 }
 

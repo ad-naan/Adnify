@@ -693,7 +693,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async run_command(args, ctx) {
         const command = args.command as string
-        const cwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : ctx.workspacePath
+        // cwd 解析：若 AI 传了 cwd 参数，解析为绝对路径；否则用工作区根目录
+        const resolvedCwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : null
         const isBackground = args.is_background as boolean
         const config = getAgentConfig()
         const timeout = args.timeout
@@ -705,9 +706,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         try {
             const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
-            // 获取或复用 Agent 专属终端（不再每次新建）
+            // 获取或复用 Agent 专属终端（初始 cwd 用工作区根目录，避免反复改变终端目录）
             const termId = await terminalManager.getOrCreateAgentTerminal(
-                cwd || ctx.workspacePath || '/'
+                ctx.workspacePath || '/'
             )
 
             // 始终唤出面板并激活 Agent 终端，让用户看到执行过程
@@ -716,19 +717,27 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // === 长进程：直接写入并立即返回，让用户在终端里跟踪 ===
             if (isLongRunningProcess) {
-                terminalManager.writeToTerminal(termId, `${command}\r`)
+                // 长进程也需要处理 cwd
+                const bgCmd = resolvedCwd
+                    ? (/windows/i.test(navigator.userAgent)
+                        ? `Push-Location "${resolvedCwd}"; ${command}; Pop-Location`
+                        : `(cd "${resolvedCwd}" && ${command})`)
+                    : command
+                terminalManager.writeToTerminal(termId, `${bgCmd}\r`)
                 return {
                     success: true,
                     result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
-                    meta: { command, cwd, terminalId: termId, isBackground: true }
+                    meta: { command, cwd: resolvedCwd, terminalId: termId, isBackground: true }
                 }
             }
 
             // === 短命令：用 sentinel 机制精确捕获输出，同时用户可见 ===
+            // 将 resolvedCwd 传给 executeCommandWithOutput，由其负责临时切换目录
             const { output, exitCode, timedOut } = await terminalManager.executeCommandWithOutput(
                 termId,
                 command,
                 timeout,
+                resolvedCwd || undefined,
             )
 
             const hasOutput = output.trim().length > 0
@@ -748,7 +757,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             return {
                 success: isSuccess,
                 result: resultText,
-                meta: { command, cwd, exitCode, timedOut, terminalId: termId },
+                meta: { command, cwd: resolvedCwd, exitCode, timedOut, terminalId: termId },
                 error: isSuccess ? undefined : resultText
             }
         } catch (error) {
@@ -944,7 +953,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     async ask_user(args, _ctx) {
         const question = args.question as string
         const rawOptions = args.options as Array<{ id?: string; value?: string; label: string; description?: string }>
-        const multiSelect = (args.multiSelect as boolean) || false
+        const multiSelect = (args.multi_select as boolean) || false
 
         // 兼容处理：支持 id 或 value 作为选项标识符
         const options = rawOptions.map((opt, idx) => ({

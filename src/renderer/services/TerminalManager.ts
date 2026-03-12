@@ -84,6 +84,22 @@ function stripAnsi(str: string): string {
     .replace(/\r/g, '')
 }
 
+const SENTINEL_PREFIX = 'ADNIFY_CMD_'
+
+/**
+ * 从终端输出中过滤 sentinel 标记行（仅用于 xterm 显示和缓冲区，不影响数据监听器）。
+ * 将含有 ADNIFY_CMD_ 的行（及其行尾换行符）整行移除，防止标记出现在终端面板中。
+ */
+function filterSentinelLines(data: string): string {
+  if (!data.includes(SENTINEL_PREFIX)) return data
+  // 保留换行符以便 split 后能重建原始格式
+  const lines = data.split(/\r?\n/)
+  const filtered = lines.filter(line => !stripAnsi(line).includes(SENTINEL_PREFIX))
+  // 如果没过滤掉任何行，直接返回原始数据
+  if (filtered.length === lines.length) return data
+  return filtered.join('\r\n')
+}
+
 class TerminalManagerClass {
   private state: TerminalManagerState = {
     terminals: [],
@@ -123,15 +139,18 @@ class TerminalManagerClass {
   private setupIpcListeners() {
     const onData = api.terminal.onData(
       ({ id, data }: { id: string; data: string }) => {
+        // 过滤后的数据用于 xterm 显示和缓冲区（sentinel 行不展示给用户）
+        const displayData = filterSentinelLines(data)
+
         const xterm = this.xtermInstances.get(id);
         if (xterm?.terminal) {
-          xterm.terminal.write(data);
+          xterm.terminal.write(displayData);
         }
 
-        // 缓存输出
-        this.appendToBuffer(id, data);
+        // 缓存过滤后的输出（buffer replay 也不应显示 sentinel 行）
+        this.appendToBuffer(id, displayData);
 
-        // 触发数据事件
+        // 数据监听器保留原始数据（sentinel 检测依赖完整标记）
         this.dataListeners.forEach(listener => listener(id, data));
       },
     );
@@ -602,8 +621,10 @@ class TerminalManagerClass {
   /**
    * 在指定终端执行命令，通过 sentinel 标记精确捕获本次命令的输出。
    * 命令过程对用户可见（在终端面板里显示），同时将 stdout 作为字符串返回给 AI。
+   *
+   * @param cwd 可选工作目录。若提供，用 Push-Location/popd（PS）或子 shell（Unix）临时切换目录。
    */
-  executeCommandWithOutput(termId: string, command: string, timeoutMs: number): Promise<CommandResult> {
+  executeCommandWithOutput(termId: string, command: string, timeoutMs: number, cwd?: string): Promise<CommandResult> {
     const sentinelId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
     const START = `ADNIFY_CMD_START_${sentinelId}`
     const END_PREFIX = `ADNIFY_CMD_END_${sentinelId}_`
@@ -641,17 +662,30 @@ class TerminalManagerClass {
       })
 
       // 必须先订阅，再写命令（避免竞态）
-      // 渲染进程无 process 对象，用 navigator.userAgent 判断平台
-      // Sentinel 用 ANSI Conceal（\e[8m）隐藏，用户不可见但仍在流中可被检测
-      const ESC = '\x1b'
-      const HIDE = `${ESC}[8m`  // Conceal on
-      const SHOW = `${ESC}[0m`  // Reset
       const isWindows = /windows/i.test(navigator.userAgent)
-      // Windows 默认 PowerShell：用 ; 分隔语句，$LASTEXITCODE 获取退出码
-      // Unix/macOS：bash/zsh 用 ; 分隔，$? 获取退出码
+
+      // ── 修复1：PowerShell 5.x（Windows 默认）不支持 && 运算符（PS 7+ 才支持）。
+      // 将 && 替换为 ; 以保证向后兼容，避免整行解析失败导致 END sentinel 永不触发。
+      const sanitizedCommand = isWindows ? command.replace(/\s*&&\s*/g, '; ') : command
+
+      // ── 修复2：cwd 参数处理。
+      // Agent 终端跨调用复用，工作目录不会随 cwd 参数变化。
+      // 用 Push-Location/Pop-Location（PS）或子 shell（Unix）临时切换，避免污染后续命令。
+      const cmdWithCwd = cwd
+        ? (isWindows
+            ? `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`
+            : `(cd "${cwd}" && ${sanitizedCommand})`)
+        : sanitizedCommand
+
+      // ── Sentinel 策略：
+      // 以纯文本输出标记行，在 onData 写入 xterm 之前通过 filterSentinelLines() 整行过滤。
+      // 数据监听器仍收到原始数据，可正常检测 START/END 标记。
+      // Windows PowerShell：用 ; 分隔，$LASTEXITCODE 获取退出码
+      // Unix/macOS：bash/zsh 用 $? 获取退出码
       const wrapped = isWindows
-        ? `Write-Host "${HIDE}${START}${SHOW}"; ${command}; Write-Host "${HIDE}${END_PREFIX}$LASTEXITCODE${SHOW}"\r`
-        : `printf '${HIDE}${START}${SHOW}\\n'; ${command}; printf '${HIDE}${END_PREFIX}'\"$?\"'${SHOW}\\n'\r`
+        ? `Write-Host "${START}"; ${cmdWithCwd}; Write-Host "${END_PREFIX}$LASTEXITCODE"\r`
+        : `printf '${START}\\n'; ${cmdWithCwd}; printf '${END_PREFIX}'\"$?\"'\\n'\r`
+
       this.writeToTerminal(termId, wrapped)
     })
   }
