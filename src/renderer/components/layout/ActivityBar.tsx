@@ -1,10 +1,11 @@
 import { Files, Search, GitBranch, Settings, Sparkles, AlertCircle, ListTree, History, Brain, Terminal } from 'lucide-react'
 import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 
 export default function ActivityBar() {
-  const { activeSidePanel, setActiveSidePanel, language, setShowSettings, setShowComposer } = useStore()
+  const { activeSidePanel, setActiveSidePanel, language, setShowSettings, setShowComposer } = useStore(useShallow(s => ({ activeSidePanel: s.activeSidePanel, setActiveSidePanel: s.setActiveSidePanel, language: s.language, setShowSettings: s.setShowSettings, setShowComposer: s.setShowComposer })))
 
   const items = [
     { id: 'explorer', icon: Files, label: t('explorer', language) },

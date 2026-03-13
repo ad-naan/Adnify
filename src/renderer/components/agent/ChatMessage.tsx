@@ -33,6 +33,7 @@ import { InteractiveCard } from './InteractiveCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
@@ -69,7 +70,7 @@ interface RenderPartProps {
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
   const [copied, setCopied] = useState(false)
-  const { currentTheme } = useStore()
+  const currentTheme = useStore(s => s.currentTheme)
   const theme = themeManager.getThemeById(currentTheme)
   const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
 
@@ -159,7 +160,7 @@ interface ThinkingBlockProps {
 
 const SearchBlock = React.memo(({ content, isStreaming }: { content: string; isStreaming?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true)
-  const { language } = useStore()
+  const language = useStore(s => s.language)
   return (
     <div className="overflow-hidden w-full group rounded-lg hover:bg-text-primary/[0.02] transition-colors my-0.5">
       <div
@@ -217,7 +218,7 @@ SearchBlock.displayName = 'SearchBlock'
 
 // 协同元数据面板中的一栏 (无外边框)
 const SkillBlock = React.memo(({ items }: { items: any[] }) => {
-  const { language, openFile, setActiveFile, workspacePath } = useStore()
+  const { language, openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
 
   if (items.length === 0) return null
 
@@ -391,7 +392,7 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
 
   const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(cleanedContent, !!isStreaming)
 
-  const { workspacePath, openFile, setActiveFile } = useStore()
+  const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
   const handleOpenFile = React.useCallback(async (filePath: string) => {
     if (!workspacePath) return
@@ -811,7 +812,7 @@ const ChatMessage = React.memo(({
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
-  const { editorConfig, language } = useStore()
+  const { editorConfig, language } = useStore(useShallow(s => ({ editorConfig: s.editorConfig, language: s.language })))
   const fontSize = editorConfig.fontSize
 
   if (!isUserMessage(message) && !isAssistantMessage(message)) {

@@ -7,7 +7,7 @@
  * - 与多文件 Diff 面板联动
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { Check, X, ChevronDown, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
@@ -16,6 +16,7 @@ import InlineDiffPreview, { getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { CodeSkeleton } from '../ui/Loading'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { toast } from '@components/common/ToastProvider'
 
@@ -28,7 +29,7 @@ interface FileChangeCardProps {
     messageId?: string
 }
 
-export default function FileChangeCard({
+function FileChangeCard({
     toolCall,
     isAwaitingApproval,
     onApprove,
@@ -36,7 +37,7 @@ export default function FileChangeCard({
     onOpenInEditor,
 }: FileChangeCardProps) {
     const [isExpanded, setIsExpanded] = useState(false)
-    const { openFile, setActiveFile, workspacePath } = useStore()
+    const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
 
     // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
     const args = useMemo(() => ({
@@ -371,3 +372,5 @@ export default function FileChangeCard({
         </motion.div>
     )
 }
+
+export default memo(FileChangeCard)

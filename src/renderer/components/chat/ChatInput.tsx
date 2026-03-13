@@ -122,7 +122,11 @@ export default function ChatInput({
   // 移除图片
   const removeImage = useCallback(
     (id: string) => {
-      setImages((prev) => prev.filter((img) => img.id !== id))
+      setImages((prev) => {
+        const target = prev.find((img) => img.id === id)
+        if (target) URL.revokeObjectURL(target.previewUrl)
+        return prev.filter((img) => img.id !== id)
+      })
     },
     [setImages]
   )

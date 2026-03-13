@@ -13,6 +13,7 @@ import {
     Play, SkipForward, Loader2, Sparkles
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@renderer/i18n'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/agent/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
@@ -64,7 +65,7 @@ const FileItem = memo(function FileItem({
 }) {
     const fileName = getFileName(path)
     const dirPath = path.replace(fileName, '').replace(/[/\\]$/, '')
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
     return (
@@ -126,7 +127,7 @@ const BranchItem = memo(function BranchItem({
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
     // 使用性能 hook 处理点击外部关闭
@@ -216,7 +217,7 @@ const CommitItem = memo(function CommitItem({
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
     const timeAgo = getTimeAgo(commit.date, language)
 
@@ -291,7 +292,7 @@ const StashItem = memo(function StashItem({
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
     // 使用性能 hook 处理点击外部关闭
@@ -362,7 +363,7 @@ function getTimeAgo(date: Date, language: 'en' | 'zh'): string {
 
 // ==================== 主组件 ====================
 export function GitView() {
-    const { workspacePath, language, openFile, setActiveFile } = useStore()
+    const { workspacePath, language, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
     // 状态
     const [activeTab, setActiveTab] = useState<GitTab>('changes')

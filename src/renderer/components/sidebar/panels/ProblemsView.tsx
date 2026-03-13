@@ -6,12 +6,13 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useMemo } from 'react'
 import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import type { LspDiagnostic } from '@shared/types'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getFileName } from '@shared/utils/pathUtils'
 
 export function ProblemsView() {
-  const { openFile, setActiveFile, language } = useStore()
+  const { openFile, setActiveFile, language } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, language: s.language })))
   
   // 从全局 store 获取诊断数据
   const diagnostics = useDiagnosticsStore(state => state.diagnostics)

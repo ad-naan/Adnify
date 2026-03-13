@@ -83,7 +83,7 @@ export default function LspStatusIndicator() {
 
   // 获取服务器状态
   useEffect(() => {
-    api.lsp.getServerStatus().then(setServerStatus).catch(() => { })
+    api.lsp.getServerStatus().then(setServerStatus).catch((e) => logger.lsp.warn('Failed to get LSP server status:', e))
   }, [])
 
   // 安装服务器

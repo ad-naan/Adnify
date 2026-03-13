@@ -8,6 +8,7 @@ import { toAppError } from '@shared/utils/errorHandler'
 import Store from 'electron-store'
 import * as path from 'path'
 import * as fs from 'fs'
+import { dialog, BrowserWindow } from 'electron'
 import { SECURITY_DEFAULTS, isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
 import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 
@@ -164,7 +165,26 @@ class SecurityManager implements SecurityModule {
       if (this.config.enablePermissionConfirm === false) {
         return true
       }
-      return true
+      // 调用 Electron 原生对话框进行确认，避免引入 IPC 循环
+      const mainWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+      const operationLabels: Partial<Record<OperationType, string>> = {
+        [OperationType.FILE_DELETE]: '删除文件',
+        [OperationType.SHELL_EXECUTE]: '执行命令',
+        [OperationType.GIT_EXEC]: '执行 Git 命令',
+      }
+      const label = operationLabels[operation] ?? operation
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        buttons: ['允许', '拒绝'],
+        defaultId: 1,
+        cancelId: 1,
+        title: '操作确认',
+        message: `是否允许以下操作？`,
+        detail: `操作类型：${label}\n目标：${target}`,
+      })
+      const allowed = response === 0
+      this.sessionStorage.set(sessionKey, allowed)
+      return allowed
     }
 
     return true

@@ -666,7 +666,7 @@ export default function ChatPanel() {
     }
 
     setInput('')
-    setImages([])
+    setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.previewUrl)); return [] })
     await sendMessage(userMessage)
   }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, handoffRequired])
 

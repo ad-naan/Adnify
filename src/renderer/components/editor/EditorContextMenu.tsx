@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { t, TranslationKey } from '@renderer/i18n'
 import { getIncomingCalls, getOutgoingCalls, lspUriToPath } from '@renderer/services/lspService'
@@ -64,7 +65,7 @@ interface EditorContextMenuProps {
 }
 
 export default function EditorContextMenu({ x, y, editor, onClose }: EditorContextMenuProps) {
-  const { language, activeFilePath, openFile, setActiveFile } = useStore()
+  const { language, activeFilePath, openFile, setActiveFile } = useStore(useShallow(s => ({ language: s.language, activeFilePath: s.activeFilePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
   const menuRef = useRef<HTMLDivElement>(null)
   const [callHierarchyResult, setCallHierarchyResult] = useState<CallHierarchyResult | null>(null)
   const [loading, setLoading] = useState(false)

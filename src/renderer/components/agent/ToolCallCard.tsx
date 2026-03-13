@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { ToolCall } from '@renderer/agent/types'
 import { JsonHighlight } from '@utils/jsonHighlight'
@@ -91,7 +92,7 @@ const ToolCallCard = memo(function ToolCallCard({
     defaultExpanded = false,
 }: ToolCallCardProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-    const { language, setTerminalVisible, currentTheme } = useStore()
+    const { language, setTerminalVisible, currentTheme } = useStore(useShallow(s => ({ language: s.language, setTerminalVisible: s.setTerminalVisible, currentTheme: s.currentTheme })))
 
     // 合并 arguments 与 streamingState.partialArgs，实现流式参数实时展示
     const args = useMemo(() => ({
