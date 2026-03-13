@@ -361,11 +361,47 @@ export class McpManager extends EventEmitter {
     // 打开浏览器
     try {
       await shell.openExternal(authUrl)
-      return { success: true, authorizationUrl: authUrl }
     } catch (err) {
       const error = toAppError(err)
       return { success: false, error: `Failed to open browser: ${error.message}` }
     }
+
+    // 通知渲染进程：OAuth 等待中（使用 connecting 状态复用现有 UI）
+    this.sendToRenderer('mcp:serverStatus', {
+      serverId,
+      status: 'connecting',
+      oauthPending: true,
+    })
+
+    // 从 AuthStore 取回 OAuth state，自动监听回调并完成授权
+    McpAuthStore.get(serverId).then((authEntry) => {
+      const oauthState = authEntry?.oauthState
+      if (!oauthState) {
+        logger.mcp?.warn(`[McpManager] No OAuth state found for ${serverId}, cannot auto-complete`)
+        return
+      }
+
+      logger.mcp?.info(`[McpManager] Waiting for OAuth callback for ${serverId}...`)
+      McpOAuthCallback.waitForCallback(oauthState)
+        .then(async (code) => {
+          logger.mcp?.info(`[McpManager] OAuth callback received for ${serverId}, completing auth...`)
+          const result = await this.finishOAuth(serverId, code)
+          if (!result.success) {
+            this.sendToRenderer('mcp:serverStatus', { serverId, status: 'error', error: result.error })
+          }
+        })
+        .catch((err: Error) => {
+          const cancelled = err.message === 'Authorization cancelled' || err.message === 'OAuth callback server stopped'
+          if (!cancelled) {
+            logger.mcp?.error(`[McpManager] OAuth failed for ${serverId}: ${err.message}`)
+            this.sendToRenderer('mcp:serverStatus', { serverId, status: 'error', error: `OAuth failed: ${err.message}` })
+          }
+        })
+    }).catch((err) => {
+      logger.mcp?.error(`[McpManager] Failed to load auth store for ${serverId}:`, err)
+    })
+
+    return { success: true, authorizationUrl: authUrl }
   }
 
   /** 完成 OAuth 认证 */

@@ -48,10 +48,29 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  // 追踪正在等待浏览器授权的服务器（OAuth pending）
+  const [oauthPendingServers, setOauthPendingServers] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadConfigPaths()
   }, [])
+
+  // 当服务器状态变为 connected/error/disconnected/needs_auth 时，清除 OAuth pending 标记
+  useEffect(() => {
+    setOauthPendingServers(prev => {
+      if (prev.size === 0) return prev
+      const next = new Set(prev)
+      let changed = false
+      for (const serverId of prev) {
+        const server = mcpServers.find(s => s.id === serverId)
+        if (!server || server.status === 'connected' || server.status === 'error' || server.status === 'needs_auth') {
+          next.delete(serverId)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [mcpServers])
 
   const loadConfigPaths = async () => {
     const paths = await mcpService.getConfigPaths()
@@ -161,10 +180,17 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
     setActionLoading(`oauth-${serverId}`)
     try {
       await mcpService.startOAuth(serverId)
+      // 标记为等待浏览器授权状态
+      setOauthPendingServers(prev => new Set(prev).add(serverId))
     } catch (err) {
       logger.settings.error('Failed to start OAuth:', err)
     }
     setActionLoading(null)
+  }
+
+  const handleCancelOAuth = async (serverId: string) => {
+    setOauthPendingServers(prev => { const s = new Set(prev); s.delete(serverId); return s })
+    await mcpService.disconnectServer(serverId)
   }
 
   const renderServerCard = (server: McpServerState) => {
@@ -173,6 +199,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
     const isDeleting = actionLoading === `delete-${server.id}`
     const showDeleteConfirm = deleteConfirm === server.id
     const isRemote = server.config.type === 'remote'
+    const isOAuthPending = oauthPendingServers.has(server.id)
 
     // 通过 presetId 查找预设获取使用示例
     const presetId = (server.config as any).presetId
@@ -250,8 +277,27 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              {/* OAuth waiting state */}
+              {!server.config.disabled && isOAuthPending && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />
+                  <span className="text-xs text-orange-400">
+                    {language === 'zh' ? '等待浏览器授权...' : 'Waiting for browser...'}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCancelOAuth(server.id)}
+                    title={language === 'zh' ? '取消' : 'Cancel'}
+                    className="text-text-muted hover:text-red-400 text-xs"
+                  >
+                    {language === 'zh' ? '取消' : 'Cancel'}
+                  </Button>
+                </div>
+              )}
+
               {/* OAuth Button for remote servers needing auth */}
-              {!server.config.disabled && (server.status === 'needs_auth' || server.status === 'needs_registration') && (
+              {!server.config.disabled && !isOAuthPending && (server.status === 'needs_auth' || server.status === 'needs_registration') && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -370,8 +416,25 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
         {/* Expanded Content */}
         {isExpanded && !showDeleteConfirm && (
           <div className="border-t border-border/50 p-5 space-y-6 animate-slide-down">
+            {/* OAuth Pending Banner */}
+            {isOAuthPending && (
+              <div className="flex items-start gap-3 p-4 bg-orange-500/10 rounded-xl border border-orange-500/20 text-orange-300 text-xs font-medium">
+                <Loader2 className="w-4 h-4 mt-0.5 flex-shrink-0 animate-spin" />
+                <div>
+                  <div className="font-bold mb-1">
+                    {language === 'zh' ? '正在等待浏览器授权...' : 'Waiting for browser authorization...'}
+                  </div>
+                  <div className="opacity-80">
+                    {language === 'zh'
+                      ? '请在打开的浏览器窗口中完成授权，完成后将自动连接。'
+                      : 'Please complete authorization in the opened browser window. The server will connect automatically.'}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Error Message */}
-            {server.error && (
+            {server.error && !isOAuthPending && (
               <div className="flex items-start gap-3 p-4 bg-red-500/10 rounded-xl border border-red-500/20 text-red-400 text-xs font-medium">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span className="leading-relaxed">{server.error}</span>
