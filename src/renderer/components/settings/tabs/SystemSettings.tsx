@@ -151,10 +151,11 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             keysToRemove.forEach(key => localStorage.removeItem(key))
 
             // 2. 清除代码库索引
-            try {
-                // @ts-ignore
-                await (window.electronAPI as any).clearIndex?.()
-            } catch { }
+            if (store.workspacePath) {
+                try {
+                    await api.index.clear(store.workspacePath)
+                } catch { }
+            }
 
             // 3. 清除持久化编辑器配置
             await api.settings.set('editorConfig', undefined)

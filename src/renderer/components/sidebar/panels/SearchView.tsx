@@ -6,6 +6,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useCallback, useMemo } from 'react'
 import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search, Crosshair } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { Input } from '../../ui'
@@ -38,7 +39,7 @@ export function SearchView() {
   })
   const [showHistory, setShowHistory] = useState(false)
 
-  const { workspacePath, workspace, openFile, setActiveFile, language, openFiles, setActiveSidePanel } = useStore()
+  const { workspacePath, workspace, openFile, setActiveFile, language, openFiles, setActiveSidePanel } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, workspace: s.workspace, openFile: s.openFile, setActiveFile: s.setActiveFile, language: s.language, openFiles: s.openFiles, setActiveSidePanel: s.setActiveSidePanel })))
 
   const addToHistory = useCallback((searchQuery: string) => {
     if (!searchQuery.trim()) return

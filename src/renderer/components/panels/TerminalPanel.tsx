@@ -11,66 +11,16 @@ import { api } from '@/renderer/services/electronAPI'
 import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2 } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent'
-import { themeManager } from '@/renderer/config/themeConfig'
 import { Button } from '../ui'
 import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
+import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@renderer/i18n'
 
-// xterm 样式
-const XTERM_STYLE = `
-.xterm { font-feature-settings: "liga" 0; position: relative; user-select: none; -ms-user-select: none; -webkit-user-select: none; padding: 4px; }
-.xterm.focus, .xterm:focus { outline: none; }
-.xterm .xterm-helpers { position: absolute; z-index: 5; }
-.xterm .xterm-helper-textarea { padding: 0; border: 0; margin: 0; position: absolute; opacity: 0; left: -9999em; top: 0; width: 0; height: 0; z-index: -5; overflow: hidden; white-space: nowrap; }
-.xterm .composition-view { background: #000; color: #FFF; display: none; position: absolute; white-space: pre; z-index: 1; }
-.xterm .composition-view.active { display: block; }
-.xterm .xterm-viewport { background-color: rgb(var(--background-secondary)); overflow-y: scroll; cursor: default; position: absolute; right: 0; left: 0; top: 0; bottom: 0; }
-.xterm .xterm-screen { position: relative; }
-.xterm .xterm-screen canvas { position: absolute; left: 0; top: 0; }
-.xterm .xterm-scroll-area { visibility: hidden; }
-.xterm-char-measure-element { display: inline-block; visibility: hidden; position: absolute; left: -9999em; top: 0; }
-.xterm.enable-mouse-events { cursor: default; }
-.xterm.xterm-cursor-pointer { cursor: pointer; }
-.xterm.xterm-cursor-crosshair { cursor: crosshair; }
-.xterm .xterm-accessibility, .xterm .xterm-message-overlay { position: absolute; left: 0; top: 0; bottom: 0; right: 0; z-index: 10; color: transparent; }
-.xterm-live-region { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-.xterm-dim { opacity: 0.5; }
-.xterm-underline { text-decoration: underline; }
-.xterm-selection-layer { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
-.xterm-cursor-layer { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; }
-.xterm-link-layer { position: absolute; top: 0; left: 0; z-index: 11; pointer-events: none; }
-.xterm-link-layer a { cursor: pointer; color: rgb(var(--accent)); text-decoration: underline; }
-`
-// 生成终端主题
-function getTerminalTheme(themeName: string) {
-    const theme = themeManager.getThemeById(themeName) || themeManager.getThemeById('adnify-dark')!
-    const themeVars = theme.colors
-    const rgbToHex = (rgb: string) => {
-        if (!rgb) return '#000000'
-        const [r, g, b] = rgb.split(' ').map(Number)
-        return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-    }
-    return {
-        background: rgbToHex(themeVars.background),
-        foreground: rgbToHex(themeVars.textPrimary),
-        cursor: rgbToHex(themeVars.textSecondary),
-        selectionBackground: rgbToHex(themeVars.accent),
-        selectionForeground: rgbToHex(themeVars.textInverted),
-        black: rgbToHex(themeVars.surface),
-        red: rgbToHex(themeVars.statusError),
-        green: rgbToHex(themeVars.statusSuccess),
-        yellow: rgbToHex(themeVars.statusWarning),
-        blue: rgbToHex(themeVars.statusInfo),
-        magenta: rgbToHex(themeVars.accentSubtle),
-        cyan: rgbToHex(themeVars.accent),
-        white: rgbToHex(themeVars.textPrimary),
-    }
-}
-
 const TerminalPanel = memo(function TerminalPanel() {
-    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore()
+    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language })))
     const { setMode } = useModeStore()
     // 从 AgentStore 获取 setInputPrompt
     const setInputPrompt = useAgentStore(state => state.setInputPrompt)
@@ -125,12 +75,13 @@ const TerminalPanel = memo(function TerminalPanel() {
     // ===== 挂载/卸载 xterm 到/从 容器 =====
 
     useEffect(() => {
-        // 当整个终端面板不可见时，卸载所有终端
+        // 当整个终端面板不可见时，销毁所有终端（含 PTY 进程）
         if (!terminalVisible) {
-            for (const id of mountedTerminals.current) {
-                terminalManager.unmountTerminal(id)
-                mountedTerminals.current.delete(id)
+            const ids = managerState.terminals.map(t => t.id)
+            for (const id of ids) {
+                terminalManager.closeTerminal(id)
             }
+            mountedTerminals.current.clear()
             return
         }
 

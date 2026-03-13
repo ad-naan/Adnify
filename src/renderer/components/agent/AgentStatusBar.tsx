@@ -8,7 +8,7 @@
  * 3. 提供 Accept/Reject 操作
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 import {
   X,
   Check,
@@ -42,7 +42,7 @@ interface AgentStatusBarProps {
   onRejectTool?: () => void
 }
 
-export default function AgentStatusBar({
+function AgentStatusBar({
   pendingChanges,
   isStreaming,
   isAwaitingApproval,
@@ -366,3 +366,5 @@ function FileChangeRow({ change, onAccept, onReject, onReview }: FileChangeRowPr
     </div>
   )
 }
+
+export default memo(AgentStatusBar)

@@ -79,7 +79,9 @@ export function IndexSettings({ language }: IndexSettingsProps) {
         const status = await api.index.status(workspacePath)
         setIndexStatus(status)
         if (status.mode) setIndexMode(status.mode)
-      } catch { }
+      } catch (e) {
+        logger.ui.warn('[IndexSettings] Failed to load index status:', e)
+      }
     }
 
     loadStatus()

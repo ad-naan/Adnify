@@ -14,7 +14,7 @@ import { ShellView } from './panels/ShellView'
 import { EmotionAwarenessPanel } from '../agent/EmotionAwarenessPanel'
 
 export default function Sidebar() {
-    const { activeSidePanel } = useStore()
+    const activeSidePanel = useStore(s => s.activeSidePanel)
 
     if (!activeSidePanel) return null
 

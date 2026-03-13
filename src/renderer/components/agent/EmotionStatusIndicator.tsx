@@ -127,6 +127,7 @@ export const EmotionStatusIndicator: React.FC = () => {
 
   useEffect(() => {
     emotionDetectionEngine.start()
+    return () => emotionDetectionEngine.stop()
   }, [])
 
   useEffect(() => {
@@ -134,11 +135,12 @@ export const EmotionStatusIndicator: React.FC = () => {
     const newState = emotion.state
 
     // Base Notification Logic (was in EmotionStatusIndicator & StateNotice)
+    let timer: ReturnType<typeof setTimeout> | undefined
     if (prevStateRef.current !== newState) {
       setJustChanged(true)
       setMessageIndex(0)
 
-      const timer = setTimeout(() => setJustChanged(false), 8000)
+      timer = setTimeout(() => setJustChanged(false), 8000)
 
       // If significant, trigger rules engine / actions (from Companion logic)
       if (newState !== 'flow' && prevStateRef.current !== newState) {
@@ -160,9 +162,8 @@ export const EmotionStatusIndicator: React.FC = () => {
       }
       prevStateRef.current = newState
       lastNoticeTimeRef.current = Date.now()
-
-      return () => clearTimeout(timer)
     }
+    return () => { if (timer !== undefined) clearTimeout(timer) }
   }, [emotion, showMessage, buildActionButtons, dismissActiveMessage])
 
   // Event Subscriptions

@@ -70,12 +70,27 @@ export function cleanupTerminals(): void {
 const DANGEROUS_PATTERNS = [
   /rm\s+-rf\s+.*\//i,  // rm -rf /
   /wget\s+.*\s+-O\s+/i,  // 下载文件
-  /curl\s+.*\s+-o\s+/i,  // 下载文件
+  /curl\s+.*\s+(-o\s+|--output\s+)/i,  // 下载文件
+  /curl\s+.*\|\s*(bash|sh|python|node)/i,  // curl | sh 远程执行
+  /wget\s+.*\|\s*(bash|sh|python|node)/i,  // wget | sh 远程执行
   /powershell\s+-e(ncodedCommand)?.*frombase64/i,  // PowerShell 编码命令
   /\/etc\/passwd|\/etc\/shadow/i,
-  /windowssystem32/i,
+  /Windows\\System32/i,
   /registry/i,
+  /\beval\s*\(/i,  // eval 执行
+  /\bchmod\s+[0-7]*7[0-7]*\s/i,  // chmod 危险权限
+  /\bsudo\b/i,  // sudo 提权
 ]
+
+// Shell 注入字符检测（用于 args 参数）
+const SHELL_INJECTION_CHARS = /[;&|`$(){}<>]/
+
+/**
+ * 检测单个参数是否包含 shell 注入字符
+ */
+function containsShellInjection(arg: string): boolean {
+  return SHELL_INJECTION_CHARS.test(arg)
+}
 
 // 命令安全检查结果
 interface SecurityCheckResult {
@@ -133,14 +148,12 @@ class SecureCommandParser {
     timeout: number
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
-      // 使用 spawn 防止 shell 注入
+      // 使用 spawn 直接执行（不经过 shell），防止注入攻击
       const child = spawn(command, args, {
         cwd,
         timeout,
-        shell: true, // 启用 shell 以支持 && 等操作，但需依赖白名单和危险模式检测来保证安全
         env: {
           ...process.env,
-          // 移除可能导致问题的环境变量
           PATH: process.env.PATH,
         },
       })
@@ -233,6 +246,14 @@ export function registerSecureTerminalHandlers(
         reason: whitelistCheck.reason,
       })
       return { success: false, error: whitelistCheck.reason }
+    }
+
+    // 3.5. args 注入字符检测（防止通过参数注入 shell 特殊字符）
+    const injectedArg = args.find(containsShellInjection)
+    if (injectedArg) {
+      const reason = `参数包含危险字符: "${injectedArg}"`
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, { reason })
+      return { success: false, error: reason }
     }
 
     // 4. 权限检查（用户确认）
@@ -364,6 +385,14 @@ export function registerSecureTerminalHandlers(
         reason: dangerousCheck.reason,
       })
       return { success: false, error: dangerousCheck.reason }
+    }
+
+    // 3.5. args 注入字符检测
+    const injectedArg = args.find(containsShellInjection)
+    if (injectedArg) {
+      const reason = `参数包含危险字符: "${injectedArg}"`
+      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, { reason })
+      return { success: false, error: reason }
     }
 
     // 4. 权限检查
