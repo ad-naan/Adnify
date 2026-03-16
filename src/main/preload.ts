@@ -256,8 +256,6 @@ export interface ElectronAPI {
   }>
 
   // Security Management
-  getAuditLogs: (limit?: number) => Promise<any[]>
-  clearAuditLogs: () => Promise<boolean>
   getPermissions: () => Promise<Record<string, string>>
   resetPermissions: () => Promise<boolean>
 
@@ -563,8 +561,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   gitExecSecure: (args: string[], cwd: string) => ipcRenderer.invoke('git:execSecure', args, cwd),
 
-  getAuditLogs: (limit = 100) => ipcRenderer.invoke('security:getAuditLogs', limit),
-  clearAuditLogs: () => ipcRenderer.invoke('security:clearAuditLogs'),
   getPermissions: () => ipcRenderer.invoke('security:getPermissions'),
   resetPermissions: () => ipcRenderer.invoke('security:resetPermissions'),
 

@@ -159,13 +159,6 @@ export interface McpToolWithServer extends McpTool {
   serverId: string
 }
 
-export interface AuditLog {
-  timestamp: string
-  operation: string
-  target: string
-  success: boolean
-  detail?: string
-}
 
 export interface SecureCommandRequest {
   command: string
@@ -478,8 +471,6 @@ export interface ElectronAPI {
   }>
 
   // Security
-  getAuditLogs: (limit?: number) => Promise<AuditLog[]>
-  clearAuditLogs: () => Promise<boolean>
   getPermissions: () => Promise<Record<string, string>>
   resetPermissions: () => Promise<boolean>
 
