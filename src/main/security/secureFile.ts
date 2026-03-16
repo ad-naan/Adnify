@@ -128,6 +128,12 @@ export function registerSecureFileHandlers(
   // 读取文件（无弹窗，使用拆分的 fileUtils）
   ipcMain.handle('file:read', async (event, filePath: string) => {
     if (!filePath) return null
+
+    // 跳过虚拟协议路径（如 git-diff://、diff:// 等），这些不是真实文件路径
+    if (/^[a-zA-Z][\w-]*:\/\//.test(filePath) && !(/^[a-zA-Z]:\\/.test(filePath))) {
+      return null
+    }
+
     const workspace = getWorkspaceSessionFn(event)
 
     // 强制工作区边界

@@ -94,6 +94,14 @@ export function defineMonacoTheme(
       'editorSuggestWidget.selectedBackground': accent + '20',
       'editorHoverWidget.background': surface,
       'editorHoverWidget.border': border,
+      // Diff Editor 颜色
+      'diffEditor.insertedTextBackground': isLight ? '#28a74520' : '#23863620',
+      'diffEditor.removedTextBackground': isLight ? '#d7343420' : '#da363620',
+      'diffEditor.insertedLineBackground': isLight ? '#28a74515' : '#23863615',
+      'diffEditor.removedLineBackground': isLight ? '#d7343415' : '#da363615',
+      'diffEditor.border': border,
+      'diffEditorGutter.insertedLineBackground': isLight ? '#28a74520' : '#23863620',
+      'diffEditorGutter.removedLineBackground': isLight ? '#d7343420' : '#da363620',
     }
   })
 }

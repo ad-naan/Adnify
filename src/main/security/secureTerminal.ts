@@ -85,11 +85,21 @@ const DANGEROUS_PATTERNS = [
 // Shell 注入字符检测（用于 args 参数）
 const SHELL_INJECTION_CHARS = /[;&|`$(){}<>]/
 
+// Git 参数注入检测（仅检测真正危险的 shell 执行字符，允许 git ref 语法如 @{upstream}、HEAD~1）
+const GIT_ARG_INJECTION_CHARS = /[;&|`$]/
+
 /**
  * 检测单个参数是否包含 shell 注入字符
  */
 function containsShellInjection(arg: string): boolean {
   return SHELL_INJECTION_CHARS.test(arg)
+}
+
+/**
+ * 检测 git 参数是否包含注入字符（比通用检测更宽松，允许 {} <> () 用于 git ref）
+ */
+function containsGitArgInjection(arg: string): boolean {
+  return GIT_ARG_INJECTION_CHARS.test(arg)
 }
 
 // 命令安全检查结果
@@ -387,8 +397,8 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: dangerousCheck.reason }
     }
 
-    // 3.5. args 注入字符检测
-    const injectedArg = args.find(containsShellInjection)
+    // 3.5. args 注入字符检测（git 使用宽松规则，允许 @{upstream} 等 ref 语法）
+    const injectedArg = args.find(containsGitArgInjection)
     if (injectedArg) {
       const reason = `参数包含危险字符: "${injectedArg}"`
       securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, { reason })
@@ -418,7 +428,13 @@ export function registerSecureTerminalHandlers(
       })
 
       if (result.exitCode !== 0) {
-        logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
+        // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
+        const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+        if (isQueryCommand) {
+          logger.security.debug('[Git] dugite query returned non-zero:', args)
+        } else {
+          logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
+        }
       }
 
       return {
@@ -439,7 +455,12 @@ export function registerSecureTerminalHandlers(
         })
 
         if (result.exitCode !== 0) {
-          logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
+          const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+          if (isQueryCommand) {
+            logger.security.debug('[Git] spawn query returned non-zero:', args)
+          } else {
+            logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
+          }
         }
 
         return {
