@@ -21,6 +21,7 @@ import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
 import { toRelativePath } from '@shared/utils/pathUtils'
 import { isLongRunningCommand } from './commandRuntime'
+import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 
 // ===== 辅助函数 =====
 
@@ -412,6 +413,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const newContent = lines.join('\n')
+            internalWriteTracker.mark(path)
             const success = await api.file.write(path, newContent)
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
@@ -470,6 +472,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             if (originalContent === '') {
+                internalWriteTracker.mark(path)
                 const success = await api.file.write(path, content)
                 if (success) fileCacheService.markFileAsRead(path, content)
                 return success
@@ -504,6 +507,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 logger.agent.warn(`[edit_file] ${path}: Detected ${warnings.length} potential issues`, warnings)
             }
 
+            internalWriteTracker.mark(path)
             const success = await api.file.write(path, newContent)
             if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
@@ -587,6 +591,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const newContent = result.newContent!
+            internalWriteTracker.mark(path)
             const writeSuccess = await api.file.write(path, newContent)
             if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
 
@@ -629,6 +634,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const path = resolvePath(args.path, ctx.workspacePath)
         const content = args.content as string
         const originalContent = await api.file.read(path) || ''
+        internalWriteTracker.mark(path)
         const success = await api.file.write(path, content)
         if (!success) return { success: false, result: '', error: 'Failed to write file' }
 
@@ -662,6 +668,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         }
 
         const content = (args.content as string) || ''
+        internalWriteTracker.mark(path)
         const success = await api.file.write(path, content)
 
         if (success) {
@@ -1002,6 +1009,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // 保存需求文档 (markdown)
             const mdPath = `${planDir}/${planId}.md`
+            internalWriteTracker.mark(mdPath)
             await api.file.write(mdPath, requirementsDoc)
 
             // 构建任务对象
@@ -1036,6 +1044,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // 保存规划文件 (json)
             const jsonPath = `${planDir}/${planId}.json`
+            internalWriteTracker.mark(jsonPath)
             await api.file.write(jsonPath, JSON.stringify(plan, null, 2))
 
             // 添加到 store 并打开 TaskBoard
@@ -1094,6 +1103,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 const mdPath = `${ctx.workspacePath}/.adnify/plan/${plan.requirementsDoc}`
                 const existingContent = await api.file.read(mdPath)
                 const newContent = `${existingContent}\n\n---\n## Updates\n${updateRequirements}`
+                internalWriteTracker.mark(mdPath)
                 await api.file.write(mdPath, newContent)
                 changes.push('Updated requirements document')
             }
@@ -1150,6 +1160,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const updatedPlan = store.plans.find(p => p.id === planId)
             if (updatedPlan) {
                 const jsonPath = `${ctx.workspacePath}/.adnify/plan/${planId}.json`
+                internalWriteTracker.mark(jsonPath)
                 await api.file.write(jsonPath, JSON.stringify(updatedPlan, null, 2))
             }
 
