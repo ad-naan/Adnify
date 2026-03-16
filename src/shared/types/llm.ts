@@ -120,7 +120,7 @@ export interface LLMToolCall {
 }
 
 export interface LLMStreamChunk {
-    type: 'text' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end' | 'reasoning' | 'error'
+    type: 'text' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available' | 'reasoning' | 'error'
     content?: string
     toolCall?: LLMToolCall
     toolCallDelta?: {

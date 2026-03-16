@@ -58,9 +58,9 @@ const FileItem = memo(function FileItem({
     path: string
     status: string
     staged: boolean
-    onStage: () => void
-    onUnstage: () => void
-    onDiscard: () => void
+    onStage?: () => void
+    onUnstage?: () => void
+    onDiscard?: () => void
     onClick: () => void
 }) {
     const fileName = getFileName(path)
@@ -80,7 +80,7 @@ const FileItem = memo(function FileItem({
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {staged ? (
-                    <button
+                    onUnstage && <button
                         onClick={(e) => { e.stopPropagation(); onUnstage() }}
                         className="p-1 hover:bg-surface-active rounded"
                         title={tt('git.unstage')}
@@ -89,20 +89,20 @@ const FileItem = memo(function FileItem({
                     </button>
                 ) : (
                     <>
-                        <button
+                        {onDiscard && <button
                             onClick={(e) => { e.stopPropagation(); onDiscard() }}
                             className="p-1 hover:bg-surface-active rounded"
                             title={tt('git.discard')}
                         >
                             <Undo2 className="w-3 h-3 text-text-muted hover:text-red-400" />
-                        </button>
-                        <button
+                        </button>}
+                        {onStage && <button
                             onClick={(e) => { e.stopPropagation(); onStage() }}
                             className="p-1 hover:bg-surface-active rounded"
                             title={tt('git.stage')}
                         >
                             <Plus className="w-3 h-3 text-text-muted" />
-                        </button>
+                        </button>}
                     </>
                 )}
             </div>
@@ -162,7 +162,7 @@ const BranchItem = memo(function BranchItem({
                     ) : null}
                 </div>
             ) : null}
-            {!branch.current && !branch.remote && (
+            {!branch.current && (
                 <div className="relative" ref={menuRef}>
                     <button
                         ref={buttonRef}
@@ -671,6 +671,25 @@ Commit message:`
         }
     }
 
+    const handleDeleteRemoteBranch = async (name: string) => {
+        const { globalConfirm } = await import('@components/common/ConfirmDialog')
+        const confirmed = await globalConfirm({
+            title: tt('git.deleteBranch'),
+            message: t('git.deleteBranchConfirm', language, { name }),
+            confirmText: tt('delete'),
+            variant: 'danger',
+        })
+        if (confirmed) {
+            const result = await gitService.deleteRemoteBranch(name)
+            if (result.success) {
+                refreshStatus()
+                toast.success(tt('git.branchDeleted'), name)
+            } else {
+                toast.error(tt('git.mergeFailed'), result.error)
+            }
+        }
+    }
+
     const handleMergeBranch = async (name: string) => {
         const result = await gitService.mergeBranch(name)
         if (result.success) {
@@ -1114,7 +1133,6 @@ Commit message:`
                                         status="unmerged"
                                         staged={false}
                                         onStage={() => handleStage(path)}
-                                        onUnstage={() => { }}
                                         onDiscard={() => handleDiscard(path)}
                                         onClick={() => setConflictFile(normalizePath(`${workspacePath}/${path}`))}
                                     />
@@ -1146,9 +1164,7 @@ Commit message:`
                                         path={file.path}
                                         status={file.status}
                                         staged={true}
-                                        onStage={() => { }}
                                         onUnstage={() => handleUnstage(file.path)}
-                                        onDiscard={() => { }}
                                         onClick={() => handleFileClick(file.path, file.status, true)}
                                     />
                                 ))}
@@ -1182,7 +1198,6 @@ Commit message:`
                                                 status={file.status}
                                                 staged={false}
                                                 onStage={() => handleStage(file.path)}
-                                                onUnstage={() => { }}
                                                 onDiscard={() => handleDiscard(file.path)}
                                                 onClick={() => handleFileClick(file.path, file.status, false)}
                                             />
@@ -1194,7 +1209,6 @@ Commit message:`
                                                 status="untracked"
                                                 staged={false}
                                                 onStage={() => handleStage(path)}
-                                                onUnstage={() => { }}
                                                 onDiscard={() => handleDiscard(path)}
                                                 onClick={() => handleFileClick(path, 'added', false)}
                                             />
@@ -1285,9 +1299,9 @@ Commit message:`
                                         key={branch.name}
                                         branch={branch}
                                         onCheckout={() => handleCheckoutBranch(branch.name)}
-                                        onDelete={() => { }}
-                                        onMerge={() => { }}
-                                        onRebase={() => { }}
+                                        onDelete={() => handleDeleteRemoteBranch(branch.name)}
+                                        onMerge={() => handleMergeBranch(branch.name)}
+                                        onRebase={() => handleRebaseBranch(branch.name)}
                                     />
                                 ))}
                             </div>

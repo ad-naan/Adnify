@@ -243,11 +243,16 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const matches: string[] = []
+            const searchRegex = isRegex ? new RegExp(pattern, 'gi') : null
 
             content.split('\n').forEach((line, index) => {
-                const matched = isRegex
-                    ? new RegExp(pattern, 'gi').test(line)
-                    : line.toLowerCase().includes(pattern.toLowerCase())
+                let matched: boolean
+                if (searchRegex) {
+                    searchRegex.lastIndex = 0
+                    matched = searchRegex.test(line)
+                } else {
+                    matched = line.toLowerCase().includes(pattern.toLowerCase())
+                }
                 if (matched) matches.push(`${pathArg}:${index + 1}: ${line.trim()}`)
             })
 
@@ -695,6 +700,18 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     async delete_file_or_folder(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath)
         const success = await api.file.delete(path)
+        if (success) {
+            composerService.ensureSession()
+            composerService.addChange({
+                filePath: path,
+                relativePath: toRelativePath(path, ctx.workspacePath || ''),
+                oldContent: null,
+                newContent: null,
+                changeType: 'delete',
+                linesAdded: 0,
+                linesRemoved: 0,
+            })
+        }
         return { success, result: success ? 'Deleted successfully' : 'Failed to delete' }
     },
 
@@ -760,7 +777,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 resultText = `[Timed out after ${timeout / 1000}s]\n${output}`
             }
 
-            const isSuccess = exitCode === 0 || (hasOutput && !timedOut)
+            const isSuccess = exitCode === 0 && !timedOut
             return {
                 success: isSuccess,
                 result: resultText,

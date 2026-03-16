@@ -252,23 +252,39 @@ async function runExecutionLoop(plan: TaskPlan, workspacePath: string): Promise<
     const store = useAgentStore.getState()
 
     while (isRunning && scheduler && !scheduler.isAborted) {
-        // 获取下一个可执行任务
-        const task = plan.executionMode === 'sequential'
-            ? scheduler.getNextTask(plan)
-            : null // 并行模式稍后处理
+        if (plan.executionMode === 'parallel') {
+            // 并行模式：获取可并行执行的任务批次
+            const batch = scheduler.getParallelBatch(plan)
 
-        if (!task) {
-            // 检查是否完成
-            if (scheduler.isComplete(plan)) {
-                await completeExecution(plan)
-            } else if (!scheduler.hasRunningTasks()) {
-                await completeExecution(plan)
+            if (batch.length === 0) {
+                // 无可执行任务，检查是否全部完成
+                if (scheduler.isComplete(plan)) {
+                    await completeExecution(plan)
+                } else if (!scheduler.hasRunningTasks()) {
+                    await completeExecution(plan)
+                }
+                break
             }
-            break
-        }
 
-        // 执行任务
-        await executeTask(task, plan, workspacePath)
+            // 并行执行批次中的所有任务
+            await Promise.all(batch.map(task => executeTask(task, plan, workspacePath)))
+        } else {
+            // 顺序模式：获取下一个可执行任务
+            const task = scheduler.getNextTask(plan)
+
+            if (!task) {
+                // 检查是否完成
+                if (scheduler.isComplete(plan)) {
+                    await completeExecution(plan)
+                } else if (!scheduler.hasRunningTasks()) {
+                    await completeExecution(plan)
+                }
+                break
+            }
+
+            // 执行任务
+            await executeTask(task, plan, workspacePath)
+        }
 
         // 重新获取最新的 plan 状态
         const freshPlan = store.getPlan(plan.id)

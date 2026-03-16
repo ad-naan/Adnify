@@ -16,6 +16,7 @@ import { Button } from '../ui'
 import { toast } from '@components/common/ToastProvider'
 import type { DebugConfig, DebugEvent } from '@renderer/types/electron'
 import { getFileName, getDirPath } from '@shared/utils/pathUtils'
+import { safeOpenFile } from '@/renderer/utils/fileUtils'
 
 type DebugTab = 'variables' | 'callstack' | 'breakpoints' | 'console'
 
@@ -350,9 +351,8 @@ export default function DebugPanel() {
   }
 
   // 跳转到断点位置
-  const gotoBreakpoint = (filePath: string, line: number) => {
-    // 打开文件并跳转
-    window.dispatchEvent(new CustomEvent('open-file', { detail: { path: filePath } }))
+  const gotoBreakpoint = async (filePath: string, line: number) => {
+    await safeOpenFile(filePath, { language })
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('editor:goto-line', { detail: { line, column: 1 } }))
     }, 100)

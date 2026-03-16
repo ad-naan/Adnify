@@ -7,8 +7,6 @@ import { logger } from '@utils/Logger'
 import {
   startLspServer,
   didOpenDocument,
-  goToDefinition,
-  lspUriToPath,
   onDiagnostics,
 } from '@services/lspService'
 import { registerLspProviders } from '@services/lspProviders'
@@ -55,53 +53,6 @@ export function useLspIntegration() {
     if (Array.isArray(lspDisposables)) {
       disposablesRef.current.push(...lspDisposables)
     }
-
-    // 注册定义提供者（仅 TypeScript/JavaScript）
-    const defDisposable = monaco.languages.registerDefinitionProvider(
-      ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
-      {
-        provideDefinition: async (model, position) => {
-          try {
-            const filePath = model.uri.fsPath || lspUriToPath(model.uri.toString())
-            const result = await goToDefinition(
-              filePath,
-              position.lineNumber - 1,
-              position.column - 1
-            )
-
-            if (!result) return null
-
-            const locations = Array.isArray(result) ? result : [result]
-            if (locations.length === 0) return null
-
-            return locations
-              .filter((loc: any) => loc && (loc.uri || loc.targetUri))
-              .map((loc: any) => {
-                const uri = loc.uri || loc.targetUri
-                const range = loc.range || loc.targetSelectionRange || loc.targetRange
-
-                if (!uri || !range || !range.start) return null
-
-                return {
-                  uri: monaco.Uri.parse(uri),
-                  range: {
-                    startLineNumber: range.start.line + 1,
-                    startColumn: range.start.character + 1,
-                    endLineNumber: range.end.line + 1,
-                    endColumn: range.end.character + 1,
-                  },
-                }
-              })
-              .filter(Boolean) as import('monaco-editor').languages.Location[]
-          } catch (error) {
-            logger.ui.error('[LSP] Definition provider error:', error)
-            return null
-          }
-        },
-      }
-    )
-
-    disposablesRef.current.push(defDisposable)
 
     // 注册路径链接提供者
     const linkDisposable = monaco.languages.registerLinkProvider(PATH_LINK_LANGUAGES, pathLinkService.createLinkProvider())
