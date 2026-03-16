@@ -141,9 +141,14 @@ class GitService {
         if (!targetRoot) return null
 
         try {
+            // 并行执行 branch 和 status 命令（status 不依赖 branch 结果，可以并行）
+            const [branchResult, statusResult] = await Promise.all([
+                this.exec(['branch', '--show-current'], targetRoot),
+                this.exec(['status', '--porcelain=v1', '-uall'], targetRoot),
+            ])
+
             // 获取分支信息
             let branch = 'HEAD'
-            const branchResult = await this.exec(['branch', '--show-current'], targetRoot)
             if (branchResult.exitCode === 0 && branchResult.stdout.trim()) {
                 branch = branchResult.stdout.trim()
             } else {
@@ -153,7 +158,7 @@ class GitService {
                 }
             }
 
-            // 获取 ahead/behind
+            // 获取 ahead/behind（依赖 branch 结果）
             let ahead = 0, behind = 0
             try {
                 const aheadBehind = await this.exec(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], targetRoot)
@@ -165,9 +170,6 @@ class GitService {
                     }
                 }
             } catch { /* 无上游 */ }
-
-            // 获取状态
-            const statusResult = await this.exec(['status', '--porcelain=v1', '-uall'], targetRoot)
 
             const staged: GitFileChange[] = []
             const unstaged: GitFileChange[] = []

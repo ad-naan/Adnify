@@ -52,6 +52,9 @@ interface ClientState {
 
 export class McpClient extends EventEmitter {
   private state: ClientState
+  private reconnectAttempts = 0
+  private readonly maxReconnectAttempts = 5
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(config: McpServerConfig) {
     super()
@@ -108,6 +111,7 @@ export class McpClient extends EventEmitter {
       logger.mcp?.error(`[MCP:${config.id}] Connection failed: ${error.code}`, error)
       if (this.state.status !== 'needs_auth' && this.state.status !== 'needs_registration') {
         this.updateStatus('error', error.message)
+        this.scheduleReconnect()
       }
       throw error
     }
@@ -157,6 +161,7 @@ export class McpClient extends EventEmitter {
     this.state.transport = transport
 
     await this.refreshCapabilities()
+    this.reconnectAttempts = 0
     this.updateStatus('connected')
     logger.mcp?.info(`[MCP:${config.id}] Connected (local)`)
   }
@@ -221,6 +226,7 @@ export class McpClient extends EventEmitter {
         this.state.transport = transport
 
         await this.refreshCapabilities()
+        this.reconnectAttempts = 0
         this.updateStatus('connected')
         logger.mcp?.info(`[MCP:${config.id}] Connected (${name})`)
         return
@@ -299,6 +305,12 @@ export class McpClient extends EventEmitter {
 
   /** 断开连接 */
   async disconnect(): Promise<void> {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    this.reconnectAttempts = 0
+
     if (this.state.status === 'disconnected') {
       return
     }
@@ -478,6 +490,29 @@ export class McpClient extends EventEmitter {
   }
 
   // =================== 私有方法 ===================
+
+  /** 指数退避自动重连 */
+  private scheduleReconnect(): void {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      logger.mcp?.warn(`[MCP:${this.id}] Max reconnect attempts reached (${this.maxReconnectAttempts})`)
+      return
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 60000) // 1s, 2s, 4s, 8s, 16s, max 60s
+    this.reconnectAttempts++
+
+    logger.mcp?.info(`[MCP:${this.id}] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+
+    this.reconnectTimer = setTimeout(async () => {
+      try {
+        await this.connect()
+        this.reconnectAttempts = 0 // 成功后重置
+      } catch (err) {
+        logger.mcp?.error(`[MCP:${this.id}] Reconnect failed:`, err)
+        this.scheduleReconnect() // 继续尝试
+      }
+    }, delay)
+  }
 
   private registerNotificationHandlers(client: Client): void {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {

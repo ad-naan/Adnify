@@ -183,9 +183,15 @@ export const createCheckpointSlice: StateCreator<
 
         logger.agent.info('[Checkpoint] Created checkpoint:', checkpoint.id, 'for message:', messageId, 'with files:', Object.keys(fileSnapshots), 'images:', images?.length ?? 0, 'contextItems:', contextItems?.length ?? 0)
 
-        set(state => ({
-            messageCheckpoints: [...state.messageCheckpoints, checkpoint],
-        }))
+        set(state => {
+            let newCheckpoints = [...state.messageCheckpoints, checkpoint]
+            // 限制 checkpoint 数量，超过时删除最旧的
+            const MAX_CHECKPOINTS = 15
+            if (newCheckpoints.length > MAX_CHECKPOINTS) {
+                newCheckpoints = newCheckpoints.slice(-MAX_CHECKPOINTS)
+            }
+            return { messageCheckpoints: newCheckpoints }
+        })
 
         return checkpoint.id
     },

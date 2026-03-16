@@ -11,7 +11,7 @@
  */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { oneDark, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore } from '@store'
 import * as Diff from 'diff'

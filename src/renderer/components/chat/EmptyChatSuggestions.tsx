@@ -63,7 +63,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
             <div className="flex flex-col gap-2 w-full relative z-10">
                 {suggestions.map((item, index) => (
                     <motion.button
-                        key={index}
+                        key={item.prompt}
                         initial={{ opacity: 0, y: 10, filter: 'blur(4px)' }}
                         animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
                         transition={{ delay: index * 0.08 + 0.1, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}

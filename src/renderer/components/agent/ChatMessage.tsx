@@ -7,7 +7,7 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Search, Wrench } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import aiAvatar from '../../assets/icon/ai-avatar.gif'
 import { themeManager } from '../../config/themeConfig'
@@ -923,7 +923,7 @@ const ChatMessage = React.memo(({
                         const imgSrc = `data:${img.source.media_type};base64,${img.source.data}`
                         return (
                           <div
-                            key={i}
+                            key={`img-${img.source.media_type}-${i}`}
                             onClick={() => setPreviewImage(imgSrc)}
                             className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
                           >

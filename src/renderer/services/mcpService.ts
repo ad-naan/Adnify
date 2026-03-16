@@ -147,12 +147,26 @@ class McpService {
 
   /** 调用 MCP 工具（带超时保护 + OAuth 自动刷新） */
   async callTool(request: McpToolCallRequest, timeoutMs = 60_000): Promise<McpToolCallResult> {
-    const execute = () => Promise.race([
-      api.mcp.callTool(request),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`MCP tool call timed out after ${timeoutMs}ms`)), timeoutMs)
-      ),
-    ])
+    const execute = () => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+      return (async () => {
+        try {
+          const result = await Promise.race([
+            api.mcp.callTool(request),
+            new Promise<never>((_, reject) => {
+              controller.signal.addEventListener('abort', () => {
+                reject(new Error(`MCP tool call timed out after ${timeoutMs}ms: ${request.toolName}`))
+              })
+            }),
+          ])
+          return result
+        } finally {
+          clearTimeout(timeoutId)
+        }
+      })()
+    }
 
     try {
       const result = await execute()

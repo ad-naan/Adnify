@@ -156,9 +156,9 @@ export function ProblemsView() {
 
                 {isExpanded && (
                   <div className="flex flex-col gap-0.5 mt-0.5 mb-2">
-                    {diags.map((diag, idx) => (
+                    {diags.map((diag) => (
                       <div
-                        key={idx}
+                        key={`${diag.range.start.line}-${diag.message.slice(0, 30)}`}
                         onClick={() => handleDiagnosticClick(uri, diag)}
                         className="flex items-start gap-2 px-3 py-2 mx-2 ml-6 rounded-md cursor-pointer hover:bg-surface-hover group border border-transparent hover:border-border-subtle transition-all"
                       >

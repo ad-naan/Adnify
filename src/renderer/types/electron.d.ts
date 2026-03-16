@@ -355,6 +355,9 @@ export interface ElectronAPI {
   deleteFile: (path: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
+  searchStream: (query: string, rootPath: string | string[], options: SearchFilesOptions, searchId: string) => Promise<void>
+  onSearchResults: (callback: (searchId: string, results: SearchFileResult[]) => void) => () => void
+  onSearchDone: (callback: (searchId: string) => void) => () => void
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => () => void
 
   // Settings

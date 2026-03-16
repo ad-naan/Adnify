@@ -142,11 +142,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
   }, [childrenCache, loadingDirs])
 
-  // 当 items (根目录内容) 变化时，清除子目录缓存以确保一致性
-  // 这使得刷新或折叠后重新展开目录时能获取最新内容
+  // 当 items (根目录内容) 变化时，增量失效子目录缓存
+  // 只重置直接子项缓存，保留其他目录的有效缓存以提升性能
   useEffect(() => {
     setChildrenCache(new Map())
-    directoryCacheService.clear()
+    if (items.length > 0 && items[0]?.path) {
+      const rootPath = items[0].path.split('/').slice(0, -1).join('/') || items[0].path
+      directoryCacheService.invalidateTree(rootPath)
+    }
   }, [items])
 
   // 展开文件夹时加载子目录

@@ -65,6 +65,11 @@ function createGroupedAPI() {
       openInBrowser: (path: string) => raw.openInBrowser(path),
       search: (query: string, rootPath: string | string[], options?: Parameters<typeof raw.searchFiles>[2]) =>
         raw.searchFiles(query, rootPath, options),
+      /** 流式搜索 — 结果通过事件增量推送 */
+      searchStream: (query: string, rootPath: string | string[], options: Parameters<typeof raw.searchFiles>[2], searchId: string) =>
+        raw.searchStream(query, rootPath, options!, searchId),
+      onSearchResults: (callback: Parameters<typeof raw.onSearchResults>[0]) => raw.onSearchResults(callback),
+      onSearchDone: (callback: Parameters<typeof raw.onSearchDone>[0]) => raw.onSearchDone(callback),
       onChanged: (callback: Parameters<typeof raw.onFileChanged>[0]) => raw.onFileChanged(callback),
     },
 
