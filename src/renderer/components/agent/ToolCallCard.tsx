@@ -25,7 +25,7 @@ import { RichContentRenderer } from './RichContentRenderer'
 import InlineDiffPreview from './InlineDiffPreview'
 import { getFileName } from '@shared/utils/pathUtils'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { themeManager } from '../../config/themeConfig'
 

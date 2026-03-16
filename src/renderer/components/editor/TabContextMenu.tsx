@@ -85,10 +85,10 @@ export function TabContextMenu({
     >
       {menuItems.map((item, index) =>
         item.type === 'separator' ? (
-          <div key={index} className="h-px bg-border-subtle my-1" />
+          <div key={`separator-${index}`} className="h-px bg-border-subtle my-1" />
         ) : (
           <button
-            key={index}
+            key={item.label || `item-${index}`}
             onClick={() => { item.action?.(); onClose() }}
             disabled={item.disabled}
             className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"

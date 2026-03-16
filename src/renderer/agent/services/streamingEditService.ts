@@ -110,6 +110,17 @@ class StreamingEditService {
 		this.notifyListeners(editId, state)
 		this.notifyGlobalListeners()
 
+		// 完成后 10 秒自动清理
+		setTimeout(() => {
+			const s = this.activeEdits.get(editId)
+			if (s?.isComplete) {
+				this.filePathIndex.delete(s.filePath)
+				this.activeEdits.delete(editId)
+				this.listeners.delete(editId)
+				this.notifyGlobalListeners()
+			}
+		}, 10000)
+
 		return state
 	}
 

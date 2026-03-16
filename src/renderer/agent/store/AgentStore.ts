@@ -400,6 +400,15 @@ export const selectBranches = (state: AgentStore) => {
     const filtered = allBranches.filter(b => b.id !== MAINLINE_BRANCH_ID)
     filteredBranchesCache.set(threadId, { branches: allBranches, filtered })
 
+    // 清理不存在线程的缓存
+    if (filteredBranchesCache.size > 100) {
+        for (const key of filteredBranchesCache.keys()) {
+            if (!state.threads[key]) {
+                filteredBranchesCache.delete(key)
+            }
+        }
+    }
+
     return filtered
 }
 

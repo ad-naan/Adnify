@@ -430,7 +430,15 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const newMessages = [...thread.messages, message]
+            let newMessages = [...thread.messages, message]
+
+            // 限制 checkpoint 消息数量，防止内存膨胀
+            const MAX_CHECKPOINTS = 20
+            const checkpointMessages = newMessages.filter(m => m.role === 'checkpoint')
+            if (checkpointMessages.length > MAX_CHECKPOINTS) {
+                const oldestCheckpointId = checkpointMessages[0].id
+                newMessages = newMessages.filter(m => m.id !== oldestCheckpointId)
+            }
 
             return {
                 threads: {

@@ -592,9 +592,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
                   {language === 'zh' ? '使用示例' : 'Usage Examples'}
                 </h5>
                 <div className="space-y-1.5">
-                  {usageExamples.map((example, index) => (
+                  {usageExamples.map((example) => (
                     <div
-                      key={index}
+                      key={`example-${example.slice(0, 30)}`}
                       className="p-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-lg text-sm text-text-secondary"
                     >
                       <span className="text-yellow-500/70 mr-2">💡</span>

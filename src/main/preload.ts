@@ -456,6 +456,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) =>
     ipcRenderer.invoke('file:search', query, rootPath, options),
+  /** 流式搜索 — 结果通过 search:results 事件增量推送 */
+  searchStream: (query: string, rootPath: string | string[], options: SearchFilesOptions, searchId: string) =>
+    ipcRenderer.invoke('file:search-stream', query, rootPath, options, searchId),
+  onSearchResults: (callback: (searchId: string, results: SearchFileResult[]) => void) => {
+    const handler = (_: IpcRendererEvent, searchId: string, results: SearchFileResult[]) => callback(searchId, results)
+    ipcRenderer.on('search:results', handler)
+    return () => { ipcRenderer.removeListener('search:results', handler) }
+  },
+  onSearchDone: (callback: (searchId: string) => void) => {
+    const handler = (_: IpcRendererEvent, searchId: string) => callback(searchId)
+    ipcRenderer.on('search:done', handler)
+    return () => { ipcRenderer.removeListener('search:done', handler) }
+  },
 
   getSetting: (key: string) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', key, value),

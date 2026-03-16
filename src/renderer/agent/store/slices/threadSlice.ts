@@ -86,10 +86,29 @@ export const createThreadSlice: StateCreator<
     // 创建线程
     createThread: () => {
         const thread = createEmptyThread()
-        set(state => ({
-            threads: { ...state.threads, [thread.id]: thread },
-            currentThreadId: thread.id,
-        }))
+        set(state => {
+            const newThreads = { ...state.threads, [thread.id]: thread }
+
+            // 限制线程数量，超过时删除最旧的非活跃线程
+            const MAX_THREADS = 50
+            const threadIds = Object.keys(newThreads)
+            if (threadIds.length > MAX_THREADS) {
+                const sorted = threadIds
+                    .filter(id => id !== thread.id) // 不删除刚创建的
+                    .map(id => ({ id, lastModified: newThreads[id].lastModified }))
+                    .sort((a, b) => a.lastModified - b.lastModified)
+
+                const toDelete = sorted.slice(0, threadIds.length - MAX_THREADS)
+                for (const { id } of toDelete) {
+                    delete newThreads[id]
+                }
+            }
+
+            return {
+                threads: newThreads,
+                currentThreadId: thread.id,
+            }
+        })
         return thread.id
     },
 

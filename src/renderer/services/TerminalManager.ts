@@ -74,8 +74,54 @@ function getOutputBufferConfig() {
     maxLines,
     // 使用行数 * 平均行长度估算，避免频繁计算字节
     maxTotalChars: maxLines * 200,
-    trimRatio: 0.3,
   };
+}
+
+/**
+ * 环形缓冲区 — O(1) 写入和裁剪
+ * 替代原来的 array.splice O(n) 方案
+ */
+class RingBuffer {
+  private buf: string[]
+  private head = 0    // 最旧元素的索引
+  private count = 0   // 当前元素数
+  private capacity: number
+  totalChars = 0
+
+  constructor(capacity: number) {
+    this.capacity = capacity
+    this.buf = new Array(capacity)
+  }
+
+  push(data: string): void {
+    if (this.count < this.capacity) {
+      this.buf[(this.head + this.count) % this.capacity] = data
+      this.count++
+    } else {
+      // 满了，覆盖最旧的
+      this.totalChars -= this.buf[this.head].length
+      this.buf[this.head] = data
+      this.head = (this.head + 1) % this.capacity
+    }
+    this.totalChars += data.length
+  }
+
+  /** 按写入顺序返回所有元素 */
+  toArray(): string[] {
+    const result: string[] = new Array(this.count)
+    for (let i = 0; i < this.count; i++) {
+      result[i] = this.buf[(this.head + i) % this.capacity]
+    }
+    return result
+  }
+
+  get length(): number { return this.count }
+
+  clear(): void {
+    this.head = 0
+    this.count = 0
+    this.totalChars = 0
+  }
 }
 
 /** 剥离 ANSI 转义序列（用于 sentinel 输出提取） */
@@ -101,11 +147,8 @@ class TerminalManagerClass {
 
   // xterm 实例管理
   private xtermInstances = new Map<string, XTermInstance>();
-  // 简化缓冲区：只记录行数和字符数（比字节数计算更快）
-  private outputBuffers = new Map<
-    string,
-    { lines: string[]; totalChars: number }
-  >();
+  // 环形缓冲区：O(1) 写入和裁剪
+  private outputBuffers = new Map<string, RingBuffer>();
 
   // PTY 状态
   private ptyReady = new Map<string, boolean>();
@@ -193,29 +236,13 @@ class TerminalManagerClass {
   private appendToBuffer(id: string, data: string): void {
     let buffer = this.outputBuffers.get(id);
     if (!buffer) {
-      buffer = { lines: [], totalChars: 0 };
+      const config = getOutputBufferConfig();
+      buffer = new RingBuffer(config.maxLines);
       this.outputBuffers.set(id, buffer);
     }
 
-    buffer.lines.push(data);
-    buffer.totalChars += data.length;
-
-    const config = getOutputBufferConfig();
-
-    // 检查是否需要裁剪
-    if (
-      buffer.lines.length > config.maxLines ||
-      buffer.totalChars > config.maxTotalChars
-    ) {
-      const keepCount = Math.floor(
-        buffer.lines.length * (1 - config.trimRatio),
-      );
-      const removed = buffer.lines.splice(0, buffer.lines.length - keepCount);
-      // 减去被移除的字符数
-      for (const line of removed) {
-        buffer.totalChars -= line.length;
-      }
-    }
+    // RingBuffer 自动处理容量溢出（O(1) 覆盖最旧数据）
+    buffer.push(data);
   }
 
   /**
@@ -224,7 +251,7 @@ class TerminalManagerClass {
   getBufferStats(id: string): { lines: number; chars: number } | null {
     const buffer = this.outputBuffers.get(id);
     if (!buffer) return null;
-    return { lines: buffer.lines.length, chars: buffer.totalChars };
+    return { lines: buffer.length, chars: buffer.totalChars };
   }
 
   // ===== 状态订阅 =====
@@ -477,8 +504,8 @@ class TerminalManagerClass {
 
     // 回放已有 buffer —— 解决 xterm 挂载前 PTY 已产生输出导致终端显示为空的问题
     const existingBuffer = this.outputBuffers.get(id);
-    if (existingBuffer && existingBuffer.lines.length > 0) {
-      for (const chunk of existingBuffer.lines) {
+    if (existingBuffer && existingBuffer.length > 0) {
+      for (const chunk of existingBuffer.toArray()) {
         terminal.write(chunk);
       }
     }
@@ -569,7 +596,7 @@ class TerminalManagerClass {
   }
 
   getOutputBuffer(id: string): string[] {
-    return this.outputBuffers.get(id)?.lines || [];
+    return this.outputBuffers.get(id)?.toArray() || [];
   }
 
   getXterm(id: string): XTerminal | null {

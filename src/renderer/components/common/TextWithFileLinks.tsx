@@ -48,7 +48,7 @@ export function TextWithFileLinks({ text, className = '' }: TextWithFileLinksPro
                 if (part.length > 2) {
                     return (
                         <span
-                            key={i}
+                            key={`part-${i}-${part.slice(0, 20)}`}
                             className="cursor-pointer hover:underline hover:text-accent transition-colors break-all"
                             onClick={(e) => handleFileClick(e, part)}
                             title="Click to open file"
@@ -58,7 +58,7 @@ export function TextWithFileLinks({ text, className = '' }: TextWithFileLinksPro
                     )
                 }
             }
-            return <span key={i} className="break-all">{part}</span>
+            return <span key={`part-${i}-${part?.slice(0, 20)}`} className="break-all">{part}</span>
         })
     }, [text, handleFileClick])
 
