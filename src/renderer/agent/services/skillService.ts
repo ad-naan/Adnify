@@ -205,9 +205,9 @@ class SkillService {
                 timeout: 60000,
             })
 
-            if (cloneResult.exitCode !== 0 && cloneResult.error) {
+            if (cloneResult.exitCode !== 0 || cloneResult.error) {
                 await api.file.delete(tmpDir)
-                return { success: false, error: cloneResult.error || cloneResult.output }
+                return { success: false, error: cloneResult.error || cloneResult.output || 'Clone failed' }
             }
 
             // 2. 在仓库中定位包含 SKILL.md 的技能目录
@@ -296,9 +296,9 @@ class SkillService {
                 timeout: 60000,
             })
 
-            if (result.exitCode !== 0 && result.error) {
+            if (result.exitCode !== 0 || result.error) {
                 await api.file.delete(tmpDir)
-                return { success: false, error: result.error || result.output }
+                return { success: false, error: result.error || result.output || 'Clone failed' }
             }
 
             // 2. 在仓库中定位包含 SKILL.md 的技能目录

@@ -42,7 +42,7 @@ export class McpConfigLoader {
     if (userConfig) {
       for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
         if (!seenIds.has(id)) {
-          configs.push({ id, ...serverConfig } as McpServerConfig)
+          configs.push(this.normalizeConfig(id, serverConfig))
           seenIds.add(id)
         }
       }
@@ -52,7 +52,7 @@ export class McpConfigLoader {
     for (const root of this.workspaceRoots) {
       const workspaceConfigPath = this.getWorkspaceConfigPath(root)
       const workspaceConfig = this.loadConfigFile(workspaceConfigPath)
-      
+
       if (workspaceConfig) {
         for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
           // 移除旧配置
@@ -61,7 +61,7 @@ export class McpConfigLoader {
             configs.splice(existingIndex, 1)
           }
           // 添加新配置
-          configs.push({ id, ...serverConfig } as McpServerConfig)
+          configs.push(this.normalizeConfig(id, serverConfig))
           seenIds.add(id)
         }
       }
@@ -69,6 +69,18 @@ export class McpConfigLoader {
 
     logger.mcp?.info(`[McpConfigLoader] Loaded ${configs.length} MCP server configs`)
     return configs
+  }
+
+  /** 自动推断配置的 type 字段 */
+  private normalizeConfig(id: string, serverConfig: Record<string, any>): McpServerConfig {
+    if (!serverConfig.type) {
+      if ('url' in serverConfig) {
+        serverConfig.type = 'remote'
+      } else if ('command' in serverConfig) {
+        serverConfig.type = 'local'
+      }
+    }
+    return { id, ...serverConfig } as McpServerConfig
   }
 
   /** 保存用户级配置 */
