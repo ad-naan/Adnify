@@ -2,7 +2,7 @@
  * 编辑器自定义右键菜单组件
  * 完全国际化支持
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
@@ -69,6 +69,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   const menuRef = useRef<HTMLDivElement>(null)
   const [callHierarchyResult, setCallHierarchyResult] = useState<CallHierarchyResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [position, setPosition] = useState({ x, y })
 
   // 获取当前编辑器语言
   const editorLanguage = editor.getModel()?.getLanguageId() || 'plaintext'
@@ -114,20 +115,29 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     }
   }, [onClose, callHierarchyResult])
 
-  // 调整菜单位置，防止超出屏幕
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect()
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-      
-      if (x + rect.width > viewportWidth) {
-        menuRef.current.style.left = `${viewportWidth - rect.width - 10}px`
-      }
-      if (y + rect.height > viewportHeight) {
-        menuRef.current.style.top = `${viewportHeight - rect.height - 10}px`
-      }
+  // 调整菜单位置，防止超出视口（useLayoutEffect 避免闪烁）
+  useLayoutEffect(() => {
+    if (!menuRef.current) return
+
+    const rect = menuRef.current.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+
+    let adjustedX = x
+    let adjustedY = y
+
+    if (x + rect.width > viewportWidth) {
+      adjustedX = viewportWidth - rect.width - 8
     }
+    if (y + rect.height > viewportHeight) {
+      adjustedY = y - rect.height
+      if (adjustedY < 8) adjustedY = 8
+    }
+
+    setPosition({
+      x: Math.max(8, adjustedX),
+      y: Math.max(8, adjustedY),
+    })
   }, [x, y, callHierarchyResult])
 
   const runAction = (actionId: string) => {
@@ -315,8 +325,8 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     return (
       <div
         ref={menuRef}
-        className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[280px] max-w-[400px] select-none"
-        style={{ left: x, top: y }}
+        className="fixed z-[100] bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[280px] max-w-[400px] select-none"
+        style={{ left: position.x, top: position.y }}
       >
         <div className="px-3 py-2 text-sm font-medium text-text-primary border-b border-border-subtle flex items-center justify-between">
           <span>{title}</span>
@@ -354,8 +364,8 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[220px] select-none"
-      style={{ left: x, top: y }}
+      className="fixed z-[100] bg-surface border border-border-subtle rounded-lg shadow-xl py-1 min-w-[220px] select-none"
+      style={{ left: position.x, top: position.y }}
     >
       {loading && (
         <div className="absolute inset-0 bg-surface/80 flex items-center justify-center rounded-lg">

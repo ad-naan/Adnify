@@ -8,7 +8,7 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { useEffect, useRef, useState, useCallback, memo } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from 'react'
 import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2 } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -45,6 +45,8 @@ const TerminalPanel = memo(function TerminalPanel() {
         y: 0,
         termId: null,
     })
+    const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
+    const contextMenuRef = useRef<HTMLDivElement>(null)
 
     // 终端状态（来自 terminalManager）
     const [managerState, setManagerState] = useState<TerminalManagerState>(() => terminalManager.getState())
@@ -223,6 +225,25 @@ const TerminalPanel = memo(function TerminalPanel() {
         window.addEventListener('click', handleClick)
         return () => window.removeEventListener('click', handleClick)
     }, [contextMenu.visible])
+
+    // 终端右键菜单视口边界检测
+    useLayoutEffect(() => {
+        if (!contextMenu.visible || !contextMenuRef.current) {
+            setContextMenuPos({ x: contextMenu.x, y: contextMenu.y })
+            return
+        }
+        const rect = contextMenuRef.current.getBoundingClientRect()
+        const vw = window.innerWidth
+        const vh = window.innerHeight
+        let ax = contextMenu.x
+        let ay = contextMenu.y
+        if (ax + rect.width > vw) ax = vw - rect.width - 8
+        if (ay + rect.height > vh) {
+            ay = contextMenu.y - rect.height
+            if (ay < 8) ay = 8
+        }
+        setContextMenuPos({ x: Math.max(8, ax), y: Math.max(8, ay) })
+    }, [contextMenu.visible, contextMenu.x, contextMenu.y])
 
     // ===== 操作函数 =====
 
@@ -417,8 +438,9 @@ const TerminalPanel = memo(function TerminalPanel() {
                 </div>
                 {contextMenu.visible && contextMenu.termId && (
                     <div
+                        ref={contextMenuRef}
                         className="fixed z-[200] min-w-[200px] bg-surface border border-border rounded-md shadow-xl py-1 text-xs select-none"
-                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        style={{ top: contextMenuPos.y, left: contextMenuPos.x }}
                         onClick={e => e.stopPropagation()}
                     >
                         <button

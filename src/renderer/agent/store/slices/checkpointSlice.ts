@@ -6,6 +6,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
+import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 import type { FileSnapshot, PendingChange, MessageCheckpoint, CheckpointImage } from '../../types'
 import type { ContextItem } from '../../types'
 import type { ThreadSlice } from './threadSlice'
@@ -100,6 +101,7 @@ export const createCheckpointSlice: StateCreator<
                         errors.push(`Failed to delete: ${change.filePath}`)
                     }
                 } else {
+                    internalWriteTracker.mark(change.filePath)
                     const written = await api.file.write(change.filePath, change.snapshot.content)
                     if (written) {
                         restoredFiles.push(change.filePath)
@@ -134,6 +136,7 @@ export const createCheckpointSlice: StateCreator<
                 const deleted = await api.file.delete(change.filePath)
                 if (!deleted) return false
             } else {
+                internalWriteTracker.mark(change.filePath)
                 const written = await api.file.write(change.filePath, change.snapshot.content)
                 if (!written) return false
             }
@@ -261,6 +264,7 @@ export const createCheckpointSlice: StateCreator<
                         restoredFiles.push(filePath)
                     }
                 } else {
+                    internalWriteTracker.mark(filePath)
                     const written = await api.file.write(filePath, snapshot.content)
                     if (written) {
                         restoredFiles.push(filePath)
