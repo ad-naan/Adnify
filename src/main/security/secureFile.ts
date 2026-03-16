@@ -481,16 +481,7 @@ export function registerSecureFileHandlers(
     }
   })
 
-  // ========== 安全审计功能 ==========
-
-  ipcMain.handle('security:getAuditLogs', (_, limit = 100) => {
-    return securityManager.getAuditLogs(limit)
-  })
-
-  ipcMain.handle('security:clearAuditLogs', () => {
-    securityManager.clearAuditLogs()
-    return true
-  })
+  // ========== 安全权限功能 ==========
 
   ipcMain.handle('security:getPermissions', () => {
     const securityStore = new Store({ name: 'security' })
@@ -500,8 +491,6 @@ export function registerSecureFileHandlers(
   ipcMain.handle('security:resetPermissions', () => {
     const securityStore = new Store({ name: 'security' })
     securityStore.delete('permissions')
-    // 审计日志现在存储在工作区 .adnify/audit.log，不再使用 electron-store
-    securityManager.clearAuditLogs()
     return true
   })
 }

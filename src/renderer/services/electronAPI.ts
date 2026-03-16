@@ -162,8 +162,6 @@ function createGroupedAPI() {
 
     // 安全管理
     security: {
-      getAuditLogs: (limit?: number) => raw.getAuditLogs(limit),
-      clearAuditLogs: () => raw.clearAuditLogs(),
       getPermissions: () => raw.getPermissions(),
       resetPermissions: () => raw.resetPermissions(),
     },

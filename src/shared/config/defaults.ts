@@ -219,7 +219,6 @@ export const AUTO_APPROVE_DEFAULTS = {
 
 export const SECURITY_SETTINGS_DEFAULTS = {
   enablePermissionConfirm: true,
-  enableAuditLog: true,
   strictWorkspaceMode: true,
   allowedShellCommands: [
     'npm', 'yarn', 'pnpm', 'bun',

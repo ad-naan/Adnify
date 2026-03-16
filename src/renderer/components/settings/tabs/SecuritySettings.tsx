@@ -87,7 +87,6 @@ export function SecuritySettings({ language }: SecuritySettingsProps) {
                 </h4>
                 <div className="space-y-4">
                     <Switch label={language === 'zh' ? '启用操作确认' : 'Enable permission confirmation'} checked={securitySettings.enablePermissionConfirm} onChange={(e) => update('securitySettings', { enablePermissionConfirm: e.target.checked })} />
-                    <Switch label={language === 'zh' ? '启用审计日志' : 'Enable audit log'} checked={securitySettings.enableAuditLog} onChange={(e) => update('securitySettings', { enableAuditLog: e.target.checked })} />
                     <Switch label={language === 'zh' ? '严格工作区模式' : 'Strict workspace mode'} checked={securitySettings.strictWorkspaceMode} onChange={(e) => update('securitySettings', { strictWorkspaceMode: e.target.checked })} />
                     <Switch label={language === 'zh' ? '显示安全警告' : 'Show security warnings'} checked={securitySettings.showSecurityWarnings} onChange={(e) => update('securitySettings', { showSecurityWarnings: e.target.checked })} />
                 </div>

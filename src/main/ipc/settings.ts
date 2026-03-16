@@ -75,7 +75,6 @@ export function registerSettingsHandlers(
         const securitySettings = (cleanedValue ?? value) as any
         const defaults = {
           enablePermissionConfirm: true,
-          enableAuditLog: true,
           strictWorkspaceMode: true,
           allowedShellCommands: SECURITY_DEFAULTS.SHELL_COMMANDS,
           allowedGitSubcommands: SECURITY_DEFAULTS.GIT_SUBCOMMANDS,

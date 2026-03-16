@@ -322,7 +322,6 @@ async function initializeModules(firstWin: BrowserWindow) {
   // 配置安全模块
   const securityConfig = configStore.get('securitySettings', {
     enablePermissionConfirm: true,
-    enableAuditLog: true,
     strictWorkspaceMode: true,
     allowedShellCommands: [...SECURITY_DEFAULTS.SHELL_COMMANDS],
     allowedGitSubcommands: [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS],
