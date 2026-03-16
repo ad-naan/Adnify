@@ -39,6 +39,7 @@ import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
 import { BranchSelector } from './BranchControls'
+import { composerService } from '@/renderer/agent/services/composerService'
 
 export default function ChatPanel() {
   const {
@@ -1085,12 +1086,14 @@ export default function ChatPanel() {
                     setActiveFile(diffUri)
                   }
                 }}
-                onAcceptFile={(filePath) => {
+                onAcceptFile={async (filePath) => {
                   acceptChange(filePath)
+                  await composerService.acceptChange(filePath)
                   toast.success(`Accepted: ${getFileName(filePath)}`)
                 }}
                 onRejectFile={async (filePath) => {
                   const success = await undoChange(filePath)
+                  await composerService.rejectChange(filePath)
                   if (success) {
                     toast.success(`Reverted: ${getFileName(filePath)}`)
                   } else {
@@ -1099,14 +1102,16 @@ export default function ChatPanel() {
                 }}
                 onUndoAll={async () => {
                   const result = await undoAllChanges()
+                  await composerService.rejectAll()
                   if (result.success) {
                     toast.success(`Reverted ${result.restoredFiles.length} files`)
                   } else {
                     toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
                   }
                 }}
-                onKeepAll={() => {
+                onKeepAll={async () => {
                   acceptAllChanges()
+                  await composerService.acceptAll()
                   toast.success('All changes accepted')
                 }}
                 // 兜底工具审批：当卡片未显示或出错时，仍可通过状态栏批准/取消

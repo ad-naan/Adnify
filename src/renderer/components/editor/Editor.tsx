@@ -21,6 +21,7 @@ import { keybindingService } from '@services/keybindingService'
 import { monaco } from '@renderer/monacoWorker'
 import { initMonacoTypeService } from '@services/monacoTypeService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
+import { composerService } from '@renderer/agent/services/composerService'
 import type { StreamingEditState } from '@renderer/agent/types'
 import type { ThemeName } from '@store/slices/themeSlice'
 import { useEditorBreakpoints } from '@hooks/useEditorBreakpoints'
@@ -310,9 +311,13 @@ export default function Editor() {
             isStreaming={!streamingEdit.isComplete}
             onAccept={() => {
               updateFileContent(activeFile.path, streamingEdit.currentContent)
+              composerService.acceptChange(activeFile.path)
               setShowDiffPreview(false)
             }}
-            onReject={() => setShowDiffPreview(false)}
+            onReject={() => {
+              composerService.rejectChange(activeFile.path)
+              setShowDiffPreview(false)
+            }}
             onClose={() => setShowDiffPreview(false)}
           />
         </div>
@@ -346,10 +351,11 @@ export default function Editor() {
               if (activeFile.path.startsWith('git-diff://')) return;
               updateFileContent(activeFile.path, newContent)
             }}
-            onAccept={() => {
+            onAccept={async () => {
               if (activeFile.path.startsWith('git-diff://')) return;
               const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               acceptChange(realPath)
+              await composerService.acceptChange(realPath)
               updateFileContent(realPath, activeFile.content)
               closeFile(activeFile.path)
             }}
@@ -357,6 +363,7 @@ export default function Editor() {
               if (activeFile.path.startsWith('git-diff://')) return;
               const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               await undoChange(realPath)
+              await composerService.rejectChange(realPath)
               closeFile(activeFile.path)
             }}
           />
