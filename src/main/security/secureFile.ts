@@ -346,6 +346,24 @@ export function registerSecureFileHandlers(
     }
   })
 
+  // 递归计算目录大小
+  async function calculateDirectorySize(dirPath: string): Promise<number> {
+    let totalSize = 0
+    const entries = await fsPromises.readdir(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        totalSize += await calculateDirectorySize(entryPath)
+      } else {
+        const stat = await fsPromises.stat(entryPath)
+        totalSize += stat.size
+      }
+      // 提前退出：超过阈值无需继续统计
+      if (totalSize > 100 * 1024 * 1024) break
+    }
+    return totalSize
+  }
+
   // 删除文件/目录（无弹窗，仅底线检查）
   ipcMain.handle('file:delete', async (_, filePath: string) => {
     if (securityManager.isSensitivePath(filePath)) {
@@ -369,11 +387,14 @@ export function registerSecureFileHandlers(
     // 大目录保护
     try {
       const stat = await fsPromises.stat(filePath)
-      if (stat.isDirectory() && stat.size > 100 * 1024 * 1024) {
-        securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-          reason: `安全底线：目录过大 (${(stat.size / 1024 / 1024).toFixed(1)}MB)`,
-        })
-        return false
+      if (stat.isDirectory()) {
+        const dirSize = await calculateDirectorySize(filePath)
+        if (dirSize > 100 * 1024 * 1024) {
+          securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
+            reason: `安全底线：目录过大 (${(dirSize / 1024 / 1024).toFixed(1)}MB)`,
+          })
+          return false
+        }
       }
     } catch {
       return false

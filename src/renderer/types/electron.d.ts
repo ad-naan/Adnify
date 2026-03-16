@@ -636,6 +636,11 @@ export interface ElectronAPI {
   debugEvaluate: (sessionId: string, expression: string, frameId?: number) => Promise<{ success: boolean; result?: { result: string; type: string }; error?: string }>
   debugGetSessionState: (sessionId: string) => Promise<DebugSessionState | null>
   debugGetAllSessions: () => Promise<DebugSessionState[]>
+  debugGetSupportedTypes: () => Promise<Array<{ type: string; label: string; languages: string[]; configurationSnippets: any[] }>>
+  debugGetConfigSnippets: (type: string) => Promise<any[]>
+  debugConfigurationDone: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+  debugGetThreads: (sessionId: string) => Promise<{ success: boolean; threads?: any[]; error?: string }>
+  debugGetCapabilities: (sessionId: string) => Promise<any>
   onDebugEvent: (callback: (event: { sessionId: string; event: DebugEvent }) => void) => () => void
 
   // Updater

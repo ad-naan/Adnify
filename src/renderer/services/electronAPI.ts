@@ -297,6 +297,11 @@ function createGroupedAPI() {
       evaluate: (sessionId: string, expression: string, frameId?: number) => raw.debugEvaluate(sessionId, expression, frameId),
       getSessionState: (sessionId: string) => raw.debugGetSessionState(sessionId),
       getAllSessions: () => raw.debugGetAllSessions(),
+      getSupportedTypes: () => raw.debugGetSupportedTypes(),
+      getConfigSnippets: (type: string) => raw.debugGetConfigSnippets(type),
+      configurationDone: (sessionId: string) => raw.debugConfigurationDone(sessionId),
+      getThreads: (sessionId: string) => raw.debugGetThreads(sessionId),
+      getCapabilities: (sessionId: string) => raw.debugGetCapabilities(sessionId),
       onEvent: (callback: Parameters<typeof raw.onDebugEvent>[0]) => raw.onDebugEvent(callback),
     },
 

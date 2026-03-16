@@ -617,4 +617,19 @@ export const zh = {
   'welcome.settings': '设置',
   'welcome.noRecentItems': '没有最近的项目',
   'welcome.pressForCommands': '按 {shortcut} 打开命令面板',
+
+  // Context Menu
+  'copyPath': '复制路径',
+  'copyRelativePath': '复制相对路径',
+  'revealInExplorer': '在资源管理器中显示',
+  'openInBrowser': '在浏览器中打开',
+  'pathCopied': '路径已复制',
+  'failedToOpenInBrowser': '无法在浏览器中打开',
+
+  // Search
+  'recentSearches': '最近搜索',
+  'tryDifferentKeyword': '尝试其他关键词或正则表达式',
+
+  // Settings
+  'unsavedChangesConfirm': '您有未保存的更改，确定要关闭吗？',
 } as const

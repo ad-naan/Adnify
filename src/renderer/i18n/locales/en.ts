@@ -617,4 +617,19 @@ export const en = {
   'welcome.settings': 'Settings',
   'welcome.noRecentItems': 'No recent items',
   'welcome.pressForCommands': 'Press {shortcut} for commands',
+
+  // Context Menu
+  'copyPath': 'Copy Path',
+  'copyRelativePath': 'Copy Relative Path',
+  'revealInExplorer': 'Reveal in Explorer',
+  'openInBrowser': 'Open in Browser',
+  'pathCopied': 'Path copied',
+  'failedToOpenInBrowser': 'Failed to open in browser',
+
+  // Search
+  'recentSearches': 'Recent Searches',
+  'tryDifferentKeyword': 'Try a different keyword or regex',
+
+  // Settings
+  'unsavedChangesConfirm': 'You have unsaved changes. Are you sure you want to close?',
 } as const

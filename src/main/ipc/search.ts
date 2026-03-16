@@ -4,7 +4,8 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import { ipcMain, app } from 'electron'
+import { app } from 'electron'
+import { safeIpcHandle } from './safeHandle'
 import { spawn } from 'child_process'
 import { rgPath } from '@vscode/ripgrep'
 import * as path from 'path'
@@ -251,7 +252,7 @@ function searchStreamInDirectory(
 
 export function registerSearchHandlers() {
   // 传统的一次性搜索（保持向后兼容）
-  ipcMain.handle('file:search', async (
+  safeIpcHandle('file:search', async (
     _event,
     query: string,
     rootPath: string | string[],
@@ -271,7 +272,7 @@ export function registerSearchHandlers() {
   })
 
   // 流式搜索 — 结果通过 IPC 事件增量推送
-  ipcMain.handle('file:search-stream', async (
+  safeIpcHandle('file:search-stream', async (
     event,
     query: string,
     rootPath: string | string[],

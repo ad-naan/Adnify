@@ -234,16 +234,16 @@ export const createMessageSlice: StateCreator<
             // 如果文本已 finalized，或最后一个 part 不是 text，创建新的 text part
             if (textFinalized || !lastPart || lastPart.type !== 'text') {
                 newParts = [...assistantMsg.parts, { type: 'text', content }]
-                // 清除 finalized 标记
-                delete (assistantMsg as any)._textFinalized
             } else {
                 // 追加到现有的 text part
                 newParts = [...assistantMsg.parts]
                 newParts[newParts.length - 1] = { type: 'text', content: lastPart.content + content }
             }
 
+            // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
+            const { _textFinalized: _, ...cleanMsg } = assistantMsg as any
             const newMessages = [...thread.messages]
-            newMessages[messageIdx] = { ...assistantMsg, content: newContent, parts: newParts }
+            newMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
 
             return {
                 threads: {
@@ -354,8 +354,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 更新消息
-    updateMessage: (messageId, updates) => {
-        const threadId = get().currentThreadId
+    updateMessage: (messageId, updates, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {
@@ -379,8 +379,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加工具结果
-    addToolResult: (toolCallId, name, content, type, rawParams) => {
-        const threadId = get().currentThreadId
+    addToolResult: (toolCallId, name, content, type, rawParams, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const message: ToolResultMessage = {
@@ -414,8 +414,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加检查点
-    addCheckpoint: (type, fileSnapshots) => {
-        const threadId = get().currentThreadId
+    addCheckpoint: (type, fileSnapshots, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const message: CheckpointMessage = {
@@ -455,8 +455,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 清空消息（同时清理检查点和待确认更改）
-    clearMessages: () => {
-        const threadId = get().currentThreadId
+    clearMessages: (targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         // 压缩状态会在 store 中重置
@@ -487,8 +487,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 删除指定消息之后的所有消息
-    deleteMessagesAfter: (messageId) => {
-        const threadId = get().currentThreadId
+    deleteMessagesAfter: (messageId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         // 重置 handoff 状态（回退消息后可能不再需要 handoff）
@@ -654,7 +654,7 @@ export const createMessageSlice: StateCreator<
         const threadId = get().currentThreadId
         if (!threadId) return ''
 
-        const partId = `reasoning-${Date.now()}`
+        const partId = `reasoning-${crypto.randomUUID()}`
 
         set(state => {
             const thread = state.threads[threadId]

@@ -451,16 +451,16 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   const handleCopyPath = useCallback((node: FlattenedNode) => {
     navigator.clipboard.writeText(node.item.path)
-    toast.success('Path copied')
-  }, [])
+    toast.success(t('pathCopied', language) || 'Path copied')
+  }, [language])
 
   const handleCopyRelativePath = useCallback((node: FlattenedNode) => {
     if (workspacePath) {
       const relativePath = node.item.path.replace(workspacePath, '').replace(/^[\\/]/, '')
       navigator.clipboard.writeText(relativePath)
-      toast.success('Path copied')
+      toast.success(t('pathCopied', language) || 'Path copied')
     }
-  }, [workspacePath])
+  }, [workspacePath, language])
 
   const handleRevealInExplorer = useCallback((node: FlattenedNode) => {
     api.file.showInFolder(node.item.path)
@@ -469,9 +469,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleOpenInBrowser = useCallback(async (node: FlattenedNode) => {
     const success = await api.file.openInBrowser(node.item.path)
     if (!success) {
-      toast.error('Failed to open in browser')
+      toast.error(t('failedToOpenInBrowser', language) || 'Failed to open in browser')
     }
-  }, [])
+  }, [language])
 
   const handleNewFile = useCallback((node: FlattenedNode) => {
     if (node.item.isDirectory) {
@@ -507,9 +507,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
         { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
         { id: 'sep2', label: '', separator: true },
-        { id: 'copyPath', label: 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-        { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-        { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+        { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
+        { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+        { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
     const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') ||
@@ -519,15 +519,15 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
       { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
       { id: 'sep1', label: '', separator: true },
-      { id: 'copyPath', label: 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-      { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-      { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+      { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
+      { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+      { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
     // 对 HTML 文件添加"在浏览器中打开"选项
     if (isHtmlFile) {
       items.push({ id: 'sep2', label: '', separator: true })
-      items.push({ id: 'openInBrowser', label: 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+      items.push({ id: 'openInBrowser', label: t('openInBrowser', language) || 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
     }
 
     return items

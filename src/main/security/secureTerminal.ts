@@ -1023,6 +1023,26 @@ export function registerSecureTerminalHandlers(
       return { success: false, output: '', exitCode: 1, error: 'Working directory outside workspace' }
     }
 
+    // 安全检查：检测危险模式
+    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(command)
+    if (!dangerousCheck.safe) {
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
+        reason: dangerousCheck.reason,
+        source: 'executeBackground',
+      })
+      return { success: false, output: '', exitCode: 1, error: dangerousCheck.reason }
+    }
+
+    // 安全检查：检测 shell 注入
+    if (containsShellInjection(command)) {
+      const reason = `命令包含危险字符: "${command}"`
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
+        reason,
+        source: 'executeBackground',
+      })
+      return { success: false, output: '', exitCode: 1, error: reason }
+    }
+
     return new Promise((resolve) => {
       const isWindows = process.platform === 'win32'
       const shell = customShell || (isWindows ? 'powershell.exe' : '/bin/bash')

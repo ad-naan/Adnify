@@ -190,7 +190,7 @@ export function SearchView() {
     if (e.key === 'Enter') handleSearch()
   }
 
-  const handleReplaceInFile = async () => {
+  const handleReplaceInFile = async (filePath: string) => {
     if (!replaceQuery) return
 
     if (replaceInSelection) {
@@ -204,10 +204,7 @@ export function SearchView() {
 
     if (searchResults.length === 0) return
 
-    const firstResult = searchResults[0]
-    if (!firstResult) return
-
-    const content = await api.file.read(firstResult.path)
+    const content = await api.file.read(filePath)
     if (content === null) return
 
     let newContent = content
@@ -226,7 +223,12 @@ export function SearchView() {
     }
 
     if (newContent !== content) {
-      await api.file.write(firstResult.path, newContent)
+      await api.file.write(filePath, newContent)
+      // 同步已打开的编辑器内容
+      const { openFiles, reloadFileFromDisk } = useStore.getState()
+      if (openFiles.some(f => f.path === filePath)) {
+        reloadFileFromDisk(filePath, newContent)
+      }
       handleSearch()
     }
   }
@@ -235,7 +237,11 @@ export function SearchView() {
     if (!replaceQuery) return
 
     if (replaceInSelection) {
-      handleReplaceInFile()
+      window.dispatchEvent(
+        new CustomEvent('editor:replace-selection', {
+          detail: { query, replaceQuery, isRegex, isCaseSensitive, isWholeWord },
+        })
+      )
       return
     }
 
@@ -280,6 +286,11 @@ export function SearchView() {
 
       if (newContent !== content) {
         await api.file.write(filePath, newContent)
+        // 同步已打开的编辑器内容
+        const { openFiles: currentOpenFiles, reloadFileFromDisk } = useStore.getState()
+        if (currentOpenFiles.some(f => f.path === filePath)) {
+          reloadFileFromDisk(filePath, newContent)
+        }
         replacedCount++
       }
     }
@@ -342,7 +353,7 @@ export function SearchView() {
           {showHistory && searchHistory.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border-subtle rounded-md shadow-lg z-20 max-h-48 overflow-y-auto animate-slide-in">
               <div className="px-2 py-1 text-[10px] text-text-muted font-semibold border-b border-border-subtle bg-surface/50 backdrop-blur-sm">
-                Recent Searches
+                {t('recentSearches', language) || 'Recent Searches'}
               </div>
               {searchHistory.map((item) => (
                 <div
@@ -406,14 +417,7 @@ export function SearchView() {
               placeholder={t('replacePlaceholder', language)}
               className="flex-1 h-8 text-xs"
             />
-            <button
-              onClick={handleReplaceInFile}
-              disabled={!replaceQuery || searchResults.length === 0}
-              className="p-1.5 hover:bg-surface-active rounded transition-colors disabled:opacity-30 text-text-muted hover:text-text-primary"
-              title={t('replace', language)}
-            >
-              <Edit2 className="w-3.5 h-3.5" />
-            </button>
+            {/* 单文件替换按钮已移至每个文件组头部 */}
             <button
               onClick={() => handleReplaceAll()}
               disabled={!replaceQuery || searchResults.length === 0}
@@ -490,6 +494,19 @@ export function SearchView() {
                     <span className="text-xs font-medium truncate flex-1" title={filePath}>
                       {fileName}
                     </span>
+                    {showReplace && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleReplaceInFile(filePath)
+                        }}
+                        disabled={!replaceQuery}
+                        className="p-0.5 rounded hover:bg-surface-active text-text-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-30"
+                        title={language === 'zh' ? '替换此文件中的匹配' : 'Replace in this file'}
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -545,7 +562,7 @@ export function SearchView() {
               <Search className="w-6 h-6 text-text-muted" />
             </div>
             <p className="text-xs font-medium text-text-secondary">{t('noResults', language)}</p>
-            <p className="text-[10px] text-text-muted mt-1">Try a different keyword or regex</p>
+            <p className="text-[10px] text-text-muted mt-1">{t('tryDifferentKeyword', language) || 'Try a different keyword or regex'}</p>
           </div>
         )}
 

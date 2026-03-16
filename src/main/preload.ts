@@ -21,7 +21,7 @@ interface SearchFileResult {
 }
 
 interface LLMStreamChunk {
-  type: 'text' | 'reasoning' | 'error' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_available'
+  type: 'text' | 'reasoning' | 'error' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available'
   content?: string
   error?: string
   id?: string
@@ -753,6 +753,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('debug:evaluate', sessionId, expression, frameId),
   debugGetSessionState: (sessionId: string) => ipcRenderer.invoke('debug:getSessionState', sessionId),
   debugGetAllSessions: () => ipcRenderer.invoke('debug:getAllSessions'),
+  debugGetSupportedTypes: () => ipcRenderer.invoke('debug:getSupportedTypes'),
+  debugGetConfigSnippets: (type: string) => ipcRenderer.invoke('debug:getConfigSnippets', type),
+  debugConfigurationDone: (sessionId: string) => ipcRenderer.invoke('debug:configurationDone', sessionId),
+  debugGetThreads: (sessionId: string) => ipcRenderer.invoke('debug:getThreads', sessionId),
+  debugGetCapabilities: (sessionId: string) => ipcRenderer.invoke('debug:getCapabilities', sessionId),
   onDebugEvent: (callback: (event: { sessionId: string; event: any }) => void) => {
     const handler = (_: IpcRendererEvent, data: { sessionId: string; event: any }) => callback(data)
     ipcRenderer.on('debug:event', handler)
