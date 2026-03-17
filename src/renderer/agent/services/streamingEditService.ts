@@ -18,6 +18,7 @@ class StreamingEditService {
 	private activeEdits: Map<string, StreamingEditState> = new Map()
 	private listeners: Map<string, Set<StreamingEditListener>> = new Map()
 	private globalListeners: Set<GlobalChangeListener> = new Set()
+	private cleanupTimer: ReturnType<typeof setInterval> | null = null
 	
 	// 文件路径到 editId 的映射，方便按路径查找
 	private filePathIndex: Map<string, string> = new Map()
@@ -301,7 +302,9 @@ class StreamingEditService {
 // 单例导出
 export const streamingEditService = new StreamingEditService()
 
-// 定期清理
-setInterval(() => {
-	streamingEditService.cleanup()
-}, 30000)
+// 启动定期清理（绑定到实例生命周期，HMR 安全）
+if (!streamingEditService['cleanupTimer']) {
+	streamingEditService['cleanupTimer'] = setInterval(() => {
+		streamingEditService.cleanup()
+	}, 30000)
+}
