@@ -9,6 +9,7 @@ import type { StateCreator } from 'zustand'
 import type { ChatThread, StreamState, CompressionPhase, TodoItem } from '../../types'
 import type { CompressionStats } from '../../core/types'
 import type { StructuredSummary } from '../../context/types'
+import type { BranchSlice } from './branchSlice'
 
 // ===== 类型定义 =====
 
@@ -78,7 +79,7 @@ const updateThread = (
 // ===== Slice 创建器 =====
 
 export const createThreadSlice: StateCreator<
-    ThreadSlice,
+    ThreadSlice & BranchSlice,
     [],
     [],
     ThreadSlice
@@ -92,6 +93,8 @@ export const createThreadSlice: StateCreator<
         const thread = createEmptyThread()
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
+            let newBranches = state.branches
+            let newActiveBranch = state.activeBranchId
 
             // 限制线程数量，超过时删除最旧的非活跃线程
             const MAX_THREADS = 50
@@ -103,14 +106,20 @@ export const createThreadSlice: StateCreator<
                     .sort((a, b) => a.lastModified - b.lastModified)
 
                 const toDelete = sorted.slice(0, threadIds.length - MAX_THREADS)
+                newBranches = { ...newBranches }
+                newActiveBranch = { ...newActiveBranch }
                 for (const { id } of toDelete) {
                     delete newThreads[id]
+                    delete newBranches[id]
+                    delete newActiveBranch[id]
                 }
             }
 
             return {
                 threads: newThreads,
                 currentThreadId: thread.id,
+                branches: newBranches,
+                activeBranchId: newActiveBranch,
             }
         })
         return thread.id
@@ -128,11 +137,18 @@ export const createThreadSlice: StateCreator<
         set(state => {
             const { [threadId]: _, ...remaining } = state.threads
             const remainingIds = Object.keys(remaining)
+
+            // 清理关联的 branches 和 activeBranchId
+            const { [threadId]: _b, ...remainingBranches } = state.branches || {}
+            const { [threadId]: _a, ...remainingActiveBranch } = state.activeBranchId || {}
+
             return {
                 threads: remaining,
                 currentThreadId: state.currentThreadId === threadId
                     ? (remainingIds[0] || null)
                     : state.currentThreadId,
+                branches: remainingBranches,
+                activeBranchId: remainingActiveBranch,
             }
         })
     },

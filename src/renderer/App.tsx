@@ -53,7 +53,20 @@ function AppContent() {
   useEffect(() => {
     emotionAdapter.initialize()
     terminalWatcher.start()
-    return () => terminalWatcher.stop()
+
+    // 窗口关闭时清理终端资源（关闭所有 PTY 进程）
+    const handleUnload = () => {
+      try {
+        const { terminalManager } = require('@/renderer/services/TerminalManager')
+        terminalManager.cleanup()
+      } catch { /* ignore */ }
+    }
+    window.addEventListener('beforeunload', handleUnload)
+
+    return () => {
+      terminalWatcher.stop()
+      window.removeEventListener('beforeunload', handleUnload)
+    }
   }, [])
 
   // 使用 selector 优化性能，避免不必要的重渲染

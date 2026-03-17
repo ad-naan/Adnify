@@ -509,6 +509,14 @@ const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingCo
 })
 MarkdownContent.displayName = 'MarkdownContent'
 
+// 用于非流式 Part 的立即完成信号（避免在条件分支中直接调用 useEffect）
+const CompletionSignal = ({ onComplete }: { onComplete?: () => void }) => {
+  useEffect(() => {
+    onComplete?.()
+  }, [])
+  return null
+}
+
 // 渲染单个 Part
 const RenderPart = React.memo(({
   part,
@@ -552,21 +560,11 @@ const RenderPart = React.memo(({
 
   // Search results are static for now, finish immediately
   if (isSearchPart(part)) {
-    // Search is handled globally in MessageMetaGroup, so we just signal completion and render null in the linear flow
-    React.useEffect(() => {
-      onTypingComplete?.()
-    }, [])
-    return null
+    return <CompletionSignal onComplete={onTypingComplete} />
   }
 
   // Tool calls handled by RenderPart (single)
   if (isToolCallPart(part)) {
-    // Call complete immediately on mount for tools, 
-    // but maybe with a slight delay for better visual rhythm
-    React.useEffect(() => {
-      const timer = setTimeout(() => onTypingComplete?.(), 100)
-      return () => clearTimeout(timer)
-    }, [])
 
     const tc = part.toolCall
     const isPending = tc.id === pendingToolId

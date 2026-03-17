@@ -219,6 +219,12 @@ function createWindow(isEmpty = false): BrowserWindow {
   })
 
   win.on('closed', () => {
+    // 清理该窗口关联的 LLM 服务（中止活跃流、释放 AbortController）
+    const webContentsId = win.webContents?.id
+    if (webContentsId && ipcModule) {
+      try { ipcModule.cleanupLLMService(webContentsId) } catch { /* ignore */ }
+    }
+
     windows.delete(windowId)
     windowWorkspaces.delete(windowId)
     logger.system.info(`[Main] Window ${windowId} closed and removed from map. Remaining: ${windows.size}`)
@@ -281,6 +287,11 @@ async function performGlobalCleanup() {
     ipcModule?.cleanupAllHandlers()
     // 2. 停止所有 LSP 服务器
     await lspManager?.stopAllServers()
+    // 3. 销毁所有 IndexService Worker 线程
+    try {
+      const { destroyIndexService } = await import('./indexing/indexService')
+      destroyIndexService()
+    } catch { /* ignore */ }
     logger.system.info('[Main] Global cleanup completed successfully')
   } catch (err) {
     logger.system.error('[Main] Global cleanup error:', err)

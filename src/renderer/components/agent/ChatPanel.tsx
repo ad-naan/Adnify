@@ -298,15 +298,6 @@ export default function ChatPanel() {
     }
   }, [inputPrompt, setInputPrompt])
 
-  // 实时更新上下文统计
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      // 上下文统计现在由 store 管理
-    }, 500) // 500ms 防抖
-
-    return () => clearTimeout(timer)
-  }, [contextItems, messages, input])
-
   // 处理文件点击
   const handleFileClick = useCallback(async (filePath: string) => {
     const fullPath = toFullPath(filePath, workspacePath)
