@@ -126,8 +126,14 @@ export function SkillSettings({ language }: SkillSettingsProps) {
         setCreating(false)
     }
 
-    // Delete skill
+    // Delete skill (with confirmation)
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
     const handleDelete = async (name: string) => {
+        if (deleteConfirm !== name) {
+            setDeleteConfirm(name)
+            return
+        }
+        setDeleteConfirm(null)
         const success = await skillService.deleteSkill(name)
         if (success) {
             showMessage('success', t('已删除', 'Deleted'))
@@ -238,8 +244,9 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                     </button>
                                     <button
                                         onClick={() => handleDelete(skill.name)}
-                                        className="p-1 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                        title={t('删除', 'Delete')}
+                                        onBlur={() => deleteConfirm === skill.name && setDeleteConfirm(null)}
+                                        className={`p-1 rounded transition-colors ${deleteConfirm === skill.name ? 'text-red-400 bg-red-500/20' : 'text-text-muted hover:text-red-400 hover:bg-red-500/10'}`}
+                                        title={deleteConfirm === skill.name ? t('再次点击确认删除', 'Click again to confirm') : t('删除', 'Delete')}
                                     >
                                         <Trash2 className="w-3 h-3" />
                                     </button>

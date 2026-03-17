@@ -228,6 +228,8 @@ function createGroupedAPI() {
       onToolsUpdated: (callback: Parameters<typeof raw.onMcpToolsUpdated>[0]) => raw.onMcpToolsUpdated(callback),
       onResourcesUpdated: (callback: Parameters<typeof raw.onMcpResourcesUpdated>[0]) => raw.onMcpResourcesUpdated(callback),
       onStateChanged: (callback: Parameters<typeof raw.onMcpStateChanged>[0]) => raw.onMcpStateChanged(callback),
+      registrySearch: (query?: string) => raw.mcpRegistrySearch(query),
+      registryGetDetails: (serverName: string) => raw.mcpRegistryGetDetails(serverName),
     },
 
     // LSP

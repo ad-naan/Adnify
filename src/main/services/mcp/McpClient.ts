@@ -93,6 +93,12 @@ export class McpClient extends EventEmitter {
 
   /** 连接到 MCP 服务器 */
   async connect(): Promise<void> {
+    // 清理已有的重连 timer，防止多个 timer 并行
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+
     if (this.state.status === 'connected' || this.state.status === 'connecting') {
       return
     }
@@ -544,9 +550,12 @@ export class McpClient extends EventEmitter {
   }
 
   private withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>
     return Promise.race([
       promise,
-      new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms)),
-    ])
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Timeout')), ms)
+      }),
+    ]).finally(() => clearTimeout(timer!))
   }
 }
