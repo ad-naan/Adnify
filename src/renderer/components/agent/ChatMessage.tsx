@@ -167,6 +167,10 @@ interface MessageMetaGroupProps {
 }
 
 const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
+  // Hooks 必须在所有条件返回之前调用（React 规则）
+  const [isExpanded, setIsExpanded] = useState(true)
+  const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
+
   const hasAutoSkills = autoSkills && autoSkills.length > 0
   const hasManualSkills = manualSkills && manualSkills.length > 0
   const hasSearch = searchContent !== undefined || isSearchStreaming
@@ -174,9 +178,6 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
   const isStreaming = isSearchStreaming
 
   if (!hasSkills && !hasSearch) return null
-
-  const [isExpanded, setIsExpanded] = useState(true)
-  const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
 
   const handleOpenSkill = async (e: React.MouseEvent, skillId: string) => {
     e.stopPropagation()

@@ -218,11 +218,16 @@ function createWindow(isEmpty = false): BrowserWindow {
     logger.system.info(`[Main] Window ${windowId} close event triggered`)
   })
 
+  // 在 close 事件中提前捕获 webContentsId（closed 时 webContents 可能已销毁）
+  let cachedWebContentsId: number | undefined
+  win.on('close', () => {
+    cachedWebContentsId = win.webContents?.id
+  })
+
   win.on('closed', () => {
     // 清理该窗口关联的 LLM 服务（中止活跃流、释放 AbortController）
-    const webContentsId = win.webContents?.id
-    if (webContentsId && ipcModule) {
-      try { ipcModule.cleanupLLMService(webContentsId) } catch { /* ignore */ }
+    if (cachedWebContentsId && ipcModule) {
+      try { ipcModule.cleanupLLMService(cachedWebContentsId) } catch { /* ignore */ }
     }
 
     windows.delete(windowId)
@@ -277,17 +282,36 @@ function createWindow(isEmpty = false): BrowserWindow {
  * 集中处理应用退出时的异步清理逻辑
  */
 let cleanupStarted = false
+/** 带超时的 Promise 包装，防止清理阶段无限挂起 */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | void> {
+  return Promise.race([
+    promise,
+    new Promise<void>(resolve => setTimeout(() => {
+      logger.system.warn(`[Main] Cleanup timeout (${ms}ms): ${label}`)
+      resolve()
+    }, ms))
+  ])
+}
+
 async function performGlobalCleanup() {
   if (cleanupStarted) return
   cleanupStarted = true
 
-  logger.system.info('[Main] Starting global terminal/LSP cleanup...')
+  logger.system.info('[Main] Starting global cleanup...')
   try {
     // 1. 清理 IPC 处理器（包括终端）
     ipcModule?.cleanupAllHandlers()
-    // 2. 停止所有 LSP 服务器
-    await lspManager?.stopAllServers()
-    // 3. 销毁所有 IndexService Worker 线程
+    // 2. 停止所有 LSP 服务器（超时 3 秒）
+    await withTimeout(
+      lspManager?.stopAllServers() ?? Promise.resolve(),
+      3000, 'LSP stopAllServers'
+    )
+    // 3. 停止所有调试会话（超时 2 秒）
+    await withTimeout(
+      import('./services/debugger').then(m => m.debugService.stopAll()).catch(() => {}),
+      2000, 'DebugService stopAll'
+    )
+    // 4. 销毁所有 IndexService Worker 线程
     try {
       const { destroyIndexService } = await import('./indexing/indexService')
       destroyIndexService()
@@ -478,14 +502,13 @@ app.on('window-all-closed', () => {
 let isCleanupDone = false
 app.on('before-quit', async (e) => {
   if (!isCleanupDone) {
-    // 拦截退出，执行清理
     e.preventDefault()
     logger.system.info('[Main] Intercepting before-quit for cleanup')
 
-    await performGlobalCleanup()
+    // 总超时 5 秒，防止清理无限挂起导致应用无法退出
+    await withTimeout(performGlobalCleanup(), 5000, 'performGlobalCleanup total')
 
     isCleanupDone = true
-    // 清理完成后再次触发退出
     logger.system.info('[Main] Cleanup done, re-triggering app.quit()')
     app.quit()
   }
