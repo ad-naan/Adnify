@@ -173,7 +173,7 @@ function buildTodoSection(todos?: PromptContext['todos']): string | null {
     section += `${icon} [${todo.status}] ${text}\n`
   }
 
-  section += `\nReview this task list. If continuing previous work, resume from the current in_progress task. If the user's new request is UNRELATED to these tasks, call todo_write with a fresh list (do not keep old tasks).`
+  section += `\nIMPORTANT: You have an active task list above. If the user's message relates to these tasks, resume from the current in_progress task — do NOT recreate the list. If the user's request is UNRELATED, call todo_write with a completely fresh list.`
 
   return section
 }
