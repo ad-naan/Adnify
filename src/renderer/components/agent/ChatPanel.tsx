@@ -101,6 +101,15 @@ export default function ChatPanel() {
 
   const [input, setInput] = useState('')
   const [images, setImages] = useState<PendingImage[]>([])
+  const imagesRef = useRef(images)
+  imagesRef.current = images
+
+  // 组件卸载时释放所有未发送图片的 ObjectURL
+  useEffect(() => {
+    return () => {
+      imagesRef.current.forEach(img => URL.revokeObjectURL(img.previewUrl))
+    }
+  }, [])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)

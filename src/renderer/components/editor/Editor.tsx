@@ -166,6 +166,7 @@ export default function Editor() {
   const handleEditorMount: OnMount = (editor, monacoInstance) => {
     editorRef.current = editor
     monacoRef.current = monacoInstance
+    const disposables: { dispose: () => void }[] = []
 
     setupCursorTracking(editor, cursorDebounceRef)
     registerProviders(monacoInstance)
@@ -188,31 +189,32 @@ export default function Editor() {
         markFileSaved(activeFilePath, model.getAlternativeVersionId())
       }
 
-      editor.onDidChangeModelContent(() => {
+      const contentDisposable = editor.onDidChangeModelContent(() => {
         const currentVersionId = model.getAlternativeVersionId()
         const editorContent = editor.getValue()
         const { openFiles: currentFiles } = useStore.getState()
         const currentFile = currentFiles.find(f => f.path === activeFilePath)
 
         if (currentFile && editorContent === currentFile.content) {
-          // 内容相同，说明是外部同步（如 AI 写入后 reloadFileFromDisk）
-          // 更新 savedVersionId，保持 isDirty: false
           markFileSaved(activeFilePath, currentVersionId)
         } else {
-          // 内容不同，说明是用户编辑
           updateFileDirtyState(activeFilePath, currentVersionId)
         }
       })
+      disposables.push(contentDisposable)
     }
 
-    editor.onContextMenu((e) => {
+    const contextMenuDisposable = editor.onContextMenu((e) => {
       e.event.preventDefault()
       e.event.stopPropagation()
       setContextMenu({ x: e.event.posx, y: e.event.posy })
     })
+    disposables.push(contextMenuDisposable)
 
     editor.onDidDispose(() => {
       unsubscribeDiagnostics()
+      disposables.forEach(d => d.dispose())
+      disposables.length = 0
     })
   }
 

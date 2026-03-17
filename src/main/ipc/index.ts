@@ -10,7 +10,7 @@ import Store from 'electron-store'
 import { registerWindowHandlers } from './window' // 窗口控制
 import { registerSettingsHandlers } from './settings' // 设置
 import { registerSearchHandlers } from './search' // 搜索
-import { registerLLMHandlers, cleanupLLMService } from './llm' // LLM
+import { registerLLMHandlers, cleanupLLMService, cleanupAllLLMServices } from './llm' // LLM
 import { registerIndexingHandlers } from './indexing' // 索引
 import { registerLspHandlers } from './lsp' // LSP
 import { registerHttpHandlers } from './http' // HTTP
@@ -140,6 +140,8 @@ export function cleanupAllHandlers() {
   cleanupTerminals()
   cleanupSecureFileWatcher()
   cleanupMcpHandlers()
+  cleanupAllLLMServices()
+  // DebugService 清理由 performGlobalCleanup 中异步处理（需要 await）
   logger.ipc.info('[IPC] All handlers cleaned up')
 }
 

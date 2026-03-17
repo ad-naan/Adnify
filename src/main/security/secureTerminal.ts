@@ -52,6 +52,7 @@ export function getWhitelist() {
 
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
+const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
 
 /**
  * 可靠地终止 PTY 进程树
@@ -88,7 +89,12 @@ export function cleanupTerminals(): void {
     killPtyReliably(ptyProcess)
     terminals.delete(id)
   }
-  logger.security.info(`[Terminal] All terminals cleaned up`)
+  // 清理后台进程
+  for (const [pid, child] of backgroundProcesses) {
+    try { child.kill('SIGTERM') } catch { /* ignore */ }
+    backgroundProcesses.delete(pid)
+  }
+  logger.security.info(`[Terminal] All terminals and background processes cleaned up`)
 }
 
 // 危险命令模式列表
@@ -1100,9 +1106,12 @@ export function registerSecureTerminalHandlers(
 
       const child = spawn(shell, shellArgs, {
         cwd: workingDir,
-        env: { ...process.env, TERM: 'dumb' }, // 禁用颜色输出
+        env: { ...process.env, TERM: 'dumb' },
         windowsHide: true,
       })
+
+      // 追踪后台进程，以便应用退出时清理
+      if (child.pid) backgroundProcesses.set(child.pid, child)
 
       let stdout = ''
       let stderr = ''
@@ -1149,6 +1158,7 @@ export function registerSecureTerminalHandlers(
 
       child.on('close', (code, signal) => {
         clearTimeout(timeoutId)
+        if (child.pid) backgroundProcesses.delete(child.pid)
 
         // 清理输出（移除 ANSI 序列）
         const cleanOutput = (stdout + (stderr ? `\n${stderr}` : ''))
@@ -1176,6 +1186,7 @@ export function registerSecureTerminalHandlers(
 
       child.on('error', (err) => {
         clearTimeout(timeoutId)
+        if (child.pid) backgroundProcesses.delete(child.pid)
         logger.security.error(`[Shell] Command error:`, err)
         resolve({
           success: false,
