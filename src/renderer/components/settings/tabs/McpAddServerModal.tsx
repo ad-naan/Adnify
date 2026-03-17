@@ -32,6 +32,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Button, Input, Modal } from '@components/ui'
+import { api } from '@renderer/services/electronAPI'
 import {
   MCP_PRESETS,
   MCP_CATEGORY_NAMES,
@@ -193,7 +194,7 @@ export default function McpAddServerModal({
     setIsLoadingRegistry(true)
     setError(null)
     try {
-      const result = await window.electronAPI.mcpRegistrySearch(searchQuery)
+      const result = await api.mcp.registrySearch(searchQuery)
       if (result.success) {
         setRegistryServers(result.servers || [])
       } else {
@@ -211,7 +212,7 @@ export default function McpAddServerModal({
     setIsLoadingRegistry(true)
     setError(null)
     try {
-      const result = await window.electronAPI.mcpRegistryGetDetails(serverName)
+      const result = await api.mcp.registryGetDetails(serverName)
       if (result.success) {
         const preset = result.localConfig as McpPreset
         setSelectedPreset(preset)

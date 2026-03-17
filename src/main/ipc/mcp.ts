@@ -24,7 +24,7 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
 
   // 获取所有服务器状态
   safeIpcHandle('mcp:getServersState', async () => {
-    return { success: true, servers: mcpManager.getServersState() }
+    return { success: true, servers: await mcpManager.getServersState() }
   })
 
   // 获取所有可用工具

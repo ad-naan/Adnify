@@ -15,6 +15,7 @@ export class McpConfigLoader {
   private workspaceRoots: string[] = []
   private watchers: fs.FSWatcher[] = []
   private onConfigChange?: () => void
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   /** 获取用户配置路径 */
   private get userConfigPath(): string {
@@ -33,16 +34,16 @@ export class McpConfigLoader {
   }
 
   /** 加载合并后的配置 */
-  loadConfig(): McpServerConfig[] {
+  async loadConfig(): Promise<McpServerConfig[]> {
     const configs: McpServerConfig[] = []
     const seenIds = new Set<string>()
 
     // 1. 加载用户级配置（最低优先级）
-    const userConfig = this.loadConfigFile(this.userConfigPath)
+    const userConfig = await this.loadConfigFile(this.userConfigPath)
     if (userConfig) {
       for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
         if (!seenIds.has(id)) {
-          configs.push(this.normalizeConfig(id, serverConfig))
+          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>))
           seenIds.add(id)
         }
       }
@@ -51,7 +52,7 @@ export class McpConfigLoader {
     // 2. 加载工作区配置（后面的覆盖前面的）
     for (const root of this.workspaceRoots) {
       const workspaceConfigPath = this.getWorkspaceConfigPath(root)
-      const workspaceConfig = this.loadConfigFile(workspaceConfigPath)
+      const workspaceConfig = await this.loadConfigFile(workspaceConfigPath)
 
       if (workspaceConfig) {
         for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
@@ -61,7 +62,7 @@ export class McpConfigLoader {
             configs.splice(existingIndex, 1)
           }
           // 添加新配置
-          configs.push(this.normalizeConfig(id, serverConfig))
+          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>))
           seenIds.add(id)
         }
       }
@@ -73,14 +74,15 @@ export class McpConfigLoader {
 
   /** 自动推断配置的 type 字段 */
   private normalizeConfig(id: string, serverConfig: Record<string, any>): McpServerConfig {
-    if (!serverConfig.type) {
+    let type = serverConfig.type
+    if (!type) {
       if ('url' in serverConfig) {
-        serverConfig.type = 'remote'
+        type = 'remote'
       } else if ('command' in serverConfig) {
-        serverConfig.type = 'local'
+        type = 'local'
       }
     }
-    return { id, ...serverConfig } as McpServerConfig
+    return { ...serverConfig, id, type } as McpServerConfig
   }
 
   /** 保存用户级配置 */
@@ -99,6 +101,11 @@ export class McpConfigLoader {
     return this.userConfigPath
   }
 
+  /** 获取工作区根目录列表 */
+  getWorkspaceRoots(): string[] {
+    return this.workspaceRoots
+  }
+
   /** 获取工作区配置路径 */
   getWorkspaceConfigPath(workspaceRoot: string): string {
     return getWorkspaceConfigFilePath(workspaceRoot, CONFIG_FILES.MCP, CONFIG_FILES.SETTINGS_DIR)
@@ -106,7 +113,7 @@ export class McpConfigLoader {
 
   /** 添加服务器到用户配置 */
   async addServer(serverConfig: McpServerConfig): Promise<void> {
-    const config = this.loadConfigFile(this.userConfigPath) || { mcpServers: {} }
+    const config = (await this.loadConfigFile(this.userConfigPath)) || { mcpServers: {} }
     const { id, ...rest } = serverConfig
     config.mcpServers[id] = rest
     await this.saveConfigFile(this.userConfigPath, config)
@@ -114,7 +121,7 @@ export class McpConfigLoader {
 
   /** 从用户配置删除服务器 */
   async removeServer(serverId: string): Promise<void> {
-    const config = this.loadConfigFile(this.userConfigPath)
+    const config = await this.loadConfigFile(this.userConfigPath)
     if (config && config.mcpServers[serverId]) {
       delete config.mcpServers[serverId]
       await this.saveConfigFile(this.userConfigPath, config)
@@ -123,7 +130,7 @@ export class McpConfigLoader {
 
   /** 切换服务器启用/禁用状态 */
   async toggleServer(serverId: string, disabled: boolean): Promise<void> {
-    const config = this.loadConfigFile(this.userConfigPath)
+    const config = await this.loadConfigFile(this.userConfigPath)
     if (config && config.mcpServers[serverId]) {
       config.mcpServers[serverId].disabled = disabled
       await this.saveConfigFile(this.userConfigPath, config)
@@ -140,13 +147,15 @@ export class McpConfigLoader {
 
   // =================== 私有方法 ===================
 
-  private loadConfigFile(filePath: string): McpConfig | null {
+  private async loadConfigFile(filePath: string): Promise<McpConfig | null> {
     try {
-      if (!fs.existsSync(filePath)) {
+      try {
+        await fs.promises.access(filePath, fs.constants.F_OK)
+      } catch {
         return null
       }
 
-      const content = fs.readFileSync(filePath, 'utf-8')
+      const content = await fs.promises.readFile(filePath, 'utf-8')
       const config = JSON.parse(content) as McpConfig
 
       if (!config.mcpServers || typeof config.mcpServers !== 'object') {
@@ -164,14 +173,11 @@ export class McpConfigLoader {
 
   private async saveConfigFile(filePath: string, config: McpConfig): Promise<void> {
     try {
-      // 确保目录存在
       const dir = path.dirname(filePath)
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true })
-      }
+      await fs.promises.mkdir(dir, { recursive: true })
 
       const content = JSON.stringify(config, null, 2)
-      fs.writeFileSync(filePath, content, 'utf-8')
+      await fs.promises.writeFile(filePath, content, 'utf-8')
       logger.mcp?.info(`[McpConfigLoader] Saved config: ${filePath}`)
     } catch (err) {
       const error = toAppError(err)
@@ -211,8 +217,10 @@ export class McpConfigLoader {
       const watcher = fs.watch(dir, (_eventType, changedFilename) => {
         if (changedFilename === filename) {
           logger.mcp?.info(`[McpConfigLoader] Config changed: ${filePath}`)
-          // 延迟触发，避免频繁更新
-          setTimeout(() => {
+          // 延迟触发，避免频繁更新（防抖：清除前一个 timer）
+          if (this.debounceTimer) clearTimeout(this.debounceTimer)
+          this.debounceTimer = setTimeout(() => {
+            this.debounceTimer = null
             this.onConfigChange?.()
           }, 500)
         }

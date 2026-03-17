@@ -26,6 +26,7 @@ export class McpManager extends EventEmitter {
   private configLoader: McpConfigLoader
   private initialized = false
   private autoConnectEnabled = true // 默认启用
+  private cachedConfigs: McpServerConfig[] | null = null
 
   constructor() {
     super()
@@ -60,14 +61,15 @@ export class McpManager extends EventEmitter {
   }
 
   /** 异步后台自动连接所有未禁用的服务器 */
-  private autoConnectServers(): void {
+  private async autoConnectServers(): Promise<void> {
     // 检查是否启用自动连接
     if (!this.autoConnectEnabled) {
       logger.mcp?.info('[McpManager] Auto-connect is disabled, skipping')
       return
     }
 
-    const configs = this.configLoader.loadConfig()
+    const configs = await this.configLoader.loadConfig()
+    this.cachedConfigs = configs
     const enabledConfigs = configs.filter((c) => !c.disabled)
 
     if (enabledConfigs.length === 0) {
@@ -94,12 +96,15 @@ export class McpManager extends EventEmitter {
       })
     ).then(() => {
       logger.mcp?.info('[McpManager] Auto-connect completed')
+    }).catch((err) => {
+      logger.mcp?.error('[McpManager] Auto-connect error:', err)
     })
   }
 
   /** 重新加载配置 */
   async reloadConfig(): Promise<void> {
-    const configs = this.configLoader.loadConfig()
+    const configs = await this.configLoader.loadConfig()
+    this.cachedConfigs = configs
     const currentIds = new Set(this.clients.keys())
     const newIds = new Set(configs.map((c) => c.id))
 
@@ -127,7 +132,7 @@ export class McpManager extends EventEmitter {
   async connectServer(configOrId: McpServerConfig | string): Promise<void> {
     let config: McpServerConfig
     if (typeof configOrId === 'string') {
-      const configs = this.configLoader.loadConfig()
+      const configs = await this.configLoader.loadConfig()
       const found = configs.find((c) => c.id === configOrId)
       if (!found) {
         logger.mcp?.error(`[McpManager] Server config not found: ${configOrId}`)
@@ -200,9 +205,12 @@ export class McpManager extends EventEmitter {
     await this.connectServer(serverId)
   }
 
-  /** 获取所有服务器状态 */
-  getServersState(): McpServerState[] {
-    const configs = this.configLoader.loadConfig()
+  /** 获取所有服务器状态（使用缓存配置，避免频繁读取文件） */
+  async getServersState(): Promise<McpServerState[]> {
+    if (!this.cachedConfigs) {
+      this.cachedConfigs = await this.configLoader.loadConfig()
+    }
+    const configs = this.cachedConfigs
     const states: McpServerState[] = []
 
     for (const config of configs) {
@@ -337,7 +345,7 @@ export class McpManager extends EventEmitter {
   getConfigPaths(): { user: string; workspace: string[] } {
     return {
       user: this.configLoader.getUserConfigPath(),
-      workspace: this.configLoader['workspaceRoots'].map((root) => this.configLoader.getWorkspaceConfigPath(root)),
+      workspace: this.configLoader.getWorkspaceRoots().map((root) => this.configLoader.getWorkspaceConfigPath(root)),
     }
   }
 
@@ -452,14 +460,15 @@ export class McpManager extends EventEmitter {
 
   private handleConfigChange(): void {
     if (!this.initialized) return
+    this.cachedConfigs = null // 清除缓存，强制重新加载
     logger.mcp?.info('[McpManager] Config changed, reloading...')
     this.reloadConfig().catch((err) => {
       logger.mcp?.error('[McpManager] Failed to reload config:', err)
     })
   }
 
-  private notifyStateChange(): void {
-    const state = this.getServersState()
+  private async notifyStateChange(): Promise<void> {
+    const state = await this.getServersState()
     this.sendToRenderer('mcp:stateChanged', state)
   }
 

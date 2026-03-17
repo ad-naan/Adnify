@@ -92,7 +92,12 @@ class SkillService {
         if (!workspacePath) return []
 
         const skillsDir = joinPath(workspacePath, this.SKILLS_DIR)
-        const items = await api.file.readDir(skillsDir)
+        let items: any[] | null
+        try {
+            items = await api.file.readDir(skillsDir)
+        } catch {
+            return []
+        }
         if (!items) return []
 
         const config = await this.loadConfig()
@@ -180,15 +185,36 @@ class SkillService {
      * 4. 清理临时克隆
      */
     async installFromMarketplace(packageId: string): Promise<{ success: boolean; error?: string }> {
-        const { workspacePath } = useStore.getState()
-        if (!workspacePath) return { success: false, error: 'No workspace open' }
-
         // 解析 owner/repo@skillId
         const atIdx = packageId.indexOf('@')
         if (atIdx === -1) return { success: false, error: 'Invalid package format' }
         const repo = packageId.substring(0, atIdx)
         const skillId = packageId.substring(atIdx + 1)
         if (!repo || !skillId) return { success: false, error: 'Invalid package format' }
+
+        return this.installFromGitRepo(`https://github.com/${repo}.git`, skillId)
+    }
+
+    /**
+     * 从 GitHub URL 安装 Skill（标准 Claude Code 流程）
+     */
+    async installFromGitHub(url: string): Promise<{ success: boolean; error?: string }> {
+        const repoName = url.replace(/\.git$/, '').split('/').pop()
+        if (!repoName) return { success: false, error: 'Invalid GitHub URL' }
+        return this.installFromGitRepo(url, repoName)
+    }
+
+    /**
+     * 通用 Git 仓库安装逻辑
+     */
+    private async installFromGitRepo(url: string, skillId: string): Promise<{ success: boolean; error?: string }> {
+        const { workspacePath } = useStore.getState()
+        if (!workspacePath) return { success: false, error: 'No workspace open' }
+
+        // 安全验证 URL
+        if (!/^https:\/\//.test(url) || /[$`;&|\n\r]/.test(url)) {
+            return { success: false, error: 'Invalid or unsafe URL' }
+        }
 
         const skillsDir = joinPath(workspacePath, this.SKILLS_DIR)
         await api.file.mkdir(skillsDir)
@@ -198,7 +224,6 @@ class SkillService {
 
         try {
             // 1. 克隆仓库到临时目录
-            const url = `https://github.com/${repo}.git`
             const cloneResult = await api.shell.executeBackground({
                 command: `git clone -c core.symlinks=true --depth 1 "${url}" "${tmpDir}"`,
                 cwd: workspacePath,
@@ -230,108 +255,15 @@ class SkillService {
 
             if (!foundDir) {
                 await api.file.delete(tmpDir)
-                return { success: false, error: `Could not find SKILL.md in cloned repository ${repo}` }
+                return { success: false, error: `Could not find SKILL.md for skill '${skillId}'` }
             }
 
-            // 3. 仅提取技能目录到 targetDir（解引用符号链接为真实文件）
+            // 3. 仅提取技能目录到 targetDir
             await api.file.delete(targetDir)
             if (foundDir === tmpDir) {
-                // SKILL.md 在仓库根目录，直接移动（删掉 .git 文件夹节省空间）
                 await api.file.delete(joinPath(tmpDir, '.git'))
                 await api.file.rename(tmpDir, targetDir)
             } else {
-                // SKILL.md 在子目录，解引用符号链接复制该子目录
-                await api.file.mkdir(targetDir)
-                const copyCommand = platform.isWindows
-                    ? `robocopy "${foundDir}" "${targetDir}" /E /NFL /NDL /NJH /NJS /NP`
-                    : `cp -rL "${foundDir}/." "${targetDir}"`
-                const copyResult = await api.shell.executeBackground({
-                    command: copyCommand,
-                    cwd: workspacePath,
-                    timeout: 30000,
-                })
-                const copyFailed = platform.isWindows
-                    ? (copyResult.exitCode !== undefined && copyResult.exitCode >= 8)
-                    : (copyResult.exitCode !== 0)
-                if (copyFailed) {
-                    await api.file.delete(targetDir)
-                    await api.file.delete(tmpDir)
-                    return { success: false, error: `Failed to copy skill directory: ${copyResult.error || copyResult.output}` }
-                }
-                // 清理临时克隆
-                await api.file.delete(tmpDir)
-            }
-
-            this.clearCache()
-            return { success: true }
-        } catch (err) {
-            await api.file.delete(tmpDir)
-            const msg = err instanceof Error ? err.message : String(err)
-            return { success: false, error: msg }
-        }
-    }
-
-    /**
-     * 从 GitHub URL 安装 Skill（标准 Claude Code 流程）
-     */
-    async installFromGitHub(url: string): Promise<{ success: boolean; error?: string }> {
-        const { workspacePath } = useStore.getState()
-        if (!workspacePath) return { success: false, error: 'No workspace open' }
-
-        // 从 URL 提取仓库名作为 skill 目录名
-        const repoName = url.replace(/\.git$/, '').split('/').pop()
-        if (!repoName) return { success: false, error: 'Invalid GitHub URL' }
-
-        const skillsDir = joinPath(workspacePath, this.SKILLS_DIR)
-        await api.file.mkdir(skillsDir)
-
-        const targetDir = joinPath(skillsDir, repoName)
-        const tmpDir = joinPath(skillsDir, `.tmp-clone-${repoName}-${Date.now()}`)
-
-        try {
-            // 1. 克隆仓库到临时目录
-            const result = await api.shell.executeBackground({
-                command: `git clone -c core.symlinks=true --depth 1 "${url}" "${tmpDir}"`,
-                cwd: workspacePath,
-                timeout: 60000,
-            })
-
-            if (result.exitCode !== 0 || result.error) {
-                await api.file.delete(tmpDir)
-                return { success: false, error: result.error || result.output || 'Clone failed' }
-            }
-
-            // 2. 在仓库中定位包含 SKILL.md 的技能目录
-            const candidateDirs = [
-                `.claude/skills/${repoName}`,
-                `skills/${repoName}`,
-                repoName,
-                '',
-            ]
-
-            let foundDir: string | null = null
-            for (const dir of candidateDirs) {
-                const checkPath = joinPath(tmpDir, dir, 'SKILL.md')
-                const exists = await api.file.exists(checkPath)
-                if (exists) {
-                    foundDir = dir ? joinPath(tmpDir, dir) : tmpDir
-                    break
-                }
-            }
-
-            if (!foundDir) {
-                await api.file.delete(tmpDir)
-                return { success: false, error: 'No SKILL.md found in repository' }
-            }
-
-            // 3. 仅提取技能目录到 targetDir（解引用符号链接为真实文件）
-            await api.file.delete(targetDir)
-            if (foundDir === tmpDir) {
-                // SKILL.md 在仓库根目录，直接移动（删掉 .git 文件夹节省空间）
-                await api.file.delete(joinPath(tmpDir, '.git'))
-                await api.file.rename(tmpDir, targetDir)
-            } else {
-                // SKILL.md 在子目录，解引用符号链接复制该子目录
                 await api.file.mkdir(targetDir)
                 const copyCommand = platform.isWindows
                     ? `robocopy "${foundDir}" "${targetDir}" /E /NFL /NDL /NJH /NJS /NP`
@@ -458,7 +390,9 @@ Add your skill instructions here.
             // 防注入安全：转义 </skill> 标签
             const safeContent = s.content.replace(/<\/skill>/gi, '<\\/skill>')
             const installPath = `${this.SKILLS_DIR}/${s.name}/`
-            return `<skill name="${s.name}" path="${installPath}">\n${s.description}\n\n${safeContent}\n</skill>`
+            const safeName = s.name.replace(/[&"<>]/g, c => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[c] || c))
+            const safePath = installPath.replace(/[&"<>]/g, c => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[c] || c))
+            return `<skill name="${safeName}" path="${safePath}">\n${s.description}\n\n${safeContent}\n</skill>`
         }).join('\n\n')
 
         return `## Skills
