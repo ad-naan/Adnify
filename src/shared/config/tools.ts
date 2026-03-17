@@ -900,31 +900,29 @@ Available skills are listed in the system prompt under "Available Skills". Each 
         name: 'todo_write',
         displayName: 'Task List',
         description: 'Create and manage a structured task list for tracking progress on complex tasks.',
-        detailedDescription: `Use this tool to break down complex tasks into trackable subtasks and show progress to the user.
+        detailedDescription: `Track progress on multi-step tasks. Provides a visible task list in the UI so the user can see what's done, what's in progress, and what's next.
 
-## When to Use
-- Complex multi-step tasks (3+ distinct steps)
-- User provides multiple tasks or a large implementation request
-- Non-trivial implementations requiring careful planning
+## MUST use when:
+- Task touches 3+ files or requires 3+ distinct steps
+- User gives multiple requirements in one message
+- User explicitly asks to track progress or create a task list
+- Multi-phase workflow (implement → test → fix → verify)
 
-## When NOT to Use
-- Single, straightforward tasks
-- Trivial changes (typo fix, single-line edit, adding a comment)
-- Pure conversational or informational requests
-- Tasks that can be completed in less than 3 trivial steps
+## Do NOT use when:
+- Single-file fix, one-line change, typo correction
+- Pure Q&A, explanation, or code review
+- Task completable in 1-2 trivial steps
 
-## Task States
-- pending: Task not yet started
-- in_progress: Currently working on (limit to ONE task at a time)
-- completed: Task finished successfully
+## Timing:
+- Call BEFORE you start coding, not halfway through
+- Call with \`[]\` to clear after all tasks are done
 
-## Rules
-- Update task status in real-time as you work
-- Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
-- Exactly ONE task must be in_progress at any time during execution
-- Each task needs both \`content\` (imperative form: "Fix the bug") and \`activeForm\` (present continuous: "Fixing the bug")
-- ONLY mark a task as completed when FULLY accomplished — not when partially done or blocked
-- Each call replaces the entire todo list — always include all tasks`,
+## Format:
+- Each call replaces the ENTIRE list
+- Exactly ONE task \`in_progress\` at a time
+- Mark \`completed\` IMMEDIATELY after finishing — never batch
+- \`content\`: imperative ("Fix the bug"), \`activeForm\`: continuous ("Fixing the bug")
+- ONLY mark completed when FULLY done — not when partial or blocked`,
         category: 'interaction',
         approvalType: 'none',
         parallel: false,
