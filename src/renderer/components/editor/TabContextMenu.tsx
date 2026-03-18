@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { useRef, useEffect } from 'react'
 import { toast } from '../common/ToastProvider'
-import { keybindingService } from '@services/keybindingService'
+import { keybindingService, formatShortcut } from '@services/keybindingService'
 
 interface TabContextMenuProps {
   x: number
@@ -45,12 +45,12 @@ export function TabContextMenu({
   }, [onClose])
 
   const menuItems = [
-    { label: isZh ? '关闭' : 'Close', action: () => onCloseFile(filePath), shortcut: 'Ctrl+W' },
+    { label: isZh ? '关闭' : 'Close', action: () => onCloseFile(filePath), shortcut: formatShortcut('Ctrl+W') },
     { label: isZh ? '关闭其他' : 'Close Others', action: () => onCloseOthers(filePath) },
     { label: isZh ? '关闭右侧' : 'Close to the Right', action: () => onCloseToRight(filePath) },
     { label: isZh ? '关闭全部' : 'Close All', action: () => onCloseAll() },
     { type: 'separator' as const },
-    { label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: 'Ctrl+S', disabled: !isDirty },
+    { label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: formatShortcut('Ctrl+S'), disabled: !isDirty },
     { type: 'separator' as const },
     {
       label: isZh ? '复制路径' : 'Copy Path',

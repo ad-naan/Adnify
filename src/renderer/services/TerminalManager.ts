@@ -17,6 +17,7 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { getEditorConfig } from "@renderer/settings";
 import { logger } from "@utils/Logger";
 import { toAppError } from "@shared/utils/errorHandler";
+import { isMac } from "@services/keybindingService";
 
 // ===== 类型定义 =====
 
@@ -441,24 +442,25 @@ class TerminalManagerClass {
       api.terminal.write(id, text);
     };
 
-    // 处理复制粘贴快捷键
+    const mod = (e: KeyboardEvent) => isMac ? e.metaKey : e.ctrlKey;
+
     terminal.attachCustomKeyEventHandler((event) => {
-      // Ctrl+C 复制（有选中内容时）
-      if (event.ctrlKey && event.key === "c" && event.type === "keydown") {
+      // Cmd/Ctrl+C 复制（有选中内容时）
+      if (mod(event) && event.key === "c" && event.type === "keydown") {
         const selection = terminal.getSelection();
         if (selection) {
           navigator.clipboard.writeText(selection);
-          return false; // 阻止默认行为
+          return false;
         }
-        // 没有选中内容时，让 Ctrl+C 发送到终端（中断信号）
+        // macOS 上 Cmd+C 没有选中内容时不发送中断信号；Ctrl+C 在 macOS 仍发中断
+        if (isMac) return false;
         return true;
       }
 
-      // Only handle keydown events to prevent duplicate execution
       if (event.type !== "keydown") return true;
 
-      // Ctrl+V for paste
-      if (event.ctrlKey && !event.shiftKey && event.key === "v") {
+      // Cmd/Ctrl+V for paste
+      if (mod(event) && !event.shiftKey && event.key === "v") {
         event.preventDefault();
         navigator.clipboard.readText().then((text) => {
           handlePasteText(text);
@@ -466,7 +468,7 @@ class TerminalManagerClass {
         return false;
       }
 
-      // Ctrl+Shift+C 复制（备用）
+      // Ctrl+Shift+C 复制（备用，非 macOS）
       if (
         event.ctrlKey &&
         event.shiftKey &&
@@ -480,7 +482,7 @@ class TerminalManagerClass {
         return false;
       }
 
-      // Ctrl+Shift+V 粘贴（备用）
+      // Ctrl+Shift+V 粘贴（备用，非 macOS）
       if (
         event.ctrlKey &&
         event.shiftKey &&
