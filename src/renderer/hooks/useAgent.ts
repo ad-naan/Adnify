@@ -4,8 +4,8 @@
  *
  * 性能优化：
  * - 所有 selector 都返回稳定引用
- * - action 函数从 store 获取，引用永远不变
- * - allThreads 独立 selector，不在主 hook 中订阅 threads
+ * - action 函数通过 getState() 获取，不作为 selector 订阅
+ * - allThreads 使用引用缓存，threads 不变时返回同一数组
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -26,14 +26,23 @@ import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
 
 // ========== 独立 selector hooks（按需使用，避免全部订阅） ==========
 
+/** useAllThreads 的引用缓存，threads 对象不变时返回同一排序数组 */
+let _threadsRef: Record<string, ChatThread> | null = null
+let _sortedResult: ChatThread[] = []
+
 /** 获取排序后的所有线程列表（仅在需要时使用） */
 export function useAllThreads(): ChatThread[] {
   return useAgentStore(state => {
-    const arr = Object.values(state.threads)
-    arr.sort((a, b) => b.lastModified - a.lastModified)
-    return arr
+    if (state.threads === _threadsRef) return _sortedResult
+    _threadsRef = state.threads
+    _sortedResult = Object.values(state.threads).sort((a, b) => b.lastModified - a.lastModified)
+    return _sortedResult
   })
 }
+
+// ========== Actions 直接获取（引用永远稳定，不需要 selector 订阅） ==========
+
+const getActions = () => useAgentStore.getState()
 
 // ========== 主 hook ==========
 
@@ -72,48 +81,21 @@ export function useAgent() {
   const orchestratorPhase = useAgentStore(state => state.phase)
 
   // 确保有一个默认线程（首次加载时）
-  const createThreadAction = useAgentStore(state => state.createThread)
   useEffect(() => {
     const state = useAgentStore.getState()
     if (!state.currentThreadId || !state.threads[state.currentThreadId]) {
-      createThreadAction()
+      state.createThread()
     }
   }, [])
 
-  // Actions — 从 store 直接获取，引用永远稳定
-  const createThread = useAgentStore(state => state.createThread)
-  const switchThread = useAgentStore(state => state.switchThread)
-  const deleteThread = useAgentStore(state => state.deleteThread)
-  const clearMessagesAction = useAgentStore(state => state.clearMessages)
-  const deleteMessagesAfter = useAgentStore(state => state.deleteMessagesAfter)
-  const addContextItem = useAgentStore(state => state.addContextItem)
-  const removeContextItem = useAgentStore(state => state.removeContextItem)
-  const clearContextItems = useAgentStore(state => state.clearContextItems)
-
-  // 待确认更改操作
-  const acceptAllChanges = useAgentStore(state => state.acceptAllChanges)
-  const undoAllChanges = useAgentStore(state => state.undoAllChanges)
-  const acceptChange = useAgentStore(state => state.acceptChange)
-  const undoChange = useAgentStore(state => state.undoChange)
-
-  // 消息检查点操作
-  const restoreToCheckpoint = useAgentStore(state => state.restoreToCheckpoint)
-  const getCheckpointForMessage = useAgentStore(state => state.getCheckpointForMessage)
-
   // 清空消息（包括工具调用日志和 handoff 状态）
   const clearMessages = useCallback(() => {
-    clearMessagesAction()
+    getActions().clearMessages()
     useStore.getState().clearToolCallLogs()
-    useAgentStore.getState().setHandoffRequired(false)
-    useAgentStore.getState().setHandoffDocument(null)
-    useAgentStore.getState().setCompressionStats(null)
-  }, [clearMessagesAction])
-  const clearCheckpoints = useAgentStore(state => state.clearMessageCheckpoints)
-
-  // 分支操作
-  const createBranch = useAgentStore(state => state.createBranch)
-  const switchBranch = useAgentStore(state => state.switchBranch)
-  const regenerateFromMessage = useAgentStore(state => state.regenerateFromMessage)
+    getActions().setHandoffRequired(false)
+    getActions().setHandoffDocument(null)
+    getActions().setCompressionStats(null)
+  }, [])
 
   // 使用 ref 持有最新值，避免 sendMessage 回调频繁重建
   const sendParamsRef = useRef({ llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase })
@@ -183,39 +165,39 @@ export function useAgent() {
 
     // 线程
     currentThreadId,
-    createThread,
-    switchThread,
-    deleteThread,
+    createThread: getActions().createThread,
+    switchThread: getActions().switchThread,
+    deleteThread: getActions().deleteThread,
 
     // 消息操作
     sendMessage,
     abort,
     clearMessages,
-    deleteMessagesAfter,
+    deleteMessagesAfter: getActions().deleteMessagesAfter,
 
     // 工具审批
     approveCurrentTool,
     rejectCurrentTool,
 
     // 待确认更改操作
-    acceptAllChanges,
-    undoAllChanges,
-    acceptChange,
-    undoChange,
+    acceptAllChanges: getActions().acceptAllChanges,
+    undoAllChanges: getActions().undoAllChanges,
+    acceptChange: getActions().acceptChange,
+    undoChange: getActions().undoChange,
 
     // 消息检查点操作
-    restoreToCheckpoint,
-    getCheckpointForMessage,
-    clearCheckpoints,
+    restoreToCheckpoint: getActions().restoreToCheckpoint,
+    getCheckpointForMessage: getActions().getCheckpointForMessage,
+    clearCheckpoints: getActions().clearMessageCheckpoints,
 
     // 上下文操作
-    addContextItem,
-    removeContextItem,
-    clearContextItems,
+    addContextItem: getActions().addContextItem,
+    removeContextItem: getActions().removeContextItem,
+    clearContextItems: getActions().clearContextItems,
 
     // 分支
-    createBranch,
-    switchBranch,
-    regenerateFromMessage,
+    createBranch: getActions().createBranch,
+    switchBranch: getActions().switchBranch,
+    regenerateFromMessage: getActions().regenerateFromMessage,
   }
 }

@@ -21,7 +21,7 @@ import { t } from '@renderer/i18n'
 
 const TerminalPanel = memo(function TerminalPanel() {
     const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language })))
-    const { setMode } = useModeStore()
+    const setMode = useModeStore(s => s.setMode)
     // 从 AgentStore 获取 setInputPrompt
     const setInputPrompt = useAgentStore(state => state.setInputPrompt)
 

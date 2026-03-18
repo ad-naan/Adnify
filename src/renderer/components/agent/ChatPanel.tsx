@@ -68,7 +68,8 @@ export default function ChatPanel() {
   const inputPrompt = useAgentStore(state => state.inputPrompt)
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
 
-  const { currentMode: chatMode, setMode: setChatMode } = useModeStore()
+  const chatMode = useModeStore(s => s.currentMode)
+  const setChatMode = useModeStore(s => s.setMode)
 
   const toast = useToast()
 
@@ -866,6 +867,50 @@ export default function ChatPanel() {
     }
   }, [getCheckpointForMessage, restoreToCheckpoint, toast, language, messages, addContextItem])
 
+  // AgentStatusBar 回调（提取为 useCallback 避免打破 memo）
+  const handleReviewFile = useCallback(async (filePath: string) => {
+    const change = pendingChanges.find(c => c.filePath === filePath)
+    if (!change) return
+    const currentContent = await api.file.read(filePath)
+    if (currentContent !== null) {
+      const diffUri = `diff://${filePath}`
+      openFile(diffUri, currentContent, change.snapshot.content || '')
+      setActiveFile(diffUri)
+    }
+  }, [pendingChanges, openFile, setActiveFile])
+
+  const handleAcceptFile = useCallback(async (filePath: string) => {
+    acceptChange(filePath)
+    await composerService.acceptChange(filePath)
+    toast.success(`Accepted: ${getFileName(filePath)}`)
+  }, [acceptChange, toast])
+
+  const handleRejectFile = useCallback(async (filePath: string) => {
+    const success = await undoChange(filePath)
+    await composerService.rejectChange(filePath)
+    if (success) {
+      toast.success(`Reverted: ${getFileName(filePath)}`)
+    } else {
+      toast.error('Failed to revert')
+    }
+  }, [undoChange, toast])
+
+  const handleUndoAll = useCallback(async () => {
+    const result = await undoAllChanges()
+    await composerService.rejectAll()
+    if (result.success) {
+      toast.success(`Reverted ${result.restoredFiles.length} files`)
+    } else {
+      toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
+    }
+  }, [undoAllChanges, toast])
+
+  const handleKeepAll = useCallback(async () => {
+    acceptAllChanges()
+    await composerService.acceptAll()
+    toast.success('All changes accepted')
+  }, [acceptAllChanges, toast])
+
   // 渲染消息
   const renderMessage = useCallback((msg: ChatMessageType) => {
     if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null
@@ -1134,44 +1179,11 @@ export default function ChatPanel() {
                         streamingStatus={streamState.statusText}
                         onStop={abort}
                         headerPrefix={switcherIcons}
-                        onReviewFile={async (filePath) => {
-                          const change = pendingChanges.find(c => c.filePath === filePath)
-                          if (!change) return
-                          const currentContent = await api.file.read(filePath)
-                          if (currentContent !== null) {
-                            const diffUri = `diff://${filePath}`
-                            openFile(diffUri, currentContent, change.snapshot.content || '')
-                            setActiveFile(diffUri)
-                          }
-                        }}
-                        onAcceptFile={async (filePath) => {
-                          acceptChange(filePath)
-                          await composerService.acceptChange(filePath)
-                          toast.success(`Accepted: ${getFileName(filePath)}`)
-                        }}
-                        onRejectFile={async (filePath) => {
-                          const success = await undoChange(filePath)
-                          await composerService.rejectChange(filePath)
-                          if (success) {
-                            toast.success(`Reverted: ${getFileName(filePath)}`)
-                          } else {
-                            toast.error('Failed to revert')
-                          }
-                        }}
-                        onUndoAll={async () => {
-                          const result = await undoAllChanges()
-                          await composerService.rejectAll()
-                          if (result.success) {
-                            toast.success(`Reverted ${result.restoredFiles.length} files`)
-                          } else {
-                            toast.error(`Failed to revert some files: ${result.errors.join(', ')}`)
-                          }
-                        }}
-                        onKeepAll={async () => {
-                          acceptAllChanges()
-                          await composerService.acceptAll()
-                          toast.success('All changes accepted')
-                        }}
+                        onReviewFile={handleReviewFile}
+                        onAcceptFile={handleAcceptFile}
+                        onRejectFile={handleRejectFile}
+                        onUndoAll={handleUndoAll}
+                        onKeepAll={handleKeepAll}
                         onApproveTool={approveCurrentTool}
                         onRejectTool={rejectCurrentTool}
                       />

@@ -5,7 +5,9 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { BrowserWindow, ipcMain } from 'electron'
-import { spawn, execSync, type ChildProcessWithoutNullStreams } from 'child_process'
+import { spawn, execSync, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
+import { promisify } from 'util'
+const execFileAsync = promisify(execFile)
 import { EventEmitter } from 'events'
 import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
@@ -967,14 +969,13 @@ export function registerSecureTerminalHandlers(
     const fs = require('fs')
     const pathModule = require('path')
 
-    // 检查命令是否可执行
-    const canExecute = (cmd: string): boolean => {
+    // 异步检查命令是否可执行
+    const canExecute = async (cmd: string): Promise<boolean> => {
       try {
-        execSync(`${cmd} --version`, {
+        await execFileAsync(cmd, ['--version'], {
           encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'ignore'],
           timeout: 3000,
-          windowsHide: true,  // Windows 上隐藏控制台窗口
+          windowsHide: true,
         })
         return true
       } catch {
@@ -991,13 +992,12 @@ export function registerSecureTerminalHandlers(
 
       // Git Bash - 通过 git --exec-path 动态获取
       try {
-        const gitExecPath = execSync('git --exec-path', {
+        const { stdout } = await execFileAsync('git', ['--exec-path'], {
           encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'ignore'],
           windowsHide: true,
-        }).trim()
+        })
+        const gitExecPath = stdout.trim()
         if (gitExecPath) {
-          // e.g., C:\Program Files\Git\mingw64\libexec\git-core -> C:\Program Files\Git\bin\bash.exe
           const gitRoot = pathModule.resolve(gitExecPath, '..', '..', '..')
           const bashPath = pathModule.join(gitRoot, 'bin', 'bash.exe')
           if (fs.existsSync(bashPath)) {
@@ -1008,29 +1008,26 @@ export function registerSecureTerminalHandlers(
         // Git 不可用
       }
 
-      // WSL - 直接检测 wsl.exe 是否可用
-      if (canExecute('wsl')) {
-        shells.push({ label: 'WSL', path: 'wsl.exe' })
-      }
-
-      // PowerShell Core (pwsh)
-      if (canExecute('pwsh')) {
-        shells.push({ label: 'PowerShell Core', path: 'pwsh.exe' })
-      }
+      // 并行检测 WSL 和 PowerShell Core
+      const [hasWsl, hasPwsh] = await Promise.all([canExecute('wsl'), canExecute('pwsh')])
+      if (hasWsl) shells.push({ label: 'WSL', path: 'wsl.exe' })
+      if (hasPwsh) shells.push({ label: 'PowerShell Core', path: 'pwsh.exe' })
     } else {
-      // Unix: detect common shells
+      // Unix: detect common shells (并行检测)
       const unixShells = ['bash', 'zsh', 'fish']
-      for (const sh of unixShells) {
+      const results = await Promise.all(unixShells.map(async (sh) => {
         try {
-          const result = execSync(`which ${sh}`, {
+          const { stdout } = await execFileAsync('which', [sh], {
             encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'ignore'],
             windowsHide: true,
           })
-          if (result.trim()) {
-            shells.push({ label: sh.charAt(0).toUpperCase() + sh.slice(1), path: result.trim() })
-          }
+          const path = stdout.trim()
+          if (path) return { label: sh.charAt(0).toUpperCase() + sh.slice(1), path }
         } catch { /* not found */ }
+        return null
+      }))
+      for (const result of results) {
+        if (result) shells.push(result)
       }
     }
 
