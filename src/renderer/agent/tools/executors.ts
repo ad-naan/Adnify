@@ -41,6 +41,32 @@ async function notifyLspAfterWrite(filePath: string): Promise<void> {
     }
 }
 
+/**
+ * 文件变更后通知 composerService（行内预览集成）
+ */
+function notifyComposerChange(opts: {
+    filePath: string
+    workspacePath: string
+    oldContent: string | null
+    newContent: string | null
+    changeType: 'create' | 'modify' | 'delete'
+    linesAdded: number
+    linesRemoved: number
+    toolCallId?: string
+}): void {
+    composerService.ensureSession()
+    composerService.addChange({
+        filePath: opts.filePath,
+        relativePath: toRelativePath(opts.filePath, opts.workspacePath),
+        oldContent: opts.oldContent,
+        newContent: opts.newContent,
+        changeType: opts.changeType,
+        linesAdded: opts.linesAdded,
+        linesRemoved: opts.linesRemoved,
+        toolCallId: opts.toolCallId,
+    })
+}
+
 interface DirTreeNode {
     name: string
     path: string
@@ -135,8 +161,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                                 const nodes = await api.index.parseCallGraph(validPath, content)
                                 if (nodes && nodes.length > 0) {
                                     graphContent = '\n--- AST Call Graph Summary ---\n'
-                                    const defs: any[] = nodes.filter(n => n.type === 'definition')
-                                    const calls: any[] = nodes.filter(n => n.type === 'call')
+                                    const defs = nodes.filter(n => n.type === 'definition')
+                                    const calls = nodes.filter(n => n.type === 'call')
                                     for (const def of defs) {
                                         const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
                                         const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
@@ -168,8 +194,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const nodes = await api.index.parseCallGraph(path, content)
             if (nodes && nodes.length > 0) {
                 graphContent = '\n\n--- AST Call Graph Summary ---\n'
-                const defs: any[] = nodes.filter(n => n.type === 'definition')
-                const calls: any[] = nodes.filter(n => n.type === 'call')
+                const defs = nodes.filter(n => n.type === 'definition')
+                const calls = nodes.filter(n => n.type === 'call')
                 for (const def of defs) {
                     const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
                     const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
@@ -342,7 +368,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const allWarnings: any[] = []
+            const allWarnings: import('../../utils/smartReplace').EditWarning[] = []
             let linesAdded = 0
             let linesRemoved = 0
 
@@ -424,18 +450,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            // 🎯 集成行内预览：将变更记录到 composerService
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: originalContent,
-                newContent: newContent,
-                changeType: 'modify',
-                linesAdded,
-                linesRemoved,
-                toolCallId: ctx.toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded, linesRemoved, toolCallId: ctx.toolCallId })
 
             await notifyLspAfterWrite(path)
 
@@ -443,9 +458,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 logger.agent.warn(`[edit_file] ${path}: Detected ${allWarnings.length} potential issues in batch`, allWarnings)
             }
 
-            const result: any = {
+            const warningsSuffix = allWarnings.length > 0 ? ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)` : ''
+            return {
                 success: true,
-                result: `File updated successfully (batch mode: ${edits.length} edits applied)`,
+                result: `File updated successfully (batch mode: ${edits.length} edits applied)${warningsSuffix}`,
                 meta: {
                     filePath: path,
                     oldContent: originalContent,
@@ -453,16 +469,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     linesAdded,
                     linesRemoved,
                     totalLines: lines.length,
-                    editsApplied: edits.length
+                    editsApplied: edits.length,
+                    ...(allWarnings.length > 0 && { warnings: allWarnings }),
                 }
             }
-
-            if (allWarnings.length > 0) {
-                result.meta.warnings = allWarnings
-                result.result += ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)`
-            }
-
-            return result
         }
 
         if (hasLineMode) {
@@ -518,41 +528,24 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: originalContent,
-                newContent: newContent,
-                changeType: 'modify',
-                linesAdded: lineChanges.added,
-                linesRemoved: lineChanges.removed,
-                toolCallId: ctx.toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
 
             await notifyLspAfterWrite(path)
 
-            const result: any = {
+            const warningsSuffix = warnings.length > 0 ? ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)` : ''
+            return {
                 success: true,
-                result: 'File updated successfully (line mode)',
+                result: `File updated successfully (line mode)${warningsSuffix}`,
                 meta: {
                     filePath: path,
                     oldContent: originalContent,
                     newContent,
                     linesAdded: lineChanges.added,
-                    linesRemoved: lineChanges.removed
+                    linesRemoved: lineChanges.removed,
+                    ...(warnings.length > 0 && { warnings }),
                 }
             }
-
-            // 如果有警告，添加到结果中
-            if (warnings.length > 0) {
-                result.meta.warnings = warnings
-                result.result += ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)`
-            }
-
-            return result
         } else {
             // 字符串模式（原 edit_file）
             const oldString = args.old_string as string
@@ -602,19 +595,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            // 🎯 集成行内预览
             const lineChanges = calculateLineChanges(originalContent, newContent)
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: originalContent,
-                newContent: newContent,
-                changeType: 'modify',
-                linesAdded: lineChanges.added,
-                linesRemoved: lineChanges.removed,
-                toolCallId: ctx.toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
 
             await notifyLspAfterWrite(path)
 
@@ -648,18 +630,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         const lineChanges = calculateLineChanges(originalContent, content)
 
-        // 🎯 集成行内预览
-        composerService.ensureSession()
-        composerService.addChange({
-            filePath: path,
-            relativePath: toRelativePath(path, ctx.workspacePath || ''),
-            oldContent: originalContent,
-            newContent: content,
-            changeType: originalContent ? 'modify' : 'create',
-            linesAdded: lineChanges.added,
-            linesRemoved: lineChanges.removed,
-            toolCallId: ctx.toolCallId
-        })
+        notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent: content, changeType: originalContent ? 'modify' : 'create', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
         return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
     },
 
@@ -680,18 +651,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 通知 LSP 并等待诊断
             await notifyLspAfterWrite(path)
 
-            // 🎯 集成行内预览
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: null,
-                newContent: content,
-                changeType: 'create',
-                linesAdded: content.split('\n').length,
-                linesRemoved: 0,
-                toolCallId: ctx.toolCallId
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: content, changeType: 'create', linesAdded: content.split('\n').length, linesRemoved: 0, toolCallId: ctx.toolCallId })
         }
 
         return { success, result: success ? 'File created' : 'Failed to create file', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length } }
@@ -701,16 +661,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const path = resolvePath(args.path, ctx.workspacePath)
         const success = await api.file.delete(path)
         if (success) {
-            composerService.ensureSession()
-            composerService.addChange({
-                filePath: path,
-                relativePath: toRelativePath(path, ctx.workspacePath || ''),
-                oldContent: null,
-                newContent: null,
-                changeType: 'delete',
-                linesAdded: 0,
-                linesRemoved: 0,
-            })
+            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: null, changeType: 'delete', linesAdded: 0, linesRemoved: 0 })
         }
         return { success, result: success ? 'Deleted successfully' : 'Failed to delete' }
     },

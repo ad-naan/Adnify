@@ -230,7 +230,7 @@ export const createMessageSlice: StateCreator<
             const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1]
 
             // 检查是否有 _textFinalized 标记（表示文本已结束，工具调用即将开始）
-            const textFinalized = (assistantMsg as any)._textFinalized
+            const textFinalized = assistantMsg._textFinalized
 
             // 如果文本已 finalized，或最后一个 part 不是 text，创建新的 text part
             if (textFinalized || !lastPart || lastPart.type !== 'text') {
@@ -242,7 +242,7 @@ export const createMessageSlice: StateCreator<
             }
 
             // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
-            const { _textFinalized: _, ...cleanMsg } = assistantMsg as any
+            const { _textFinalized: _, ...cleanMsg } = assistantMsg
             const newMessages = [...thread.messages]
             newMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
 
@@ -314,7 +314,7 @@ export const createMessageSlice: StateCreator<
         if (!threadId) return
 
         // 关键修复：先刷新文本缓冲区，确保所有文本都已写入
-        const store = get() as any
+        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
         if (store._flushTextBuffer) {
             store._flushTextBuffer(messageId)
         }
@@ -532,7 +532,7 @@ export const createMessageSlice: StateCreator<
         // 关键修复：在添加工具调用 part 之前，先刷新文本缓冲区
         // 这确保了工具调用 part 会出现在正确的位置（在之前的文本之后）
         // 注意：这个调用是同步的，不会影响性能
-        const store = get() as any
+        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
         if (store._flushTextBuffer) {
             store._flushTextBuffer(messageId)
         }
