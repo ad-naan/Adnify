@@ -931,8 +931,17 @@ Available skills are listed in the system prompt under "Available Skills". Each 
         parameters: {
             todos: {
                 type: 'array',
-                description: 'The complete updated todo list. Each item: { content: string, status: "pending"|"in_progress"|"completed", activeForm: string }',
+                description: 'The complete updated todo list.',
                 required: true,
+                items: {
+                    type: 'object',
+                    description: 'A single todo item',
+                    properties: {
+                        content: { type: 'string', description: 'Imperative form of the task (e.g., "Fix the bug")', required: true },
+                        status: { type: 'string', description: 'Task status: "pending", "in_progress", or "completed"', required: true, enum: ['pending', 'in_progress', 'completed'] },
+                        activeForm: { type: 'string', description: 'Present continuous form (e.g., "Fixing the bug")', required: true },
+                    },
+                },
             },
         },
     },
