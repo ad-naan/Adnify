@@ -603,7 +603,8 @@ export function ProviderSettings({
     } else {
       setCustomHeaders([])
     }
-  }, [localConfig.provider, localConfig.headers])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- localConfig.headers 由 onChange 手动管理，加入依赖会导致循环覆盖
+  }, [localConfig.provider])
 
   // 添加模型到本地配置
   const handleAddModel = (name?: string) => {
