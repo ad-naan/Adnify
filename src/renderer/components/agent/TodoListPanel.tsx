@@ -55,6 +55,7 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
   if (todos.length === 0) return null
 
   const completed = todos.filter(t => t.status === 'completed').length
+  const hasInProgress = todos.some(t => t.status === 'in_progress')
   const total = todos.length
   const progress = total > 0 ? (completed / total) * 100 : 0
 
@@ -78,13 +79,24 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
         </div>
 
         {/* Progress bar */}
-        <div className="w-20 h-1 rounded-full bg-border/50 overflow-hidden">
+        <div className="w-20 h-1 rounded-full bg-border/50 overflow-hidden relative">
           <motion.div
             className="h-full rounded-full bg-accent"
             initial={{ width: 0 }}
             animate={{ width: `${progress}%` }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
           />
+          {hasInProgress && (
+            <motion.div
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
+                backgroundSize: '200% 100%',
+              }}
+              animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
+            />
+          )}
         </div>
       </button>
 
