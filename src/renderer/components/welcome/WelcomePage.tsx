@@ -8,6 +8,7 @@ import { FolderOpen, History, Folder, Plus, Settings } from 'lucide-react'
 import { api } from '@/renderer/services/electronAPI'
 import { workspaceManager } from '@/renderer/services/WorkspaceManager'
 import { useStore } from '@/renderer/store'
+import { formatShortcut } from '@services/keybindingService'
 import { logger } from '@utils/Logger'
 import { toast } from '@components/common/ToastProvider'
 import { Logo } from '../common/Logo'
@@ -164,7 +165,7 @@ export default function WelcomePage() {
         {/* Footer Hint */}
         <div className="mt-16 text-center flex-shrink-0">
           <p className="text-[11px] text-text-muted font-bold uppercase tracking-widest opacity-40">
-            {language === 'zh' ? '按' : 'Press'} <kbd className="mx-1.5 px-2 py-1 bg-surface-muted border border-border-subtle rounded-md text-text-primary font-mono text-[10px] shadow-sm">Ctrl+Shift+O</kbd> {language === 'zh' ? '打开命令面板' : 'for commands'}
+            {language === 'zh' ? '按' : 'Press'} <kbd className="mx-1.5 px-2 py-1 bg-surface-muted border border-border-subtle rounded-md text-text-primary font-mono text-[10px] shadow-sm">{formatShortcut('Ctrl+Shift+O')}</kbd> {language === 'zh' ? '打开命令面板' : 'for commands'}
           </p>
         </div>
       </div>
