@@ -103,6 +103,8 @@ export default function ChatPanel() {
   const [images, setImages] = useState<PendingImage[]>([])
   const imagesRef = useRef(images)
   imagesRef.current = images
+  const messageCheckpointsRef = useRef(messageCheckpoints)
+  messageCheckpointsRef.current = messageCheckpoints
 
   // 组件卸载时释放所有未发送图片的 ObjectURL
   useEffect(() => {
@@ -121,6 +123,7 @@ export default function ChatPanel() {
   const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([])
   const [mentionLoading, setMentionLoading] = useState(false)
   const [mentionRange, setMentionRange] = useState<{ start: number; end: number } | null>(null)
+  const suggestionRequestId = useRef(0) // 防止 getSuggestions 竞态
   const [isDragging, setIsDragging] = useState(false)
   // 斜杠命令状态
   const [showSlashCommand, setShowSlashCommand] = useState(false)
@@ -554,15 +557,20 @@ export default function ChatPanel() {
       setShowFileMention(true)
       setShowSlashCommand(false)
 
-      // Fetch suggestions
+      // Fetch suggestions（用递增 ID 防止竞态：只接受最新请求的结果）
+      const requestId = ++suggestionRequestId.current
       setMentionLoading(true)
       try {
         const suggestions = await MentionParser.getSuggestions(parseResult.query, workspacePath)
-        setMentionCandidates(suggestions)
+        if (requestId === suggestionRequestId.current) {
+          setMentionCandidates(suggestions)
+        }
       } catch (err) {
         logger.agent.error('Error fetching suggestions:', err)
       } finally {
-        setMentionLoading(false)
+        if (requestId === suggestionRequestId.current) {
+          setMentionLoading(false)
+        }
       }
     } else if (value.startsWith('/') && !value.includes(' ') && value.length < 20) {
       // 斜杠命令：只在行首输入 / 且没有空格时触发
@@ -862,7 +870,7 @@ export default function ChatPanel() {
   const renderMessage = useCallback((msg: ChatMessageType) => {
     if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null
 
-    const hasCheckpoint = isUserMessage(msg) && messageCheckpoints.some(cp => cp.messageId === msg.id)
+    const hasCheckpoint = isUserMessage(msg) && messageCheckpointsRef.current.some(cp => cp.messageId === msg.id)
 
     return (
       <ChatMessageUI
@@ -879,7 +887,7 @@ export default function ChatPanel() {
         hasCheckpoint={hasCheckpoint}
       />
     )
-  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id, messageCheckpoints])
+  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id])
 
   const virtuosoComponents = useMemo(() => ({
     EmptyPlaceholder: () => (

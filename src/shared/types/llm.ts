@@ -286,3 +286,15 @@ export interface ValidationResult<T = unknown> {
     data?: T
     error?: string
 }
+
+/** AST 调用图节点（用于代码结构分析） */
+export interface CodeGraphNode {
+    id: string
+    name: string
+    type: 'definition' | 'call'
+    content: string
+    startLine: number
+    endLine: number
+    callerName?: string
+    calleeName?: string
+}
