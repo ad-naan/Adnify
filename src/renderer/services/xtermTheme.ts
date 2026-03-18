@@ -31,7 +31,7 @@ export const XTERM_STYLE = `
 
 /** 将 "r g b" 格式转为 "#rrggbb" */
 function rgbToHex(rgb: string): string {
-  if (!rgb) return '#000000'
+  if (!rgb || typeof rgb !== 'string') return '#000000'
   const [r, g, b] = rgb.split(' ').map(Number)
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
