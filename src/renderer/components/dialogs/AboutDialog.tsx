@@ -19,6 +19,9 @@ const CONTRIBUTORS = [
     { name: 'adnaan', avatar: 'https://github.com/adnaan-worker.png', url: 'https://github.com/adnaan-worker' },
     { name: 'kerwin', avatar: 'https://github.com/kerwin2046.png', url: 'https://github.com/kerwin2046' },
     { name: 'cniu6', avatar: 'https://github.com/cniu6.png', url: 'https://github.com/cniu6' },
+    { name: '晨曦', avatar: 'https://github.com/tss-tss.png', url: 'https://github.com/tss-tss' },
+    { name: 'joanboss', avatar: 'https://github.com/joanboss.png', url: 'https://github.com/joanboss' },
+    { name: '玉衡', avatar: 'https://github.com/yuheng-888.png', url: 'https://github.com/yuheng-888' },
 ]
 
 export default function AboutDialog({ onClose }: AboutDialogProps) {
