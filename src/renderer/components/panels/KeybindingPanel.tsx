@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react'
 import { Search, RotateCcw } from 'lucide-react'
-import { keybindingService, Command } from '@services/keybindingService'
+import { keybindingService, Command, formatShortcut, isMac } from '@services/keybindingService'
 import { registerCoreCommands } from '@renderer/config/commands'
 import { useStore } from '@store'
 import { t, type TranslationKey } from '@renderer/i18n'
@@ -37,10 +37,15 @@ export default function KeybindingPanel() {
         e.stopPropagation()
 
         const modifiers = []
-        if (e.ctrlKey) modifiers.push('Ctrl')
+        if (isMac) {
+            if (e.metaKey) modifiers.push('Ctrl')
+            if (e.ctrlKey) modifiers.push('Control')
+        } else {
+            if (e.ctrlKey) modifiers.push('Ctrl')
+            if (e.metaKey) modifiers.push('Meta')
+        }
         if (e.shiftKey) modifiers.push('Shift')
         if (e.altKey) modifiers.push('Alt')
-        if (e.metaKey) modifiers.push('Meta')
 
         let key = e.key
         if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') return
@@ -97,7 +102,7 @@ export default function KeybindingPanel() {
                                     onClick={() => setRecordingId(cmd.id)}
                                     className="font-mono min-w-[80px]"
                                 >
-                                    {bindings[cmd.id] || '-'}
+                                    {bindings[cmd.id] ? formatShortcut(bindings[cmd.id]) : '-'}
                                 </Button>
 
                                 {keybindingService.isOverridden(cmd.id) && (

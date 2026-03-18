@@ -9,6 +9,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { t, TranslationKey } from '@renderer/i18n'
 import { getIncomingCalls, getOutgoingCalls, lspUriToPath } from '@renderer/services/lspService'
 import { getFileName } from '@shared/utils/pathUtils'
+import { formatShortcut } from '@services/keybindingService'
 import type { editor } from 'monaco-editor'
 import { logger } from '@shared/utils/Logger'
 
@@ -285,24 +286,24 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     // 导航
     { id: 'goto-def', labelKey: 'ctxGotoDefinition', shortcut: 'F12', action: () => runAction('editor.action.revealDefinition') },
     { id: 'find-refs', labelKey: 'ctxFindReferences', shortcut: 'Shift+F12', action: () => runAction('editor.action.goToReferences') },
-    { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: 'Ctrl+Shift+O', action: () => runAction('editor.action.quickOutline') },
+    { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: formatShortcut('Ctrl+Shift+O'), action: () => runAction('editor.action.quickOutline') },
     { id: 'find-callers', labelKey: 'ctxFindCallers', action: handleFindCallers, disabled: !supportsCallHierarchy },
     { id: 'find-callees', labelKey: 'ctxFindCallees', action: handleFindCallees, divider: true, disabled: !supportsCallHierarchy },
     // 编辑
     { id: 'rename', labelKey: 'ctxRename', shortcut: 'F2', action: () => runAction('editor.action.rename') },
-    { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: 'Ctrl+F2', action: () => runAction('editor.action.changeAll') },
-    { id: 'format', labelKey: 'ctxFormat', shortcut: 'Shift+Alt+F', action: () => runAction('editor.action.formatDocument'), divider: true },
+    { id: 'change-all', labelKey: 'ctxChangeAll', shortcut: formatShortcut('Ctrl+F2'), action: () => runAction('editor.action.changeAll') },
+    { id: 'format', labelKey: 'ctxFormat', shortcut: formatShortcut('Shift+Alt+F'), action: () => runAction('editor.action.formatDocument'), divider: true },
     // 剪贴板
-    { id: 'cut', labelKey: 'ctxCut', shortcut: 'Ctrl+X', action: handleCut },
-    { id: 'copy', labelKey: 'ctxCopy', shortcut: 'Ctrl+C', action: handleCopy },
-    { id: 'paste', labelKey: 'ctxPaste', shortcut: 'Ctrl+V', action: handlePaste, divider: true },
+    { id: 'cut', labelKey: 'ctxCut', shortcut: formatShortcut('Ctrl+X'), action: handleCut },
+    { id: 'copy', labelKey: 'ctxCopy', shortcut: formatShortcut('Ctrl+C'), action: handleCopy },
+    { id: 'paste', labelKey: 'ctxPaste', shortcut: formatShortcut('Ctrl+V'), action: handlePaste, divider: true },
     // 查找
-    { id: 'find', labelKey: 'ctxFind', shortcut: 'Ctrl+F', action: () => runAction('actions.find') },
-    { id: 'replace', labelKey: 'ctxReplace', shortcut: 'Ctrl+H', action: () => runAction('editor.action.startFindReplaceAction'), divider: true },
+    { id: 'find', labelKey: 'ctxFind', shortcut: formatShortcut('Ctrl+F'), action: () => runAction('actions.find') },
+    { id: 'replace', labelKey: 'ctxReplace', shortcut: formatShortcut('Ctrl+H'), action: () => runAction('editor.action.startFindReplaceAction'), divider: true },
     // 其他
-    { id: 'comment', labelKey: 'ctxToggleComment', shortcut: 'Ctrl+/', action: () => runAction('editor.action.commentLine') },
-    { id: 'delete-line', labelKey: 'ctxDeleteLine', shortcut: 'Ctrl+Shift+K', action: () => runAction('editor.action.deleteLines') },
-    { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: 'Ctrl+D', action: () => runAction('editor.action.addSelectionToNextFindMatch'), divider: true },
+    { id: 'comment', labelKey: 'ctxToggleComment', shortcut: formatShortcut('Ctrl+/'), action: () => runAction('editor.action.commentLine') },
+    { id: 'delete-line', labelKey: 'ctxDeleteLine', shortcut: formatShortcut('Ctrl+Shift+K'), action: () => runAction('editor.action.deleteLines') },
+    { id: 'select-next', labelKey: 'ctxSelectNext', shortcut: formatShortcut('Ctrl+D'), action: () => runAction('editor.action.addSelectionToNextFindMatch'), divider: true },
     // 文件操作
     { 
       id: 'open-in-browser', 
