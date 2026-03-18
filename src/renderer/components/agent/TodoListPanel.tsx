@@ -88,13 +88,12 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
           />
           {hasInProgress && (
             <motion.div
-              className="absolute inset-0 rounded-full"
+              className="absolute inset-y-0 w-1/2 rounded-full"
               style={{
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
-                backgroundSize: '200% 100%',
+                background: 'linear-gradient(90deg, transparent, rgb(var(--accent) / 0.5), transparent)',
               }}
-              animate={{ backgroundPosition: ['200% 0%', '-200% 0%'] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'linear' }}
+              animate={{ left: ['-50%', '150%'] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />
           )}
         </div>
