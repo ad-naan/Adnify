@@ -18,6 +18,7 @@ import { terminalManager, TerminalManagerState } from '@/renderer/services/Termi
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@renderer/i18n'
+import { formatShortcut } from '@services/keybindingService'
 
 const TerminalPanel = memo(function TerminalPanel() {
     const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language })))
@@ -460,7 +461,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                             }}
                         >
                             <span>{t('newTerminal', language)}</span>
-                            <span className="text-[10px] text-text-muted">Ctrl+Shift+`</span>
+                            <span className="text-[10px] text-text-muted">{formatShortcut('Ctrl+Shift+`')}</span>
                         </button>
                         <button
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
@@ -471,7 +472,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                             }}
                         >
                             <span>{t('splitTerminal', language)}</span>
-                            <span className="text-[10px] text-text-muted">Ctrl+Shift+5</span>
+                            <span className="text-[10px] text-text-muted">{formatShortcut('Ctrl+Shift+5')}</span>
                         </button>
 
                         <div className="my-1 h-px bg-border/60" />
@@ -492,7 +493,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                             }}
                         >
                             <span>{t('ctxCopy', language)}</span>
-                            <span className="text-[10px] text-text-muted">Ctrl+Shift+C</span>
+                            <span className="text-[10px] text-text-muted">{formatShortcut('Ctrl+Shift+C')}</span>
                         </button>
                         <button
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
@@ -509,7 +510,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                             }}
                         >
                             <span>{t('ctxPaste', language)}</span>
-                            <span className="text-[10px] text-text-muted">Ctrl+Shift+V</span>
+                            <span className="text-[10px] text-text-muted">{formatShortcut('Ctrl+Shift+V')}</span>
                         </button>
                         <button
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
