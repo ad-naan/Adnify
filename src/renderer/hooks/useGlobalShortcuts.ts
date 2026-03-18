@@ -7,6 +7,9 @@
 import { useEffect, useCallback, useRef } from 'react'
 import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
+import { isMac } from '@services/keybindingService'
+
+const primaryMod = (e: KeyboardEvent) => isMac ? e.metaKey : e.ctrlKey
 
 export function useGlobalShortcuts() {
   // setter 函数引用稳定，直接从 store 获取
@@ -44,15 +47,17 @@ export function useGlobalShortcuts() {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const s = stateRef.current
 
-    // Command Palette: Ctrl+Shift+O or F1
-    if (e.key === 'F1' || (e.ctrlKey && e.shiftKey && e.key === 'O')) {
+    const mod = primaryMod(e)
+
+    // Command Palette: Ctrl/Cmd+Shift+O or F1
+    if (e.key === 'F1' || (mod && e.shiftKey && e.key === 'O')) {
       e.preventDefault()
       setShowCommandPalette(true)
       return
     }
 
-    // Quick Open: Ctrl+P
-    if (e.ctrlKey && e.key.toLowerCase() === 'p' && !e.altKey) {
+    // Quick Open: Ctrl/Cmd+P
+    if (mod && e.key.toLowerCase() === 'p' && !e.altKey) {
       e.preventDefault()
       setShowQuickOpen(true)
       return
@@ -64,22 +69,22 @@ export function useGlobalShortcuts() {
       return
     }
 
-    // Settings: Ctrl+,
-    if (e.ctrlKey && e.key === ',') {
+    // Settings: Ctrl/Cmd+,
+    if (mod && e.key === ',') {
       e.preventDefault()
       setShowSettings(true)
       return
     }
 
-    // Terminal: Ctrl+`
-    if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
+    // Terminal: Ctrl/Cmd+`
+    if (mod && (e.key === '`' || e.code === 'Backquote')) {
       e.preventDefault()
       setTerminalVisible(!s.terminalVisible)
       return
     }
 
-    // Debug: Ctrl+Shift+D
-    if (e.ctrlKey && (e.key === 'D' || (e.shiftKey && e.key.toLowerCase() === 'd'))) {
+    // Debug: Ctrl/Cmd+Shift+D
+    if (mod && (e.key === 'D' || (e.shiftKey && e.key.toLowerCase() === 'd'))) {
       e.preventDefault()
       setDebugVisible(!s.debugVisible)
       return
@@ -99,8 +104,8 @@ export function useGlobalShortcuts() {
       return
     }
 
-    // Composer: Ctrl+Shift+I
-    if (e.ctrlKey && (e.key === 'I' || (e.shiftKey && e.key.toLowerCase() === 'i'))) {
+    // Composer: Ctrl/Cmd+Shift+I
+    if (mod && (e.key === 'I' || (e.shiftKey && e.key.toLowerCase() === 'i'))) {
       e.preventDefault()
       setShowComposer(true)
       return
@@ -115,8 +120,8 @@ export function useGlobalShortcuts() {
       return
     }
 
-    // Reveal active file in explorer: Ctrl+Shift+E
-    if (e.ctrlKey && (e.key === 'E' || (e.shiftKey && e.key.toLowerCase() === 'e'))) {
+    // Reveal active file in explorer: Ctrl/Cmd+Shift+E
+    if (mod && (e.key === 'E' || (e.shiftKey && e.key.toLowerCase() === 'e'))) {
       e.preventDefault()
       window.dispatchEvent(new CustomEvent('explorer:reveal-active-file'))
       return
@@ -129,8 +134,8 @@ export function useGlobalShortcuts() {
       return
     }
 
-    // Close active file: Ctrl+W
-    if (e.ctrlKey && e.key.toLowerCase() === 'w') {
+    // Close active file: Ctrl/Cmd+W
+    if (mod && e.key.toLowerCase() === 'w') {
       e.preventDefault()
       if (s.activeFilePath) {
         closeFile(s.activeFilePath)

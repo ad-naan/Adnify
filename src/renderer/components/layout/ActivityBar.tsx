@@ -3,6 +3,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
+import { formatShortcut } from '@services/keybindingService'
 
 export default function ActivityBar() {
   const { activeSidePanel, setActiveSidePanel, language, setShowSettings, setShowComposer } = useStore(useShallow(s => ({ activeSidePanel: s.activeSidePanel, setActiveSidePanel: s.setActiveSidePanel, language: s.language, setShowSettings: s.setShowSettings, setShowComposer: s.setShowComposer })))
@@ -49,7 +50,7 @@ export default function ActivityBar() {
 
       {/* Bottom Actions */}
       <div className="flex flex-col w-full items-center gap-3 pb-2">
-        <Tooltip content={`${t('composer', language)} (Ctrl+Shift+I)`} side="right">
+        <Tooltip content={`${t('composer', language)} (${formatShortcut('Ctrl+Shift+I')})`} side="right">
           <button
             onClick={() => setShowComposer(true)}
             className="w-10 h-10 rounded-xl flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-hover active:scale-95 transition-all duration-300 group"
