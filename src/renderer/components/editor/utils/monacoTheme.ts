@@ -6,6 +6,7 @@ import type { ThemeName } from '@store/slices/themeSlice'
 
 // RGB 字符串转 Hex
 const rgbToHex = (rgbStr: string) => {
+  if (typeof rgbStr !== 'string' || !rgbStr) return '#000000'
   const parts = rgbStr.split(' ').map(Number)
   if (parts.length !== 3 || parts.some(isNaN)) return '#000000'
   const [r, g, b] = parts

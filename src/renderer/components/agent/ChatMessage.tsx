@@ -383,7 +383,8 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
 ThinkingBlock.displayName = 'ThinkingBlock'
 
 // Markdown 渲染组件
-const MarkdownContent = React.memo(({ content, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
+const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
+  const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
   const cleanedContent = React.useMemo(() => {
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
@@ -534,11 +535,12 @@ const RenderPart = React.memo(({
   onTypingComplete,
 }: RenderPartProps & { onTypingComplete?: () => void }) => {
   if (isTextPart(part)) {
-    if (!part.content.trim()) return null
+    const textStr = typeof part.content === 'string' ? part.content : String(part.content ?? '')
+    if (!textStr.trim()) return null
     return (
       <MarkdownContent
         key={`text-${index}`}
-        content={part.content}
+        content={textStr}
         fontSize={fontSize}
         isStreaming={isStreaming}
         onTypingComplete={onTypingComplete}
