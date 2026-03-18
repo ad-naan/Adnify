@@ -118,7 +118,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
   // 从 AgentStore 获取 setInputPrompt
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
 
-  const { setMode } = useModeStore()
+  const setMode = useModeStore(s => s.setMode)
 
   const { clearMessages, clearCheckpoints } = useAgent()
 

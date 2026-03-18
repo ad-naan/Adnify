@@ -144,6 +144,8 @@ CodeBlock.displayName = 'CodeBlock'
 // 辅助函数：清理流式输出中的 XML 工具调用标签
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
+  // 短路优化：大部分流式 token 不含 XML 标签，无需执行正则
+  if (!text.includes('<')) return text
   let cleaned = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
   cleaned = cleaned.replace(/<function>[\s\S]*?<\/function>/gi, '')
   cleaned = cleaned.replace(/<tool_call>[\s\S]*$/gi, '')
