@@ -60,6 +60,7 @@ function createGroupedAPI() {
       mkdir: (path: string) => raw.mkdir(path),
       ensureDir: (path: string) => raw.ensureDir(path),
       delete: (path: string) => raw.deleteFile(path),
+      copy: (sourcePath: string, destinationPath: string) => raw.copyFile(sourcePath, destinationPath),
       rename: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
       showInFolder: (path: string) => raw.showItemInFolder(path),
       openInBrowser: (path: string) => raw.openInBrowser(path),

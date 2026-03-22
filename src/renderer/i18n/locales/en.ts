@@ -53,6 +53,7 @@ export const en = {
   'closeTerminal': 'Close',
   'killTerminal': 'Kill Terminal',
   'selectAll': 'Select All',
+  'openIntegratedTerminalHere': 'Open Integrated Terminal Here',
 
   // Tools
   'toolResultFor': 'Tool result for',
@@ -619,6 +620,7 @@ export const en = {
   'welcome.pressForCommands': 'Press {shortcut} for commands',
 
   // Context Menu
+  'copyFile': 'Copy File',
   'copyPath': 'Copy Path',
   'copyRelativePath': 'Copy Relative Path',
   'revealInExplorer': 'Reveal in Explorer',
