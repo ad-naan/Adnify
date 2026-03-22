@@ -104,6 +104,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null)
+  const dragSourcePathRef = useRef<string | null>(null)
 
   // 监听容器尺寸变化
   useEffect(() => {
@@ -492,6 +494,49 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
   }, [expandFolder, loadChildren, onStartCreate])
 
+  const moveItemToDirectory = useCallback(async (sourcePath: string, targetDirectoryPath: string) => {
+    const normalizedSourcePath = normalizePath(sourcePath)
+    const normalizedTargetDirectoryPath = normalizePath(targetDirectoryPath)
+
+    if (!normalizedSourcePath || !normalizedTargetDirectoryPath) return
+    if (normalizedSourcePath === normalizedTargetDirectoryPath) return
+    if (normalizedTargetDirectoryPath.startsWith(`${normalizedSourcePath}/`)) return
+
+    const sourceName = sourcePath.split(/[/\\]/).pop()
+    if (!sourceName) return
+
+    const sourceParentPath = getDirPath(sourcePath)
+    const destinationPath = joinPath(targetDirectoryPath, sourceName)
+    if (pathEquals(sourcePath, destinationPath)) return
+
+    const success = await api.file.rename(sourcePath, destinationPath)
+    if (success) {
+      directoryCacheService.invalidate(sourceParentPath)
+      directoryCacheService.invalidate(targetDirectoryPath)
+      setChildrenCache((prev) => {
+        const next = new Map(prev)
+        next.delete(sourceParentPath)
+        next.delete(targetDirectoryPath)
+        next.delete(sourcePath)
+        return next
+      })
+      expandFolder(targetDirectoryPath)
+      onRefresh()
+    } else {
+      toast.error('Move failed')
+    }
+  }, [expandFolder, onRefresh])
+
+  const handleDropOnDirectory = useCallback(async (targetNode: FlattenedNode, sourcePath: string) => {
+    if (!targetNode.item.isDirectory) return
+    await moveItemToDirectory(sourcePath, targetNode.item.path)
+  }, [moveItemToDirectory])
+
+  const handleDropNextToNode = useCallback(async (targetNode: FlattenedNode, sourcePath: string) => {
+    const targetDirectoryPath = targetNode.item.isDirectory ? targetNode.item.path : getDirPath(targetNode.item.path)
+    await moveItemToDirectory(sourcePath, targetDirectoryPath)
+  }, [moveItemToDirectory])
+
   const handleOpenTerminalHere = useCallback((node: FlattenedNode) => {
     const cwd = node.item.isDirectory ? node.item.path : getDirPath(node.item.path)
     void onOpenTerminal(cwd)
@@ -610,7 +655,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         onContextMenu={(e) => handleContextMenu(e, node)}
         draggable={!isRenaming}
         onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = 'copy'
+          dragSourcePathRef.current = item.path
+          e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('application/adnify-file-path', item.path)
           e.dataTransfer.setData('text/uri-list', `file:///${item.path.replace(/\\/g, '/')}`)
           e.dataTransfer.setData('text/plain', item.path)
@@ -622,6 +668,46 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           e.dataTransfer.setDragImage(dragImage, 0, 0)
           setTimeout(() => document.body.removeChild(dragImage), 0)
         }}
+        onDragEnd={() => {
+          dragSourcePathRef.current = null
+          setDragOverPath(null)
+        }}
+        onDragEnter={(e) => {
+          if (isRenaming) return
+          const sourcePath = dragSourcePathRef.current
+          if (!sourcePath || pathEquals(sourcePath, item.path)) return
+          e.preventDefault()
+          setDragOverPath(item.path)
+        }}
+        onDragOver={(e) => {
+          if (isRenaming) return
+          const sourcePath = dragSourcePathRef.current
+          if (!sourcePath || pathEquals(sourcePath, item.path)) return
+          e.preventDefault()
+          e.stopPropagation()
+          e.dataTransfer.dropEffect = 'move'
+          if (!pathEquals(dragOverPath || '', item.path)) {
+            setDragOverPath(item.path)
+          }
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setDragOverPath((prev) => (prev === item.path ? null : prev))
+          }
+        }}
+        onDrop={async (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          const sourcePath = dragSourcePathRef.current
+          dragSourcePathRef.current = null
+          setDragOverPath(null)
+          if (!sourcePath) return
+          if (item.isDirectory) {
+            await handleDropOnDirectory(node, sourcePath)
+            return
+          }
+          await handleDropNextToNode(node, sourcePath)
+        }}
         className={`
           group flex items-center gap-2 pr-2 cursor-pointer transition-colors duration-150 relative select-none rounded-md mx-2 my-[2px]
           ${isActive
@@ -631,6 +717,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
               : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover/40'
           }
           ${isHighlighted ? 'animate-reveal-highlight' : ''}
+          ${dragOverPath && pathEquals(dragOverPath, item.path) ? 'ring-1 ring-accent bg-accent/10' : ''}
         `}
         style={{
           height: ITEM_HEIGHT,
@@ -711,6 +798,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         if (!renamingPath && !contextMenu) {
           setFocusedPath(null)
         }
+      }}
+      onDragLeave={() => setDragOverPath(null)}
+      onDrop={() => {
+        dragSourcePathRef.current = null
+        setDragOverPath(null)
       }}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>
