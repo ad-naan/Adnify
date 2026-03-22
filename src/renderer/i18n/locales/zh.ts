@@ -620,6 +620,7 @@ export const zh = {
   'welcome.pressForCommands': '按 {shortcut} 打开命令面板',
 
   // Context Menu
+  'copyFile': '复制当前文件',
   'copyPath': '复制路径',
   'copyRelativePath': '复制相对路径',
   'revealInExplorer': '在资源管理器中显示',

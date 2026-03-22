@@ -191,6 +191,7 @@ export interface ElectronAPI {
   showItemInFolder: (path: string) => Promise<void>
   mkdir: (path: string) => Promise<boolean>
   deleteFile: (path: string) => Promise<boolean>
+  copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
 
@@ -466,6 +467,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInBrowser: (path: string) => ipcRenderer.invoke('file:openInBrowser', path),
   mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
   deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path),
+  copyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke('file:copy', sourcePath, destinationPath),
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) =>
     ipcRenderer.invoke('file:search', query, rootPath, options),
