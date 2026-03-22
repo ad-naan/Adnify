@@ -620,6 +620,7 @@ export const en = {
   'welcome.pressForCommands': 'Press {shortcut} for commands',
 
   // Context Menu
+  'copyFile': 'Copy File',
   'copyPath': 'Copy Path',
   'copyRelativePath': 'Copy Relative Path',
   'revealInExplorer': 'Reveal in Explorer',

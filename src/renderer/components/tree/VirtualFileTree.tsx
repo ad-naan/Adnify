@@ -396,8 +396,10 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleDelete = useCallback(async (node: FlattenedNode) => {
     const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '删除' : 'Delete',
-      message: t('confirmDelete', language, { name: node.item.name }),
+      title: '删除',
+      message: t('confirmDelete', 'zh', { name: node.item.name }) || `确定要删除 ${node.item.name} 吗？`,
+      confirmText: '确定',
+      cancelText: '取消',
       variant: 'danger',
     })
     if (confirmed) {
@@ -442,6 +444,42 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
     setRenamingPath(null)
   }, [renamingPath, renameValue, flattenedNodes, onRefresh])
+
+  const handleCopyFile = useCallback(async (node: FlattenedNode) => {
+    if (node.item.isDirectory) {
+      toast.warning(language === 'zh' ? '暂不支持复制文件夹' : 'Copying folders is not supported yet')
+      return
+    }
+
+    const parentPath = getDirPath(node.item.path)
+    const nameParts = node.item.name.match(/^(.*?)(\.[^.]*)?$/)
+    const baseName = nameParts?.[1] || node.item.name
+    const extension = nameParts?.[2] || ''
+
+    let candidateName = `${baseName} - 副本${extension}`
+    let candidatePath = joinPath(parentPath, candidateName)
+    let counter = 2
+
+    while (await api.file.exists(candidatePath)) {
+      candidateName = `${baseName} - 副本 ${counter}${extension}`
+      candidatePath = joinPath(parentPath, candidateName)
+      counter += 1
+    }
+
+    const success = await api.file.copy(node.item.path, candidatePath)
+    if (success) {
+      directoryCacheService.invalidate(parentPath)
+      setChildrenCache((prev) => {
+        const next = new Map(prev)
+        next.delete(parentPath)
+        return next
+      })
+      onRefresh()
+      toast.success(language === 'zh' ? '文件已复制' : 'File copied')
+    } else {
+      toast.error(language === 'zh' ? '复制文件失败' : 'Failed to copy file')
+    }
+  }, [language, onRefresh])
 
   // 全局快捷键处理 (F2 重命名)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -552,43 +590,46 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   // 构建右键菜单项
   const getContextMenuItems = useCallback((node: FlattenedNode): ContextMenuItem[] => {
+    const contextMenuLanguage = 'zh'
+
     if (node.item.isDirectory) {
       return [
-        { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleNewFile(node) },
-        { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleNewFolder(node) },
+        { id: 'newFile', label: t('newFile', contextMenuLanguage), icon: FilePlus, onClick: () => handleNewFile(node) },
+        { id: 'newFolder', label: t('newFolder', contextMenuLanguage), icon: FolderPlus, onClick: () => handleNewFolder(node) },
         { id: 'sep1', label: '', separator: true },
-        { id: 'openTerminal', label: t('openIntegratedTerminalHere', language) || 'Open Integrated Terminal Here', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
+        { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
         { id: 'sep2', label: '', separator: true },
-        { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
-        { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+        { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
+        { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
         { id: 'sep3', label: '', separator: true },
-        { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-        { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-        { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+        { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
+        { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+        { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
     const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') ||
       node.item.name.toLowerCase().endsWith('.htm')
 
     const items: ContextMenuItem[] = [
-      { id: 'openTerminal', label: t('openIntegratedTerminalHere', language) || 'Open Integrated Terminal Here', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
+      { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
       { id: 'sep1', label: '', separator: true },
-      { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
-      { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+      { id: 'copyFile', label: t('copyFile', contextMenuLanguage) || '复制当前文件', icon: Copy, onClick: () => handleCopyFile(node) },
+      { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
+      { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
       { id: 'sep2', label: '', separator: true },
-      { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-      { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-      { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+      { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
+      { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+      { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
     // 对 HTML 文件添加"在浏览器中打开"选项
     if (isHtmlFile) {
       items.push({ id: 'sep2', label: '', separator: true })
-      items.push({ id: 'openInBrowser', label: t('openInBrowser', language) || 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+      items.push({ id: 'openInBrowser', label: t('openInBrowser', contextMenuLanguage) || '在浏览器中打开', icon: Globe, onClick: () => handleOpenInBrowser(node) })
     }
 
     return items
-  }, [language, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
+  }, [handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyFile, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {
