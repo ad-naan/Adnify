@@ -205,20 +205,20 @@ export function ExplorerView() {
   }, [language, setTerminalVisible])
 
   const rootMenuItems: ContextMenuItem[] = [
-    { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleRootCreate('file') },
-    { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
+    { id: 'newFile', label: t('newFile', 'zh'), icon: FilePlus, onClick: () => handleRootCreate('file') },
+    { id: 'newFolder', label: t('newFolder', 'zh'), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
     { id: 'sep1', label: '', separator: true },
     {
       id: 'openTerminal',
-      label: t('openIntegratedTerminalHere', language) || 'Open Integrated Terminal Here',
+      label: t('openIntegratedTerminalHere', 'zh') || '在此处打开集成终端',
       icon: Terminal,
       onClick: () => workspacePath && openTerminalAtPath(workspacePath),
     },
     { id: 'sep2', label: '', separator: true },
-    { id: 'refresh', label: t('refresh', language), icon: RefreshCw, onClick: refreshFiles },
+    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: refreshFiles },
     {
       id: 'reveal',
-      label: 'Reveal in Explorer',
+      label: '在资源管理器中显示',
       icon: ExternalLink,
       onClick: () => workspacePath && api.file.showInFolder(workspacePath),
     },
