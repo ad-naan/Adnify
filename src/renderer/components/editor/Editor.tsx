@@ -7,6 +7,7 @@ import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
+import { t } from '@renderer/i18n'
 import { useAgent } from '@hooks/useAgent'
 import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
@@ -20,6 +21,7 @@ import { keybindingService } from '@services/keybindingService'
 import { monaco } from '@renderer/monacoWorker'
 import { initMonacoTypeService } from '@services/monacoTypeService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
+import { composerService } from '@renderer/agent/services/composerService'
 import type { StreamingEditState } from '@renderer/agent/types'
 import type { ThemeName } from '@store/slices/themeSlice'
 import { useEditorBreakpoints } from '@hooks/useEditorBreakpoints'
@@ -154,29 +156,6 @@ export default function Editor() {
     }
   }, [activeFilePath])
 
-  // 监听跳转到行的事件
-  useEffect(() => {
-    const handleGotoLine = (event: CustomEvent<{ line: number; column: number }>) => {
-      // 使用 setTimeout 确保编辑器已经渲染
-      setTimeout(() => {
-        const editor = editorRef.current
-        if (!editor) {
-          console.warn('[Editor] Editor not ready for goto-line')
-          return
-        }
-
-        const { line, column } = event.detail
-        editor.revealLineInCenter(line)
-        editor.setPosition({ lineNumber: line, column })
-        editor.focus()
-      }, 100)
-    }
-
-    window.addEventListener('editor:goto-line', handleGotoLine as EventListener)
-    return () => {
-      window.removeEventListener('editor:goto-line', handleGotoLine as EventListener)
-    }
-  }, [])
 
   const handleBeforeMount: BeforeMount = (monacoInstance) => {
     const { currentTheme } = useStore.getState() as { currentTheme: ThemeName }
@@ -187,6 +166,7 @@ export default function Editor() {
   const handleEditorMount: OnMount = (editor, monacoInstance) => {
     editorRef.current = editor
     monacoRef.current = monacoInstance
+    const disposables: { dispose: () => void }[] = []
 
     setupCursorTracking(editor, cursorDebounceRef)
     registerProviders(monacoInstance)
@@ -209,31 +189,32 @@ export default function Editor() {
         markFileSaved(activeFilePath, model.getAlternativeVersionId())
       }
 
-      editor.onDidChangeModelContent(() => {
+      const contentDisposable = editor.onDidChangeModelContent(() => {
         const currentVersionId = model.getAlternativeVersionId()
         const editorContent = editor.getValue()
         const { openFiles: currentFiles } = useStore.getState()
         const currentFile = currentFiles.find(f => f.path === activeFilePath)
 
         if (currentFile && editorContent === currentFile.content) {
-          // 内容相同，说明是外部同步（如 AI 写入后 reloadFileFromDisk）
-          // 更新 savedVersionId，保持 isDirty: false
           markFileSaved(activeFilePath, currentVersionId)
         } else {
-          // 内容不同，说明是用户编辑
           updateFileDirtyState(activeFilePath, currentVersionId)
         }
       })
+      disposables.push(contentDisposable)
     }
 
-    editor.onContextMenu((e) => {
+    const contextMenuDisposable = editor.onContextMenu((e) => {
       e.event.preventDefault()
       e.event.stopPropagation()
       setContextMenu({ x: e.event.posx, y: e.event.posy })
     })
+    disposables.push(contextMenuDisposable)
 
     editor.onDidDispose(() => {
       unsubscribeDiagnostics()
+      disposables.forEach(d => d.dispose())
+      disposables.length = 0
     })
   }
 
@@ -309,9 +290,13 @@ export default function Editor() {
             isStreaming={!streamingEdit.isComplete}
             onAccept={() => {
               updateFileContent(activeFile.path, streamingEdit.currentContent)
+              composerService.acceptChange(activeFile.path)
               setShowDiffPreview(false)
             }}
-            onReject={() => setShowDiffPreview(false)}
+            onReject={() => {
+              composerService.rejectChange(activeFile.path)
+              setShowDiffPreview(false)
+            }}
             onClose={() => setShowDiffPreview(false)}
           />
         </div>
@@ -345,10 +330,11 @@ export default function Editor() {
               if (activeFile.path.startsWith('git-diff://')) return;
               updateFileContent(activeFile.path, newContent)
             }}
-            onAccept={() => {
+            onAccept={async () => {
               if (activeFile.path.startsWith('git-diff://')) return;
               const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               acceptChange(realPath)
+              await composerService.acceptChange(realPath)
               updateFileContent(realPath, activeFile.content)
               closeFile(activeFile.path)
             }}
@@ -356,6 +342,7 @@ export default function Editor() {
               if (activeFile.path.startsWith('git-diff://')) return;
               const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               await undoChange(realPath)
+              await composerService.rejectChange(realPath)
               closeFile(activeFile.path)
             }}
           />
@@ -364,13 +351,13 @@ export default function Editor() {
             {/* Markdown 工具栏 */}
             {activeFileType === 'markdown' && (
               <div className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 bg-surface/80 backdrop-blur-sm rounded-bl-lg border-l border-b border-border">
-                <button onClick={() => setMarkdownMode('edit')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'edit' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="编辑模式">
+                <button onClick={() => setMarkdownMode('edit')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'edit' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title={t('editor.editMode', language)}>
                   <Edit className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => setMarkdownMode('split')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'split' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="分屏模式">
+                <button onClick={() => setMarkdownMode('split')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'split' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title={t('editor.splitMode', language)}>
                   <Columns className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => setMarkdownMode('preview')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'preview' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title="预览模式">
+                <button onClick={() => setMarkdownMode('preview')} className={`p-1.5 rounded-md text-xs transition-colors ${markdownMode === 'preview' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary hover:bg-white/10'}`} title={t('editor.previewMode', language)}>
                   <Eye className="w-3.5 h-3.5" />
                 </button>
               </div>

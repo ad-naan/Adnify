@@ -141,9 +141,14 @@ class GitService {
         if (!targetRoot) return null
 
         try {
+            // 并行执行 branch 和 status 命令（status 不依赖 branch 结果，可以并行）
+            const [branchResult, statusResult] = await Promise.all([
+                this.exec(['branch', '--show-current'], targetRoot),
+                this.exec(['status', '--porcelain=v1', '-uall'], targetRoot),
+            ])
+
             // 获取分支信息
             let branch = 'HEAD'
-            const branchResult = await this.exec(['branch', '--show-current'], targetRoot)
             if (branchResult.exitCode === 0 && branchResult.stdout.trim()) {
                 branch = branchResult.stdout.trim()
             } else {
@@ -153,7 +158,7 @@ class GitService {
                 }
             }
 
-            // 获取 ahead/behind
+            // 获取 ahead/behind（依赖 branch 结果）
             let ahead = 0, behind = 0
             try {
                 const aheadBehind = await this.exec(['rev-list', '--left-right', '--count', '@{upstream}...HEAD'], targetRoot)
@@ -165,9 +170,6 @@ class GitService {
                     }
                 }
             } catch { /* 无上游 */ }
-
-            // 获取状态
-            const statusResult = await this.exec(['status', '--porcelain=v1', '-uall'], targetRoot)
 
             const staged: GitFileChange[] = []
             const unstaged: GitFileChange[] = []
@@ -553,6 +555,25 @@ class GitService {
         }
     }
 
+    async deleteRemoteBranch(name: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            // name 格式为 "origin/branchName"，需要拆分出 remote 和 branch
+            const slashIndex = name.indexOf('/')
+            if (slashIndex === -1) {
+                return { success: false, error: 'Invalid remote branch name format' }
+            }
+            const remote = name.slice(0, slashIndex)
+            const branch = name.slice(slashIndex + 1)
+            const result = await this.exec(['push', remote, '--delete', branch], rootPath)
+            return {
+                success: result.exitCode === 0,
+                error: result.exitCode !== 0 ? result.stderr : undefined,
+            }
+        } catch (err) {
+            return { success: false, error: handleGitError(err) }
+        }
+    }
+
     async renameBranch(oldName: string, newName: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
             const result = await this.exec(['branch', '-m', oldName, newName], rootPath)
@@ -605,12 +626,9 @@ class GitService {
 
     // ==================== Rebase 操作 ====================
 
-    async rebase(branch: string, interactive?: boolean, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+    async rebase(branch: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const args = interactive
-                ? ['rebase', '-i', branch]
-                : ['rebase', branch]
-            const result = await this.exec(args, rootPath)
+            const result = await this.exec(['rebase', branch], rootPath)
             return {
                 success: result.exitCode === 0,
                 error: result.exitCode !== 0 ? result.stderr : undefined,
@@ -764,11 +782,11 @@ class GitService {
 
     async getStashList(rootPath?: string): Promise<GitStashEntry[]> {
         try {
-            const result = await this.exec(['stash', 'list', '--format=%gd|%gs|%ci'], rootPath)
+            const result = await this.exec(['stash', 'list', '--format=%gd%x00%gs%x00%ci'], rootPath)
             if (result.exitCode !== 0 || !result.stdout) return []
 
             return result.stdout.trim().split('\n').filter(Boolean).map((line) => {
-                const parts = line.split('|')
+                const parts = line.split('\0')
                 const indexMatch = parts[0]?.match(/stash@\{(\d+)\}/)
                 const index = indexMatch ? parseInt(indexMatch[1]) : 0
                 const message = parts[1] || ''
@@ -802,13 +820,13 @@ class GitService {
             const result = await this.exec([
                 'log',
                 `-${count}`,
-                '--pretty=format:%H|%h|%s|%an|%ae|%aI|%P'
+                '--pretty=format:%H%x00%h%x00%s%x00%an%x00%ae%x00%aI%x00%P'
             ], rootPath)
 
             if (result.exitCode !== 0 || !result.stdout) return []
 
             return result.stdout.trim().split('\n').filter(Boolean).map(line => {
-                const [hash, shortHash, message, author, email, dateStr, parents] = line.split('|')
+                const [hash, shortHash, message, author, email, dateStr, parents] = line.split('\0')
                 return {
                     hash,
                     shortHash,
@@ -831,13 +849,13 @@ class GitService {
         try {
             // 获取 commit 信息
             const infoResult = await this.exec([
-                'show', hash, '--format=%H|%h|%s|%an|%ae|%aI|%P', '--stat', '--stat-width=1000'
+                'show', hash, '--format=%H%x00%h%x00%s%x00%an%x00%ae%x00%aI%x00%P', '--stat', '--stat-width=1000'
             ], rootPath)
 
             if (infoResult.exitCode !== 0) return null
 
             const lines = infoResult.stdout.trim().split('\n')
-            const [hash_, shortHash, message, author, email, dateStr, parents] = lines[0].split('|')
+            const [hash_, shortHash, message, author, email, dateStr, parents] = lines[0].split('\0')
 
             const commit: GitCommit = {
                 hash: hash_,
@@ -879,7 +897,7 @@ class GitService {
             const result = await this.exec([
                 'log',
                 `-${count}`,
-                '--pretty=format:%H|%h|%s|%an|%ae|%aI',
+                '--pretty=format:%H%x00%h%x00%s%x00%an%x00%ae%x00%aI',
                 '--follow',
                 '--',
                 filePath
@@ -888,7 +906,7 @@ class GitService {
             if (result.exitCode !== 0 || !result.stdout) return []
 
             return result.stdout.trim().split('\n').filter(Boolean).map(line => {
-                const [hash, shortHash, message, author, email, dateStr] = line.split('|')
+                const [hash, shortHash, message, author, email, dateStr] = line.split('\0')
                 return {
                     hash,
                     shortHash,
@@ -908,13 +926,13 @@ class GitService {
             const result = await this.exec([
                 'log', branch,
                 `-${count}`,
-                '--pretty=format:%H|%h|%s|%an|%ae|%aI'
+                '--pretty=format:%H%x00%h%x00%s%x00%an%x00%ae%x00%aI'
             ], rootPath)
 
             if (result.exitCode !== 0 || !result.stdout) return []
 
             return result.stdout.trim().split('\n').filter(Boolean).map(line => {
-                const [hash, shortHash, message, author, email, dateStr] = line.split('|')
+                const [hash, shortHash, message, author, email, dateStr] = line.split('\0')
                 return {
                     hash,
                     shortHash,
@@ -983,11 +1001,11 @@ class GitService {
 
     async getTags(rootPath?: string): Promise<{ name: string; hash: string; message?: string }[]> {
         try {
-            const result = await this.exec(['tag', '-l', '--format=%(refname:short)|%(objectname:short)|%(contents:subject)'], rootPath)
+            const result = await this.exec(['tag', '-l', '--format=%(refname:short)%00%(objectname:short)%00%(contents:subject)'], rootPath)
             if (result.exitCode !== 0 || !result.stdout) return []
 
             return result.stdout.trim().split('\n').filter(Boolean).map(line => {
-                const [name, hash, message] = line.split('|')
+                const [name, hash, message] = line.split('\0')
                 return { name, hash, message }
             })
         } catch {
@@ -1055,32 +1073,22 @@ class GitService {
         if (!targetPath) return 'normal'
 
         try {
-            // 检查 .git 目录下的状态文件
-            const checks = [
-                { file: 'MERGE_HEAD', state: 'merge' as const },
-                { file: 'rebase-merge', state: 'rebase' as const },
-                { file: 'rebase-apply', state: 'rebase' as const },
-                { file: 'CHERRY_PICK_HEAD', state: 'cherry-pick' as const },
-                { file: 'REVERT_HEAD', state: 'revert' as const },
-            ]
-
-            for (const check of checks) {
-                const result = await this.exec(['rev-parse', '--git-path', check.file], targetPath)
-                if (result.exitCode === 0) {
-                    const gitPath = result.stdout.trim()
-                    // 检查文件是否存在 (gitPath is used for debugging if needed)
-                    void gitPath
-                    const existsResult = await this.exec(['rev-parse', '--verify', '--quiet', 'HEAD'], targetPath)
-                    if (existsResult.exitCode === 0) {
-                        // 简单检查：如果能获取到路径，假设状态存在
-                        const statusResult = await this.exec(['status'], targetPath)
-                        if (statusResult.stdout.includes('rebase in progress')) return 'rebase'
-                        if (statusResult.stdout.includes('merge in progress') || statusResult.stdout.includes('Unmerged')) return 'merge'
-                        if (statusResult.stdout.includes('cherry-pick')) return 'cherry-pick'
-                        if (statusResult.stdout.includes('revert')) return 'revert'
-                    }
-                }
+            // 通过 git rev-parse --verify 检查特殊引用来判断操作状态
+            // 这些引用 (REBASE_HEAD, MERGE_HEAD 等) 在对应操作进行时由 git 自动创建
+            // 比解析 git status 的本地化文本输出更可靠
+            const checkRef = async (ref: string): Promise<boolean> => {
+                const result = await this.exec(
+                    ['rev-parse', '--verify', '--quiet', ref],
+                    targetPath
+                ).catch(() => null)
+                return result?.exitCode === 0
             }
+
+            // 检查顺序: rebase > merge > cherry-pick > revert
+            if (await checkRef('REBASE_HEAD')) return 'rebase'
+            if (await checkRef('MERGE_HEAD')) return 'merge'
+            if (await checkRef('CHERRY_PICK_HEAD')) return 'cherry-pick'
+            if (await checkRef('REVERT_HEAD')) return 'revert'
 
             return 'normal'
         } catch {
