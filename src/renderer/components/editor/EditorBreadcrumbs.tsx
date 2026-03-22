@@ -33,7 +33,7 @@ export const EditorBreadcrumbs = memo(function EditorBreadcrumbs({
       </div>
       <span className="mx-1 opacity-30">/</span>
       {breadcrumbs.map((part, index, arr) => (
-        <div key={index} className="flex items-center gap-1.5 flex-shrink-0">
+        <div key={`${part}-${index}`} className="flex items-center gap-1.5 flex-shrink-0">
           <span className={`hover:text-text-primary transition-colors cursor-pointer px-1.5 py-0.5 rounded-sm ${index === arr.length - 1 ? 'text-text-primary font-medium bg-surface-hover/50' : ''}`}>
             {part}
           </span>

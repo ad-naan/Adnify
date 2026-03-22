@@ -13,8 +13,9 @@ import {
     Play, SkipForward, Loader2, Sparkles
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@renderer/i18n'
-import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/agent/services/gitService'
+import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { keybindingService } from '@services/keybindingService'
@@ -57,14 +58,14 @@ const FileItem = memo(function FileItem({
     path: string
     status: string
     staged: boolean
-    onStage: () => void
-    onUnstage: () => void
-    onDiscard: () => void
+    onStage?: () => void
+    onUnstage?: () => void
+    onDiscard?: () => void
     onClick: () => void
 }) {
     const fileName = getFileName(path)
     const dirPath = path.replace(fileName, '').replace(/[/\\]$/, '')
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
     return (
@@ -79,7 +80,7 @@ const FileItem = memo(function FileItem({
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {staged ? (
-                    <button
+                    onUnstage && <button
                         onClick={(e) => { e.stopPropagation(); onUnstage() }}
                         className="p-1 hover:bg-surface-active rounded"
                         title={tt('git.unstage')}
@@ -88,20 +89,20 @@ const FileItem = memo(function FileItem({
                     </button>
                 ) : (
                     <>
-                        <button
+                        {onDiscard && <button
                             onClick={(e) => { e.stopPropagation(); onDiscard() }}
                             className="p-1 hover:bg-surface-active rounded"
                             title={tt('git.discard')}
                         >
                             <Undo2 className="w-3 h-3 text-text-muted hover:text-red-400" />
-                        </button>
-                        <button
+                        </button>}
+                        {onStage && <button
                             onClick={(e) => { e.stopPropagation(); onStage() }}
                             className="p-1 hover:bg-surface-active rounded"
                             title={tt('git.stage')}
                         >
                             <Plus className="w-3 h-3 text-text-muted" />
-                        </button>
+                        </button>}
                     </>
                 )}
             </div>
@@ -126,7 +127,7 @@ const BranchItem = memo(function BranchItem({
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
     // 使用性能 hook 处理点击外部关闭
@@ -161,7 +162,7 @@ const BranchItem = memo(function BranchItem({
                     ) : null}
                 </div>
             ) : null}
-            {!branch.current && !branch.remote && (
+            {!branch.current && (
                 <div className="relative" ref={menuRef}>
                     <button
                         ref={buttonRef}
@@ -216,7 +217,7 @@ const CommitItem = memo(function CommitItem({
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
     const timeAgo = getTimeAgo(commit.date, language)
 
@@ -291,7 +292,7 @@ const StashItem = memo(function StashItem({
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const { language } = useStore()
+    const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
     // 使用性能 hook 处理点击外部关闭
@@ -362,7 +363,7 @@ function getTimeAgo(date: Date, language: 'en' | 'zh'): string {
 
 // ==================== 主组件 ====================
 export function GitView() {
-    const { workspacePath, language, openFile, setActiveFile } = useStore()
+    const { workspacePath, language, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
     // 状态
     const [activeTab, setActiveTab] = useState<GitTab>('changes')
@@ -661,6 +662,25 @@ Commit message:`
         })
         if (confirmed) {
             const result = await gitService.deleteBranch(name)
+            if (result.success) {
+                refreshStatus()
+                toast.success(tt('git.branchDeleted'), name)
+            } else {
+                toast.error(tt('git.mergeFailed'), result.error)
+            }
+        }
+    }
+
+    const handleDeleteRemoteBranch = async (name: string) => {
+        const { globalConfirm } = await import('@components/common/ConfirmDialog')
+        const confirmed = await globalConfirm({
+            title: tt('git.deleteBranch'),
+            message: t('git.deleteBranchConfirm', language, { name }),
+            confirmText: tt('delete'),
+            variant: 'danger',
+        })
+        if (confirmed) {
+            const result = await gitService.deleteRemoteBranch(name)
             if (result.success) {
                 refreshStatus()
                 toast.success(tt('git.branchDeleted'), name)
@@ -1113,7 +1133,6 @@ Commit message:`
                                         status="unmerged"
                                         staged={false}
                                         onStage={() => handleStage(path)}
-                                        onUnstage={() => { }}
                                         onDiscard={() => handleDiscard(path)}
                                         onClick={() => setConflictFile(normalizePath(`${workspacePath}/${path}`))}
                                     />
@@ -1145,9 +1164,7 @@ Commit message:`
                                         path={file.path}
                                         status={file.status}
                                         staged={true}
-                                        onStage={() => { }}
                                         onUnstage={() => handleUnstage(file.path)}
-                                        onDiscard={() => { }}
                                         onClick={() => handleFileClick(file.path, file.status, true)}
                                     />
                                 ))}
@@ -1181,7 +1198,6 @@ Commit message:`
                                                 status={file.status}
                                                 staged={false}
                                                 onStage={() => handleStage(file.path)}
-                                                onUnstage={() => { }}
                                                 onDiscard={() => handleDiscard(file.path)}
                                                 onClick={() => handleFileClick(file.path, file.status, false)}
                                             />
@@ -1193,7 +1209,6 @@ Commit message:`
                                                 status="untracked"
                                                 staged={false}
                                                 onStage={() => handleStage(path)}
-                                                onUnstage={() => { }}
                                                 onDiscard={() => handleDiscard(path)}
                                                 onClick={() => handleFileClick(path, 'added', false)}
                                             />
@@ -1284,9 +1299,9 @@ Commit message:`
                                         key={branch.name}
                                         branch={branch}
                                         onCheckout={() => handleCheckoutBranch(branch.name)}
-                                        onDelete={() => { }}
-                                        onMerge={() => { }}
-                                        onRebase={() => { }}
+                                        onDelete={() => handleDeleteRemoteBranch(branch.name)}
+                                        onMerge={() => handleMergeBranch(branch.name)}
+                                        onRebase={() => handleRebaseBranch(branch.name)}
                                     />
                                 ))}
                             </div>
@@ -1344,9 +1359,14 @@ Commit message:`
                                         onApply={() => handleStashApply(stash.index)}
                                         onPop={() => handleStashPop(stash.index)}
                                         onDrop={() => handleStashDrop(stash.index)}
-                                        onView={() => {
-                                            // TODO: Show stash diff
-                                            toast.info(tt('git.stash'), stash.message || 'WIP')
+                                        onView={async () => {
+                                            const diff = await gitService.getStashDiff(stash.index, workspacePath || undefined)
+                                            if (diff) {
+                                                openFile(`git-diff://stash@{${stash.index}}`, diff, '')
+                                                setActiveFile(`git-diff://stash@{${stash.index}}`)
+                                            } else {
+                                                toast.info(tt('git.stash'), stash.message || 'WIP')
+                                            }
                                         }}
                                     />
                                 ))}
@@ -1375,9 +1395,14 @@ Commit message:`
                                             navigator.clipboard.writeText(commit.hash)
                                             toast.success(tt('git.hashCopied'))
                                         }}
-                                        onClick={() => {
-                                            // TODO: Show commit details
-                                            toast.info(commit.shortHash, commit.message)
+                                        onClick={async () => {
+                                            const diff = await gitService.getCommitDiff(commit.hash, workspacePath || undefined)
+                                            if (diff) {
+                                                openFile(`git-diff://commit/${commit.shortHash}`, diff, '')
+                                                setActiveFile(`git-diff://commit/${commit.shortHash}`)
+                                            } else {
+                                                toast.info(commit.shortHash, commit.message)
+                                            }
                                         }}
                                     />
                                 ))}

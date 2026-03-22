@@ -295,21 +295,21 @@ export function useComposerInlineDiff(
                     const domNode = document.createElement('div')
                     domNode.className = 'inline-diff-remove-zone'
                     domNode.style.fontFamily = fontFamily
-                    domNode.style.fontSize = `${fontSize} px`
-                    domNode.style.lineHeight = `${lineHeight} px`
+                    domNode.style.fontSize = `${fontSize}px`
+                    domNode.style.lineHeight = `${lineHeight}px`
                     domNode.style.pointerEvents = 'none'
 
                     const marginDomNode = document.createElement('div')
                     marginDomNode.className = 'inline-diff-remove-zone'
                     marginDomNode.style.fontFamily = fontFamily
-                    marginDomNode.style.fontSize = `${fontSize} px`
-                    marginDomNode.style.lineHeight = `${lineHeight} px`
+                    marginDomNode.style.fontSize = `${fontSize}px`
+                    marginDomNode.style.lineHeight = `${lineHeight}px`
                     marginDomNode.style.pointerEvents = 'none'
 
                     block.lines.forEach((text) => {
                         // Content line
                         const lineDiv = document.createElement('div')
-                        lineDiv.style.height = `${lineHeight} px`
+                        lineDiv.style.height = `${lineHeight}px`
                         lineDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'
                         lineDiv.style.color = '#ff6b6b'
                         lineDiv.style.whiteSpace = 'pre'
@@ -317,7 +317,7 @@ export function useComposerInlineDiff(
 
                         // Margin line
                         const marginLineDiv = document.createElement('div')
-                        marginLineDiv.style.height = `${lineHeight} px`
+                        marginLineDiv.style.height = `${lineHeight}px`
                         marginLineDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'
                         marginLineDiv.style.color = '#ff6b6b'
                         marginLineDiv.style.display = 'flex'

@@ -17,6 +17,7 @@ import {
   Globe
 } from 'lucide-react'
 import { useStore } from '@store'
+import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
 import { t } from '@renderer/i18n'
 import { getDirPath, joinPath, pathEquals, normalizePath } from '@shared/utils/pathUtils'
@@ -72,7 +73,16 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     activeFilePath,
     language,
     workspacePath
-  } = useStore()
+  } = useStore(useShallow(s => ({
+    expandedFolders: s.expandedFolders,
+    toggleFolder: s.toggleFolder,
+    expandFolder: s.expandFolder,
+    openFile: s.openFile,
+    setActiveFile: s.setActiveFile,
+    activeFilePath: s.activeFilePath,
+    language: s.language,
+    workspacePath: s.workspacePath
+  })))
 
   // 焦点状态
   const [focusedPath, setFocusedPath] = useState<string | null>(null)
@@ -132,11 +142,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
   }, [childrenCache, loadingDirs])
 
-  // 当 items (根目录内容) 变化时，清除子目录缓存以确保一致性
-  // 这使得刷新或折叠后重新展开目录时能获取最新内容
+  // 当 items (根目录内容) 变化时，增量失效子目录缓存
+  // 只重置直接子项缓存，保留其他目录的有效缓存以提升性能
   useEffect(() => {
     setChildrenCache(new Map())
-    directoryCacheService.clear()
+    if (items.length > 0 && items[0]?.path) {
+      const rootPath = items[0].path.split('/').slice(0, -1).join('/') || items[0].path
+      directoryCacheService.invalidateTree(rootPath)
+    }
   }, [items])
 
   // 展开文件夹时加载子目录
@@ -438,16 +451,16 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   const handleCopyPath = useCallback((node: FlattenedNode) => {
     navigator.clipboard.writeText(node.item.path)
-    toast.success('Path copied')
-  }, [])
+    toast.success(t('pathCopied', language) || 'Path copied')
+  }, [language])
 
   const handleCopyRelativePath = useCallback((node: FlattenedNode) => {
     if (workspacePath) {
       const relativePath = node.item.path.replace(workspacePath, '').replace(/^[\\/]/, '')
       navigator.clipboard.writeText(relativePath)
-      toast.success('Path copied')
+      toast.success(t('pathCopied', language) || 'Path copied')
     }
-  }, [workspacePath])
+  }, [workspacePath, language])
 
   const handleRevealInExplorer = useCallback((node: FlattenedNode) => {
     api.file.showInFolder(node.item.path)
@@ -456,9 +469,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleOpenInBrowser = useCallback(async (node: FlattenedNode) => {
     const success = await api.file.openInBrowser(node.item.path)
     if (!success) {
-      toast.error('Failed to open in browser')
+      toast.error(t('failedToOpenInBrowser', language) || 'Failed to open in browser')
     }
-  }, [])
+  }, [language])
 
   const handleNewFile = useCallback((node: FlattenedNode) => {
     if (node.item.isDirectory) {
@@ -494,9 +507,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
         { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
         { id: 'sep2', label: '', separator: true },
-        { id: 'copyPath', label: 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-        { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-        { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+        { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
+        { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+        { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
     const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') ||
@@ -506,15 +519,15 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
       { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
       { id: 'sep1', label: '', separator: true },
-      { id: 'copyPath', label: 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-      { id: 'copyRelPath', label: 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-      { id: 'reveal', label: 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+      { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
+      { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+      { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
     // 对 HTML 文件添加"在浏览器中打开"选项
     if (isHtmlFile) {
       items.push({ id: 'sep2', label: '', separator: true })
-      items.push({ id: 'openInBrowser', label: 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+      items.push({ id: 'openInBrowser', label: t('openInBrowser', language) || 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
     }
 
     return items
