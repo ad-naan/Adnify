@@ -171,6 +171,9 @@ export interface SecureCommandRequest {
 export interface WorkspaceConfig {
   configPath: string | null
   roots: string[]
+  restoreError?: 'missing-workspace'
+  missingRoots?: string[]
+  workspaceId?: string
 }
 
 export interface RemoteShellEntry {
@@ -346,6 +349,7 @@ export interface ElectronAPI {
   openInBrowser: (path: string) => Promise<boolean>
   mkdir: (path: string) => Promise<boolean>
   deleteFile: (path: string) => Promise<boolean>
+  copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
   searchStream: (query: string, rootPath: string | string[], options: SearchFilesOptions, searchId: string) => Promise<void>
