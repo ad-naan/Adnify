@@ -162,10 +162,22 @@ export interface ElectronAPI {
   openFile: () => Promise<{ path: string; content: string } | null>
   openFolder: () => Promise<string | null>
   selectFolder: () => Promise<string | null>
-  openWorkspace: () => Promise<{ configPath: string | null; roots: string[] } | null>
+  openWorkspace: () => Promise<{
+    configPath: string | null
+    roots: string[]
+    restoreError?: 'missing-workspace'
+    missingRoots?: string[]
+    workspaceId?: string
+  } | null>
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
-  restoreWorkspace: () => Promise<{ configPath: string | null; roots: string[] } | null>
+  restoreWorkspace: () => Promise<{
+    configPath: string | null
+    roots: string[]
+    restoreError?: 'missing-workspace'
+    missingRoots?: string[]
+    workspaceId?: string
+  } | null>
   getRecentWorkspaces: () => Promise<string[]>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
@@ -179,6 +191,7 @@ export interface ElectronAPI {
   showItemInFolder: (path: string) => Promise<void>
   mkdir: (path: string) => Promise<boolean>
   deleteFile: (path: string) => Promise<boolean>
+  copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
 
@@ -454,6 +467,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInBrowser: (path: string) => ipcRenderer.invoke('file:openInBrowser', path),
   mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
   deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path),
+  copyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke('file:copy', sourcePath, destinationPath),
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) =>
     ipcRenderer.invoke('file:search', query, rootPath, options),

@@ -14,7 +14,8 @@ import {
   Clipboard,
   ExternalLink,
   Loader2,
-  Globe
+  Globe,
+  Terminal
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -46,6 +47,7 @@ interface VirtualFileTreeProps {
   onStartCreate: (path: string, type: 'file' | 'folder') => void
   onCancelCreate: () => void
   onCreateSubmit: (parentPath: string, name: string, type: 'file' | 'folder') => void
+  onOpenTerminal: (cwd: string) => Promise<void>
 }
 
 export const VirtualFileTree = memo(function VirtualFileTree({
@@ -54,7 +56,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   creatingIn,
   onStartCreate,
   onCancelCreate,
-  onCreateSubmit
+  onCreateSubmit,
+  onOpenTerminal
 }: VirtualFileTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
@@ -101,6 +104,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null)
+  const dragSourcePathRef = useRef<string | null>(null)
 
   // 监听容器尺寸变化
   useEffect(() => {
@@ -391,8 +396,10 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleDelete = useCallback(async (node: FlattenedNode) => {
     const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '删除' : 'Delete',
-      message: t('confirmDelete', language, { name: node.item.name }),
+      title: '删除',
+      message: t('confirmDelete', 'zh', { name: node.item.name }) || `确定要删除 ${node.item.name} 吗？`,
+      confirmText: '确定',
+      cancelText: '取消',
       variant: 'danger',
     })
     if (confirmed) {
@@ -437,6 +444,42 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
     setRenamingPath(null)
   }, [renamingPath, renameValue, flattenedNodes, onRefresh])
+
+  const handleCopyFile = useCallback(async (node: FlattenedNode) => {
+    if (node.item.isDirectory) {
+      toast.warning(language === 'zh' ? '暂不支持复制文件夹' : 'Copying folders is not supported yet')
+      return
+    }
+
+    const parentPath = getDirPath(node.item.path)
+    const nameParts = node.item.name.match(/^(.*?)(\.[^.]*)?$/)
+    const baseName = nameParts?.[1] || node.item.name
+    const extension = nameParts?.[2] || ''
+
+    let candidateName = `${baseName} - 副本${extension}`
+    let candidatePath = joinPath(parentPath, candidateName)
+    let counter = 2
+
+    while (await api.file.exists(candidatePath)) {
+      candidateName = `${baseName} - 副本 ${counter}${extension}`
+      candidatePath = joinPath(parentPath, candidateName)
+      counter += 1
+    }
+
+    const success = await api.file.copy(node.item.path, candidatePath)
+    if (success) {
+      directoryCacheService.invalidate(parentPath)
+      setChildrenCache((prev) => {
+        const next = new Map(prev)
+        next.delete(parentPath)
+        return next
+      })
+      onRefresh()
+      toast.success(language === 'zh' ? '文件已复制' : 'File copied')
+    } else {
+      toast.error(language === 'zh' ? '复制文件失败' : 'Failed to copy file')
+    }
+  }, [language, onRefresh])
 
   // 全局快捷键处理 (F2 重命名)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -489,6 +532,54 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
   }, [expandFolder, loadChildren, onStartCreate])
 
+  const moveItemToDirectory = useCallback(async (sourcePath: string, targetDirectoryPath: string) => {
+    const normalizedSourcePath = normalizePath(sourcePath)
+    const normalizedTargetDirectoryPath = normalizePath(targetDirectoryPath)
+
+    if (!normalizedSourcePath || !normalizedTargetDirectoryPath) return
+    if (normalizedSourcePath === normalizedTargetDirectoryPath) return
+    if (normalizedTargetDirectoryPath.startsWith(`${normalizedSourcePath}/`)) return
+
+    const sourceName = sourcePath.split(/[/\\]/).pop()
+    if (!sourceName) return
+
+    const sourceParentPath = getDirPath(sourcePath)
+    const destinationPath = joinPath(targetDirectoryPath, sourceName)
+    if (pathEquals(sourcePath, destinationPath)) return
+
+    const success = await api.file.rename(sourcePath, destinationPath)
+    if (success) {
+      directoryCacheService.invalidate(sourceParentPath)
+      directoryCacheService.invalidate(targetDirectoryPath)
+      setChildrenCache((prev) => {
+        const next = new Map(prev)
+        next.delete(sourceParentPath)
+        next.delete(targetDirectoryPath)
+        next.delete(sourcePath)
+        return next
+      })
+      expandFolder(targetDirectoryPath)
+      onRefresh()
+    } else {
+      toast.error('Move failed')
+    }
+  }, [expandFolder, onRefresh])
+
+  const handleDropOnDirectory = useCallback(async (targetNode: FlattenedNode, sourcePath: string) => {
+    if (!targetNode.item.isDirectory) return
+    await moveItemToDirectory(sourcePath, targetNode.item.path)
+  }, [moveItemToDirectory])
+
+  const handleDropNextToNode = useCallback(async (targetNode: FlattenedNode, sourcePath: string) => {
+    const targetDirectoryPath = targetNode.item.isDirectory ? targetNode.item.path : getDirPath(targetNode.item.path)
+    await moveItemToDirectory(sourcePath, targetDirectoryPath)
+  }, [moveItemToDirectory])
+
+  const handleOpenTerminalHere = useCallback((node: FlattenedNode) => {
+    const cwd = node.item.isDirectory ? node.item.path : getDirPath(node.item.path)
+    void onOpenTerminal(cwd)
+  }, [onOpenTerminal])
+
   // 聚焦重命名输入框
   useEffect(() => {
     if (renamingPath && renameInputRef.current) {
@@ -499,39 +590,46 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   // 构建右键菜单项
   const getContextMenuItems = useCallback((node: FlattenedNode): ContextMenuItem[] => {
+    const contextMenuLanguage = 'zh'
+
     if (node.item.isDirectory) {
       return [
-        { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleNewFile(node) },
-        { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleNewFolder(node) },
+        { id: 'newFile', label: t('newFile', contextMenuLanguage), icon: FilePlus, onClick: () => handleNewFile(node) },
+        { id: 'newFolder', label: t('newFolder', contextMenuLanguage), icon: FolderPlus, onClick: () => handleNewFolder(node) },
         { id: 'sep1', label: '', separator: true },
-        { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
-        { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+        { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
         { id: 'sep2', label: '', separator: true },
-        { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-        { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-        { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+        { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
+        { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+        { id: 'sep3', label: '', separator: true },
+        { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
+        { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+        { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
     const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') ||
       node.item.name.toLowerCase().endsWith('.htm')
 
     const items: ContextMenuItem[] = [
-      { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
-      { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+      { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
       { id: 'sep1', label: '', separator: true },
-      { id: 'copyPath', label: t('copyPath', language) || 'Copy Path', icon: Copy, onClick: () => handleCopyPath(node) },
-      { id: 'copyRelPath', label: t('copyRelativePath', language) || 'Copy Relative Path', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-      { id: 'reveal', label: t('revealInExplorer', language) || 'Reveal in Explorer', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+      { id: 'copyFile', label: t('copyFile', contextMenuLanguage) || '复制当前文件', icon: Copy, onClick: () => handleCopyFile(node) },
+      { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
+      { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+      { id: 'sep2', label: '', separator: true },
+      { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
+      { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+      { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
     // 对 HTML 文件添加"在浏览器中打开"选项
     if (isHtmlFile) {
       items.push({ id: 'sep2', label: '', separator: true })
-      items.push({ id: 'openInBrowser', label: t('openInBrowser', language) || 'Open in Browser', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+      items.push({ id: 'openInBrowser', label: t('openInBrowser', contextMenuLanguage) || '在浏览器中打开', icon: Globe, onClick: () => handleOpenInBrowser(node) })
     }
 
     return items
-  }, [language, handleNewFile, handleNewFolder, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
+  }, [handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyFile, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {
@@ -598,7 +696,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         onContextMenu={(e) => handleContextMenu(e, node)}
         draggable={!isRenaming}
         onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = 'copy'
+          dragSourcePathRef.current = item.path
+          e.dataTransfer.effectAllowed = 'move'
           e.dataTransfer.setData('application/adnify-file-path', item.path)
           e.dataTransfer.setData('text/uri-list', `file:///${item.path.replace(/\\/g, '/')}`)
           e.dataTransfer.setData('text/plain', item.path)
@@ -610,6 +709,46 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           e.dataTransfer.setDragImage(dragImage, 0, 0)
           setTimeout(() => document.body.removeChild(dragImage), 0)
         }}
+        onDragEnd={() => {
+          dragSourcePathRef.current = null
+          setDragOverPath(null)
+        }}
+        onDragEnter={(e) => {
+          if (isRenaming) return
+          const sourcePath = dragSourcePathRef.current
+          if (!sourcePath || pathEquals(sourcePath, item.path)) return
+          e.preventDefault()
+          setDragOverPath(item.path)
+        }}
+        onDragOver={(e) => {
+          if (isRenaming) return
+          const sourcePath = dragSourcePathRef.current
+          if (!sourcePath || pathEquals(sourcePath, item.path)) return
+          e.preventDefault()
+          e.stopPropagation()
+          e.dataTransfer.dropEffect = 'move'
+          if (!pathEquals(dragOverPath || '', item.path)) {
+            setDragOverPath(item.path)
+          }
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setDragOverPath((prev) => (prev === item.path ? null : prev))
+          }
+        }}
+        onDrop={async (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          const sourcePath = dragSourcePathRef.current
+          dragSourcePathRef.current = null
+          setDragOverPath(null)
+          if (!sourcePath) return
+          if (item.isDirectory) {
+            await handleDropOnDirectory(node, sourcePath)
+            return
+          }
+          await handleDropNextToNode(node, sourcePath)
+        }}
         className={`
           group flex items-center gap-2 pr-2 cursor-pointer transition-colors duration-150 relative select-none rounded-md mx-2 my-[2px]
           ${isActive
@@ -619,6 +758,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
               : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover/40'
           }
           ${isHighlighted ? 'animate-reveal-highlight' : ''}
+          ${dragOverPath && pathEquals(dragOverPath, item.path) ? 'ring-1 ring-accent bg-accent/10' : ''}
         `}
         style={{
           height: ITEM_HEIGHT,
@@ -699,6 +839,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         if (!renamingPath && !contextMenu) {
           setFocusedPath(null)
         }
+      }}
+      onDragLeave={() => setDragOverPath(null)}
+      onDrop={() => {
+        dragSourcePathRef.current = null
+        setDragOverPath(null)
       }}
     >
       <div style={{ height: totalHeight, position: 'relative' }}>

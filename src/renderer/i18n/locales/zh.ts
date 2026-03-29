@@ -53,6 +53,7 @@ export const zh = {
   'closeTerminal': '关闭',
   'killTerminal': '终止终端',
   'selectAll': '全选',
+  'openIntegratedTerminalHere': '在此处打开集成终端',
 
   // Tools
   'toolResultFor': '工具结果：',
@@ -621,6 +622,7 @@ export const zh = {
   'welcome.pressForCommands': '按 {shortcut} 打开命令面板',
 
   // Context Menu
+  'copyFile': '复制当前文件',
   'copyPath': '复制路径',
   'copyRelativePath': '复制相对路径',
   'revealInExplorer': '在资源管理器中显示',

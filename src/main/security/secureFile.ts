@@ -46,7 +46,7 @@ export function registerSecureFileHandlers(
   getWorkspaceSessionFn: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
   windowManager?: WindowManagerContext
 ) {
-  ;(global as any).mainWindow = getMainWindowFn()
+  ; (global as any).mainWindow = getMainWindowFn()
 
   // 注册工作区相关处理器（从 workspaceHandlers.ts 导入）
   registerWorkspaceHandlers(getMainWindowFn, store, getWorkspaceSessionFn, windowManager)
@@ -441,6 +441,45 @@ export function registerSecureFileHandlers(
       return true
     } catch (err) {
       logger.security.error('[File] delete failed:', filePath, toAppError(err).message)
+      return false
+    }
+  })
+
+  // 复制文件（无弹窗）
+  ipcMain.handle('file:copy', async (event, sourcePath: string, destinationPath: string) => {
+    if (!sourcePath || !destinationPath) return false
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && (!securityManager.validateWorkspacePath(sourcePath, workspace.roots) || !securityManager.validateWorkspacePath(destinationPath, workspace.roots))) {
+      securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, false, {
+        reason: '安全底线：超出工作区边界',
+        destinationPath,
+      })
+      return false
+    }
+    if (securityManager.isSensitivePath(sourcePath) || securityManager.isSensitivePath(destinationPath)) {
+      securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, false, {
+        reason: '安全底线：敏感路径',
+        destinationPath,
+      })
+      return false
+    }
+
+    try {
+      const stat = await fsPromises.stat(sourcePath)
+      if (!stat.isFile()) {
+        logger.security.warn('[File] copy skipped, source is not a file:', sourcePath)
+        return false
+      }
+
+      await fsPromises.mkdir(path.dirname(destinationPath), { recursive: true })
+      await fsPromises.copyFile(sourcePath, destinationPath)
+      securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, true, {
+        destinationPath,
+        bypass: true,
+      })
+      return true
+    } catch (err) {
+      logger.security.error('[File] copy failed:', sourcePath, toAppError(err).message)
       return false
     }
   })
