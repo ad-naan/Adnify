@@ -136,7 +136,7 @@ function getThemeBackgroundColor(): string {
   }
 }
 
-function createWindow(isEmpty = false): BrowserWindow {
+function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   // 根据平台选择正确的图标格式
   const getIconPath = () => {
     const platform = process.platform
@@ -266,7 +266,16 @@ function createWindow(isEmpty = false): BrowserWindow {
     }
   })
 
-  // 加载页面
+  // 加载页面（deferLoad 时跳过，由外部调用 loadWindowContent 加载）
+  if (!deferLoad) {
+    loadWindowContent(win, isEmpty)
+  }
+
+  return win
+}
+
+/** 加载窗口页面内容 */
+function loadWindowContent(win: BrowserWindow, isEmpty: boolean) {
   if (app.isPackaged) {
     win.loadFile(path.join(__dirname, '../renderer/index.html'), {
       query: isEmpty ? { empty: '1' } : undefined
@@ -274,8 +283,6 @@ function createWindow(isEmpty = false): BrowserWindow {
   } else {
     win.loadURL(`http://localhost:5173${isEmpty ? '?empty=1' : ''}`)
   }
-
-  return win
 }
 
 /**
@@ -469,13 +476,18 @@ app.whenReady().then(async () => {
   const { registerUpdaterHandlers } = await import('./ipc/updater')
   registerUpdaterHandlers()
 
-  // 4. 创建窗口
-  const firstWin = createWindow()
+  // 4. 创建窗口（此时不加载页面内容，等模块初始化完成后再加载）
+  const firstWin = createWindow(false, true)
 
-  // 5. 后台加载模块（不阻塞窗口显示）
-  initializeModules(firstWin).catch(err => {
+  // 5. 初始化模块（等待完成，确保所有 IPC handler 就绪后再加载页面）
+  try {
+    await initializeModules(firstWin)
+  } catch (err) {
     logger.system.error('[Main] Module initialization failed:', err)
-  })
+  }
+
+  // 6. 模块就绪，加载页面内容
+  loadWindowContent(firstWin, false)
 })
 
 app.on('second-instance', () => {
