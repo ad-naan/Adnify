@@ -572,6 +572,8 @@ export const zh = {
   'workspace.openWorkspace': '打开工作区...',
   'workspace.addFolder': '添加文件夹',
   'workspace.folderNotExist': '文件夹不存在，已从列表移除',
+  'workspace.openFolderFailed': '打开文件夹失败，请稍后重试',
+  'workspace.openWorkspaceFailed': '打开工作区失败，请稍后重试',
 
   // Editor Tabs
   'editor.fileDeleted': '文件已被删除',

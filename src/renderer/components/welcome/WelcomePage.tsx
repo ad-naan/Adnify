@@ -44,16 +44,26 @@ export default function WelcomePage() {
   }
 
   const handleOpenFolder = async () => {
-    const result = await api.file.openFolder()
-    if (result && typeof result === 'string') {
-      await workspaceManager.openFolder(result)
+    try {
+      const result = await api.file.openFolder()
+      if (result && typeof result === 'string') {
+        await workspaceManager.openFolder(result)
+      }
+    } catch (e) {
+      logger.ui.error('[WelcomePage] Failed to open folder:', e)
+      toast.error(t('workspace.openFolderFailed', language))
     }
   }
 
   const handleOpenWorkspace = async () => {
-    const result = await api.workspace.open()
-    if (result && !('redirected' in result)) {
-      await workspaceManager.switchTo(result)
+    try {
+      const result = await api.workspace.open()
+      if (result && !('redirected' in result)) {
+        await workspaceManager.switchTo(result)
+      }
+    } catch (e) {
+      logger.ui.error('[WelcomePage] Failed to open workspace:', e)
+      toast.error(t('workspace.openWorkspaceFailed', language))
     }
   }
 

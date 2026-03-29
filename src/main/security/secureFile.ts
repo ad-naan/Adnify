@@ -70,12 +70,21 @@ export function registerSecureFileHandlers(
         return null
       }
 
-      const content = await fsPromises.readFile(filePath, 'utf-8')
-      securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
-        userAction: true,
-        size: content.length,
-      })
-      return { path: filePath, content }
+      try {
+        const content = await fsPromises.readFile(filePath, 'utf-8')
+        securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
+          userAction: true,
+          size: content.length,
+        })
+        return { path: filePath, content }
+      } catch (err) {
+        logger.security.error('[SecureFile] Failed to read file:', filePath, err)
+        securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
+          userAction: true,
+          error: String(err),
+        })
+        return null
+      }
     }
     return null
   })
