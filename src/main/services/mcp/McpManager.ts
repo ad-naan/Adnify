@@ -38,6 +38,9 @@ export class McpManager extends EventEmitter {
   setAutoConnectEnabled(enabled: boolean): void {
     this.autoConnectEnabled = enabled
     logger.mcp?.info(`[McpManager] Auto-connect ${enabled ? 'enabled' : 'disabled'}`)
+    if (enabled && this.initialized) {
+      this.autoConnectServers()
+    }
   }
 
   /** 初始化 MCP 管理器 */
