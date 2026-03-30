@@ -517,8 +517,8 @@ ${sections}`
         const config = await this.loadConfig()
         if (!config.typeOverrides) config.typeOverrides = {}
 
-        if (type === 'manual') {
-            // manual 是默认值，移除覆盖
+        if (type === 'auto') {
+            // auto 是默认值，移除覆盖
             delete config.typeOverrides[name]
         } else {
             config.typeOverrides[name] = type
