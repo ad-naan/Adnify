@@ -2,7 +2,7 @@
  * 聊天输入组件
  * 极致打磨：悬浮光晕、灵动按钮、精致上下文药丸
  */
-import { useRef, useCallback, useMemo, useState } from 'react'
+import { useRef, useCallback, useMemo, useState, useLayoutEffect } from 'react'
 import {
   FileText,
   X,
@@ -83,6 +83,14 @@ export default function ChatInput({
   const { language, editorConfig } = useStore(useShallow(s => ({ language: s.language, editorConfig: s.editorConfig })))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(false)
+
+  // Auto-resize
+  useLayoutEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    }
+  }, [input, textareaRef])
 
   // 文件引用检测
   const fileRefs = useMemo(() => {
@@ -254,7 +262,7 @@ export default function ChatInput({
         )}
 
         {/* Input Area */}
-        <div className="flex items-end gap-3 px-4 pb-3 pt-2">
+        <div className="flex flex-col px-4 pb-3 pt-2">
           <textarea
             ref={textareaRef}
             value={input}
@@ -265,57 +273,61 @@ export default function ChatInput({
             onBlur={() => setIsFocused(false)}
             placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
             disabled={!hasApiKey || hasPendingToolCall}
-            className="flex-1 bg-transparent border-none p-0 py-2.5
+            className="w-full bg-transparent border-none p-0 py-2.5
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
-                       focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[200px] caret-accent font-medium tracking-wide"
+                       focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide"
             rows={1}
             style={{ minHeight: '48px', fontSize: `${Math.max(14, editorConfig.fontSize)}px` }}
           />
 
-          <div className="flex items-center gap-2 pb-2">
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              accept="image/*"
-              multiple
-              onChange={(e) => {
-                if (e.target.files) {
-                  Array.from(e.target.files).forEach(addImage)
-                }
-                e.target.value = ''
-              }}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              title={t('uploadImage', language)}
-              className="rounded-xl w-8 h-8 hover:bg-surface-active text-text-muted hover:text-text-primary transition-all active:scale-95"
-            >
-              <ImageIcon className="w-4 h-4 opacity-70 group-hover:opacity-100" />
-            </Button>
+          {/* Bottom Actions */}
+          <div className="flex items-center justify-between pt-1">
+            <div />
+            <div className="flex items-center gap-2">
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  if (e.target.files) {
+                    Array.from(e.target.files).forEach(addImage)
+                  }
+                  e.target.value = ''
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                title={t('uploadImage', language)}
+                className="rounded-xl w-8 h-8 hover:bg-surface-active text-text-muted hover:text-text-primary transition-all active:scale-95"
+              >
+                <ImageIcon className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+              </Button>
 
-            <button
-              onClick={isStreaming ? onAbort : onSubmit}
-              disabled={
-                !hasApiKey || ((!input.trim() && images.length === 0) && !isStreaming) || hasPendingToolCall
-              }
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300
-                  ${isStreaming
-                  ? 'bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
-                  : isSendable
-                    ? 'bg-accent text-white shadow-md shadow-accent/20 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 border border-transparent'
-                    : 'bg-text-primary/5 text-text-muted/30 cursor-not-allowed border border-transparent'
+              <button
+                onClick={isStreaming ? onAbort : onSubmit}
+                disabled={
+                  !hasApiKey || ((!input.trim() && images.length === 0) && !isStreaming) || hasPendingToolCall
                 }
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300
+                  ${isStreaming
+                    ? 'bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
+                    : isSendable
+                      ? 'bg-accent text-white shadow-md shadow-accent/20 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 border border-transparent'
+                      : 'bg-text-primary/5 text-text-muted/30 cursor-not-allowed border border-transparent'
+                  }
                   `}
-            >
-              {isStreaming ? (
-                <div className="w-2.5 h-2.5 bg-current rounded-[1px] animate-pulse" />
-              ) : (
-                <ArrowUp className="w-5 h-5 stroke-[3]" />
-              )}
-            </button>
+              >
+                {isStreaming ? (
+                  <div className="w-2.5 h-2.5 bg-current rounded-[1px] animate-pulse" />
+                ) : (
+                  <ArrowUp className="w-5 h-5 stroke-[3]" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
