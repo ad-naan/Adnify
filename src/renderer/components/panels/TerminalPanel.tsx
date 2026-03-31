@@ -324,18 +324,25 @@ const TerminalPanel = memo(function TerminalPanel() {
     return (
         <>
             <style>{XTERM_STYLE}</style>
-            <div className="bg-transparent flex flex-col transition-none relative z-10" style={{ height: isCollapsed ? 40 : height }}>
+            <div className="bg-transparent flex flex-col transition-none relative z-10" style={{ height: isCollapsed ? 42 : height }}>
                 {/* 拖拽调整高度的区域 */}
                 <div className="absolute top-0 left-0 right-0 h-1 cursor-row-resize z-50 hover:bg-accent/50 transition-colors" onMouseDown={startResizing} />
 
                 {/* 标题栏 */}
-                <div className="h-9 min-h-[36px] flex items-center justify-between border-t border-border/50 bg-background-secondary/95 backdrop-blur-md select-none relative z-20 px-1">
+                <div className="h-[42px] min-h-[42px] flex items-center justify-between border-b border-border/50 bg-background select-none relative z-20 px-2 py-1.5">
                     {/* 左侧：图标和标签页 */}
-                    <div className="flex items-center flex-1 min-w-0 h-full overflow-hidden">
-                        <div className="flex-shrink-0 flex items-center justify-center w-9 h-full cursor-pointer hover:bg-surface-hover text-text-muted transition-colors border-r border-border/50" onClick={() => setIsCollapsed(!isCollapsed)}>
+                    <div className="flex items-center flex-1 min-w-0 h-full overflow-hidden gap-1.5">
+                        <div className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-md cursor-pointer hover:bg-surface-hover text-text-muted transition-colors" onClick={() => setIsCollapsed(!isCollapsed)}>
                             <TerminalIcon className="w-4 h-4" />
                         </div>
-                        <div className="flex items-center overflow-x-auto no-scrollbar flex-1 h-full">
+                        <div
+                            className="flex items-center overflow-x-auto overflow-y-hidden scrollbar-none flex-1 h-full gap-1.5"
+                            onWheel={(e) => {
+                                if (e.deltaY !== 0 && e.currentTarget) {
+                                    e.currentTarget.scrollLeft += e.deltaY
+                                }
+                            }}
+                        >
                             {terminals.map(term => {
                                 const isRunning = managerState.runningCommand?.terminalId === term.id
                                 return (
@@ -343,10 +350,10 @@ const TerminalPanel = memo(function TerminalPanel() {
                                         key={term.id}
                                         onClick={() => terminalManager.setActiveTerminal(term.id)}
                                         className={`
-                                            relative flex items-center gap-1.5 px-3 h-full cursor-pointer min-w-[120px] max-w-[200px] flex-shrink-0 group transition-all border-r border-border/50
+                                            relative flex items-center gap-2 px-3 h-full min-w-[120px] max-w-[200px] cursor-pointer transition-colors duration-150 rounded-md flex-shrink-0 group
                                             ${activeId === term.id
-                                                ? 'bg-surface text-text-primary font-medium shadow-[inset_0_2px_0_0_rgba(var(--accent))]'
-                                                : 'bg-transparent text-text-muted hover:bg-surface-hover hover:text-text-secondary'}
+                                                ? 'bg-accent/15 text-accent font-medium'
+                                                : 'bg-transparent text-text-muted hover:bg-surface-hover/50 hover:text-text-primary'}
                                         `}
                                     >
                                         {term.isAgent && (
@@ -370,8 +377,8 @@ const TerminalPanel = memo(function TerminalPanel() {
                     </div>
 
                     {/* 固定位置的按钮区 (不在 overflow-hidden 内) */}
-                    <div className="flex items-center h-full">
-                        <div className="relative flex-shrink-0 h-full flex items-center px-1 border-r border-border/50">
+                    <div className="flex items-center h-full gap-1 bg-background z-10 pl-2">
+                        <div className="relative flex-shrink-0 h-full flex items-center pr-1 border-r border-border/50">
                             <Button
                                 variant="ghost"
                                 size="icon"

@@ -42,7 +42,14 @@ export const EditorTabs = memo(function EditorTabs({
   const plans = useAgentStore(state => state.plans)
 
   return (
-    <div className="h-[42px] flex items-center bg-background border-b border-border/50 overflow-x-auto custom-scrollbar select-none px-2 gap-1.5 py-1.5">
+    <div
+      className="h-[42px] flex items-center bg-background border-b border-border/50 overflow-x-auto overflow-y-hidden scrollbar-none select-none px-2 gap-1.5 py-1.5"
+      onWheel={(e) => {
+        if (e.deltaY !== 0 && e.currentTarget) {
+          e.currentTarget.scrollLeft += e.deltaY
+        }
+      }}
+    >
       {openFiles.map((file) => {
         const isActive = file.path === activeFilePath
 
