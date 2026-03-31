@@ -9,7 +9,7 @@ type FlushCallback = (messageId: string, content: string, threadId?: string) => 
 
 class StreamingBuffer {
     private buffer: Map<string, { content: string; threadId?: string }> = new Map()
-    private rafId: number | null = null
+    private timerId: ReturnType<typeof setTimeout> | null = null
     private flushCallback: FlushCallback | null = null
 
     setFlushCallback(callback: FlushCallback) {
@@ -18,10 +18,10 @@ class StreamingBuffer {
 
     append(messageId: string, content: string, threadId?: string): void {
         if (!content) return
-        
+
         const isFirstData = !this.buffer.has(messageId)
         const existing = this.buffer.get(messageId)
-        
+
         if (existing) {
             this.buffer.set(messageId, {
                 content: existing.content + content,
@@ -30,7 +30,7 @@ class StreamingBuffer {
         } else {
             this.buffer.set(messageId, { content, threadId })
         }
-        
+
         // 优化：第一次数据立即刷新，后续数据节流
         if (isFirstData) {
             this.flushNow()
@@ -40,14 +40,15 @@ class StreamingBuffer {
     }
 
     private scheduleFlush(): void {
-        if (this.rafId !== null) return
+        if (this.timerId !== null) return
 
-        // 简化逻辑：直接在下一帧刷新，不做复杂的时间判断
-        // requestAnimationFrame 本身就提供了约 60fps 的节流
-        this.rafId = requestAnimationFrame(() => {
-            this.rafId = null
+        // 优化：将 60fps (requestAnimationFrame) 的全局状态分发降频到约 20fps (50ms)
+        // 这个改动能极大地减轻 Zustand/React Fiber 树的全局调和（Reconciliation）压力
+        // 从而彻底解放渲染主线程，解决整个界面卡顿（包括其他面板失去响应）的问题
+        this.timerId = setTimeout(() => {
+            this.timerId = null
             this.flush()
-        })
+        }, 50)
     }
 
     private flush(): void {
@@ -64,17 +65,17 @@ class StreamingBuffer {
     }
 
     flushNow(): void {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId)
-            this.rafId = null
+        if (this.timerId !== null) {
+            clearTimeout(this.timerId)
+            this.timerId = null
         }
         this.flush()
     }
 
     clear(): void {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId)
-            this.rafId = null
+        if (this.timerId !== null) {
+            clearTimeout(this.timerId)
+            this.timerId = null
         }
         this.buffer.clear()
     }

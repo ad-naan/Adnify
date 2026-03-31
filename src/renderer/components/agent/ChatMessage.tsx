@@ -70,7 +70,7 @@ interface RenderPartProps {
 }
 
 // 代码块组件 - 更加精致的玻璃质感
-const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
+const CodeBlock = React.memo(({ language, children, fontSize, isStreaming }: { language: string | undefined; children: React.ReactNode; fontSize: number; isStreaming?: boolean }) => {
   const [copied, setCopied] = useState(false)
   const currentTheme = useStore(s => s.currentTheme)
   const theme = themeManager.getThemeById(currentTheme)
@@ -122,17 +122,26 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
         </Tooltip>
       </div>
       <div className="relative">
-        <SyntaxHighlighter
-          style={syntaxStyle}
-          language={language}
-          PreTag="div"
-          className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
-          customStyle={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
-          wrapLines
-          wrapLongLines
-        >
-          {codeText}
-        </SyntaxHighlighter>
+        {isStreaming ? (
+          <pre
+            className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono text-text-primary/90"
+            style={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
+          >
+            {codeText}
+          </pre>
+        ) : (
+          <SyntaxHighlighter
+            style={syntaxStyle}
+            language={language}
+            PreTag="div"
+            className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
+            customStyle={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
+            wrapLines
+            wrapLongLines
+          >
+            {codeText}
+          </SyntaxHighlighter>
+        )}
         {hasCursor && <span className="fuzzy-cursor absolute bottom-4 right-4" />}
       </div>
     </div>
@@ -463,7 +472,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         </code>
       ) : (
         <div className="animate-fluid-block">
-          <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
+          <CodeBlock language={match?.[1]} fontSize={fontSize} isStreaming={isStreaming}>{children}</CodeBlock>
         </div>
       )
     },
