@@ -159,7 +159,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                         <h5 className="text-sm font-medium text-text-primary">
                             {t('已安装 Skills', 'Installed Skills')}
                         </h5>
-                        <span className="text-[10px] text-text-muted px-2 py-0.5 bg-black/20 rounded">
+                        <span className="text-[10px] text-text-muted px-2 py-0.5 bg-surface-hover rounded">
                             {skills.filter(s => s.enabled).length}/{skills.length}
                         </span>
                     </div>
@@ -210,8 +210,8 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                             <div
                                 key={skill.name}
                                 className={`group flex items-start gap-3 p-3 rounded-lg border transition-colors ${skill.enabled
-                                    ? 'bg-black/20 border-border hover:border-accent/30'
-                                    : 'bg-black/10 border-border/50 opacity-60'
+                                    ? 'bg-surface border-border hover:border-accent/30'
+                                    : 'bg-background border-border/50 opacity-60'
                                     }`}
                             >
                                 <button
@@ -239,11 +239,10 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                                         await skillService.updateSkillType(skill.name, val)
                                                         loadSkills()
                                                     }}
-                                                    className={`text-[9px] px-2 py-0.5 transition-colors ${
-                                                        skill.type === val
+                                                    className={`text-[9px] px-2 py-0.5 transition-colors ${skill.type === val
                                                             ? 'bg-accent/20 text-accent font-medium'
                                                             : 'bg-black/20 text-text-muted hover:bg-black/30 hover:text-text-secondary'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {label}
                                                 </button>
@@ -328,7 +327,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder={t('搜索 skills.sh 市场...', 'Search skills.sh marketplace...')}
-                                className="flex-1 bg-black/20 border-border text-xs"
+                                className="flex-1 bg-surface border-border text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                             />
                             <Button
@@ -351,11 +350,11 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                         {searchResults.length > 0 && (
                             <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
                                 {searchResults.map((result) => (
-                                    <div key={result.package} className="flex items-center justify-between p-2.5 rounded-lg bg-black/20 border border-border">
+                                    <div key={result.package} className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border">
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs font-medium text-text-primary">{result.name}</span>
-                                                <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-black/30 rounded">
+                                                <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-surface-hover rounded">
                                                     {result.installs >= 1000 ? `${(result.installs / 1000).toFixed(1)}K` : result.installs} installs
                                                 </span>
                                             </div>
@@ -389,7 +388,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 value={githubUrl}
                                 onChange={(e) => setGithubUrl(e.target.value)}
                                 placeholder="https://github.com/user/my-skill"
-                                className="flex-1 bg-black/20 border-border text-xs"
+                                className="flex-1 bg-surface border-border text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleGithubInstall()}
                             />
                             <Button
@@ -416,7 +415,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 value={newSkillName}
                                 onChange={(e) => setNewSkillName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
                                 placeholder={t('skill-name（小写字母和连字符）', 'skill-name (lowercase and hyphens)')}
-                                className="flex-1 bg-black/20 border-border text-xs"
+                                className="flex-1 bg-surface border-border text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                             />
                             <Button
@@ -436,11 +435,10 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                     <button
                                         key={val}
                                         onClick={() => setCreateLevel(val)}
-                                        className={`text-[10px] px-2.5 py-0.5 transition-colors ${
-                                            createLevel === val
+                                        className={`text-[10px] px-2.5 py-0.5 transition-colors ${createLevel === val
                                                 ? 'bg-accent/20 text-accent font-medium'
-                                                : 'bg-black/20 text-text-muted hover:bg-black/30 hover:text-text-secondary'
-                                        }`}
+                                                : 'bg-surface text-text-muted hover:bg-surface-hover hover:text-text-secondary'
+                                            }`}
                                     >
                                         {label}
                                     </button>
