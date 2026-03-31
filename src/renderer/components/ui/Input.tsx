@@ -11,7 +11,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         return (
             <div className="relative flex items-center w-full group">
                 {leftIcon && (
-                    <div className="absolute left-3 text-text-muted pointer-events-none flex items-center justify-center transition-colors group-focus-within:text-accent">
+                    <div className="absolute left-3 z-10 text-text-muted pointer-events-none flex items-center justify-center transition-colors group-focus-within:text-accent">
                         {leftIcon}
                     </div>
                 )}
@@ -33,7 +33,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                     {...props}
                 />
                 {rightIcon && (
-                    <div className="absolute right-3 text-text-muted flex items-center justify-center transition-colors group-focus-within:text-accent">
+                    <div className="absolute right-3 z-10 text-text-muted flex items-center justify-center transition-colors group-focus-within:text-accent">
                         {rightIcon}
                     </div>
                 )}
