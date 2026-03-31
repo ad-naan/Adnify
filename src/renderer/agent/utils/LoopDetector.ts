@@ -101,13 +101,13 @@ export class LoopDetector {
     fileContents?: Map<string, string>
   ): LoopCheckResult {
     const now = Date.now()
-    
+
     // 清理过期记录
     this.cleanupOldRecords(now)
 
     for (const tc of toolCalls) {
       const record = this.createRecord(tc, fileContents)
-      
+
       // 1. 检测精确重复（完全相同的参数）
       const exactResult = this.checkExactRepeat(record)
       if (exactResult.isLoop) return exactResult
@@ -167,9 +167,10 @@ export class LoopDetector {
   // ===== 私有方法 =====
 
   private createRecord(tc: LLMToolCall, fileContents?: Map<string, string>): ToolCallRecord {
-    const args = tc.arguments as Record<string, unknown>
-    const target = (args.path || args.file || args.command || args.query || null) as string | null
-    
+    const args = (tc.arguments || {}) as Record<string, unknown>
+    const rawTarget = args.path || args.file || args.command || args.query || null
+    const target = typeof rawTarget === 'string' ? rawTarget : null
+
     let contentHash: string | undefined
     if (target && fileContents?.has(target)) {
       contentHash = this.hashContent(fileContents.get(target)!)
@@ -188,10 +189,10 @@ export class LoopDetector {
   private cleanupOldRecords(now: number): void {
     const config = this.config
     const cutoff = now - config.timeWindowMs
-    
+
     // 先按时间过滤
     this.history = this.history.filter(r => r.timestamp > cutoff)
-    
+
     // 再按最大历史记录数限制
     if (this.history.length > config.maxHistory) {
       this.history = this.history.slice(-config.maxHistory)
@@ -201,12 +202,12 @@ export class LoopDetector {
   private checkExactRepeat(record: ToolCallRecord): LoopCheckResult {
     const isReadOp = READ_OPERATIONS.has(record.name)
     const config = this.config
-    
+
     // 动态调整阈值
-    let threshold = isReadOp 
+    let threshold = isReadOp
       ? config.maxExactRepeats * config.readOpMultiplier
       : config.maxExactRepeats
-    
+
     // 如果启用动态阈值，根据任务复杂度调整
     if (config.dynamicThreshold) {
       const complexity = this.estimateTaskComplexity()
@@ -224,7 +225,7 @@ export class LoopDetector {
       return {
         isLoop: true,
         reason: `Detected exact repeat of ${record.name} (${exactMatches.length + 1} times with identical arguments).`,
-        suggestion: isReadOp 
+        suggestion: isReadOp
           ? 'The file content may not have changed. Consider a different approach.'
           : 'The same operation has been attempted multiple times. Please try a different approach.',
       }
@@ -328,6 +329,7 @@ export class LoopDetector {
    * 检查是否是子路径关系
    */
   private isSubPath(path1: string, path2: string): boolean {
+    if (typeof path1 !== 'string' || typeof path2 !== 'string') return false
     const normalized1 = path1.replace(/\\/g, '/').toLowerCase()
     const normalized2 = path2.replace(/\\/g, '/').toLowerCase()
     return normalized1.startsWith(normalized2) || normalized2.startsWith(normalized1)
@@ -348,21 +350,21 @@ export class LoopDetector {
    */
   private estimateTaskComplexity(): number {
     if (this.history.length < 5) return 0
-    
+
     // 1. 工具多样性（使用的不同工具数量）
     const uniqueTools = new Set(this.history.map(h => h.name)).size
     const toolDiversity = Math.min(uniqueTools / 10, 1)  // 最多 10 种工具算满分
-    
+
     // 2. 目标多样性（操作的不同文件/目标数量）
     const uniqueTargets = new Set(this.history.filter(h => h.target).map(h => h.target)).size
     const targetDiversity = Math.min(uniqueTargets / 15, 1)  // 最多 15 个目标算满分
-    
+
     // 3. 失败率（失败的工具调用比例）
     const failureRate = this.history.filter(h => !h.success).length / this.history.length
-    
+
     // 综合评分：工具多样性 40% + 目标多样性 40% + 失败率 20%
     const complexity = toolDiversity * 0.4 + targetDiversity * 0.4 + failureRate * 0.2
-    
+
     return complexity
   }
 

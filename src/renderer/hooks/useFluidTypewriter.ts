@@ -44,6 +44,10 @@ export const useFluidTypewriter = (
     const displayedLengthRef = useRef(displayedLength)
     displayedLengthRef.current = displayedLength
 
+    // Track sub-character fluid progression internally without triggering React renders
+    const preciseLengthRef = useRef(displayedLength)
+    const lastRenderTime = useRef<number>(0)
+
     const lastFrameTime = useRef<number>(0)
     const animationFrameId = useRef<number>()
     const isStreamingRef = useRef(isStreaming)
@@ -95,15 +99,23 @@ export const useFluidTypewriter = (
             if (delta > 0 && increment < 0.1) increment = 0.1
 
             let caughtUp = false
+            const nextPreciseLength = preciseLengthRef.current + increment
 
-            setDisplayedLength(prev => {
-                const next = prev + increment
-                if (next >= content.length) {
-                    caughtUp = true
-                    return content.length
-                }
-                return next
-            })
+            if (nextPreciseLength >= content.length) {
+                caughtUp = true
+                preciseLengthRef.current = content.length
+            } else {
+                preciseLengthRef.current = nextPreciseLength
+            }
+
+            // Throttle React state updates: update if we moved >= 3 chars, OR 40ms passed, OR caught up
+            const timeSinceLastRender = time - lastRenderTime.current
+            const charsSinceLastRender = preciseLengthRef.current - displayedLengthRef.current
+
+            if (caughtUp || charsSinceLastRender >= 3 || timeSinceLastRender >= 40) {
+                setDisplayedLength(preciseLengthRef.current)
+                lastRenderTime.current = time
+            }
 
             if (!caughtUp && delta >= 0) {
                 animationFrameId.current = requestAnimationFrame(animate)
