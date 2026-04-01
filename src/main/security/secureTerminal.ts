@@ -780,17 +780,29 @@ export function registerSecureTerminalHandlers(
 
   const bindTerminalProcess = (id: string, terminalProcess: any, mainWindow: BrowserWindow | null) => {
     terminals.set(id, terminalProcess)
+    let seq = 0
+
+    const nextMeta = () => ({
+      seq: ++seq,
+      occurredAt: Date.now(),
+    })
 
     terminalProcess.onData((data: string) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data })
+        mainWindow.webContents.send('terminal:data', { id, data, ...nextMeta() })
       }
     })
 
     terminalProcess.on('error', (err: any) => {
       logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:error', { id, error: toAppError(err).message })
+        mainWindow.webContents.send('terminal:error', {
+          id,
+          error: toAppError(err).message,
+          fatal: true,
+          reason: 'process_error',
+          ...nextMeta(),
+        })
       }
     })
 
@@ -798,7 +810,13 @@ export function registerSecureTerminalHandlers(
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
       terminals.delete(id)
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:exit', { id, exitCode, signal })
+        mainWindow.webContents.send('terminal:exit', {
+          id,
+          exitCode,
+          signal,
+          reason: 'process_exit',
+          ...nextMeta(),
+        })
       }
     })
   }

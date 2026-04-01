@@ -9,7 +9,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from 'react'
-import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2 } from 'lucide-react'
+import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2, AlertTriangle, Clock3, CheckCircle2 } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent'
@@ -344,7 +344,21 @@ const TerminalPanel = memo(function TerminalPanel() {
                             }}
                         >
                             {terminals.map(term => {
-                                const isRunning = managerState.runningCommand?.terminalId === term.id
+                                const commandInfo = managerState.commandInfoByTerminal[term.id]
+                                const commandSession = commandInfo?.current || commandInfo?.last || null
+                                const commandIcon = (() => {
+                                    if (!commandSession) return term.isAgent ? <Bot className="w-3 h-3 text-accent flex-shrink-0" /> : null
+                                    if (commandSession.status === 'queued' || commandSession.status === 'running') {
+                                        return <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0" />
+                                    }
+                                    if (commandSession.status === 'completed' || commandSession.status === 'detached') {
+                                        return <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                                    }
+                                    if (commandSession.status === 'timed_out') {
+                                        return <Clock3 className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                                    }
+                                    return <AlertTriangle className="w-3 h-3 text-orange-400 flex-shrink-0" />
+                                })()
                                 return (
                                     <div
                                         key={term.id}
@@ -355,12 +369,9 @@ const TerminalPanel = memo(function TerminalPanel() {
                                                 ? 'bg-accent/15 text-accent font-medium'
                                                 : 'bg-transparent text-text-muted hover:bg-surface-hover/50 hover:text-text-primary'}
                                         `}
+                                        title={commandSession?.command || term.name}
                                     >
-                                        {term.isAgent && (
-                                            isRunning
-                                                ? <Loader2 className="w-3 h-3 text-accent animate-spin flex-shrink-0" />
-                                                : <Bot className="w-3 h-3 text-accent flex-shrink-0" />
-                                        )}
+                                        {commandIcon}
                                         <span className="truncate flex-1 text-xs">{term.name}</span>
                                         <Button
                                             variant="ghost"

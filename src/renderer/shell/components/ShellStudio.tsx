@@ -21,6 +21,9 @@ import {
   Star,
   Terminal as TerminalIcon,
   X,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -57,6 +60,83 @@ function formatTime(timestamp: number, language: string) {
     month: 'short',
     day: 'numeric',
   }).format(timestamp)
+}
+
+function formatDuration(durationMs?: number) {
+  if (!durationMs || durationMs < 1000) return '0s'
+  const seconds = Math.round(durationMs / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remain = seconds % 60
+  return remain > 0 ? `${minutes}m ${remain}s` : `${minutes}m`
+}
+
+function getCommandStatusMeta(session: TerminalManagerState['commandInfoByTerminal'][string]['current'] | TerminalManagerState['commandInfoByTerminal'][string]['last'], language: string) {
+  if (!session) {
+    return {
+      label: language === 'zh' ? '空闲' : 'Idle',
+      tone: 'muted' as const,
+      icon: null as React.ReactNode,
+    }
+  }
+
+  switch (session.status) {
+    case 'queued':
+    case 'running':
+      return {
+        label: language === 'zh' ? '运行中' : 'Running',
+        tone: 'accent' as const,
+        icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+      }
+    case 'completed':
+      return {
+        label: language === 'zh' ? '已完成' : 'Completed',
+        tone: 'success' as const,
+        icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+      }
+    case 'detached':
+      return {
+        label: language === 'zh' ? '后台运行' : 'Detached',
+        tone: 'success' as const,
+        icon: <Play className="h-3.5 w-3.5" />,
+      }
+    case 'timed_out':
+      return {
+        label: language === 'zh' ? '已超时' : 'Timed out',
+        tone: 'warning' as const,
+        icon: <Clock3 className="h-3.5 w-3.5" />,
+      }
+    case 'failed':
+    case 'cancelled':
+    case 'interrupted':
+    case 'shell_exited':
+      return {
+        label: language === 'zh' ? '异常结束' : 'Ended with issues',
+        tone: 'danger' as const,
+        icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      }
+    default:
+      return {
+        label: session.status,
+        tone: 'muted' as const,
+        icon: null,
+      }
+  }
+}
+
+function getToneClasses(tone: 'muted' | 'accent' | 'success' | 'warning' | 'danger') {
+  switch (tone) {
+    case 'accent':
+      return 'text-accent bg-accent/10 border-accent/20'
+    case 'success':
+      return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+    case 'warning':
+      return 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+    case 'danger':
+      return 'text-orange-400 bg-orange-500/10 border-orange-500/20'
+    default:
+      return 'text-text-muted bg-background/60 border-border'
+  }
 }
 
 function getSessionTabContent(session: TerminalManagerState['terminals'][number]) {
@@ -572,6 +652,9 @@ export default function ShellStudio() {
                   {filteredSessions.map((session) => {
                     const active = session.id === managerState.activeId
                     const sessionContent = getSessionTabContent(session)
+                    const commandInfo = managerState.commandInfoByTerminal[session.id]
+                    const commandSession = commandInfo?.current || commandInfo?.last || null
+                    const commandStatus = getCommandStatusMeta(commandSession, language)
                     return (
                       <button
                         key={session.id}
@@ -587,6 +670,12 @@ export default function ShellStudio() {
                             <div className="truncate text-sm font-medium text-text-primary">{sessionContent.title}</div>
                             {sessionContent.subtitle && (
                               <div className="mt-0.5 truncate text-xs text-text-muted">{sessionContent.subtitle}</div>
+                            )}
+                            {commandSession && (
+                              <div className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${getToneClasses(commandStatus.tone)}`}>
+                                {commandStatus.icon}
+                                <span>{commandStatus.label}</span>
+                              </div>
                             )}
                           </div>
                           <button
@@ -621,6 +710,22 @@ export default function ShellStudio() {
                               {activeSession.cwd}
                             </div>
                           )}
+                          {activeSession && (() => {
+                            const commandInfo = managerState.commandInfoByTerminal[activeSession.id]
+                            const commandSession = commandInfo?.current || commandInfo?.last || null
+                            const commandStatus = getCommandStatusMeta(commandSession, language)
+                            return commandSession ? (
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${getToneClasses(commandStatus.tone)}`}>
+                                  {commandStatus.icon}
+                                  {commandStatus.label}
+                                </span>
+                                <span className="truncate text-text-muted max-w-[460px]" title={commandSession.command}>
+                                  {commandSession.command}
+                                </span>
+                              </div>
+                            ) : null
+                          })()}
                         </div>
                       </div>
                       {activeSession && (
@@ -741,6 +846,32 @@ export default function ShellStudio() {
                           </div>
                         )}
                       </div>
+                      {(() => {
+                        const commandInfo = managerState.commandInfoByTerminal[selectedSession.id]
+                        const commandSession = commandInfo?.current || commandInfo?.last || null
+                        const commandStatus = getCommandStatusMeta(commandSession, language)
+                        return commandSession ? (
+                          <div className="rounded-xl border border-border bg-background/60 p-3 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${getToneClasses(commandStatus.tone)}`}>
+                                {commandStatus.icon}
+                                {commandStatus.label}
+                              </span>
+                              <span className="text-xs text-text-muted">{commandSession.commandSessionId}</span>
+                            </div>
+                            <div className="text-sm text-text-primary break-all">{commandSession.command}</div>
+                            <div className="grid grid-cols-2 gap-3 text-xs text-text-muted">
+                              <div>Exit code: {commandSession.exitCode ?? '—'}</div>
+                              <div>{language === 'zh' ? '运行时长' : 'Duration'}: {formatDuration(commandSession.endedAt ? commandSession.endedAt - commandSession.startedAt : Date.now() - commandSession.startedAt)}</div>
+                              <div>{language === 'zh' ? '终止原因' : 'Reason'}: {commandSession.terminationReason || '—'}</div>
+                              <div>Sentinel: {commandSession.sentinelMatched ? 'yes' : 'no'}</div>
+                            </div>
+                            {(commandSession.output || commandSession.partialOutput) && (
+                              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs text-text-primary">{commandSession.output || commandSession.partialOutput}</pre>
+                            )}
+                          </div>
+                        ) : null
+                      })()}
                       <div className="rounded-xl border border-border bg-background/60 p-3">
                         <div className="text-text-muted text-sm">{language === 'zh' ? '终端摘要' : 'Terminal snippet'}</div>
                         <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs text-text-primary">{terminalPreview || (language === 'zh' ? '暂无输出' : 'No output yet')}</pre>

@@ -6,11 +6,12 @@
  * 放置在编辑器容器内，使用 pointer-events-none
  */
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { EmotionState } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
+import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 
 const GLOW_CONFIG: Record<EmotionState, {
   opacity: number
@@ -49,6 +50,11 @@ function buildBackground(corner: string, color: string, spread: number, opacity:
 
 export const EmotionAmbientGlow: React.FC = () => {
   const emotion = useEmotionState()
+  const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(loadEmotionPanelSettings().ambientGlow)
+
+  useEffect(() => {
+    return subscribeEmotionPanelSettings((settings) => setAmbientGlowEnabled(settings.ambientGlow))
+  }, [])
 
   const state = emotion?.state || 'neutral'
   const intensity = emotion?.intensity ?? 0
@@ -58,7 +64,7 @@ export const EmotionAmbientGlow: React.FC = () => {
   }), [state])
 
   // neutral 或 0 强度不渲染
-  if (state === 'neutral' || intensity === 0 || config.opacity === 0) return null
+  if (!ambientGlowEnabled || state === 'neutral' || intensity === 0 || config.opacity === 0) return null
 
   // 实际透明度 = 基础透明度 * 强度
   const effectiveOpacity = config.opacity * Math.max(intensity, 0.3)

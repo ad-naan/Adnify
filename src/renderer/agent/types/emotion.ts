@@ -89,6 +89,50 @@ export interface EnvironmentAdaptation {
   }
 }
 
+export interface EmotionFeedbackAction {
+  id: string
+  label: string
+  emoji?: string
+  actionType?: string
+}
+
+export type EmotionFeedbackType =
+  | 'encouragement'
+  | 'reassurance'
+  | 'focus_hint'
+  | 'frustration_support'
+  | 'fatigue_warning'
+  | 'break_micro'
+  | 'break_suggested'
+  | 'celebration'
+
+export interface EmotionFeedbackPayload {
+  id: string
+  type: EmotionFeedbackType
+  priority: number
+  emotionState: EmotionState
+  message: string
+  shortMessage?: string
+  actions?: EmotionFeedbackAction[]
+  createdAt: number
+  expiresAt?: number
+  cooldownKey?: string
+  sourceRule?: string
+  dismissible?: boolean
+  channelHints?: Array<'statusBar' | 'editorBar' | 'panelLog'>
+  showFeedback?: boolean
+}
+
+export interface EmotionCompanionState {
+  currentFeedback: EmotionFeedbackPayload | null
+  queue: EmotionFeedbackPayload[]
+  lastShownAtByType: Partial<Record<EmotionFeedbackType, number>>
+  snoozedUntil?: number
+  dismissedIds: string[]
+  sessionMuted: boolean
+  companionEnabled: boolean
+}
+
 /** 情绪历史记录 */
 export interface EmotionHistory {
   timestamp: number

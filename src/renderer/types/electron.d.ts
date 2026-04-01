@@ -445,9 +445,9 @@ export interface ElectronAPI {
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>
-  onTerminalData: (callback: (event: { id: string; data: string }) => void) => () => void
-  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void) => () => void
-  onTerminalError: (callback: (event: { id: string; error: string }) => void) => () => void
+  onTerminalData: (callback: (event: { id: string; data: string; seq: number; occurredAt: number }) => void) => () => void
+  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) => () => void
+  onTerminalError: (callback: (event: { id: string; error: string; seq: number; occurredAt: number; fatal?: boolean; reason: 'process_error' | 'spawn_error' | 'unknown' }) => void) => () => void
 
   // Remote Shell / SFTP
   remoteShellList: (server: RemoteShellServer, remotePath?: string) => Promise<RemoteShellEntry[]>

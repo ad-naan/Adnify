@@ -52,6 +52,7 @@ export type AgentEvent =
   | { type: 'emotion:message'; message: string; state: import('../types/emotion').EmotionState }
   | { type: 'break:micro'; message: string }
   | { type: 'break:suggested'; message: string }
+  | { type: 'emotion:feedback'; feedback: import('../types/emotion').EmotionFeedbackPayload }
 
   // Orchestrator 事件
   | { type: 'plan:start'; planId: string }

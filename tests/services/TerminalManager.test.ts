@@ -1,28 +1,43 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest'
 
 const createMock = vi.fn()
-const onDataCleanup = vi.fn()
-const onExitCleanup = vi.fn()
-const onErrorCleanup = vi.fn()
+const writeMock = vi.fn()
+const resizeMock = vi.fn()
+const killMock = vi.fn()
+let dataHandler: ((event: { id: string; data: string; seq: number; occurredAt: number }) => void) | null = null
+let exitHandler: ((event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) | null = null
 
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
     terminal: {
       create: createMock,
-      write: vi.fn(),
-      resize: vi.fn(),
-      kill: vi.fn(),
-      onData: vi.fn(() => onDataCleanup),
-      onExit: vi.fn(() => onExitCleanup),
-      onError: vi.fn(() => onErrorCleanup),
+      write: writeMock,
+      resize: resizeMock,
+      kill: killMock,
+      onData: vi.fn((handler) => {
+        dataHandler = handler
+        return () => { dataHandler = null }
+      }),
+      onExit: vi.fn((handler) => {
+        exitHandler = handler
+        return () => { exitHandler = null }
+      }),
+      onError: vi.fn((_handler) => {
+        return () => {}
+      }),
     },
   },
 }))
 
 vi.mock('@renderer/settings', () => ({
   getEditorConfig: () => ({
-    performance: {
-      terminalBufferSize: 1000,
+    performance: { terminalBufferSize: 1000 },
+    terminal: {
+      cursorBlink: true,
+      fontFamily: 'monospace',
+      fontSize: 14,
+      lineHeight: 1.4,
+      scrollback: 1000,
     },
   }),
 }))
@@ -36,7 +51,9 @@ vi.mock('@xterm/xterm', () => ({
     open = vi.fn()
     dispose = vi.fn()
     onData = vi.fn()
-    onResize = vi.fn()
+    attachCustomKeyEventHandler = vi.fn()
+    getSelection = vi.fn(() => '')
+    clear = vi.fn()
   },
 }))
 
@@ -44,6 +61,7 @@ vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class MockFitAddon {
     fit = vi.fn()
     dispose = vi.fn()
+    proposeDimensions = vi.fn(() => ({ cols: 120, rows: 30 }))
   },
 }))
 
@@ -77,25 +95,63 @@ vi.mock('@renderer/agent/tools/commandRuntime', () => ({
   getInteractiveTerminalBackend: vi.fn(() => 'pipe'),
 }))
 
-describe('TerminalManager', () => {
+describe('TerminalManager command sessions', () => {
   beforeEach(() => {
+    vi.resetModules()
     createMock.mockReset()
     createMock.mockResolvedValue({ success: true })
+    writeMock.mockReset()
+    resizeMock.mockReset()
+    killMock.mockReset()
+    dataHandler = null
+    exitHandler = null
+    vi.useFakeTimers()
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => 'session-uuid') })
+    vi.stubGlobal('navigator', { userAgent: 'Macintosh' })
   })
 
-  it('uses pipe backend for agent terminals on macOS', async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it('tracks detached background commands as last session state', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
-      await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
+      const termId = await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
+      const session = terminalManager.recordDetachedCommand(termId, 'npm run dev', '/tmp/adnify-agent', 'agent')
+      const state = terminalManager.getTerminalCommandState(termId)
 
-      expect(createMock).toHaveBeenCalledTimes(1)
-      expect(createMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cwd: '/tmp/adnify-agent',
-          backend: 'pipe',
-        }),
-      )
+      expect(session.status).toBe('detached')
+      expect(state.current).toBeNull()
+      expect(state.last?.status).toBe('detached')
+      expect(state.last?.command).toBe('npm run dev')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('finalizes command when terminal exits before sentinel matches', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000, '/tmp/adnify-agent')
+
+      expect(writeMock).toHaveBeenCalledTimes(1)
+      dataHandler?.({ id: termId, data: 'partial output\n', seq: 1, occurredAt: Date.now() })
+      exitHandler?.({ id: termId, exitCode: 7, seq: 2, occurredAt: Date.now(), reason: 'process_exit' })
+
+      const result = await resultPromise
+      const state = terminalManager.getTerminalCommandState(termId)
+
+      expect(result.finalStatus).toBe('shell_exited')
+      expect(result.exitCode).toBe(7)
+      expect(result.success).toBe(false)
+      expect(state.current).toBeNull()
+      expect(state.last?.status).toBe('shell_exited')
+      expect(state.last?.terminationReason).toBe('terminal_exit')
     } finally {
       terminalManager.cleanup()
     }

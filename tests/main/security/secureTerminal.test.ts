@@ -1,9 +1,14 @@
 import { EventEmitter } from 'events'
+import * as fs from 'fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const handlers = new Map<string, Function>()
 const childSpawnMock = vi.fn()
 const ptySpawnMock = vi.fn()
+
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => true),
+}))
 
 vi.mock('electron', () => ({
   BrowserWindow: class MockBrowserWindow {},
@@ -61,6 +66,7 @@ describe('secureTerminal', () => {
     handlers.clear()
     childSpawnMock.mockReset()
     ptySpawnMock.mockReset()
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true)
   })
 
   afterEach(async () => {
@@ -71,6 +77,7 @@ describe('secureTerminal', () => {
 
   it('falls back to pipe on macOS even when PTY backend is requested', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    const workspaceRoot = process.cwd()
 
     const stdout = new EventEmitter()
     const stderr = new EventEmitter()
@@ -98,7 +105,7 @@ describe('secureTerminal', () => {
     const module = await import('@main/security/secureTerminal')
     module.registerSecureTerminalHandlers(
       () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
-      () => ({ roots: ['/Users/tech/Documents/dev/NodeProj/Adnify'] }),
+      () => ({ roots: [workspaceRoot] }),
     )
 
     const handler = handlers.get('terminal:interactive')
@@ -106,7 +113,8 @@ describe('secureTerminal', () => {
 
     const result = await handler?.({}, {
       id: 'agent-test',
-      cwd: '/Users/tech/Documents/dev/NodeProj/Adnify',
+      cwd: workspaceRoot,
+      shell: 'bash',
       backend: 'pty',
     })
 
@@ -115,3 +123,4 @@ describe('secureTerminal', () => {
     expect(ptySpawnMock).not.toHaveBeenCalled()
   })
 })
+

@@ -1,179 +1,133 @@
 /**
  * 编辑器情绪提示栏
- * 在编辑器底部显示当前情绪状态和互动提示
+ * 消费结构化 companion feedback，作为 editor 场景主入口。
  */
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Zap, Coffee, AlertTriangle, Heart, Brain } from 'lucide-react'
-import type { EmotionState } from '@/renderer/agent/types/emotion'
+import { Sparkles } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
+import { EventBus } from '@/renderer/agent/core/EventBus'
+import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META } from '@/renderer/agent/emotion'
-import { toast } from '../common/ToastProvider'
-
-/** 编辑器栏专用：bgColor、icon、消息 i18n keys（emotion.editor.*） */
-const EDITOR_BAR_EXTRA: Record<EmotionState, {
-  bgColor: string
-  icon: React.ReactNode
-  messages: string[]
-}> = {
-  focused:    { bgColor: 'bg-blue-500/10',   icon: <Zap className="w-4 h-4" />,           messages: ['emotion.editor.focused.1',    'emotion.editor.focused.2',    'emotion.editor.focused.3'] },
-  frustrated: { bgColor: 'bg-orange-500/10', icon: <AlertTriangle className="w-4 h-4" />, messages: ['emotion.editor.frustrated.1', 'emotion.editor.frustrated.2', 'emotion.editor.frustrated.3'] },
-  tired:      { bgColor: 'bg-purple-500/10', icon: <Coffee className="w-4 h-4" />,         messages: ['emotion.editor.tired.1',      'emotion.editor.tired.2',      'emotion.editor.tired.3'] },
-  excited:    { bgColor: 'bg-green-500/10', icon: <Sparkles className="w-4 h-4" />,      messages: ['emotion.editor.excited.1',   'emotion.editor.excited.2',   'emotion.editor.excited.3'] },
-  bored:      { bgColor: 'bg-gray-500/10',   icon: <Brain className="w-4 h-4" />,         messages: ['emotion.editor.bored.1',    'emotion.editor.bored.2',    'emotion.editor.bored.3'] },
-  stressed:   { bgColor: 'bg-cyan-500/10',   icon: <AlertTriangle className="w-4 h-4" />, messages: ['emotion.editor.stressed.1',  'emotion.editor.stressed.2',  'emotion.editor.stressed.3'] },
-  flow:       { bgColor: 'bg-indigo-500/10', icon: <Sparkles className="w-4 h-4" />,      messages: ['emotion.editor.flow.1',      'emotion.editor.flow.2',      'emotion.editor.flow.3'] },
-  neutral:    { bgColor: 'bg-gray-500/5',    icon: <Heart className="w-4 h-4" />,         messages: ['emotion.editor.neutral.1',   'emotion.editor.neutral.2',   'emotion.editor.neutral.3'] },
-}
+import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 
 export const EmotionEditorBar: React.FC = () => {
   const language = useStore(s => s.language)
   const emotion = useEmotionState()
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
-  const [isHovered, setIsHovered] = useState(false)
+  const [feedback, setFeedback] = useState<EmotionFeedbackPayload | null>(null)
+  const [hovered, setHovered] = useState(false)
+  const [companionEnabled, setCompanionEnabled] = useState(loadEmotionPanelSettings().companionEnabled)
 
-  // 状态变化时重置消息索引
   useEffect(() => {
-    setCurrentMessageIndex(0)
-  }, [emotion?.state])
+    return subscribeEmotionPanelSettings((settings) => setCompanionEnabled(settings.companionEnabled))
+  }, [])
 
-  // 轮播消息
   useEffect(() => {
-    if (!emotion || emotion.state === 'neutral') return
+    if (!companionEnabled) {
+      setFeedback(null)
+      return
+    }
 
-    const extra = EDITOR_BAR_EXTRA[emotion.state]
-    const interval = setInterval(() => {
-      setCurrentMessageIndex((prev) => (prev + 1) % extra.messages.length)
-    }, 8000) // 每8秒切换一次消息
+    const unsubscribe = EventBus.on('emotion:feedback', (event) => {
+      if (!event.feedback.channelHints?.includes('editorBar')) return
+      setFeedback(event.feedback)
+    })
 
-    return () => clearInterval(interval)
-  }, [emotion?.state])
+    return () => unsubscribe()
+  }, [companionEnabled])
 
-  const handleClick = useCallback(() => {
-    if (!emotion) return
-    const extra = EDITOR_BAR_EXTRA[emotion.state]
-    setCurrentMessageIndex((prev) => (prev + 1) % extra.messages.length)
-  }, [emotion])
-
-  const isActive = emotion && emotion.state !== 'neutral'
-  const meta = isActive ? EMOTION_META[emotion.state] : null
-  const extra = isActive ? EDITOR_BAR_EXTRA[emotion.state] : null
-  const currentMessageKey = extra?.messages[currentMessageIndex]
+  const state = emotion?.state || feedback?.emotionState || 'neutral'
+  const meta = EMOTION_META[state]
   const intensity = emotion?.intensity ?? 0.5
+  const actions = feedback?.actions || []
+  const visible = companionEnabled && !!feedback && state !== 'neutral'
+
+  const title = useMemo(() => {
+    if (!feedback) return ''
+    return feedback.shortMessage || feedback.message
+  }, [feedback])
+
+  const handleAction = (actionType?: string) => {
+    if (!actionType || !emotion) {
+      setFeedback(null)
+      return
+    }
+    import('@/renderer/agent/emotion/emotionActions').then(({ getRecommendedActions }) => {
+      const action = getRecommendedActions(emotion).find(item => item.type === actionType)
+      action?.execute()
+      setFeedback(null)
+    }).catch(() => setFeedback(null))
+  }
 
   return (
     <AnimatePresence>
-      {isActive && meta && extra && currentMessageKey && (
-      <motion.div
-        key={emotion.state}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 10 }}
-        transition={{ duration: 0.3 }}
-        className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
-      >
-        <div
-          className={`
-            relative border-t border-white/10
-            ${extra.bgColor}
-            backdrop-blur-sm
-            transition-all duration-300
-            ${isHovered ? 'bg-opacity-20' : 'bg-opacity-10'}
-          `}
-          style={{ borderTopColor: `${meta.color}30` }}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
+      {visible && feedback && (
+        <motion.div
+          key={feedback.id}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          transition={{ duration: 0.25 }}
+          className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none"
         >
-          <div className="px-4 py-2 flex items-center gap-3 pointer-events-auto">
-            {/* 情绪图标和状态 */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <motion.div
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                className="text-lg"
-              >
-                {meta.emoji}
-              </motion.div>
-              <div className="flex flex-col">
-                <span
-                  className="text-xs font-medium leading-none"
-                  style={{ color: meta.color }}
+          <div
+            className="relative border-t border-white/10 bg-background-secondary/80 backdrop-blur-sm transition-all duration-300"
+            style={{ borderTopColor: `${meta.color}30` }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+          >
+            <div className="px-4 py-2 flex items-center gap-3 pointer-events-auto">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <motion.div
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  className="text-lg"
                 >
-                  {t(`emotion.state.${emotion.state}`, language)}
-                </span>
-                <div className="flex items-center gap-1 mt-0.5">
-                  <div
-                    className="h-1 rounded-full transition-all"
-                    style={{
-                      width: `${intensity * 60}px`,
-                      backgroundColor: meta.color,
-                      opacity: 0.6,
-                    }}
-                  />
-                  <span className="text-[9px] text-text-muted">
-                    {Math.round(intensity * 100)}%
+                  {meta.emoji}
+                </motion.div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium leading-none" style={{ color: meta.color }}>
+                    {t(`emotion.state.${state}`, language)}
                   </span>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <div
+                      className="h-1 rounded-full transition-all"
+                      style={{ width: `${intensity * 60}px`, backgroundColor: meta.color, opacity: 0.6 }}
+                    />
+                    <span className="text-[9px] text-text-muted">{Math.round(intensity * 100)}%</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* 消息提示 */}
-            <div
-              className="flex-1 min-w-0 cursor-pointer"
-              onClick={handleClick}
-              title={t('emotion.editor.clickToChange', language)}
-            >
-              <AnimatePresence mode="wait">
-                <motion.p
-                  key={currentMessageIndex}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  transition={{ duration: 0.2 }}
-                  className="text-xs text-text-secondary leading-relaxed truncate"
-                >
-                  {t(currentMessageKey as any, language)}
-                </motion.p>
-              </AnimatePresence>
-            </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-text-secondary leading-relaxed truncate" title={title}>
+                  {title}
+                </p>
+              </div>
 
-            {/* 建议按钮 */}
-            {emotion.suggestions && emotion.suggestions.length > 0 && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`
-                  flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium
-                  transition-colors flex-shrink-0
-                  ${extra.bgColor} hover:bg-opacity-20
-                  border border-white/10 hover:border-white/20
-                `}
-                style={{ color: meta.color }}
-                onClick={() => {
-                  if (emotion.suggestions && emotion.suggestions.length > 0) {
-                    toast.info(emotion.suggestions[0])
-                  }
-                }}
-              >
-                {extra.icon}
-                <span>{t('emotion.editor.viewSuggestions', language)}</span>
-              </motion.button>
-            )}
+              {actions.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {actions.slice(0, 2).map((action) => (
+                    <motion.button
+                      key={action.id}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors border border-white/10 hover:border-white/20"
+                      style={{ color: meta.color, backgroundColor: hovered ? `${meta.color}18` : `${meta.color}10` }}
+                      onClick={() => handleAction(action.actionType)}
+                    >
+                      {action.emoji ? <span>{action.emoji}</span> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>{action.label}</span>
+                    </motion.button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-
-          {/* 进度条动画 */}
-          <motion.div
-            className="absolute bottom-0 left-0 h-0.5"
-            style={{ backgroundColor: meta.color }}
-            initial={{ width: '0%' }}
-            animate={{ width: '100%' }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-          />
-        </div>
-      </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   )

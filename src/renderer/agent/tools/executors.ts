@@ -702,45 +702,82 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     : command
                 terminalManager.writeToTerminal(termId, `${bgCmd}\r`)
 
+                const detachedSession = terminalManager.recordDetachedCommand(
+                    termId,
+                    command,
+                    resolvedCwd || undefined,
+                    'agent',
+                )
+
                 // 长进程占用了当前终端的 shell，释放 agentTerminalId
                 // 使下一次 run_command 自动创建新终端，避免命令被 stdin 吞掉
                 terminalManager.releaseAgentTerminal()
 
                 return {
                     success: true,
-                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
-                    meta: { command, cwd: resolvedCwd, terminalId: termId, isBackground: true }
+                    result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\nSession ID: ${detachedSession.commandSessionId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
+                    meta: {
+                        command,
+                        cwd: resolvedCwd,
+                        terminalId: termId,
+                        commandSessionId: detachedSession.commandSessionId,
+                        finalStatus: detachedSession.status,
+                        terminationReason: detachedSession.terminationReason,
+                        isBackground: true,
+                    }
                 }
             }
 
-            // === 短命令：用 sentinel 机制精确捕获输出，同时用户可见 ===
-            // 将 resolvedCwd 传给 executeCommandWithOutput，由其负责临时切换目录
-            const { output, exitCode, timedOut } = await terminalManager.executeCommandWithOutput(
+            const commandResult = await terminalManager.executeCommandWithOutput(
                 termId,
                 command,
                 timeout,
                 resolvedCwd || undefined,
             )
 
-            const hasOutput = output.trim().length > 0
-            let resultText = output
+            const displayOutput = (commandResult.output || commandResult.partialOutput || '').trim()
+            let resultText = displayOutput
 
-            if (!hasOutput) {
-                resultText = exitCode === 0
-                    ? 'Command executed successfully (no output)'
-                    : `Command exited with code ${exitCode} (no output)`
+            if (!resultText) {
+                if (commandResult.finalStatus === 'timed_out') {
+                    resultText = `Command timed out after ${timeout / 1000}s`
+                } else if (commandResult.exitCode === 0 && commandResult.finalStatus === 'completed') {
+                    resultText = 'Command executed successfully (no output)'
+                } else {
+                    resultText = `Command finished with status ${commandResult.finalStatus}${commandResult.exitCode !== null ? ` (exit code ${commandResult.exitCode})` : ''} (no output)`
+                }
             }
 
-            if (timedOut) {
-                resultText = `[Timed out after ${timeout / 1000}s]\n${output}`
+            if (commandResult.finalStatus === 'timed_out' && displayOutput) {
+                resultText = `[Timed out after ${timeout / 1000}s]\n${displayOutput}`
             }
 
-            const isSuccess = exitCode === 0 && !timedOut
+            if (commandResult.finalStatus === 'interrupted' && !commandResult.sentinelMatched) {
+                resultText = displayOutput
+                    ? `[Partial output captured before prompt recovery]\n${displayOutput}`
+                    : 'Command ended without a sentinel. Partial output may have been recovered from the terminal prompt.'
+            }
+
+            if (commandResult.finalStatus === 'shell_exited' && displayOutput) {
+                resultText = `[Shell exited while command was running]\n${displayOutput}`
+            }
+
             return {
-                success: isSuccess,
+                success: commandResult.success,
                 result: resultText,
-                meta: { command, cwd: resolvedCwd, exitCode, timedOut, terminalId: termId },
-                error: isSuccess ? undefined : resultText
+                meta: {
+                    command,
+                    cwd: resolvedCwd,
+                    terminalId: termId,
+                    commandSessionId: commandResult.commandSessionId,
+                    exitCode: commandResult.exitCode,
+                    timedOut: commandResult.timedOut,
+                    finalStatus: commandResult.finalStatus,
+                    durationMs: commandResult.durationMs,
+                    terminationReason: commandResult.terminationReason,
+                    sentinelMatched: commandResult.sentinelMatched,
+                },
+                error: commandResult.success ? undefined : resultText
             }
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error)
