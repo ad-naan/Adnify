@@ -12,6 +12,7 @@ import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
 import { emotionAdapter } from './agent/emotion/emotionAdapter'
+import { emotionDetectionEngine } from './agent/emotion/emotionDetectionEngine'
 import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 
@@ -51,6 +52,7 @@ function ToastInitializer() {
 function AppContent() {
   // 初始化情绪适配器和终端监听器（应用级别，只初始化一次）
   useEffect(() => {
+    emotionDetectionEngine.start()
     emotionAdapter.initialize()
     terminalWatcher.start()
 
@@ -65,6 +67,8 @@ function AppContent() {
 
     return () => {
       terminalWatcher.stop()
+      emotionAdapter.cleanup()
+      emotionDetectionEngine.stop()
       window.removeEventListener('beforeunload', handleUnload)
     }
   }, [])

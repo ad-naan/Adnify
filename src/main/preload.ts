@@ -547,18 +547,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('terminal:resize', { id, cols, rows }),
   killTerminal: (id?: string) => ipcRenderer.send('terminal:kill', id),
   getAvailableShells: () => ipcRenderer.invoke('shell:getAvailableShells'),
-  onTerminalData: (callback: (event: { id: string; data: string }) => void) => {
-    const handler = (_: IpcRendererEvent, event: { id: string; data: string }) => callback(event)
+  onTerminalData: (callback: (event: { id: string; data: string; seq: number; occurredAt: number }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { id: string; data: string; seq: number; occurredAt: number }) => callback(event)
     ipcRenderer.on('terminal:data', handler)
     return () => ipcRenderer.removeListener('terminal:data', handler)
   },
-  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number }) => void) => {
-    const handler = (_: IpcRendererEvent, event: { id: string; exitCode: number; signal?: number }) => callback(event)
+  onTerminalExit: (callback: (event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => callback(event)
     ipcRenderer.on('terminal:exit', handler)
     return () => ipcRenderer.removeListener('terminal:exit', handler)
   },
-  onTerminalError: (callback: (event: { id: string; error: string }) => void) => {
-    const handler = (_: IpcRendererEvent, event: { id: string; error: string }) => callback(event)
+  onTerminalError: (callback: (event: { id: string; error: string; seq: number; occurredAt: number; fatal?: boolean; reason: 'process_error' | 'spawn_error' | 'unknown' }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { id: string; error: string; seq: number; occurredAt: number; fatal?: boolean; reason: 'process_error' | 'spawn_error' | 'unknown' }) => callback(event)
     ipcRenderer.on('terminal:error', handler)
     return () => ipcRenderer.removeListener('terminal:error', handler)
   },

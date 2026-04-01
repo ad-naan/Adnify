@@ -42,17 +42,99 @@ export interface RunningCommandInfo {
   startedAt: number;
 }
 
+export type TerminalCommandStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'timed_out'
+  | 'cancelled'
+  | 'interrupted'
+  | 'detached'
+  | 'shell_exited';
+
+export type TerminalCommandTerminationReason =
+  | 'sentinel_matched'
+  | 'sentinel_missing_prompt'
+  | 'terminal_exit'
+  | 'terminal_error'
+  | 'timeout'
+  | 'user_closed_terminal'
+  | 'cleanup'
+  | 'detached';
+
+export interface TerminalCommandSession {
+  commandSessionId: string;
+  terminalId: string;
+  command: string;
+  cwd?: string;
+  startedAt: number;
+  endedAt?: number;
+  status: TerminalCommandStatus;
+  exitCode: number | null;
+  signal?: number;
+  timedOut: boolean;
+  terminationReason?: TerminalCommandTerminationReason;
+  captureStartSeq?: number;
+  captureEndSeq?: number;
+  output: string;
+  partialOutput: string;
+  sentinelMatched: boolean;
+  isBackground: boolean;
+  source: 'agent' | 'shell_ui' | 'user';
+}
+
+export interface TerminalCommandInfo {
+  current: TerminalCommandSession | null;
+  last: TerminalCommandSession | null;
+}
+
 export interface TerminalManagerState {
   terminals: TerminalInstance[];
   activeId: string | null;
-  /** 当前正在执行的命令（用于 UI 显示 spinner） */
+  /** 兼容字段：由 command session 状态派生，不再作为事实来源 */
   runningCommand: RunningCommandInfo | null;
+  commandInfoByTerminal: Record<string, TerminalCommandInfo>;
 }
 
 export interface CommandResult {
+  success: boolean;
+  finalStatus: TerminalCommandStatus;
   output: string;
-  exitCode: number;
+  partialOutput: string;
+  exitCode: number | null;
   timedOut: boolean;
+  durationMs: number;
+  terminalId: string;
+  commandSessionId: string;
+  terminationReason: TerminalCommandTerminationReason;
+  sentinelMatched: boolean;
+  signal?: number;
+}
+
+export interface TerminalDataEvent {
+  id: string;
+  data: string;
+  seq: number;
+  occurredAt: number;
+}
+
+export interface TerminalExitEvent {
+  id: string;
+  exitCode: number;
+  signal?: number;
+  seq: number;
+  occurredAt: number;
+  reason: 'process_exit' | 'killed_by_user' | 'remote_close';
+}
+
+export interface TerminalErrorEvent {
+  id: string;
+  error: string;
+  seq: number;
+  occurredAt: number;
+  fatal?: boolean;
+  reason: 'process_error' | 'spawn_error' | 'unknown';
 }
 
 export type TerminalBackend = 'pty' | 'pipe';
@@ -62,6 +144,14 @@ interface XTermInstance {
   fitAddon: FitAddon;
   webglAddon?: WebglAddon;
   container: HTMLDivElement | null;
+}
+
+interface ActiveCommandExecution {
+  commandSessionId: string;
+  finalize: (
+    reason: TerminalCommandTerminationReason,
+    override?: Partial<Pick<CommandResult, 'finalStatus' | 'exitCode' | 'signal' | 'timedOut' | 'output' | 'partialOutput' | 'sentinelMatched'>>,
+  ) => void;
 }
 
 type StateListener = (state: TerminalManagerState) => void;
@@ -136,12 +226,23 @@ function stripAnsi(str: string): string {
     .replace(/\r/g, '')
 }
 
+function looksLikeShellPrompt(str: string): boolean {
+  const text = stripAnsi(str).replace(/\r/g, '').trimEnd()
+  if (!text) return false
+
+  const tail = text.split('\n').slice(-3).join('\n')
+  return /(?:^|\n)(?:PS\s+[^\n>]*>\s*|(?:[^\n@\s]+@[^\n:\s]+:[^\n#$]+[#$]\s*)|(?:[A-Za-z]:\\[^\n>]*>\s*)|(?:[^\n]*[#$]\s*))$/.test(tail)
+}
+
+function cloneCommandSession(session: TerminalCommandSession | null): TerminalCommandSession | null {
+  if (!session) return null
+  return { ...session }
+}
 
 class TerminalManagerClass {
-  private state: TerminalManagerState = {
-    terminals: [],
-    activeId: null,
-    runningCommand: null,
+  private state = {
+    terminals: [] as TerminalInstance[],
+    activeId: null as string | null,
   };
 
   /** Agent 专属终端 ID（跨 tool call 复用） */
@@ -153,6 +254,11 @@ class TerminalManagerClass {
   // 环形缓冲区：O(1) 写入和裁剪
   private outputBuffers = new Map<string, RingBuffer>();
 
+  // 命令会话状态
+  private currentCommandSessions = new Map<string, TerminalCommandSession>();
+  private lastCommandSessions = new Map<string, TerminalCommandSession>();
+  private activeExecutions = new Map<string, ActiveCommandExecution>();
+
   // PTY 状态
   private ptyReady = new Map<string, boolean>();
   private pendingPtyCreation = new Map<string, Promise<boolean>>();
@@ -160,6 +266,7 @@ class TerminalManagerClass {
   // 监听器
   private stateListeners = new Set<StateListener>();
   private dataListeners = new Set<(id: string, data: string) => void>();
+  private rawDataListeners = new Set<(event: TerminalDataEvent) => void>();
 
   // 主题配置
   private currentTheme: Record<string, string> = {};
@@ -173,30 +280,25 @@ class TerminalManagerClass {
 
   private setupIpcListeners() {
     const onData = api.terminal.onData(
-      ({ id, data }: { id: string; data: string }) => {
+      (event: TerminalDataEvent) => {
+        const { id, data } = event;
         const xterm = this.xtermInstances.get(id);
         if (xterm?.terminal) {
           xterm.terminal.write(data);
         }
 
-        // 缓存输出
+        // UI 展示缓冲（ring buffer）
         this.appendToBuffer(id, data);
 
-        // 触发数据事件
+        // 命令级缓冲由 active command session 单独维护
+        this.rawDataListeners.forEach(listener => listener(event));
         this.dataListeners.forEach(listener => listener(id, data));
       },
     );
 
     const onExit = api.terminal.onExit(
-      ({
-        id,
-        exitCode,
-        signal,
-      }: {
-        id: string;
-        exitCode: number;
-        signal?: number;
-      }) => {
+      (event: TerminalExitEvent) => {
+        const { id, exitCode, signal } = event;
         logger.system.info(
           `[TerminalManager] Terminal ${id} exited with code ${exitCode}, signal ${signal}`,
         );
@@ -208,13 +310,36 @@ class TerminalManagerClass {
           );
         }
 
+        const activeExecution = this.activeExecutions.get(id);
+        if (activeExecution) {
+          activeExecution.finalize('terminal_exit', {
+            finalStatus: 'shell_exited',
+            exitCode,
+            signal,
+          })
+        } else {
+          const current = this.currentCommandSessions.get(id)
+          if (current) {
+            this.finalizeCommandSession(id, {
+              ...current,
+              status: 'shell_exited',
+              endedAt: Date.now(),
+              exitCode,
+              signal,
+              timedOut: false,
+              terminationReason: 'terminal_exit',
+            })
+          }
+        }
+
         // 清理 PTY 状态
         this.ptyReady.delete(id);
       },
     );
 
     const onError = api.terminal.onError?.(
-      ({ id, error }: { id: string; error: string }) => {
+      (event: TerminalErrorEvent) => {
+        const { id, error } = event;
         logger.system.error(`[TerminalManager] Terminal ${id} error:`, error);
 
         const xterm = this.xtermInstances.get(id);
@@ -222,6 +347,13 @@ class TerminalManagerClass {
           xterm.terminal.write(
             `\r\n\x1b[31m[Terminal Error: ${error}]\x1b[0m\r\n`,
           );
+        }
+
+        const activeExecution = this.activeExecutions.get(id)
+        if (activeExecution) {
+          activeExecution.finalize('terminal_error', {
+            finalStatus: 'failed',
+          })
         }
       },
     );
@@ -248,6 +380,63 @@ class TerminalManagerClass {
     buffer.push(data);
   }
 
+  private getDerivedRunningCommand(): RunningCommandInfo | null {
+    const running = Array.from(this.currentCommandSessions.values())
+      .filter(session => session.status === 'queued' || session.status === 'running')
+      .sort((a, b) => b.startedAt - a.startedAt)
+
+    if (running.length === 0) return null
+
+    const session = running[0]
+    return {
+      terminalId: session.terminalId,
+      command: session.command,
+      startedAt: session.startedAt,
+    }
+  }
+
+  private getCommandInfoSnapshot(): Record<string, TerminalCommandInfo> {
+    const snapshot: Record<string, TerminalCommandInfo> = {}
+    for (const terminal of this.state.terminals) {
+      snapshot[terminal.id] = {
+        current: cloneCommandSession(this.currentCommandSessions.get(terminal.id) || null),
+        last: cloneCommandSession(this.lastCommandSessions.get(terminal.id) || null),
+      }
+    }
+    return snapshot
+  }
+
+  private setCurrentCommandSession(terminalId: string, session: TerminalCommandSession | null): void {
+    if (session) {
+      this.currentCommandSessions.set(terminalId, session)
+    } else {
+      this.currentCommandSessions.delete(terminalId)
+    }
+    this.notify()
+  }
+
+  private updateCurrentCommandSession(
+    terminalId: string,
+    updater: (session: TerminalCommandSession) => TerminalCommandSession,
+  ): void {
+    const current = this.currentCommandSessions.get(terminalId)
+    if (!current) return
+    this.currentCommandSessions.set(terminalId, updater(current))
+    this.notify()
+  }
+
+  private finalizeCommandSession(terminalId: string, session: TerminalCommandSession): void {
+    this.currentCommandSessions.delete(terminalId)
+    this.lastCommandSessions.set(terminalId, session)
+    this.notify()
+  }
+
+  private clearCommandState(terminalId: string): void {
+    this.activeExecutions.delete(terminalId)
+    this.currentCommandSessions.delete(terminalId)
+    this.lastCommandSessions.delete(terminalId)
+  }
+
   /**
    * 获取缓冲区统计信息
    */
@@ -270,6 +459,11 @@ class TerminalManagerClass {
     return () => this.dataListeners.delete(listener);
   }
 
+  private onRawData(listener: (event: TerminalDataEvent) => void): () => void {
+    this.rawDataListeners.add(listener)
+    return () => this.rawDataListeners.delete(listener)
+  }
+
   private notify() {
     const state = this.getState();
     this.stateListeners.forEach((listener) => listener(state));
@@ -279,8 +473,16 @@ class TerminalManagerClass {
     return {
       terminals: [...this.state.terminals],
       activeId: this.state.activeId,
-      runningCommand: this.state.runningCommand,
+      runningCommand: this.getDerivedRunningCommand(),
+      commandInfoByTerminal: this.getCommandInfoSnapshot(),
     };
+  }
+
+  getTerminalCommandState(terminalId: string): TerminalCommandInfo {
+    return {
+      current: cloneCommandSession(this.currentCommandSessions.get(terminalId) || null),
+      last: cloneCommandSession(this.lastCommandSessions.get(terminalId) || null),
+    }
   }
 
   // ===== 主题管理 =====
@@ -521,7 +723,7 @@ class TerminalManagerClass {
       fitAddon.fit();
     } catch { }
 
-    const dims = fitAddon.proposeDimensions();
+    const dims = fitAddon.proposeDimensions?.();
     if (dims && dims.cols > 0 && dims.rows > 0) {
       api.terminal.resize(id, dims.cols, dims.rows);
     }
@@ -555,7 +757,7 @@ class TerminalManagerClass {
 
     try {
       instance.fitAddon.fit();
-      const dims = instance.fitAddon.proposeDimensions();
+      const dims = instance.fitAddon.proposeDimensions?.();
       if (dims && dims.cols > 0 && dims.rows > 0) {
         api.terminal.resize(id, dims.cols, dims.rows);
       }
@@ -563,6 +765,23 @@ class TerminalManagerClass {
   }
 
   closeTerminal(id: string) {
+    const activeExecution = this.activeExecutions.get(id)
+    if (activeExecution) {
+      activeExecution.finalize('user_closed_terminal', {
+        finalStatus: 'cancelled',
+      })
+    } else {
+      const current = this.currentCommandSessions.get(id)
+      if (current) {
+        this.finalizeCommandSession(id, {
+          ...current,
+          status: 'cancelled',
+          endedAt: Date.now(),
+          terminationReason: 'user_closed_terminal',
+        })
+      }
+    }
+
     const xterm = this.xtermInstances.get(id);
     if (xterm) {
       xterm.terminal.dispose();
@@ -575,6 +794,7 @@ class TerminalManagerClass {
 
     this.outputBuffers.delete(id);
     this.ptyReady.delete(id);
+    this.clearCommandState(id)
     api.terminal.kill(id);
 
     const index = this.state.terminals.findIndex((t) => t.id === id);
@@ -670,6 +890,36 @@ class TerminalManagerClass {
     this.agentTerminalId = null
   }
 
+  recordDetachedCommand(
+    termId: string,
+    command: string,
+    cwd?: string,
+    source: TerminalCommandSession['source'] = 'agent',
+  ): TerminalCommandSession {
+    const startedAt = Date.now()
+    const session: TerminalCommandSession = {
+      commandSessionId: crypto.randomUUID(),
+      terminalId: termId,
+      command,
+      cwd,
+      startedAt,
+      endedAt: startedAt,
+      status: 'detached',
+      exitCode: null,
+      timedOut: false,
+      terminationReason: 'detached',
+      output: '',
+      partialOutput: '',
+      sentinelMatched: false,
+      isBackground: true,
+      source,
+    }
+
+    this.lastCommandSessions.set(termId, session)
+    this.notify()
+    return cloneCommandSession(session)!
+  }
+
   /**
    * 在指定终端执行命令，通过 sentinel 标记精确捕获本次命令的输出。
    * 命令过程对用户可见（在终端面板里显示），同时将 stdout 作为字符串返回给 AI。
@@ -688,41 +938,148 @@ class TerminalManagerClass {
     // 用于在原始数据中检测 end sentinel
     const RAW_END_MARKER = `${OSC}${END_PAYLOAD_PREFIX}`
 
-    // 广播运行状态
-    this.state.runningCommand = { terminalId: termId, command, startedAt: Date.now() }
-    this.notify()
+    const commandSessionId = crypto.randomUUID()
+    const startedAt = Date.now()
+    const initialSession: TerminalCommandSession = {
+      commandSessionId,
+      terminalId: termId,
+      command,
+      cwd,
+      startedAt,
+      status: 'queued',
+      exitCode: null,
+      timedOut: false,
+      output: '',
+      partialOutput: '',
+      sentinelMatched: false,
+      isBackground: false,
+      source: 'agent',
+    }
+
+    this.setCurrentCommandSession(termId, initialSession)
 
     return new Promise<CommandResult>((resolve) => {
       let rawAccumulator = ''   // 原始 PTY 数据，用于检测 OSC sentinel
       let textAccumulator = ''  // stripAnsi 后的纯文本，用于返回给 AI
       let textAtStart = -1      // 检测到 START sentinel 时 textAccumulator 的长度
       let settled = false
+      let sentinelMatched = false
+      let idleTimer: ReturnType<typeof setTimeout> | null = null
 
-      const settle = (result: CommandResult) => {
+      const getVisibleOutput = () => {
+        const output = textAtStart !== -1
+          ? textAccumulator.slice(textAtStart)
+          : textAccumulator
+        return output.trim()
+      }
+
+      const updatePartialOutput = (partialOutput: string, captureStartSeq?: number) => {
+        this.updateCurrentCommandSession(termId, (session) => ({
+          ...session,
+          status: session.status === 'queued' ? 'running' : session.status,
+          partialOutput,
+          captureStartSeq: captureStartSeq ?? session.captureStartSeq,
+        }))
+      }
+
+      const clearIdleTimer = () => {
+        if (idleTimer) {
+          clearTimeout(idleTimer)
+          idleTimer = null
+        }
+      }
+
+      const settle = (
+        reason: TerminalCommandTerminationReason,
+        override?: Partial<Pick<CommandResult, 'finalStatus' | 'exitCode' | 'signal' | 'timedOut' | 'output' | 'partialOutput' | 'sentinelMatched'>>,
+      ) => {
         if (settled) return
         settled = true
-        unsub()
+        unsubRaw()
         clearTimeout(timer)
-        this.state.runningCommand = null
-        this.notify()
+        clearIdleTimer()
+        this.activeExecutions.delete(termId)
+
+        const partialOutput = override?.partialOutput ?? getVisibleOutput()
+        const output = override?.output ?? partialOutput
+        const finalStatus = override?.finalStatus ?? 'failed'
+        const exitCode = override?.exitCode ?? null
+        const timedOut = override?.timedOut ?? finalStatus === 'timed_out'
+        const result: CommandResult = {
+          success: finalStatus === 'completed' && exitCode === 0,
+          finalStatus,
+          output,
+          partialOutput,
+          exitCode,
+          timedOut,
+          durationMs: Date.now() - startedAt,
+          terminalId: termId,
+          commandSessionId,
+          terminationReason: reason,
+          sentinelMatched: override?.sentinelMatched ?? sentinelMatched,
+          signal: override?.signal,
+        }
+
+        this.finalizeCommandSession(termId, {
+          ...(this.currentCommandSessions.get(termId) || initialSession),
+          status: finalStatus,
+          endedAt: Date.now(),
+          exitCode,
+          signal: result.signal,
+          timedOut,
+          terminationReason: reason,
+          output,
+          partialOutput,
+          sentinelMatched: result.sentinelMatched,
+          captureStartSeq: this.currentCommandSessions.get(termId)?.captureStartSeq,
+          captureEndSeq: result.sentinelMatched ? this.currentCommandSessions.get(termId)?.captureEndSeq : this.currentCommandSessions.get(termId)?.captureEndSeq,
+        })
+
         resolve(result)
       }
 
+      const scheduleIdleFallback = () => {
+        clearIdleTimer()
+        if (textAtStart === -1 || sentinelMatched) return
+        idleTimer = setTimeout(() => {
+          if (settled) return
+          const tail = rawAccumulator.slice(-400)
+          if (looksLikeShellPrompt(tail)) {
+            settle('sentinel_missing_prompt', {
+              finalStatus: 'interrupted',
+              output: getVisibleOutput(),
+              partialOutput: getVisibleOutput(),
+              sentinelMatched: false,
+            })
+          }
+        }, 1200)
+      }
+
       const timer = setTimeout(() => {
-        settle({ output: textAccumulator.trim(), exitCode: -1, timedOut: true })
+        settle('timeout', {
+          finalStatus: 'timed_out',
+          timedOut: true,
+          partialOutput: getVisibleOutput(),
+          output: getVisibleOutput(),
+        })
       }, timeoutMs)
 
-      const unsub = this.onData((id, data) => {
-        if (id !== termId || settled) return
-        rawAccumulator += data
-        textAccumulator += stripAnsi(data)
+      const unsubRaw = this.onRawData((event) => {
+        if (event.id !== termId || settled) return
+        rawAccumulator += event.data
+        textAccumulator += stripAnsi(event.data)
 
-        // OSC 序列被 stripAnsi 整体剥除，无文本残留。
-        // 在 raw 中检测到 START 时记录 textAccumulator 当前长度，
-        // 作为命令输出的起始游标（跳过 shell 回显、提示符等）
         if (textAtStart === -1 && rawAccumulator.includes(`${OSC}${START_PAYLOAD}${BEL}`)) {
           textAtStart = textAccumulator.length
+          this.updateCurrentCommandSession(termId, (session) => ({
+            ...session,
+            status: 'running',
+            captureStartSeq: event.seq,
+          }))
         }
+
+        const visibleOutput = getVisibleOutput()
+        updatePartialOutput(visibleOutput)
 
         // 在原始数据中检测 OSC end sentinel：ESC]9001;ADNIFY_CMD_END_..._N BEL
         const endIdx = rawAccumulator.indexOf(RAW_END_MARKER)
@@ -730,12 +1087,30 @@ class TerminalManagerClass {
           const afterMarker = rawAccumulator.slice(endIdx + RAW_END_MARKER.length)
           const codeMatch = afterMarker.match(/^(\d+)\x07/)
           if (codeMatch) {
-            const output = textAtStart !== -1
-              ? textAccumulator.slice(textAtStart).trim()
-              : textAccumulator.trim()
-            settle({ output, exitCode: parseInt(codeMatch[1], 10), timedOut: false })
+            sentinelMatched = true
+            const exitCode = parseInt(codeMatch[1], 10)
+            this.updateCurrentCommandSession(termId, (session) => ({
+              ...session,
+              captureEndSeq: event.seq,
+              sentinelMatched: true,
+            }))
+            settle('sentinel_matched', {
+              finalStatus: exitCode === 0 ? 'completed' : 'failed',
+              exitCode,
+              output: visibleOutput,
+              partialOutput: visibleOutput,
+              sentinelMatched: true,
+            })
+            return
           }
         }
+
+        scheduleIdleFallback()
+      })
+
+      this.activeExecutions.set(termId, {
+        commandSessionId,
+        finalize: settle,
       })
 
       // 必须先订阅，再写命令（避免竞态）
@@ -744,15 +1119,15 @@ class TerminalManagerClass {
       // PowerShell 5.x 不支持 && 运算符；cmd.exe 的 cd /d 在 PS 里无效（/d 被当位置参数）
       const sanitizedCommand = isWindows
         ? command
-            .replace(/\s*&&\s*/g, '; ')
-            .replace(/\bcd\s+\/[dD]\s+(['"]?)([^;|&\n'"]+)\1/g, 'Push-Location "$2"')
+          .replace(/\s*&&\s*/g, '; ')
+          .replace(/\bcd\s+\/[dD]\s+(['"]?)([^;|&\n'"]+)\1/g, 'Push-Location "$2"')
         : command
 
       // cwd 参数：Agent 终端复用，需临时切换目录
       const cmdWithCwd = cwd
         ? (isWindows
-            ? `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`
-            : `(cd "${cwd}" && ${sanitizedCommand})`)
+          ? `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`
+          : `(cd "${cwd}" && ${sanitizedCommand})`)
         : sanitizedCommand
 
       // OSC sentinel 命令（Windows/Unix/macOS 三平台）
@@ -761,7 +1136,7 @@ class TerminalManagerClass {
         : `printf '\\033]9001;${START_PAYLOAD}\\007'`
       const sentinelEnd = isWindows
         ? `Write-Host -NoNewline "$([char]27)]9001;${END_PAYLOAD_PREFIX}$LASTEXITCODE$([char]7)"`
-        : `printf '\\033]9001;${END_PAYLOAD_PREFIX}'\"$?\"'\\007'`
+        : `printf '\\033]9001;${END_PAYLOAD_PREFIX}'"$?"'\\007'`
 
       const mainCommand = `${sentinelStart}; ${cmdWithCwd}; ${sentinelEnd}`
 
@@ -774,11 +1149,11 @@ class TerminalManagerClass {
       //
       // N 的计算：ceil((提示符估算长度 + 完整命令长度) / 终端列数) + 1
       const xtermInst = this.xtermInstances.get(termId)
-      const cols = xtermInst?.fitAddon?.proposeDimensions()?.cols ?? 80
+      const cols = xtermInst?.fitAddon?.proposeDimensions?.()?.cols ?? 80
       const promptLen = isWindows ? 60 : 35
       // 每个清除单元的字面长度（PS 使用 $([char]N) 表达式，Unix 使用 octal 转义）
       const clearUnit = isWindows ? '$([char]27)[1A$([char]27)[2K' : '\\033[1A\\033[2K'
-      const clearWrapLen = isWindows ? 22 : 10  // "Write-Host -NoNewline ""; " 或 "printf ''; "
+      const clearWrapLen = isWindows ? 22 : 10  // "Write-Host -NoNewline \"\"; " 或 "printf ''; "
       // 两次迭代逼近（消除循环依赖）
       const roughLines = Math.ceil((promptLen + mainCommand.length) / cols)
       const clearOverhead = clearWrapLen + clearUnit.length * roughLines
@@ -800,6 +1175,10 @@ class TerminalManagerClass {
 
       const wrapped = `${fakeEchoCmd}; ${mainCommand}\r`
 
+      this.updateCurrentCommandSession(termId, (session) => ({
+        ...session,
+        status: 'running',
+      }))
       this.writeToTerminal(termId, wrapped)
     })
   }
@@ -810,16 +1189,24 @@ class TerminalManagerClass {
       this.ipcCleanup = null;
     }
 
-    for (const terminal of this.state.terminals) {
+    for (const terminal of [...this.state.terminals]) {
+      const activeExecution = this.activeExecutions.get(terminal.id)
+      if (activeExecution) {
+        activeExecution.finalize('cleanup', {
+          finalStatus: 'cancelled',
+        })
+      }
       this.closeTerminal(terminal.id);
     }
 
     this.agentTerminalId = null
     this.agentTerminalCreating = null
+    this.currentCommandSessions.clear()
+    this.lastCommandSessions.clear()
+    this.activeExecutions.clear()
     this.state = {
       terminals: [],
       activeId: null,
-      runningCommand: null,
     };
     this.notify();
   }
