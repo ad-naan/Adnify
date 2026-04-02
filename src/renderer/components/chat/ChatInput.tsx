@@ -143,7 +143,7 @@ export default function ChatInput({
   const isSendable = input.trim().length > 0 || images.length > 0
 
   return (
-    <div ref={inputContainerRef} className="p-4 z-20">
+    <div ref={inputContainerRef} className="z-20">
       <div
         className={`
             relative group flex flex-col rounded-xl transition-all duration-500 ease-out border backdrop-blur-md
@@ -282,7 +282,10 @@ export default function ChatInput({
 
           {/* Bottom Actions */}
           <div className="flex items-center justify-between pt-1">
-            <div />
+            <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+              <ModeSelector mode={chatMode} onModeChange={setChatMode} />
+              <ModelSelector />
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="file"
@@ -334,10 +337,6 @@ export default function ChatInput({
 
       {/* Mode & Model Selector */}
       <div className="mt-3 flex items-center justify-between px-3">
-        <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-          <ModeSelector mode={chatMode} onModeChange={setChatMode} />
-          <ModelSelector />
-        </div>
         <div className="hidden sm:flex items-center gap-2 text-[10px] text-text-muted/40 font-medium tracking-wide whitespace-nowrap overflow-hidden shrink-0">
           <span>⏎ Send</span>
           <span className="w-1 h-1 rounded-full bg-current opacity-30" />
