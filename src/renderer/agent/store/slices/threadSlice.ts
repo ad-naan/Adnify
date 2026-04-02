@@ -9,6 +9,7 @@ import type { CompressionStats } from '../../core/types'
 import type { StructuredSummary } from '../../context/types'
 import type { BranchSlice } from './branchSlice'
 import type { ToolStreamingPreview } from '@/shared/types'
+import { adnifyDir } from '@/renderer/services/adnifyDirService'
 
 export interface ThreadStoreState {
     threads: Record<string, ChatThread>
@@ -115,6 +116,7 @@ export const createThreadSlice: StateCreator<
 
     createThread: () => {
         const thread = createEmptyThread()
+        let shouldFlushImmediately = false
 
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
@@ -140,6 +142,8 @@ export const createThreadSlice: StateCreator<
                 }
             }
 
+            shouldFlushImmediately = state.currentThreadId !== thread.id
+
             return {
                 threads: newThreads,
                 currentThreadId: thread.id,
@@ -148,21 +152,32 @@ export const createThreadSlice: StateCreator<
             }
         })
 
+        if (shouldFlushImmediately) {
+            void adnifyDir.flush()
+        }
+
         return thread.id
     },
 
     switchThread: (threadId) => {
         const state = get()
         if (!state.threads[threadId]) return
+        if (state.currentThreadId === threadId) return
         set({ currentThreadId: threadId })
+        void adnifyDir.flush()
     },
 
     deleteThread: (threadId) => {
+        let didDelete = false
+
         set(state => {
+            if (!state.threads[threadId]) return state
+
             const { [threadId]: _thread, ...remaining } = state.threads
             const remainingIds = Object.keys(remaining)
             const { [threadId]: _branch, ...remainingBranches } = state.branches || {}
             const { [threadId]: _activeBranch, ...remainingActiveBranch } = state.activeBranchId || {}
+            didDelete = true
 
             return {
                 threads: remaining,
@@ -173,6 +188,10 @@ export const createThreadSlice: StateCreator<
                 activeBranchId: remainingActiveBranch,
             }
         })
+
+        if (didDelete) {
+            void adnifyDir.flush()
+        }
     },
 
     getCurrentThread: () => {
