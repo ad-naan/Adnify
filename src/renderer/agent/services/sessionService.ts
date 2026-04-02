@@ -10,6 +10,7 @@ import { LLMConfig } from '@store'
 import { WorkMode } from '@/renderer/modes/types'
 import { ChatMessage, ChatThread, getMessageText as getMsgText, isUserMessage } from '../types'
 import { useAgentStore } from '../store/AgentStore'
+import { adnifyDir } from '@/renderer/services/adnifyDirService'
 
 export interface ChatSession {
 	id: string
@@ -28,15 +29,17 @@ export interface SessionSummary {
 	messageCount: number
 	createdAt: number
 	updatedAt: number
-	preview: string // 第一条用户消息的预览
+	preview: string
+	config?: Partial<LLMConfig>
 }
 
+interface SavedSessionIndexEntry extends SessionSummary {}
+
 const SESSIONS_KEY = 'chat_sessions'
+const SAVED_SESSIONS_DIR = 'saved-sessions'
+const SAVED_SESSIONS_INDEX_FILE = `${SAVED_SESSIONS_DIR}/index.json`
 const MAX_SESSIONS = 50
 
-/**
- * 提取消息文本内容
- */
 function getMessageText(msg: ChatMessage): string {
 	if (isUserMessage(msg)) {
 		return getMsgText(msg.content)
@@ -47,9 +50,6 @@ function getMessageText(msg: ChatMessage): string {
 	return ''
 }
 
-/**
- * 生成会话名称
- */
 function generateSessionName(messages: ChatMessage[]): string {
 	const firstUserMessage = messages.find(m => isUserMessage(m))
 	if (firstUserMessage) {
@@ -60,9 +60,6 @@ function generateSessionName(messages: ChatMessage[]): string {
 	return `Session ${new Date().toLocaleString()}`
 }
 
-/**
- * 获取消息预览
- */
 function getMessagePreview(messages: ChatMessage[]): string {
 	const firstUserMessage = messages.find(m => isUserMessage(m))
 	if (firstUserMessage) {
@@ -71,48 +68,171 @@ function getMessagePreview(messages: ChatMessage[]): string {
 	return ''
 }
 
+function toSummary(session: ChatSession): SavedSessionIndexEntry {
+	return {
+		id: session.id,
+		name: session.name,
+		mode: session.mode,
+		messageCount: session.messages.length,
+		createdAt: session.createdAt,
+		updatedAt: session.updatedAt,
+		preview: getMessagePreview(session.messages),
+		config: session.config,
+	}
+}
+
+function sortSummaries(sessions: SavedSessionIndexEntry[]): SavedSessionIndexEntry[] {
+	return [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+function getSessionFilePath(sessionId: string): string {
+	return `${SAVED_SESSIONS_DIR}/${sessionId}.jsonl`
+}
+
+function serializeMessages(messages: ChatMessage[]): string {
+	if (messages.length === 0) return ''
+	return messages.map(message => JSON.stringify(message)).join('\n')
+}
+
+function parseMessagesFromJsonl(content: string): ChatMessage[] {
+	if (!content.trim()) return []
+
+	const messages: ChatMessage[] = []
+	for (const line of content.split(/\r?\n/)) {
+		const trimmed = line.trim()
+		if (!trimmed) continue
+		try {
+			messages.push(JSON.parse(trimmed) as ChatMessage)
+		} catch (error) {
+			logger.agent.warn('[SessionService] Skipped invalid session JSONL line', error)
+		}
+	}
+	return messages
+}
+
 class SessionService {
-	/**
-	 * 获取所有会话摘要
-	 */
+	private migrationPromise: Promise<void> | null = null
+
+	private async ensureInitialized(): Promise<void> {
+		if (!adnifyDir.isInitialized()) {
+			throw new Error('Adnify directory is not initialized')
+		}
+		await adnifyDir.ensureSavedSessionsDir()
+		await this.ensureMigrated()
+	}
+
+	private async ensureMigrated(): Promise<void> {
+		if (this.migrationPromise) {
+			await this.migrationPromise
+			return
+		}
+
+		this.migrationPromise = this.migrateLegacySessions()
+		try {
+			await this.migrationPromise
+		} finally {
+			this.migrationPromise = null
+		}
+	}
+
+	private async readIndex(): Promise<SavedSessionIndexEntry[]> {
+		const data = await adnifyDir.readJson<SavedSessionIndexEntry[]>(SAVED_SESSIONS_INDEX_FILE)
+		return Array.isArray(data) ? sortSummaries(data) : []
+	}
+
+	private async writeIndex(entries: SavedSessionIndexEntry[]): Promise<void> {
+		await adnifyDir.writeJson(SAVED_SESSIONS_INDEX_FILE, sortSummaries(entries))
+	}
+
+	private async readSessionMessages(sessionId: string): Promise<ChatMessage[] | null> {
+		const content = await adnifyDir.readText(getSessionFilePath(sessionId))
+		if (content === null) return null
+		return parseMessagesFromJsonl(content)
+	}
+
+	private async writeSessionMessages(sessionId: string, messages: ChatMessage[]): Promise<void> {
+		await adnifyDir.writeText(getSessionFilePath(sessionId), serializeMessages(messages))
+	}
+
+	private async deleteSessionFile(sessionId: string): Promise<void> {
+		await adnifyDir.deleteFile(getSessionFilePath(sessionId))
+	}
+
+	private async trimSessions(entries: SavedSessionIndexEntry[]): Promise<SavedSessionIndexEntry[]> {
+		if (entries.length <= MAX_SESSIONS) return entries
+
+		const sorted = sortSummaries(entries)
+		const kept = sorted.slice(0, MAX_SESSIONS)
+		const keptIds = new Set(kept.map(entry => entry.id))
+		const removed = sorted.filter(entry => !keptIds.has(entry.id))
+		await Promise.all(removed.map(entry => this.deleteSessionFile(entry.id)))
+		return kept
+	}
+
+	private async migrateLegacySessions(): Promise<void> {
+		try {
+			const legacyData = await api.settings.get(SESSIONS_KEY)
+			if (!legacyData || typeof legacyData !== 'string') return
+
+			const legacySessions = JSON.parse(legacyData) as ChatSession[]
+			if (!Array.isArray(legacySessions) || legacySessions.length === 0) {
+				return
+			}
+
+			const existingIndex = await this.readIndex()
+			const existingIds = new Set(existingIndex.map(session => session.id))
+			const mergedIndex = [...existingIndex]
+
+			for (const session of legacySessions) {
+				if (!session?.id || !Array.isArray(session.messages)) continue
+				if (!existingIds.has(session.id)) {
+					await this.writeSessionMessages(session.id, session.messages)
+					mergedIndex.push(toSummary(session))
+					existingIds.add(session.id)
+				}
+			}
+
+			await this.writeIndex(await this.trimSessions(mergedIndex))
+			await api.settings.set(SESSIONS_KEY, undefined)
+			logger.agent.info('[SessionService] Migrated legacy chat_sessions to saved-sessions storage')
+		} catch (error) {
+			logger.agent.error('[SessionService] Failed to migrate legacy chat_sessions:', error)
+		}
+	}
+
 	async getSessions(): Promise<SessionSummary[]> {
 		try {
-			const data = await api.settings.get(SESSIONS_KEY)
-			if (!data || typeof data !== 'string') return []
-
-			const sessions: ChatSession[] = JSON.parse(data)
-			return sessions.map(s => ({
-				id: s.id,
-				name: s.name,
-				mode: s.mode,
-				messageCount: s.messages.length,
-				createdAt: s.createdAt,
-				updatedAt: s.updatedAt,
-				preview: getMessagePreview(s.messages),
-			})).sort((a, b) => b.updatedAt - a.updatedAt)
+			await this.ensureInitialized()
+			return await this.readIndex()
 		} catch {
 			return []
 		}
 	}
 
-	/**
-	 * 获取单个会话
-	 */
 	async getSession(id: string): Promise<ChatSession | null> {
 		try {
-			const data = await api.settings.get(SESSIONS_KEY)
-			if (!data || typeof data !== 'string') return null
+			await this.ensureInitialized()
+			const index = await this.readIndex()
+			const entry = index.find(session => session.id === id)
+			if (!entry) return null
 
-			const sessions: ChatSession[] = JSON.parse(data)
-			return sessions.find(s => s.id === id) || null
+			const messages = await this.readSessionMessages(id)
+			if (!messages) return null
+
+			return {
+				id: entry.id,
+				name: entry.name,
+				mode: entry.mode,
+				messages,
+				createdAt: entry.createdAt,
+				updatedAt: entry.updatedAt,
+				config: entry.config,
+			}
 		} catch {
 			return null
 		}
 	}
 
-	/**
-	 * 保存当前线程为会话
-	 */
 	async saveCurrentThread(
 		mode: WorkMode,
 		existingId?: string,
@@ -125,38 +245,39 @@ class SessionService {
 		return this.saveThread(thread, mode, existingId, config)
 	}
 
-	/**
-	 * 保存指定线程为会话
-	 */
 	async saveThread(
 		thread: ChatThread,
 		mode: WorkMode,
 		existingId?: string,
 		config?: Partial<LLMConfig>
 	): Promise<string> {
-		const data = await api.settings.get(SESSIONS_KEY)
-		let sessions: ChatSession[] = data && typeof data === 'string' ? JSON.parse(data) : []
+		await this.ensureInitialized()
 
 		const now = Date.now()
 		const messages = thread.messages
+		let index = await this.readIndex()
 
 		if (existingId) {
-			// 更新现有会话
-			const idx = sessions.findIndex(s => s.id === existingId)
-			if (idx >= 0) {
-				sessions[idx] = {
-					...sessions[idx],
-					messages,
-					mode,
-					updatedAt: now,
-					config,
-				}
-				await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
+			const existing = index.find(session => session.id === existingId)
+			if (existing) {
+				await this.writeSessionMessages(existingId, messages)
+				index = index.map(session =>
+					session.id === existingId
+						? {
+							...session,
+							mode,
+							updatedAt: now,
+							messageCount: messages.length,
+							preview: getMessagePreview(messages),
+							config,
+						}
+						: session
+				)
+				await this.writeIndex(index)
 				return existingId
 			}
 		}
 
-		// 创建新会话
 		const newSession: ChatSession = {
 			id: crypto.randomUUID(),
 			name: generateSessionName(messages),
@@ -167,100 +288,78 @@ class SessionService {
 			config,
 		}
 
-		sessions.unshift(newSession)
-
-		// 限制会话数量
-		if (sessions.length > MAX_SESSIONS) {
-			sessions = sessions.slice(0, MAX_SESSIONS)
-		}
-
-		await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
+		await this.writeSessionMessages(newSession.id, messages)
+		index.unshift(toSummary(newSession))
+		index = await this.trimSessions(index)
+		await this.writeIndex(index)
 		return newSession.id
 	}
 
-	/**
-	 * 删除会话
-	 */
 	async deleteSession(id: string): Promise<boolean> {
 		try {
-			const data = await api.settings.get(SESSIONS_KEY)
-			if (!data || typeof data !== 'string') return false
+			await this.ensureInitialized()
+			const index = await this.readIndex()
+			const nextIndex = index.filter(session => session.id !== id)
+			if (nextIndex.length === index.length) return false
 
-			let sessions: ChatSession[] = JSON.parse(data)
-			const initialLength = sessions.length
-			sessions = sessions.filter(s => s.id !== id)
-
-			if (sessions.length < initialLength) {
-				await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
-				return true
-			}
-			return false
+			await this.deleteSessionFile(id)
+			await this.writeIndex(nextIndex)
+			return true
 		} catch {
 			return false
 		}
 	}
 
-	/**
-	 * 重命名会话
-	 */
 	async renameSession(id: string, name: string): Promise<boolean> {
 		try {
-			const data = await api.settings.get(SESSIONS_KEY)
-			if (!data || typeof data !== 'string') return false
-
-			const sessions: ChatSession[] = JSON.parse(data)
-			const session = sessions.find(s => s.id === id)
-
-			if (session) {
-				session.name = name
-				session.updatedAt = Date.now()
-				await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
-				return true
-			}
-			return false
+			await this.ensureInitialized()
+			const index = await this.readIndex()
+			let found = false
+			const nextIndex = index.map(session => {
+				if (session.id !== id) return session
+				found = true
+				return {
+					...session,
+					name,
+					updatedAt: Date.now(),
+				}
+			})
+			if (!found) return false
+			await this.writeIndex(nextIndex)
+			return true
 		} catch {
 			return false
 		}
 	}
 
-	/**
-	 * 清除所有会话
-	 */
 	async clearAllSessions(): Promise<void> {
-		await api.settings.set(SESSIONS_KEY, JSON.stringify([]))
+		await this.ensureInitialized()
+		const index = await this.readIndex()
+		await Promise.all(index.map(session => this.deleteSessionFile(session.id)))
+		await this.writeIndex([])
 	}
 
-	/**
-	 * 导出会话为 JSON
-	 */
 	async exportSession(id: string): Promise<string | null> {
 		const session = await this.getSession(id)
 		if (!session) return null
 		return JSON.stringify(session, null, 2)
 	}
 
-	/**
-	 * 导入会话
-	 */
 	async importSession(jsonStr: string): Promise<string | null> {
 		try {
 			const session: ChatSession = JSON.parse(jsonStr)
-
-			// 验证必要字段
 			if (!session.messages || !Array.isArray(session.messages)) {
 				throw new Error('Invalid session format')
 			}
 
-			// 生成新 ID
 			session.id = crypto.randomUUID()
 			session.createdAt = Date.now()
 			session.updatedAt = Date.now()
 
-			const data = await api.settings.get(SESSIONS_KEY)
-			const sessions: ChatSession[] = data && typeof data === 'string' ? JSON.parse(data) : []
-
-			sessions.unshift(session)
-			await api.settings.set(SESSIONS_KEY, JSON.stringify(sessions))
+			await this.ensureInitialized()
+			await this.writeSessionMessages(session.id, session.messages)
+			const index = await this.trimSessions([toSummary(session), ...(await this.readIndex())])
+			await this.writeIndex(index)
 
 			return session.id
 		} catch {
@@ -268,21 +367,13 @@ class SessionService {
 		}
 	}
 
-	/**
-	 * 加载会话到当前线程
-	 */
 	async loadSessionToThread(sessionId: string): Promise<boolean> {
 		const session = await this.getSession(sessionId)
 		if (!session) return false
 
 		const store = useAgentStore.getState()
-
-		// 创建新线程
 		const threadId = store.createThread()
 
-		// 直接设置线程的消息（通过 zustand set）
-		// 重要：加载历史会话时必须重置 streamState 为 idle，
-		// 否则可能会因为之前未完成的流状态导致 UI 卡在"正在输出"
 		useAgentStore.setState(state => {
 			const thread = state.threads[threadId]
 			if (!thread) return state
@@ -294,7 +385,7 @@ class SessionService {
 						...thread,
 						messages: session.messages,
 						lastModified: Date.now(),
-						streamState: { phase: 'idle' }, // 强制重置流状态
+						streamState: { phase: 'idle' },
 					},
 				},
 			}

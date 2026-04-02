@@ -15,6 +15,7 @@ import { emotionAdapter } from './agent/emotion/emotionAdapter'
 import { emotionDetectionEngine } from './agent/emotion/emotionDetectionEngine'
 import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
+import { adnifyDir } from './services/adnifyDirService'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -61,6 +62,10 @@ function AppContent() {
       try {
         const { terminalManager } = require('@/renderer/services/TerminalManager')
         terminalManager.cleanup()
+      } catch { /* ignore */ }
+
+      try {
+        void adnifyDir.flush()
       } catch { /* ignore */ }
     }
     window.addEventListener('beforeunload', handleUnload)
