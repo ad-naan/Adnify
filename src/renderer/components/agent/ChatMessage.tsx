@@ -213,7 +213,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
       {/* 标题行 */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 cursor-pointer select-none group rounded-md hover:bg-text-primary/[0.03] transition-colors"
+        className="flex w-full items-center gap-2 py-1.5 cursor-pointer select-none group rounded-md hover:bg-text-primary/[0.03] transition-colors"
       >
         <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 group-hover:text-text-muted transition-colors">
           <ChevronDown className="w-3.5 h-3.5" />
@@ -815,7 +815,7 @@ const ChatMessage = React.memo(({
   return (
     <div className={`
       w-full group/msg transition-colors duration-300
-      ${isUser ? 'py-1 bg-transparent' : 'py-2 border-border bg-surface'}
+      ${isUser ? 'py-1 bg-transparent' : 'py-2 bg-transparent'}
     `}>
       <div className="w-full px-4 flex flex-col gap-1">
 
@@ -878,7 +878,7 @@ const ChatMessage = React.memo(({
                   </div>
                 </div>
               ) : (
-                <div className="relative bg-surface-active text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-sm w-fit max-w-full border border-transparent">
+                <div className="relative bg-surface/60 backdrop-blur-sm text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-sm w-fit max-w-full border border-border/50">
                   {/* Images */}
                   {images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 justify-end">

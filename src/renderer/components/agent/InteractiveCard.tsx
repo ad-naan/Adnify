@@ -36,7 +36,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
     const [selected, setSelected] = useState<Set<string>>(
         new Set(content.selectedIds || [])
     )
-    const [isExpanded, setIsExpanded] = useState(!disabled)
+    const [isExpanded, setIsExpanded] = useState(true)
     const [submitted, setSubmitted] = useState(!!content.selectedIds?.length)
     const [customText, setCustomText] = useState('')
     const [showCustomInput, setShowCustomInput] = useState(false)
@@ -131,12 +131,12 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
 
     return (
         <div className={`group my-0.5 relative rounded-lg overflow-hidden transition-colors ${submitted
-                ? 'hover:bg-text-primary/[0.02]'
-                : 'bg-amber-500/5 border border-amber-500/15'
+            ? 'hover:bg-text-primary/[0.02]'
+            : 'bg-amber-500/5 border border-amber-500/15'
             }`}>
             {/* Header */}
             <div
-                className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
+                className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 <motion.div
@@ -161,8 +161,8 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
 
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
                     <span className={`text-[12px] truncate ${submitted
-                            ? 'text-text-secondary group-hover:text-text-primary transition-colors'
-                            : 'text-text-primary'
+                        ? 'text-text-secondary group-hover:text-text-primary transition-colors'
+                        : 'text-text-primary'
                         }`}>
                         {content.question}
                     </span>
@@ -265,8 +265,8 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                                 onClick={handleCustomSubmit}
                                                 disabled={!customText.trim()}
                                                 className={`absolute right-2 bottom-2 p-1 rounded-md transition-all ${customText.trim()
-                                                        ? 'text-accent hover:bg-accent/10 active:scale-90'
-                                                        : 'text-text-muted/30 cursor-not-allowed'
+                                                    ? 'text-accent hover:bg-accent/10 active:scale-90'
+                                                    : 'text-text-muted/30 cursor-not-allowed'
                                                     }`}
                                                 title={language === 'zh' ? '发送' : 'Send'}
                                             >

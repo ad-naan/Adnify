@@ -36,7 +36,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
         <div className="group my-0.5 relative hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden">
             {/* Header - 与 ToolCallCard 完全一致的扁平化结构 */}
             <div
-                className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
+                className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 {/* Expand Toggle */}

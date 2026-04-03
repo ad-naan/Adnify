@@ -12,6 +12,7 @@ import { streamingEditService } from '@renderer/agent/services/streamingEditServ
 import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { CodeSkeleton } from '../ui/Loading'
+import { ExpandablePreviewContainer } from './ToolCallCard'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
@@ -33,7 +34,7 @@ function FileChangeCard({
     onReject,
     onOpenInEditor,
 }: FileChangeCardProps) {
-    const [isExpanded, setIsExpanded] = useState(false)
+    const [isExpanded, setIsExpanded] = useState(true)
     const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
     const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
 
@@ -147,7 +148,7 @@ function FileChangeCard({
             )}
             {/* Header - Flat Outline Style */}
             <div
-                className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none"
+                className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
                 {/* Expand Toggle (Moved to far left) */}
@@ -276,21 +277,23 @@ function FileChangeCard({
                             <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
 
                             <div className="relative z-10 ms-1">
-                                <div className="max-h-64 overflow-auto custom-scrollbar relative min-h-[60px] border-l-2 border-border/30 pl-2">
-                                    {isExpanded ? (
-                                        <InlineDiffPreview
-                                            oldContent={oldContent}
-                                            newContent={newContent}
-                                            filePath={filePath}
-                                            isStreaming={isStreaming || isRunning}
-                                            maxLines={50}
-                                        />
-                                    ) : (
-                                        <div className="min-h-[160px] opacity-50 pt-2">
-                                            <CodeSkeleton lines={5} />
-                                        </div>
-                                    )}
-                                </div>
+                                <ExpandablePreviewContainer>
+                                    <div className="relative min-h-[60px] p-2">
+                                        {isExpanded ? (
+                                            <InlineDiffPreview
+                                                oldContent={oldContent}
+                                                newContent={newContent}
+                                                filePath={filePath}
+                                                isStreaming={isStreaming || isRunning}
+                                                maxLines={50}
+                                            />
+                                        ) : (
+                                            <div className="min-h-[160px] opacity-50 pt-2">
+                                                <CodeSkeleton lines={5} />
+                                            </div>
+                                        )}
+                                    </div>
+                                </ExpandablePreviewContainer>
                             </div>
                         </div>
                     </motion.div>

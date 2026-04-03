@@ -105,7 +105,7 @@ export function registerHealthCheckHandlers() {
       const model = createModel(config)
       const { text } = await generateText({
         model,
-        messages: [{ role: 'user', content: 'hi' }],
+        messages: [{ role: 'user', content: 'hi,Please tell me directly what model you are?' }],
         maxOutputTokens: 10,
       })
 

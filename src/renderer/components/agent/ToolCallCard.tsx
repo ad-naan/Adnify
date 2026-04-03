@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState, useRef } from 'react'
 import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Search, Terminal, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
@@ -203,6 +203,49 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
     return isRunning ? 'Processing...' : ''
 }
 
+export function ExpandablePreviewContainer({ children, maxHeight = 'max-h-[200px]', expandedHeight = 'max-h-[350px]', language = 'en' }: { children: React.ReactNode, maxHeight?: string, expandedHeight?: string, language?: string }) {
+    const [expanded, setExpanded] = useState(false);
+    const contentRef = useRef<HTMLDivElement>(null);
+    const [isOverflowing, setIsOverflowing] = useState(false);
+
+    useEffect(() => {
+        if (contentRef.current) {
+            setIsOverflowing(contentRef.current.scrollHeight > contentRef.current.clientHeight + 10);
+        }
+    }, [children]);
+
+    return (
+        <div className="mt-1 relative rounded-lg border border-border/40 bg-background-tertiary overflow-hidden shadow-sm">
+            <div
+                ref={contentRef}
+                className={`overflow-y-auto custom-scrollbar ${expanded ? expandedHeight : maxHeight} transition-all duration-300 relative`}
+            >
+                {children}
+            </div>
+            {isOverflowing && !expanded && (
+                <div
+                    onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+                    className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-background-tertiary via-background-tertiary/90 to-transparent flex items-end justify-center pb-1 cursor-pointer hover:text-accent text-[10px] text-text-muted transition-colors opacity-90 hover:opacity-100"
+                >
+                    <div className="flex items-center gap-1 font-medium pb-0.5 pointer-events-none">
+                        <ChevronDown className="w-3 h-3" />
+                        {language === 'zh' ? '展开到 350px' : 'Expand to 350px'}
+                    </div>
+                </div>
+            )}
+            {isOverflowing && expanded && (
+                <div
+                    onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
+                    className="w-full text-center py-1 bg-surface/30 hover:bg-surface-hover hover:text-accent cursor-pointer text-[10px] text-text-muted transition-colors border-t border-border/30 flex items-center justify-center gap-1"
+                >
+                    <ChevronDown className="w-3 h-3 rotate-180 pointer-events-none" />
+                    {language === 'zh' ? '收起' : 'Collapse'}
+                </div>
+            )}
+        </div>
+    )
+}
+
 function ToolPreview({
     toolCall,
     args,
@@ -255,10 +298,12 @@ function ToolPreview({
                     </button>
                 </div>
                 {stringResult && (
-                    <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-border/30 pl-2 ml-1 mt-1">
-                        {stringResult.slice(0, 500)}
-                        {stringResult.length > 500 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-3 font-mono text-[11px]">
+                            {stringResult.slice(0, 5000)}
+                            {stringResult.length > 5000 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
+                        </div>
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -302,9 +347,11 @@ function ToolPreview({
                     <span className="opacity-50 text-[10px]">{asString(args.terminal_id)}</span>
                 </div>
                 {stringResult.length > 0 && (
-                    <div className="text-text-muted/80 whitespace-pre-wrap break-all border-l-2 border-accent/30 pl-2 ml-1 mt-1 max-h-32 overflow-y-auto custom-scrollbar bg-surface/50 p-1.5 rounded-r">
-                        {stringResult}
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-3 bg-surface/50">
+                            {stringResult}
+                        </div>
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -322,9 +369,9 @@ function ToolPreview({
                     <span className="text-text-primary font-medium truncate">"{query}"</span>
                 </div>
                 {toolCall.result && (
-                    <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
-                        <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={3000} />
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <JsonHighlight data={toolCall.result} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -341,10 +388,12 @@ function ToolPreview({
                     <span className="text-text-primary font-medium" title={path || undefined}>{displayName}</span>
                 </div>
                 {stringResult && (
-                    <div className="max-h-64 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 font-mono text-text-secondary whitespace-pre">
-                        {stringResult.slice(0, 3000)}
-                        {stringResult.length > 3000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <div className="p-3 font-mono text-text-secondary whitespace-pre">
+                            {stringResult.slice(0, 5000)}
+                            {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
+                        </div>
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -390,9 +439,11 @@ function ToolPreview({
                         />
                     </div>
                     {stringResult && !isStreaming && (
-                        <div className="text-[11px] text-text-muted border-l-2 border-border/30 pl-2 ml-1 mt-1">
-                            {stringResult.slice(0, 200)}
-                        </div>
+                        <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
+                            <div className="p-3 text-[11px] text-text-muted">
+                                {stringResult.slice(0, 1000)}
+                            </div>
+                        </ExpandablePreviewContainer>
                     )}
                 </div>
             )
@@ -415,9 +466,11 @@ function ToolPreview({
                     <span className="text-text-primary break-all" title={path || undefined}>{displayName}</span>
                 </div>
                 {stringResult && (
-                    <div className="text-[11px] text-text-muted border-l-2 border-border/30 pl-2 ml-1">
-                        <TextWithFileLinks text={stringResult.slice(0, 200)} />
-                    </div>
+                    <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
+                        <div className="p-3 text-[11px] text-text-muted">
+                            <TextWithFileLinks text={stringResult.slice(0, 1000)} />
+                        </div>
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -439,26 +492,19 @@ function ToolPreview({
                     </span>
                 </div>
                 {stringResult && (
-                    <div className="mt-1 relative rounded-lg border border-border/40 bg-background-tertiary overflow-hidden shadow-sm">
-                        <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                            <SyntaxHighlighter
-                                style={syntaxStyle}
-                                language={filePath ? guessLanguage(filePath) : 'typescript'}
-                                PreTag="div"
-                                className="!bg-transparent !p-3 !m-0 !text-[11px] leading-relaxed font-mono"
-                                customStyle={{ background: 'transparent', margin: 0 }}
-                                wrapLines
-                                wrapLongLines
-                            >
-                                {stringResult.slice(0, 3000)}
-                            </SyntaxHighlighter>
-                        </div>
-                        {stringResult.length > 3000 && (
-                            <div className="px-3 py-1.5 border-t border-border/50 text-[10px] text-text-muted bg-surface/30 italic drop-shadow-sm truncate">
-                                ... (Content truncated for preview length limits)
-                            </div>
-                        )}
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <SyntaxHighlighter
+                            style={syntaxStyle}
+                            language={filePath ? guessLanguage(filePath) : 'typescript'}
+                            PreTag="div"
+                            className="!bg-transparent !p-3 !m-0 !text-[11px] leading-relaxed font-mono"
+                            customStyle={{ background: 'transparent', margin: 0 }}
+                            wrapLines
+                            wrapLongLines
+                        >
+                            {stringResult.slice(0, 5000)}
+                        </SyntaxHighlighter>
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -484,10 +530,12 @@ function ToolPreview({
                     </a>
                 </div>
                 {stringResult && (
-                    <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1 text-[11px] text-text-secondary">
-                        {stringResult.slice(0, 2000)}
-                        {stringResult.length > 2000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <div className="p-3 text-[11px] text-text-secondary whitespace-pre-wrap break-all">
+                            {stringResult.slice(0, 5000)}
+                            {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
+                        </div>
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -507,9 +555,9 @@ function ToolPreview({
                     {line && <span className="text-text-muted/60">:{line}</span>}
                 </div>
                 {toolCall.result && (
-                    <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
-                        <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={2000} />
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <JsonHighlight data={toolCall.result} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
+                    </ExpandablePreviewContainer>
                 )}
             </div>
         )
@@ -526,13 +574,17 @@ function ToolPreview({
                         <FileCode className="w-3 h-3" />
                         <span>Arguments:</span>
                     </div>
-                    <div className="max-h-32 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
-                        <JsonHighlight data={filteredArgs} className="py-1" maxHeight="max-h-32" maxLength={1500} />
-                    </div>
+                    <ExpandablePreviewContainer language={language} maxHeight="max-h-[150px]">
+                        <JsonHighlight data={filteredArgs} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={1500} />
+                    </ExpandablePreviewContainer>
                 </>
             )}
             {toolCall.richContent && toolCall.richContent.length > 0 && (
-                <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-64" />
+                <ExpandablePreviewContainer language={language}>
+                    <div className="p-3">
+                        <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-full" />
+                    </div>
+                </ExpandablePreviewContainer>
             )}
             {toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (
                 <>
@@ -552,9 +604,9 @@ function ToolPreview({
                             <Copy className="w-3 h-3" />
                         </button>
                     </div>
-                    <div className="max-h-48 overflow-y-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
-                        <JsonHighlight data={toolCall.result} className="py-1" maxHeight="max-h-48" maxLength={3000} />
-                    </div>
+                    <ExpandablePreviewContainer language={language}>
+                        <JsonHighlight data={toolCall.result} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
+                    </ExpandablePreviewContainer>
                 </>
             )}
         </div>
@@ -566,7 +618,7 @@ const ToolCallCard = memo(function ToolCallCard({
     isAwaitingApproval,
     onApprove,
     onReject,
-    defaultExpanded = false,
+    defaultExpanded = true,
 }: ToolCallCardProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded)
     const { language, setTerminalVisible, currentTheme } = useStore(useShallow(state => ({
@@ -602,7 +654,7 @@ const ToolCallCard = memo(function ToolCallCard({
                 </div>
             )}
 
-            <div className="flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+            <div className="flex items-center gap-2 py-1.5 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
                 <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 hover:text-text-muted">
                     <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
                 </motion.div>
