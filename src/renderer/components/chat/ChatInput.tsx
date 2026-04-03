@@ -26,6 +26,7 @@ import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
 import ModeSelector from './ModeSelector'
+import { KaomojiPet } from './KaomojiPet'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
 
@@ -151,7 +152,7 @@ export default function ChatInput({
             ? 'bg-surface/30 border-accent/20 shadow-[0_4px_24px_-12px_rgba(var(--accent)/0.15)]'
             : isFocused
               ? 'bg-background/80 border-accent/30 shadow-[0_8px_32px_-16px_rgba(var(--accent)/0.2)] ring-1 ring-accent/10 translate-y-[-1px]'
-              : 'bg-surface/40 border-border/50 hover:border-text-primary/10 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)]'
+              : 'bg-surface/60 border-border/50 hover:border-text-primary/10 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)]'
           }
         `}
       >
@@ -335,8 +336,15 @@ export default function ChatInput({
         </div>
       </div>
 
-      {/* Mode & Model Selector */}
-      <div className="mt-3 flex items-center justify-between px-3">
+      {/* Bottom Footer Area */}
+      <div className="mt-3.5 mb-1 flex items-center justify-between px-4 pb-1">
+
+        {/* Left Side: Dynamic Pet */}
+        <div className="hidden sm:flex items-center">
+          <KaomojiPet language={language} />
+        </div>
+
+        {/* Right Side: Key Shortcuts */}
         <div className="hidden sm:flex items-center gap-2 text-[10px] text-text-muted/40 font-medium tracking-wide whitespace-nowrap overflow-hidden shrink-0">
           <span>⏎ Send</span>
           <span className="w-1 h-1 rounded-full bg-current opacity-30" />
