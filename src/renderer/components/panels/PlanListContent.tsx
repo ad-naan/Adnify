@@ -15,7 +15,7 @@ import {
     ChevronRight,
     FileText,
 } from 'lucide-react'
-import type { TaskPlan, PlanStatus } from '@renderer/agent/orchestrator/types'
+import type { TaskPlan, PlanStatus } from '@renderer/agent/plan/types'
 
 interface PlanListContentProps {
     language?: 'en' | 'zh'

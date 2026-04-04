@@ -3,7 +3,7 @@
  * 将内部消息格式转换为 LLM API 格式
  */
 
-import { ChatMessage, isUserMessage, isAssistantMessage, isToolResultMessage, ToolResultMessage } from '../types'
+import { ChatMessage, isUserMessage, isAssistantMessage, isToolResultMessage, ToolResultMessage } from '../../types'
 import { logger } from '@shared/utils/Logger'
 import type { LLMMessage } from '@/shared/types'
 
@@ -43,7 +43,7 @@ export function buildLLMApiMessages(
       let toolCalls = msg.toolCalls || []
       if (toolCalls.length === 0 && msg.parts) {
         toolCalls = msg.parts
-          .filter((p): p is import('../types').ToolCallPart => p.type === 'tool_call')
+          .filter((p): p is import('../../types').ToolCallPart => p.type === 'tool_call')
           .map(p => p.toolCall)
       }
 

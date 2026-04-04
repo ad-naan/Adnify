@@ -17,6 +17,7 @@ import type {
   ToolRichContent,
 } from '@/shared/types'
 import type { McpTool, McpServerState, McpContent } from '@shared/types/mcp'
+import type { ToolLoadingContext } from '@/shared/config/toolGroups'
 
 /** MCP 工具名称前缀 */
 const MCP_TOOL_PREFIX = 'mcp_'
@@ -29,6 +30,7 @@ export class McpToolProvider implements ToolProvider {
   readonly name = 'MCP Tools'
 
   private static nameMap = new Map<string, { serverId: string; toolName: string }>()
+  private context: ToolLoadingContext = { mode: 'agent' }
 
   /** 清理名称映射缓存 */
   static clearNameMap(): void {
@@ -69,6 +71,20 @@ export class McpToolProvider implements ToolProvider {
     return toolName.startsWith(MCP_TOOL_PREFIX)
   }
 
+  /**
+   * 设置工具加载上下文
+   */
+  setContext(context: ToolLoadingContext): void {
+    this.context = context
+  }
+
+  /**
+   * 获取当前上下文
+   */
+  getContext(): ToolLoadingContext {
+    return this.context
+  }
+
   hasTool(toolName: string): boolean {
     if (!McpToolProvider.isMcpTool(toolName)) {
       return false
@@ -88,6 +104,11 @@ export class McpToolProvider implements ToolProvider {
   }
 
   getToolDefinitions(): ToolDefinition[] {
+    // Plan 模式的 planning 阶段不提供 MCP 工具
+    if (this.context.mode === 'plan' && this.context.planPhase !== 'executing') {
+      return []
+    }
+
     const servers = this.getConnectedServers()
     const definitions: ToolDefinition[] = []
 

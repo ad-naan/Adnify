@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { prepareMessages, estimateMessagesTokens } from '@renderer/agent/context/CompressionManager'
+import { prepareMessages, estimateMessagesTokens } from '@renderer/agent/domains/context/CompressionManager'
 import type { UserMessage, AssistantMessage } from '@renderer/agent/types'
 
 describe('CompressionManager - Image Handling', () => {

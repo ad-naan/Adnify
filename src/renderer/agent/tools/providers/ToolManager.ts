@@ -5,12 +5,15 @@
 
 import { logger } from '@utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
+import { getToolMetadata } from '@/shared/config/tools'
 import type { ToolProvider, ToolMeta } from './types'
 import type {
   ToolDefinition,
   ToolExecutionResult,
   ToolExecutionContext,
   ToolApprovalType,
+  ToolExecutionEnvelope,
+  ToolExecutionOutcome,
 } from '@/shared/types'
 
 class ToolManager {
@@ -141,6 +144,90 @@ class ToolManager {
     return provider.validateArgs(toolName, args)
   }
 
+  private buildEnvelope(
+    executionId: string,
+    startedAt: number,
+    providerId?: string,
+    partial?: Partial<ToolExecutionEnvelope>
+  ): ToolExecutionEnvelope {
+    return {
+      executionId,
+      providerId,
+      startedAt,
+      completedAt: partial?.completedAt ?? Date.now(),
+      retryable: partial?.retryable ?? false,
+      errorCategory: partial?.errorCategory,
+    }
+  }
+
+  private inferRetryable(toolName: string, errorCategory?: ToolExecutionEnvelope['errorCategory']): boolean {
+    const retryPolicy = getToolMetadata(toolName)?.retryPolicy
+    if (!retryPolicy || retryPolicy.maxAttempts <= 1) {
+      return false
+    }
+    return errorCategory === 'timeout' || errorCategory === 'execution' || errorCategory === 'dependency'
+  }
+
+  private inferOutcome(
+    result: ToolExecutionResult,
+    retryable: boolean
+  ): ToolExecutionOutcome {
+    if (result.outcome) {
+      return {
+        retryable,
+        ...result.outcome,
+      }
+    }
+
+    return result.success
+      ? { kind: 'success', retryable }
+      : { kind: 'error', retryable, code: result.error ? 'EXECUTION_ERROR' : 'UNKNOWN_ERROR' }
+  }
+
+  private finalizeResult(
+    toolName: string,
+    executionId: string,
+    startedAt: number,
+    providerId: string | undefined,
+    result: ToolExecutionResult,
+    errorCategory?: ToolExecutionEnvelope['errorCategory']
+  ): ToolExecutionResult {
+    const retryable = result.envelope?.retryable ?? result.outcome?.retryable ?? this.inferRetryable(toolName, errorCategory ?? result.envelope?.errorCategory)
+    const envelope = this.buildEnvelope(executionId, startedAt, providerId, {
+      ...result.envelope,
+      completedAt: result.envelope?.completedAt ?? Date.now(),
+      retryable,
+      errorCategory: errorCategory ?? result.envelope?.errorCategory,
+    })
+
+    return {
+      ...result,
+      envelope,
+      outcome: this.inferOutcome(result, retryable),
+    }
+  }
+
+  private semanticValidate(
+    toolName: string,
+    args: Record<string, unknown>,
+    context: ToolExecutionContext
+  ): { valid: boolean; error?: string } {
+    const metadata = getToolMetadata(toolName)
+    if (!metadata || metadata.validationLevel === 'schema') {
+      return { valid: true }
+    }
+
+    if (metadata.requiresWorkspace && !context.workspacePath) {
+      return { valid: false, error: 'Workspace is required for this tool' }
+    }
+
+    if ((metadata.validationLevel === 'semantic' || metadata.validationLevel === 'strict') && metadata.validate) {
+      return metadata.validate(args)
+    }
+
+    return { valid: true }
+  }
+
   /**
    * 执行工具
    */
@@ -149,35 +236,52 @@ class ToolManager {
     args: Record<string, unknown>,
     context: ToolExecutionContext
   ): Promise<ToolExecutionResult> {
+    const executionId = crypto.randomUUID()
+    const startedAt = Date.now()
     const provider = this.findProviderForTool(toolName)
+
     if (!provider) {
-      return {
+      return this.finalizeResult(toolName, executionId, startedAt, undefined, {
         success: false,
         result: '',
         error: `Unknown tool: ${toolName}`,
-      }
+        outcome: { kind: 'error', code: 'UNKNOWN_TOOL', retryable: false },
+      }, 'validation')
     }
 
     // 验证参数
     const validation = provider.validateArgs(toolName, args)
     if (!validation.valid) {
-      return {
+      return this.finalizeResult(toolName, executionId, startedAt, provider.id, {
         success: false,
         result: '',
         error: `Validation failed: ${validation.error}`,
-      }
+        outcome: { kind: 'error', code: 'VALIDATION_FAILED', retryable: false },
+      }, 'validation')
+    }
+
+    const semanticValidation = this.semanticValidate(toolName, args, context)
+    if (!semanticValidation.valid) {
+      return this.finalizeResult(toolName, executionId, startedAt, provider.id, {
+        success: false,
+        result: '',
+        error: `Semantic validation failed: ${semanticValidation.error}`,
+        outcome: { kind: 'error', code: 'SEMANTIC_VALIDATION_FAILED', retryable: false },
+      }, 'validation')
     }
 
     // 执行
     try {
-      return await provider.execute(toolName, args, context)
+      const result = await provider.execute(toolName, args, context)
+      return this.finalizeResult(toolName, executionId, startedAt, provider.id, result, result.success ? undefined : 'execution')
     } catch (err) {
       logger.agent.error(`[ToolManager] Tool execution failed:`, err)
-      return {
+      return this.finalizeResult(toolName, executionId, startedAt, provider.id, {
         success: false,
         result: '',
         error: `Execution error: ${toAppError(err).message}`,
-      }
+        outcome: { kind: 'error', code: 'EXECUTION_ERROR' },
+      }, 'execution')
     }
   }
 

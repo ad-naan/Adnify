@@ -113,7 +113,56 @@ async function saveFileSnapshots(
   }
 }
 
-// ===== 工具执行 =====
+interface ToolExecutionIdentity {
+  threadId?: string
+  assistantId?: string
+  requestId?: string
+  toolCallId?: string
+}
+
+function buildToolExecutionIdentity(
+  toolCall: ToolCall,
+  context: ToolExecutionContext
+): ToolExecutionIdentity {
+  return {
+    threadId: context.threadId ?? undefined,
+    assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    requestId: context.requestId,
+    toolCallId: context.toolCallId ?? toolCall.id,
+  }
+}
+
+function emitToolEvent(
+  event:
+    | ({ type: 'tool:pending'; id: string; name: string; args: Record<string, unknown> } & ToolExecutionIdentity)
+    | ({ type: 'tool:running'; id: string } & ToolExecutionIdentity)
+    | ({ type: 'tool:completed'; id: string; result: string; meta?: Record<string, unknown> } & ToolExecutionIdentity)
+    | ({ type: 'tool:error'; id: string; error: string } & ToolExecutionIdentity)
+    | ({ type: 'tool:rejected'; id: string } & ToolExecutionIdentity)
+): void {
+  EventBus.emit(event)
+}
+
+function buildDependencyErrorResult(
+  toolCall: ToolCall,
+  reason: string
+): AgentToolExecutionResult {
+  return {
+    toolCall,
+    result: {
+      content: reason,
+      meta: {
+        outcome: 'dependency_failed',
+        skippedDueToDependency: true,
+      },
+    },
+  }
+}
+
+function hasDependencyFailure(content: string): boolean {
+  return content.startsWith('Skipped: dependency') || content.startsWith('Error: dependency')
+}
+
 
 /**
  * 检查工具是否需要审批
@@ -221,6 +270,7 @@ async function executeSingle(
 ): Promise<AgentToolExecutionResult> {
   const mainStore = useStore.getState()
   const { currentAssistantId, workspacePath } = context
+  const identity = buildToolExecutionIdentity(toolCall, context)
   const startTime = Date.now()
 
   // 更新状态为运行中
@@ -230,7 +280,7 @@ async function executeSingle(
       streamingState: undefined,  // 清除流式状态
     })
   }
-  EventBus.emit({ type: 'tool:running', id: toolCall.id })
+  emitToolEvent({ type: 'tool:running', id: toolCall.id, ...identity })
 
   // 记录请求日志
   mainStore.addToolCallLog({
@@ -243,7 +293,15 @@ async function executeSingle(
     const result = await toolManager.execute(
       toolCall.name,
       toolCall.arguments,
-      { workspacePath: workspacePath ?? null, currentAssistantId: currentAssistantId ?? null }
+      {
+        workspacePath: workspacePath ?? null,
+        currentAssistantId: currentAssistantId ?? null,
+        assistantId: currentAssistantId ?? null,
+        threadId: context.threadId,
+        requestId: context.requestId,
+        toolCallId: toolCall.id,
+        chatMode: context.chatMode,
+      }
     )
 
     const duration = Date.now() - startTime
@@ -292,17 +350,19 @@ async function executeSingle(
       store.addToolResult(toolCall.id, toolCall.name, content, result.success ? 'success' : 'tool_error')
     }
     if (result.success) {
-      EventBus.emit({
+      emitToolEvent({
         type: 'tool:completed',
         id: toolCall.id,
         result: content,
         meta,
+        ...identity,
       })
     } else {
-      EventBus.emit({
+      emitToolEvent({
         type: 'tool:error',
         id: toolCall.id,
         error: content,
+        ...identity,
       })
     }
 
@@ -330,7 +390,7 @@ async function executeSingle(
       })
       store.addToolResult(toolCall.id, toolCall.name, `Error: ${errorMsg}`, 'tool_error')
     }
-    EventBus.emit({ type: 'tool:error', id: toolCall.id, error: errorMsg })
+    emitToolEvent({ type: 'tool:error', id: toolCall.id, error: errorMsg, ...identity })
 
     return { toolCall, result: { content: `Error: ${errorMsg}` } }
   }
@@ -361,6 +421,7 @@ export async function executeTools(
   const deps = analyzeToolDependencies(toolCalls)
   const completed = new Set<string>()
   const rejected = new Set<string>()
+  const failed = new Set<string>()
   const pending = new Set(toolCalls.map(tc => tc.id))
 
   // 分离需要审批和不需要审批的工具
@@ -372,7 +433,11 @@ export async function executeTools(
 
   // 1. 先并行执行不需要审批的工具（使用动态并发限制），但必须尊重依赖关系
   if (noApprovalRequired.length > 0) {
-    store.setStreamState({ phase: 'tool_running' })
+    store.setStreamState({
+      phase: 'tool_running',
+      requestId: context.requestId,
+      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    })
 
     const concurrency = getDynamicConcurrency()
     const limit = pLimit(concurrency)
@@ -389,15 +454,40 @@ export async function executeTools(
           .filter(Boolean) as Promise<AgentToolExecutionResult>[]
 
         if (depPromises.length > 0) {
-          await Promise.allSettled(depPromises)
+          const depResults = await Promise.all(depPromises)
+          const blocked = depResults.some(depResult => hasDependencyFailure(depResult.result.content) || rejected.has(depResult.toolCall.id) || failed.has(depResult.toolCall.id))
+          if (blocked) {
+            const skipped = buildDependencyErrorResult(tc, 'Skipped: dependency failed')
+            if (context.currentAssistantId) {
+              store.updateToolCall(context.currentAssistantId, tc.id, {
+                status: 'error',
+                result: skipped.result.content,
+                streamingState: undefined,
+              })
+            }
+            failed.add(tc.id)
+            pending.delete(tc.id)
+            results.push(skipped)
+            emitToolEvent({
+              type: 'tool:error',
+              id: tc.id,
+              error: skipped.result.content,
+              ...buildToolExecutionIdentity(tc, context),
+            })
+            return skipped
+          }
         }
 
         return limit(async () => {
           try {
             const result = await executeSingle(tc, context, store)
             results.push(result)
-            completed.add(result.toolCall.id)
             pending.delete(result.toolCall.id)
+            if (result.result.content.startsWith('Error:')) {
+              failed.add(result.toolCall.id)
+            } else {
+              completed.add(result.toolCall.id)
+            }
             return result
           } catch (error) {
             logger.agent.error(`[Tools] Unexpected error in ${tc.name}:`, error)
@@ -411,9 +501,16 @@ export async function executeTools(
               })
             }
 
+            failed.add(tc.id)
             pending.delete(tc.id)
             const errorResult = { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
             results.push(errorResult)
+            emitToolEvent({
+              type: 'tool:error',
+              id: tc.id,
+              error: errorMsg,
+              ...buildToolExecutionIdentity(tc, context),
+            })
             return errorResult
           }
         })
@@ -429,33 +526,51 @@ export async function executeTools(
   for (const tc of approvalRequired) {
     if (abortSignal?.aborted) break
 
-    // 检查依赖是否满足（依赖的工具必须已完成且未被拒绝）
+    // 检查依赖是否满足（依赖的工具必须已完成且未失败/未被拒绝）
     const tcDeps = deps.get(tc.id) || new Set()
-    const depsOk = Array.from(tcDeps).every(dep => completed.has(dep) && !rejected.has(dep))
+    const depsOk = Array.from(tcDeps).every(dep => completed.has(dep) && !rejected.has(dep) && !failed.has(dep))
 
     if (!depsOk) {
-      // 依赖未满足，跳过此工具
+      const skipped = buildDependencyErrorResult(tc, 'Skipped: dependency not met')
       if (context.currentAssistantId) {
         store.updateToolCall(context.currentAssistantId, tc.id, {
           status: 'error',
-          result: 'Skipped: dependency not met',
-          streamingState: undefined,  // 清除流式状态
+          result: skipped.result.content,
+          streamingState: undefined,
         })
       }
-      results.push({ toolCall: tc, result: { content: 'Skipped: dependency not met' } })
+      failed.add(tc.id)
+      results.push(skipped)
       pending.delete(tc.id)
+      emitToolEvent({
+        type: 'tool:error',
+        id: tc.id,
+        error: skipped.result.content,
+        ...buildToolExecutionIdentity(tc, context),
+      })
       continue
     }
 
     // 设置当前工具为待审批状态
-    store.setStreamState({ phase: 'tool_pending', currentToolCall: tc })
+    store.setStreamState({
+      phase: 'tool_pending',
+      currentToolCall: tc,
+      requestId: context.requestId,
+      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    })
     if (context.currentAssistantId) {
       store.updateToolCall(context.currentAssistantId, tc.id, { status: 'awaiting' })
     }
-    EventBus.emit({ type: 'tool:pending', id: tc.id, name: tc.name, args: tc.arguments })
+    emitToolEvent({
+      type: 'tool:pending',
+      id: tc.id,
+      name: tc.name,
+      args: tc.arguments,
+      ...buildToolExecutionIdentity(tc, context),
+    })
 
     // 等待用户审批
-    const approved = await approvalService.waitForApproval()
+    const approved = await approvalService.waitForApproval(context.requestId)
 
     if (!approved || abortSignal?.aborted) {
       // 用户拒绝了这个工具
@@ -464,10 +579,10 @@ export async function executeTools(
       if (context.currentAssistantId) {
         store.updateToolCall(context.currentAssistantId, tc.id, {
           status: 'rejected',
-          streamingState: undefined,  // 清除流式状态
+          streamingState: undefined,
         })
       }
-      EventBus.emit({ type: 'tool:rejected', id: tc.id })
+      emitToolEvent({ type: 'tool:rejected', id: tc.id, ...buildToolExecutionIdentity(tc, context) })
       results.push({ toolCall: tc, result: { content: 'Rejected by user' } })
       pending.delete(tc.id)
 
@@ -476,17 +591,31 @@ export async function executeTools(
     }
 
     // 用户批准，执行工具
-    store.setStreamState({ phase: 'tool_running' })
+    store.setStreamState({
+      phase: 'tool_running',
+      currentToolCall: undefined,
+      requestId: context.requestId,
+      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    })
     const result = await executeSingle(tc, context, store)
     results.push(result)
-    completed.add(tc.id)
     pending.delete(tc.id)
+    if (result.result.content.startsWith('Error:')) {
+      failed.add(tc.id)
+    } else {
+      completed.add(tc.id)
+    }
   }
 
   // 确保所有工具状态已更新并重置流状态
   if (!abortSignal?.aborted) {
     // 重置流状态为 streaming（移除 tool_running 状态）
-    store.setStreamState({ phase: 'streaming' })
+    store.setStreamState({
+      phase: 'streaming',
+      currentToolCall: undefined,
+      requestId: context.requestId,
+      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    })
   }
 
   return { results, userRejected }

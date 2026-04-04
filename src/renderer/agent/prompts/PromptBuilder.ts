@@ -97,8 +97,8 @@ export interface PromptContext {
   customInstructions: string | null
   templateId?: string
   projectSummary?: string | null
-  /** Orchestrator 阶段 */
-  orchestratorPhase?: 'planning' | 'executing'
+  /** Plan 阶段 */
+  planPhase?: 'planning' | 'executing'
   /** 当前线程的任务列表 */
   todos?: Array<{ content: string; status: string; activeForm: string }>
 }
@@ -114,12 +114,12 @@ export interface PromptContext {
  * 1. 根据 getToolsForContext 获取允许的工具列表（包含角色专属工具）
  * 2. 只生成允许工具的描述
  */
-function buildTools(mode: WorkMode, templateId?: string, orchestratorPhase?: 'planning' | 'executing'): string {
+function buildTools(mode: WorkMode, templateId?: string, planPhase?: 'planning' | 'executing'): string {
   // 不排除任何类别
   const excludeCategories: ToolCategory[] = []
 
-  // 获取当前上下文允许的工具列表（包含角色专属工具和 orchestrator 阶段）
-  const allowedTools = getToolsForContext({ mode, templateId, orchestratorPhase })
+  // 获取当前上下文允许的工具列表（包含角色专属工具和 plan 阶段）
+  const allowedTools = getToolsForContext({ mode, templateId, planPhase })
 
   // 生成工具描述（双重过滤：类别 + 允许列表）
   const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, allowedTools)
@@ -211,7 +211,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     APP_IDENTITY,
     PROFESSIONAL_OBJECTIVITY,
     SECURITY_RULES,
-    buildTools(ctx.mode, ctx.templateId, ctx.orchestratorPhase),
+    buildTools(ctx.mode, ctx.templateId, ctx.planPhase),
     CODE_CONVENTIONS,
     // 使用通用工作流指南
     WORKFLOW_GUIDELINES,
@@ -270,13 +270,13 @@ export async function buildAgentSystemPrompt(
     activeFile?: string
     customInstructions?: string
     promptTemplateId?: string
-    /** Orchestrator 阶段 */
-    orchestratorPhase?: 'planning' | 'executing'
+    /** Plan 阶段 */
+    planPhase?: 'planning' | 'executing'
     /** 被提到的 Skills (按需加载) */
     mentionedSkills?: string[]
   }
 ): Promise<{ prompt: string; activeSkills: { name: string; description: string }[] }> {
-  const { openFiles = [], activeFile, customInstructions, promptTemplateId, orchestratorPhase, mentionedSkills } = options || {}
+  const { openFiles = [], activeFile, customInstructions, promptTemplateId, planPhase, mentionedSkills } = options || {}
 
   // 获取模板
   let template = promptTemplateId
@@ -343,7 +343,7 @@ export async function buildAgentSystemPrompt(
     customInstructions: customInstructions || null,
     templateId: template.id,
     projectSummary,
-    orchestratorPhase,
+    planPhase,
     todos,
   }
 

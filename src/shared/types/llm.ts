@@ -219,6 +219,29 @@ export interface ToolPropertySchema {
 export type ToolStatus = 'pending' | 'awaiting' | 'running' | 'success' | 'error' | 'rejected'
 export type ToolApprovalType = 'none' | 'terminal' | 'dangerous' | 'interaction'
 export type ToolResultType = 'tool_request' | 'running_now' | 'success' | 'tool_error' | 'rejected'
+export type ToolConcurrencyMode = 'parallel-safe' | 'serialized' | 'approval-gated'
+export type ToolResultSemantics = 'text' | 'file-read' | 'file-write' | 'command' | 'interactive' | 'plan' | 'search' | 'network'
+export type ToolValidationLevel = 'schema' | 'semantic' | 'strict'
+
+export interface ToolRetryPolicy {
+    maxAttempts: number
+    retryableErrors?: string[]
+}
+
+export interface ToolExecutionOutcome {
+    kind: 'success' | 'error' | 'skipped' | 'conflict' | 'awaiting_user'
+    code?: string
+    retryable?: boolean
+}
+
+export interface ToolExecutionEnvelope {
+    executionId: string
+    providerId?: string
+    startedAt: number
+    completedAt?: number
+    retryable?: boolean
+    errorCategory?: 'validation' | 'execution' | 'timeout' | 'conflict' | 'approval' | 'dependency'
+}
 
 /**
  * Ephemeral tool preview state used while a tool call is still streaming.
@@ -257,6 +280,8 @@ export interface ToolExecutionResult {
     meta?: Record<string, unknown>
     /** Structured rich output for renderer-side display. */
     richContent?: ToolRichContent[]
+    outcome?: ToolExecutionOutcome
+    envelope?: ToolExecutionEnvelope
 }
 
 export type ToolRichContentType =
@@ -290,6 +315,9 @@ export interface ToolExecutionContext {
     currentAssistantId?: string | null
     chatMode?: import('@/renderer/modes/types').WorkMode
     toolCallId?: string
+    threadId?: string | null
+    requestId?: string
+    assistantId?: string | null
 }
 
 export type ToolExecutor = (

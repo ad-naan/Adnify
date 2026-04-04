@@ -9,10 +9,10 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
-import { getAgentConfig } from '../utils/AgentConfig'
+import { getAgentConfig } from '../../utils/AgentConfig'
 import type { StructuredSummary, HandoffDocument, FileChangeRecord } from './types'
-import type { ChatMessage, AssistantMessage, UserMessage } from '../types'
-import { getMessageText } from '../types'
+import type { ChatMessage, AssistantMessage, UserMessage } from '../../types'
+import { getMessageText } from '../../types'
 
 // ===== Prompts =====
 
@@ -331,7 +331,7 @@ function generateRuleBasedSummary(messages: ChatMessage[], lastUserRequest?: str
     const lastMessages = messages.slice(-5)
     const hasRecentSuccess = lastMessages.some(m =>
       m.role === 'assistant' &&
-      (m as import('../types').AssistantMessage).toolCalls?.some(tc => tc.status === 'success')
+      (m as import('../../types').AssistantMessage).toolCalls?.some(tc => tc.status === 'success')
     )
 
     if (!hasRecentSuccess) {

@@ -161,7 +161,7 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-72 max-h-[400px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in">
+        <div className="absolute bottom-full left-0 mb-2 w-62 max-h-[300px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in">
           {/* 搜索框 */}
           <div className="p-2 border-b border-border/50 sticky top-0 bg-surface/95 backdrop-blur-sm z-10 rounded-t-xl shrink-0">
             <div className="relative">

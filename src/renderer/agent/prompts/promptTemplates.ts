@@ -457,15 +457,15 @@ Before delivering UI code, verify:
   },
 
   {
-    id: 'orchestrator',
-    name: 'Orchestrator',
-    nameZh: '编排器',
+    id: 'plan',
+    name: 'Plan',
+    nameZh: '计划',
     description: 'Multi-turn requirement gathering and task planning',
     descriptionZh: '多轮需求收集和任务规划',
     priority: 8,
-    tags: ['orchestrator', 'planning', 'requirements'],
+    tags: ['plan', 'planning', 'requirements'],
     tools: {
-      toolGroups: ['orchestrator'],
+      toolGroups: ['plan'],
     },
     personality: `You are an expert requirements analyst and task orchestrator - a "super-agent" that can use ALL available tools.
 

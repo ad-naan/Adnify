@@ -39,4 +39,5 @@ export function initializeToolProviders(): void {
  */
 export function setToolLoadingContext(context: ToolLoadingContext): void {
   builtinToolProvider.setContext(context)
+  mcpToolProvider.setContext(context)
 }

@@ -1,6 +1,6 @@
 /**
- * Orchestrator 类型定义
- * 
+ * Plan 类型定义
+ *
  * 设计原则：复用现有系统，不造轮子
  * - role → 映射到 promptTemplateId
  * - provider/model → 使用现有的 providerConfigs
@@ -10,8 +10,8 @@
 // 状态机类型
 // ============================================
 
-/** Orchestrator 状态 */
-export type OrchestratorState =
+/** Plan 状态 */
+export type PlanState =
     | 'idle'        // 空闲，等待用户输入
     | 'gathering'   // 收集需求（多轮对话）
     | 'planning'    // 生成任务计划
@@ -35,8 +35,22 @@ export type ExecutionMode = 'sequential' | 'parallel'
 /** 计划状态 */
 export type PlanStatus = 'draft' | 'approved' | 'executing' | 'completed' | 'failed' | 'paused'
 
+export type TaskExecutionClass = 'analysis-read-heavy' | 'write-heavy' | 'approval-heavy' | 'general'
+
+export interface TaskResourceScope {
+    kind: 'file' | 'scope'
+    value: string
+}
+
+export interface DependencySummary {
+    taskId: string
+    title: string
+    summary: string
+    status: Extract<TaskStatus, 'completed' | 'failed' | 'skipped'>
+}
+
 /** 单个任务 */
-export interface OrchestratorTask {
+export interface PlanTask {
     id: string
     title: string
     description: string
@@ -60,6 +74,26 @@ export interface OrchestratorTask {
     completedAt?: number
     /** 重试次数 */
     retryCount?: number
+    /** 当前运行线程 ID */
+    threadId?: string
+    /** 当前运行助手消息 ID */
+    assistantId?: string
+    /** 当前执行请求 ID */
+    requestId?: string
+    /** 调度尝试次数 */
+    attempt?: number
+    /** 调度优先级，越大越优先 */
+    priority?: number
+    /** 预计消耗 token */
+    estimatedTokens?: number
+    /** 任务将写入的文件/资源 */
+    producesFiles?: string[]
+    /** 任务将读取或依赖的文件/资源 */
+    consumesFiles?: string[]
+    /** 执行类别，用于并发调度 */
+    executionClass?: TaskExecutionClass
+    /** 上游任务输出摘要，供下游任务注入上下文 */
+    dependencySummary?: DependencySummary[]
 }
 
 /** 任务计划 */
@@ -68,6 +102,8 @@ export interface TaskPlan {
     name: string
     createdAt: number
     updatedAt: number
+    /** 持久化修订号，用于避免并发覆盖 */
+    revision?: number
     /** 需求文档路径（相对于 .adnify/plan/） */
     requirementsDoc: string
     /** 需求文档内容（缓存，用于注入上下文） */
@@ -77,7 +113,7 @@ export interface TaskPlan {
     /** 计划状态 */
     status: PlanStatus
     /** 任务列表 */
-    tasks: OrchestratorTask[]
+    tasks: PlanTask[]
     /** 用户原始请求 */
     userRequest?: string
 }
@@ -93,9 +129,11 @@ export interface TaskExecutionContext {
     /** 当前计划 */
     plan: TaskPlan
     /** 当前任务 */
-    task: OrchestratorTask
+    task: PlanTask
     /** 已完成任务的输出（可用于传递上下文） */
     completedOutputs: Record<string, string>
+    /** 依赖任务摘要（优先使用，而不是原始完整输出） */
+    dependencySummary: DependencySummary[]
     /** 需求文档内容 */
     requirementsContent?: string
 }
@@ -120,30 +158,49 @@ export interface ExecutionStats {
     completedAt?: number
 }
 
+export interface ExecutionSessionTaskBinding {
+    planId: string
+    taskId: string
+    threadId: string
+    assistantId: string
+    requestId: string
+}
+
+export interface ExecutionSession {
+    id: string
+    planId: string
+    workspacePath: string
+    startedAt: number
+    scheduler: import('./PlanScheduler').ExecutionScheduler
+    status: 'running' | 'paused' | 'stopped' | 'completed' | 'failed'
+    bindings: Map<string, ExecutionSessionTaskBinding>
+    abortControllers: Map<string, AbortController>
+}
+
 // ============================================
 // 事件类型
 // ============================================
 
-/** Orchestrator 事件 */
-export type OrchestratorEvent =
-    | { type: 'state:change'; from: OrchestratorState; to: OrchestratorState }
-    | { type: 'task:start'; taskId: string; planId: string }
+/** Plan 事件 */
+export type PlanEvent =
+    | { type: 'state:change'; from: PlanState; to: PlanState }
+    | { type: 'task:start'; taskId: string; planId: string; threadId?: string; assistantId?: string; requestId?: string }
     | { type: 'task:progress'; taskId: string; message: string }
-    | { type: 'task:complete'; taskId: string; output: string; duration: number }
-    | { type: 'task:failed'; taskId: string; error: string }
+    | { type: 'task:complete'; taskId: string; output: string; duration: number; threadId?: string; assistantId?: string; requestId?: string }
+    | { type: 'task:failed'; taskId: string; error: string; threadId?: string; assistantId?: string; requestId?: string }
     | { type: 'task:skipped'; taskId: string; reason: string }
-    | { type: 'plan:start'; planId: string }
-    | { type: 'plan:complete'; planId: string; stats: ExecutionStats }
-    | { type: 'plan:failed'; planId: string; error: string }
-    | { type: 'plan:paused'; planId: string }
-    | { type: 'plan:resumed'; planId: string }
+    | { type: 'plan:start'; planId: string; sessionId?: string }
+    | { type: 'plan:complete'; planId: string; stats: ExecutionStats; sessionId?: string }
+    | { type: 'plan:failed'; planId: string; error: string; sessionId?: string }
+    | { type: 'plan:paused'; planId: string; sessionId?: string }
+    | { type: 'plan:resumed'; planId: string; sessionId?: string }
 
 // ============================================
 // 配置
 // ============================================
 
-/** Orchestrator 配置 */
-export interface OrchestratorConfig {
+/** Plan 配置 */
+export interface PlanConfig {
     /** 最大重试次数 */
     maxRetries: number
     /** 任务超时（毫秒） */
@@ -155,7 +212,7 @@ export interface OrchestratorConfig {
 }
 
 /** 默认配置 */
-export const DEFAULT_ORCHESTRATOR_CONFIG: OrchestratorConfig = {
+export const DEFAULT_PLAN_CONFIG: PlanConfig = {
     maxRetries: 2,
     taskTimeout: 300_000, // 5 分钟
     autoSkipOnDependencyFailure: true,
