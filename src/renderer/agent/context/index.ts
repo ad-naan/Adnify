@@ -12,21 +12,21 @@ export {
   type CompressionLevel,
   type CompressionStats,
   type PrepareResult,
-} from './CompressionManager'
+} from '../domains/context/CompressionManager'
 
 // 摘要服务
 export {
   generateSummary,
   generateHandoffDocument,
   type SummaryResult,
-} from './summaryService'
+} from '../domains/context/summaryService'
 
 // Handoff 管理
-export { buildHandoffContext, buildWelcomeMessage } from './HandoffManager'
+export { buildHandoffContext, buildWelcomeMessage } from '../domains/context/HandoffManager'
 
 // 类型
 export type {
   StructuredSummary,
   HandoffDocument,
   FileChangeRecord,
-} from './types'
+} from '../domains/context/types'

@@ -28,7 +28,7 @@ import type { ThreadSlice } from './threadSlice'
 export interface MessageActions {
     // 消息操作（支持可选的 targetThreadId，默认使用 currentThreadId）
     addUserMessage: (content: MessageContent, contextItems?: ContextItem[], targetThreadId?: string) => string
-    prepareExecution: (content: MessageContent, contextItems: ContextItem[], targetThreadId?: string) => { userMessageId: string, assistantId: string }
+    prepareExecution: (content: MessageContent, contextItems: ContextItem[], targetThreadId?: string) => { userMessageId: string, assistantId: string, threadId: string }
     addAssistantMessage: (content?: string, targetThreadId?: string) => string
     appendToAssistant: (messageId: string, content: string, targetThreadId?: string) => void
     finalizeAssistant: (messageId: string, targetThreadId?: string) => void
@@ -125,7 +125,7 @@ export const createMessageSlice: StateCreator<
         let threadId = targetThreadId || get().currentThreadId
 
         if (!threadId || !get().threads[threadId]) {
-            threadId = get().createThread()
+            threadId = get().createThread({ activate: !targetThreadId })
         }
 
         const userMessage: UserMessage = {
@@ -165,7 +165,7 @@ export const createMessageSlice: StateCreator<
             }
         })
 
-        return { userMessageId: userMessage.id, assistantId: assistantMessage.id }
+        return { userMessageId: userMessage.id, assistantId: assistantMessage.id, threadId: threadId! }
     },
 
     // 添加助手消息

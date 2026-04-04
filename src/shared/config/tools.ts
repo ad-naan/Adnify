@@ -16,7 +16,7 @@ import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/re
 // 类型定义
 // ============================================
 
-export type ToolCategory = 'read' | 'write' | 'terminal' | 'search' | 'lsp' | 'network' | 'interaction' | 'orchestrator'
+export type ToolCategory = 'read' | 'write' | 'terminal' | 'search' | 'lsp' | 'network' | 'interaction' | 'plan'
 
 export interface ToolPropertyDef {
     type: 'string' | 'number' | 'boolean' | 'array' | 'object'
@@ -44,6 +44,11 @@ export interface ToolConfig {
     category: ToolCategory
     approvalType: ToolApprovalType
     parallel: boolean
+    concurrencyMode?: import('@/shared/types/llm').ToolConcurrencyMode
+    resourceScope?: string[]
+    resultSemantics?: import('@/shared/types/llm').ToolResultSemantics
+    retryPolicy?: import('@/shared/types/llm').ToolRetryPolicy
+    validationLevel?: import('@/shared/types/llm').ToolValidationLevel
     requiresWorkspace: boolean
     enabled: boolean
     parameters: Record<string, ToolPropertyDef>
@@ -86,6 +91,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         category: 'read',
         approvalType: 'none',
         parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['filesystem:read'],
+        resultSemantics: 'file-read',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -109,6 +119,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         category: 'read',
         approvalType: 'none',
         parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['filesystem:list'],
+        resultSemantics: 'file-read',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -138,6 +153,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         category: 'search',
         approvalType: 'none',
         parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['filesystem:search'],
+        resultSemantics: 'search',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -169,6 +189,11 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         category: 'search',
         approvalType: 'none',
         parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['filesystem:semantic-search'],
+        resultSemantics: 'search',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -190,12 +215,6 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
 - String mode: old_string + new_string (include 3-5 lines context around the change)
 - Line mode: start_line + end_line + content (use exact line numbers from read_file)
 - Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)`,
-        commonErrors: [
-            { error: 'old_string not found', solution: 'Read file again, copy exact content including whitespace' },
-            { error: 'Multiple matches', solution: 'Include more surrounding context lines in old_string' },
-            { error: 'Overlapping edits', solution: 'Ensure edit ranges do not overlap' },
-            { error: 'Cannot mix string mode, line mode, and batch mode', solution: 'Use ONLY one mode per call: either old_string+new_string OR start_line+end_line+content OR edits array' },
-        ],
         customSchema: z.object({
             path: z.string().min(1, 'path is required'),
             old_string: z.string().optional(),
@@ -225,6 +244,11 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         category: 'write',
         approvalType: 'none',
         parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -264,6 +288,11 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         category: 'write',
         approvalType: 'none',
         parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -286,6 +315,11 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         category: 'write',
         approvalType: 'none',
         parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -307,6 +341,11 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         category: 'write',
         approvalType: 'dangerous',
         parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -343,6 +382,11 @@ For long-running servers or watch tasks:
         category: 'terminal',
         approvalType: 'terminal',
         parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['process:command'],
+        resultSemantics: 'command',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'semantic',
         requiresWorkspace: false,
         enabled: true,
         parameters: {
@@ -363,6 +407,11 @@ For long-running servers or watch tasks:
         category: 'terminal',
         approvalType: 'none',
         parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['process:terminal-read'],
+        resultSemantics: 'command',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
         requiresWorkspace: false,
         enabled: true,
         parameters: {
@@ -382,6 +431,11 @@ For long-running servers or watch tasks:
         category: 'terminal',
         approvalType: 'none',
         parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['process:terminal-write'],
+        resultSemantics: 'interactive',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'semantic',
         requiresWorkspace: false,
         enabled: true,
         parameters: {
@@ -390,7 +444,6 @@ For long-running servers or watch tasks:
             is_ctrl: { type: 'boolean', description: 'If true, sends input as a Ctrl key combo. input MUST be a single character (e.g. is_ctrl=true, input="c" → Ctrl+C). Default: false.', default: false },
         },
     },
-
     stop_terminal: {
         name: 'stop_terminal',
         displayName: 'Stop Terminal',
@@ -400,6 +453,11 @@ For long-running servers or watch tasks:
         category: 'terminal',
         approvalType: 'none',
         parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['process:terminal-write'],
+        resultSemantics: 'command',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
         requiresWorkspace: false,
         enabled: true,
         parameters: {
@@ -590,6 +648,11 @@ TIPS:
         category: 'interaction',
         approvalType: 'none',
         parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['interaction:user'],
+        resultSemantics: 'interactive',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
         requiresWorkspace: false,
         enabled: true,
         parameters: {
@@ -632,7 +695,7 @@ TIPS:
             'Suggest appropriate models based on task complexity',
             'Include clear task descriptions',
         ],
-        category: 'orchestrator',
+        category: 'plan',
         approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
@@ -676,7 +739,7 @@ You can:
             'update_task_plan planId="login-1234" updateRequirements="增加密码强度验证" addTasks=[{title: "密码验证", ...}]',
             'update_task_plan planId="login-1234" removeTasks=["task-001"]',
         ],
-        category: 'orchestrator',
+        category: 'plan',
         approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
@@ -740,7 +803,7 @@ This will trigger the task executor to run through the plan.`,
             'start_task_execution',
             'start_task_execution planId="login-1234"',
         ],
-        category: 'orchestrator',
+        category: 'plan',
         approvalType: 'none',
         parallel: false,
         requiresWorkspace: true,
@@ -1209,7 +1272,7 @@ export function generateToolsPromptDescriptionFiltered(
         lsp: [],
         network: [],
         interaction: [],
-        orchestrator: [],
+        plan: [],
     }
 
     // 按类别分组

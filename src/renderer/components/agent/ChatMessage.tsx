@@ -42,6 +42,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
 import { useFluidTypewriter } from '@renderer/hooks/useFluidTypewriter'
+import { SystemAlert, parseSystemAlert } from './SystemAlert'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -357,7 +358,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
     <div className="my-3 group/think overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 px-2 py-1.5 text-text-muted/50 hover:text-text-muted rounded-md hover:bg-text-primary/[0.03] transition-colors select-none"
+        className="flex w-full items-center gap-2 py-1.5 text-text-muted/50 hover:text-text-muted rounded-md hover:bg-text-primary/[0.03] transition-colors select-none"
       >
         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
           <ChevronDown className="w-3.5 h-3.5" />
@@ -400,7 +401,24 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
 
-  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(cleanedContent, !!isStreaming)
+  // 检测系统警告
+  const systemAlert = React.useMemo(() => {
+    if (!isStreaming) {
+      return parseSystemAlert(cleanedContent)
+    }
+    return null
+  }, [cleanedContent, isStreaming])
+
+  // 如果检测到系统警告，移除原始文本中的警告部分
+  const contentWithoutAlert = React.useMemo(() => {
+    if (systemAlert) {
+      // 移除 ⚠️ 和 💡 部分
+      return cleanedContent.replace(/⚠️\s*.+?(?:\n💡\s*.+)?$/s, '').trim()
+    }
+    return cleanedContent
+  }, [cleanedContent, systemAlert])
+
+  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(contentWithoutAlert, !!isStreaming)
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
@@ -502,7 +520,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
   }), [fontSize, handleOpenFile])
 
-  if (!cleanedContent) {
+  if (!contentWithoutAlert && !systemAlert) {
     // If content is empty but we're here, signaling complete immediately to avoid blocking
     if (!isTyping && onTypingComplete) {
       setTimeout(onTypingComplete, 0)
@@ -511,15 +529,27 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
   }
 
   return (
-    <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}>
-      <ReactMarkdown
-        className="prose prose-invert max-w-none"
-        remarkPlugins={[remarkGfm]}
-        components={markdownComponents}
-      >
-        {fluidContent}
-      </ReactMarkdown>
-    </div>
+    <>
+      {systemAlert && (
+        <SystemAlert
+          type={systemAlert.type}
+          title={systemAlert.title}
+          message={systemAlert.message}
+          suggestion={systemAlert.suggestion}
+        />
+      )}
+      {contentWithoutAlert && (
+        <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}>
+          <ReactMarkdown
+            className="prose prose-invert max-w-none"
+            remarkPlugins={[remarkGfm]}
+            components={markdownComponents}
+          >
+            {fluidContent}
+          </ReactMarkdown>
+        </div>
+      )}
+    </>
   )
 })
 MarkdownContent.displayName = 'MarkdownContent'

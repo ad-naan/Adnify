@@ -38,7 +38,7 @@ import { EditorWelcome } from './EditorWelcome'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile } from './FilePreview'
 import { CodeSkeleton } from '../ui/Loading'
-import { TaskBoard } from '../orchestrator/TaskBoard'
+import { TaskBoard } from '../plan/TaskBoard'
 
 // Hooks
 import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDiff } from './hooks'

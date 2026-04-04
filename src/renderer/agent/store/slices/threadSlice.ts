@@ -6,7 +6,7 @@
 import type { StateCreator } from 'zustand'
 import type { ChatThread, StreamState, CompressionPhase, TodoItem } from '../../types'
 import type { CompressionStats } from '../../core/types'
-import type { StructuredSummary } from '../../context/types'
+import type { StructuredSummary } from '../../domains/context/types'
 import type { BranchSlice } from './branchSlice'
 import type { ToolStreamingPreview } from '@/shared/types'
 import { adnifyDir } from '@/renderer/services/adnifyDirService'
@@ -17,7 +17,7 @@ export interface ThreadStoreState {
 }
 
 export interface ThreadActions {
-    createThread: () => string
+    createThread: (options?: { activate?: boolean }) => string
     switchThread: (threadId: string) => void
     deleteThread: (threadId: string) => void
     getCurrentThread: () => ChatThread | null
@@ -36,6 +36,9 @@ export interface ThreadActions {
 
     setTodos: (todos: TodoItem[], threadId?: string) => void
     getTodos: (threadId?: string) => TodoItem[]
+    setExecutionMeta: (meta: import('../../types').ThreadExecutionMeta | null, threadId?: string) => void
+    updateExecutionMeta: (meta: Partial<import('../../types').ThreadExecutionMeta>, threadId?: string) => void
+    clearExecutionMeta: (threadId?: string) => void
 }
 
 export type ThreadSlice = ThreadStoreState & ThreadActions
@@ -55,6 +58,7 @@ export const createEmptyThread = (): ChatThread => ({
     handoffRequired: false,
     isCompacting: false,
     compressionPhase: 'idle',
+    executionMeta: { loopState: 'idle' },
 })
 
 const updateThread = (
@@ -114,8 +118,9 @@ export const createThreadSlice: StateCreator<
     threads: {},
     currentThreadId: null,
 
-    createThread: () => {
+    createThread: (options) => {
         const thread = createEmptyThread()
+        const activate = options?.activate ?? true
         let shouldFlushImmediately = false
 
         set(state => {
@@ -142,11 +147,11 @@ export const createThreadSlice: StateCreator<
                 }
             }
 
-            shouldFlushImmediately = state.currentThreadId !== thread.id
+            shouldFlushImmediately = activate && state.currentThreadId !== thread.id
 
             return {
                 threads: newThreads,
-                currentThreadId: thread.id,
+                currentThreadId: activate ? thread.id : state.currentThreadId,
                 branches: newBranches,
                 activeBranchId: newActiveBranch,
             }
@@ -165,6 +170,26 @@ export const createThreadSlice: StateCreator<
         if (state.currentThreadId === threadId) return
         set({ currentThreadId: threadId })
         void adnifyDir.flush()
+
+        // 懒加载切换后线程的消息
+        const thread = state.threads[threadId]
+        if (thread && (!thread.messages || thread.messages.length === 0)) {
+            adnifyDir.loadThreadMessages(threadId).then(messages => {
+                if (messages.length > 0) {
+                    set(state => ({
+                        threads: {
+                            ...state.threads,
+                            [threadId]: {
+                                ...state.threads[threadId],
+                                messages,
+                            },
+                        },
+                    }))
+                }
+            }).catch(err => {
+                console.error('[ThreadSlice] Failed to load messages:', err)
+            })
+        }
     },
 
     deleteThread: (threadId) => {
@@ -368,4 +393,49 @@ export const createThreadSlice: StateCreator<
         const thread = get().threads[targetId]
         return thread?.todos || []
     },
+
+    setExecutionMeta: (meta, threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => ({
+            threads: updateThread(state.threads, targetId, { executionMeta: meta || { loopState: 'idle' } }),
+        }))
+    },
+
+    updateExecutionMeta: (meta, threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => {
+            const thread = state.threads[targetId]
+            if (!thread) return state
+
+            return {
+                threads: updateThread(state.threads, targetId, {
+                    executionMeta: {
+                        ...(thread.executionMeta || { loopState: 'idle' }),
+                        ...meta,
+                    },
+                }),
+            }
+        })
+    },
+
+    clearExecutionMeta: (threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => ({
+            threads: updateThread(state.threads, targetId, {
+                executionMeta: { loopState: 'idle' },
+                streamState: {
+                    ...state.threads[targetId]?.streamState,
+                    requestId: undefined,
+                    assistantId: undefined,
+                },
+            }),
+        }))
+    },
 })
+

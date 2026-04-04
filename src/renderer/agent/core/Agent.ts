@@ -23,14 +23,15 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { useAgentStore } from '../store/AgentStore'
-import { buildLLMMessages, buildContextContent } from '../llm/MessageBuilder'
 import { fileCacheService } from '../services/fileCacheService'
 import { approvalService } from './tools'
 import { EventBus } from './EventBus'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { MessageContent, TextContent, ImageContent } from '../types'
 import type { CheckpointImage } from '../types'
-import type { LLMConfig } from './types'
+import type { LLMConfig, ExecutionContext } from './types'
+import { agentExecutor } from '../application/AgentExecutor'
+import type { ExecutionConfig } from '../application/AgentExecutor'
 
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
@@ -42,6 +43,8 @@ export class AgentClass {
   private runningTasks: Map<string, {
     abortController: AbortController
     assistantId: string
+    requestId?: string
+    orchestratorTaskId?: string
   }> = new Map()
 
   // ===== 公共 API =====
@@ -65,47 +68,66 @@ export class AgentClass {
       activeFile?: string
       customInstructions?: string
       promptTemplateId?: string
-      orchestratorPhase?: 'planning' | 'executing'
+      planPhase?: 'planning' | 'executing'
       mentionedSkills?: string[]
+    },
+    executionOptions?: {
+      threadId?: string
+      requestId?: string
+      orchestratorTaskId?: string
     }
-  ): Promise<void> {
+  ): Promise<{ threadId: string; assistantId: string; requestId: string }> {
     const store = useAgentStore.getState()
 
     // 第一次对话时可能还没有 threadId，需要在 addUserMessage 后获取
-    let threadId = store.currentThreadId
+    let threadId = executionOptions?.threadId || store.currentThreadId
 
     // 防止同一线程重复运行
     if (threadId && this.runningTasks.has(threadId)) {
       logger.agent.warn('[Agent] Thread already running, ignoring new request')
-      return
+      throw new Error(`Thread ${threadId} is already running`)
     }
 
     // 验证 API Key
     if (!config.apiKey) {
       this.showError('Please configure your API key in settings.')
-      return
+      throw new Error('Missing API key')
     }
 
     const abortController = new AbortController()
-    const contextItems = store.getCurrentThread()?.contextItems || []
+    const requestId = executionOptions?.requestId || crypto.randomUUID()
+    const contextItems = threadId
+      ? (store.threads[threadId]?.contextItems || [])
+      : (store.getCurrentThread()?.contextItems || [])
 
     try {
       // 1. 【性能关键】批量初始化消息环境（合并用户消息、助手气泡、上下文清理）
-      // 这将三次导致全量同步序列化（persist）的更新合并为一次，彻底消除 UI 线程阻塞。
-      const { userMessageId, assistantId } = store.prepareExecution(userMessage, contextItems)
+      const { assistantId, threadId: preparedThreadId } = store.prepareExecution(userMessage, contextItems, executionOptions?.threadId)
 
-      // 重新获取 threadId（prepareExecution 可能创建了新线程）
-      threadId = useAgentStore.getState().currentThreadId as string
+      threadId = preparedThreadId
       if (!threadId) {
         logger.agent.error('[Agent] No thread ID after prepareExecution')
-        return
+        throw new Error('No thread ID after prepareExecution')
       }
 
+      const threadStore = useAgentStore.getState().forThread(threadId)
+      threadStore.setExecutionMeta({
+        requestId,
+        assistantId,
+        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+        loopState: 'running',
+      })
+      threadStore.setStreamState({ requestId, assistantId, phase: 'streaming' })
+
       // 2. 记录任务并绑定助手消息 ID
-      this.runningTasks.set(threadId, { abortController, assistantId })
+      this.runningTasks.set(threadId, {
+        abortController,
+        assistantId,
+        requestId,
+        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+      })
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
-      // 避免后续耗时任务（提示词构建、隐式搜索）阻塞首屏显示
       await new Promise(resolve => setTimeout(resolve, 0))
 
       // 3. 提取提到的 Skills
@@ -123,42 +145,57 @@ export class AgentClass {
       const mentionedSet = new Set(mentionedSkills)
       const autoSelectedSkills = activeSkills.filter(s => !mentionedSet.has(s.name))
       if (autoSelectedSkills.length > 0) {
-        store.addSkillsToMessage(assistantId, autoSelectedSkills)
+        store.addSkillsToMessage(assistantId, autoSelectedSkills, threadId)
       }
 
-      // 5. 准备上下文（搜索状态会更新到刚才创建的助手消息中）
-      const userQuery = this.extractUserQuery(userMessage)
-      const contextContent = await buildContextContent(contextItems, userQuery, assistantId, threadId)
-
-      // 6. 创建检查点（用于撤销）
+      // 5. 创建检查点（用于撤销）
       const checkpointImages = this.extractCheckpointImages(userMessage)
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
-      await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
+      const userMessageId = useAgentStore.getState().threads[threadId]?.messages.filter(m => m.role === 'user').at(-1)?.id
+      if (userMessageId) {
+        await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
+      }
 
-      // 7. 构建 LLM 消息（包含上下文压缩）
-      const llmMessages = await buildLLMMessages(userMessage, contextContent, systemPrompt)
+      // 6. 使用 AgentExecutor 准备执行
+      const executionConfig: ExecutionConfig = {
+        mode: chatMode,
+        workspacePath,
+        threadId,
+        assistantId,
+        requestId,
+        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+      }
+
+      const preparation = await agentExecutor.prepare(
+        userMessage,
+        contextItems,
+        store.threads[threadId]?.messages || [],
+        systemPrompt,
+        executionConfig
+      )
 
       // 7. 开始流式响应
       store.setStreamPhase('streaming', threadId)
 
       // 8. 运行主循环
       const runLoop = await importRunLoop()
-      await runLoop(
-        config,
-        llmMessages,
-        {
-          workspacePath,
-          chatMode,
-          abortSignal: abortController.signal,
-          threadId,
-        },
-        assistantId
-      )
+      const executionContext: ExecutionContext = {
+        workspacePath,
+        chatMode,
+        abortSignal: abortController.signal,
+        threadId,
+        requestId,
+        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+      }
+      await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
+
+      return { threadId, assistantId, requestId }
     } catch (error) {
       // 统一错误处理
       const appError = AppError.fromError(error)
       logger.agent.error('[Agent] Error:', appError.toJSON())
       this.showError(formatErrorMessage(appError))
+      throw error
     } finally {
       // 确保清理资源（threadId 现在一定存在）
       this.cleanupTask(threadId)
@@ -174,70 +211,85 @@ export class AgentClass {
    * - 更新所有运行中的工具状态为 error
    * - 清理资源
    */
-  abort(): void {
+  abort(threadId?: string): void {
     const store = useAgentStore.getState()
-    const currentThreadId = store.currentThreadId
+    const targetThreadId = threadId || store.currentThreadId
 
     // 中止当前线程的任务
-    if (currentThreadId && this.runningTasks.has(currentThreadId)) {
-      const task = this.runningTasks.get(currentThreadId)!
+    if (targetThreadId && this.runningTasks.has(targetThreadId)) {
+      const task = this.runningTasks.get(targetThreadId)!
       task.abortController.abort()
 
-      // 更新所有运行中的工具状态
-      if (task.assistantId) {
-        const thread = store.getCurrentThread()
-        if (thread) {
-          const msg = thread.messages.find(m => m.id === task.assistantId)
-          if (msg?.role === 'assistant') {
-            const assistantMsg = msg as import('../types').AssistantMessage
-            for (const tc of assistantMsg.toolCalls || []) {
-              if (['running', 'awaiting', 'pending'].includes(tc.status)) {
-                store.updateToolCall(task.assistantId, tc.id, {
-                  status: 'error',
-                  error: 'Aborted by user',
-                  streamingState: undefined,  // 清除流式状态
-                })
-              }
+      const thread = store.threads[targetThreadId]
+      if (task.assistantId && thread) {
+        const msg = thread.messages.find(m => m.id === task.assistantId)
+        if (msg?.role === 'assistant') {
+          const assistantMsg = msg as import('../types').AssistantMessage
+          for (const tc of assistantMsg.toolCalls || []) {
+            if (['running', 'awaiting', 'pending'].includes(tc.status)) {
+              store.updateToolCall(task.assistantId, tc.id, {
+                status: 'error',
+                error: 'Aborted by user',
+                streamingState: undefined,
+              }, targetThreadId)
             }
           }
         }
-        store.finalizeAssistant(task.assistantId)
+        store.finalizeAssistant(task.assistantId, targetThreadId)
       }
 
-      this.runningTasks.delete(currentThreadId)
+      this.runningTasks.delete(targetThreadId)
     }
 
     api.llm.abort()
-    approvalService.reject()
+    if (targetThreadId) {
+      approvalService.reject(useAgentStore.getState().threads[targetThreadId]?.executionMeta?.requestId)
+    }
 
-    // 确保所有流式消息都被终止
-    const thread = store.getCurrentThread()
+    const thread = targetThreadId ? store.threads[targetThreadId] : store.getCurrentThread()
     if (thread) {
       for (const msg of thread.messages) {
         if (msg.role === 'assistant') {
           const assistantMsg = msg as import('../types').AssistantMessage
           if (assistantMsg.isStreaming) {
-            store.finalizeAssistant(msg.id)
+            store.finalizeAssistant(msg.id, thread.id)
           }
         }
       }
     }
 
-    store.setStreamPhase('idle')
+    if (targetThreadId) {
+      const threadStore = store.forThread(targetThreadId)
+      threadStore.updateExecutionMeta({ loopState: 'aborted' })
+      threadStore.setStreamPhase('idle')
+      threadStore.clearExecutionMeta()
+    } else {
+      store.setStreamPhase('idle')
+    }
   }
 
   /**
    * 批准当前待审批的工具
    */
-  approve(): void {
-    approvalService.approve()
+  approve(requestId?: string): void {
+    const effectiveRequestId = requestId
+      || useAgentStore.getState().threads[useAgentStore.getState().currentThreadId || '']?.executionMeta?.requestId
+
+    if (effectiveRequestId) {
+      approvalService.approve(effectiveRequestId)
+    }
   }
 
   /**
    * 拒绝当前待审批的工具
    */
-  reject(): void {
-    approvalService.reject()
+  reject(requestId?: string): void {
+    const effectiveRequestId = requestId
+      || useAgentStore.getState().threads[useAgentStore.getState().currentThreadId || '']?.executionMeta?.requestId
+
+    if (effectiveRequestId) {
+      approvalService.reject(effectiveRequestId)
+    }
   }
 
   /**
@@ -322,6 +374,7 @@ export class AgentClass {
   /**
    * 从消息中提取文本查询
    */
+  // @ts-expect-error - Method kept for potential future use
   private extractUserQuery(message: MessageContent): string {
     if (typeof message === 'string') return message
     if (Array.isArray(message)) {
@@ -389,7 +442,9 @@ export class AgentClass {
 
     // 重置该线程的流状态
     if (threadId) {
-      store.setStreamPhase('idle', threadId)
+      const threadStore = store.forThread(threadId)
+      threadStore.setStreamPhase('idle')
+      threadStore.clearExecutionMeta()
     }
   }
 

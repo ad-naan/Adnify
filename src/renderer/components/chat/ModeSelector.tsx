@@ -39,9 +39,9 @@ const MODES: Array<{
       color: 'text-accent',
     },
     {
-      id: 'orchestrator',
+      id: 'plan',
       icon: Workflow,
-      labelKey: 'Orchestrator',
+      labelKey: 'Plan',
       descZh: '多轮需求收集与任务规划',
       descEn: 'Requirement gathering & task planning',
       color: 'text-purple-400',

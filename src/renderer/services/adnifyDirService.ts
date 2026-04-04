@@ -7,8 +7,7 @@
  *   ├── sessions/            # Agent 会话（按线程拆分）
  *   │   ├── _meta.json       # 线程索引元数据（currentThreadId, threadIds, version）
  *   │   ├── _extra.json      # 非线程快照状态（branches, checkpoints 等）
- *   │   └── {threadId}.json  # 单个线程数据
- *   ├── saved-sessions/      # 已保存会话（index + jsonl）
+ *   │   └── {threadId}.jsonl # 单个线程消息数据
  *   ├── settings.json        # 项目级设置
  *   ├── workspace-state.json # 工作区状态（打开的文件等）
  *   └── rules.md             # 项目 AI 规则
@@ -23,7 +22,6 @@ export const ADNIFY_DIR_NAME = '.adnify'
 export const ADNIFY_FILES = {
   INDEX_DIR: 'index',
   SESSIONS_DIR: 'sessions',
-  SAVED_SESSIONS_DIR: 'saved-sessions',
   SETTINGS: 'settings.json',
   WORKSPACE_STATE: 'workspace-state.json',
   RULES: 'rules.md',
@@ -169,7 +167,6 @@ class AdnifyDirService {
       const requiredDirs = [
         `${adnifyPath}/${ADNIFY_FILES.INDEX_DIR}`,
         `${adnifyPath}/${ADNIFY_FILES.SESSIONS_DIR}`,
-        `${adnifyPath}/${ADNIFY_FILES.SAVED_SESSIONS_DIR}`,
       ]
 
       await Promise.all(requiredDirs.map(async dirPath => {
@@ -187,16 +184,14 @@ class AdnifyDirService {
     }
   }
 
-  async ensureSavedSessionsDir(): Promise<void> {
-    if (!this.primaryRoot) return
-    const dirPath = this.getFilePath(ADNIFY_FILES.SAVED_SESSIONS_DIR)
-    if (!await api.file.exists(dirPath)) {
-      await api.file.ensureDir(dirPath)
-    }
-  }
-
   async setPrimaryRoot(rootPath: string): Promise<void> {
-    if (this.primaryRoot === rootPath) return
+    logger.system.info('[AdnifyDir] setPrimaryRoot called with:', rootPath)
+    logger.system.info('[AdnifyDir] Current primaryRoot:', this.primaryRoot)
+
+    if (this.primaryRoot === rootPath) {
+      logger.system.info('[AdnifyDir] Primary root already set, skipping initialization')
+      return
+    }
 
     if (this.primaryRoot) {
       await this.flush()
@@ -205,6 +200,8 @@ class AdnifyDirService {
     this.primaryRoot = rootPath
     await this.initialize(rootPath)
     await this.migrateOldSessions()
+    logger.system.info('[AdnifyDir] About to call migrateToJsonl()')
+    await this.migrateToJsonl()
     await this.loadAllData()
     this.initialized = true
     logger.system.info('[AdnifyDir] Primary root set:', rootPath)
@@ -339,6 +336,33 @@ class AdnifyDirService {
     return data
   }
 
+  /**
+   * 按需加载线程消息（懒加载）
+   * 从 .jsonl 文件读取消息，不影响缓存的元数据
+   */
+  async loadThreadMessages(threadId: string): Promise<any[]> {
+    if (!this.isInitialized()) return []
+
+    try {
+      const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
+      const jsonlExists = await api.file.exists(jsonlPath)
+
+      if (!jsonlExists) {
+        return []
+      }
+
+      const jsonlContent = await api.file.read(jsonlPath)
+      if (!jsonlContent) return []
+
+      const messages = this.parseMessagesFromJsonl(jsonlContent)
+      logger.system.info(`[AdnifyDir] Loaded ${messages.length} messages for thread ${threadId}`)
+      return messages
+    } catch (error) {
+      logger.system.error(`[AdnifyDir] Failed to load messages for thread ${threadId}:`, error)
+      return []
+    }
+  }
+
   setThreadDirty(threadId: string, data: unknown): void {
     const nextHash = stableStringify(data)
     const prevHash = this.threadHashes.get(threadId)
@@ -373,8 +397,12 @@ class AdnifyDirService {
 
     if (this.isInitialized()) {
       try {
-        const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
-        await api.file.delete(filePath)
+        const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
+        const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
+        await Promise.all([
+          api.file.delete(jsonPath).catch(() => {}),
+          api.file.delete(jsonlPath).catch(() => {}),
+        ])
       } catch {
         // ignore
       }
@@ -387,8 +415,12 @@ class AdnifyDirService {
       this.cache.threads.delete(threadId)
       this.threadHashes.delete(threadId)
       try {
-        const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
-        await api.file.delete(filePath)
+        const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
+        const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
+        await Promise.all([
+          api.file.delete(jsonPath).catch(() => {}),
+          api.file.delete(jsonlPath).catch(() => {}),
+        ])
       } catch {
         // ignore
       }
@@ -554,13 +586,33 @@ class AdnifyDirService {
   }
 
   private async rebuildMetaFromThreadFiles(extra: Record<string, unknown>): Promise<SessionMeta | null> {
+    // 如果未初始化，直接返回 null，避免不必要的错误日志
+    if (!this.isInitialized()) {
+      return null
+    }
+
     try {
       const sessionsDirPath = this.getFilePath(ADNIFY_FILES.SESSIONS_DIR)
       const entries = await api.file.readDir(sessionsDirPath)
-      const threadIds = entries
-        .filter(entry => !entry.isDirectory && entry.name.endsWith('.json') && entry.name !== '_meta.json' && entry.name !== '_extra.json')
-        .map(entry => entry.name.slice(0, -'.json'.length))
-        .sort()
+
+      // 收集所有线程 ID（支持 .json 和 .jsonl 文件）
+      const threadIdSet = new Set<string>()
+
+      for (const entry of entries) {
+        if (entry.isDirectory) continue
+
+        // 跳过元数据文件
+        if (entry.name === '_meta.json' || entry.name === '_extra.json') continue
+
+        // 提取线程 ID（从 .json 或 .jsonl 文件）
+        if (entry.name.endsWith('.json')) {
+          threadIdSet.add(entry.name.slice(0, -'.json'.length))
+        } else if (entry.name.endsWith('.jsonl')) {
+          threadIdSet.add(entry.name.slice(0, -'.jsonl'.length))
+        }
+      }
+
+      const threadIds = Array.from(threadIdSet).sort()
 
       if (threadIds.length === 0) {
         return null
@@ -627,6 +679,78 @@ class AdnifyDirService {
     }
   }
 
+  private async migrateToJsonl(): Promise<void> {
+    if (!this.primaryRoot) {
+      logger.system.warn('[AdnifyDir] JSONL migration skipped: no primary root')
+      return
+    }
+
+    try {
+      const sessionsDir = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}`
+      logger.system.info(`[AdnifyDir] Starting JSONL migration in: ${sessionsDir}`)
+
+      const files = await api.file.readDir(sessionsDir)
+      logger.system.info(`[AdnifyDir] Found ${files.length} files in sessions directory`)
+
+      let migratedCount = 0
+      let skippedCount = 0
+
+      for (const file of files) {
+        // 只处理线程文件（不是 _meta.json 或 _extra.json）
+        if (file.name.endsWith('.json') && !file.name.startsWith('_')) {
+          const threadId = file.name.replace('.json', '')
+          const jsonlPath = `${sessionsDir}/${threadId}.jsonl`
+
+          // 检查是否已经迁移过
+          const jsonlExists = await api.file.exists(jsonlPath)
+          if (jsonlExists) {
+            skippedCount++
+            logger.system.debug(`[AdnifyDir] Skipping ${threadId}: already migrated`)
+            continue
+          }
+
+          // 读取旧的 JSON 文件
+          const jsonPath = `${sessionsDir}/${file.name}`
+          const content = await api.file.read(jsonPath)
+          if (!content) {
+            logger.system.warn(`[AdnifyDir] Skipping ${threadId}: empty file`)
+            continue
+          }
+
+          const threadData = JSON.parse(content) as any
+          if (!threadData.messages || !Array.isArray(threadData.messages)) {
+            logger.system.warn(`[AdnifyDir] Skipping ${threadId}: no messages array`)
+            continue
+          }
+
+          const messageCount = threadData.messages.length
+          logger.system.info(`[AdnifyDir] Migrating ${threadId}: ${messageCount} messages`)
+
+          // 分离消息和元数据
+          const { messages, ...metadata } = threadData
+
+          // 写入元数据（JSON 格式）
+          const metadataContent = JSON.stringify(metadata, null, 2)
+          await api.file.write(jsonPath, metadataContent)
+
+          // 写入消息（JSONL 格式）
+          const jsonlContent = this.serializeMessages(messages)
+          await api.file.write(jsonlPath, jsonlContent)
+
+          migratedCount++
+          logger.system.info(`[AdnifyDir] ✓ Migrated ${threadId}`)
+        }
+      }
+
+      logger.system.info(`[AdnifyDir] JSONL migration complete: ${migratedCount} migrated, ${skippedCount} skipped`)
+    } catch (error) {
+      logger.system.error('[AdnifyDir] JSONL migration failed:', error instanceof Error ? error.message : String(error))
+      if (error instanceof Error && error.stack) {
+        logger.system.error('[AdnifyDir] Stack trace:', error.stack)
+      }
+    }
+  }
+
   private async loadAllData(): Promise<void> {
     const [sessionMeta, workspaceState, settings] = await Promise.all([
       this.getSessionMeta(),
@@ -645,7 +769,19 @@ class AdnifyDirService {
       const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
       const content = await api.file.read(filePath)
       if (!content) return null
-      return JSON.parse(content) as T
+
+      // 线程文件只读取元数据，不自动加载消息（懒加载）
+      // 消息需要通过 loadThreadMessages() 按需加载
+      const threadData = JSON.parse(content) as any
+
+      // 如果是线程文件，确保 messages 字段存在但为空（懒加载标记）
+      if (fileName.endsWith('.json') && !fileName.startsWith('_')) {
+        if (!threadData.messages) {
+          threadData.messages = []
+        }
+      }
+
+      return threadData as T
     } catch {
       return null
     }
@@ -654,11 +790,54 @@ class AdnifyDirService {
   private async writeSessionFile<T>(fileName: string, data: T): Promise<void> {
     try {
       const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
-      const content = JSON.stringify(data, null, 2)
-      await api.file.write(filePath, content)
+
+      // 如果是线程文件，使用 JSONL 格式存储消息
+      if (fileName.endsWith('.json') && !fileName.startsWith('_')) {
+        const threadId = fileName.replace('.json', '')
+        const threadData = data as any
+
+        // 分离消息和元数据
+        const { messages, ...metadata } = threadData
+
+        // 写入元数据（JSON 格式）
+        const metadataContent = JSON.stringify(metadata, null, 2)
+        await api.file.write(filePath, metadataContent)
+
+        // 写入消息（JSONL 格式）
+        if (messages && Array.isArray(messages)) {
+          const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
+          const jsonlContent = this.serializeMessages(messages)
+          await api.file.write(jsonlPath, jsonlContent)
+        }
+      } else {
+        // 元数据文件保持 JSON 格式
+        const content = JSON.stringify(data, null, 2)
+        await api.file.write(filePath, content)
+      }
     } catch (error) {
       logger.system.error(`[AdnifyDir] Failed to write session file ${fileName}:`, error)
     }
+  }
+
+  private serializeMessages(messages: any[]): string {
+    if (messages.length === 0) return ''
+    return messages.map(message => JSON.stringify(message)).join('\n')
+  }
+
+  private parseMessagesFromJsonl(content: string): any[] {
+    if (!content.trim()) return []
+
+    const messages: any[] = []
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        messages.push(JSON.parse(trimmed))
+      } catch (error) {
+        logger.system.warn('[AdnifyDir] Skipped invalid JSONL line', error)
+      }
+    }
+    return messages
   }
 
   private async readJsonFile<T>(file: AdnifyFile): Promise<T | null> {

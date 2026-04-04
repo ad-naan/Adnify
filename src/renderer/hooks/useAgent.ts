@@ -78,7 +78,7 @@ export function useAgent() {
 
   // 线程 ID（轻量 selector，不订阅整个 threads 对象）
   const currentThreadId = useAgentStore(state => state.currentThreadId)
-  const orchestratorPhase = useAgentStore(state => state.phase)
+  const planPhase = useAgentStore(state => state.phase)
 
   // 确保有一个默认线程（首次加载时）
   useEffect(() => {
@@ -98,12 +98,12 @@ export function useAgent() {
   }, [])
 
   // 使用 ref 持有最新值，避免 sendMessage 回调频繁重建
-  const sendParamsRef = useRef({ llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase })
-  sendParamsRef.current = { llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, orchestratorPhase }
+  const sendParamsRef = useRef({ llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, planPhase })
+  sendParamsRef.current = { llmConfig, workspacePath, chatMode, promptTemplateId, aiInstructions, openFiles, activeFilePath, planPhase }
 
   // 发送消息 — 依赖通过 ref 访问，回调引用永远稳定
   const sendMessage = useCallback(async (content: MessageContent) => {
-    const { llmConfig: cfg, workspacePath: ws, chatMode: mode, promptTemplateId: tplId, aiInstructions: ai, openFiles: files, activeFilePath: active, orchestratorPhase: phase } = sendParamsRef.current
+    const { llmConfig: cfg, workspacePath: ws, chatMode: mode, promptTemplateId: tplId, aiInstructions: ai, openFiles: files, activeFilePath: active, planPhase: phase } = sendParamsRef.current
     const openFilePaths = files.map(f => f.path)
     const agentConfig = getAgentConfig()
 
@@ -132,7 +132,7 @@ export function useAgent() {
         activeFile: active || undefined,
         customInstructions: ai,
         promptTemplateId: tplId,
-        orchestratorPhase: mode === 'orchestrator' ? phase : undefined,
+        planPhase: mode === 'plan' ? phase : undefined,
       }
     )
   }, [])

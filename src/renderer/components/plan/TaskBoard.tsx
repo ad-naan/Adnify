@@ -27,7 +27,7 @@ import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
 import {
     getPromptTemplateSummary,
 } from '@/renderer/agent/prompts/promptTemplates'
-import type { OrchestratorTask, ExecutionMode } from '@/renderer/agent/store/slices/orchestratorSlice'
+import type { PlanTask, ExecutionMode } from '@/renderer/agent/store/slices/planSlice'
 
 interface TaskBoardProps {
     planId: string
@@ -38,7 +38,7 @@ interface TaskBoardProps {
 // ============================================
 
 /** 任务状态图标 */
-const TaskStatusIcon = memo(function TaskStatusIcon({ status }: { status: OrchestratorTask['status'] }) {
+const TaskStatusIcon = memo(function TaskStatusIcon({ status }: { status: PlanTask['status'] }) {
     switch (status) {
         case 'completed':
             return <CheckCircle2 className="w-4 h-4 text-green-500" />
@@ -185,7 +185,7 @@ const TaskCard = memo(function TaskCard({
     planId,
     isExecuting,
 }: {
-    task: OrchestratorTask
+    task: PlanTask
     planId: string
     isExecuting: boolean
 }) {
@@ -382,8 +382,8 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
 
     const handleStart = useCallback(async () => {
         if (plan) {
-            // 使用 orchestratorExecutor 启动执行
-            const { startPlanExecution } = await import('@/renderer/agent/orchestrator/orchestratorExecutor')
+            // 使用 planExecutor 启动执行
+            const { startPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
             const result = await startPlanExecution(plan.id)
             if (!result.success) {
                 console.error('Failed to start execution:', result.message)
@@ -392,8 +392,8 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     }, [plan])
 
     const handleStop = useCallback(async () => {
-        // 使用 orchestratorExecutor 停止执行
-        const { stopPlanExecution } = await import('@/renderer/agent/orchestrator/orchestratorExecutor')
+        // 使用 planExecutor 停止执行
+        const { stopPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
         stopPlanExecution()
     }, [])
 

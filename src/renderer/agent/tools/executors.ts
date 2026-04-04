@@ -131,7 +131,69 @@ function resolvePath(p: unknown, workspacePath: string | null, allowRead = false
     return validation.sanitizedPath!
 }
 
-// ===== 工具执行器 =====
+function hashContent(content: string | null): string {
+    const input = content ?? '__NULL__'
+    let hash = 2166136261
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i)
+        hash = Math.imul(hash, 16777619)
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+async function guardedWriteFile(opts: {
+    path: string
+    nextContent: string
+    originalContent: string | null
+    staleMessage?: string
+}): Promise<
+    | { success: true; meta: { preHash: string; postHash: string } }
+    | { success: false; result: ToolExecutionResult }
+> {
+    const currentContent = await api.file.read(opts.path)
+    const originalHash = hashContent(opts.originalContent)
+    const currentHash = hashContent(currentContent)
+
+    if (currentHash !== originalHash) {
+        return {
+            success: false,
+            result: {
+                success: false,
+                result: '',
+                error: opts.staleMessage || 'Write conflict detected: file changed since it was read',
+                outcome: { kind: 'conflict', code: 'STALE_WRITE', retryable: false },
+                envelope: { executionId: crypto.randomUUID(), startedAt: Date.now(), completedAt: Date.now(), errorCategory: 'conflict', retryable: false },
+                meta: {
+                    filePath: opts.path,
+                    preHash: originalHash,
+                    currentHash,
+                }
+            }
+        }
+    }
+
+    internalWriteTracker.mark(opts.path)
+    const success = await api.file.write(opts.path, opts.nextContent)
+    if (!success) {
+        return {
+            success: false,
+            result: {
+                success: false,
+                result: '',
+                error: 'Failed to write file',
+            }
+        }
+    }
+
+    return {
+        success: true,
+        meta: {
+            preHash: originalHash,
+            postHash: hashContent(opts.nextContent),
+        }
+    }
+}
+
 
 const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
@@ -447,9 +509,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const newContent = lines.join('\n')
-            internalWriteTracker.mark(path)
-            const success = await api.file.write(path, newContent)
-            if (!success) return { success: false, result: '', error: 'Failed to write file' }
+            const guardedWrite = await guardedWriteFile({
+                path,
+                nextContent: newContent,
+                originalContent,
+                staleMessage: 'Batch edit conflict detected: file changed since it was read',
+            })
+            if (!guardedWrite.success) return guardedWrite.result
 
             fileCacheService.markFileAsRead(path, newContent)
 
@@ -473,6 +539,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     linesRemoved,
                     totalLines: lines.length,
                     editsApplied: edits.length,
+                    preHash: guardedWrite.meta.preHash,
+                    postHash: guardedWrite.meta.postHash,
                     ...(allWarnings.length > 0 && { warnings: allWarnings }),
                 }
             }
@@ -488,12 +556,16 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             if (originalContent === '') {
-                internalWriteTracker.mark(path)
-                const success = await api.file.write(path, content)
-                if (success) fileCacheService.markFileAsRead(path, content)
-                return success
-                    ? { success: true, result: 'File written (was empty)', meta: { filePath: path, oldContent: '', newContent: content, linesAdded: content.split('\n').length, linesRemoved: 0 } }
-                    : { success: false, result: '', error: 'Failed to write file' }
+                const guardedWrite = await guardedWriteFile({
+                    path,
+                    nextContent: content,
+                    originalContent,
+                    staleMessage: 'Line edit conflict detected: file changed before empty-file write completed',
+                })
+                if (guardedWrite.success) fileCacheService.markFileAsRead(path, content)
+                return guardedWrite.success
+                    ? { success: true, result: 'File written (was empty)', meta: { filePath: path, oldContent: '', newContent: content, linesAdded: content.split('\n').length, linesRemoved: 0, preHash: guardedWrite.meta.preHash, postHash: guardedWrite.meta.postHash } }
+                    : guardedWrite.result
             }
 
             const lines = originalContent.split('\n')
@@ -523,9 +595,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 logger.agent.warn(`[edit_file] ${path}: Detected ${warnings.length} potential issues`, warnings)
             }
 
-            internalWriteTracker.mark(path)
-            const success = await api.file.write(path, newContent)
-            if (!success) return { success: false, result: '', error: 'Failed to write file' }
+            const guardedWrite = await guardedWriteFile({
+                path,
+                nextContent: newContent,
+                originalContent,
+                staleMessage: 'Line edit conflict detected: file changed since it was read',
+            })
+            if (!guardedWrite.success) return guardedWrite.result
 
             fileCacheService.markFileAsRead(path, newContent)
 
@@ -544,6 +620,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     newContent,
                     linesAdded: lineChanges.added,
                     linesRemoved: lineChanges.removed,
+                    preHash: guardedWrite.meta.preHash,
+                    postHash: guardedWrite.meta.postHash,
                     ...(warnings.length > 0 && { warnings }),
                 }
             }
@@ -588,9 +666,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const newContent = result.newContent!
-            internalWriteTracker.mark(path)
-            const writeSuccess = await api.file.write(path, newContent)
-            if (!writeSuccess) return { success: false, result: '', error: 'Failed to write file' }
+            const guardedWrite = await guardedWriteFile({
+                path,
+                nextContent: newContent,
+                originalContent,
+                staleMessage: 'String edit conflict detected: file changed since it was read',
+            })
+            if (!guardedWrite.success) return guardedWrite.result
 
             fileCacheService.markFileAsRead(path, newContent)
 
@@ -610,7 +692,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     newContent,
                     linesAdded: lineChanges.added,
                     linesRemoved: lineChanges.removed,
-                    matchStrategy: result.strategy
+                    matchStrategy: result.strategy,
+                    preHash: guardedWrite.meta.preHash,
+                    postHash: guardedWrite.meta.postHash,
                 }
             }
         }
@@ -620,9 +704,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const path = resolvePath(args.path, ctx.workspacePath)
         const content = args.content as string
         const originalContent = await api.file.read(path) || ''
-        internalWriteTracker.mark(path)
-        const success = await api.file.write(path, content)
-        if (!success) return { success: false, result: '', error: 'Failed to write file' }
+        const guardedWrite = await guardedWriteFile({
+            path,
+            nextContent: content,
+            originalContent,
+            staleMessage: 'Write conflict detected: file changed before overwrite completed',
+        })
+        if (!guardedWrite.success) return guardedWrite.result
 
         // 通知 LSP 并等待诊断
         await notifyLspAfterWrite(path, content)
@@ -630,7 +718,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const lineChanges = calculateLineChanges(originalContent, content)
 
         notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent: content, changeType: originalContent ? 'modify' : 'create', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
-        return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed } }
+        return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, preHash: guardedWrite.meta.preHash, postHash: guardedWrite.meta.postHash } }
     },
 
     async create_file_or_folder(args, ctx) {
@@ -642,18 +730,25 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             return { success, result: success ? 'Folder created' : 'Failed to create folder' }
         }
 
+        const originalContent = await api.file.read(path)
         const content = (args.content as string) || ''
-        internalWriteTracker.mark(path)
-        const success = await api.file.write(path, content)
+        const guardedWrite = await guardedWriteFile({
+            path,
+            nextContent: content,
+            originalContent,
+            staleMessage: 'Create file conflict detected: target path changed before creation completed',
+        })
 
-        if (success) {
+        if (guardedWrite.success) {
             // 通知 LSP 并等待诊断
             await notifyLspAfterWrite(path, content)
 
             notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: content, changeType: 'create', linesAdded: content.split('\n').length, linesRemoved: 0, toolCallId: ctx.toolCallId })
         }
 
-        return { success, result: success ? 'File created' : 'Failed to create file', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length } }
+        if (!guardedWrite.success) return guardedWrite.result
+
+        return { success: true, result: 'File created', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length, preHash: guardedWrite.meta.preHash, postHash: guardedWrite.meta.postHash } }
     },
 
     async delete_file_or_folder(args, ctx) {
@@ -1223,7 +1318,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const { startPlanExecution } = await import('../orchestrator/orchestratorExecutor')
+            const { startPlanExecution } = await import('../plan/planExecutor')
 
             // 异步启动执行（不等待完成）
             const result = await startPlanExecution(plan.id)

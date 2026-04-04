@@ -44,7 +44,6 @@ export { getToolApprovalType, getToolDisplayName } from '@/shared/config/tools'
 // 其他服务
 export { lintService } from './services/lintService'
 export { streamingEditService } from './services/streamingEditService'
-export { sessionService } from './services/sessionService'
 export { rulesService } from './services/rulesService'
 export { memoryService } from './services/memoryService'
 export type { MemoryItem } from './services/memoryService'
@@ -62,10 +61,6 @@ export {
     buildWelcomeMessage,
 } from './context'
 export type { CompressionLevel, CompressionStats, StructuredSummary, HandoffDocument } from './context'
-
-// LLM 相关
-export { buildContextContent, buildUserContent } from './llm/ContextBuilder'
-export { buildLLMMessages } from './llm/MessageBuilder'
 
 // 工具函数
 export { parseXMLToolCalls, generateToolCallId } from './utils/XMLToolParser'

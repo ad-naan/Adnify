@@ -5,7 +5,7 @@
 import type { ToolCall, ToolStreamingPreview } from '@/shared/types'
 import type { ChatMessage } from './messages'
 import type { ContextItem } from './context'
-import type { StructuredSummary } from '../context/types'
+import type { StructuredSummary } from '../domains/context/types'
 import type { CompressionStats } from '../core/types'
 
 export interface TodoItem {
@@ -19,12 +19,21 @@ export type StreamPhase = 'idle' | 'streaming' | 'tool_pending' | 'tool_running'
 
 export type CompressionPhase = 'idle' | 'analyzing' | 'compressing' | 'summarizing' | 'done'
 
+export interface ThreadExecutionMeta {
+  requestId?: string
+  assistantId?: string
+  orchestratorTaskId?: string
+  loopState?: 'idle' | 'running' | 'waiting_for_tools' | 'waiting_for_user' | 'completed' | 'failed' | 'aborted'
+}
+
 /** Thread-local streaming state for the current agent run. */
 export interface StreamState {
   phase: StreamPhase
   currentToolCall?: ToolCall
   error?: string
   statusText?: string
+  requestId?: string
+  assistantId?: string
 }
 
 /** Complete persisted thread record plus thread-scoped ephemeral preview state. */
@@ -47,7 +56,19 @@ export interface ChatThread {
 
   todos?: TodoItem[]
 
+  executionMeta?: ThreadExecutionMeta
+
   handoffContext?: string
   pendingObjective?: string
   pendingSteps?: string[]
+
+  // ===== Thread Ownership Metadata (Phase 3.1) =====
+  /** Thread mode: chat/agent/orchestrator(plan) */
+  mode?: import('@/shared/types/workMode').WorkMode
+  /** Thread origin: user-created or plan-task worker */
+  origin?: 'user' | 'plan-task'
+  /** Associated plan ID (if origin is plan-task) */
+  planId?: string
+  /** Associated task ID (if origin is plan-task) */
+  taskId?: string
 }

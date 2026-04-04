@@ -31,8 +31,8 @@ export interface ToolLoadingContext {
   mode: WorkMode
   /** 角色模板 ID（可选） */
   templateId?: string
-  /** Orchestrator 阶段：planning = 只有编排工具, executing = 所有工具 */
-  orchestratorPhase?: 'planning' | 'executing'
+  /** Plan 阶段：planning = 只有编排工具, executing = 所有工具 */
+  planPhase?: 'planning' | 'executing'
 }
 
 /** 角色工具配置 */
@@ -87,8 +87,8 @@ const UIUX_TOOLS: string[] = [
   'uiux_recommend',
 ]
 
-/** Orchestrator 工具 - orchestrator 模式专用 */
-const ORCHESTRATOR_TOOLS: string[] = [
+/** Plan 工具 - plan 模式专用 */
+const PLAN_TOOLS: string[] = [
   'ask_user',
   'create_task_plan',
   'update_task_plan',
@@ -99,7 +99,7 @@ const ORCHESTRATOR_TOOLS: string[] = [
 const TOOL_GROUPS: Record<string, string[]> = {
   core: CORE_TOOLS,
   uiux: UIUX_TOOLS,
-  orchestrator: ORCHESTRATOR_TOOLS,
+  plan: PLAN_TOOLS,
 }
 
 /** 角色工具配置注册表 */
@@ -138,11 +138,11 @@ export function getToolGroup(id: string): string[] | undefined {
 
 /**
  * 根据上下文获取工具列表
- * 
+ *
  * 加载规则：
  * - chat: 空（无工具）
  * - agent: core 工具组
- * - orchestrator: orchestrator 工具组（ask_user, create_task_plan）
+ * - plan: plan 工具组（ask_user, create_task_plan）
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
@@ -154,21 +154,21 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
   // 收集工具（使用 Set 去重）
   const tools = new Set<string>()
 
-  // orchestrator 模式：根据阶段加载不同工具
-  if (context.mode === 'orchestrator') {
-    // 执行阶段：加载所有工具（core + orchestrator）
-    if (context.orchestratorPhase === 'executing') {
+  // plan 模式：根据阶段加载不同工具
+  if (context.mode === 'plan') {
+    // 执行阶段：加载所有工具（core + plan）
+    if (context.planPhase === 'executing') {
       for (const tool of CORE_TOOLS) {
         tools.add(tool)
       }
-      for (const tool of TOOL_GROUPS['orchestrator'] || []) {
+      for (const tool of TOOL_GROUPS['plan'] || []) {
         tools.add(tool)
       }
       return Array.from(tools)
     }
 
     // 规划阶段（默认）：只使用编排工具
-    for (const tool of TOOL_GROUPS['orchestrator'] || []) {
+    for (const tool of TOOL_GROUPS['plan'] || []) {
       tools.add(tool)
     }
     return Array.from(tools)

@@ -25,13 +25,13 @@ import {
     type Branch,
 } from './slices'
 import {
-    createOrchestratorSlice,
-    type OrchestratorSlice,
-} from './slices/orchestratorSlice'
+    createPlanSlice,
+    type PlanSlice,
+} from './slices/planSlice'
 import type { ChatMessage, ContextItem, StreamState, TodoItem } from '../types'
 import type { CompressionStats } from '../core/types'
-import type { HandoffDocument, StructuredSummary } from '../context/types'
-import { buildHandoffContext } from '../context/HandoffManager'
+import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
+import { buildHandoffContext } from '../domains/context/HandoffManager'
 import type { EmotionDetection, EmotionHistory } from '../types/emotion'
 import type { ToolStreamingPreview } from '@/shared/types'
 
@@ -113,6 +113,9 @@ export interface ThreadBoundStore {
     clearToolStreamingPreview: (toolCallId: string) => void
     getToolStreamingPreview: (toolCallId: string) => ToolStreamingPreview | undefined
     setCompressionStats: (stats: CompressionStats | null) => void
+    setExecutionMeta: (meta: import('../types').ThreadExecutionMeta | null) => void
+    updateExecutionMeta: (meta: Partial<import('../types').ThreadExecutionMeta>) => void
+    clearExecutionMeta: () => void
     setContextSummary: (summary: StructuredSummary | null) => void
     setCompressionPhase: (phase: import('../types').CompressionPhase) => void
     setHandoffRequired: (required: boolean) => void
@@ -136,7 +139,7 @@ export interface ThreadBoundStore {
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
 }
 
-export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & OrchestratorSlice & UIState & {
+export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & PlanSlice & UIState & {
     _flushTextBuffer: (messageId: string) => void
     forThread: (threadId: string) => ThreadBoundStore
 }
@@ -151,7 +154,7 @@ export const useAgentStore = create<AgentStore>()(
             const messageSlice = createMessageSlice(...args)
             const checkpointSlice = createCheckpointSlice(...args)
             const branchSlice = createBranchSlice(...args)
-            const orchestratorSlice = createOrchestratorSlice(...args)
+            const planSlice = createPlanSlice(...args)
 
             const [set, get] = args
 
@@ -297,6 +300,9 @@ export const useAgentStore = create<AgentStore>()(
                 getToolStreamingPreview: (toolCallId) =>
                     threadSlice.getToolStreamingPreview(toolCallId, threadId),
                 setCompressionStats: (stats) => threadSlice.setCompressionStats(stats, threadId),
+                setExecutionMeta: (meta) => threadSlice.setExecutionMeta(meta, threadId),
+                updateExecutionMeta: (meta) => threadSlice.updateExecutionMeta(meta, threadId),
+                clearExecutionMeta: () => threadSlice.clearExecutionMeta(threadId),
                 setContextSummary: (summary) => threadSlice.setContextSummary(summary, threadId),
                 setCompressionPhase: (phase) => threadSlice.setCompressionPhase(phase, threadId),
                 setHandoffRequired: (required) => threadSlice.setHandoffRequired(required, threadId),
@@ -334,7 +340,7 @@ export const useAgentStore = create<AgentStore>()(
                 ...messageSlice,
                 ...checkpointSlice,
                 ...branchSlice,
-                ...orchestratorSlice,
+                ...planSlice,
                 ...uiState,
                 _flushTextBuffer,
                 forThread,
@@ -496,13 +502,8 @@ export const selectTodos = (state: AgentStore) => {
 
 export async function initializeAgentStore(): Promise<void> {
     try {
-        const store = useAgentStore as typeof useAgentStore & {
-            persist?: { rehydrate: () => Promise<void> }
-        }
-        if (store.persist) {
-            await store.persist.rehydrate()
-            logger.agent.info('[AgentStore] Rehydrated from project storage')
-        }
+        // 注意：不在这里调用 rehydrate()，因为此时 adnifyDir 可能还没有初始化
+        // rehydrate() 会在 initService.ts 的 scheduleBackgroundInit() 中延迟调用
 
         const { initializeTools } = await import('../tools')
         await initializeTools()

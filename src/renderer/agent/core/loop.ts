@@ -25,8 +25,9 @@ import { EventBus } from './EventBus'
 import {
   generateSummary,
   generateHandoffDocument,
-} from '../context'
-import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../context/CompressionManager'
+} from '../domains/context'
+import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../domains/context/CompressionManager'
+import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { LintCheckFile } from '../types'
 import type { ChatMessage } from '../types'
 import type { LLMMessage } from '@/shared/types'
@@ -259,7 +260,7 @@ interface CompressionCheckResult {
 
 /**
  * 检查并处理压缩
- * 
+ *
  * 在 LLM 返回后调用，根据真实 token 使用量更新压缩统计
  */
 async function checkAndHandleCompression(
@@ -270,12 +271,106 @@ async function checkAndHandleCompression(
   context: ExecutionContext,
   assistantId: string,
   enableLLMSummary: boolean,
-  autoHandoff: boolean
+  autoHandoff: boolean,
+  budgetController?: TokenBudgetController
 ): Promise<CompressionCheckResult> {
   const thread = store.getCurrentThread()
   const messageCount = thread?.messages.length || 0
 
-  // 使用 CompressionManager 更新统计（使用真实 usage）
+  // Use budget controller for reconciliation if available
+  if (budgetController) {
+    const reconciliation = budgetController.reconcile(
+      usage.input,
+      usage.output,
+      usage.input // TODO: Pass actual estimated tokens from pipeline
+    )
+
+    logger.agent.info(
+      `[Compression] L${reconciliation.calculatedLevel} (${LEVEL_NAMES[reconciliation.calculatedLevel]}), ` +
+      `ratio: ${(reconciliation.actualUsageRatio * 100).toFixed(1)}%, ` +
+      `tokens: ${reconciliation.actualInputTokens + reconciliation.actualOutputTokens}/${contextLimit}`
+    )
+
+    // Update store with new stats
+    const newStats = updateStats(
+      { promptTokens: usage.input, completionTokens: usage.output },
+      contextLimit,
+      thread?.compressionStats || null,
+      messageCount
+    )
+    threadStore.setCompressionStats(newStats as import('../domains/context/CompressionManager').CompressionStats)
+    threadStore.setCompressionPhase('idle')
+
+    // L3 warning
+    if (reconciliation.calculatedLevel === 3 && (!thread?.compressionStats || thread.compressionStats.level < 3)) {
+      const remainingTurns = budgetController.estimateRemainingTurns(usage.input, usage.output)
+      EventBus.emit({
+        type: 'context:warning',
+        level: 3,
+        message: `Context usage is high (${(reconciliation.actualUsageRatio * 100).toFixed(1)}%). Estimated ${remainingTurns} turns remaining.`,
+      })
+    }
+
+    // L3: Generate summary if recommended
+    if (reconciliation.shouldGenerateSummary && thread) {
+      threadStore.setCompressionPhase('summarizing')
+      try {
+        const userTurns = thread.messages.filter(m => m.role === 'user').length
+        const summaryResult = await generateSummary(thread.messages, { type: 'detailed' })
+        threadStore.setContextSummary({
+          objective: summaryResult.objective,
+          completedSteps: summaryResult.completedSteps,
+          pendingSteps: summaryResult.pendingSteps,
+          decisions: [],
+          fileChanges: summaryResult.fileChanges,
+          errorsAndFixes: [],
+          userInstructions: [],
+          generatedAt: Date.now(),
+          turnRange: [0, userTurns],
+        })
+        EventBus.emit({ type: 'context:summary', summary: summaryResult.summary })
+      } catch {
+        // Summary generation failed, not critical
+      }
+      threadStore.setCompressionPhase('idle')
+    }
+
+    // L4: Generate handoff if recommended
+    if (reconciliation.shouldGenerateHandoff) {
+      if (thread && context.workspacePath) {
+        threadStore.setCompressionPhase('summarizing')
+        try {
+          const handoff = await generateHandoffDocument(thread.id, thread.messages, context.workspacePath)
+          store.setHandoffDocument(handoff)
+          EventBus.emit({ type: 'context:handoff', document: handoff })
+        } catch {
+          // Handoff generation failed, not critical
+        }
+        threadStore.setCompressionPhase('idle')
+      }
+
+      const { language } = useStore.getState()
+      const msg = language === 'zh'
+        ? '⚠️ **上下文已满**\n\n当前对话已达到上下文限制。请开始新会话继续。'
+        : '⚠️ **Context Limit Reached**\n\nPlease start a new session to continue.'
+      threadStore.appendToAssistant(assistantId, msg)
+      threadStore.setHandoffRequired(true)
+    }
+
+    EventBus.emit({
+      type: 'context:level',
+      level: reconciliation.calculatedLevel,
+      tokens: reconciliation.actualInputTokens + reconciliation.actualOutputTokens,
+      ratio: reconciliation.actualUsageRatio
+    })
+
+    return {
+      level: reconciliation.calculatedLevel,
+      needsHandoff: reconciliation.isLimitReached
+    }
+  }
+
+  // Fallback to legacy logic if no budget controller
   const previousStats = thread?.compressionStats || null
   const newStats = updateStats(
     { promptTokens: usage.input, completionTokens: usage.output },
@@ -284,7 +379,6 @@ async function checkAndHandleCompression(
     messageCount
   )
 
-  // 使用真实 usage 计算的等级（不再强制"只升不降"）
   const calculatedLevel = newStats.level
 
   logger.agent.info(
@@ -293,11 +387,10 @@ async function checkAndHandleCompression(
     `tokens: ${newStats.inputTokens + newStats.outputTokens}/${contextLimit}`
   )
 
-  // 更新 store（使用 threadStore 确保线程隔离）
-  threadStore.setCompressionStats(newStats as import('../context/CompressionManager').CompressionStats)
+  threadStore.setCompressionStats(newStats as import('../domains/context/CompressionManager').CompressionStats)
   threadStore.setCompressionPhase('idle')
 
-  // L3 预警：提前通知用户上下文即将满
+  // L3 warning
   if (calculatedLevel === 3 && (!previousStats || previousStats.level < 3)) {
     const remainingRatio = 1 - newStats.ratio
     const estimatedRemainingTurns = Math.floor(remainingRatio * contextLimit / (usage.input + usage.output))
@@ -308,7 +401,7 @@ async function checkAndHandleCompression(
     })
   }
 
-  // L3: 生成 LLM 摘要
+  // L3: Generate summary
   if (calculatedLevel >= 3 && enableLLMSummary && thread) {
     threadStore.setCompressionPhase('summarizing')
     try {
@@ -327,21 +420,21 @@ async function checkAndHandleCompression(
       })
       EventBus.emit({ type: 'context:summary', summary: summaryResult.summary })
     } catch {
-      // 摘要生成失败，不影响主流程
+      // Summary generation failed, not critical
     }
     threadStore.setCompressionPhase('idle')
   }
 
-  // L4: 生成 Handoff 文档
+  // L4: Generate handoff
   if (calculatedLevel >= 4) {
     if (autoHandoff && thread && context.workspacePath) {
       threadStore.setCompressionPhase('summarizing')
       try {
         const handoff = await generateHandoffDocument(thread.id, thread.messages, context.workspacePath)
-        store.setHandoffDocument(handoff)  // handoffDocument 是全局状态，保持使用 store
+        store.setHandoffDocument(handoff)
         EventBus.emit({ type: 'context:handoff', document: handoff })
       } catch {
-        // Handoff 生成失败，不影响主流程
+        // Handoff generation failed, not critical
       }
       threadStore.setCompressionPhase('idle')
     }
@@ -365,7 +458,8 @@ export async function runLoop(
   config: LLMConfig,
   llmMessages: LLMMessage[],
   context: ExecutionContext,
-  assistantId: string
+  assistantId: string,
+  budgetController?: TokenBudgetController
 ): Promise<void> {
   const store = useAgentStore.getState()
   const mainStore = useStore.getState()
@@ -389,7 +483,14 @@ export async function runLoop(
   const contextLimit = config.contextLimit || 128_000
 
   // 生成请求 ID，用于 IPC 频道隔离
-  const requestId = crypto.randomUUID()
+  const requestId = context.requestId || crypto.randomUUID()
+  threadStore.setExecutionMeta({
+    requestId,
+    assistantId,
+    orchestratorTaskId: context.orchestratorTaskId,
+    loopState: 'running',
+  })
+  threadStore.setStreamState({ requestId, assistantId })
 
   // 【性能关键】工具初始化只做一次，避免每个 LLM 调用轮次重复初始化
   initializeToolProviders()
@@ -404,23 +505,24 @@ export async function runLoop(
   let iteration = 0
   let shouldContinue = true
 
-  EventBus.emit({ type: 'loop:start' })
+  EventBus.emit({ type: 'loop:start', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
 
   while (shouldContinue && iteration < maxIterations && !context.abortSignal?.aborted) {
     iteration++
     shouldContinue = false
-    EventBus.emit({ type: 'loop:iteration', count: iteration })
+    EventBus.emit({ type: 'loop:iteration', count: iteration, threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
 
     // 检查中止信号
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
     if (llmMessages.length === 0) {
       logger.agent.error('[Loop] No messages to send')
       threadStore.appendToAssistant(assistantId, '\n\n❌ Error: No messages to send')
-      EventBus.emit({ type: 'loop:end', reason: 'no_messages' })
+      threadStore.updateExecutionMeta({ loopState: 'failed' })
+      EventBus.emit({ type: 'loop:end', reason: 'no_messages', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -429,7 +531,7 @@ export async function runLoop(
 
     // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -462,7 +564,8 @@ Try again with the corrected tool call.`
         // 其他错误：中止循环
         logger.agent.error('[Loop] LLM error:', result.error)
         threadStore.appendToAssistant(assistantId, `\n\n❌ Error: ${result.error}`)
-        EventBus.emit({ type: 'loop:end', reason: 'error' })
+        threadStore.updateExecutionMeta({ loopState: 'failed' })
+        EventBus.emit({ type: 'loop:end', reason: 'error', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
         break
       }
     }
@@ -485,12 +588,14 @@ Try again with the corrected tool call.`
         context,
         assistantId,
         enableLLMSummary,
-        autoHandoff
+        autoHandoff,
+        budgetController
       )
 
       // L4 需要中断循环
       if (compressionResult.needsHandoff) {
-        EventBus.emit({ type: 'loop:end', reason: 'handoff_required' })
+        threadStore.updateExecutionMeta({ loopState: 'completed' })
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
         break
       }
     } else {
@@ -524,12 +629,14 @@ Try again with the corrected tool call.`
         context,
         assistantId,
         enableLLMSummary,
-        autoHandoff
+        autoHandoff,
+        budgetController
       )
 
       // L4 需要中断循环
       if (compressionResult.needsHandoff) {
-        EventBus.emit({ type: 'loop:end', reason: 'handoff_required' })
+        threadStore.updateExecutionMeta({ loopState: 'completed' })
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
         break
       }
     }
@@ -556,7 +663,8 @@ Try again with the corrected tool call.`
         shouldContinue = true
         continue
       }
-      EventBus.emit({ type: 'loop:end', reason: 'complete' })
+      threadStore.updateExecutionMeta({ loopState: 'completed' })
+      EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -566,8 +674,9 @@ Try again with the corrected tool call.`
       logger.agent.warn(`[Loop] Loop detected: ${loopCheck.reason}`)
       const suggestion = loopCheck.suggestion ? `\n💡 ${loopCheck.suggestion}` : ''
       threadStore.appendToAssistant(assistantId, `\n\n⚠️ ${loopCheck.reason}${suggestion}`)
-      EventBus.emit({ type: 'loop:warning', message: loopCheck.reason || 'Loop detected' })
-      EventBus.emit({ type: 'loop:end', reason: 'loop_detected' })
+      threadStore.updateExecutionMeta({ loopState: 'failed' })
+      EventBus.emit({ type: 'loop:warning', message: loopCheck.reason || 'Loop detected', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'loop_detected', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -597,14 +706,21 @@ Try again with the corrected tool call.`
     // 执行工具
     const { results: toolResults, userRejected } = await executeTools(
       result.toolCalls,
-      { workspacePath: context.workspacePath, currentAssistantId: assistantId, chatMode: context.chatMode },
+      {
+        workspacePath: context.workspacePath,
+        currentAssistantId: assistantId,
+        assistantId,
+        threadId,
+        requestId,
+        chatMode: context.chatMode,
+      },
       threadStore,
       context.abortSignal
     )
 
     // 检查中止信号（工具执行后）
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -620,7 +736,8 @@ Try again with the corrected tool call.`
         threadStore.finalizeAssistant(assistantId)
       }
       threadStore.setStreamPhase('idle')
-      EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user' })
+      threadStore.updateExecutionMeta({ loopState: 'waiting_for_user' })
+      EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -629,7 +746,8 @@ Try again with the corrected tool call.`
     if (stopLoopResult) {
       threadStore.finalizeAssistant(assistantId)
       threadStore.setStreamPhase('idle')
-      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop' })
+      threadStore.updateExecutionMeta({ loopState: 'completed' })
+      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -688,7 +806,8 @@ Try again with the corrected tool call.`
     }
 
     if (userRejected) {
-      EventBus.emit({ type: 'loop:end', reason: 'user_rejected' })
+      threadStore.updateExecutionMeta({ loopState: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'user_rejected', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
       break
     }
 
@@ -700,7 +819,8 @@ Try again with the corrected tool call.`
   if (iteration >= maxIterations) {
     logger.agent.warn('[Loop] Reached maximum iterations')
     threadStore.appendToAssistant(assistantId, '\n\n⚠️ Reached maximum tool call limit.')
-    EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached' })
-    EventBus.emit({ type: 'loop:end', reason: 'max_iterations' })
+    threadStore.updateExecutionMeta({ loopState: 'failed' })
+    EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+    EventBus.emit({ type: 'loop:end', reason: 'max_iterations', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
   }
 }

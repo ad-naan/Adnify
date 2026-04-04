@@ -9,7 +9,7 @@
 
 import { logger } from '@utils/Logger'
 import type { ToolCall } from '@/shared/types'
-import type { HandoffDocument } from '../context/types'
+import type { HandoffDocument } from '../domains/context/types'
 import type { TokenUsage } from '../types'
 
 // ===== 事件类型 =====
@@ -28,11 +28,11 @@ export type AgentEvent =
   | { type: 'llm:error'; error: string }
 
   // 工具事件
-  | { type: 'tool:pending'; id: string; name: string; args: Record<string, unknown> }
-  | { type: 'tool:running'; id: string }
-  | { type: 'tool:completed'; id: string; result: string; meta?: Record<string, unknown> }
-  | { type: 'tool:error'; id: string; error: string }
-  | { type: 'tool:rejected'; id: string }
+  | { type: 'tool:pending'; id: string; name: string; args: Record<string, unknown>; threadId?: string; assistantId?: string; requestId?: string; toolCallId?: string }
+  | { type: 'tool:running'; id: string; threadId?: string; assistantId?: string; requestId?: string; toolCallId?: string }
+  | { type: 'tool:completed'; id: string; result: string; meta?: Record<string, unknown>; threadId?: string; assistantId?: string; requestId?: string; toolCallId?: string }
+  | { type: 'tool:error'; id: string; error: string; threadId?: string; assistantId?: string; requestId?: string; toolCallId?: string }
+  | { type: 'tool:rejected'; id: string; threadId?: string; assistantId?: string; requestId?: string; toolCallId?: string }
 
   // 上下文事件
   | { type: 'context:level'; level: number; tokens: number; ratio: number }
@@ -42,10 +42,10 @@ export type AgentEvent =
   | { type: 'context:handoff'; document: HandoffDocument }
 
   // 循环事件
-  | { type: 'loop:start' }
-  | { type: 'loop:iteration'; count: number }
-  | { type: 'loop:end'; reason: string }
-  | { type: 'loop:warning'; message: string }
+  | { type: 'loop:start'; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
+  | { type: 'loop:iteration'; count: number; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
+  | { type: 'loop:end'; reason: string; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
+  | { type: 'loop:warning'; message: string; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
 
   // 情绪感知事件
   | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }
@@ -55,14 +55,14 @@ export type AgentEvent =
   | { type: 'emotion:feedback'; feedback: import('../types/emotion').EmotionFeedbackPayload }
 
   // Orchestrator 事件
-  | { type: 'plan:start'; planId: string }
-  | { type: 'plan:complete'; planId: string; stats: import('../orchestrator/types').ExecutionStats }
-  | { type: 'plan:failed'; planId: string; error: string }
-  | { type: 'plan:paused'; planId: string }
-  | { type: 'plan:resumed'; planId: string }
-  | { type: 'task:start'; taskId: string; planId: string }
-  | { type: 'task:complete'; taskId: string; output: string; duration: number }
-  | { type: 'task:failed'; taskId: string; error: string }
+  | { type: 'plan:start'; planId: string; sessionId?: string }
+  | { type: 'plan:complete'; planId: string; stats: import('../plan/types').ExecutionStats; sessionId?: string }
+  | { type: 'plan:failed'; planId: string; error: string; sessionId?: string }
+  | { type: 'plan:paused'; planId: string; sessionId?: string }
+  | { type: 'plan:resumed'; planId: string; sessionId?: string }
+  | { type: 'task:start'; taskId: string; planId: string; threadId?: string; assistantId?: string; requestId?: string }
+  | { type: 'task:complete'; taskId: string; output: string; duration: number; threadId?: string; assistantId?: string; requestId?: string }
+  | { type: 'task:failed'; taskId: string; error: string; threadId?: string; assistantId?: string; requestId?: string }
 
 export type EventType = AgentEvent['type']
 

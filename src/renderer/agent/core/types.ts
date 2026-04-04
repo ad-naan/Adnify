@@ -21,6 +21,8 @@ export interface ExecutionContext {
   abortSignal?: AbortSignal
   /** 绑定的线程 ID（用于后台任务隔离） */
   threadId?: string | null
+  requestId?: string
+  orchestratorTaskId?: string
 }
 
 // ===== 工具执行上下文（重新导出 shared 定义） =====
@@ -46,7 +48,7 @@ export interface LoopCheckResult {
 
 // ===== 压缩统计（从 CompressionManager 导出） =====
 
-export type { CompressionStats, CompressionLevel } from '../context/CompressionManager'
+export type { CompressionStats, CompressionLevel } from '../domains/context/CompressionManager'
 
 // ===== 工具执行结果（Agent 内部使用，包含 toolCall 信息） =====
 

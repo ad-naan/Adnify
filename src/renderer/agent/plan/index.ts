@@ -1,14 +1,14 @@
 /**
- * Orchestrator 模块导出
+ * Plan 模块导出
  */
 
 // 类型
 export type {
-    OrchestratorState,
-    OrchestratorConfig,
-    OrchestratorEvent,
+    PlanState,
+    PlanConfig,
+    PlanEvent,
     TaskPlan,
-    OrchestratorTask,
+    PlanTask,
     TaskStatus,
     ExecutionMode,
     PlanStatus,
@@ -17,10 +17,10 @@ export type {
     ExecutionStats,
 } from './types'
 
-export { DEFAULT_ORCHESTRATOR_CONFIG } from './types'
+export { DEFAULT_PLAN_CONFIG } from './types'
 
 // 调度器
-export { ExecutionScheduler } from './ExecutionScheduler'
+export { ExecutionScheduler } from './PlanScheduler'
 
 // 执行引擎
 export {
@@ -30,4 +30,4 @@ export {
     resumePlanExecution,
     getExecutionStatus,
     getCurrentPhase,
-} from './orchestratorExecutor'
+} from './planExecutor'

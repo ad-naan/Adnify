@@ -28,10 +28,10 @@ export const MODE_CONFIGS: Record<WorkMode, ModeConfig> = {
         icon: 'Sparkles',
         description: '单次任务，工具调用'
     },
-    orchestrator: {
-        id: 'orchestrator',
-        label: 'Orchestrator',
+    plan: {
+        id: 'plan',
+        label: 'Plan',
         icon: 'Workflow',
-        description: '多轮交互，任务编排'
+        description: '多步规划，任务编排'
     }
 }

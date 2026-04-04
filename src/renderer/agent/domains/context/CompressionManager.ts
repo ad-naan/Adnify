@@ -8,10 +8,10 @@
  */
 
 import { logger } from '@utils/Logger'
-import { getAgentConfig } from '../utils/AgentConfig'
+import { getAgentConfig } from '../../utils/AgentConfig'
 import { pruneMessages } from 'ai'
 import { countTokens, countContentTokens } from '@shared/utils/tokenCounter'
-import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../types'
+import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../../types'
 
 // ===== 类型 =====
 

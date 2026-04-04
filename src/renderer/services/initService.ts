@@ -139,6 +139,26 @@ function scheduleBackgroundInit(): void {
     try {
       await useAgentStore.persist.rehydrate()
       logger.system.debug('[Init] Agent store rehydrated')
+
+      // 懒加载当前线程的消息
+      const currentThreadId = useAgentStore.getState().currentThreadId
+      if (currentThreadId) {
+        const { adnifyDir } = await import('./adnifyDirService')
+        const messages = await adnifyDir.loadThreadMessages(currentThreadId)
+        if (messages.length > 0) {
+          // 将消息注入到当前线程
+          useAgentStore.setState(state => ({
+            threads: {
+              ...state.threads,
+              [currentThreadId]: {
+                ...state.threads[currentThreadId],
+                messages,
+              },
+            },
+          }))
+          logger.system.info(`[Init] Loaded ${messages.length} messages for current thread`)
+        }
+      }
     } catch (e) {
       logger.system.warn('[Init] Agent store rehydrate failed:', e)
     }
