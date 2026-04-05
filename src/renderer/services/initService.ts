@@ -134,7 +134,7 @@ async function restoreWorkspace(): Promise<boolean> {
 
 /**
  * 恢复 Agent Store 数据（阻塞）
- * 确保当前线程的消息在 UI 渲染前加载完成
+ * 消息已在 agentStorage.getItem() → getFullSessionData() 中同步加载
  */
 async function restoreAgentData(): Promise<void> {
   try {
@@ -158,23 +158,11 @@ async function restoreAgentData(): Promise<void> {
       logger.system.info(`[Init] Activated first thread: ${firstThreadId}`)
     }
 
-    // 懒加载当前线程的消息
+    // 消息已在 getFullSessionData() 中加载，无需重复加载
     const activeThreadId = useAgentStore.getState().currentThreadId
-    if (activeThreadId) {
-      const messages = await adnifyDir.loadThreadMessages(activeThreadId)
-      if (messages.length > 0) {
-        // 将消息注入到当前线程
-        useAgentStore.setState(state => ({
-          threads: {
-            ...state.threads,
-            [activeThreadId]: {
-              ...state.threads[activeThreadId],
-              messages,
-            },
-          },
-        }))
-        logger.system.info(`[Init] Loaded ${messages.length} messages for current thread`)
-      }
+    if (activeThreadId && threads[activeThreadId]) {
+      const messageCount = threads[activeThreadId].messages?.length || 0
+      logger.system.info(`[Init] Current thread has ${messageCount} messages`)
     }
   } catch (e) {
     logger.system.warn('[Init] Agent store restore failed:', e)

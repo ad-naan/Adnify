@@ -460,6 +460,20 @@ class AdnifyDirService {
       }
     }
 
+    // 立即加载当前线程的消息（阻塞加载，确保 UI 渲染前消息已就绪）
+    const currentThreadId = effectiveMeta.currentThreadId
+    if (currentThreadId && threads[currentThreadId]) {
+      const threadData = threads[currentThreadId] as any
+      // 只有当消息为空时才加载（避免重复加载）
+      if (!threadData.messages || threadData.messages.length === 0) {
+        const messages = await this.loadThreadMessages(currentThreadId)
+        if (messages.length > 0) {
+          threadData.messages = messages
+          logger.system.info(`[AdnifyDir] Loaded ${messages.length} messages for current thread in getFullSessionData`)
+        }
+      }
+    }
+
     return {
       state: {
         threads,
