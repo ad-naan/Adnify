@@ -24,15 +24,7 @@ export const useFluidTypewriter = (
         enabled = true
     } = options
 
-    // If disabled, short-circuit
-    if (!enabled) {
-        return {
-            displayedContent: content,
-            isTyping: false
-        }
-    }
-
-    // State
+    // State - 必须始终调用，不能有条件分支
     const [displayedLength, setDisplayedLength] = useState(() => {
         // If we are definitely not streaming, show all
         if (!isStreaming) return content.length
@@ -108,11 +100,11 @@ export const useFluidTypewriter = (
                 preciseLengthRef.current = nextPreciseLength
             }
 
-            // Throttle React state updates: update if we moved >= 3 chars, OR 40ms passed, OR caught up
+            // Throttle React state updates: update if we moved >= 5 chars, OR 80ms passed, OR caught up
             const timeSinceLastRender = time - lastRenderTime.current
             const charsSinceLastRender = preciseLengthRef.current - displayedLengthRef.current
 
-            if (caughtUp || charsSinceLastRender >= 3 || timeSinceLastRender >= 40) {
+            if (caughtUp || charsSinceLastRender >= 5 || timeSinceLastRender >= 80) {
                 setDisplayedLength(preciseLengthRef.current)
                 lastRenderTime.current = time
             }
@@ -137,6 +129,14 @@ export const useFluidTypewriter = (
         if (displayedLength >= content.length) return content
         return content.slice(0, Math.floor(displayedLength))
     }, [content, displayedLength])
+
+    // If disabled, return full content immediately
+    if (!enabled) {
+        return {
+            displayedContent: content,
+            isTyping: false
+        }
+    }
 
     return {
         displayedContent,

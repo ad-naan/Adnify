@@ -122,6 +122,9 @@ async function restoreWorkspace(): Promise<boolean> {
   // 恢复编辑器状态
   await restoreWorkspaceState()
 
+  // 恢复 Agent 数据（包括当前线程消息）
+  await restoreAgentData()
+
   // MCP 服务延迟初始化（不阻塞启动）
   scheduleIdleTask(() => mcpService.initialize(workspaceConfig.roots), 1000)
 
@@ -130,39 +133,60 @@ async function restoreWorkspace(): Promise<boolean> {
 }
 
 /**
+ * 恢复 Agent Store 数据（阻塞）
+ * 确保当前线程的消息在 UI 渲染前加载完成
+ */
+async function restoreAgentData(): Promise<void> {
+  try {
+    await useAgentStore.persist.rehydrate()
+    logger.system.debug('[Init] Agent store rehydrated')
+
+    const state = useAgentStore.getState()
+    const { threads, currentThreadId, createThread } = state
+
+    // 如果没有任何线程，创建一个空线程
+    if (Object.keys(threads).length === 0) {
+      createThread()
+      logger.system.info('[Init] Created initial thread')
+      return
+    }
+
+    // 如果有线程但没有当前线程，激活第一个线程
+    if (!currentThreadId || !threads[currentThreadId]) {
+      const firstThreadId = Object.keys(threads)[0]
+      useAgentStore.setState({ currentThreadId: firstThreadId })
+      logger.system.info(`[Init] Activated first thread: ${firstThreadId}`)
+    }
+
+    // 懒加载当前线程的消息
+    const activeThreadId = useAgentStore.getState().currentThreadId
+    if (activeThreadId) {
+      const messages = await adnifyDir.loadThreadMessages(activeThreadId)
+      if (messages.length > 0) {
+        // 将消息注入到当前线程
+        useAgentStore.setState(state => ({
+          threads: {
+            ...state.threads,
+            [activeThreadId]: {
+              ...state.threads[activeThreadId],
+              messages,
+            },
+          },
+        }))
+        logger.system.info(`[Init] Loaded ${messages.length} messages for current thread`)
+      }
+    }
+  } catch (e) {
+    logger.system.warn('[Init] Agent store restore failed:', e)
+  }
+}
+
+/**
  * 第四阶段：后台初始化（非阻塞）
  * 使用 requestIdleCallback 延迟执行
  */
 function scheduleBackgroundInit(): void {
-  // Agent Store 持久化恢复
-  scheduleIdleTask(async () => {
-    try {
-      await useAgentStore.persist.rehydrate()
-      logger.system.debug('[Init] Agent store rehydrated')
-
-      // 懒加载当前线程的消息
-      const currentThreadId = useAgentStore.getState().currentThreadId
-      if (currentThreadId) {
-        const { adnifyDir } = await import('./adnifyDirService')
-        const messages = await adnifyDir.loadThreadMessages(currentThreadId)
-        if (messages.length > 0) {
-          // 将消息注入到当前线程
-          useAgentStore.setState(state => ({
-            threads: {
-              ...state.threads,
-              [currentThreadId]: {
-                ...state.threads[currentThreadId],
-                messages,
-              },
-            },
-          }))
-          logger.system.info(`[Init] Loaded ${messages.length} messages for current thread`)
-        }
-      }
-    } catch (e) {
-      logger.system.warn('[Init] Agent store rehydrate failed:', e)
-    }
-  })
+  // Agent Store 持久化恢复已移至 restoreAgentData()
 
   // Worker 服务初始化
   scheduleIdleTask(() => {

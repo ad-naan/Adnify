@@ -397,6 +397,8 @@ ThinkingBlock.displayName = 'ThinkingBlock'
 // Markdown 渲染组件
 const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
   const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
+
+  // 所有 useMemo 必须在前面
   const cleanedContent = React.useMemo(() => {
     return isStreaming ? cleanStreamingContent(content) : content
   }, [content, isStreaming])
@@ -418,7 +420,14 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     return cleanedContent
   }, [cleanedContent, systemAlert])
 
-  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(contentWithoutAlert, !!isStreaming)
+  // 所有 useState/useRef 必须在 useMemo 之后，useEffect 之前
+  // 流式输出时禁用打字机效果，直接显示内容，避免双重动画
+  const typewriterEnabled = !isStreaming
+
+  // 这个 Hook 必须始终调用，不能有条件分支
+  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(contentWithoutAlert, !!isStreaming, {
+    enabled: typewriterEnabled
+  })
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
@@ -439,21 +448,6 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
       console.warn('Failed to open file from markdown:', err)
     }
   }, [workspacePath, openFile, setActiveFile])
-
-  // Notify parent when typing finishes
-  useEffect(() => {
-    if (!isTyping && onTypingComplete) {
-      // 这里的 defer 是因为 React 状态更新可能是同步的，稍微延后以确保渲染稳定
-      const timer = setTimeout(onTypingComplete, 50)
-      return () => clearTimeout(timer)
-    }
-  }, [isTyping, onTypingComplete])
-
-  // Add cursor to the last text node if streaming
-  // Note: This is a simplified approach. Ideally we'd inject it into the AST.
-  // For now, we rely on the fact that ReactMarkdown renders children.
-  // We can't easily append to the markdown output directly without parsing.
-  // Instead, we render the cursor as a separate element if it's streaming.
 
   const markdownComponents = React.useMemo(() => ({
     code({ className, children, node, ...props }: any) {
@@ -518,13 +512,26 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
     th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
     td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
-  }), [fontSize, handleOpenFile])
+  }), [fontSize, handleOpenFile, isStreaming])
+
+  // 所有 useEffect 必须在最后
+  // Notify parent when typing finishes
+  React.useEffect(() => {
+    if (!isTyping && onTypingComplete) {
+      const timer = setTimeout(onTypingComplete, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [isTyping, onTypingComplete])
+
+  // 处理空内容的完成回调
+  React.useEffect(() => {
+    if (!contentWithoutAlert && !systemAlert && onTypingComplete) {
+      const timer = setTimeout(onTypingComplete, 0)
+      return () => clearTimeout(timer)
+    }
+  }, [contentWithoutAlert, systemAlert, onTypingComplete])
 
   if (!contentWithoutAlert && !systemAlert) {
-    // If content is empty but we're here, signaling complete immediately to avoid blocking
-    if (!isTyping && onTypingComplete) {
-      setTimeout(onTypingComplete, 0)
-    }
     return null
   }
 
@@ -544,6 +551,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
             className="prose prose-invert max-w-none"
             remarkPlugins={[remarkGfm]}
             components={markdownComponents}
+            skipHtml
           >
             {fluidContent}
           </ReactMarkdown>

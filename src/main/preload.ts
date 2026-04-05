@@ -516,7 +516,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM 事件订阅（使用动态 IPC 频道实现请求隔离）
   onLLMStream: (requestId: string, callback: (data: LLMStreamChunk) => void) => {
     const channel = `llm:stream:${requestId}`
-    const handler = (_: IpcRendererEvent, data: LLMStreamChunk) => callback(data)
+    const handler = (_: IpcRendererEvent, data: LLMStreamChunk | { type: 'batch'; events: LLMStreamChunk[] }) => {
+      // 处理批量事件
+      if (data.type === 'batch' && 'events' in data) {
+        data.events.forEach(event => callback(event))
+      } else {
+        callback(data as LLMStreamChunk)
+      }
+    }
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
   },

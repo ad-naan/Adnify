@@ -263,41 +263,38 @@ export default function ChatPanel() {
 
   // 流式输出时的自动滚动 - 只在用户处于底部时才滚动
   useEffect(() => {
-    if (!isStreaming || !atBottom || typeof virtuosoRef.current?.autoscrollToBottom === 'function') return
+    if (!isStreaming || !atBottom) return
 
-    let rafId: number
-    let intervalId: NodeJS.Timeout
+    let rafId: number | null = null
     let lastScrollTime = 0
 
     const doScroll = () => {
       const now = Date.now()
-      // 节流：至少间隔 200ms 才执行一次
-      if (now - lastScrollTime < 200) return
+      // 节流：至少间隔 500ms 才执行一次（降低频率）
+      if (now - lastScrollTime < 500) {
+        rafId = requestAnimationFrame(doScroll)
+        return
+      }
       lastScrollTime = now
 
       isAutoScrollingRef.current = true
-      rafId = requestAnimationFrame(() => {
-        virtuosoRef.current?.scrollToIndex({
-          index: filteredMessages.length - 1,
-          align: 'end',
-          behavior: 'smooth'
-        })
-        // 延迟重置标志，给 Virtuoso 时间处理滚动
-        setTimeout(() => {
-          isAutoScrollingRef.current = false
-        }, 100)
+      virtuosoRef.current?.scrollToIndex({
+        index: filteredMessages.length - 1,
+        align: 'end',
+        behavior: 'auto' // 改为 auto，smooth 会触发额外的重绘
       })
+
+      setTimeout(() => {
+        isAutoScrollingRef.current = false
+      }, 50)
+
+      rafId = requestAnimationFrame(doScroll)
     }
 
-    // 立即滚动一次
-    doScroll()
-
-    // 每 300ms 检查并滚动（降低频率避免抖动）
-    intervalId = setInterval(doScroll, 300)
+    rafId = requestAnimationFrame(doScroll)
 
     return () => {
-      cancelAnimationFrame(rafId)
-      clearInterval(intervalId)
+      if (rafId !== null) cancelAnimationFrame(rafId)
       isAutoScrollingRef.current = false
     }
   }, [isStreaming, atBottom, filteredMessages.length])
@@ -1114,8 +1111,8 @@ export default function ChatPanel() {
             itemContent={(_, message) => renderMessage(message)}
             className="flex-1 custom-scrollbar"
             style={{ minHeight: '100px' }}
-            overscan={200}
-            atBottomThreshold={200}
+            overscan={50}
+            atBottomThreshold={100}
             totalListHeightChanged={handleTotalListHeightChanged}
             skipAnimationFrameInResizeObserver
             components={virtuosoComponents}

@@ -42,13 +42,12 @@ class StreamingBuffer {
     private scheduleFlush(): void {
         if (this.timerId !== null) return
 
-        // 优化：将 60fps (requestAnimationFrame) 的全局状态分发降频到约 20fps (50ms)
-        // 这个改动能极大地减轻 Zustand/React Fiber 树的全局调和（Reconciliation）压力
-        // 从而彻底解放渲染主线程，解决整个界面卡顿（包括其他面板失去响应）的问题
+        // 优化：降频到约 10fps (100ms) 进一步减轻渲染压力
+        // 流式输出时用户感知不到 50ms vs 100ms 的差异，但性能提升明显
         this.timerId = setTimeout(() => {
             this.timerId = null
             this.flush()
-        }, 50)
+        }, 100)
     }
 
     private flush(): void {
