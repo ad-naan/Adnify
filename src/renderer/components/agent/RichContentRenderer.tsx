@@ -79,7 +79,7 @@ const ContentCard = ({ title, icon: Icon, actions, children, noPadding = false }
         {actions}
       </div>
     </div>
-    <div className={`border-l-2 border-border/30 pl-2 ml-1 ${noPadding ? '' : 'py-1'}`}>
+    <div className={`pl-2 ml-1 ${noPadding ? '' : 'py-1'}`}>
       {children}
     </div>
   </div>
@@ -162,7 +162,7 @@ function ImageContent({ item }: { item: ToolRichContent }) {
           <img
             src={imageSrc}
             alt={item.title || 'Image'}
-            className="max-w-full max-h-64 object-contain cursor-zoom-in rounded border border-border/30"
+            className="max-w-full max-h-64 object-contain cursor-zoom-in rounded"
             onClick={() => setIsExpanded(true)}
           />
         </div>
@@ -199,7 +199,7 @@ function TableContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: s
   const { headers, rows } = item.tableData
   return (
     <ContentCard title={`Data Table (${rows.length})`} icon={Table} noPadding>
-      <div className={`overflow-auto ${maxHeight} custom-scrollbar rounded border border-border/30`}>
+      <div className={`overflow-auto ${maxHeight} custom-scrollbar rounded`}>
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-surface/50 sticky top-0 z-10">
@@ -275,7 +275,7 @@ function HtmlContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: st
 
 function TextContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: string }) {
   return (
-    <div className={`p-4 bg-surface/10 rounded-2xl border border-border text-sm text-text-secondary leading-relaxed ${maxHeight} overflow-auto custom-scrollbar`}>
+    <div className={`p-4 bg-surface/10 rounded-2xl text-sm text-text-secondary leading-relaxed ${maxHeight} overflow-auto custom-scrollbar`}>
       {item.text}
     </div>
   )

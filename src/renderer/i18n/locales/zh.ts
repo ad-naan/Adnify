@@ -275,6 +275,8 @@ export const zh = {
   'toolReject': '拒绝',
   'toolCopyResult': '复制结果',
   'toolTruncated': '... (已截断)',
+  'toolExpand': '展开到 {height}',
+  'toolCollapse': '收起',
   'confirmLargeFile': '此文件较大（{size} MB），可能影响性能。是否继续？',
 
   // Confirm Dialogs

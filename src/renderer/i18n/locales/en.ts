@@ -275,6 +275,8 @@ export const en = {
   'toolReject': 'Reject',
   'toolCopyResult': 'Copy result',
   'toolTruncated': '... (truncated)',
+  'toolExpand': 'Expand to {height}',
+  'toolCollapse': 'Collapse',
   'confirmLargeFile': 'This file is large ({size} MB) and may affect performance. Continue?',
 
   // Confirm Dialogs

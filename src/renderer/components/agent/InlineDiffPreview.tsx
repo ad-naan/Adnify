@@ -241,7 +241,8 @@ const getCustomStyle = (isLight: boolean) => {
             backgroundColor: 'transparent',
             border: 'none',
             boxShadow: 'none',
-            fontSize: '11px',
+            fontSize: 'inherit',
+            fontFamily: 'inherit',
             lineHeight: '1.4',
             textShadow: 'none',
         },
@@ -251,7 +252,8 @@ const getCustomStyle = (isLight: boolean) => {
             backgroundColor: 'transparent',
             border: 'none',
             boxShadow: 'none',
-            fontSize: '11px',
+            fontSize: 'inherit',
+            fontFamily: 'inherit',
             textShadow: 'none',
         },
     }
@@ -275,11 +277,11 @@ const DiffLineItem = React.memo(({ line, language, style }: { line: DiffLine, la
 
     return (
         <div className={`flex ${bgClass} hover:brightness-95 dark:hover:brightness-110 transition-all`}>
-            <span className="w-8 shrink-0 text-right pr-2 text-text-muted/40 select-none text-[10px]">
+            <span className="w-5 shrink-0 text-right pr-1 text-text-muted/40 select-none text-[10px] mt-[1px]">
                 {lineNum || ''}
             </span>
 
-            <span className={`w-4 shrink-0 text-center select-none font-bold ${symbolClass}`}>
+            <span className={`w-2.5 shrink-0 text-center select-none font-bold mt-[1px] ${symbolClass}`}>
                 {symbol}
             </span>
 
@@ -301,6 +303,7 @@ const DiffLineItem = React.memo(({ line, language, style }: { line: DiffLine, la
                             whiteSpace: 'pre',
                             overflow: 'visible',
                         }}
+                        className="!m-0 !p-0 !text-[11px] !font-mono leading-relaxed"
                         wrapLines={false}
                         PreTag="span"
                         CodeTag="span"

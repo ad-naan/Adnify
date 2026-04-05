@@ -35,7 +35,12 @@ function FileChangeCard({
     onOpenInEditor,
 }: FileChangeCardProps) {
     const [isExpanded, setIsExpanded] = useState(true)
-    const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
+    const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
+        openFile: s.openFile,
+        setActiveFile: s.setActiveFile,
+        workspacePath: s.workspacePath,
+        language: s.language
+    })))
     const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
 
     const meta = args._meta as Record<string, unknown> | undefined
@@ -276,8 +281,8 @@ function FileChangeCard({
                             {/* Visual Threading Line */}
                             <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
 
-                            <div className="relative z-10 ms-1">
-                                <ExpandablePreviewContainer>
+                            <div className="relative z-10">
+                                <ExpandablePreviewContainer language={language}>
                                     <div className="relative min-h-[60px] p-2">
                                         {isExpanded ? (
                                             <InlineDiffPreview
