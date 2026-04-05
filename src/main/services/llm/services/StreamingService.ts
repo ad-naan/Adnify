@@ -37,6 +37,9 @@ export class StreamingService {
   private window: BrowserWindow
   private messageConverter: MessageConverter
   private toolConverter: ToolConverter
+  // IPC 批量发送缓冲区
+  private eventBuffer = new Map<string, StreamEvent[]>()
+  private flushTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(window: BrowserWindow) {
     this.window = window
@@ -350,48 +353,104 @@ export class StreamingService {
   }
 
   /**
-   * 发送事件到渲染进程（使用动态 IPC 频道实现请求隔离）
+   * 发送事件到渲染进程（批量发送优化）
    */
   private sendEvent(requestId: string, event: StreamEvent): void {
     if (this.window.isDestroyed()) return
 
+    // 立即发送的事件类型（不批量）
+    const immediateEvents = ['error', 'done', 'tool-call-start', 'tool-call-available']
+
+    if (immediateEvents.includes(event.type)) {
+      this.flushEvents(requestId) // 先刷新缓冲区
+      this.sendEventImmediate(requestId, event)
+      return
+    }
+
+    // 批量发送的事件类型（text, reasoning, tool-call-delta）
+    if (!this.eventBuffer.has(requestId)) {
+      this.eventBuffer.set(requestId, [])
+    }
+
+    this.eventBuffer.get(requestId)!.push(event)
+
+    // 清除旧的定时器
+    const existingTimer = this.flushTimers.get(requestId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    // 设置新的定时器（50ms 批量发送）
+    const timer = setTimeout(() => {
+      this.flushEvents(requestId)
+    }, 50)
+
+    this.flushTimers.set(requestId, timer)
+  }
+
+  /**
+   * 刷新事件缓冲区
+   */
+  private flushEvents(requestId: string): void {
+    const events = this.eventBuffer.get(requestId)
+    if (!events || events.length === 0) return
+
+    if (this.window.isDestroyed()) {
+      this.eventBuffer.delete(requestId)
+      this.flushTimers.delete(requestId)
+      return
+    }
+
+    try {
+      // 批量发送所有事件
+      this.window.webContents.send(`llm:stream:${requestId}`, {
+        type: 'batch',
+        events: events.map(e => this.serializeEvent(e))
+      })
+    } catch (error) {
+      logger.llm.error('[StreamingService] Failed to flush events:', error)
+    }
+
+    this.eventBuffer.delete(requestId)
+    this.flushTimers.delete(requestId)
+  }
+
+  /**
+   * 序列化事件
+   */
+  private serializeEvent(event: StreamEvent): any {
+    switch (event.type) {
+      case 'text':
+        return { type: 'text', content: event.content }
+      case 'reasoning':
+        return { type: 'reasoning', content: event.content }
+      case 'tool-call-delta':
+        return {
+          type: 'tool_call_delta',
+          id: event.id,
+          name: event.name,
+          argumentsDelta: event.argumentsDelta,
+        }
+      case 'tool-call-delta-end':
+        return { type: 'tool_call_delta_end', id: event.id }
+      default:
+        return event
+    }
+  }
+
+  /**
+   * 立即发送事件（不批量）
+   */
+  private sendEventImmediate(requestId: string, event: StreamEvent): void {
+    if (this.window.isDestroyed()) return
+
     try {
       switch (event.type) {
-        case 'text':
-          this.window.webContents.send(`llm:stream:${requestId}`, {
-            type: 'text',
-            content: event.content,
-          })
-          break
-
-        case 'reasoning':
-          this.window.webContents.send(`llm:stream:${requestId}`, {
-            type: 'reasoning',
-            content: event.content,
-          })
-          break
-
         case 'tool-call-start':
           this.window.webContents.send(`llm:stream:${requestId}`, {
             type: 'tool_call_start',
             id: event.id,
             name: event.name,
-          })
-          break
-
-        case 'tool-call-delta':
-          this.window.webContents.send(`llm:stream:${requestId}`, {
-            type: 'tool_call_delta',
-            id: event.id,
-            name: event.name,
-            argumentsDelta: event.argumentsDelta,
-          })
-          break
-
-        case 'tool-call-delta-end':
-          this.window.webContents.send(`llm:stream:${requestId}`, {
-            type: 'tool_call_delta_end',
-            id: event.id,
           })
           break
 
@@ -427,7 +486,7 @@ export class StreamingService {
           break
       }
     } catch (error) {
-      logger.llm.warn('[StreamingService] Failed to send event:', error)
+      logger.llm.error('[StreamingService] Failed to send event:', error)
     }
   }
 }

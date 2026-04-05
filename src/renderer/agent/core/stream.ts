@@ -177,10 +177,11 @@ export function createStreamProcessor(
   const scheduleToolPreviewUpdates = () => {
     if (toolUpdateRafId !== null) return
 
-    toolUpdateRafId = requestAnimationFrame(() => {
+    // 降低工具预览更新频率，避免频繁触发状态更新
+    toolUpdateRafId = window.setTimeout(() => {
       toolUpdateRafId = null
       flushToolPreviewUpdates()
-    })
+    }, 150) as unknown as number
   }
 
   const queueToolPreviewUpdate = (

@@ -62,11 +62,11 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
   return (
     <div className="rounded-xl border border-border/50 bg-surface/40 backdrop-blur-md overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] transition-all">
       {/* Header */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2 hover:bg-surface-hover/50 transition-colors"
-      >
-        <div className="flex items-center gap-2.5">
+      <div className="w-full flex items-center justify-between px-4 py-2">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+        >
           {headerPrefix}
           <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
           <span className="text-[11px] font-medium text-text-primary">
@@ -76,7 +76,7 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
               <>{completed}/{total} Tasks</>
             )}
           </span>
-        </div>
+        </button>
 
         {/* Progress bar */}
         <div className="w-20 h-1 rounded-full bg-border/50 overflow-hidden relative">
@@ -97,7 +97,7 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
             />
           )}
         </div>
-      </button>
+      </div>
 
       {/* Task list */}
       <AnimatePresence>

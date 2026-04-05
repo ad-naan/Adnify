@@ -209,16 +209,35 @@ function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, 
   )
 }
 
-function ThreadItem({ thread, isActive, language, onSelect, onDelete }: { 
-  thread: ChatThread, 
-  isActive: boolean, 
+function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
+  thread: ChatThread,
+  isActive: boolean,
   language: string,
-  onSelect: () => void, 
-  onDelete: () => void 
+  onSelect: () => void,
+  onDelete: () => void
 }) {
-  const firstUserMsg = thread.messages.find(m => m.role === 'user')
-  const preview = firstUserMsg ? getMessageText(firstUserMsg.content).slice(0, 60) : 'New chat'
+  const [preview, setPreview] = React.useState<string>('New chat')
   const timeStr = getRelativeTime(thread.lastModified, language)
+
+  // 懒加载消息以获取预览文本
+  React.useEffect(() => {
+    const firstUserMsg = thread.messages.find(m => m.role === 'user')
+    if (firstUserMsg) {
+      setPreview(getMessageText(firstUserMsg.content).slice(0, 60))
+    } else if (thread.messages.length === 0) {
+      // 消息未加载，尝试懒加载
+      import('@/renderer/services/adnifyDirService').then(({ adnifyDir }) => {
+        adnifyDir.loadThreadMessages(thread.id).then(messages => {
+          const firstUser = messages.find(m => m.role === 'user')
+          if (firstUser) {
+            setPreview(getMessageText(firstUser.content).slice(0, 60))
+          }
+        }).catch(() => {
+          // 加载失败，保持 "New chat"
+        })
+      })
+    }
+  }, [thread.id, thread.messages.length])
 
   return (
     <div 

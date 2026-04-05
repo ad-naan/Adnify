@@ -215,7 +215,8 @@ export const createThreadSlice: StateCreator<
         })
 
         if (didDelete) {
-            void adnifyDir.flush()
+            // 删除 JSONL 文件和元数据
+            void adnifyDir.deleteThreadData(threadId)
         }
     },
 
