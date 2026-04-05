@@ -214,8 +214,13 @@ export function ExpandablePreviewContainer({ children, maxHeight = 'max-h-[200px
         }
     }, [children]);
 
+    const heightValue = useMemo(() => {
+        const match = expandedHeight.match(/\[(.*?)\]/);
+        return match ? match[1] : expandedHeight.replace('max-h-', '');
+    }, [expandedHeight]);
+
     return (
-        <div className="mt-1 relative rounded-lg border border-border/40 bg-background-tertiary overflow-hidden shadow-sm">
+        <div className="mt-1 relative overflow-hidden">
             <div
                 ref={contentRef}
                 className={`overflow-y-auto custom-scrollbar ${expanded ? expandedHeight : maxHeight} transition-all duration-300 relative`}
@@ -225,21 +230,23 @@ export function ExpandablePreviewContainer({ children, maxHeight = 'max-h-[200px
             {isOverflowing && !expanded && (
                 <div
                     onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
-                    className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-background-tertiary via-background-tertiary/90 to-transparent flex items-end justify-center pb-1 cursor-pointer hover:text-accent text-[10px] text-text-muted transition-colors opacity-90 hover:opacity-100"
+                    className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-surface/80 via-surface/40 to-transparent flex items-end justify-center pb-2 cursor-pointer transition-all opacity-90 hover:opacity-100"
                 >
-                    <div className="flex items-center gap-1 font-medium pb-0.5 pointer-events-none">
+                    <div className="flex items-center gap-1 font-medium pb-0.5 pointer-events-none bg-surface-elevated text-text-muted hover:text-accent px-3 py-1 rounded-full shadow-sm border border-border/40 text-[10px] transition-colors">
                         <ChevronDown className="w-3 h-3" />
-                        {language === 'zh' ? '展开到 350px' : 'Expand to 350px'}
+                        {t('toolExpand', language as any, { height: heightValue })}
                     </div>
                 </div>
             )}
             {isOverflowing && expanded && (
                 <div
                     onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
-                    className="w-full text-center py-1 bg-surface/30 hover:bg-surface-hover hover:text-accent cursor-pointer text-[10px] text-text-muted transition-colors border-t border-border/30 flex items-center justify-center gap-1"
+                    className="w-full text-center py-2 mt-1 cursor-pointer flex items-center justify-center"
                 >
-                    <ChevronDown className="w-3 h-3 rotate-180 pointer-events-none" />
-                    {language === 'zh' ? '收起' : 'Collapse'}
+                    <div className="flex items-center gap-1 font-medium pointer-events-none bg-surface-elevated text-text-muted hover:text-accent px-4 py-1 rounded-full shadow-sm border border-border/40 text-[10px] transition-colors">
+                        <ChevronDown className="w-3 h-3 rotate-180 pointer-events-none" />
+                        {t('toolCollapse', language as any)}
+                    </div>
                 </div>
             )}
         </div>
@@ -290,7 +297,7 @@ function ToolPreview({
                             setTerminalVisible(true)
                             if (terminalId) terminalManager.setActiveTerminal(terminalId)
                         }}
-                        className={`flex items-center gap-1 flex-shrink-0 ml-2 text-[10px] px-1.5 py-0.5 rounded transition-colors ${isRunning ? 'text-accent bg-accent/10 border border-accent/20' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}
+                        className={`flex items-center gap-1 flex-shrink-0 ml-2 text-[10px] px-1.5 py-0.5 rounded transition-colors ${isRunning ? 'text-accent bg-accent/10' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}
                         title={t('tool.viewInTerminal', language as any)}
                     >
                         <Terminal className={`w-3 h-3 ${isRunning ? 'animate-pulse' : ''}`} />
@@ -299,7 +306,7 @@ function ToolPreview({
                 </div>
                 {stringResult && (
                     <ExpandablePreviewContainer language={language}>
-                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-3 font-mono text-[11px]">
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2 font-mono text-[11px]">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
                         </div>
@@ -312,7 +319,7 @@ function ToolPreview({
     if (effectiveName === 'send_terminal_input') {
         const input = asString(args.input)
         const display = args.is_ctrl ? `Ctrl+${input.toUpperCase()}` : input.replace(/\n|\r/g, '\\n')
-        const badgeClass = args.is_ctrl ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' : 'bg-surface-elevated text-text-secondary border border-border/50'
+        const badgeClass = args.is_ctrl ? 'bg-orange-500/10 text-orange-400' : 'bg-surface-elevated text-text-secondary'
 
         return (
             <div className="font-mono text-[11px] space-y-1">
@@ -348,7 +355,7 @@ function ToolPreview({
                 </div>
                 {stringResult.length > 0 && (
                     <ExpandablePreviewContainer language={language}>
-                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-3 bg-surface/50">
+                        <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2 bg-surface/50">
                             {stringResult}
                         </div>
                     </ExpandablePreviewContainer>
@@ -370,7 +377,7 @@ function ToolPreview({
                 </div>
                 {toolCall.result && (
                     <ExpandablePreviewContainer language={language}>
-                        <JsonHighlight data={toolCall.result} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
+                        <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
                     </ExpandablePreviewContainer>
                 )}
             </div>
@@ -389,7 +396,7 @@ function ToolPreview({
                 </div>
                 {stringResult && (
                     <ExpandablePreviewContainer language={language}>
-                        <div className="p-3 font-mono text-text-secondary whitespace-pre">
+                        <div className="p-2 font-mono text-text-secondary whitespace-pre">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
@@ -429,7 +436,7 @@ function ToolPreview({
                         )}
                         {isTruncated && !isStreaming && <span className="text-amber-500">(truncated)</span>}
                     </div>
-                    <div className="max-h-64 overflow-auto custom-scrollbar border-l-2 border-border/30 pl-2 ml-1">
+                    <div className="max-h-64 overflow-auto custom-scrollbar pl-2 ml-1">
                         <InlineDiffPreview
                             oldContent={oldContent}
                             newContent={newContent}
@@ -440,7 +447,7 @@ function ToolPreview({
                     </div>
                     {stringResult && !isStreaming && (
                         <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
-                            <div className="p-3 text-[11px] text-text-muted">
+                            <div className="p-2 text-[11px] text-text-muted">
                                 {stringResult.slice(0, 1000)}
                             </div>
                         </ExpandablePreviewContainer>
@@ -467,7 +474,7 @@ function ToolPreview({
                 </div>
                 {stringResult && (
                     <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
-                        <div className="p-3 text-[11px] text-text-muted">
+                        <div className="p-2 text-[11px] text-text-muted">
                             <TextWithFileLinks text={stringResult.slice(0, 1000)} />
                         </div>
                     </ExpandablePreviewContainer>
@@ -497,8 +504,8 @@ function ToolPreview({
                             style={syntaxStyle}
                             language={filePath ? guessLanguage(filePath) : 'typescript'}
                             PreTag="div"
-                            className="!bg-transparent !p-3 !m-0 !text-[11px] leading-relaxed font-mono"
-                            customStyle={{ background: 'transparent', margin: 0 }}
+                            className="!bg-transparent !p-2 !m-0 !text-[11px] leading-relaxed font-mono"
+                            customStyle={{ background: 'transparent', margin: 0, padding: 0, border: 'none', boxShadow: 'none', fontFamily: 'inherit' }}
                             wrapLines
                             wrapLongLines
                         >
@@ -531,7 +538,7 @@ function ToolPreview({
                 </div>
                 {stringResult && (
                     <ExpandablePreviewContainer language={language}>
-                        <div className="p-3 text-[11px] text-text-secondary whitespace-pre-wrap break-all">
+                        <div className="p-2 text-[11px] text-text-secondary whitespace-pre-wrap break-all">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
@@ -556,7 +563,7 @@ function ToolPreview({
                 </div>
                 {toolCall.result && (
                     <ExpandablePreviewContainer language={language}>
-                        <JsonHighlight data={toolCall.result} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
+                        <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
                     </ExpandablePreviewContainer>
                 )}
             </div>
@@ -575,13 +582,13 @@ function ToolPreview({
                         <span>Arguments:</span>
                     </div>
                     <ExpandablePreviewContainer language={language} maxHeight="max-h-[150px]">
-                        <JsonHighlight data={filteredArgs} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={1500} />
+                        <JsonHighlight data={filteredArgs} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={1500} />
                     </ExpandablePreviewContainer>
                 </>
             )}
             {toolCall.richContent && toolCall.richContent.length > 0 && (
                 <ExpandablePreviewContainer language={language}>
-                    <div className="p-3">
+                    <div className="p-2">
                         <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-full" />
                     </div>
                 </ExpandablePreviewContainer>
@@ -605,7 +612,7 @@ function ToolPreview({
                         </button>
                     </div>
                     <ExpandablePreviewContainer language={language}>
-                        <JsonHighlight data={toolCall.result} className="p-3 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
+                        <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
                     </ExpandablePreviewContainer>
                 </>
             )}
@@ -721,7 +728,7 @@ const ToolCallCard = memo(function ToolCallCard({
                                     setTerminalVisible={setTerminalVisible}
                                 />
                                 {toolCall.error && (
-                                    <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-md">
+                                    <div className="px-3 py-2 bg-red-500/10 rounded-md">
                                         <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
                                             <AlertTriangle className="w-3 h-3" />
                                             Error

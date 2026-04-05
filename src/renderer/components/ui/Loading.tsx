@@ -110,6 +110,43 @@ EditorSkeleton.displayName = 'EditorSkeleton'
 
 // ============ 聊天面板骨架屏 ============
 
+export const ChatMessagesSkeleton = memo(() => (
+  <div className="flex-1 p-4 space-y-6 overflow-hidden">
+    {/* AI 消息 */}
+    <div className="flex gap-3 animate-pulse">
+      <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />
+      <div className="flex-1 space-y-2 pt-1">
+        <div className="h-3 w-16 bg-surface-active/50 rounded" />
+        <div className="space-y-1.5">
+          <div className="h-3 bg-surface-active/30 rounded w-[90%]" />
+          <div className="h-3 bg-surface-active/30 rounded w-[75%]" />
+          <div className="h-3 bg-surface-active/30 rounded w-[60%]" />
+        </div>
+      </div>
+    </div>
+    {/* 用户消息 */}
+    <div className="flex gap-3 animate-pulse">
+      <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />
+      <div className="flex-1 space-y-2 pt-1">
+        <div className="h-3 w-12 bg-surface-active/50 rounded" />
+        <div className="h-3 bg-surface-active/30 rounded w-[40%]" />
+      </div>
+    </div>
+    {/* AI 消息 */}
+    <div className="flex gap-3 animate-pulse">
+      <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />
+      <div className="flex-1 space-y-2 pt-1">
+        <div className="h-3 w-16 bg-surface-active/50 rounded" />
+        <div className="space-y-1.5">
+          <div className="h-3 bg-surface-active/30 rounded w-[85%]" />
+          <div className="h-3 bg-surface-active/30 rounded w-[70%]" />
+        </div>
+      </div>
+    </div>
+  </div>
+))
+ChatMessagesSkeleton.displayName = 'ChatMessagesSkeleton'
+
 export const ChatSkeleton = memo(() => (
   <div className="h-full flex flex-col bg-background">
     {/* Header */}
@@ -122,39 +159,7 @@ export const ChatSkeleton = memo(() => (
       </div>
     </div>
     {/* Messages */}
-    <div className="flex-1 p-4 space-y-6 overflow-hidden">
-      {/* AI 消息 */}
-      <div className="flex gap-3 animate-pulse">
-        <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />
-        <div className="flex-1 space-y-2 pt-1">
-          <div className="h-3 w-16 bg-surface-active/50 rounded" />
-          <div className="space-y-1.5">
-            <div className="h-3 bg-surface-active/30 rounded w-[90%]" />
-            <div className="h-3 bg-surface-active/30 rounded w-[75%]" />
-            <div className="h-3 bg-surface-active/30 rounded w-[60%]" />
-          </div>
-        </div>
-      </div>
-      {/* 用户消息 */}
-      <div className="flex gap-3 animate-pulse">
-        <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />
-        <div className="flex-1 space-y-2 pt-1">
-          <div className="h-3 w-12 bg-surface-active/50 rounded" />
-          <div className="h-3 bg-surface-active/30 rounded w-[40%]" />
-        </div>
-      </div>
-      {/* AI 消息 */}
-      <div className="flex gap-3 animate-pulse">
-        <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />
-        <div className="flex-1 space-y-2 pt-1">
-          <div className="h-3 w-16 bg-surface-active/50 rounded" />
-          <div className="space-y-1.5">
-            <div className="h-3 bg-surface-active/30 rounded w-[85%]" />
-            <div className="h-3 bg-surface-active/30 rounded w-[70%]" />
-          </div>
-        </div>
-      </div>
-    </div>
+    <ChatMessagesSkeleton />
     {/* Input */}
     <div className="p-3 border-t border-border">
       <div className="h-16 bg-surface-active/30 rounded-xl animate-pulse" />

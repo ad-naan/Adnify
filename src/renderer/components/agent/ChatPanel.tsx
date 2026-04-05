@@ -39,6 +39,7 @@ import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
 import EmptyChatSuggestions from '../chat/EmptyChatSuggestions'
+import { ChatMessagesSkeleton } from '../ui/Loading'
 import { Button } from '../ui'
 import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
@@ -98,6 +99,7 @@ export default function ChatPanel() {
     addContextItem,
     removeContextItem,
     regenerateFromMessage,
+    currentThreadId,
   } = useAgent()
 
   const [input, setInput] = useState('')
@@ -113,6 +115,41 @@ export default function ChatPanel() {
       imagesRef.current.forEach(img => URL.revokeObjectURL(img.previewUrl))
     }
   }, [])
+
+  // 缓存过滤后的消息列表，避免每次渲染都创建新数组
+  const filteredMessages = useMemo(
+    () => messages.filter(m => m.role === 'user' || m.role === 'assistant'),
+    [messages]
+  )
+
+  // 骨架屏转场状态：避免大量消息的突现造成卡顿
+  const [displayMessages, setDisplayMessages] = useState(filteredMessages)
+  const [isSwitchingThread, setIsSwitchingThread] = useState(false)
+  const prevThreadIdRef = useRef(currentThreadId)
+
+  useEffect(() => {
+    if (currentThreadId !== prevThreadIdRef.current) {
+      prevThreadIdRef.current = currentThreadId
+      setIsSwitchingThread(true)
+
+      // 第 1 步：350ms 充足的时间让侧边栏的 Spring 退出动画丝滑播放完毕，并且让骨架屏先画出来
+      const timer = setTimeout(() => {
+        // 第 2 步：将新的海量消息传给 Virtuoso 触发它的高强度同步渲染阻塞
+        setDisplayMessages(filteredMessages)
+
+        // 第 3 步：由于 Virtuoso 是同步阻塞主线程的，这里的 rAF 会在它真正的 DOM 计算完全结束后才执行
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsSwitchingThread(false)
+          })
+        })
+      }, 350)
+      return () => clearTimeout(timer)
+    } else {
+      // 在同一个对话流里（比如聊天回复时），直接无缝追加不触发骨架屏
+      setDisplayMessages(filteredMessages)
+    }
+  }, [currentThreadId, filteredMessages])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -233,24 +270,18 @@ export default function ChatPanel() {
   // 用于防止工具卡片展开/收缩时误判滚动状态
   const isAutoScrollingRef = useRef(false)
 
-  // 缓存过滤后的消息列表，避免每次渲染都创建新数组
-  const filteredMessages = useMemo(
-    () => messages.filter(m => m.role === 'user' || m.role === 'assistant'),
-    [messages]
-  )
-
   // 滚动到底部的函数
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
     requestAnimationFrame(() => {
       virtuosoRef.current?.scrollToIndex({
-        index: filteredMessages.length - 1,
+        index: displayMessages.length - 1,
         align: 'end',
         behavior
       })
     })
     setAtBottom(true)
     setShowScrollButton(false)
-  }, [filteredMessages.length])
+  }, [displayMessages.length])
   const followOutput = useCallback((isListAtBottom: boolean) => {
     if (!isStreaming) return false
     return isListAtBottom ? 'smooth' : false
@@ -279,7 +310,7 @@ export default function ChatPanel() {
 
       isAutoScrollingRef.current = true
       virtuosoRef.current?.scrollToIndex({
-        index: filteredMessages.length - 1,
+        index: displayMessages.length - 1,
         align: 'end',
         behavior: 'auto' // 改为 auto，smooth 会触发额外的重绘
       })
@@ -297,7 +328,7 @@ export default function ChatPanel() {
       if (rafId !== null) cancelAnimationFrame(rafId)
       isAutoScrollingRef.current = false
     }
-  }, [isStreaming, atBottom, filteredMessages.length])
+  }, [isStreaming, atBottom, displayMessages.length])
 
   // 处理用户滚动状态变化
   const handleAtBottomStateChange = useCallback((bottom: boolean) => {
@@ -1100,23 +1131,39 @@ export default function ChatPanel() {
             </div>
           )}
 
-          {/* Message List - 始终渲染 Virtuoso，避免组件切换导致的闪烁 */}
-          <Virtuoso
-            ref={virtuosoRef}
-            data={filteredMessages}
-            computeItemKey={(_, message) => message.id}
-            atBottomStateChange={handleAtBottomStateChange}
-            initialTopMostItemIndex={Math.max(0, filteredMessages.length - 1)}
-            followOutput={followOutput}
-            itemContent={(_, message) => renderMessage(message)}
-            className="flex-1 custom-scrollbar"
-            style={{ minHeight: '100px' }}
-            overscan={50}
-            atBottomThreshold={100}
-            totalListHeightChanged={handleTotalListHeightChanged}
-            skipAnimationFrameInResizeObserver
-            components={virtuosoComponents}
-          />
+          {/* Message List */}
+          <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+            {/* 过渡用的骨架屏 */}
+            <AnimatePresence>
+              {isSwitchingThread && (
+                <motion.div
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 z-10 bg-background-secondary"
+                >
+                  <ChatMessagesSkeleton />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <Virtuoso
+              ref={virtuosoRef}
+              data={displayMessages}
+              computeItemKey={(_, message) => message.id}
+              atBottomStateChange={handleAtBottomStateChange}
+              initialTopMostItemIndex={Math.max(0, displayMessages.length - 1)}
+              followOutput={followOutput}
+              itemContent={(_, message) => renderMessage(message)}
+              className="flex-1 custom-scrollbar w-full h-full"
+              style={{ minHeight: '100px' }}
+              overscan={50}
+              atBottomThreshold={100}
+              totalListHeightChanged={handleTotalListHeightChanged}
+              skipAnimationFrameInResizeObserver
+              components={virtuosoComponents}
+            />
+          </div>
 
           {/* File Mention Popup */}
           {
