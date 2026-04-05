@@ -8,6 +8,7 @@ import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { EXTENSION_TO_LANGUAGE, LSP_SUPPORTED_LANGUAGES } from '@shared/languages'
 import { toAppError } from '@shared/utils/errorHandler'
+import { pathToLspUri } from '@shared/utils/uriUtils'
 
 // 文档版本追踪
 const documentVersions = new Map<string, number>()
@@ -108,29 +109,6 @@ export function isLanguageSupported(languageId: string): boolean {
 }
 
 /**
- * 将文件路径转换为 LSP URI
- */
-export function pathToLspUri(filePath: string): string {
-  const normalizedPath = filePath.replace(/\\/g, '/')
-  if (/^[a-zA-Z]:/.test(normalizedPath)) {
-    return `file:///${normalizedPath}`
-  }
-  return `file://${normalizedPath}`
-}
-
-/**
- * 将 LSP URI 转换为文件路径
- */
-export function lspUriToPath(uri: string): string {
-  let path = uri
-  if (path.startsWith('file:///')) path = path.slice(8)
-  else if (path.startsWith('file://')) path = path.slice(7)
-  try { path = decodeURIComponent(path) } catch { }
-  if (/^[a-zA-Z]:/.test(path)) path = path.replace(/\//g, '\\')
-  return path
-}
-
-/**
  * 启动 LSP 服务器
  */
 export async function startLspServer(workspacePath: string): Promise<boolean> {
@@ -175,7 +153,9 @@ export function resetLspState(): void {
 export async function didOpenDocument(filePath: string, content: string): Promise<void> {
   const uri = pathToLspUri(filePath)
   const languageId = getLanguageId(filePath)
-  if (!isLanguageSupported(languageId)) return
+  if (!isLanguageSupported(languageId)) {
+    return
+  }
 
   if (openedDocuments.has(uri)) {
     await didChangeDocument(filePath, content)
@@ -187,7 +167,7 @@ export async function didOpenDocument(filePath: string, content: string): Promis
   openedDocuments.add(uri)
 
   const workspacePath = getFileWorkspaceRoot(filePath)
-  
+
   // 使用智能根目录检测启动服务器
   // 这会根据语言类型找到最佳的项目根目录
   const params: LspDocumentParams & { languageId: string; version: number } = {
@@ -198,6 +178,13 @@ export async function didOpenDocument(filePath: string, content: string): Promis
     workspacePath,
   }
   await api.lsp.didOpen(params)
+
+  // 为 Pyright 发送一个 didChange 来触发诊断
+  if (languageId === 'python') {
+    setTimeout(() => {
+      didChangeDocument(filePath, content)
+    }, 100)
+  }
 }
 
 /**

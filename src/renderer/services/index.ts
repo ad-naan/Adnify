@@ -35,7 +35,6 @@ export {
   getIncomingCalls,
   getOutgoingCalls,
   onDiagnostics,
-  lspUriToPath,
   getDocumentSymbols,
 } from './lspService'
 export { registerLspProviders } from './lspProviders'

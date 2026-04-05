@@ -12,6 +12,7 @@ import {
 import { registerLspProviders } from '@services/lspProviders'
 import { pathLinkService } from '@services/pathLinkService'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
+import { normalizeLspUri } from '@shared/utils/uriUtils'
 import type { editor } from 'monaco-editor'
 import { LSP_SUPPORTED_LANGUAGES } from '@shared/languages'
 
@@ -73,7 +74,17 @@ export function useLspIntegration() {
   ) => {
     // 监听 LSP 诊断
     const unsubscribeLsp = onDiagnostics((uri, diagnostics) => {
-      const model = monaco.editor.getModels().find(m => m.uri.toString() === uri)
+      // 规范化接收到的 URI
+      const normalizedUri = normalizeLspUri(uri)
+
+      const models = monaco.editor.getModels()
+
+      // 查找匹配的 model，使用规范化后的 URI 进行比较
+      const model = models.find(m => {
+        const modelUri = normalizeLspUri(m.uri.toString())
+        return modelUri === normalizedUri
+      })
+
       if (model) {
         const markers = diagnostics.map(d => ({
           severity: d.severity === 1 ? monaco.MarkerSeverity.Error
