@@ -63,9 +63,9 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
     <div className="rounded-xl border border-border/50 bg-surface/40 backdrop-blur-md overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] transition-all">
       {/* Header */}
       <div className="w-full flex items-center justify-between px-4 py-2">
-        <button
+        <div
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity cursor-pointer"
         >
           {headerPrefix}
           <ChevronDown className={`w-3.5 h-3.5 text-text-muted transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
@@ -76,7 +76,7 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
               <>{completed}/{total} Tasks</>
             )}
           </span>
-        </button>
+        </div>
 
         {/* Progress bar */}
         <div className="w-20 h-1 rounded-full bg-border/50 overflow-hidden relative">

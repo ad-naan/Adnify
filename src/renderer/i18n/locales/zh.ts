@@ -638,4 +638,16 @@ export const zh = {
 
   // Settings
   'unsavedChangesConfirm': '您有未保存的更改，确定要关闭吗？',
+
+  // Agent Status
+  'agent.status.generating': '正在生成响应...',
+  'agent.status.toolCalling': '正在调用工具...',
+  'agent.typing.0': '正在泡一杯赛博咖啡...',
+  'agent.typing.1': '正在连接到矩阵主机...',
+  'agent.typing.2': '脑细胞飞速运转中...',
+  'agent.typing.3': '正在吸收知识碎片...',
+  'agent.typing.4': '正在疯狂敲击虚拟键盘...',
+  'agent.typing.5': '正在解开宇宙的代码...',
+  'agent.typing.6': '深思熟虑中...',
+  'agent.typing.7': '正在翻阅阿卡西记录...',
 } as const

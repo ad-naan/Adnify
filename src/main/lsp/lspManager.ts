@@ -13,6 +13,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getExecutableName } from '@shared/utils/pathUtils'
+import { normalizeLspUri } from '@shared/utils/uriUtils'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -685,6 +686,85 @@ class LspManager {
       clearTimeout(timeout)
       if (message.error) reject(message.error)
       else resolve(message.result)
+    } else if (message.method === 'workspace/configuration' && message.id !== undefined) {
+      // 处理 workspace/configuration 请求（某些 LSP 服务器需要）
+      const items = message.params?.items || []
+      const settings = items.map((item: any) => {
+        const section = item.section || ''
+
+        // Python (Pyright)
+        if (section === 'python' || section.startsWith('python.')) {
+          return {
+            pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+            analysis: {
+              typeCheckingMode: 'basic',
+              diagnosticMode: 'openFilesOnly',
+              autoSearchPaths: true,
+              useLibraryCodeForTypes: true,
+              diagnosticSeverityOverrides: {}
+            }
+          }
+        }
+
+        // Rust (rust-analyzer)
+        if (section === 'rust-analyzer' || section.startsWith('rust-analyzer.')) {
+          return {
+            checkOnSave: {
+              command: 'clippy'
+            },
+            cargo: {
+              allFeatures: false
+            },
+            procMacro: {
+              enable: true
+            }
+          }
+        }
+
+        // PHP (Intelephense)
+        if (section === 'intelephense' || section.startsWith('intelephense.')) {
+          return {
+            files: {
+              maxSize: 1000000
+            },
+            diagnostics: {
+              enable: true
+            },
+            completion: {
+              insertUseDeclaration: true,
+              fullyQualifyGlobalConstantsAndFunctions: false
+            }
+          }
+        }
+
+        // Vue
+        if (section === 'vue' || section.startsWith('volar.')) {
+          return {
+            server: {
+              hybridMode: false
+            }
+          }
+        }
+
+        return null
+      })
+
+      // 发送响应
+      const response = {
+        jsonrpc: '2.0',
+        id: message.id,
+        result: settings
+      }
+      const body = JSON.stringify(response)
+      const responseMessage = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
+
+      try {
+        if (instance.process?.stdin) {
+          instance.process.stdin.write(responseMessage)
+        }
+      } catch (e) {
+        logger.lsp.error(`[LSP ${key}] Failed to send configuration response:`, e)
+      }
     } else if (message.method) {
       this.handleNotification(key, message)
     }
@@ -692,13 +772,12 @@ class LspManager {
 
   private handleNotification(key: string, message: any): void {
     if (message.method === 'textDocument/publishDiagnostics') {
-      const { uri, diagnostics } = message.params
-      this.setDiagnosticsCache(uri, diagnostics)
+      let { uri, diagnostics } = message.params
 
-      // 只在有诊断信息时记录日志
-      if (diagnostics.length > 0) {
-        logger.lsp.debug(`[LSP ${key}] Diagnostics: ${uri} (${diagnostics.length} items)`)
-      }
+      // 规范化 URI：处理不同 LSP 服务器返回的 URI 格式差异
+      uri = normalizeLspUri(uri)
+
+      this.setDiagnosticsCache(uri, diagnostics)
 
       // 通知等待诊断的调用者
       this.notifyDiagnosticsWaiters(uri)
@@ -706,12 +785,11 @@ class LspManager {
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) {
           try {
-            win.webContents.send('lsp:diagnostics', { ...message.params, serverKey: key })
+            win.webContents.send('lsp:diagnostics', { uri, diagnostics, serverKey: key })
           } catch { }
         }
       })
     }
-    // 忽略其他通知类型的日志，太频繁了
   }
 
   /**
@@ -794,8 +872,10 @@ class LspManager {
 
     const instance = this.servers.get(key)
     if (!instance?.process?.stdin || !instance.process.stdin.writable) return
+
     const body = JSON.stringify({ jsonrpc: '2.0', method, params })
     const message = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
+
     try { instance.process.stdin.write(message) } catch { }
   }
 
@@ -803,14 +883,43 @@ class LspManager {
     const normalizedPath = workspacePath.replace(/\\/g, '/')
     const rootUri = /^[a-zA-Z]:/.test(normalizedPath) ? `file:///${normalizedPath}` : `file://${normalizedPath}`
 
+    const instance = this.servers.get(key)
+    const serverName = instance?.config.name
+
+    // 为 Pyright 添加 Python 解释器配置
+    const initializationOptions = serverName === 'python' ? {
+      python: {
+        pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+      },
+    } : undefined
+
     await this.sendRequest(key, 'initialize', {
       processId: process.pid,
       rootUri,
       capabilities: this.getClientCapabilities(),
       workspaceFolders: [{ uri: rootUri, name: path.basename(workspacePath) }],
+      ...(initializationOptions && { initializationOptions }),
     }, 60000)
 
     this.sendNotification(key, 'initialized', {})
+
+    // 为 Pyright 发送配置
+    if (serverName === 'python') {
+      this.sendNotification(key, 'workspace/didChangeConfiguration', {
+        settings: {
+          python: {
+            pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+            analysis: {
+              typeCheckingMode: 'basic',
+              diagnosticMode: 'openFilesOnly',
+              autoSearchPaths: true,
+              useLibraryCodeForTypes: true,
+              diagnosticSeverityOverrides: {}
+            }
+          }
+        }
+      })
+    }
   }
 
   private getClientCapabilities(): any {

@@ -10,7 +10,8 @@ import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import { validatePath, isSensitivePath } from '@shared/utils/pathUtils'
-import { pathToLspUri, waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
+import { pathToLspUri } from '@shared/utils/uriUtils'
+import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
 } from '@/renderer/utils/searchReplace'

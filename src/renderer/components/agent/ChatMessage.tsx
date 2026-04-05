@@ -43,6 +43,7 @@ import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
 import { useFluidTypewriter } from '@renderer/hooks/useFluidTypewriter'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
+import { t } from '../../i18n'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -850,6 +851,20 @@ const ChatMessage = React.memo(({
     cancel: language === 'zh' ? '取消' : 'Cancel',
   }
 
+  const [typingIndex, setTypingIndex] = useState(0)
+
+  // 为了类型安全
+  const isStreaming = isAssistantMessage(message) ? message.isStreaming : false
+
+  useEffect(() => {
+    if (isStreaming) {
+      const interval = setInterval(() => {
+        setTypingIndex(prev => (prev + 1) % 8)
+      }, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [isStreaming])
+
   return (
     <div className={`
       w-full group/msg transition-colors duration-300
@@ -996,9 +1011,30 @@ const ChatMessage = React.memo(({
                 <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
                 <img src={aiAvatar} alt="AI" className="w-full h-full object-cover" />
               </div>
-              <div className="flex items-center gap-2 select-none">
+              <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-accent/10 text-accent uppercase tracking-widest border border-accent/20">AI</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-accent/10 text-accent uppercase tracking-widest border border-accent/20 flex-shrink-0">AI</span>
+
+                <AnimatePresence mode="wait">
+                  {isStreaming && (
+                    <motion.div
+                      key={typingIndex}
+                      initial={{ opacity: 0, filter: 'blur(2px)', y: 2 }}
+                      animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
+                      exit={{ opacity: 0, filter: 'blur(2px)', y: -2 }}
+                      transition={{ duration: 0.4, ease: "easeInOut" }}
+                      className="flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded-full bg-surface-active/30 border border-border/40 shadow-sm self-center mt-[1px]"
+                    >
+                      <div className="relative flex h-[5px] w-[5px] items-center justify-center shrink-0">
+                        <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-accent/60 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-[5px] w-[5px] bg-accent" />
+                      </div>
+                      <span className="text-[10px] text-text-muted/90 font-medium truncate tracking-wide">
+                        {t(`agent.typing.${typingIndex}` as any, language)}
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {!message.isStreaming && (

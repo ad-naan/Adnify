@@ -636,6 +636,17 @@ export const en = {
   'recentSearches': 'Recent Searches',
   'tryDifferentKeyword': 'Try a different keyword or regex',
 
-  // Settings
   'unsavedChangesConfirm': 'You have unsaved changes. Are you sure you want to close?',
+
+  // Agent Status
+  'agent.status.generating': 'Generating response...',
+  'agent.status.toolCalling': 'Calling tools...',
+  'agent.typing.0': 'Brewing digital coffee...',
+  'agent.typing.1': 'Connecting to the Matrix...',
+  'agent.typing.2': 'Brainstorming ideas...',
+  'agent.typing.3': 'Synthesizing knowledge...',
+  'agent.typing.4': 'Typing at the speed of light...',
+  'agent.typing.5': 'Cracking the code...',
+  'agent.typing.6': 'Deep in thought...',
+  'agent.typing.7': 'Organizing cosmic data...',
 } as const

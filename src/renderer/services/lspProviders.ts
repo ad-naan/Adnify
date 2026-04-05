@@ -6,6 +6,7 @@
 import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
 import type * as Monaco from 'monaco-editor'
+import { lspUriToPath } from '@shared/utils/uriUtils'
 
 // 扩展 CompletionItem 类型以支持 LSP data 字段
 interface CompletionItemWithData extends Monaco.languages.CompletionItem {
@@ -27,7 +28,6 @@ interface LspWorkspaceEdit {
 }
 
 import {
-  lspUriToPath,
   getHoverInfo,
   getCompletions,
   resolveCompletionItem,
