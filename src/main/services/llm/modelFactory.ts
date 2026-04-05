@@ -17,6 +17,26 @@ export interface ModelOptions {
 }
 
 /**
+ * 智能处理 baseUrl，避免重复添加版本路径
+ * AI SDK 会自动添加 /v1 等路径，所以如果用户已经提供了，需要移除
+ */
+function normalizeBaseUrl(baseUrl: string | undefined, _protocol: string): string | undefined {
+    if (!baseUrl) return undefined
+
+    // 移除末尾斜杠
+    let url = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+
+    // 如果 URL 已经包含版本号路径（如 /v1, /v4, /v1beta），移除它
+    // 因为 AI SDK 会自动添加这些路径
+    const versionPattern = /\/v\d+(?:beta)?$/
+    if (versionPattern.test(url)) {
+        url = url.replace(versionPattern, '')
+    }
+
+    return url
+}
+
+/**
  * 根据配置创建 AI SDK model 实例
  */
 export function createModel(config: LLMConfig, options: ModelOptions = {}): LanguageModel {
@@ -59,17 +79,20 @@ function createBuiltinModel(
     config: LLMConfig,
     _options: ModelOptions = {}
 ): LanguageModel {
-    const { provider, model, apiKey, baseUrl } = config
+    const { provider, model, apiKey, baseUrl, protocol } = config
     const providerDef = BUILTIN_PROVIDERS[provider]
     if (!providerDef) {
         throw new Error(`Unknown builtin provider: ${provider}`)
     }
 
+    // 规范化 baseUrl
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl || providerDef.baseUrl, protocol || providerDef.protocol)
+
     switch (provider) {
         case 'openai': {
             const openai = createOpenAI({
                 apiKey,
-                baseURL: baseUrl || providerDef.baseUrl,
+                baseURL: normalizedBaseUrl,
                 headers: config.headers,
             })
 
@@ -86,7 +109,7 @@ function createBuiltinModel(
         case 'anthropic': {
             const anthropic = createAnthropic({
                 apiKey,
-                baseURL: baseUrl || undefined,
+                baseURL: normalizedBaseUrl,
                 headers: config.headers,
             })
             // Anthropic 直接调用就是 messages API，无需 .chat()
@@ -96,7 +119,7 @@ function createBuiltinModel(
         case 'gemini': {
             const google = createGoogleGenerativeAI({
                 apiKey,
-                baseURL: baseUrl || undefined,
+                baseURL: normalizedBaseUrl,
                 headers: config.headers,
             })
             // Google 直接调用就是 generateContent API，无需 .chat()
@@ -122,12 +145,15 @@ function createCustomModel(
         throw new Error('Custom provider requires baseUrl')
     }
 
+    // 规范化 baseUrl（此时 baseUrl 已确保不为 undefined）
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl, protocol) || baseUrl
+
     switch (protocol) {
         case 'openai': {
             const provider = createOpenAICompatible({
                 name: 'custom-openai',
                 apiKey,
-                baseURL: baseUrl,
+                baseURL: normalizedBaseUrl,
                 headers: options.headers,
             })
             return provider(model)
@@ -137,7 +163,7 @@ function createCustomModel(
             // Response API 需要使用 @ai-sdk/openai（非 compatible）
             const openai = createOpenAI({
                 apiKey,
-                baseURL: baseUrl,
+                baseURL: normalizedBaseUrl,
                 headers: options.headers,
             })
             return openai.responses(model)
@@ -146,7 +172,7 @@ function createCustomModel(
         case 'anthropic': {
             const anthropic = createAnthropic({
                 apiKey,
-                baseURL: baseUrl,
+                baseURL: normalizedBaseUrl,
                 headers: options.headers,
             })
             return anthropic(model)
@@ -155,7 +181,7 @@ function createCustomModel(
         case 'google': {
             const google = createGoogleGenerativeAI({
                 apiKey,
-                baseURL: baseUrl,
+                baseURL: normalizedBaseUrl,
                 headers: options.headers,
             })
             return google(model)
@@ -165,7 +191,7 @@ function createCustomModel(
             const fallback = createOpenAICompatible({
                 name: 'custom',
                 apiKey,
-                baseURL: baseUrl,
+                baseURL: normalizedBaseUrl,
                 headers: options.headers,
             })
             return fallback(model)

@@ -56,17 +56,31 @@ export function registerHealthCheckHandlers() {
 
       if (activeProtocol === 'google') {
         // Google Gemini: GET /v1beta/models?key=
-        fetchUrl = url.includes('/v1') ? `${url}/models` : `${url}/v1beta/models`
+        // 智能处理：如果 URL 已包含 /v1 或 /v1beta，直接追加 /models
+        if (url.includes('/v1beta') || url.includes('/v1')) {
+          fetchUrl = `${url}/models`
+        } else {
+          fetchUrl = `${url}/v1beta/models`
+        }
         if (apiKey) fetchUrl += `?key=${apiKey}`
       } else if (activeProtocol === 'anthropic') {
-        // Anthropic: GET /v1/messages 不可用，改用简单的模型列表或 POST 测试
-        // 尝试 /v1/models（较新版本支持）
-        fetchUrl = `${url}/v1/models`
+        // Anthropic: GET /v1/models
+        // 智能处理：如果 URL 已包含 /v1，直接追加 /models
+        if (url.includes('/v1')) {
+          fetchUrl = `${url}/models`
+        } else {
+          fetchUrl = `${url}/v1/models`
+        }
         headers['x-api-key'] = apiKey
         headers['anthropic-version'] = '2023-06-01'
       } else {
         // OpenAI / OpenAI-Responses / 其他兼容协议: GET /models
-        fetchUrl = `${url}/models`
+        // 智能处理：如果 URL 已包含 /v1 或 /v4 等版本号，直接追加 /models
+        if (/\/v\d+/.test(url)) {
+          fetchUrl = `${url}/models`
+        } else {
+          fetchUrl = `${url}/v1/models`
+        }
         headers['Authorization'] = `Bearer ${apiKey}`
       }
 
@@ -143,6 +157,9 @@ export function registerHealthCheckHandlers() {
       }
 
       let url = baseUrl || defaultUrls[provider] || defaultUrls.openai
+      // 移除末尾斜杠
+      url = url.endsWith('/') ? url.slice(0, -1) : url
+
       let fetchUrl = ''
       let headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -153,21 +170,33 @@ export function registerHealthCheckHandlers() {
 
       if (activeProtocol === 'google' || provider === 'gemini') {
         // Google Gemini API
-        // 兼容处理：如果 baseUrl 包含 /v1beta，则直接使用
-        const base = url.endsWith('/') ? url.slice(0, -1) : url
-        fetchUrl = base.includes('/v1') ? `${base}/models` : `${base}/v1beta/models`
+        // 智能处理：如果 URL 已包含 /v1 或 /v1beta，直接追加 /models
+        if (url.includes('/v1beta') || url.includes('/v1')) {
+          fetchUrl = `${url}/models`
+        } else {
+          fetchUrl = `${url}/v1beta/models`
+        }
         if (apiKey) {
           fetchUrl += `?key=${apiKey}`
         }
       } else if (activeProtocol === 'anthropic') {
         // Anthropic
-        const base = url.endsWith('/') ? url.slice(0, -1) : url
-        fetchUrl = `${base}/v1/models`
+        // 智能处理：如果 URL 已包含 /v1，直接追加 /models
+        if (url.includes('/v1')) {
+          fetchUrl = `${url}/models`
+        } else {
+          fetchUrl = `${url}/v1/models`
+        }
         headers['x-api-key'] = apiKey
         headers['anthropic-version'] = '2023-06-01'
       } else {
         // OpenAI / OpenAI-Responses / 其他兼容协议
-        fetchUrl = `${url.endsWith('/') ? url.slice(0, -1) : url}/models`
+        // 智能处理：如果 URL 已包含 /v1 或 /v4 等版本号，直接追加 /models
+        if (/\/v\d+/.test(url)) {
+          fetchUrl = `${url}/models`
+        } else {
+          fetchUrl = `${url}/v1/models`
+        }
         headers['Authorization'] = `Bearer ${apiKey}`
       }
 
