@@ -18,16 +18,27 @@ export interface ModelOptions {
 
 /**
  * 智能处理 baseUrl，避免重复添加版本路径
- * AI SDK 会自动添加 /v1 等路径，所以如果用户已经提供了，需要移除
+ *
+ * 注意：
+ * - createOpenAI / createAnthropic / createGoogleGenerativeAI 会自动添加 /v1 等路径
+ * - createOpenAICompatible 不会自动添加路径，需要用户提供完整 URL
  */
-function normalizeBaseUrl(baseUrl: string | undefined, _protocol: string): string | undefined {
+function normalizeBaseUrl(baseUrl: string | undefined, protocol: string): string | undefined {
     if (!baseUrl) return undefined
 
     // 移除末尾斜杠
     let url = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
 
+    // 只有在使用官方 SDK（非 compatible）时才移除版本路径
+    // createOpenAICompatible 不会自动添加路径，所以保留用户提供的完整 URL
+    if (protocol === 'openai') {
+        // openai-compatible 不处理，保留原样
+        return url
+    }
+
+    // 对于 openai-responses、anthropic、google 等使用官方 SDK 的协议
     // 如果 URL 已经包含版本号路径（如 /v1, /v4, /v1beta），移除它
-    // 因为 AI SDK 会自动添加这些路径
+    // 因为官方 SDK 会自动添加这些路径
     const versionPattern = /\/v\d+(?:beta)?$/
     if (versionPattern.test(url)) {
         url = url.replace(versionPattern, '')

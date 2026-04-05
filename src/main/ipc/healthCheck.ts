@@ -115,6 +115,13 @@ export function registerHealthCheckHandlers() {
       }
 
       logger.ipc.info(`[ModelTest] Testing model ${config.model} for provider ${config.provider}`)
+      logger.ipc.info(`[ModelTest] Config:`, {
+        provider: config.provider,
+        model: config.model,
+        baseUrl: config.baseUrl,
+        protocol: config.protocol,
+        hasApiKey: !!config.apiKey
+      })
 
       const model = createModel(config)
       const { text } = await generateText({
@@ -134,7 +141,14 @@ export function registerHealthCheckHandlers() {
     } catch (err) {
       const error = toAppError(err)
       const latency = Date.now() - startTime
-      logger.ipc.error(`[ModelTest] Failed:`, error.message)
+      logger.ipc.error(`[ModelTest] Failed:`, error)
+      logger.ipc.error(`[ModelTest] Error details:`, {
+        message: error.message,
+        stack: error.stack,
+        cause: (err as any)?.cause,
+        response: (err as any)?.response,
+        data: (err as any)?.data
+      })
       return {
         success: false,
         error: error.message || 'Model test failed',
