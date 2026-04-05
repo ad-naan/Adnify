@@ -1074,6 +1074,11 @@ export function registerSecureTerminalHandlers(
     if (ptyProcess) {
       try {
         ptyProcess.write(data)
+
+        // 对于 Ctrl+C，添加日志以便调试
+        if (data === '\x03' || data === String.fromCharCode(3)) {
+          logger.security.debug(`[Terminal] Ctrl+C sent to terminal ${id}`)
+        }
       } catch (err) {
         logger.security.error(`[Terminal] Write error (id: ${id}):`, err)
       }

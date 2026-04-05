@@ -658,8 +658,9 @@ class TerminalManagerClass {
           navigator.clipboard.writeText(selection);
           return false;
         }
-        // macOS 上 Cmd+C 没有选中内容时不发送中断信号；Ctrl+C 在 macOS 仍发中断
-        if (isMac) return false;
+        // macOS 上 Cmd+C 没有选中内容时不发送中断信号
+        // 但 Ctrl+C（非 Cmd）应该发送中断信号
+        if (isMac && event.metaKey) return false;
         return true;
       }
 
