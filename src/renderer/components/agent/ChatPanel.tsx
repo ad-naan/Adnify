@@ -128,8 +128,11 @@ export default function ChatPanel() {
   const prevThreadIdRef = useRef(currentThreadId)
 
   useEffect(() => {
-    if (currentThreadId !== prevThreadIdRef.current) {
-      prevThreadIdRef.current = currentThreadId
+    const threadChanged = currentThreadId !== prevThreadIdRef.current
+    prevThreadIdRef.current = currentThreadId
+
+    if (threadChanged) {
+      // 线程切换：显示骨架屏
       setIsSwitchingThread(true)
 
       // 第 1 步：350ms 充足的时间让侧边栏的 Spring 退出动画丝滑播放完毕，并且让骨架屏先画出来
