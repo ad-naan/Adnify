@@ -28,6 +28,7 @@ function convertTokenUsage(usage: LLMTokenUsage | undefined): {
   completionTokens: number
   totalTokens: number
   cachedInputTokens?: number
+  cacheWriteTokens?: number
   reasoningTokens?: number
 } | undefined {
   if (!usage) return undefined
@@ -37,6 +38,7 @@ function convertTokenUsage(usage: LLMTokenUsage | undefined): {
     completionTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
     cachedInputTokens: usage.cachedInputTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
     reasoningTokens: usage.reasoningTokens,
   }
 }

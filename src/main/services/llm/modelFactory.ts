@@ -1,7 +1,5 @@
 /**
- * Model Factory - 统一创建各协议的 LLM model 实例
- *
- * 使用 Vercel AI SDK，根据 provider 配置创建对应的 model
+ * Model Factory - create LLM model instances for different protocols.
  */
 
 import { createOpenAI } from '@ai-sdk/openai'
@@ -17,28 +15,27 @@ export interface ModelOptions {
 }
 
 /**
- * 智能处理 baseUrl，避免重复添加版本路径
+ * Normalize base URLs for the provider SDK we are about to use.
  *
- * 注意：
- * - createOpenAI / createAnthropic / createGoogleGenerativeAI 会自动添加 /v1 等路径
- * - createOpenAICompatible 不会自动添加路径，需要用户提供完整 URL
+ * Notes:
+ * - `createOpenAICompatible` expects the full user-provided base URL.
+ * - `createAnthropic` works reliably with Anthropic-compatible gateways only
+ *   when the versioned `/v1` prefix is present.
+ * - Other official SDKs can derive their own versioned paths.
  */
 function normalizeBaseUrl(baseUrl: string | undefined, protocol: string): string | undefined {
     if (!baseUrl) return undefined
 
-    // 移除末尾斜杠
     let url = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
 
-    // 只有在使用官方 SDK（非 compatible）时才移除版本路径
-    // createOpenAICompatible 不会自动添加路径，所以保留用户提供的完整 URL
     if (protocol === 'openai') {
-        // openai-compatible 不处理，保留原样
         return url
     }
 
-    // 对于 openai-responses、anthropic、google 等使用官方 SDK 的协议
-    // 如果 URL 已经包含版本号路径（如 /v1, /v4, /v1beta），移除它
-    // 因为官方 SDK 会自动添加这些路径
+    if (protocol === 'anthropic') {
+        return /\/v1$/i.test(url) ? url : `${url}/v1`
+    }
+
     const versionPattern = /\/v\d+(?:beta)?$/
     if (versionPattern.test(url)) {
         url = url.replace(versionPattern, '')
@@ -47,35 +44,29 @@ function normalizeBaseUrl(baseUrl: string | undefined, protocol: string): string
     return url
 }
 
-/**
- * 根据配置创建 AI SDK model 实例
- */
 export function createModel(config: LLMConfig, options: ModelOptions = {}): LanguageModel {
     const { provider } = config
-
-    // 替换 headers 中的 {{apiKey}} 占位符
     const resolvedHeaders = resolveHeaderPlaceholders(config.headers, config.apiKey)
 
-    // 内置 provider
     if (isBuiltinProvider(provider)) {
         return createBuiltinModel({ ...config, headers: resolvedHeaders }, options)
     }
 
-    // 自定义 provider - 根据 protocol 选择
     const protocol = config.protocol || 'openai'
     const customOptions = {
         ...options,
-        headers: resolvedHeaders
+        headers: resolvedHeaders,
     }
+
     return createCustomModel(protocol, config.model, config.apiKey, config.baseUrl, customOptions)
 }
 
-/** 替换 headers 值中的 {{apiKey}} 占位符 */
 export function resolveHeaderPlaceholders(
     headers?: Record<string, string>,
     apiKey?: string
 ): Record<string, string> | undefined {
     if (!headers) return undefined
+
     const resolved: Record<string, string> = {}
     for (const [key, value] of Object.entries(headers)) {
         resolved[key] = typeof value === 'string' ? value.replace(/\{\{apiKey\}\}/g, apiKey || '') : value
@@ -83,9 +74,6 @@ export function resolveHeaderPlaceholders(
     return resolved
 }
 
-/**
- * 创建内置 provider 的 model
- */
 function createBuiltinModel(
     config: LLMConfig,
     _options: ModelOptions = {}
@@ -96,7 +84,6 @@ function createBuiltinModel(
         throw new Error(`Unknown builtin provider: ${provider}`)
     }
 
-    // 规范化 baseUrl
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl || providerDef.baseUrl, protocol || providerDef.protocol)
 
     switch (provider) {
@@ -107,14 +94,11 @@ function createBuiltinModel(
                 headers: config.headers,
             })
 
-            // 基于 protocol 选择 API 端点
             if (config.protocol === 'openai-responses') {
-                // Responses API (/v1/responses)
                 return openai.responses(model)
-            } else {
-                // Chat Completions API (/v1/chat/completions) - 默认
-                return openai.chat(model)
             }
+
+            return openai.chat(model)
         }
 
         case 'anthropic': {
@@ -123,7 +107,6 @@ function createBuiltinModel(
                 baseURL: normalizedBaseUrl,
                 headers: config.headers,
             })
-            // Anthropic 直接调用就是 messages API，无需 .chat()
             return anthropic(model)
         }
 
@@ -133,7 +116,6 @@ function createBuiltinModel(
                 baseURL: normalizedBaseUrl,
                 headers: config.headers,
             })
-            // Google 直接调用就是 generateContent API，无需 .chat()
             return google(model)
         }
 
@@ -142,9 +124,6 @@ function createBuiltinModel(
     }
 }
 
-/**
- * 创建自定义 provider 的 model
- */
 function createCustomModel(
     protocol: string,
     model: string,
@@ -156,7 +135,6 @@ function createCustomModel(
         throw new Error('Custom provider requires baseUrl')
     }
 
-    // 规范化 baseUrl（此时 baseUrl 已确保不为 undefined）
     const normalizedBaseUrl = normalizeBaseUrl(baseUrl, protocol) || baseUrl
 
     switch (protocol) {
@@ -171,7 +149,6 @@ function createCustomModel(
         }
 
         case 'openai-responses': {
-            // Response API 需要使用 @ai-sdk/openai（非 compatible）
             const openai = createOpenAI({
                 apiKey,
                 baseURL: normalizedBaseUrl,

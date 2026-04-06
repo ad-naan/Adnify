@@ -10,7 +10,7 @@ import { logger } from '@shared/utils/Logger'
 import { createModel, resolveHeaderPlaceholders } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
-import { applyCaching, getCacheConfig } from '../core/PromptCache'
+import { prepareRequestCache } from '../core/RequestCache'
 import { LLMError, convertUsage } from '../types'
 import type { StreamEvent, TokenUsage, ResponseMetadata } from '../types'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
@@ -74,8 +74,8 @@ export class StreamingService {
       let coreMessages = this.messageConverter.convert(messages, systemPrompt)
 
       // 应用 Prompt Caching
-      const cacheConfig = getCacheConfig(config.provider)
-      coreMessages = applyCaching(coreMessages, cacheConfig)
+      const cachePreparation = await prepareRequestCache(config, coreMessages)
+      coreMessages = cachePreparation.messages
 
       // 转换工具
       const coreTools = tools ? this.toolConverter.convert(tools) : undefined
@@ -105,6 +105,7 @@ export class StreamingService {
         headers: resolveHeaderPlaceholders(config.headers, config.apiKey),
         timeout: config.timeout,  // 超时配置
         abortSignal,
+        providerOptions: cachePreparation.providerOptions,
       }
 
       // OpenAI 特定参数
@@ -479,6 +480,7 @@ export class StreamingService {
               completionTokens: event.usage.outputTokens,
               totalTokens: event.usage.totalTokens,
               cachedInputTokens: event.usage.cachedInputTokens,
+              cacheWriteTokens: event.usage.cacheWriteTokens,
               reasoningTokens: event.usage.reasoningTokens,
             } : undefined,
             metadata: event.metadata,

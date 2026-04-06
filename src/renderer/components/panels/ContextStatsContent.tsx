@@ -1,13 +1,6 @@
-/**
- * 上下文统计面板（合并版）
- * 
- * 整合 Token 使用统计 + 上下文压缩状态
- * 显示：使用进度、压缩等级、Token 详情、摘要
- */
-
 import { Layers, Coins, Zap, AlertTriangle, ChevronRight } from 'lucide-react'
-import { useAgentStore, selectCompressionStats, selectContextSummary, selectHandoffRequired } from '@/renderer/agent'
 import { useMemo } from 'react'
+import { useAgentStore, selectCompressionStats, selectContextSummary, selectHandoffRequired } from '@/renderer/agent'
 import type { CompressionLevel } from '@/renderer/agent/domains/context/types'
 import type { TokenUsage } from '@renderer/agent/types'
 
@@ -59,12 +52,12 @@ export default function ContextStatsContent({
     if (n === undefined || n === null || isNaN(n)) return '0'
     return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n.toString()
   }
+
   const formatNumber = (n: number | undefined) => {
     if (n === undefined || n === null || isNaN(n)) return '0'
     return n.toLocaleString()
   }
 
-  // 进度条颜色
   const progressColor = useMemo(() => {
     if (ratio >= 0.95) return 'bg-red-500'
     if (ratio >= 0.85) return 'bg-orange-500'
@@ -74,9 +67,7 @@ export default function ContextStatsContent({
 
   return (
     <div className="flex flex-col h-full bg-background/50 backdrop-blur-xl select-none">
-      {/* 顶部：上下文使用进度 */}
       <div className="p-4 border-b border-border/40">
-        {/* 主进度条 */}
         <div className="mb-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -95,7 +86,6 @@ export default function ContextStatsContent({
             </div>
           </div>
 
-          {/* 进度条 */}
           <div className="h-2 bg-text-primary/[0.05] rounded-full overflow-hidden">
             <div
               className={`h-full ${progressColor} transition-all duration-500 rounded-full`}
@@ -103,7 +93,6 @@ export default function ContextStatsContent({
             />
           </div>
 
-          {/* 刻度标记 */}
           <div className="flex justify-between mt-1 text-[9px] text-text-muted/50 font-mono">
             <span>0</span>
             <span className="text-yellow-500/50">50%</span>
@@ -111,7 +100,6 @@ export default function ContextStatsContent({
           </div>
         </div>
 
-        {/* Token 详情 */}
         <div className="grid grid-cols-3 gap-2 text-center">
           <div className="p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
             <div className="text-[9px] text-text-muted uppercase">
@@ -140,7 +128,6 @@ export default function ContextStatsContent({
         </div>
       </div>
 
-      {/* 中间：费用统计（会话累计消耗） */}
       <div className="p-4 border-b border-border/40">
         <div className="flex items-center gap-2 mb-3">
           <Coins className="w-4 h-4 text-accent" />
@@ -153,41 +140,48 @@ export default function ContextStatsContent({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div className="flex items-center justify-between p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
-            <span className="text-[10px] text-text-muted">
-              {language === 'zh' ? '累计输入' : 'Total In'}
-            </span>
-            <span className="text-xs font-mono text-text-primary">
-              {formatNumber(totalUsage?.promptTokens ?? 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
-            <span className="text-[10px] text-text-muted">
-              {language === 'zh' ? '累计输出' : 'Total Out'}
-            </span>
-            <span className="text-xs font-mono text-text-primary">
-              {formatNumber(totalUsage?.completionTokens ?? 0)}
-            </span>
-          </div>
+          <StatRow
+            label={language === 'zh' ? '累计输入' : 'Total In'}
+            value={formatNumber(totalUsage?.promptTokens ?? 0)}
+          />
+          <StatRow
+            label={language === 'zh' ? '累计输出' : 'Total Out'}
+            value={formatNumber(totalUsage?.completionTokens ?? 0)}
+          />
+          <StatRow
+            label={language === 'zh' ? '缓存命中' : 'Cache Read'}
+            value={formatNumber(totalUsage?.cachedInputTokens ?? 0)}
+            valueClassName="text-emerald-300"
+          />
+          <StatRow
+            label={language === 'zh' ? '缓存写入' : 'Cache Write'}
+            value={formatNumber(totalUsage?.cacheWriteTokens ?? 0)}
+            valueClassName="text-sky-300"
+          />
         </div>
 
-        {/* 最近请求 */}
         {lastUsage && (
-          <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted">
-            <span className="flex items-center gap-1">
-              <Zap className="w-3 h-3" />
-              {language === 'zh' ? '最近一次' : 'Last request'}
-            </span>
-            <span>
-              {formatK(lastUsage?.promptTokens ?? 0)} <ChevronRight className="w-3 h-3 inline" /> {formatK(lastUsage?.completionTokens ?? 0)}
-            </span>
-          </div>
+          <>
+            <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted">
+              <span className="flex items-center gap-1">
+                <Zap className="w-3 h-3" />
+                {language === 'zh' ? '最近一次' : 'Last request'}
+              </span>
+              <span>
+                {formatK(lastUsage.promptTokens)} <ChevronRight className="w-3 h-3 inline" /> {formatK(lastUsage.completionTokens)}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[10px] text-text-muted">
+              <span>{language === 'zh' ? '最近缓存' : 'Last cache'}</span>
+              <span>
+                {formatK(lastUsage.cachedInputTokens ?? 0)} <ChevronRight className="w-3 h-3 inline" /> {formatK(lastUsage.cacheWriteTokens ?? 0)}
+              </span>
+            </div>
+          </>
         )}
       </div>
 
-      {/* 底部：警告或摘要 */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-        {/* Handoff 警告 */}
         {handoffRequired && (
           <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex gap-3 mb-4">
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
@@ -196,24 +190,20 @@ export default function ContextStatsContent({
                 {language === 'zh' ? '上下文已满' : 'Context Full'}
               </h4>
               <p className="text-[10px] text-red-400/70">
-                {language === 'zh'
-                  ? '请开始新会话继续'
-                  : 'Please start a new session'}
+                {language === 'zh' ? '请开始新会话继续' : 'Please start a new session'}
               </p>
             </div>
           </div>
         )}
 
-        {/* 压缩等级说明 */}
         <div className="space-y-2">
           <div className="text-[9px] text-text-muted uppercase tracking-wider mb-2">
             {language === 'zh' ? '压缩策略' : 'Compression Strategy'}
           </div>
-          {([0, 1, 2, 3, 4] as CompressionLevel[]).map((level) => (
+          {([0, 1, 2, 3, 4] as CompressionLevel[]).map(level => (
             <div
               key={level}
-              className={`flex items-center gap-2 p-2 rounded-lg transition-all ${level === currentLevel ? 'bg-text-primary/[0.05] ring-1 ring-text-primary/[0.1]' : 'opacity-50'
-                }`}
+              className={`flex items-center gap-2 p-2 rounded-lg transition-all ${level === currentLevel ? 'bg-text-primary/[0.05] ring-1 ring-text-primary/[0.1]' : 'opacity-50'}`}
             >
               <span className={`text-[9px] font-bold font-mono w-6 ${LEVEL_COLORS[level]}`}>
                 L{level}
@@ -232,7 +222,6 @@ export default function ContextStatsContent({
           ))}
         </div>
 
-        {/* 摘要 */}
         {contextSummary && (
           <div className="mt-4 p-3 rounded-xl bg-surface/30 border border-border/40">
             <div className="text-[9px] text-accent font-bold uppercase tracking-wider mb-1">
@@ -244,6 +233,23 @@ export default function ContextStatsContent({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function StatRow({
+  label,
+  value,
+  valueClassName = 'text-text-primary',
+}: {
+  label: string
+  value: string
+  valueClassName?: string
+}) {
+  return (
+    <div className="flex items-center justify-between p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
+      <span className="text-[10px] text-text-muted">{label}</span>
+      <span className={`text-xs font-mono ${valueClassName}`}>{value}</span>
     </div>
   )
 }
