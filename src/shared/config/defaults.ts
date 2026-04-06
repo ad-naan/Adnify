@@ -223,9 +223,10 @@ export const SECURITY_SETTINGS_DEFAULTS = {
   allowedShellCommands: [
     'npm', 'yarn', 'pnpm', 'bun',
     'node', 'npx', 'deno',
+    'powershell', 'pwsh', 'bash', 'sh',
     'eslint', 'tsc',
     'git',
-    'python', 'python3', 'pip', 'pip3',
+    'python', 'python3', 'py', 'pip', 'pip3',
     'java', 'javac', 'mvn', 'gradle',
     'go', 'rust', 'cargo',
     'make', 'gcc', 'clang', 'cmake',

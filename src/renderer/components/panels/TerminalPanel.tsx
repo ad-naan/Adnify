@@ -269,8 +269,15 @@ const TerminalPanel = memo(function TerminalPanel() {
         const hasValidWorkspace = selectedRoot || (workspace?.roots && workspace.roots.length > 0)
         const wasVisible = prevTerminalVisibleRef.current
 
-        if (terminalVisible && !wasVisible && managerState.terminals.length === 0 && availableShells.length > 0 && hasValidWorkspace) {
-            createTerminal()
+        if (terminalVisible && !wasVisible && availableShells.length > 0 && hasValidWorkspace) {
+            const timer = window.setTimeout(() => {
+                const liveState = terminalManager.getState()
+                if (useStore.getState().terminalVisible && liveState.terminals.length === 0) {
+                    createTerminal()
+                }
+            }, 120)
+            prevTerminalVisibleRef.current = terminalVisible
+            return () => window.clearTimeout(timer)
         }
 
         prevTerminalVisibleRef.current = terminalVisible

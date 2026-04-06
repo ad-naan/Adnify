@@ -1,6 +1,5 @@
 /**
- * LLM 服务 - 统一入口
- * 完全重构，使用 AI SDK 6.0 新 API
+ * LLM service entry point.
  */
 
 import { BrowserWindow } from 'electron'
@@ -22,7 +21,6 @@ export class LLMService {
   private syncService: SyncService
   private structuredService: StructuredService
   private embeddingService: EmbeddingService
-  // 按 requestId 管理多个并发请求的 AbortController
   private abortControllers = new Map<string, AbortController>()
 
   constructor(window: BrowserWindow) {
@@ -32,14 +30,13 @@ export class LLMService {
     this.embeddingService = new EmbeddingService()
   }
 
-  // 流式生成（支持多个并发请求）
   async sendMessage(params: {
     config: LLMConfig
     messages: LLMMessage[]
     tools?: ToolDefinition[]
     systemPrompt?: string
     activeTools?: string[]
-    requestId?: string  // 请求标识，用于多对话隔离
+    requestId?: string
   }) {
     const requestId = params.requestId || crypto.randomUUID()
     const abortController = new AbortController()
@@ -56,25 +53,22 @@ export class LLMService {
     }
   }
 
-  // 中止指定请求，或中止所有请求
   abort(requestId?: string) {
     if (requestId) {
-      // 中止指定请求
       const controller = this.abortControllers.get(requestId)
       if (controller) {
         controller.abort()
         this.abortControllers.delete(requestId)
       }
-    } else {
-      // 中止所有请求
-      for (const controller of this.abortControllers.values()) {
-        controller.abort()
-      }
-      this.abortControllers.clear()
+      return
     }
+
+    for (const controller of this.abortControllers.values()) {
+      controller.abort()
+    }
+    this.abortControllers.clear()
   }
 
-  // 同步生成
   async sendMessageSync(params: {
     config: LLMConfig
     messages: LLMMessage[]
@@ -84,7 +78,6 @@ export class LLMService {
     return await this.syncService.generate(params)
   }
 
-  // 结构化输出
   async analyzeCode(params: {
     config: LLMConfig
     code: string
@@ -147,7 +140,6 @@ export class LLMService {
     return await this.structuredService.generateStructuredObject(params)
   }
 
-  // Embeddings
   async embedText(text: string, config: LLMConfig): Promise<LLMResponse<number[]>> {
     return await this.embeddingService.embedText(text, config)
   }
@@ -170,6 +162,5 @@ export class LLMService {
   }
 }
 
-// 导出类型
 export type { CodeAnalysis, Refactoring, CodeFix, TestCase, LLMResponse }
 export { LLMError } from './types'

@@ -593,6 +593,9 @@ export const zh = {
   'tool.viewInTerminal': '在终端面板中查看执行过程',
   'tool.running': '运行中…',
   'tool.terminal': '终端',
+  'tool.direct': '直执行',
+  'tool.noTerminalSession': '这条命令没有可用的终端会话。',
+  'tool.directExecutionNoTerminal': '这条命令为了保证可靠性走的是直执行，因此没有创建可实时查看的终端会话。',
 
   // File Preview
   'filePreview.cannotLoadImage': '无法加载图片',

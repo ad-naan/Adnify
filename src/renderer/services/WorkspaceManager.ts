@@ -14,6 +14,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
+import { suspendAgentStorageWrites, resumeAgentStorageWrites } from '@renderer/agent/store/agentStorage'
 import { adnifyDir } from './adnifyDirService'
 import { mcpService } from './mcpService'
 import { gitService } from '@renderer/services/gitService'
@@ -221,7 +222,6 @@ class WorkspaceManager {
       threads: {},
       currentThreadId: null,
       pendingChanges: [],
-      messageCheckpoints: [],
       branches: {},
       activeBranchId: {},
       contextStats: null,
@@ -290,7 +290,12 @@ class WorkspaceManager {
       persist?: { rehydrate: () => Promise<void> }
     }
     if (store.persist) {
-      await store.persist.rehydrate()
+      suspendAgentStorageWrites()
+      try {
+        await store.persist.rehydrate()
+      } finally {
+        resumeAgentStorageWrites()
+      }
       logger.agent.info('[WorkspaceManager] Agent store rehydrated')
     }
 

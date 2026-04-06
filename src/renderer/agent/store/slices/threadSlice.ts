@@ -51,6 +51,7 @@ export const createEmptyThread = (): ChatThread => ({
     lastModified: Date.now(),
     messages: [],
     contextItems: [],
+    messageCheckpoints: [],
     streamState: { phase: 'idle' },
     toolStreamingPreviews: {},
     compressionStats: null,
@@ -449,4 +450,3 @@ export const createThreadSlice: StateCreator<
         }))
     },
 })
-

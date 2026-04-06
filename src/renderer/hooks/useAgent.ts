@@ -78,7 +78,7 @@ export function useAgent() {
 
   // 线程 ID（轻量 selector，不订阅整个 threads 对象）
   const currentThreadId = useAgentStore(state => state.currentThreadId)
-  const planPhase = useAgentStore(state => {
+  const planPhase = useAgentStore<'planning' | 'executing'>(state => {
     const activePlan = state.plans.find(plan => plan.id === state.activePlanId)
     return activePlan?.status === 'executing' ? 'executing' : 'planning'
   })

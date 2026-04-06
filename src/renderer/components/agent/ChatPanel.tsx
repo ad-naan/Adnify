@@ -46,6 +46,29 @@ import ConversationSidebar from './ConversationSidebar'
 import { BranchSelector } from './BranchControls'
 import { composerService } from '@/renderer/agent/services/composerService'
 
+interface RenderableMessageItem {
+  message: ChatMessageType
+  hasCheckpoint: boolean
+  renderKey: string
+}
+
+function buildRenderableMessageItems(
+  messages: ChatMessageType[],
+  checkpointMessageIds: ReadonlySet<string>
+): RenderableMessageItem[] {
+  return messages.map(message => {
+    const hasCheckpoint = isUserMessage(message) && checkpointMessageIds.has(message.id)
+
+    return {
+      message,
+      hasCheckpoint,
+      // Virtuoso caches rows by key. Include checkpoint state so a hydrated checkpoint
+      // remounts the affected user row instead of reusing the pre-hydration render.
+      renderKey: `${message.id}:${hasCheckpoint ? 'checkpoint' : 'plain'}`,
+    }
+  })
+}
+
 export default function ChatPanel() {
   const {
     llmConfig,
@@ -106,8 +129,9 @@ export default function ChatPanel() {
   const [images, setImages] = useState<PendingImage[]>([])
   const imagesRef = useRef(images)
   imagesRef.current = images
-  const messageCheckpointsRef = useRef(messageCheckpoints)
-  messageCheckpointsRef.current = messageCheckpoints
+  const checkpointMessageIds = useMemo(() => {
+    return new Set(messageCheckpoints.map(checkpoint => checkpoint.messageId))
+  }, [messageCheckpoints])
 
   // 组件卸载时释放所有未发送图片的 ObjectURL
   useEffect(() => {
@@ -123,7 +147,11 @@ export default function ChatPanel() {
   )
 
   // 骨架屏转场状态：避免大量消息的突现造成卡顿
-  const [displayMessages, setDisplayMessages] = useState(filteredMessages)
+  const filteredRenderableMessages = useMemo<RenderableMessageItem[]>(
+    () => buildRenderableMessageItems(filteredMessages, checkpointMessageIds),
+    [filteredMessages, checkpointMessageIds]
+  )
+  const [displayMessages, setDisplayMessages] = useState(filteredRenderableMessages)
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
 
@@ -150,8 +178,8 @@ export default function ChatPanel() {
 
   // Effect 2：同步 displayMessages，无论是线程切换后懒加载到位，还是流式追加
   useEffect(() => {
-    setDisplayMessages(filteredMessages)
-  }, [filteredMessages])
+    setDisplayMessages(filteredRenderableMessages)
+  }, [filteredRenderableMessages])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -951,10 +979,9 @@ export default function ChatPanel() {
   }, [acceptAllChanges, toast])
 
   // 渲染消息
-  const renderMessage = useCallback((msg: ChatMessageType) => {
+  const renderMessage = useCallback((item: RenderableMessageItem) => {
+    const msg = item.message
     if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null
-
-    const hasCheckpoint = isUserMessage(msg) && messageCheckpointsRef.current.some(cp => cp.messageId === msg.id)
 
     return (
       <ChatMessageUI
@@ -968,7 +995,7 @@ export default function ChatPanel() {
         onRejectTool={rejectCurrentTool}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
-        hasCheckpoint={hasCheckpoint}
+        hasCheckpoint={item.hasCheckpoint}
       />
     )
   }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id])
@@ -1152,13 +1179,13 @@ export default function ChatPanel() {
             <Virtuoso
               ref={virtuosoRef}
               data={displayMessages}
-              computeItemKey={(_, message) => message.id}
+              computeItemKey={(_, item) => item.renderKey}
               atBottomStateChange={handleAtBottomStateChange}
               initialTopMostItemIndex={Math.max(0, displayMessages.length - 1)}
               followOutput={followOutput}
-              itemContent={(_, message) => renderMessage(message)}
+              itemContent={(_, item) => renderMessage(item)}
               className="flex-1 custom-scrollbar w-full h-full"
-              style={{ minHeight: '100px' }}
+              style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
               overscan={50}
               atBottomThreshold={100}
               totalListHeightChanged={handleTotalListHeightChanged}

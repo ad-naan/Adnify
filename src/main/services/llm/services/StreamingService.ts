@@ -7,10 +7,16 @@ import { streamText } from 'ai'
 import type { StreamTextResult } from 'ai'
 import { BrowserWindow } from 'electron'
 import { logger } from '@shared/utils/Logger'
+import { ErrorCode } from '@shared/utils/errorHandler'
 import { createModel, resolveHeaderPlaceholders } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { prepareRequestCache } from '../core/RequestCache'
+import {
+  detectUnsupportedCacheFeature,
+  getCacheFeatureErrorReason,
+  markCacheFeatureUnsupported,
+} from '../core/CacheCompatibility'
 import { LLMError, convertUsage } from '../types'
 import type { StreamEvent, TokenUsage, ResponseMetadata } from '../types'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
@@ -33,6 +39,20 @@ export interface StreamingResult {
   metadata?: ResponseMetadata
 }
 
+interface StreamingRecoveryState {
+  cacheRetryCount: number
+}
+
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 15_000
+
+function resolveStreamIdleTimeoutMs(config: LLMConfig): number {
+  if (typeof config.timeout === 'number' && Number.isFinite(config.timeout) && config.timeout > 0) {
+    return config.timeout
+  }
+
+  return DEFAULT_STREAM_IDLE_TIMEOUT_MS
+}
+
 export class StreamingService {
   private window: BrowserWindow
   private messageConverter: MessageConverter
@@ -51,6 +71,15 @@ export class StreamingService {
    * 流式生成文本
    */
   async generate(params: StreamingParams): Promise<StreamingResult> {
+    return this.generateWithRecovery(params, {
+      cacheRetryCount: 0,
+    })
+  }
+
+  private async generateWithRecovery(
+    params: StreamingParams,
+    recoveryState: StreamingRecoveryState
+  ): Promise<StreamingResult> {
     const { config, messages, tools, systemPrompt, abortSignal, activeTools, requestId } = params
 
     // 创建 thinking 策略（只为需要特殊处理的模型）
@@ -213,10 +242,39 @@ export class StreamingService {
       })
 
       // 处理流式响应
-      return await this.processStream(result, strategy, requestId)
+      return await this.processStream(
+        result,
+        strategy,
+        requestId,
+        resolveStreamIdleTimeoutMs(config)
+      )
     } catch (error) {
+      if (abortSignal?.aborted) {
+        const abortedError = new LLMError(
+          'Request was cancelled',
+          ErrorCode.ABORTED,
+          false,
+        )
+        this.sendEvent(requestId, { type: 'error', error: abortedError })
+        throw abortedError
+      }
+
       // LLMError.fromError 会自动使用 mapAISDKError 获取友好消息
+      const unsupportedFeature = detectUnsupportedCacheFeature(error, config)
+      if (unsupportedFeature && recoveryState.cacheRetryCount < 1) {
+        markCacheFeatureUnsupported(
+          config,
+          unsupportedFeature,
+          getCacheFeatureErrorReason(error)
+        )
+        return await this.generateWithRecovery(params, {
+          ...recoveryState,
+          cacheRetryCount: recoveryState.cacheRetryCount + 1,
+        })
+      }
+
       const llmError = LLMError.fromError(error)
+
       this.sendEvent(requestId, { type: 'error', error: llmError })
       throw llmError
     }
@@ -230,13 +288,20 @@ export class StreamingService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     result: StreamTextResult<any, any>,
     strategy: ThinkingStrategy,
-    requestId: string
+    requestId: string,
+    streamIdleTimeoutMs: number
   ): Promise<StreamingResult> {
     let reasoning = ''
     const hasCustomParser = !!strategy.parseStreamText
     let streamError: Error | null = null
+    let sawToolActivity = false
+    let sawExecutableToolCall = false
+    const iterator = result.fullStream[Symbol.asyncIterator]()
 
-    for await (const part of result.fullStream) {
+    while (true) {
+      const next = await this.nextStreamPart(iterator, requestId, streamIdleTimeoutMs)
+      if (next.done) break
+      const part = next.value
       if (this.window.isDestroyed()) break
 
       try {
@@ -264,6 +329,7 @@ export class StreamingService {
             break
 
           case 'tool-input-start':
+            sawToolActivity = true
             this.sendEvent(requestId, {
               type: 'tool-call-start',
               id: part.id,
@@ -272,6 +338,7 @@ export class StreamingService {
             break
 
           case 'tool-input-delta':
+            sawToolActivity = true
             this.sendEvent(requestId, {
               type: 'tool-call-delta',
               id: part.id,
@@ -280,6 +347,7 @@ export class StreamingService {
             break
 
           case 'tool-input-end':
+            sawToolActivity = true
             this.sendEvent(requestId, {
               type: 'tool-call-delta-end',
               id: part.id,
@@ -287,6 +355,8 @@ export class StreamingService {
             break
 
           case 'tool-call':
+            sawToolActivity = true
+            sawExecutableToolCall = true
             this.sendEvent(requestId, {
               type: 'tool-call-available',
               id: part.toolCallId,
@@ -297,11 +367,11 @@ export class StreamingService {
 
           case 'error':
             // 捕获流中的错误，稍后抛出
-            if (part.error instanceof Error) {
-              streamError = part.error
+            if (!streamError) {
+              streamError = part.error instanceof Error
+                ? part.error
+                : new Error(String(part.error ?? 'Unknown stream error'))
             }
-            const llmError = LLMError.fromError(part.error)
-            this.sendEvent(requestId, { type: 'error', error: llmError })
             break
         }
       } catch (error) {
@@ -332,6 +402,33 @@ export class StreamingService {
       }
     }
 
+    const finishReason = await result.finishReason
+
+    if (finishReason === 'tool-calls' && !sawExecutableToolCall) {
+      throw new LLMError(
+        'Model stopped with tool-calls finish reason but did not produce any executable tool call',
+        ErrorCode.LLM_NO_OUTPUT,
+        true,
+      )
+    }
+
+    if (!finalText.trim() && !finalReasoning.trim() && !sawToolActivity) {
+      throw new LLMError(
+        'Model returned an empty response after the API call completed',
+        ErrorCode.LLM_EMPTY_RESPONSE,
+        true,
+      )
+    }
+
+    logger.llm.info('[StreamingService] Stream completed', {
+      requestId,
+      contentLength: finalText.length,
+      reasoningLength: finalReasoning.length,
+      sawToolActivity,
+      sawExecutableToolCall,
+      finishReason,
+    })
+
     const streamingResult: StreamingResult = {
       content: finalText,
       reasoning: finalReasoning || undefined,
@@ -340,7 +437,7 @@ export class StreamingService {
         id: response.id,
         modelId: response.modelId,
         timestamp: response.timestamp,
-        finishReason: (await result.finishReason) || undefined,
+        finishReason: finishReason || undefined,
       },
     }
 
@@ -489,6 +586,43 @@ export class StreamingService {
       }
     } catch (error) {
       logger.llm.error('[StreamingService] Failed to send event:', error)
+    }
+  }
+
+  private async nextStreamPart(
+    iterator: AsyncIterator<any>,
+    requestId: string,
+    idleTimeoutMs: number
+  ): Promise<IteratorResult<any>> {
+    let timeoutId: NodeJS.Timeout | null = null
+
+    try {
+      return await Promise.race([
+        iterator.next().finally(() => {
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+            timeoutId = null
+          }
+        }),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            logger.llm.warn('[StreamingService] Stream idle timeout waiting for next chunk', {
+              requestId,
+              idleTimeoutMs,
+            })
+            void iterator.return?.()
+            reject(new LLMError(
+              `Model stream stalled for more than ${Math.floor(idleTimeoutMs / 1000)}s`,
+              ErrorCode.TIMEOUT,
+              true,
+            ))
+          }, idleTimeoutMs)
+        }),
+      ])
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
     }
   }
 }

@@ -247,7 +247,6 @@ export interface AppSettingsSchema {
     maxRetries?: number
     toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
     parallelToolCalls?: boolean
-    headers?: Record<string, string>
   }
   language?: string
   autoApprove?: {
@@ -326,17 +325,6 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
       }
     }
 
-    // headers 验证
-    if (llm.headers && typeof llm.headers === 'object') {
-      const headers = llm.headers as Record<string, unknown>
-      const cleanedHeaders: Record<string, string> = {}
-      for (const [key, value] of Object.entries(headers)) {
-        if (typeof value === 'string') cleanedHeaders[key] = value
-      }
-      if (Object.keys(cleanedHeaders).length > 0) {
-        cleaned.llmConfig.headers = cleanedHeaders
-      }
-    }
   }
 
   if (typeof config.language === 'string') cleaned.language = config.language

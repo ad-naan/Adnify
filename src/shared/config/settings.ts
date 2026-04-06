@@ -69,6 +69,7 @@ const defaultLLMConfig: LLMConfig = {
   provider: LLM_DEFAULTS.defaultProvider,
   model: LLM_DEFAULTS.defaultModel,
   apiKey: '',
+  timeout: LLM_DEFAULTS.timeout,
   temperature: LLM_DEFAULTS.temperature,
   maxTokens: LLM_DEFAULTS.maxTokens,
   topP: LLM_DEFAULTS.topP,

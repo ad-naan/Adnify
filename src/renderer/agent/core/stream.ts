@@ -489,8 +489,14 @@ export function createStreamProcessor(
     if (result?.usage) {
       usage = result.usage as TokenUsage
     }
-    finalizeReasoning()
-    doResolve({ content, toolCalls, usage, error })
+    flushToolPreviewUpdates()
+
+    // `llm:done:*` and `llm:stream:*` are delivered on different IPC channels.
+    // Give any in-flight final tool-call event one tick to arrive before resolving.
+    window.setTimeout(() => {
+      finalizeReasoning()
+      doResolve({ content, toolCalls, usage, error })
+    }, 0)
   }
 
   // Subscribe only to this request's IPC channel.
@@ -506,4 +512,3 @@ export function createStreamProcessor(
 
   return { wait, cleanup }
 }
-

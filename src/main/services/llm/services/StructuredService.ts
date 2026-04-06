@@ -1,19 +1,16 @@
 /**
- * 结构化输出服务 - 使用 AI SDK 6.0 generateText + Output
+ * Structured-output service built on AI SDK generateText / generateObject.
  */
 
-import { generateText, Output, generateObject } from 'ai'
+import { generateObject, generateText, Output } from 'ai'
+import type { ModelMessage } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { logger } from '@shared/utils/Logger'
 import { createModel } from '../modelFactory'
-import { prepareRequestCache } from '../core/RequestCache'
+import { executePreparedRequest } from '../core/RequestExecution'
 import { LLMError, convertUsage } from '../types'
 import type { LLMResponse, CodeAnalysis, Refactoring, CodeFix, TestCase } from '../types'
 import type { LLMConfig } from '@shared/types'
-
-// ============================================
-// Zod Schemas
-// ============================================
 
 const CodeIssueSchema = z.object({
   severity: z.enum(['error', 'warning', 'info', 'hint']),
@@ -101,14 +98,86 @@ const TestCaseSchema = z.object({
   teardown: z.string().optional(),
 })
 
-// ============================================
-// 服务实现
-// ============================================
+interface GenerationResponseLike {
+  usage?: Parameters<typeof convertUsage>[0]
+  response: {
+    id: string
+    modelId: string
+    timestamp: Date
+  }
+  finishReason?: string | null
+}
 
 export class StructuredService {
-  /**
-   * 代码分析
-   */
+  private buildResponse<T>(result: GenerationResponseLike, data: T): LLMResponse<T> {
+    return {
+      data,
+      usage: result.usage ? convertUsage(result.usage) : undefined,
+      metadata: {
+        id: result.response.id,
+        modelId: result.response.modelId,
+        timestamp: result.response.timestamp,
+        finishReason: result.finishReason || undefined,
+      },
+    }
+  }
+
+  private async executeStructuredText<T>(options: {
+    config: LLMConfig
+    operation: string
+    messages: ModelMessage[]
+    schema: z.ZodTypeAny
+    onData?: (data: T) => void
+  }): Promise<LLMResponse<T>> {
+    const { config, operation, messages, schema, onData } = options
+    const model = createModel(config)
+
+    const result = await executePreparedRequest({
+      config,
+      operation,
+      baseMessages: messages,
+      execute: async ({ messages: preparedMessages, providerOptions }) =>
+        await generateText({
+          model,
+          messages: preparedMessages,
+          providerOptions,
+          experimental_output: Output.object({
+            schema: schema as any,
+          }),
+        }),
+    })
+
+    const data = result.experimental_output as unknown as T
+    onData?.(data)
+    return this.buildResponse(result, data)
+  }
+
+  private async executeStructuredObjectRequest<T>(options: {
+    config: LLMConfig
+    operation: string
+    messages: ModelMessage[]
+    schema: z.ZodTypeAny
+  }): Promise<LLMResponse<T>> {
+    const { config, operation, messages, schema } = options
+    const model = createModel(config)
+
+    const result = await executePreparedRequest({
+      config,
+      operation,
+      baseMessages: messages,
+      execute: async ({ messages: preparedMessages, providerOptions }) =>
+        await generateObject({
+          model,
+          schema: schema as any,
+          messages: preparedMessages as any,
+          providerOptions,
+          temperature: config.temperature,
+        }),
+    })
+
+    return this.buildResponse(result, result.object as T)
+  }
+
   async analyzeCode(params: {
     config: LLMConfig
     code: string
@@ -118,13 +187,13 @@ export class StructuredService {
     logger.system.info('[StructuredService] Analyzing code')
 
     try {
-      const model = createModel(params.config)
-
-      // 应用缓存
-      const cachePreparation = await prepareRequestCache(params.config, [
-        {
-          role: 'user',
-          content: `Analyze the following ${params.language} code and return a structured analysis.
+      return await this.executeStructuredText<CodeAnalysis>({
+        config: params.config,
+        operation: 'structured:analyze-code',
+        messages: [
+          {
+            role: 'user',
+            content: `Analyze the following ${params.language} code and return a structured analysis.
 
 File: ${params.filePath}
 
@@ -136,30 +205,10 @@ Return a JSON object with:
 - issues: array of code issues (severity, message, line, column)
 - suggestions: array of improvement suggestions (title, description, priority)
 - summary: brief text summary`,
-        },
-      ] as any)
-
-      const result = await generateText({
-        model,
-        messages: cachePreparation.messages,
-        providerOptions: cachePreparation.providerOptions,
-        experimental_output: Output.object({
-          schema: CodeAnalysisSchema as any,
-        }),
+          },
+        ],
+        schema: CodeAnalysisSchema,
       })
-
-      const data = result.experimental_output as unknown as CodeAnalysis
-
-      return {
-        data,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
-        metadata: {
-          id: result.response.id,
-          modelId: result.response.modelId,
-          timestamp: result.response.timestamp,
-          finishReason: result.finishReason,
-        },
-      }
     } catch (error) {
       const llmError = LLMError.fromError(error)
       logger.system.error('[StructuredService] Code analysis failed:', llmError)
@@ -167,9 +216,6 @@ Return a JSON object with:
     }
   }
 
-  /**
-   * 代码重构建议
-   */
   async suggestRefactoring(params: {
     config: LLMConfig
     code: string
@@ -179,12 +225,13 @@ Return a JSON object with:
     logger.system.info('[StructuredService] Suggesting refactoring')
 
     try {
-      const model = createModel(params.config)
-
-      const cachePreparation = await prepareRequestCache(params.config, [
-        {
-          role: 'user',
-          content: `Suggest refactorings for the following ${params.language} code.
+      return await this.executeStructuredText<Refactoring>({
+        config: params.config,
+        operation: 'structured:suggest-refactoring',
+        messages: [
+          {
+            role: 'user',
+            content: `Suggest refactorings for the following ${params.language} code.
 
 Intent: ${params.intent}
 
@@ -193,30 +240,10 @@ ${params.code}
 \`\`\`
 
 Return refactoring suggestions with precise line/column positions.`,
-        },
-      ] as any)
-
-      const result = await generateText({
-        model,
-        messages: cachePreparation.messages,
-        providerOptions: cachePreparation.providerOptions,
-        experimental_output: Output.object({
-          schema: RefactoringSchema as any,
-        }),
+          },
+        ],
+        schema: RefactoringSchema,
       })
-
-      const data = result.experimental_output as unknown as Refactoring
-
-      return {
-        data,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
-        metadata: {
-          id: result.response.id,
-          modelId: result.response.modelId,
-          timestamp: result.response.timestamp,
-          finishReason: result.finishReason,
-        },
-      }
     } catch (error) {
       const llmError = LLMError.fromError(error)
       logger.system.error('[StructuredService] Refactoring failed:', llmError)
@@ -224,9 +251,6 @@ Return refactoring suggestions with precise line/column positions.`,
     }
   }
 
-  /**
-   * 错误修复建议
-   */
   async suggestFixes(params: {
     config: LLMConfig
     code: string
@@ -241,16 +265,17 @@ Return refactoring suggestions with precise line/column positions.`,
     logger.system.info('[StructuredService] Suggesting fixes')
 
     try {
-      const model = createModel(params.config)
-
       const diagnosticsText = params.diagnostics
-        .map((d, i) => `${i}. Line ${d.line}: ${d.message}`)
+        .map((diagnostic, index) => `${index}. Line ${diagnostic.line}: ${diagnostic.message}`)
         .join('\n')
 
-      const cachePreparation = await prepareRequestCache(params.config, [
-        {
-          role: 'user',
-          content: `Suggest fixes for the following ${params.language} errors:
+      return await this.executeStructuredText<CodeFix>({
+        config: params.config,
+        operation: 'structured:suggest-fixes',
+        messages: [
+          {
+            role: 'user',
+            content: `Suggest fixes for the following ${params.language} errors:
 
 Diagnostics:
 ${diagnosticsText}
@@ -261,30 +286,10 @@ ${params.code}
 \`\`\`
 
 Return fix suggestions with precise line/column positions.`,
-        },
-      ] as any)
-
-      const result = await generateText({
-        model,
-        messages: cachePreparation.messages,
-        providerOptions: cachePreparation.providerOptions,
-        experimental_output: Output.object({
-          schema: CodeFixSchema as any,
-        }),
+          },
+        ],
+        schema: CodeFixSchema,
       })
-
-      const data = result.experimental_output as unknown as CodeFix
-
-      return {
-        data,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
-        metadata: {
-          id: result.response.id,
-          modelId: result.response.modelId,
-          timestamp: result.response.timestamp,
-          finishReason: result.finishReason,
-        },
-      }
     } catch (error) {
       const llmError = LLMError.fromError(error)
       logger.system.error('[StructuredService] Fix suggestion failed:', llmError)
@@ -292,9 +297,6 @@ Return fix suggestions with precise line/column positions.`,
     }
   }
 
-  /**
-   * 生成测试用例
-   */
   async generateTests(params: {
     config: LLMConfig
     code: string
@@ -304,42 +306,23 @@ Return fix suggestions with precise line/column positions.`,
     logger.system.info('[StructuredService] Generating tests')
 
     try {
-      const model = createModel(params.config)
-
-      const cachePreparation = await prepareRequestCache(params.config, [
-        {
-          role: 'user',
-          content: `Generate test cases for the following ${params.language} code${params.framework ? ` using ${params.framework}` : ''}.
+      return await this.executeStructuredText<TestCase>({
+        config: params.config,
+        operation: 'structured:generate-tests',
+        messages: [
+          {
+            role: 'user',
+            content: `Generate test cases for the following ${params.language} code${params.framework ? ` using ${params.framework}` : ''}.
 
 \`\`\`${params.language}
 ${params.code}
 \`\`\`
 
 Return comprehensive test cases including unit tests, integration tests, and edge cases.`,
-        },
-      ] as any)
-
-      const result = await generateText({
-        model,
-        messages: cachePreparation.messages,
-        providerOptions: cachePreparation.providerOptions,
-        experimental_output: Output.object({
-          schema: TestCaseSchema as any,
-        }),
+          },
+        ],
+        schema: TestCaseSchema,
       })
-
-      const data = result.experimental_output as unknown as TestCase
-
-      return {
-        data,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
-        metadata: {
-          id: result.response.id,
-          modelId: result.response.modelId,
-          timestamp: result.response.timestamp,
-          finishReason: result.finishReason,
-        },
-      }
     } catch (error) {
       const llmError = LLMError.fromError(error)
       logger.system.error('[StructuredService] Test generation failed:', llmError)
@@ -359,45 +342,26 @@ Return comprehensive test cases including unit tests, integration tests, and edg
     logger.system.info('[StructuredService] Analyzing code (streaming)')
 
     try {
-      const model = createModel(params.config)
-
-      const cachePreparation = await prepareRequestCache(params.config, [
-        {
-          role: 'user',
-          content: `Analyze the following ${params.language} code:
+      return await this.executeStructuredText<CodeAnalysis>({
+        config: params.config,
+        operation: 'structured:analyze-code-stream',
+        messages: [
+          {
+            role: 'user',
+            content: `Analyze the following ${params.language} code:
 
 File: ${params.filePath}
 
 \`\`\`${params.language}
 ${params.code}
-\`\`\`
+        \`\`\`
 
 Return structured analysis with issues, suggestions, and summary.`,
-        },
-      ] as any)
-
-      const result = await generateText({
-        model,
-        messages: cachePreparation.messages,
-        providerOptions: cachePreparation.providerOptions,
-        experimental_output: Output.object({
-          schema: CodeAnalysisSchema as any,
-        }),
+          },
+        ],
+        schema: CodeAnalysisSchema,
+        onData: onPartial,
       })
-
-      const data = result.experimental_output as unknown as CodeAnalysis
-      onPartial(data)
-
-      return {
-        data,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
-        metadata: {
-          id: result.response.id,
-          modelId: result.response.modelId,
-          timestamp: result.response.timestamp,
-          finishReason: result.finishReason,
-        },
-      }
     } catch (error) {
       const llmError = LLMError.fromError(error)
       logger.system.error('[StructuredService] Streaming analysis failed:', llmError)
@@ -405,53 +369,28 @@ Return structured analysis with issues, suggestions, and summary.`,
     }
   }
 
-  /**
-   * 通用结构化对象生成（使用 generateObject）
-   */
   async generateStructuredObject<T>(params: {
     config: LLMConfig
-    schema: any // 支持 Zod schema 或 JSON Schema
+    schema: any
     system: string
     prompt: string
   }): Promise<LLMResponse<T>> {
     logger.system.info('[StructuredService] Generating structured object')
 
     try {
-      const model = createModel(params.config)
+      const zodSchema: z.ZodTypeAny = params.schema._def
+        ? params.schema
+        : jsonSchemaToZod(params.schema)
 
-      // 如果传入的是 JSON Schema，转换为 Zod schema
-      let zodSchema: z.ZodTypeAny
-      if (params.schema._def) {
-        // 已经是 Zod schema
-        zodSchema = params.schema
-      } else {
-        // 是 JSON Schema，需要转换（简化版，只支持常见类型）
-        zodSchema = jsonSchemaToZod(params.schema)
-      }
-
-      const cachePreparation = await prepareRequestCache(params.config, [
-        ...(params.system ? [{ role: 'system', content: params.system }] : []),
-        { role: 'user', content: params.prompt },
-      ] as any)
-
-      const result = await generateObject({
-        model,
-        schema: zodSchema as any,
-        messages: cachePreparation.messages as any,
-        providerOptions: cachePreparation.providerOptions,
-        temperature: params.config.temperature,
+      return await this.executeStructuredObjectRequest<T>({
+        config: params.config,
+        operation: 'structured:generate-object',
+        messages: [
+          ...(params.system ? [{ role: 'system' as const, content: params.system }] : []),
+          { role: 'user' as const, content: params.prompt },
+        ],
+        schema: zodSchema,
       })
-
-      return {
-        data: result.object as T,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
-        metadata: {
-          id: result.response.id,
-          modelId: result.response.modelId,
-          timestamp: result.response.timestamp,
-          finishReason: result.finishReason,
-        },
-      }
     } catch (error) {
       const llmError = LLMError.fromError(error)
       logger.system.error('[StructuredService] Structured object generation failed:', llmError)
@@ -460,10 +399,6 @@ Return structured analysis with issues, suggestions, and summary.`,
   }
 }
 
-/**
- * 简化的 JSON Schema 到 Zod 转换器
- * 只支持常见的类型，用于 IPC 传递
- */
 function jsonSchemaToZod(schema: any): z.ZodTypeAny {
   if (schema.type === 'object') {
     const shape: Record<string, z.ZodTypeAny> = {}
@@ -476,25 +411,25 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
     }
     return z.object(shape)
   }
-  
+
   if (schema.type === 'array') {
     return z.array(jsonSchemaToZod(schema.items))
   }
-  
+
   if (schema.type === 'string') {
     if (schema.enum) {
       return z.enum(schema.enum as [string, ...string[]])
     }
     return z.string()
   }
-  
+
   if (schema.type === 'number') {
     return z.number()
   }
-  
+
   if (schema.type === 'boolean') {
     return z.boolean()
   }
-  
+
   return z.any()
 }
