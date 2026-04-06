@@ -8,7 +8,7 @@ import { logger } from '@shared/utils/Logger'
 import { createModel } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
-import { applyCaching, getCacheConfig } from '../core/PromptCache'
+import { prepareRequestCache } from '../core/RequestCache'
 import { LLMError, convertUsage } from '../types'
 import type { LLMResponse } from '../types'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
@@ -52,8 +52,8 @@ export class SyncService {
       let coreMessages = this.messageConverter.convert(messages, systemPrompt)
 
       // 应用 Prompt Caching
-      const cacheConfig = getCacheConfig(config.provider)
-      coreMessages = applyCaching(coreMessages, cacheConfig)
+      const cachePreparation = await prepareRequestCache(config, coreMessages)
+      coreMessages = cachePreparation.messages
 
       // 转换工具
       const coreTools = tools ? this.toolConverter.convert(tools) : undefined
@@ -68,6 +68,7 @@ export class SyncService {
         topP: config.topP !== undefined && config.topP < 1 ? config.topP : undefined,
         topK: config.topK,
         seed: config.seed,
+        providerOptions: cachePreparation.providerOptions,
         abortSignal,
         timeout,
       })

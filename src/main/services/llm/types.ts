@@ -14,6 +14,7 @@ export interface TokenUsage {
   outputTokens: number
   totalTokens: number
   cachedInputTokens?: number
+  cacheWriteTokens?: number
   reasoningTokens?: number
 }
 
@@ -191,7 +192,8 @@ export function convertUsage(usage: LanguageModelUsage): TokenUsage {
     inputTokens: usage.inputTokens || 0,
     outputTokens: usage.outputTokens || 0,
     totalTokens: usage.totalTokens || 0,
-    cachedInputTokens: usageAny.inputDetails?.cacheReadTokens,
-    reasoningTokens: usageAny.outputDetails?.reasoningTokens,
+    cachedInputTokens: usageAny.inputTokenDetails?.cacheReadTokens ?? usageAny.cachedInputTokens,
+    cacheWriteTokens: usageAny.inputTokenDetails?.cacheWriteTokens,
+    reasoningTokens: usageAny.outputTokenDetails?.reasoningTokens ?? usageAny.reasoningTokens,
   }
 }

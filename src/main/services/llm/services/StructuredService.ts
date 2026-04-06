@@ -6,7 +6,7 @@ import { generateText, Output, generateObject } from 'ai'
 import { z } from 'zod'
 import { logger } from '@shared/utils/Logger'
 import { createModel } from '../modelFactory'
-import { applyCaching, getCacheConfig } from '../core/PromptCache'
+import { prepareRequestCache } from '../core/RequestCache'
 import { LLMError, convertUsage } from '../types'
 import type { LLMResponse, CodeAnalysis, Refactoring, CodeFix, TestCase } from '../types'
 import type { LLMConfig } from '@shared/types'
@@ -121,12 +121,10 @@ export class StructuredService {
       const model = createModel(params.config)
 
       // 应用缓存
-      const cacheConfig = getCacheConfig(params.config.provider)
-      const messages = applyCaching(
-        [
-          {
-            role: 'user',
-            content: `Analyze the following ${params.language} code and return a structured analysis.
+      const cachePreparation = await prepareRequestCache(params.config, [
+        {
+          role: 'user',
+          content: `Analyze the following ${params.language} code and return a structured analysis.
 
 File: ${params.filePath}
 
@@ -138,14 +136,13 @@ Return a JSON object with:
 - issues: array of code issues (severity, message, line, column)
 - suggestions: array of improvement suggestions (title, description, priority)
 - summary: brief text summary`,
-          },
-        ],
-        cacheConfig
-      )
+        },
+      ] as any)
 
       const result = await generateText({
         model,
-        messages,
+        messages: cachePreparation.messages,
+        providerOptions: cachePreparation.providerOptions,
         experimental_output: Output.object({
           schema: CodeAnalysisSchema as any,
         }),
@@ -184,12 +181,10 @@ Return a JSON object with:
     try {
       const model = createModel(params.config)
 
-      const cacheConfig = getCacheConfig(params.config.provider)
-      const messages = applyCaching(
-        [
-          {
-            role: 'user',
-            content: `Suggest refactorings for the following ${params.language} code.
+      const cachePreparation = await prepareRequestCache(params.config, [
+        {
+          role: 'user',
+          content: `Suggest refactorings for the following ${params.language} code.
 
 Intent: ${params.intent}
 
@@ -198,14 +193,13 @@ ${params.code}
 \`\`\`
 
 Return refactoring suggestions with precise line/column positions.`,
-          },
-        ],
-        cacheConfig
-      )
+        },
+      ] as any)
 
       const result = await generateText({
         model,
-        messages,
+        messages: cachePreparation.messages,
+        providerOptions: cachePreparation.providerOptions,
         experimental_output: Output.object({
           schema: RefactoringSchema as any,
         }),
@@ -253,12 +247,10 @@ Return refactoring suggestions with precise line/column positions.`,
         .map((d, i) => `${i}. Line ${d.line}: ${d.message}`)
         .join('\n')
 
-      const cacheConfig = getCacheConfig(params.config.provider)
-      const messages = applyCaching(
-        [
-          {
-            role: 'user',
-            content: `Suggest fixes for the following ${params.language} errors:
+      const cachePreparation = await prepareRequestCache(params.config, [
+        {
+          role: 'user',
+          content: `Suggest fixes for the following ${params.language} errors:
 
 Diagnostics:
 ${diagnosticsText}
@@ -269,14 +261,13 @@ ${params.code}
 \`\`\`
 
 Return fix suggestions with precise line/column positions.`,
-          },
-        ],
-        cacheConfig
-      )
+        },
+      ] as any)
 
       const result = await generateText({
         model,
-        messages,
+        messages: cachePreparation.messages,
+        providerOptions: cachePreparation.providerOptions,
         experimental_output: Output.object({
           schema: CodeFixSchema as any,
         }),
@@ -315,26 +306,23 @@ Return fix suggestions with precise line/column positions.`,
     try {
       const model = createModel(params.config)
 
-      const cacheConfig = getCacheConfig(params.config.provider)
-      const messages = applyCaching(
-        [
-          {
-            role: 'user',
-            content: `Generate test cases for the following ${params.language} code${params.framework ? ` using ${params.framework}` : ''}.
+      const cachePreparation = await prepareRequestCache(params.config, [
+        {
+          role: 'user',
+          content: `Generate test cases for the following ${params.language} code${params.framework ? ` using ${params.framework}` : ''}.
 
 \`\`\`${params.language}
 ${params.code}
 \`\`\`
 
 Return comprehensive test cases including unit tests, integration tests, and edge cases.`,
-          },
-        ],
-        cacheConfig
-      )
+        },
+      ] as any)
 
       const result = await generateText({
         model,
-        messages,
+        messages: cachePreparation.messages,
+        providerOptions: cachePreparation.providerOptions,
         experimental_output: Output.object({
           schema: TestCaseSchema as any,
         }),
@@ -373,12 +361,10 @@ Return comprehensive test cases including unit tests, integration tests, and edg
     try {
       const model = createModel(params.config)
 
-      const cacheConfig = getCacheConfig(params.config.provider)
-      const messages = applyCaching(
-        [
-          {
-            role: 'user',
-            content: `Analyze the following ${params.language} code:
+      const cachePreparation = await prepareRequestCache(params.config, [
+        {
+          role: 'user',
+          content: `Analyze the following ${params.language} code:
 
 File: ${params.filePath}
 
@@ -387,14 +373,13 @@ ${params.code}
 \`\`\`
 
 Return structured analysis with issues, suggestions, and summary.`,
-          },
-        ],
-        cacheConfig
-      )
+        },
+      ] as any)
 
       const result = await generateText({
         model,
-        messages,
+        messages: cachePreparation.messages,
+        providerOptions: cachePreparation.providerOptions,
         experimental_output: Output.object({
           schema: CodeAnalysisSchema as any,
         }),
@@ -444,11 +429,16 @@ Return structured analysis with issues, suggestions, and summary.`,
         zodSchema = jsonSchemaToZod(params.schema)
       }
 
+      const cachePreparation = await prepareRequestCache(params.config, [
+        ...(params.system ? [{ role: 'system', content: params.system }] : []),
+        { role: 'user', content: params.prompt },
+      ] as any)
+
       const result = await generateObject({
         model,
         schema: zodSchema as any,
-        system: params.system,
-        prompt: params.prompt,
+        messages: cachePreparation.messages as any,
+        providerOptions: cachePreparation.providerOptions,
         temperature: params.config.temperature,
       })
 

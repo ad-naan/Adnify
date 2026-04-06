@@ -51,6 +51,7 @@ export interface TokenUsage {
   outputTokens: number
   totalTokens: number
   cachedInputTokens?: number
+  cacheWriteTokens?: number
   reasoningTokens?: number
 }
 

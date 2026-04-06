@@ -106,6 +106,8 @@ export default function StatusBar() {
         totalUsage.promptTokens += msg.usage.promptTokens
         totalUsage.completionTokens += msg.usage.completionTokens
         totalUsage.totalTokens += msg.usage.totalTokens
+        totalUsage.cachedInputTokens = (totalUsage.cachedInputTokens || 0) + (msg.usage.cachedInputTokens || 0)
+        totalUsage.cacheWriteTokens = (totalUsage.cacheWriteTokens || 0) + (msg.usage.cacheWriteTokens || 0)
         lastUsage = msg.usage
       }
     }
