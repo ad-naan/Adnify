@@ -15,6 +15,7 @@ import { toast } from '../../common/ToastProvider'
 import { workspaceManager } from '@services/WorkspaceManager'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { Button, Tooltip, ContextMenu, ContextMenuItem } from '../../ui'
+import { TreeSkeleton } from '../../ui/Loading'
 import { VirtualFileTree } from '../../tree/VirtualFileTree'
 import { terminalManager } from '@/renderer/services/TerminalManager'
 
@@ -266,8 +267,8 @@ export function ExplorerView() {
             onOpenTerminal={openTerminalAtPath}
           />
         ) : workspace && workspace.roots.length > 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="w-5 h-5 border-2 border-text-muted border-t-transparent rounded-full animate-spin" />
+          <div className="flex-1 overflow-hidden">
+            <TreeSkeleton rows={14} />
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">

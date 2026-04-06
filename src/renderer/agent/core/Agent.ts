@@ -44,7 +44,7 @@ export class AgentClass {
     abortController: AbortController
     assistantId: string
     requestId?: string
-    orchestratorTaskId?: string
+    planTaskId?: string
   }> = new Map()
 
   // ===== 公共 API =====
@@ -74,7 +74,7 @@ export class AgentClass {
     executionOptions?: {
       threadId?: string
       requestId?: string
-      orchestratorTaskId?: string
+      planTaskId?: string
     }
   ): Promise<{ threadId: string; assistantId: string; requestId: string }> {
     const store = useAgentStore.getState()
@@ -114,7 +114,7 @@ export class AgentClass {
       threadStore.setExecutionMeta({
         requestId,
         assistantId,
-        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+        planTaskId: executionOptions?.planTaskId,
         loopState: 'running',
       })
       threadStore.setStreamState({ requestId, assistantId, phase: 'streaming' })
@@ -124,7 +124,7 @@ export class AgentClass {
         abortController,
         assistantId,
         requestId,
-        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+        planTaskId: executionOptions?.planTaskId,
       })
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
@@ -163,7 +163,7 @@ export class AgentClass {
         threadId,
         assistantId,
         requestId,
-        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+        planTaskId: executionOptions?.planTaskId,
       }
 
       const preparation = await agentExecutor.prepare(
@@ -182,10 +182,11 @@ export class AgentClass {
       const executionContext: ExecutionContext = {
         workspacePath,
         chatMode,
+        planPhase: promptOptions?.planPhase,
         abortSignal: abortController.signal,
         threadId,
         requestId,
-        orchestratorTaskId: executionOptions?.orchestratorTaskId,
+        planTaskId: executionOptions?.planTaskId,
       }
       await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
 
@@ -408,8 +409,13 @@ export class AgentClass {
    */
   private showError(message: string): void {
     const store = useAgentStore.getState()
+    const language = useStore.getState().language
     const id = store.addAssistantMessage()
-    store.appendToAssistant(id, `❌ ${message}`)
+    store.addSystemAlertPart(id, {
+      alertType: 'error',
+      title: language === 'zh' ? '错误' : 'Error',
+      message,
+    })
     store.finalizeAssistant(id)
   }
 

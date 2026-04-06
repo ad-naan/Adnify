@@ -57,6 +57,16 @@ export interface MessageActions {
     // Lint Check 操作
     addLintCheckPart: (messageId: string, targetThreadId?: string) => void
     updateLintCheckPart: (messageId: string, updates: Partial<import('../../types').LintCheckPart>, targetThreadId?: string) => void
+    addSystemAlertPart: (
+        messageId: string,
+        alert: {
+            alertType: 'error' | 'warning' | 'info' | 'success'
+            title?: string
+            message: string
+            suggestion?: string
+        },
+        targetThreadId?: string
+    ) => void
 
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: InteractiveContent, targetThreadId?: string) => void
@@ -953,6 +963,35 @@ export const createMessageSlice: StateCreator<
 
             return {
                 threads: { ...state.threads, [threadId]: { ...thread, messages } },
+            }
+        })
+    },
+
+    addSystemAlertPart: (messageId, alert, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id === messageId && msg.role === 'assistant') {
+                    const assistantMsg = msg as AssistantMessage
+                    const newPart: AssistantPart = {
+                        type: 'system_alert',
+                        alertType: alert.alertType,
+                        title: alert.title,
+                        message: alert.message,
+                        suggestion: alert.suggestion,
+                    }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
+                }
+                return msg
+            })
+
+            return {
+                threads: { ...state.threads, [threadId]: { ...thread, messages, lastModified: Date.now() } },
             }
         })
     },

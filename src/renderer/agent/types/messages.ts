@@ -38,6 +38,14 @@ export interface SearchPart {
   isStreaming?: boolean
 }
 
+export interface SystemAlertPart {
+  type: 'system_alert'
+  alertType: 'error' | 'warning' | 'info' | 'success'
+  title?: string
+  message: string
+  suggestion?: string
+}
+
 /** Lint 自动检查结果 */
 export interface LintCheckPart {
   type: 'lint_check'
@@ -53,7 +61,7 @@ export interface LintCheckFile {
 }
 
 /** 助手消息部分 */
-export type AssistantPart = TextPart | ReasoningPart | ToolCallPart | SearchPart | LintCheckPart
+export type AssistantPart = TextPart | ReasoningPart | ToolCallPart | SearchPart | LintCheckPart | SystemAlertPart
 
 /** Token 使用统计 */
 export interface TokenUsage {
@@ -172,6 +180,10 @@ export function isToolCallPart(part: AssistantPart): part is ToolCallPart {
 
 export function isSearchPart(part: AssistantPart): part is SearchPart {
   return part.type === 'search'
+}
+
+export function isSystemAlertPart(part: AssistantPart): part is SystemAlertPart {
+  return part.type === 'system_alert'
 }
 
 export function isLintCheckPart(part: AssistantPart): part is LintCheckPart {

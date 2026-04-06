@@ -18,11 +18,12 @@ export interface LLMConfig extends SharedLLMConfig {
 export interface ExecutionContext {
   workspacePath: string | null
   chatMode: WorkMode
+  planPhase?: 'planning' | 'executing'
   abortSignal?: AbortSignal
   /** 绑定的线程 ID（用于后台任务隔离） */
   threadId?: string | null
   requestId?: string
-  orchestratorTaskId?: string
+  planTaskId?: string
 }
 
 // ===== 工具执行上下文（重新导出 shared 定义） =====
@@ -44,6 +45,7 @@ export interface LoopCheckResult {
   isLoop: boolean
   reason?: string
   suggestion?: string
+  warning?: string
 }
 
 // ===== 压缩统计（从 CompressionManager 导出） =====

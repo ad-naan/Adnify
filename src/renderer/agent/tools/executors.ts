@@ -28,6 +28,14 @@ import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 
 // ===== 辅助函数 =====
 
+function getLocalizedText(language: string, zh: string, en: string): string {
+    return language === 'zh' ? zh : en
+}
+
+function getCurrentLanguage(): string {
+    return useStore.getState().language
+}
+
 /**
  * 文件写入后通知 LSP 并等待诊断
  *
@@ -1167,7 +1175,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             return {
                 success: true,
-                result: `Created task plan "${name}" with ${tasks.length} tasks.\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe TaskBoard has been opened for user review. Please review the plan and click "开始执行" to proceed.`,
+                result: getLocalizedText(
+                    getCurrentLanguage(),
+                    `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n规划文件：${jsonPath}\n需求文档：${mdPath}\n\nTaskBoard 已打开，请先审核规划，再点击“开始执行”。`,
+                    `Created task plan "${name}" with ${tasks.length} tasks.\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe TaskBoard has been opened for user review. Please review the plan and click "Start Execution" to proceed.`,
+                ),
                 meta: { planId, planPath: jsonPath, stopLoop: true },
             }
         } catch (err) {
@@ -1277,7 +1289,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             return {
                 success: true,
-                result: `Plan updated:\n${changes.map(c => `- ${c}`).join('\n')}\n\nPlease review the changes in the TaskBoard.`,
+                result: getLocalizedText(
+                    getCurrentLanguage(),
+                    `规划已更新：\n${changes.map(c => `- ${c}`).join('\n')}\n\n请在 TaskBoard 中审核这些变更。`,
+                    `Plan updated:\n${changes.map(c => `- ${c}`).join('\n')}\n\nPlease review the changes in the TaskBoard.`,
+                ),
                 meta: { stopLoop: true },
             }
         } catch (err) {
@@ -1301,21 +1317,33 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             if (!plan) {
                 return {
                     success: false,
-                    result: 'Error: No task plan found. You must first create a plan using `create_task_plan` before starting execution.\n\nPlease:\n1. Use `ask_user` to gather requirements\n2. Use `create_task_plan` to create a plan\n3. Wait for user to review and approve\n4. Then use `start_task_execution`'
+                    result: getLocalizedText(
+                        getCurrentLanguage(),
+                        '错误：未找到可执行的任务规划。开始执行前，你需要先用 `create_task_plan` 创建规划。\n\n请按这个顺序进行：\n1. 使用 `ask_user` 收集需求\n2. 使用 `create_task_plan` 创建规划\n3. 等待用户审核并确认\n4. 然后再使用 `start_task_execution`',
+                        'Error: No task plan found. You must first create a plan using `create_task_plan` before starting execution.\n\nPlease:\n1. Use `ask_user` to gather requirements\n2. Use `create_task_plan` to create a plan\n3. Wait for user to review and approve\n4. Then use `start_task_execution`',
+                    )
                 }
             }
 
             if (plan.tasks.length === 0) {
                 return {
                     success: false,
-                    result: 'Error: Plan has no tasks. Use `update_task_plan` to add tasks first.'
+                    result: getLocalizedText(
+                        getCurrentLanguage(),
+                        '错误：当前规划没有任务，请先使用 `update_task_plan` 添加任务。',
+                        'Error: Plan has no tasks. Use `update_task_plan` to add tasks first.',
+                    )
                 }
             }
 
             if (plan.status === 'executing') {
                 return {
                     success: false,
-                    result: 'Error: Plan is already being executed.'
+                    result: getLocalizedText(
+                        getCurrentLanguage(),
+                        '错误：当前规划已经在执行中。',
+                        'Error: Plan is already being executed.',
+                    )
                 }
             }
 
@@ -1330,7 +1358,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             return {
                 success: true,
-                result: `Started executing plan "${plan.name}" with ${plan.tasks.length} tasks.\n\nProgress will be shown in the TaskBoard.`,
+                result: getLocalizedText(
+                    getCurrentLanguage(),
+                    `已开始执行规划“${plan.name}”，共 ${plan.tasks.length} 个任务。\n\n进度会显示在 TaskBoard 中。`,
+                    `Started executing plan "${plan.name}" with ${plan.tasks.length} tasks.\n\nProgress will be shown in the TaskBoard.`,
+                ),
                 meta: { stopLoop: true },
             }
         } catch (err) {

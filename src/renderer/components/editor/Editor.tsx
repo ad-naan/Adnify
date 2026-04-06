@@ -11,7 +11,7 @@ import { t } from '@renderer/i18n'
 import { useAgent } from '@hooks/useAgent'
 import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { api } from '@renderer/services/electronAPI'
 import { didChangeDocument } from '@services/lspService'
 import { getFileInfo } from '@services/largeFileService'
@@ -39,6 +39,15 @@ import { SafeDiffEditor } from './SafeDiffEditor'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile } from './FilePreview'
 import { CodeSkeleton } from '../ui/Loading'
 import { TaskBoard } from '../plan/TaskBoard'
+
+function isPlanJsonFile(filePath: string): boolean {
+  const normalizedPath = normalizePath(filePath)
+  return normalizedPath.includes('/.adnify/plan/') && normalizedPath.endsWith('.json')
+}
+
+function getPlanIdFromPlanFilePath(filePath: string): string {
+  return getFileName(filePath).replace(/\.json$/i, '')
+}
 
 // Hooks
 import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDiff } from './hooks'
@@ -367,8 +376,8 @@ export default function Editor() {
               <ImagePreview path={activeFile.path} />
             ) : activeFileType === 'binary' ? (
               <UnsupportedFile path={activeFile.path} fileType="binary" />
-            ) : activeFile.path.includes('.adnify/plan/') && activeFile.path.endsWith('.json') ? (
-              <TaskBoard planId={activeFile.path.split('/').pop()?.replace('.json', '') || ''} />
+            ) : isPlanJsonFile(activeFile.path) ? (
+              <TaskBoard planId={getPlanIdFromPlanFilePath(activeFile.path)} />
             ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
               <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (

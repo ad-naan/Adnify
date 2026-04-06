@@ -40,8 +40,8 @@ export interface ExecutionConfig {
   assistantId?: string
   /** 请求 ID */
   requestId?: string
-  /** Orchestrator 任务 ID */
-  orchestratorTaskId?: string
+  /** Plan 任务 ID */
+  planTaskId?: string
   /** 上下文限制 */
   contextLimit?: number
   /** Plan 特定上下文 */

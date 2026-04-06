@@ -42,10 +42,10 @@ export type AgentEvent =
   | { type: 'context:handoff'; document: HandoffDocument }
 
   // 循环事件
-  | { type: 'loop:start'; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
-  | { type: 'loop:iteration'; count: number; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
-  | { type: 'loop:end'; reason: string; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
-  | { type: 'loop:warning'; message: string; threadId?: string; assistantId?: string; requestId?: string; orchestratorTaskId?: string }
+  | { type: 'loop:start'; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
+  | { type: 'loop:iteration'; count: number; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
+  | { type: 'loop:end'; reason: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
+  | { type: 'loop:warning'; message: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
 
   // 情绪感知事件
   | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }
@@ -54,7 +54,7 @@ export type AgentEvent =
   | { type: 'break:suggested'; message: string }
   | { type: 'emotion:feedback'; feedback: import('../types/emotion').EmotionFeedbackPayload }
 
-  // Orchestrator 事件
+  // Plan 执行事件
   | { type: 'plan:start'; planId: string; sessionId?: string }
   | { type: 'plan:complete'; planId: string; stats: import('../plan/types').ExecutionStats; sessionId?: string }
   | { type: 'plan:failed'; planId: string; error: string; sessionId?: string }

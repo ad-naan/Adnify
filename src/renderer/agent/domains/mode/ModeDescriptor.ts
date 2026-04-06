@@ -17,10 +17,6 @@ import type { CompressionLevel } from '../context/CompressionManager'
 export interface ToolPolicy {
   /** Whether tools are enabled */
   enabled: boolean
-  /** Tool allowlist (empty = all allowed) */
-  allowlist?: string[]
-  /** Tool blocklist */
-  blocklist?: string[]
   /** Whether to require approval for dangerous tools */
   requireApproval?: boolean
 }
@@ -205,8 +201,6 @@ export const PLAN_MODE_DESCRIPTOR: ModeDescriptor = {
   toolPolicy: {
     enabled: true,
     requireApproval: true,
-    // Plan mode has specific tools for planning
-    allowlist: ['create_task_plan', 'update_task_plan', 'start_task_execution', 'ask_user'],
   },
   promptProfile: {
     includeWorkspaceContext: true,

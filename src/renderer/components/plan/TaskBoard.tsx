@@ -23,6 +23,7 @@ import { Button, Select } from '@/renderer/components/ui'
 import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
+import { toast } from '@/renderer/components/common/ToastProvider'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
 import {
     getPromptTemplateSummary,
@@ -31,6 +32,10 @@ import type { PlanTask, ExecutionMode } from '@/renderer/agent/store/slices/plan
 
 interface TaskBoardProps {
     planId: string
+}
+
+function getLocalizedText(language: string, zh: string, en: string): string {
+    return language === 'zh' ? zh : en
 }
 
 // ============================================
@@ -339,9 +344,10 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const [showRequirements, setShowRequirements] = useState(true)
     const [requirementsContent, setRequirementsContent] = useState<string>('')
     const plan = useAgentStore((s) => s.plans.find((p) => p.id === planId))
-    const isExecuting = useAgentStore((s) => s.isExecuting)
     const updatePlan = useAgentStore((s) => s.updatePlan)
     const workspacePath = useStore((s) => s.workspacePath)
+    const language = useStore((s) => s.language)
+    const isExecuting = plan?.status === 'executing'
 
     // 加载需求文档内容
     useEffect(() => {
@@ -386,16 +392,19 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
             const { startPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
             const result = await startPlanExecution(plan.id)
             if (!result.success) {
-                console.error('Failed to start execution:', result.message)
+                toast.error(
+                    getLocalizedText(language, '启动执行失败', 'Failed to start execution'),
+                    result.message
+                )
             }
         }
-    }, [plan])
+    }, [language, plan])
 
     const handleStop = useCallback(async () => {
         // 使用 planExecutor 停止执行
         const { stopPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
-        stopPlanExecution()
-    }, [])
+        stopPlanExecution(planId)
+    }, [planId])
 
     if (!plan) {
         return (

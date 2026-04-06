@@ -38,6 +38,7 @@ interface FlattenedNode {
   depth: number
   isExpanded: boolean
   hasChildren: boolean
+  kind?: 'item' | 'loading'
 }
 
 interface VirtualFileTreeProps {
@@ -289,6 +290,20 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
         if (item.isDirectory && isExpanded && children) {
           traverse(children, depth + 1)
+        } else if (item.isDirectory && isExpanded && loadingDirs.has(item.path)) {
+          for (let i = 0; i < 4; i++) {
+            result.push({
+              item: {
+                name: `__loading__${i}`,
+                path: `${item.path}/__loading__${i}`,
+                isDirectory: false
+              },
+              depth: depth + 1,
+              isExpanded: false,
+              hasChildren: false,
+              kind: 'loading'
+            })
+          }
         }
       }
     }
@@ -640,6 +655,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     const isRenaming = renamingPath === item.path
     const isLoading = loadingDirs.has(item.path)
     const isCreatingInput = item.name === '__creating__'
+    const isLoadingPlaceholder = node.kind === 'loading'
 
     // 创建输入框
     if (isCreatingInput && creatingIn) {
@@ -684,6 +700,30 @@ export const VirtualFileTree = memo(function VirtualFileTree({
                 onCancelCreate()
               }
             }}
+          />
+        </div>
+      )
+    }
+
+    if (isLoadingPlaceholder) {
+      return (
+        <div
+          key={item.path}
+          className="flex items-center gap-2 px-2 py-1.5"
+          style={{
+            height: ITEM_HEIGHT,
+            paddingLeft: `${depth * 12 + 8}px`,
+            position: 'absolute',
+            top: (visibleRange.startIndex + index) * ITEM_HEIGHT,
+            left: 0,
+            right: 0
+          }}
+        >
+          <div className="w-3 flex-shrink-0" />
+          <div className="w-3.5 h-3.5 rounded-sm bg-surface-active/45 animate-pulse flex-shrink-0" />
+          <div
+            className="h-3 rounded bg-surface-active/30 animate-pulse"
+            style={{ width: `${58 + (index % 3) * 10}%` }}
           />
         </div>
       )

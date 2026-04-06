@@ -6,15 +6,9 @@
 export type WorkMode = 'chat' | 'agent' | 'plan'
 
 /**
- * Mode alias mapping for backward compatibility
- * 'orchestrator' is the old internal name, now aliased to 'plan'
+ * 规范化工作模式名称。
+ * 这里仅接受当前有效模式，避免历史别名继续扩散成第二数据来源。
  */
-export type ModeAlias = 'orchestrator'
-
-/**
- * Normalize mode name (resolve aliases)
- */
-export function normalizeMode(mode: WorkMode | ModeAlias): WorkMode {
-  if (mode === 'orchestrator') return 'plan'
-  return mode as WorkMode
+export function normalizeMode(mode: WorkMode): WorkMode {
+  return mode
 }
