@@ -349,6 +349,7 @@ export const useAgentStore = create<AgentStore>()(
         {
             name: 'adnify-agent-store',
             storage: createJSONStorage(() => agentStorage),
+            skipHydration: true, // 核心：禁止自动水合，由 initService 在恢复工作区之后手动调用 rehydrate()
             partialize: (state) => ({
                 threads: state.threads,
                 currentThreadId: state.currentThreadId,
