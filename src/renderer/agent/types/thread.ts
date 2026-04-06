@@ -44,6 +44,11 @@ export interface ChatThread {
 
   messages: ChatMessage[]
   contextItems: ContextItem[]
+  /**
+   * 消息总数（从磁盘元数据读取，用于懒加载线程的 UI 计数显示）
+   * 当前线程实时值以 messages.length 为准；非当前线程用此字段
+   */
+  messageCount?: number
 
   streamState: StreamState
   toolStreamingPreviews?: Record<string, ToolStreamingPreview>

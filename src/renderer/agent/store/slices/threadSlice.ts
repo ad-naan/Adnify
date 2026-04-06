@@ -175,19 +175,29 @@ export const createThreadSlice: StateCreator<
         const thread = state.threads[threadId]
         if (thread && (!thread.messages || thread.messages.length === 0)) {
             adnifyDir.loadThreadMessages(threadId).then(messages => {
-                if (messages.length > 0) {
-                    set(state => ({
-                        threads: {
-                            ...state.threads,
-                            [threadId]: {
-                                ...state.threads[threadId],
-                                messages,
-                            },
+                // 无论消息是否为空，都触发一次 set，确保 ChatPanel 的 useEffect
+                // 检测到 filteredMessages 引用变化，能正常退出骨架屏状态
+                set(state => ({
+                    threads: {
+                        ...state.threads,
+                        [threadId]: {
+                            ...state.threads[threadId],
+                            messages,
                         },
-                    }))
-                }
+                    },
+                }))
             }).catch(err => {
                 console.error('[ThreadSlice] Failed to load messages:', err)
+                // 加载失败时也强制触发 set，让骨架屏能正常退出
+                set(state => ({
+                    threads: {
+                        ...state.threads,
+                        [threadId]: {
+                            ...state.threads[threadId],
+                            messages: [],
+                        },
+                    },
+                }))
             })
         }
     },

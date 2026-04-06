@@ -127,32 +127,31 @@ export default function ChatPanel() {
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
 
+  // Effect 1：只监听 currentThreadId 变化，控制骨架屏的显示/隐藏
+  // 与 filteredMessages 解耦，防止懒加载消息在 350ms 内到达时
+  // 触发 effect cleanup → clearTimeout → isSwitchingThread 永远不归 false
   useEffect(() => {
     const threadChanged = currentThreadId !== prevThreadIdRef.current
     prevThreadIdRef.current = currentThreadId
 
-    if (threadChanged) {
-      // 线程切换：显示骨架屏
-      setIsSwitchingThread(true)
+    if (!threadChanged) return
 
-      // 第 1 步：350ms 充足的时间让侧边栏的 Spring 退出动画丝滑播放完毕，并且让骨架屏先画出来
-      const timer = setTimeout(() => {
-        // 第 2 步：将新的海量消息传给 Virtuoso 触发它的高强度同步渲染阻塞
-        setDisplayMessages(filteredMessages)
-
-        // 第 3 步：由于 Virtuoso 是同步阻塞主线程的，这里的 rAF 会在它真正的 DOM 计算完全结束后才执行
+    // 线程切换：显示骨架屏，350ms 后关闭（骨架屏本身会遮住 Virtuoso 的渲染）
+    setIsSwitchingThread(true)
+    const timer = setTimeout(() => {
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setIsSwitchingThread(false)
-          })
+          setIsSwitchingThread(false)
         })
-      }, 350)
-      return () => clearTimeout(timer)
-    } else {
-      // 在同一个对话流里（比如聊天回复时），直接无缝追加不触发骨架屏
-      setDisplayMessages(filteredMessages)
-    }
-  }, [currentThreadId, filteredMessages])
+      })
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [currentThreadId])
+
+  // Effect 2：同步 displayMessages，无论是线程切换后懒加载到位，还是流式追加
+  useEffect(() => {
+    setDisplayMessages(filteredMessages)
+  }, [filteredMessages])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)

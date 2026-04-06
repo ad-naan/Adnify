@@ -132,11 +132,11 @@ class AdnifyDirService {
     workspaceState: WorkspaceStateData | null
     settings: ProjectSettingsData | null
   } = {
-    sessionMeta: null,
-    threads: new Map(),
-    workspaceState: null,
-    settings: null,
-  }
+      sessionMeta: null,
+      threads: new Map(),
+      workspaceState: null,
+      settings: null,
+    }
 
   private dirty: {
     sessionMeta: boolean
@@ -144,11 +144,11 @@ class AdnifyDirService {
     workspaceState: boolean
     settings: boolean
   } = {
-    sessionMeta: false,
-    dirtyThreads: new Set(),
-    workspaceState: false,
-    settings: false,
-  }
+      sessionMeta: false,
+      dirtyThreads: new Set(),
+      workspaceState: false,
+      settings: false,
+    }
 
   private flushTimer: ReturnType<typeof setTimeout> | null = null
   private threadHashes: Map<string, string> = new Map()
@@ -229,9 +229,9 @@ class AdnifyDirService {
 
     const metaToWrite = this.dirty.sessionMeta && this.cache.sessionMeta
       ? {
-          index: toSessionIndexMeta(this.cache.sessionMeta),
-          extra: { ...this.cache.sessionMeta.extra },
-        }
+        index: toSessionIndexMeta(this.cache.sessionMeta),
+        extra: { ...this.cache.sessionMeta.extra },
+      }
       : null
     const metaRevision = metaToWrite ? ++this.metaWriteRevision : 0
 
@@ -400,8 +400,8 @@ class AdnifyDirService {
         const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
         const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
         await Promise.all([
-          api.file.delete(jsonPath).catch(() => {}),
-          api.file.delete(jsonlPath).catch(() => {}),
+          api.file.delete(jsonPath).catch(() => { }),
+          api.file.delete(jsonlPath).catch(() => { }),
         ])
       } catch {
         // ignore
@@ -418,8 +418,8 @@ class AdnifyDirService {
         const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
         const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
         await Promise.all([
-          api.file.delete(jsonPath).catch(() => {}),
-          api.file.delete(jsonlPath).catch(() => {}),
+          api.file.delete(jsonPath).catch(() => { }),
+          api.file.delete(jsonlPath).catch(() => { }),
         ])
       } catch {
         // ignore
@@ -500,6 +500,14 @@ class AdnifyDirService {
     })
 
     for (const [threadId, data] of Object.entries(threads)) {
+      const threadData = data as any
+      const messages = threadData?.messages
+      // 非当前线程且 messages 为空时，说明是懒加载占位符（还未从磁盘读取）
+      // 只更新内存缓存，不标记 dirty，避免调度 flush 用空数组覆盖磁盘上的真实 JSONL 消息
+      if (threadId !== currentThreadId && (!messages || messages.length === 0)) {
+        this.cache.threads.set(threadId, data)
+        continue
+      }
       this.setThreadDirty(threadId, data)
     }
 
@@ -509,8 +517,11 @@ class AdnifyDirService {
         this.dirty.dirtyThreads.delete(cachedId)
         this.threadHashes.delete(cachedId)
         if (this.isInitialized()) {
-          const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${cachedId}.json`
-          api.file.delete(filePath).catch(() => { /* ignore */ })
+          // Bug 5 fix: 同时删除 .json 和 .jsonl，防止孤儿文件泄漏
+          const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${cachedId}.json`
+          const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${cachedId}.jsonl`
+          api.file.delete(jsonPath).catch(() => { /* ignore */ })
+          api.file.delete(jsonlPath).catch(() => { /* ignore */ })
         }
       }
     }
@@ -632,15 +643,37 @@ class AdnifyDirService {
         return null
       }
 
+      // Bug 7 fix: 读取各线程的 lastModified 字段，选最近修改的作为当前线程
+      // 而非按字母序选第一个（可能是最旧的线程）
+      let bestThreadId = threadIds[0]
+      let bestModified = 0
+
+      await Promise.all(threadIds.map(async (threadId) => {
+        try {
+          const jsonPath = `${sessionsDirPath}/${threadId}.json`
+          const content = await api.file.read(jsonPath)
+          if (content) {
+            const data = JSON.parse(content)
+            const lastModified = data?.lastModified || 0
+            if (lastModified > bestModified) {
+              bestModified = lastModified
+              bestThreadId = threadId
+            }
+          }
+        } catch {
+          // 读取失败则忽略，保留已选到的最新线程
+        }
+      }))
+
       const rebuiltMeta: SessionMeta = {
-        currentThreadId: threadIds[0],
+        currentThreadId: bestThreadId,
         threadIds,
         extra,
         version: 0,
       }
 
       this.setSessionMetaDirty(rebuiltMeta)
-      logger.system.warn('[AdnifyDir] Rebuilt missing session meta from thread files:', threadIds.length)
+      logger.system.warn('[AdnifyDir] Rebuilt missing session meta from thread files:', threadIds.length, '→ currentThread:', bestThreadId)
       return rebuiltMeta
     } catch (error) {
       logger.system.error('[AdnifyDir] Failed to rebuild session meta:', error)
@@ -813,12 +846,18 @@ class AdnifyDirService {
         // 分离消息和元数据
         const { messages, ...metadata } = threadData
 
+        // Bug 6 fix: 将消息数量存入元数据，供未加载消息的线程（懒加载占位符）正确显示计数
+        if (messages && Array.isArray(messages)) {
+          (metadata as any).messageCount = messages.length
+        }
+
         // 写入元数据（JSON 格式）
         const metadataContent = JSON.stringify(metadata, null, 2)
         await api.file.write(filePath, metadataContent)
 
         // 写入消息（JSONL 格式）
-        if (messages && Array.isArray(messages)) {
+        // 只有消息非空时才写入，防止懒加载期间 messages=[] 覆盖磁盘上的真实消息
+        if (messages && Array.isArray(messages) && messages.length > 0) {
           const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
           const jsonlContent = this.serializeMessages(messages)
           await api.file.write(jsonlPath, jsonlContent)

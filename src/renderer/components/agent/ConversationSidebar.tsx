@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  X, 
-  History, 
-  GitBranch, 
-  Search, 
-  Trash2, 
-  MessageSquare, 
+import {
+  X,
+  History,
+  GitBranch,
+  Search,
+  Trash2,
+  MessageSquare,
   Clock,
   Check,
   Edit2,
@@ -57,7 +57,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             className="absolute inset-0 bg-black/20 backdrop-blur-sm z-40"
             onClick={onClose}
           />
-          
+
           {/* Sidebar */}
           <motion.div
             initial={{ x: '100%', opacity: 0.5 }}
@@ -79,17 +79,16 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
 
             {/* Tabs - Modern Segmented Control */}
             <div className="px-5 pt-4 pb-2">
-               <div className="flex p-1 bg-surface/50 rounded-lg select-none border border-border/20">
+              <div className="flex p-1 bg-surface/50 rounded-lg select-none border border-border/20">
                 <button
                   onClick={() => setActiveTab('history')}
-                  className={`relative flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 z-10 ${
-                    activeTab === 'history' 
-                      ? 'text-text-primary' 
-                      : 'text-text-muted hover:text-text-secondary'
-                  }`}
+                  className={`relative flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 z-10 ${activeTab === 'history'
+                    ? 'text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary'
+                    }`}
                 >
                   {activeTab === 'history' && (
-                    <motion.div 
+                    <motion.div
                       layoutId="activeTabBg"
                       className="absolute inset-0 bg-background shadow-sm rounded-md border border-border/50 -z-10"
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
@@ -100,14 +99,13 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                 </button>
                 <button
                   onClick={() => setActiveTab('branches')}
-                  className={`relative flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 z-10 ${
-                    activeTab === 'branches' 
-                      ? 'text-text-primary' 
-                      : 'text-text-muted hover:text-text-secondary'
-                  }`}
+                  className={`relative flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all duration-200 z-10 ${activeTab === 'branches'
+                    ? 'text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary'
+                    }`}
                 >
                   {activeTab === 'branches' && (
-                    <motion.div 
+                    <motion.div
                       layoutId="activeTabBg"
                       className="absolute inset-0 bg-background shadow-sm rounded-md border border-border/50 -z-10"
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
@@ -123,7 +121,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             <div className="px-5 py-2">
               <div className="relative group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted/70 group-focus-within:text-accent transition-colors" />
-                <input 
+                <input
                   type="text"
                   placeholder={language === 'zh' ? '搜索...' : 'Search...'}
                   value={searchQuery}
@@ -131,7 +129,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                   className="w-full h-9 pl-9 pr-8 text-xs bg-surface/30 border border-border/30 rounded-lg focus:outline-none focus:border-accent/30 focus:bg-surface/50 transition-all placeholder:text-text-muted/40"
                 />
                 {searchQuery && (
-                  <button 
+                  <button
                     onClick={() => setSearchQuery('')}
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-primary hover:bg-black/10 rounded-full transition-all"
                   >
@@ -153,7 +151,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             {/* Footer Action */}
             {activeTab === 'history' && (
               <div className="p-4 border-t border-border/30 bg-surface/10 backdrop-blur-sm">
-                <Button 
+                <Button
                   className="w-full justify-center gap-2 bg-accent hover:bg-accent-hover text-white shadow-lg shadow-accent/20 h-10 rounded-xl transition-transform active:scale-[0.98]"
                   onClick={() => {
                     const { createThread } = useAgentStore.getState()
@@ -193,9 +191,9 @@ function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, 
   return (
     <div className="space-y-1.5">
       {filteredThreads.map(thread => (
-        <ThreadItem 
-          key={thread.id} 
-          thread={thread} 
+        <ThreadItem
+          key={thread.id}
+          thread={thread}
           isActive={currentThreadId === thread.id}
           language={language}
           onSelect={() => {
@@ -240,12 +238,11 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
   }, [thread.id, thread.messages.length])
 
   return (
-    <div 
-      className={`group relative flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all border overflow-hidden ${
-        isActive 
-          ? 'bg-accent/5 border-accent/20 shadow-sm shadow-accent/5' 
-          : 'bg-transparent border-transparent hover:bg-surface/40 hover:border-border/40'
-      }`}
+    <div
+      className={`group relative flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all border overflow-hidden ${isActive
+        ? 'bg-accent/5 border-accent/20 shadow-sm shadow-accent/5'
+        : 'bg-transparent border-transparent hover:bg-surface/40 hover:border-border/40'
+        }`}
       onClick={onSelect}
     >
       {/* Active Indicator (Left Strip) */}
@@ -253,12 +250,11 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
         <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
       )}
 
-      <div className={`mt-0.5 shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-        isActive ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:bg-surface group-hover:text-text-primary'
-      }`}>
+      <div className={`mt-0.5 shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:bg-surface group-hover:text-text-primary'
+        }`}>
         <MessageSquare className="w-4 h-4" />
       </div>
-      
+
       <div className="flex-1 min-w-0 overflow-hidden pt-0.5">
         <div className="flex items-center justify-between gap-2">
           <h4 className={`text-sm font-medium truncate pr-6 ${isActive ? 'text-accent' : 'text-text-primary'}`}>
@@ -271,7 +267,7 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
             {timeStr}
           </span>
           <span className="text-[10px] text-text-muted/50">
-            {thread.messages.length} msgs
+            {(thread.messageCount ?? thread.messages.length)} msgs
           </span>
         </div>
       </div>
@@ -314,7 +310,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
   }
 
   const filteredBranches = useMemo(() => {
-    return branches.filter(b => 
+    return branches.filter(b =>
       !searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
   }, [branches, searchQuery])
@@ -323,33 +319,30 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
     <div className="space-y-4 px-1">
       {/* Mainline */}
       {!searchQuery && (
-        <div 
+        <div
           onClick={() => {
             switchToMainline()
             onClose()
           }}
-          className={`relative p-3 rounded-xl border transition-all flex items-center gap-3 cursor-pointer group overflow-hidden ${
-            !isOnBranch 
-              ? 'bg-accent/5 border-accent/20 shadow-sm shadow-accent/5' 
-              : 'bg-surface/20 border-border/40 hover:bg-surface/40 hover:border-border/60'
-          }`}
+          className={`relative p-3 rounded-xl border transition-all flex items-center gap-3 cursor-pointer group overflow-hidden ${!isOnBranch
+            ? 'bg-accent/5 border-accent/20 shadow-sm shadow-accent/5'
+            : 'bg-surface/20 border-border/40 hover:bg-surface/40 hover:border-border/60'
+            }`}
         >
           {/* Active Indicator */}
           {!isOnBranch && (
             <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
           )}
 
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-            !isOnBranch ? 'bg-accent/20 text-accent' : 'bg-surface/80 text-text-muted group-hover:text-text-primary'
-          }`}>
-             <GitBranch className="w-4 h-4 stroke-[1.5]" />
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${!isOnBranch ? 'bg-accent/20 text-accent' : 'bg-surface/80 text-text-muted group-hover:text-text-primary'
+            }`}>
+            <GitBranch className="w-4 h-4 stroke-[1.5]" />
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <span className={`text-sm font-semibold tracking-tight ${
-                !isOnBranch ? 'text-accent' : 'text-text-primary'
-              }`}>
+              <span className={`text-sm font-semibold tracking-tight ${!isOnBranch ? 'text-accent' : 'text-text-primary'
+                }`}>
                 {language === 'zh' ? '主线对话' : 'Main Thread'}
               </span>
               {!isOnBranch && <Check className="w-3.5 h-3.5 text-accent" />}
@@ -365,21 +358,20 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
       <div className="space-y-2">
         {filteredBranches.length > 0 && (
           <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 opacity-70 flex items-center gap-2">
-             <GitBranch className="w-3 h-3" />
-             {language === 'zh' ? '分支列表' : 'Your Branches'} ({filteredBranches.length})
+            <GitBranch className="w-3 h-3" />
+            {language === 'zh' ? '分支列表' : 'Your Branches'} ({filteredBranches.length})
           </p>
         )}
-        
+
         {filteredBranches.map(branch => {
           const isActive = activeBranch?.id === branch.id
           return (
             <div
               key={branch.id}
-              className={`group relative p-3 rounded-xl border transition-all cursor-pointer overflow-hidden ${
-                isActive
-                  ? 'bg-accent/5 border-accent/20 shadow-sm shadow-accent/5'
-                  : 'bg-transparent border-transparent hover:bg-surface/40 hover:border-border/40'
-              }`}
+              className={`group relative p-3 rounded-xl border transition-all cursor-pointer overflow-hidden ${isActive
+                ? 'bg-accent/5 border-accent/20 shadow-sm shadow-accent/5'
+                : 'bg-transparent border-transparent hover:bg-surface/40 hover:border-border/40'
+                }`}
             >
               {/* Active Indicator */}
               {isActive && (
@@ -387,9 +379,8 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
               )}
 
               <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
-                  isActive ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:bg-surface group-hover:text-text-primary'
-                }`}>
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:bg-surface group-hover:text-text-primary'
+                  }`}>
                   <GitBranch className="w-4 h-4 stroke-[1.5]" />
                 </div>
 
@@ -398,31 +389,30 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                   onClose()
                 }}>
                   {editingId === branch.id ? (
-                     <div className="flex items-center gap-1">
-                        <input
-                          autoFocus
-                          value={editName}
-                          onChange={e => setEditName(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleSaveEdit()
-                            if (e.key === 'Escape') setEditingId(null)
-                          }}
-                          className="w-full bg-surface text-sm px-2 py-1 rounded border border-accent/50 focus:outline-none"
-                          onClick={e => e.stopPropagation()}
-                        />
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-green-400 hover:bg-green-500/10" onClick={(e) => {
-                          e.stopPropagation()
-                          handleSaveEdit()
-                        }}>
-                          <Check className="w-3.5 h-3.5" />
-                        </Button>
-                     </div>
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleSaveEdit()
+                          if (e.key === 'Escape') setEditingId(null)
+                        }}
+                        className="w-full bg-surface text-sm px-2 py-1 rounded border border-accent/50 focus:outline-none"
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-green-400 hover:bg-green-500/10" onClick={(e) => {
+                        e.stopPropagation()
+                        handleSaveEdit()
+                      }}>
+                        <Check className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   ) : (
                     <>
                       <div className="flex items-center justify-between">
-                        <span className={`text-sm font-medium truncate ${
-                          isActive ? 'text-accent' : 'text-text-primary'
-                        }`}>
+                        <span className={`text-sm font-medium truncate ${isActive ? 'text-accent' : 'text-text-primary'
+                          }`}>
                           {branch.name}
                         </span>
                         {isActive && (
@@ -443,44 +433,44 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
 
                 {/* Actions */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 bg-background/50 backdrop-blur-sm rounded-lg">
-                   {editingId !== branch.id && (
-                     <>
-                        <Tooltip content="Rename">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleStartEdit(branch)
-                            }}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        </Tooltip>
-                        <Tooltip content="Delete">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              deleteBranch(branch.id)
-                            }}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </Tooltip>
-                     </>
-                   )}
+                  {editingId !== branch.id && (
+                    <>
+                      <Tooltip content="Rename">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleStartEdit(branch)
+                          }}
+                          className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="Delete">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteBranch(branch.id)
+                          }}
+                          className="p-1.5 rounded-lg text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </Tooltip>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           )
         })}
-        
+
         {filteredBranches.length === 0 && (
-           <EmptyState 
-             icon={GitBranch} 
-             text={language === 'zh' ? '暂无分支' : 'No branches found'} 
-             subText={language === 'zh' ? '在消息上点击"重新生成"可创建分支' : 'Click "Regenerate" on messages to create branches'}
-           />
+          <EmptyState
+            icon={GitBranch}
+            text={language === 'zh' ? '暂无分支' : 'No branches found'}
+            subText={language === 'zh' ? '在消息上点击"重新生成"可创建分支' : 'Click "Regenerate" on messages to create branches'}
+          />
         )}
       </div>
     </div>
