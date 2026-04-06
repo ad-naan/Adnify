@@ -21,34 +21,34 @@ const alertConfig = {
   error: {
     icon: XCircle,
     bgColor: 'bg-red-500/5',
-    borderColor: 'border-red-500/20',
-    iconColor: 'text-red-400',
-    titleColor: 'text-red-300',
-    glowColor: 'shadow-red-500/10',
+    borderColor: 'border-red-500/15',
+    iconBgColor: 'bg-red-500/10',
+    iconColor: 'text-red-500',
+    titleColor: 'text-red-400',
   },
   warning: {
     icon: AlertTriangle,
     bgColor: 'bg-amber-500/5',
-    borderColor: 'border-amber-500/20',
-    iconColor: 'text-amber-400',
-    titleColor: 'text-amber-300',
-    glowColor: 'shadow-amber-500/10',
+    borderColor: 'border-amber-500/15',
+    iconBgColor: 'bg-amber-500/10',
+    iconColor: 'text-amber-500',
+    titleColor: 'text-amber-400',
   },
   info: {
     icon: Info,
     bgColor: 'bg-blue-500/5',
-    borderColor: 'border-blue-500/20',
-    iconColor: 'text-blue-400',
-    titleColor: 'text-blue-300',
-    glowColor: 'shadow-blue-500/10',
+    borderColor: 'border-blue-500/15',
+    iconBgColor: 'bg-blue-500/10',
+    iconColor: 'text-blue-500',
+    titleColor: 'text-blue-400',
   },
   success: {
     icon: CheckCircle,
     bgColor: 'bg-green-500/5',
-    borderColor: 'border-green-500/20',
-    iconColor: 'text-green-400',
-    titleColor: 'text-green-300',
-    glowColor: 'shadow-green-500/10',
+    borderColor: 'border-green-500/15',
+    iconBgColor: 'bg-green-500/10',
+    iconColor: 'text-green-500',
+    titleColor: 'text-green-400',
   },
 }
 
@@ -64,82 +64,44 @@ export const SystemAlert: React.FC<SystemAlertProps> = ({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -10, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className={`
-        relative overflow-hidden rounded-xl border backdrop-blur-xl
-        ${config.bgColor} ${config.borderColor} ${config.glowColor}
-        shadow-lg my-4
-        ${className}
-      `}
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      transition={{ duration: 0.2 }}
+      className={`group my-0.5 relative rounded-lg overflow-hidden transition-colors border ${config.bgColor} ${config.borderColor} ${className}`}
     >
-      {/* 渐变背景装饰 */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
-
-      {/* 顶部光晕 */}
-      <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-${type === 'error' ? 'red' : type === 'warning' ? 'amber' : type === 'success' ? 'green' : 'blue'}-400/30 to-transparent`} />
-
-      <div className="relative px-4 py-3.5 flex gap-3">
+      <div className="flex items-start gap-2.5 px-3 py-2.5">
         {/* 图标 */}
-        <motion.div
-          initial={{ scale: 0, rotate: -180 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 15 }}
-          className="flex-shrink-0 mt-0.5"
-        >
-          <div className={`
-            w-8 h-8 rounded-lg flex items-center justify-center
-            ${config.bgColor} ${config.borderColor} border
-            ${config.glowColor} shadow-md
-          `}>
-            <Icon className={`w-4.5 h-4.5 ${config.iconColor}`} />
+        <div className="shrink-0 mt-[1.5px] w-4 h-4 flex items-center justify-center">
+          <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${config.iconBgColor}`}>
+            <Icon className={`w-2.5 h-2.5 ${config.iconColor}`} />
           </div>
-        </motion.div>
+        </div>
 
         {/* 内容 */}
-        <div className="flex-1 min-w-0 space-y-1.5">
+        <div className="flex-1 min-w-0 space-y-1">
           {/* 标题 */}
           {title && (
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.15 }}
-              className={`text-sm font-semibold ${config.titleColor} tracking-tight`}
-            >
+            <div className={`text-[12px] font-medium px-0.5 ${config.titleColor} tracking-tight`}>
               {title}
-            </motion.div>
+            </div>
           )}
 
           {/* 消息 */}
-          <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="text-[13px] text-text-secondary leading-relaxed"
-          >
+          <div className={`text-[11px] px-0.5 break-words ${title ? 'text-text-secondary' : config.titleColor} leading-relaxed`}>
             {message}
-          </motion.div>
+          </div>
 
           {/* 建议 */}
           {suggestion && (
-            <motion.div
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.25 }}
-              className="flex items-start gap-2 mt-2 pt-2 border-t border-border/30"
-            >
-              <Lightbulb className="w-3.5 h-3.5 text-accent/70 flex-shrink-0 mt-0.5" />
-              <span className="text-[12px] text-text-muted leading-relaxed">
+            <div className="flex items-start gap-1.5 mt-2 pt-1.5 border-t border-border/30">
+              <Lightbulb className="w-3 h-3 text-accent/70 shrink-0 mt-[1.5px]" />
+              <span className="text-[11px] text-text-muted break-words leading-relaxed">
                 {suggestion}
               </span>
-            </motion.div>
+            </div>
           )}
         </div>
       </div>
-
-      {/* 底部光晕 */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
     </motion.div>
   )
 }

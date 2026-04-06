@@ -1028,28 +1028,29 @@ const ChatMessage = React.memo(({
               </div>
               <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-accent/10 text-accent uppercase tracking-widest border border-accent/20 flex-shrink-0">AI</span>
 
-                <AnimatePresence mode="wait">
-                  {isStreaming && (
-                    <motion.div
-                      key={typingIndex}
-                      initial={{ opacity: 0, filter: 'blur(2px)', y: 2 }}
-                      animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-                      exit={{ opacity: 0, filter: 'blur(2px)', y: -2 }}
-                      transition={{ duration: 0.4, ease: "easeInOut" }}
-                      className="flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded-full bg-surface-active/30 border border-border/40 shadow-sm self-center mt-[1px]"
-                    >
-                      <div className="relative flex h-[5px] w-[5px] items-center justify-center shrink-0">
-                        <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-accent/60 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-[5px] w-[5px] bg-accent" />
-                      </div>
-                      <span className="text-[10px] text-text-muted/90 font-medium truncate tracking-wide">
-                        {t(`agent.typing.${typingIndex}` as any, language)}
-                      </span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {isStreaming && (
+                  <div className="flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded-full bg-surface-hover/50 border border-transparent self-center mt-[1px]">
+                    <div className="relative flex h-[5px] w-[5px] items-center justify-center shrink-0">
+                      <span className="animate-ping absolute inline-flex h-[8px] w-[8px] rounded-full bg-accent/40 opacity-75" style={{ animationDuration: '2s' }} />
+                      <span className="relative inline-flex rounded-full h-[5px] w-[5px] bg-accent" />
+                    </div>
+                    <div className="relative flex items-center overflow-hidden h-[16px]">
+                      <AnimatePresence mode="wait">
+                        <motion.span
+                          key={typingIndex}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.25, ease: "easeOut" }}
+                          className="text-[10px] text-text-muted/80 font-medium whitespace-nowrap tracking-wide"
+                        >
+                          {t(`agent.typing.${typingIndex}` as any, language)}
+                        </motion.span>
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {!message.isStreaming && (
