@@ -203,8 +203,8 @@ export default memo(function PlanListContent({
                 </p>
                 <p className="text-xs text-text-muted/50 mt-1 text-center px-4">
                     {language === 'zh'
-                        ? '使用 Orchestrator 模式创建任务计划'
-                        : 'Use Orchestrator mode to create task plans'
+                        ? '使用 Plan 模式创建任务计划'
+                        : 'Use Plan mode to create task plans'
                     }
                 </p>
             </div>

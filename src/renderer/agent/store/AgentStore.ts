@@ -134,6 +134,15 @@ export interface ThreadBoundStore {
     // Lint Check 操作
     addLintCheckPart: (messageId: string) => void
     updateLintCheckPart: (messageId: string, updates: Partial<import('../types').LintCheckPart>) => void
+    addSystemAlertPart: (
+        messageId: string,
+        alert: {
+            alertType: 'error' | 'warning' | 'info' | 'success'
+            title?: string
+            message: string
+            suggestion?: string
+        }
+    ) => void
 
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
@@ -329,6 +338,8 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.addLintCheckPart(messageId, threadId),
                 updateLintCheckPart: (messageId, updates) =>
                     messageSlice.updateLintCheckPart(messageId, updates, threadId),
+                addSystemAlertPart: (messageId, alert) =>
+                    messageSlice.addSystemAlertPart(messageId, alert, threadId),
 
                 // 交互式内容操作
                 setInteractive: (messageId, interactive) =>

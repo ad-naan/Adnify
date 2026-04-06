@@ -1,5 +1,5 @@
 /**
- * Orchestrator 执行引擎
+ * Plan 执行引擎
  *
  * 职责：
  * - 启动/停止计划执行
@@ -113,7 +113,7 @@ function waitForAgentCompletion(
             if (event.threadId !== identity.threadId) return
             if (event.assistantId !== identity.assistantId) return
             if (event.requestId !== identity.requestId) return
-            if (event.orchestratorTaskId && event.orchestratorTaskId !== identity.taskId) return
+            if (event.planTaskId && event.planTaskId !== identity.taskId) return
 
             const output = getTaskOutput(identity.threadId, identity.assistantId) || 'Task execution completed'
             if (event.reason === 'error' || event.reason === 'aborted' || event.reason === 'loop_detected' || event.reason === 'max_iterations') {
@@ -194,7 +194,8 @@ export function stopPlanExecution(planId?: string): void {
         Agent.abort(binding.threadId)
     }
 
-    store.stopExecution()
+    // 手动停止后回到可再次执行的稳定态，避免 TaskBoard 仍显示 executing。
+    store.stopExecution(plan.id, 'approved')
     clearSession(session)
     logger.agent.info('[PlanExecutor] Execution stopped')
 }
@@ -213,7 +214,7 @@ export function pausePlanExecution(): void {
         Agent.abort(binding.threadId)
     }
 
-    store.pauseExecution()
+    store.pauseExecution(plan.id)
     EventBus.emit({ type: 'plan:paused', planId: plan.id, sessionId: session.id })
     logger.agent.info('[PlanExecutor] Execution paused')
 }
@@ -228,7 +229,7 @@ export async function resumePlanExecution(): Promise<void> {
     const session = getSessionByPlanId(plan.id) || createSession(plan.id, workspacePath)
     session.status = 'running'
     session.scheduler.resume()
-    store.resumeExecution()
+    store.resumeExecution(plan.id)
 
     EventBus.emit({ type: 'plan:resumed', planId: plan.id, sessionId: session.id })
 
@@ -260,7 +261,9 @@ export function getExecutionStatus(): {
 }
 
 export function getCurrentPhase(): 'planning' | 'executing' {
-    return useAgentStore.getState().phase
+    const state = useAgentStore.getState()
+    const activePlan = state.getActivePlan()
+    return activePlan?.status === 'executing' ? 'executing' : 'planning'
 }
 
 async function runExecutionLoop(session: ExecutionSession): Promise<void> {
@@ -376,8 +379,7 @@ async function completeExecution(session: ExecutionSession, plan: TaskPlan): Pro
     const hasFailures = stats.failedTasks > 0
 
     const store = useAgentStore.getState()
-    store.updatePlan(plan.id, { status: hasFailures ? 'failed' : 'completed' })
-    store.stopExecution()
+    store.stopExecution(plan.id, hasFailures ? 'failed' : 'completed')
 
     session.status = hasFailures ? 'failed' : 'completed'
     EventBus.emit({ type: 'plan:complete', planId: plan.id, stats, sessionId: session.id })
@@ -389,8 +391,7 @@ async function completeExecution(session: ExecutionSession, plan: TaskPlan): Pro
 function handleExecutionError(session: ExecutionSession, error: unknown): void {
     const errorMsg = error instanceof Error ? error.message : String(error)
     const store = useAgentStore.getState()
-    store.updatePlan(session.planId, { status: 'failed' })
-    store.stopExecution()
+    store.stopExecution(session.planId, 'failed')
 
     session.status = 'failed'
     EventBus.emit({ type: 'plan:failed', planId: session.planId, error: errorMsg, sessionId: session.id })
@@ -437,7 +438,7 @@ async function runTaskWithAgent(
                 {
                     threadId,
                     requestId: activeRequestId,
-                    orchestratorTaskId: task.id,
+                    planTaskId: task.id,
                 }
             )
 

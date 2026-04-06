@@ -34,6 +34,15 @@ import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
 
+// ===== 告警文案 =====
+
+/**
+ * 根据当前界面语言返回对应文案，避免同类告警散落在多处硬编码。
+ */
+function getLocalizedText(language: string, zh: string, en: string): string {
+  return language === 'zh' ? zh : en
+}
+
 // ===== 模式后处理钩子 =====
 
 /**
@@ -350,10 +359,11 @@ async function checkAndHandleCompression(
       }
 
       const { language } = useStore.getState()
-      const msg = language === 'zh'
-        ? '⚠️ **上下文已满**\n\n当前对话已达到上下文限制。请开始新会话继续。'
-        : '⚠️ **Context Limit Reached**\n\nPlease start a new session to continue.'
-      threadStore.appendToAssistant(assistantId, msg)
+      threadStore.addSystemAlertPart(assistantId, {
+        alertType: 'warning',
+        title: getLocalizedText(language, '上下文已满', 'Context Limit Reached'),
+        message: getLocalizedText(language, '当前对话已达到上下文限制，请开始新会话继续。', 'Please start a new session to continue.'),
+      })
       threadStore.setHandoffRequired(true)
     }
 
@@ -440,10 +450,11 @@ async function checkAndHandleCompression(
     }
 
     const { language } = useStore.getState()
-    const msg = language === 'zh'
-      ? '⚠️ **上下文已满**\n\n当前对话已达到上下文限制。请开始新会话继续。'
-      : '⚠️ **Context Limit Reached**\n\nPlease start a new session to continue.'
-    threadStore.appendToAssistant(assistantId, msg)
+    threadStore.addSystemAlertPart(assistantId, {
+      alertType: 'warning',
+      title: getLocalizedText(language, '上下文已满', 'Context Limit Reached'),
+      message: getLocalizedText(language, '当前对话已达到上下文限制，请开始新会话继续。', 'Please start a new session to continue.'),
+    })
     threadStore.setHandoffRequired(true)
   }
 
@@ -487,7 +498,7 @@ export async function runLoop(
   threadStore.setExecutionMeta({
     requestId,
     assistantId,
-    orchestratorTaskId: context.orchestratorTaskId,
+    planTaskId: context.planTaskId,
     loopState: 'running',
   })
   threadStore.setStreamState({ requestId, assistantId })
@@ -498,6 +509,7 @@ export async function runLoop(
   setToolLoadingContext({
     mode: context.chatMode,
     templateId: useStore.getState().promptTemplateId,
+    planPhase: context.chatMode === 'plan' ? context.planPhase : undefined,
   })
   const agentTools = context.chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
 
@@ -505,24 +517,29 @@ export async function runLoop(
   let iteration = 0
   let shouldContinue = true
 
-  EventBus.emit({ type: 'loop:start', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+  EventBus.emit({ type: 'loop:start', threadId, assistantId, requestId, planTaskId: context.planTaskId })
 
   while (shouldContinue && iteration < maxIterations && !context.abortSignal?.aborted) {
     iteration++
     shouldContinue = false
-    EventBus.emit({ type: 'loop:iteration', count: iteration, threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+    EventBus.emit({ type: 'loop:iteration', count: iteration, threadId, assistantId, requestId, planTaskId: context.planTaskId })
 
     // 检查中止信号
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
     if (llmMessages.length === 0) {
       logger.agent.error('[Loop] No messages to send')
-      threadStore.appendToAssistant(assistantId, '\n\n❌ Error: No messages to send')
+      const { language } = useStore.getState()
+      threadStore.addSystemAlertPart(assistantId, {
+        alertType: 'error',
+        title: getLocalizedText(language, '请求异常', 'Request Error'),
+        message: getLocalizedText(language, '当前没有可发送给模型的消息。', 'No messages were available to send to the model.'),
+      })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
-      EventBus.emit({ type: 'loop:end', reason: 'no_messages', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'no_messages', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -531,7 +548,7 @@ export async function runLoop(
 
     // 再次检查中止信号（LLM 调用后）
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -561,11 +578,16 @@ Try again with the corrected tool call.`
         shouldContinue = true
         continue
       } else {
-        // 其他错误：中止循环
+        // 其他错误：中止循环，并通过结构化卡片展示
         logger.agent.error('[Loop] LLM error:', result.error)
-        threadStore.appendToAssistant(assistantId, `\n\n❌ Error: ${result.error}`)
+        const { language } = useStore.getState()
+        threadStore.addSystemAlertPart(assistantId, {
+          alertType: 'error',
+          title: getLocalizedText(language, '模型错误', 'Model Error'),
+          message: result.error,
+        })
         threadStore.updateExecutionMeta({ loopState: 'failed' })
-        EventBus.emit({ type: 'loop:end', reason: 'error', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+        EventBus.emit({ type: 'loop:end', reason: 'error', threadId, assistantId, requestId, planTaskId: context.planTaskId })
         break
       }
     }
@@ -595,7 +617,7 @@ Try again with the corrected tool call.`
       // L4 需要中断循环
       if (compressionResult.needsHandoff) {
         threadStore.updateExecutionMeta({ loopState: 'completed' })
-        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId, assistantId, requestId, planTaskId: context.planTaskId })
         break
       }
     } else {
@@ -636,7 +658,7 @@ Try again with the corrected tool call.`
       // L4 需要中断循环
       if (compressionResult.needsHandoff) {
         threadStore.updateExecutionMeta({ loopState: 'completed' })
-        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+        EventBus.emit({ type: 'loop:end', reason: 'handoff_required', threadId, assistantId, requestId, planTaskId: context.planTaskId })
         break
       }
     }
@@ -664,7 +686,7 @@ Try again with the corrected tool call.`
         continue
       }
       threadStore.updateExecutionMeta({ loopState: 'completed' })
-      EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -672,12 +694,30 @@ Try again with the corrected tool call.`
     const loopCheck = loopDetector.checkLoop(result.toolCalls)
     if (loopCheck.isLoop) {
       logger.agent.warn(`[Loop] Loop detected: ${loopCheck.reason}`)
-      const suggestion = loopCheck.suggestion ? `\n💡 ${loopCheck.suggestion}` : ''
-      threadStore.appendToAssistant(assistantId, `\n\n⚠️ ${loopCheck.reason}${suggestion}`)
+      const { language } = useStore.getState()
+      threadStore.addSystemAlertPart(assistantId, {
+        alertType: 'warning',
+        title: getLocalizedText(language, '检测到循环执行', 'Loop Detected'),
+        message: loopCheck.reason || getLocalizedText(language, '代理似乎在重复执行相同操作。', 'The agent appears to be repeating the same actions.'),
+        suggestion: loopCheck.suggestion,
+      })
       threadStore.updateExecutionMeta({ loopState: 'failed' })
-      EventBus.emit({ type: 'loop:warning', message: loopCheck.reason || 'Loop detected', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
-      EventBus.emit({ type: 'loop:end', reason: 'loop_detected', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:warning', message: loopCheck.reason || 'Loop detected', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'loop_detected', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
+    }
+
+    // 非阻断型循环预警也走结构化告警卡片，避免退化成普通文本。
+    if (loopCheck.warning) {
+      const { language } = useStore.getState()
+      logger.agent.warn(`[Loop] Non-blocking loop warning: ${loopCheck.warning}`)
+      threadStore.addSystemAlertPart(assistantId, {
+        alertType: 'warning',
+        title: getLocalizedText(language, '循环预警', 'Loop Warning'),
+        message: loopCheck.warning,
+        suggestion: loopCheck.suggestion,
+      })
+      EventBus.emit({ type: 'loop:warning', message: loopCheck.warning, threadId, assistantId, requestId, planTaskId: context.planTaskId })
     }
 
     // 添加工具调用到 UI
@@ -720,7 +760,7 @@ Try again with the corrected tool call.`
 
     // 检查中止信号（工具执行后）
     if (context.abortSignal?.aborted) {
-      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -737,7 +777,7 @@ Try again with the corrected tool call.`
       }
       threadStore.setStreamPhase('idle')
       threadStore.updateExecutionMeta({ loopState: 'waiting_for_user' })
-      EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'waiting_for_user', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -747,7 +787,7 @@ Try again with the corrected tool call.`
       threadStore.finalizeAssistant(assistantId)
       threadStore.setStreamPhase('idle')
       threadStore.updateExecutionMeta({ loopState: 'completed' })
-      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'tool_requested_stop', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -807,7 +847,7 @@ Try again with the corrected tool call.`
 
     if (userRejected) {
       threadStore.updateExecutionMeta({ loopState: 'aborted' })
-      EventBus.emit({ type: 'loop:end', reason: 'user_rejected', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+      EventBus.emit({ type: 'loop:end', reason: 'user_rejected', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }
 
@@ -818,9 +858,14 @@ Try again with the corrected tool call.`
   // 达到最大迭代次数
   if (iteration >= maxIterations) {
     logger.agent.warn('[Loop] Reached maximum iterations')
-    threadStore.appendToAssistant(assistantId, '\n\n⚠️ Reached maximum tool call limit.')
+    const { language } = useStore.getState()
+    threadStore.addSystemAlertPart(assistantId, {
+      alertType: 'warning',
+      title: getLocalizedText(language, '达到工具调用上限', 'Tool Call Limit Reached'),
+      message: getLocalizedText(language, '当前轮次已达到最大工具调用次数。', 'The agent reached the maximum tool call limit for this turn.'),
+    })
     threadStore.updateExecutionMeta({ loopState: 'failed' })
-    EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
-    EventBus.emit({ type: 'loop:end', reason: 'max_iterations', threadId, assistantId, requestId, orchestratorTaskId: context.orchestratorTaskId })
+    EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+    EventBus.emit({ type: 'loop:end', reason: 'max_iterations', threadId, assistantId, requestId, planTaskId: context.planTaskId })
   }
 }

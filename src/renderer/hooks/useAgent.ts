@@ -78,7 +78,10 @@ export function useAgent() {
 
   // 线程 ID（轻量 selector，不订阅整个 threads 对象）
   const currentThreadId = useAgentStore(state => state.currentThreadId)
-  const planPhase = useAgentStore(state => state.phase)
+  const planPhase = useAgentStore(state => {
+    const activePlan = state.plans.find(plan => plan.id === state.activePlanId)
+    return activePlan?.status === 'executing' ? 'executing' : 'planning'
+  })
 
 
   // 清空消息（包括工具调用日志和 handoff 状态）

@@ -22,7 +22,8 @@ export type CompressionPhase = 'idle' | 'analyzing' | 'compressing' | 'summarizi
 export interface ThreadExecutionMeta {
   requestId?: string
   assistantId?: string
-  orchestratorTaskId?: string
+  /** 当前执行关联的 Plan 任务 ID，用于把线程执行态和任务实例绑定起来。 */
+  planTaskId?: string
   loopState?: 'idle' | 'running' | 'waiting_for_tools' | 'waiting_for_user' | 'completed' | 'failed' | 'aborted'
 }
 
@@ -68,7 +69,7 @@ export interface ChatThread {
   pendingSteps?: string[]
 
   // ===== Thread Ownership Metadata (Phase 3.1) =====
-  /** Thread mode: chat/agent/orchestrator(plan) */
+  /** Thread mode: chat/agent/plan */
   mode?: import('@/shared/types/workMode').WorkMode
   /** Thread origin: user-created or plan-task worker */
   origin?: 'user' | 'plan-task'

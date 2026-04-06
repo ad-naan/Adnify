@@ -192,6 +192,32 @@ ListSkeleton.displayName = 'ListSkeleton'
 
 // ============ 代码块骨架屏 ============
 
+interface TreeSkeletonProps {
+  rows?: number
+}
+
+export const TreeSkeleton = memo(({ rows = 12 }: TreeSkeletonProps) => (
+  <div className="flex flex-col gap-0.5 p-2">
+    {[...Array(rows)].map((_, i) => {
+      const depth = i % 4
+      return (
+        <div
+          key={i}
+          className="flex items-center gap-2 px-2 py-1.5 animate-pulse"
+          style={{ paddingLeft: `${8 + depth * 12}px` }}
+        >
+          <div className="w-3.5 h-3.5 rounded-sm bg-surface-active/45 flex-shrink-0" />
+          <div
+            className="h-3 rounded bg-surface-active/30"
+            style={{ width: `${Math.max(32, 88 - (i % 6) * 11)}%` }}
+          />
+        </div>
+      )
+    })}
+  </div>
+))
+TreeSkeleton.displayName = 'TreeSkeleton'
+
 export interface CodeSkeletonProps {
   lines?: number
 }

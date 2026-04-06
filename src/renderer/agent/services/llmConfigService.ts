@@ -2,7 +2,7 @@
  * LLM 配置服务
  * 
  * 职责：从 Store 获取完整的 LLM 配置（包括 apiKey）
- * 用于 Orchestrator 任务执行
+ * 用于 Plan 任务执行
  */
 
 import { useStore } from '@store'

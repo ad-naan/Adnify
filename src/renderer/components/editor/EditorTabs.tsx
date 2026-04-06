@@ -3,7 +3,7 @@
  */
 import { memo } from 'react'
 import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff } from 'lucide-react'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent'
 import { t } from '@renderer/i18n'
@@ -24,6 +24,11 @@ interface EditorTabsProps {
  */
 function getTabDisplayName(filePath: string): string {
   return getFileName(filePath)
+}
+
+function isPlanJsonFile(filePath: string): boolean {
+  const normalizedPath = normalizePath(filePath)
+  return normalizedPath.includes('/.adnify/plan/') && normalizedPath.endsWith('.json')
 }
 
 export const EditorTabs = memo(function EditorTabs({
@@ -57,7 +62,7 @@ export const EditorTabs = memo(function EditorTabs({
         let fileName = getTabDisplayName(file.path)
 
         // 如果是计划文件，尝试显示计划名称
-        if (file.path.includes('/.adnify/plan/') && file.path.endsWith('.json')) {
+        if (isPlanJsonFile(file.path)) {
           const planId = fileName.replace('.json', '')
           const plan = plans.find(p => p.id === planId)
           if (plan) {

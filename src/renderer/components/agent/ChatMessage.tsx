@@ -24,6 +24,7 @@ import {
   isReasoningPart,
   ReasoningPart,
   isSearchPart,
+  isSystemAlertPart,
   isLintCheckPart,
   ToolCall,
 } from '@renderer/agent/types'
@@ -616,6 +617,20 @@ const RenderPart = React.memo(({
   // Search results are static for now, finish immediately
   if (isSearchPart(part)) {
     return <CompletionSignal onComplete={onTypingComplete} />
+  }
+
+  if (isSystemAlertPart(part)) {
+    return (
+      <>
+        <SystemAlert
+          type={part.alertType}
+          title={part.title}
+          message={part.message}
+          suggestion={part.suggestion}
+        />
+        <CompletionSignal onComplete={onTypingComplete} />
+      </>
+    )
   }
 
   // Lint check results

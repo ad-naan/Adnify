@@ -8,7 +8,6 @@
 import { StateCreator } from 'zustand'
 import type { AgentStore } from '../AgentStore'
 import type {
-    PlanState as ControllerState,
     TaskPlan,
     PlanTask,
     TaskStatus,
@@ -19,15 +18,11 @@ import { useStore } from '@store'
 
 export type { TaskStatus, ExecutionMode, PlanStatus, PlanTask, TaskPlan }
 export type PlanTaskStatus = TaskStatus
-export type PlanPhase = 'planning' | 'executing'
 
 export interface PlanSliceState {
     plans: TaskPlan[]
     activePlanId: string | null
-    phase: PlanPhase
-    isExecuting: boolean
     currentTaskId: string | null
-    controllerState: ControllerState
 }
 
 export interface PlanSliceActions {
@@ -43,12 +38,10 @@ export interface PlanSliceActions {
     markTaskFailed: (planId: string, taskId: string, error: string) => void
     markTaskSkipped: (planId: string, taskId: string, reason: string) => void
 
-    setPhase: (phase: PlanPhase) => void
-    setControllerState: (state: ControllerState) => void
     startExecution: (planId: string) => void
-    pauseExecution: () => void
-    resumeExecution: () => void
-    stopExecution: () => void
+    pauseExecution: (planId?: string) => void
+    resumeExecution: (planId?: string) => void
+    stopExecution: (planId?: string, nextStatus?: PlanStatus) => void
     setCurrentTask: (taskId: string | null) => void
 
     getActivePlan: () => TaskPlan | null
@@ -82,18 +75,13 @@ export const createPlanSlice: StateCreator<
 > = (set, get) => ({
     plans: [],
     activePlanId: null,
-    phase: 'planning' as PlanPhase,
-    isExecuting: false,
     currentTaskId: null,
-    controllerState: 'idle' as ControllerState,
 
     addPlan: (plan) => {
         const planWithRevision = { ...plan, revision: plan.revision || 1 }
         set((state) => ({
             plans: [...state.plans, planWithRevision],
             activePlanId: plan.id,
-            phase: 'planning' as PlanPhase,
-            controllerState: 'reviewing' as ControllerState,
         }))
     },
 
@@ -240,22 +228,11 @@ export const createPlanSlice: StateCreator<
         })
     },
 
-    setPhase: (phase) => {
-        set({ phase })
-    },
-
-    setControllerState: (controllerState) => {
-        set({ controllerState })
-    },
-
     startExecution: (planId) => {
         const plan = get().plans.find(p => p.id === planId)
         if (!plan) return
 
         set((state) => ({
-            isExecuting: true,
-            phase: 'executing' as PlanPhase,
-            controllerState: 'executing' as ControllerState,
             currentTaskId: null,
             plans: state.plans.map((p) =>
                 p.id === planId
@@ -263,45 +240,57 @@ export const createPlanSlice: StateCreator<
                     : p
             ),
         }))
+        void get().savePlan(planId)
     },
 
-    pauseExecution: () => {
+    pauseExecution: (planId) => {
         const state = get()
-        if (!state.activePlanId) return
+        const targetPlanId = planId || state.activePlanId
+        if (!targetPlanId) return
 
         set((prev) => ({
-            isExecuting: false,
-            controllerState: 'paused' as ControllerState,
             plans: prev.plans.map((p) =>
-                p.id === state.activePlanId
+                p.id === targetPlanId
                     ? withRevision(p, { status: 'paused' as PlanStatus })
                     : p
             ),
         }))
+        void get().savePlan(targetPlanId)
     },
 
-    resumeExecution: () => {
+    resumeExecution: (planId) => {
         const state = get()
-        if (!state.activePlanId) return
+        const targetPlanId = planId || state.activePlanId
+        if (!targetPlanId) return
 
         set((prev) => ({
-            isExecuting: true,
-            controllerState: 'executing' as ControllerState,
             plans: prev.plans.map((p) =>
-                p.id === state.activePlanId
+                p.id === targetPlanId
                     ? withRevision(p, { status: 'executing' as PlanStatus })
                     : p
             ),
         }))
+        void get().savePlan(targetPlanId)
     },
 
-    stopExecution: () => {
-        set({
-            isExecuting: false,
+    stopExecution: (planId, nextStatus = 'approved') => {
+        const state = get()
+        const targetPlanId = planId || state.activePlanId
+
+        set((prev) => ({
             currentTaskId: null,
-            phase: 'planning' as PlanPhase,
-            controllerState: 'idle' as ControllerState,
-        })
+            plans: targetPlanId
+                ? prev.plans.map((plan) =>
+                    plan.id === targetPlanId
+                        ? withRevision(plan, { status: nextStatus })
+                        : plan
+                )
+                : prev.plans,
+        }))
+
+        if (targetPlanId) {
+            void get().savePlan(targetPlanId)
+        }
     },
 
     setCurrentTask: (taskId) => {

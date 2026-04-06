@@ -87,19 +87,37 @@ const UIUX_TOOLS: string[] = [
   'uiux_recommend',
 ]
 
-/** Plan 工具 - plan 模式专用 */
-const PLAN_TOOLS: string[] = [
+/** Plan 规划工具 - 仅用于需求收集、计划创建与计划修订 */
+const PLAN_PLANNING_TOOLS: string[] = [
   'ask_user',
   'create_task_plan',
   'update_task_plan',
+]
+
+/** Plan 执行控制工具 - 仅在进入执行阶段后可用 */
+const PLAN_EXECUTION_CONTROL_TOOLS: string[] = [
   'start_task_execution',
+]
+
+const PLAN_EXPLORATION_TOOLS: string[] = [
+  'read_file',
+  'read_multiple_files',
+  'list_directory',
+  'get_dir_tree',
+  'search_files',
+  'codebase_search',
+  'find_references',
+  'go_to_definition',
+  'get_hover_info',
+  'get_document_symbols',
+  'get_file_info',
 ]
 
 /** 工具组注册表 */
 const TOOL_GROUPS: Record<string, string[]> = {
   core: CORE_TOOLS,
   uiux: UIUX_TOOLS,
-  plan: PLAN_TOOLS,
+  plan: PLAN_PLANNING_TOOLS,
 }
 
 /** 角色工具配置注册表 */
@@ -142,7 +160,7 @@ export function getToolGroup(id: string): string[] | undefined {
  * 加载规则：
  * - chat: 空（无工具）
  * - agent: core 工具组
- * - plan: plan 工具组（ask_user, create_task_plan）
+ * - plan: plan 规划工具组（ask_user, create_task_plan, update_task_plan）
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
@@ -156,7 +174,7 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
 
   // plan 模式：根据阶段加载不同工具
   if (context.mode === 'plan') {
-    // 执行阶段：加载所有工具（core + plan）
+    // 执行阶段：加载所有工具（core + plan）以及执行控制工具
     if (context.planPhase === 'executing') {
       for (const tool of CORE_TOOLS) {
         tools.add(tool)
@@ -164,10 +182,16 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
       for (const tool of TOOL_GROUPS['plan'] || []) {
         tools.add(tool)
       }
+      for (const tool of PLAN_EXECUTION_CONTROL_TOOLS) {
+        tools.add(tool)
+      }
       return Array.from(tools)
     }
 
-    // 规划阶段（默认）：只使用编排工具
+    // 规划阶段（默认）：只使用探索工具和规划工具，不允许直接启动执行
+    for (const tool of PLAN_EXPLORATION_TOOLS) {
+      tools.add(tool)
+    }
     for (const tool of TOOL_GROUPS['plan'] || []) {
       tools.add(tool)
     }
