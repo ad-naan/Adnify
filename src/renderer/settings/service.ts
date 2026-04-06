@@ -1,14 +1,15 @@
 /**
- * 设置持久化服务
- * 
- * 职责：
- * - 从文件/localStorage 加载设置
- * - 保存设置到文件/localStorage
- * - 同步设置到主进程
- * 
- * 不负责：
- * - 状态管理（由 Zustand store 负责）
- * - 类型定义（由 schema 负责）
+ * Settings persistence service.
+ *
+ * Responsibilities:
+ * - load settings from file/localStorage
+ * - save settings to file/localStorage
+ * - sync non-file side effects to the main process
+ *
+ * Architecture:
+ * - `llmConfig` persistence only stores active model selection + generation behavior
+ * - provider/network fields (apiKey/baseUrl/timeout/headers/protocol) live in `providerConfigs`
+ * - runtime `LLMConfig` is reconstructed from persisted llmConfig + providerConfigs + defaults
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -25,11 +26,11 @@ import {
   isBuiltinProvider,
   getBuiltinProvider,
 } from '@shared/config/providers'
-import type { ProviderConfig, LLMConfig } from '@shared/config/types'
-
-// ============================================
-// 存储键
-// ============================================
+import type {
+  ProviderConfig,
+  LLMConfig,
+  PersistedLLMConfig,
+} from '@shared/config/types'
 
 const STORAGE_KEYS = {
   APP: 'app-settings',
@@ -39,60 +40,63 @@ const STORAGE_KEYS = {
 
 const LOCAL_CACHE_KEY = 'adnify-settings-cache'
 
-// ============================================
-// 深度合并
-// ============================================
-
 function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   const result = { ...target }
+
   for (const key in source) {
-    if (source[key] !== undefined) {
-      const sourceVal = source[key]
-      const targetVal = target[key]
-      if (
-        typeof sourceVal === 'object' &&
-        sourceVal !== null &&
-        !Array.isArray(sourceVal) &&
-        typeof targetVal === 'object' &&
-        targetVal !== null
-      ) {
-        (result as Record<string, unknown>)[key] = deepMerge(
-          targetVal as object,
-          sourceVal as object
-        )
-      } else {
-        (result as Record<string, unknown>)[key] = sourceVal
-      }
+    if (source[key] === undefined) continue
+
+    const sourceValue = source[key]
+    const targetValue = target[key]
+
+    if (
+      typeof sourceValue === 'object' &&
+      sourceValue !== null &&
+      !Array.isArray(sourceValue) &&
+      typeof targetValue === 'object' &&
+      targetValue !== null
+    ) {
+      ;(result as Record<string, unknown>)[key] = deepMerge(
+        targetValue as object,
+        sourceValue as object,
+      )
+      continue
     }
+
+    ;(result as Record<string, unknown>)[key] = sourceValue
   }
+
   return result
 }
-
-// ============================================
-// Provider 配置处理
-// ============================================
 
 function cleanProviderConfig(
   providerId: string,
   config: ProviderConfig,
-  isCurrentProvider: boolean
+  isCurrentProvider: boolean,
 ): Partial<ProviderConfig> | null {
-  const isBuiltin = isBuiltinProvider(providerId)
+  const builtinDef = getBuiltinProvider(providerId)
   const cleaned: Partial<ProviderConfig> = {}
 
   if (config.apiKey) cleaned.apiKey = config.apiKey
 
-  const builtinDef = getBuiltinProvider(providerId)
   if (config.baseUrl && config.baseUrl !== builtinDef?.baseUrl) {
     cleaned.baseUrl = config.baseUrl
   }
 
   if (isCurrentProvider && config.model) cleaned.model = config.model
-  if (config.timeout && config.timeout !== 120000) cleaned.timeout = config.timeout
+
+  if (
+    typeof config.timeout === 'number' &&
+    config.timeout > 0 &&
+    config.timeout !== SETTINGS.llmConfig.default.timeout
+  ) {
+    cleaned.timeout = config.timeout
+  }
+
   if (config.customModels?.length) cleaned.customModels = config.customModels
   if (config.headers && Object.keys(config.headers).length > 0) cleaned.headers = config.headers
 
-  if (!isBuiltin) {
+  if (!isBuiltinProvider(providerId)) {
     if (config.displayName) cleaned.displayName = config.displayName
     if (config.protocol) cleaned.protocol = config.protocol
     if (config.createdAt) cleaned.createdAt = config.createdAt
@@ -104,25 +108,69 @@ function cleanProviderConfig(
 }
 
 function mergeProviderConfigs(
-  saved: Record<string, ProviderConfig> | undefined
+  saved: Record<string, ProviderConfig> | undefined,
 ): Record<string, ProviderModelConfig> {
   const defaults = SETTINGS.providerConfigs.default
   if (!saved) return { ...defaults }
 
   const merged: Record<string, ProviderModelConfig> = { ...defaults }
+
   for (const [id, config] of Object.entries(saved)) {
     if (isBuiltinProvider(id)) {
       merged[id] = { ...defaults[id], ...config }
-    } else {
-      merged[id] = { ...config }
+      continue
     }
+
+    merged[id] = { ...config }
   }
+
   return merged
 }
 
+function serializeLLMConfig(config: LLMConfig): PersistedLLMConfig {
+  return {
+    provider: config.provider,
+    model: config.model,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    topP: config.topP,
+    topK: config.topK,
+    frequencyPenalty: config.frequencyPenalty,
+    presencePenalty: config.presencePenalty,
+    stopSequences: config.stopSequences,
+    seed: config.seed,
+    logitBias: config.logitBias,
+    maxRetries: config.maxRetries,
+    toolChoice: config.toolChoice,
+    parallelToolCalls: config.parallelToolCalls,
+    enableThinking: config.enableThinking,
+    thinkingBudget: config.thinkingBudget,
+    reasoningEffort: config.reasoningEffort,
+  }
+}
+
+function buildPersistedSettingsPayload(
+  settings: SettingsState,
+  providerConfigs: Record<string, unknown>,
+) {
+  return {
+    llmConfig: serializeLLMConfig(settings.llmConfig),
+    language: settings.language,
+    autoApprove: settings.autoApprove,
+    promptTemplateId: settings.promptTemplateId,
+    agentConfig: settings.agentConfig,
+    providerConfigs,
+    aiInstructions: settings.aiInstructions,
+    onboardingCompleted: settings.onboardingCompleted,
+    webSearchConfig: settings.webSearchConfig,
+    mcpConfig: settings.mcpConfig,
+    enableFileLogging: settings.enableFileLogging,
+  }
+}
+
 function mergeLLMConfig(
-  saved: Partial<LLMConfig> | undefined,
-  providerConfigs: Record<string, ProviderModelConfig>
+  saved: Partial<PersistedLLMConfig> | undefined,
+  providerConfigs: Record<string, ProviderModelConfig>,
 ): LLMConfig {
   const defaults = SETTINGS.llmConfig.default
   if (!saved) return defaults
@@ -131,15 +179,12 @@ function mergeLLMConfig(
   const providerConfig = providerConfigs[providerId] ?? {}
   const builtinDef = getBuiltinProvider(providerId)
 
-  // 优先级：saved > providerConfig > builtinDef > defaults
   return {
     provider: providerId,
     model: saved.model ?? providerConfig.model ?? builtinDef?.defaultModel ?? defaults.model,
     apiKey: providerConfig.apiKey ?? defaults.apiKey,
     baseUrl: providerConfig.baseUrl ?? builtinDef?.baseUrl ?? defaults.baseUrl,
     timeout: providerConfig.timeout ?? builtinDef?.defaults.timeout ?? defaults.timeout,
-
-    // 核心参数
     temperature: saved.temperature ?? defaults.temperature,
     maxTokens: saved.maxTokens ?? defaults.maxTokens,
     topP: saved.topP ?? defaults.topP,
@@ -149,47 +194,34 @@ function mergeLLMConfig(
     stopSequences: saved.stopSequences ?? defaults.stopSequences,
     seed: saved.seed ?? defaults.seed,
     logitBias: saved.logitBias ?? defaults.logitBias,
-
-    // AI SDK 高级参数
     maxRetries: saved.maxRetries ?? defaults.maxRetries,
     toolChoice: saved.toolChoice ?? defaults.toolChoice,
     parallelToolCalls: saved.parallelToolCalls ?? defaults.parallelToolCalls,
-    headers: providerConfig.headers ?? defaults.headers,  // 从 providerConfig 加载 headers
-
-    // 功能开关
+    headers: providerConfig.headers ?? defaults.headers,
     enableThinking: saved.enableThinking ?? defaults.enableThinking,
     thinkingBudget: saved.thinkingBudget ?? defaults.thinkingBudget,
     reasoningEffort: saved.reasoningEffort ?? defaults.reasoningEffort,
-
-    // 协议
     protocol: providerConfig.protocol,
   }
 }
 
-// ============================================
-// 设置服务
-// ============================================
-
 class SettingsService {
   private cache: SettingsState | null = null
 
-  /** 加载所有设置 */
   async load(): Promise<SettingsState> {
-    // 1. 尝试 localStorage 缓存
     try {
       const cached = localStorage.getItem(LOCAL_CACHE_KEY)
       if (cached) {
-        const parsed = JSON.parse(cached)
+        const parsed = JSON.parse(cached) as Record<string, unknown>
         const merged = this.merge(parsed)
         this.cache = merged
         this.syncFromFile()
         return merged
       }
     } catch {
-      // ignore
+      // ignore local cache corruption
     }
 
-    // 2. 从文件加载
     try {
       const [appSettings, editorConfig, securitySettings] = await Promise.all([
         api.settings.get(STORAGE_KEYS.APP),
@@ -202,98 +234,54 @@ class SettingsService {
         editorConfig,
         securitySettings,
       })
+
       this.cache = merged
       this.saveToLocalStorage(merged)
       return merged
-    } catch (e) {
-      logger.settings.error('[SettingsService] Load failed:', e)
+    } catch (error) {
+      logger.settings.error('[SettingsService] Load failed:', error)
       return getAllDefaults()
     }
   }
 
-  /** 保存所有设置 */
   async save(settings: SettingsState): Promise<void> {
     try {
-      // 清理 provider configs
       const cleanedProviderConfigs: Record<string, ProviderConfig> = {}
+
       for (const [id, config] of Object.entries(settings.providerConfigs)) {
         const cleaned = cleanProviderConfig(id, config, id === settings.llmConfig.provider)
         if (cleaned) cleanedProviderConfigs[id] = cleaned as ProviderConfig
       }
 
-      // 构建 app-settings
-      const appSettings = {
-        llmConfig: {
-          provider: settings.llmConfig.provider,
-          model: settings.llmConfig.model,
+      const appSettings = buildPersistedSettingsPayload(settings, cleanedProviderConfigs)
 
-          // 核心参数
-          temperature: settings.llmConfig.temperature,
-          maxTokens: settings.llmConfig.maxTokens,
-          topP: settings.llmConfig.topP,
-          topK: settings.llmConfig.topK,
-          frequencyPenalty: settings.llmConfig.frequencyPenalty,
-          presencePenalty: settings.llmConfig.presencePenalty,
-          stopSequences: settings.llmConfig.stopSequences,
-          seed: settings.llmConfig.seed,
-          logitBias: settings.llmConfig.logitBias,
-
-          // AI SDK 高级参数
-          maxRetries: settings.llmConfig.maxRetries,
-          toolChoice: settings.llmConfig.toolChoice,
-          parallelToolCalls: settings.llmConfig.parallelToolCalls,
-          headers: settings.llmConfig.headers,
-
-          // 功能开关
-          enableThinking: settings.llmConfig.enableThinking,
-          thinkingBudget: settings.llmConfig.thinkingBudget,
-          reasoningEffort: settings.llmConfig.reasoningEffort,
-        },
-        language: settings.language,
-        autoApprove: settings.autoApprove,
-        promptTemplateId: settings.promptTemplateId,
-        agentConfig: settings.agentConfig,
-        providerConfigs: cleanedProviderConfigs,
-        aiInstructions: settings.aiInstructions,
-        onboardingCompleted: settings.onboardingCompleted,
-        webSearchConfig: settings.webSearchConfig,
-        mcpConfig: settings.mcpConfig,
-        enableFileLogging: settings.enableFileLogging,
-      }
-
-      // 更新缓存
       this.cache = settings
       this.saveToLocalStorage(settings)
 
-      // 写入文件
       await Promise.all([
         api.settings.set(STORAGE_KEYS.APP, appSettings),
         api.settings.set(STORAGE_KEYS.EDITOR, settings.editorConfig),
         api.settings.set(STORAGE_KEYS.SECURITY, settings.securitySettings),
       ])
 
-      // 同步到主进程
       await this.syncToMain(settings)
 
       logger.settings.info('[SettingsService] Saved')
-    } catch (e) {
-      logger.settings.error('[SettingsService] Save failed:', e)
-      throw e
+    } catch (error) {
+      logger.settings.error('[SettingsService] Save failed:', error)
+      throw error
     }
   }
 
-  /** 保存单个设置 */
   async saveSingle<K extends SettingKey>(key: K, value: SettingValue<K>): Promise<void> {
     const current = this.cache || await this.load()
     await this.save({ ...current, [key]: value })
   }
 
-  /** 获取缓存 */
   getCache(): SettingsState | null {
     return this.cache
   }
 
-  /** 清除缓存 */
   clearCache(): void {
     this.cache = null
     try {
@@ -303,12 +291,15 @@ class SettingsService {
     }
   }
 
-  // ============ 私有方法 ============
-
   private merge(saved: Record<string, unknown>): SettingsState {
     const defaults = getAllDefaults()
-    const providerConfigs = mergeProviderConfigs(saved.providerConfigs as Record<string, ProviderConfig>)
-    const llmConfig = mergeLLMConfig(saved.llmConfig as { provider: string; model: string }, providerConfigs)
+    const providerConfigs = mergeProviderConfigs(
+      saved.providerConfigs as Record<string, ProviderConfig> | undefined,
+    )
+    const llmConfig = mergeLLMConfig(
+      saved.llmConfig as Partial<PersistedLLMConfig> | undefined,
+      providerConfigs,
+    )
 
     return {
       llmConfig,
@@ -343,78 +334,44 @@ class SettingsService {
         api.settings.get(STORAGE_KEYS.SECURITY),
       ])
 
-      if (appSettings || editorConfig || securitySettings) {
-        const merged = this.merge({
-          ...(appSettings as object || {}),
-          editorConfig,
-          securitySettings,
-        })
-        this.cache = merged
-        this.saveToLocalStorage(merged)
-      }
+      if (!appSettings && !editorConfig && !securitySettings) return
+
+      const merged = this.merge({
+        ...(appSettings as object || {}),
+        editorConfig,
+        securitySettings,
+      })
+
+      this.cache = merged
+      this.saveToLocalStorage(merged)
     } catch {
-      // ignore
+      // ignore file refresh failures
     }
   }
 
   private saveToLocalStorage(settings: SettingsState): void {
     try {
-      localStorage.setItem(LOCAL_CACHE_KEY, JSON.stringify({
-        llmConfig: {
-          provider: settings.llmConfig.provider,
-          model: settings.llmConfig.model,
-
-          // 核心参数
-          temperature: settings.llmConfig.temperature,
-          maxTokens: settings.llmConfig.maxTokens,
-          topP: settings.llmConfig.topP,
-          topK: settings.llmConfig.topK,
-          frequencyPenalty: settings.llmConfig.frequencyPenalty,
-          presencePenalty: settings.llmConfig.presencePenalty,
-          stopSequences: settings.llmConfig.stopSequences,
-          seed: settings.llmConfig.seed,
-          logitBias: settings.llmConfig.logitBias,
-
-          // AI SDK 高级参数
-          maxRetries: settings.llmConfig.maxRetries,
-          toolChoice: settings.llmConfig.toolChoice,
-          parallelToolCalls: settings.llmConfig.parallelToolCalls,
-          headers: settings.llmConfig.headers,
-
-          // 功能开关
-          enableThinking: settings.llmConfig.enableThinking,
-          thinkingBudget: settings.llmConfig.thinkingBudget,
-          reasoningEffort: settings.llmConfig.reasoningEffort,
-        },
-        language: settings.language,
-        autoApprove: settings.autoApprove,
-        promptTemplateId: settings.promptTemplateId,
-        agentConfig: settings.agentConfig,
-        providerConfigs: settings.providerConfigs,
-        aiInstructions: settings.aiInstructions,
-        onboardingCompleted: settings.onboardingCompleted,
-        editorConfig: settings.editorConfig,
-        securitySettings: settings.securitySettings,
-        webSearchConfig: settings.webSearchConfig,
-        mcpConfig: settings.mcpConfig,
-        enableFileLogging: settings.enableFileLogging,
-      }))
+      localStorage.setItem(
+        LOCAL_CACHE_KEY,
+        JSON.stringify(buildPersistedSettingsPayload(settings, settings.providerConfigs)),
+      )
     } catch {
-      // ignore
+      // ignore local cache write failures
     }
   }
 
   private async syncToMain(settings: SettingsState): Promise<void> {
     const promises: Promise<unknown>[] = []
 
-    // 同步 Google Search
     if (settings.webSearchConfig.googleApiKey && settings.webSearchConfig.googleCx) {
       promises.push(
-        api.http.setGoogleSearch(settings.webSearchConfig.googleApiKey, settings.webSearchConfig.googleCx)
+        api.http.setGoogleSearch(
+          settings.webSearchConfig.googleApiKey,
+          settings.webSearchConfig.googleCx,
+        ),
       )
     }
 
-    // 同步 MCP 自动连接
     promises.push(api.mcp.setAutoConnect(settings.mcpConfig.autoConnect ?? true))
 
     await Promise.all(promises)
@@ -423,30 +380,22 @@ class SettingsService {
 
 export const settingsService = new SettingsService()
 
-
-// ============================================
-// 便捷函数
-// ============================================
-
-/** 获取编辑器配置（同步） */
 export function getEditorConfig(): SettingsState['editorConfig'] {
   return settingsService.getCache()?.editorConfig || SETTINGS.editorConfig.default
 }
 
-/** 保存编辑器配置 */
 export function saveEditorConfig(config: Partial<SettingsState['editorConfig']>): void {
   const current = settingsService.getCache()
-  if (current) {
-    const merged = deepMerge(current.editorConfig, config)
-    settingsService.saveSingle('editorConfig', merged).catch((err) => {
-      logger.settings.error('Failed to save editor config:', err)
-    })
-  }
+  if (!current) return
+
+  const merged = deepMerge(current.editorConfig, config)
+  settingsService.saveSingle('editorConfig', merged).catch((error) => {
+    logger.settings.error('Failed to save editor config:', error)
+  })
 }
 
-/** 重置编辑器配置 */
 export function resetEditorConfig(): void {
-  settingsService.saveSingle('editorConfig', SETTINGS.editorConfig.default).catch((err) => {
-    logger.settings.error('Failed to reset editor config:', err)
+  settingsService.saveSingle('editorConfig', SETTINGS.editorConfig.default).catch((error) => {
+    logger.settings.error('Failed to reset editor config:', error)
   })
 }

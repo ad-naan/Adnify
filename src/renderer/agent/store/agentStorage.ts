@@ -10,6 +10,37 @@ import { StateStorage } from 'zustand/middleware'
 import { adnifyDir } from '@services/adnifyDirService'
 
 let lastSerializedValue: string | null = null
+let writeSuspendCount = 0
+
+export interface PersistedAgentSessionState {
+  threads: Record<string, unknown>
+  currentThreadId: string | null
+  branches: Record<string, unknown>
+  activeBranchId: Record<string, unknown>
+}
+
+export function suspendAgentStorageWrites(): void {
+  writeSuspendCount += 1
+}
+
+export function resumeAgentStorageWrites(): void {
+  writeSuspendCount = Math.max(0, writeSuspendCount - 1)
+}
+
+export async function persistCriticalAgentSessionState(
+  state: PersistedAgentSessionState
+): Promise<void> {
+  try {
+    adnifyDir.setFullSessionDataDirty('adnify-agent-store', {
+      state,
+      version: 0,
+    })
+    await adnifyDir.flush()
+    lastSerializedValue = null
+  } catch (error) {
+    logger.agent.error('[AgentStorage] Failed to persist critical agent session state:', error)
+  }
+}
 
 /**
  * 自定义 Zustand Storage
@@ -30,6 +61,9 @@ export const agentStorage: StateStorage = {
 
   setItem: async (name: string, value: string): Promise<void> => {
     try {
+      if (writeSuspendCount > 0) {
+        return
+      }
       if (value === lastSerializedValue) {
         return
       }

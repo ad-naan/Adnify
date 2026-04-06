@@ -6,7 +6,7 @@
  *   ├── index/               # 代码库向量索引
  *   ├── sessions/            # Agent 会话（按线程拆分）
  *   │   ├── _meta.json       # 线程索引元数据（currentThreadId, threadIds, version）
- *   │   ├── _extra.json      # 非线程快照状态（branches, checkpoints 等）
+ *   │   ├── _extra.json      # 非线程状态（branches 等）
  *   │   └── {threadId}.jsonl # 单个线程消息数据
  *   ├── settings.json        # 项目级设置
  *   ├── workspace-state.json # 工作区状态（打开的文件等）
@@ -35,8 +35,13 @@ interface SessionIndexMeta {
   version: number
 }
 
+interface SessionExtraState {
+  branches: Record<string, unknown>
+  activeBranchId: Record<string, string | null>
+}
+
 export interface SessionMeta extends SessionIndexMeta {
-  extra: Record<string, unknown>
+  extra: SessionExtraState
 }
 
 export interface WorkspaceStateData {
@@ -96,8 +101,46 @@ const DEFAULT_PROJECT_SETTINGS: ProjectSettingsData = {
 const DEFAULT_SESSION_META: SessionMeta = {
   currentThreadId: null,
   threadIds: [],
-  extra: {},
+  extra: {
+    branches: {},
+    activeBranchId: {},
+  },
   version: 0,
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeSessionExtraState(value?: Record<string, unknown> | null): SessionExtraState {
+  const rawBranches = isPlainRecord(value?.branches) ? value.branches : {}
+  const rawActiveBranchId = isPlainRecord(value?.activeBranchId) ? value.activeBranchId : {}
+
+  const activeBranchId: Record<string, string | null> = {}
+  for (const [threadId, branchId] of Object.entries(rawActiveBranchId)) {
+    if (typeof branchId === 'string' || branchId === null) {
+      activeBranchId[threadId] = branchId
+    }
+  }
+
+  return {
+    branches: { ...rawBranches },
+    activeBranchId,
+  }
+}
+
+function serializeSessionExtraState(extra: SessionExtraState): Record<string, unknown> {
+  const serialized: Record<string, unknown> = {}
+
+  if (Object.keys(extra.branches).length > 0) {
+    serialized.branches = extra.branches
+  }
+
+  if (Object.keys(extra.activeBranchId).length > 0) {
+    serialized.activeBranchId = extra.activeBranchId
+  }
+
+  return serialized
 }
 
 function stableStringify(value: unknown): string {
@@ -230,7 +273,7 @@ class AdnifyDirService {
     const metaToWrite = this.dirty.sessionMeta && this.cache.sessionMeta
       ? {
         index: toSessionIndexMeta(this.cache.sessionMeta),
-        extra: { ...this.cache.sessionMeta.extra },
+        extra: serializeSessionExtraState(this.cache.sessionMeta.extra),
       }
       : null
     const metaRevision = metaToWrite ? ++this.metaWriteRevision : 0
@@ -239,7 +282,11 @@ class AdnifyDirService {
 
     if (metaToWrite) {
       promises.push(this.writeSessionFile('_meta.json', metaToWrite.index))
-      promises.push(this.writeSessionFile('_extra.json', metaToWrite.extra))
+      if (Object.keys(metaToWrite.extra).length > 0) {
+        promises.push(this.writeSessionFile('_extra.json', metaToWrite.extra))
+      } else {
+        promises.push(this.deleteSessionFile('_extra.json'))
+      }
     }
 
     const flushedThreadIds = [...this.dirty.dirtyThreads]
@@ -319,7 +366,7 @@ class AdnifyDirService {
       currentThreadId: indexMeta?.currentThreadId ?? null,
       threadIds: indexMeta?.threadIds ?? [],
       version: indexMeta?.version ?? 0,
-      extra: extra ?? {},
+      extra: normalizeSessionExtraState(extra),
     }
     this.metaHash = stableStringify(this.cache.sessionMeta)
     return this.cache.sessionMeta
@@ -431,7 +478,7 @@ class AdnifyDirService {
     this.dirty.dirtyThreads.clear()
     await Promise.all([
       this.writeSessionFile('_meta.json', toSessionIndexMeta(this.cache.sessionMeta)),
-      this.writeSessionFile('_extra.json', this.cache.sessionMeta.extra),
+      this.deleteSessionFile('_extra.json'),
     ])
   }
 
@@ -478,7 +525,8 @@ class AdnifyDirService {
       state: {
         threads,
         currentThreadId: effectiveMeta.currentThreadId,
-        ...effectiveMeta.extra,
+        branches: effectiveMeta.extra.branches,
+        activeBranchId: effectiveMeta.extra.activeBranchId,
       },
       version: effectiveMeta.version,
     }
@@ -490,7 +538,7 @@ class AdnifyDirService {
 
     const threads = (state.threads || {}) as Record<string, unknown>
     const currentThreadId = state.currentThreadId as string | null
-    const { threads: _threads, currentThreadId: _currentThreadId, ...extra } = state
+    const extra = normalizeSessionExtraState(state)
 
     this.setSessionMetaDirty({
       currentThreadId,
@@ -610,7 +658,7 @@ class AdnifyDirService {
     }
   }
 
-  private async rebuildMetaFromThreadFiles(extra: Record<string, unknown>): Promise<SessionMeta | null> {
+  private async rebuildMetaFromThreadFiles(extra: SessionExtraState): Promise<SessionMeta | null> {
     // 如果未初始化，直接返回 null，避免不必要的错误日志
     if (!this.isInitialized()) {
       return null
@@ -699,7 +747,10 @@ class AdnifyDirService {
         return
       }
 
-      const { threads, currentThreadId, ...extra } = storeData.state as Record<string, unknown>
+      const migratedState = storeData.state as Record<string, unknown>
+      const threads = migratedState.threads
+      const currentThreadId = migratedState.currentThreadId
+      const extra = normalizeSessionExtraState(migratedState)
       const threadsMap = threads as Record<string, unknown>
       const threadIds = Object.keys(threadsMap)
 
@@ -716,7 +767,9 @@ class AdnifyDirService {
 
       await Promise.all([
         this.writeSessionFile('_meta.json', toSessionIndexMeta(meta)),
-        this.writeSessionFile('_extra.json', meta.extra),
+        Object.keys(serializeSessionExtraState(meta.extra)).length > 0
+          ? this.writeSessionFile('_extra.json', serializeSessionExtraState(meta.extra))
+          : this.deleteSessionFile('_extra.json'),
       ])
 
       await api.file.delete(oldPath)
@@ -826,11 +879,26 @@ class AdnifyDirService {
         if (!threadData.messages) {
           threadData.messages = []
         }
+        if (!Array.isArray(threadData.messageCheckpoints)) {
+          threadData.messageCheckpoints = []
+        }
       }
 
       return threadData as T
     } catch {
       return null
+    }
+  }
+
+  private async deleteSessionFile(fileName: string): Promise<void> {
+    try {
+      const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
+      const exists = await api.file.exists(filePath)
+      if (exists) {
+        await api.file.delete(filePath)
+      }
+    } catch (error) {
+      logger.system.error(`[AdnifyDir] Failed to delete session file ${fileName}:`, error)
     }
   }
 

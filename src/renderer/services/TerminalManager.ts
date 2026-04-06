@@ -240,6 +240,7 @@ function cloneCommandSession(session: TerminalCommandSession | null): TerminalCo
 }
 
 class TerminalManagerClass {
+  private static readonly MAX_IDLE_AGENT_TERMINALS = 2
   private state = {
     terminals: [] as TerminalInstance[],
     activeId: null as string | null,
@@ -856,9 +857,25 @@ class TerminalManagerClass {
     // 检查现有 agent 终端是否仍然存活
     if (this.agentTerminalId) {
       const exists = this.state.terminals.find(t => t.id === this.agentTerminalId)
-      if (exists) return this.agentTerminalId
+      if (exists) {
+        const commandInfo = this.getTerminalCommandState(this.agentTerminalId)
+        const occupiedByDetachedWork =
+          commandInfo.current?.status === 'detached' ||
+          commandInfo.last?.status === 'detached'
+        const occupiedByActiveCommand =
+          commandInfo.current?.status === 'queued' ||
+          commandInfo.current?.status === 'running'
+
+        if (!occupiedByDetachedWork && !occupiedByActiveCommand) {
+          return this.agentTerminalId
+        }
+
+        this.agentTerminalId = null
+      }
       // 已被关闭，重置
-      this.agentTerminalId = null
+      else {
+        this.agentTerminalId = null
+      }
     }
 
     // 并发锁：防止快速连续的 run_command 创建多个 Agent 终端
@@ -867,12 +884,13 @@ class TerminalManagerClass {
     }
 
     this.agentTerminalCreating = this.createTerminal({
-      name: 'Agent',
+      name: this.getNextAgentTerminalName(),
       cwd,
       shell,
       isAgent: true,
     }).then(id => {
       this.agentTerminalId = id
+      this.cleanupIdleAgentTerminals()
       this.agentTerminalCreating = null
       return id
     }).catch(err => {
@@ -889,6 +907,39 @@ class TerminalManagerClass {
    */
   releaseAgentTerminal() {
     this.agentTerminalId = null
+  }
+
+  private getNextAgentTerminalName(): string {
+    const agentTerminals = this.state.terminals.filter(t => t.isAgent)
+    if (agentTerminals.length === 0) return 'Agent'
+    return `Agent ${agentTerminals.length + 1}`
+  }
+
+  private cleanupIdleAgentTerminals(): void {
+    const idleAgentTerminals = this.state.terminals
+      .filter(terminal => terminal.isAgent)
+      .filter(terminal => terminal.id !== this.agentTerminalId)
+      .filter(terminal => terminal.id !== this.state.activeId)
+      .filter((terminal) => {
+        const commandInfo = this.getTerminalCommandState(terminal.id)
+        const currentStatus = commandInfo.current?.status
+        const lastStatus = commandInfo.last?.status
+        const isOccupied = currentStatus === 'queued'
+          || currentStatus === 'running'
+          || currentStatus === 'detached'
+          || lastStatus === 'detached'
+        return !isOccupied
+      })
+      .sort((a, b) => a.createdAt - b.createdAt)
+
+    const terminalsToClose = Math.max(
+      0,
+      idleAgentTerminals.length - TerminalManagerClass.MAX_IDLE_AGENT_TERMINALS,
+    )
+
+    idleAgentTerminals.slice(0, terminalsToClose).forEach((terminal) => {
+      this.closeTerminal(terminal.id)
+    })
   }
 
   recordDetachedCommand(

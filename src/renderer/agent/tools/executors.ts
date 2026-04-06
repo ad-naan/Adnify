@@ -150,6 +150,156 @@ function hashContent(content: string | null): string {
     return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
+function getPathSeparator(basePath: string): string {
+    return basePath.includes('\\') ? '\\' : '/'
+}
+
+function joinPath(basePath: string, ...parts: string[]): string {
+    const sep = getPathSeparator(basePath)
+    const trimmedBase = basePath.replace(/[\\/]+$/, '')
+    const trimmedParts = parts.map(part => part.replace(/^[\\/]+|[\\/]+$/g, ''))
+    return [trimmedBase, ...trimmedParts].join(sep)
+}
+
+type InlineScriptRuntime = 'python' | 'node' | 'powershell' | 'sh'
+
+interface InlineScriptCommand {
+    runtime: InlineScriptRuntime
+    executable: string
+    script: string
+    extension: string
+    args: string[]
+}
+
+function unwrapInlineScript(script: string): string {
+    const trimmed = script.trim()
+    if (!trimmed) return trimmed
+
+    if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+        const quote = trimmed[0]
+        const inner = trimmed.slice(1, -1)
+        if (quote === '"') {
+            return inner.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+        }
+        return inner.replace(/''/g, "'")
+    }
+
+    return trimmed
+}
+
+function parseInlineScriptCommand(command: string): InlineScriptCommand | null {
+    const patterns: Array<{
+        regex: RegExp
+        runtime: InlineScriptRuntime
+        extension: string
+        executable?: (raw: string) => string
+        args: (tempFile: string, executable: string) => string[]
+    }> = [
+        {
+            regex: /^\s*(python(?:\d+(?:\.\d+)*)?|python3|py(?:\s+-\d+(?:\.\d+)*)?)\s+-c\s+([\s\S]+?)\s*$/i,
+            runtime: 'python',
+            extension: '.py',
+            executable: raw => raw.trim().toLowerCase().startsWith('py') ? 'python' : raw.trim(),
+            args: tempFile => [tempFile],
+        },
+        {
+            regex: /^\s*(node(?:\.exe)?)\s+-e\s+([\s\S]+?)\s*$/i,
+            runtime: 'node',
+            extension: '.js',
+            args: tempFile => [tempFile],
+        },
+        {
+            regex: /^\s*(powershell(?:\.exe)?|pwsh(?:\.exe)?)\s+-(?:Command|c)\s+([\s\S]+?)\s*$/i,
+            runtime: 'powershell',
+            extension: '.ps1',
+            args: (tempFile, executable) => executable.toLowerCase().startsWith('powershell')
+                ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tempFile]
+                : ['-NoProfile', '-File', tempFile],
+        },
+        {
+            regex: /^\s*(bash|sh)\s+-c\s+([\s\S]+?)\s*$/i,
+            runtime: 'sh',
+            extension: '.sh',
+            args: tempFile => [tempFile],
+        },
+    ]
+
+    for (const pattern of patterns) {
+        const match = command.match(pattern.regex)
+        if (!match) continue
+
+        const rawExecutable = match[1].trim()
+        const executable = pattern.executable ? pattern.executable(rawExecutable) : rawExecutable
+        return {
+            runtime: pattern.runtime,
+            executable,
+            script: unwrapInlineScript(match[2]),
+            extension: pattern.extension,
+            args: pattern.args('__TEMP_FILE__', executable),
+        }
+    }
+
+    return null
+}
+
+async function runInlineScriptViaTempFile(
+    command: string,
+    ctx: ToolExecutionContext,
+    timeout: number
+): Promise<ToolExecutionResult | null> {
+    const parsed = parseInlineScriptCommand(command)
+    if (!parsed) return null
+
+    const baseDir = ctx.workspacePath || await api.settings.getUserDataPath()
+    const tempDir = joinPath(baseDir, '.adnify', 'agent-temp')
+    const tempFile = joinPath(
+        tempDir,
+        `inline-${parsed.runtime}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${parsed.extension}`
+    )
+
+    try {
+        await api.file.ensureDir(tempDir)
+        const writeOk = await api.file.write(tempFile, parsed.script)
+        if (!writeOk) {
+            return {
+                success: false,
+                result: `Error: Failed to prepare temporary ${parsed.runtime} script at ${tempFile}`,
+                error: `Failed to prepare temporary ${parsed.runtime} script`,
+            }
+        }
+
+        const execResult = await api.shell.executeSecure({
+            command: parsed.executable,
+            args: parsed.args.map(arg => arg === '__TEMP_FILE__' ? tempFile : arg),
+            cwd: ctx.workspacePath || undefined,
+            timeout,
+            requireConfirm: false,
+        })
+
+        const output = (execResult.output || execResult.errorOutput || '').trim()
+        const resultText = output || (execResult.success ? 'Command executed successfully (no output)' : `Command failed${execResult.exitCode != null ? ` (exit code ${execResult.exitCode})` : ''}`)
+
+        return {
+            success: !!execResult.success,
+            result: resultText,
+            error: execResult.success ? undefined : (execResult.error || resultText),
+            meta: {
+                command,
+                cwd: ctx.workspacePath || undefined,
+                exitCode: execResult.exitCode,
+                executionMode: `inline-${parsed.runtime}-temp-file`,
+                tempFile,
+            }
+        }
+    } finally {
+        try {
+            await api.file.delete(tempFile)
+        } catch {
+            // Best-effort cleanup for temp scripts.
+        }
+    }
+}
+
 async function guardedWriteFile(opts: {
     path: string
     nextContent: string
@@ -782,6 +932,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const isLongRunningProcess = isLongRunningCommand(command, isBackground)
 
         try {
+            if (!isLongRunningProcess) {
+                const directExecutionResult = await runInlineScriptViaTempFile(command, ctx, timeout)
+                if (directExecutionResult) {
+                    return directExecutionResult
+                }
+            }
+
             const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
             // 先唤出面板，再创建/获取终端，避免竞态：

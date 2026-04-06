@@ -593,6 +593,9 @@ export const en = {
   'tool.viewInTerminal': 'View execution in terminal panel',
   'tool.running': 'Running…',
   'tool.terminal': 'Terminal',
+  'tool.direct': 'Direct',
+  'tool.noTerminalSession': 'No terminal session is available for this command.',
+  'tool.directExecutionNoTerminal': 'This command was executed directly for reliability, so no live terminal session was created.',
 
   // File Preview
   'filePreview.cannotLoadImage': 'Cannot load image',

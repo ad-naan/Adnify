@@ -419,6 +419,19 @@ export function mapAISDKError(error: unknown): { code: ErrorCode; originalMessag
       retryable: true,
     }
   }
+  if (
+    msg === 'terminated' ||
+    msg.includes('terminated') ||
+    msg.includes('socket hang up') ||
+    msg.includes('other side closed') ||
+    msg.includes('connection closed')
+  ) {
+    return {
+      code: ErrorCode.NETWORK,
+      originalMessage,
+      retryable: true,
+    }
+  }
   if (msg.includes('timeout')) {
     return {
       code: ErrorCode.TIMEOUT,

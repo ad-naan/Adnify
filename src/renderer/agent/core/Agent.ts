@@ -20,6 +20,7 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
+import { useStore } from '@/renderer/store'
 import { logger } from '@utils/Logger'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { useAgentStore } from '../store/AgentStore'

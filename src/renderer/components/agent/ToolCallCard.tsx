@@ -278,7 +278,10 @@ function ToolPreview({
 
     if (effectiveName === 'run_command') {
         const cmd = asString(args.command)
-        const terminalId = (args as { _meta?: { terminalId?: string } })._meta?.terminalId
+        const meta = (args as { _meta?: { terminalId?: string; executionMode?: string } })._meta
+        const terminalId = meta?.terminalId
+        const hasLiveTerminal = !!terminalId
+        const wasDirectExecution = !!meta?.executionMode && meta.executionMode !== 'terminal'
 
         return (
             <div className="font-mono text-[11px] space-y-1">
@@ -290,18 +293,39 @@ function ToolPreview({
                     <button
                         onClick={event => {
                             event.stopPropagation()
+                            if (!terminalId) {
+                                toast.info(
+                                    wasDirectExecution
+                                        ? t('tool.directExecutionNoTerminal', language as any)
+                                        : t('tool.noTerminalSession', language as any)
+                                )
+                                return
+                            }
                             if (terminalId && !terminalManager.hasTerminal(terminalId)) {
                                 toast.info('Terminal has been closed')
                                 return
                             }
                             setTerminalVisible(true)
-                            if (terminalId) terminalManager.setActiveTerminal(terminalId)
+                            terminalManager.setActiveTerminal(terminalId)
+                            window.setTimeout(() => terminalManager.setActiveTerminal(terminalId), 0)
                         }}
-                        className={`flex items-center gap-1 flex-shrink-0 ml-2 text-[10px] px-1.5 py-0.5 rounded transition-colors ${isRunning ? 'text-accent bg-accent/10' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}
+                        className={`flex items-center gap-1 flex-shrink-0 ml-2 text-[10px] px-1.5 py-0.5 rounded transition-colors ${
+                            isRunning
+                                ? 'text-accent bg-accent/10'
+                                : hasLiveTerminal
+                                    ? 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
+                                    : 'text-text-muted/60 bg-surface-elevated/60 cursor-not-allowed'
+                        }`}
                         title={t('tool.viewInTerminal', language as any)}
                     >
                         <Terminal className={`w-3 h-3 ${isRunning ? 'animate-pulse' : ''}`} />
-                        <span>{isRunning ? t('tool.running', language as any) : t('tool.terminal', language as any)}</span>
+                        <span>
+                            {isRunning
+                                ? t('tool.running', language as any)
+                                : hasLiveTerminal
+                                    ? t('tool.terminal', language as any)
+                                    : t('tool.direct', language as any)}
+                        </span>
                     </button>
                 </div>
                 {stringResult && (

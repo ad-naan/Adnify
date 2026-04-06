@@ -2,12 +2,12 @@
  * 检查点面板
  * 显示检查点历史，支持回滚操作
  * 
- * 数据来源：AgentStore.messageCheckpoints（消息级别的检查点）
+ * 数据来源：当前线程的 messageCheckpoints（线程内聚的消息级检查点）
  */
 
 import { useState, useCallback, memo } from 'react'
 import { History, RotateCcw, ChevronDown, ChevronUp, FileText, X, Loader2 } from 'lucide-react'
-import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { selectMessageCheckpoints, useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
 import { MessageCheckpoint } from '@/renderer/agent/types'
@@ -120,7 +120,7 @@ interface CheckpointPanelProps {
 
 export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
   const language = useStore(state => state.language)
-  const messageCheckpoints = useAgentStore(state => state.messageCheckpoints)
+  const messageCheckpoints = useAgentStore(selectMessageCheckpoints)
   const restoreToCheckpoint = useAgentStore(state => state.restoreToCheckpoint)
   const addAssistantMessage = useAgentStore(state => state.addAssistantMessage)
   const appendToAssistant = useAgentStore(state => state.appendToAssistant)

@@ -486,12 +486,12 @@ export const createMessageSlice: StateCreator<
                         ...thread,
                         messages: [],
                         contextItems: [],
+                        messageCheckpoints: [],
                         lastModified: Date.now(),
                         state: { currentCheckpointIdx: null, isStreaming: false },
                     },
                 },
                 // 同时清理检查点和待确认更改
-                messageCheckpoints: [],
                 pendingChanges: [],
             }
         })
@@ -516,12 +516,16 @@ export const createMessageSlice: StateCreator<
             const index = thread.messages.findIndex(m => m.id === messageId)
             if (index === -1) return state
 
+            const remainingMessages = thread.messages.slice(0, index + 1)
+            const remainingMessageIds = new Set(remainingMessages.map(message => message.id))
+
             return {
                 threads: {
                     ...state.threads,
                     [threadId]: {
                         ...thread,
-                        messages: thread.messages.slice(0, index + 1),
+                        messages: remainingMessages,
+                        messageCheckpoints: (thread.messageCheckpoints || []).filter(checkpoint => remainingMessageIds.has(checkpoint.messageId)),
                         lastModified: Date.now(),
                     },
                 },

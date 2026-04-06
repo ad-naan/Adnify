@@ -28,7 +28,7 @@ import {
     createPlanSlice,
     type PlanSlice,
 } from './slices/planSlice'
-import type { ChatMessage, ContextItem, StreamState, TodoItem } from '../types'
+import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import { buildHandoffContext } from '../domains/context/HandoffManager'
@@ -366,7 +366,6 @@ export const useAgentStore = create<AgentStore>()(
                 currentThreadId: state.currentThreadId,
                 branches: state.branches,
                 activeBranchId: state.activeBranchId,
-                messageCheckpoints: state.messageCheckpoints,
             }),
         }
     )
@@ -376,6 +375,7 @@ export const useAgentStore = create<AgentStore>()(
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_CONTEXT_ITEMS: ContextItem[] = []
+const EMPTY_MESSAGE_CHECKPOINTS: MessageCheckpoint[] = []
 const EMPTY_TODOS: TodoItem[] = []
 const DEFAULT_STREAM_STATE: StreamState = { phase: 'idle' }
 
@@ -421,7 +421,10 @@ export const selectPendingChanges = (state: AgentStore) => state.pendingChanges
 
 export const selectHasPendingChanges = (state: AgentStore) => state.pendingChanges.length > 0
 
-export const selectMessageCheckpoints = (state: AgentStore) => state.messageCheckpoints
+export const selectMessageCheckpoints = (state: AgentStore) => {
+    const thread = selectCurrentThread(state)
+    return thread?.messageCheckpoints || EMPTY_MESSAGE_CHECKPOINTS
+}
 
 // 分支相关 selectors
 const EMPTY_BRANCHES: Branch[] = []

@@ -5,6 +5,7 @@ import { logger } from '@shared/utils/Logger'
 import { countTokens } from '@shared/utils/tokenCounter'
 import { resolveHeaderPlaceholders } from '../modelFactory'
 import { applyCaching, getCacheConfig } from './PromptCache'
+import { isCacheFeatureUnsupported, markCacheFeatureUnsupported } from './CacheCompatibility'
 
 type RequestProviderOptions = ProviderOptions
 
@@ -70,6 +71,7 @@ class GoogleExplicitCacheManager {
 
       if (/cachedcontent|cached contents|cache.*not supported|unsupported/i.test(message)) {
         this.unsupportedModels.set(config.model, now + 30 * 60 * 1000)
+        markCacheFeatureUnsupported(config, 'google-explicit-cached-content', message)
       }
 
       logger.llm.warn('[RequestCache] Google explicit cache unavailable, falling back to implicit cache', {
@@ -201,18 +203,21 @@ export async function prepareRequestCache(
   let preparedMessages = messages
   let providerOptions: RequestProviderOptions | undefined
 
-  if (protocol === 'anthropic') {
+  if (protocol === 'anthropic' && !isCacheFeatureUnsupported(config, 'anthropic-prompt-caching')) {
     preparedMessages = applyCaching(messages, getCacheConfig(config.provider, config.protocol))
   }
 
-  if (protocol === 'openai' || protocol === 'openai-responses') {
+  if (
+    (protocol === 'openai' || protocol === 'openai-responses') &&
+    !isCacheFeatureUnsupported(config, 'openai-prompt-cache-key')
+  ) {
     const openAICacheOptions = buildOpenAICacheOptions(config, messages)
     if (openAICacheOptions) {
       providerOptions = openAICacheOptions
     }
   }
 
-  if (protocol === 'google') {
+  if (protocol === 'google' && !isCacheFeatureUnsupported(config, 'google-explicit-cached-content')) {
     const cachedContent = await googleExplicitCacheManager.ensureCache(config, messages)
     if (cachedContent) {
       providerOptions = mergeProviderOptions(providerOptions, {

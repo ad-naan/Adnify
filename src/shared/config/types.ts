@@ -219,8 +219,28 @@ export interface McpConfig {
 // 完整应用设置（保存到 app-settings）
 // ============================================
 
+export interface PersistedLLMConfig {
+  provider: string
+  model: string
+  enableThinking?: boolean
+  thinkingBudget?: number
+  reasoningEffort?: 'low' | 'medium' | 'high'
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+  topK?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  stopSequences?: string[]
+  seed?: number
+  logitBias?: Record<string, number>
+  maxRetries?: number
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
+  parallelToolCalls?: boolean
+}
+
 export interface AppSettings {
-  llmConfig: Pick<LLMConfig, 'provider' | 'model'> // 只保存 provider 和 model
+  llmConfig: PersistedLLMConfig
   language: string
   autoApprove: AutoApproveSettings
   promptTemplateId?: string

@@ -8,6 +8,7 @@ import { logger } from '@utils/Logger'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import { useStore } from '../store'
 import { useAgentStore, initializeAgentStore } from '@renderer/agent/store/AgentStore'
+import { suspendAgentStorageWrites, resumeAgentStorageWrites } from '@renderer/agent/store/agentStorage'
 import { themeManager } from '../config/themeConfig'
 import { keybindingService } from './keybindingService'
 import { registerCoreCommands } from '../config/commands'
@@ -137,6 +138,7 @@ async function restoreWorkspace(): Promise<boolean> {
  * 消息已在 agentStorage.getItem() → getFullSessionData() 中同步加载
  */
 async function restoreAgentData(): Promise<void> {
+  suspendAgentStorageWrites()
   try {
     await useAgentStore.persist.rehydrate()
     logger.system.debug('[Init] Agent store rehydrated')
@@ -166,6 +168,8 @@ async function restoreAgentData(): Promise<void> {
     }
   } catch (e) {
     logger.system.warn('[Init] Agent store restore failed:', e)
+  } finally {
+    resumeAgentStorageWrites()
   }
 }
 
