@@ -80,13 +80,6 @@ export function useAgent() {
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   const planPhase = useAgentStore(state => state.phase)
 
-  // 确保有一个默认线程（首次加载时）
-  useEffect(() => {
-    const state = useAgentStore.getState()
-    if (!state.currentThreadId || !state.threads[state.currentThreadId]) {
-      state.createThread()
-    }
-  }, [])
 
   // 清空消息（包括工具调用日志和 handoff 状态）
   const clearMessages = useCallback(() => {
