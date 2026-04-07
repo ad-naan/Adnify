@@ -188,12 +188,51 @@ export interface TestCase {
 
 export function convertUsage(usage: LanguageModelUsage): TokenUsage {
   const usageAny = usage as any
+  const rawUsage = usageAny.raw as Record<string, unknown> | undefined
+
   return {
     inputTokens: usage.inputTokens || 0,
     outputTokens: usage.outputTokens || 0,
     totalTokens: usage.totalTokens || 0,
-    cachedInputTokens: usageAny.inputTokenDetails?.cacheReadTokens ?? usageAny.cachedInputTokens,
-    cacheWriteTokens: usageAny.inputTokenDetails?.cacheWriteTokens,
+    cachedInputTokens:
+      readNumber(
+        usageAny.inputTokenDetails?.cacheReadTokens,
+        usageAny.inputTokens?.cacheRead,
+        usageAny.cachedInputTokens,
+        rawUsage?.cache_read_input_tokens,
+        getNestedValue(rawUsage, ['prompt_tokens_details', 'cached_tokens']),
+        getNestedValue(rawUsage, ['input_tokens_details', 'cached_tokens']),
+        rawUsage?.cachedContentTokenCount,
+      ) ?? 0,
+    cacheWriteTokens:
+      readNumber(
+        usageAny.inputTokenDetails?.cacheWriteTokens,
+        usageAny.inputTokens?.cacheWrite,
+        rawUsage?.cache_creation_input_tokens,
+      ) ?? 0,
     reasoningTokens: usageAny.outputTokenDetails?.reasoningTokens ?? usageAny.reasoningTokens,
   }
+}
+
+function readNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value
+    }
+  }
+
+  return undefined
+}
+
+function getNestedValue(source: unknown, path: string[]): unknown {
+  let current = source
+
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || !(key in (current as Record<string, unknown>))) {
+      return undefined
+    }
+    current = (current as Record<string, unknown>)[key]
+  }
+
+  return current
 }
