@@ -6,6 +6,7 @@ import { countTokens } from '@shared/utils/tokenCounter'
 import { resolveHeaderPlaceholders } from '../modelFactory'
 import { applyCaching, getCacheConfig } from './PromptCache'
 import { isCacheFeatureUnsupported, markCacheFeatureUnsupported } from './CacheCompatibility'
+import { resolveCacheProtocol } from './cacheProtocol'
 
 type RequestProviderOptions = ProviderOptions
 
@@ -198,7 +199,7 @@ export async function prepareRequestCache(
   config: LLMConfig,
   messages: ModelMessage[]
 ): Promise<RequestCacheResult> {
-  const protocol = config.protocol || (config.provider === 'anthropic' ? 'anthropic' : config.provider === 'gemini' ? 'google' : 'openai')
+  const protocol = resolveCacheProtocol(config.protocol, config.provider)
 
   let preparedMessages = messages
   let providerOptions: RequestProviderOptions | undefined
@@ -252,7 +253,7 @@ function buildOpenAICacheOptions(
   } = {
     promptCacheKey: createHash('sha256')
       .update(JSON.stringify({
-        protocol: config.protocol || 'openai',
+        protocol: resolveCacheProtocol(config.protocol, config.provider),
         model: config.model,
         prefix,
       }))

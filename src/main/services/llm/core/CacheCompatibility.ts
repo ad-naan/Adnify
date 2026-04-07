@@ -6,7 +6,8 @@ export type CacheFeature =
   | 'openai-prompt-cache-key'
   | 'google-explicit-cached-content'
 
-const unsupportedCacheFeatures = new Map<string, Set<CacheFeature>>()
+const CACHE_FEATURE_DISABLE_TTL_MS = 10 * 60 * 1000
+const unsupportedCacheFeatures = new Map<string, Map<CacheFeature, number>>()
 
 function getConfigKey(config: Pick<LLMConfig, 'provider' | 'protocol' | 'baseUrl' | 'model'>): string {
   return JSON.stringify({
@@ -21,7 +22,26 @@ export function isCacheFeatureUnsupported(
   config: Pick<LLMConfig, 'provider' | 'protocol' | 'baseUrl' | 'model'>,
   feature: CacheFeature
 ): boolean {
-  return unsupportedCacheFeatures.get(getConfigKey(config))?.has(feature) ?? false
+  const key = getConfigKey(config)
+  const features = unsupportedCacheFeatures.get(key)
+  if (!features) {
+    return false
+  }
+
+  const expiresAt = features.get(feature)
+  if (!expiresAt) {
+    return false
+  }
+
+  if (expiresAt <= Date.now()) {
+    features.delete(feature)
+    if (features.size === 0) {
+      unsupportedCacheFeatures.delete(key)
+    }
+    return false
+  }
+
+  return true
 }
 
 export function markCacheFeatureUnsupported(
@@ -30,8 +50,9 @@ export function markCacheFeatureUnsupported(
   reason?: string
 ): void {
   const key = getConfigKey(config)
-  const features = unsupportedCacheFeatures.get(key) ?? new Set<CacheFeature>()
-  features.add(feature)
+  const features = unsupportedCacheFeatures.get(key) ?? new Map<CacheFeature, number>()
+  const expiresAt = Date.now() + CACHE_FEATURE_DISABLE_TTL_MS
+  features.set(feature, expiresAt)
   unsupportedCacheFeatures.set(key, features)
 
   logger.llm.warn('[CacheCompatibility] Disabled unsupported cache feature for provider', {
@@ -41,7 +62,13 @@ export function markCacheFeatureUnsupported(
     baseUrl: config.baseUrl,
     feature,
     reason,
+    cooldownMs: CACHE_FEATURE_DISABLE_TTL_MS,
+    retryAfter: new Date(expiresAt).toISOString(),
   })
+}
+
+export function clearCacheCompatibilityState(): void {
+  unsupportedCacheFeatures.clear()
 }
 
 export function detectUnsupportedCacheFeature(
