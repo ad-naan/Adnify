@@ -116,12 +116,20 @@ export function ExplorerView() {
 
         if (debounceTimer) clearTimeout(debounceTimer)
         debounceTimer = setTimeout(() => {
+          let shouldRefreshTree = false
+
           pendingChanges.forEach((change) => {
             const eventType = change.event === 'create' ? 'create' : change.event === 'delete' ? 'delete' : 'update'
             directoryCacheService.handleFileChange(change.path, eventType)
+            if (eventType === 'create' || eventType === 'delete') {
+              shouldRefreshTree = true
+            }
           })
           pendingChanges = []
-          refreshFiles()
+
+          if (shouldRefreshTree) {
+            refreshFiles()
+          }
         }, config.performance.fileChangeDebounceMs)
         
         // 如果启用了自动刷新且是 .git 目录变化，延迟刷新 Git 状态

@@ -305,27 +305,30 @@ async function guardedWriteFile(opts: {
     nextContent: string
     originalContent: string | null
     staleMessage?: string
+    skipStaleCheck?: boolean
 }): Promise<
     | { success: true; meta: { preHash: string; postHash: string } }
     | { success: false; result: ToolExecutionResult }
 > {
-    const currentContent = await api.file.read(opts.path)
     const originalHash = hashContent(opts.originalContent)
-    const currentHash = hashContent(currentContent)
+    if (!opts.skipStaleCheck) {
+        const currentContent = await api.file.read(opts.path)
+        const currentHash = hashContent(currentContent)
 
-    if (currentHash !== originalHash) {
-        return {
-            success: false,
-            result: {
+        if (currentHash !== originalHash) {
+            return {
                 success: false,
-                result: '',
-                error: opts.staleMessage || 'Write conflict detected: file changed since it was read',
-                outcome: { kind: 'conflict', code: 'STALE_WRITE', retryable: false },
-                envelope: { executionId: crypto.randomUUID(), startedAt: Date.now(), completedAt: Date.now(), errorCategory: 'conflict', retryable: false },
-                meta: {
-                    filePath: opts.path,
-                    preHash: originalHash,
-                    currentHash,
+                result: {
+                    success: false,
+                    result: '',
+                    error: opts.staleMessage || 'Write conflict detected: file changed since it was read',
+                    outcome: { kind: 'conflict', code: 'STALE_WRITE', retryable: false },
+                    envelope: { executionId: crypto.randomUUID(), startedAt: Date.now(), completedAt: Date.now(), errorCategory: 'conflict', retryable: false },
+                    meta: {
+                        filePath: opts.path,
+                        preHash: originalHash,
+                        currentHash,
+                    }
                 }
             }
         }
@@ -868,6 +871,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             nextContent: content,
             originalContent,
             staleMessage: 'Write conflict detected: file changed before overwrite completed',
+            skipStaleCheck: true,
         })
         if (!guardedWrite.success) return guardedWrite.result
 

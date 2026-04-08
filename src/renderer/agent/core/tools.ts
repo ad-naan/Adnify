@@ -108,7 +108,9 @@ async function saveFileSnapshots(
   // 保存到检查点
   for (const snapshot of snapshots) {
     if (snapshot) {
-      store.addSnapshotToCurrentCheckpoint(snapshot.filePath, snapshot.content)
+      if (context.checkpointId) {
+        store.addSnapshotToCheckpoint(context.checkpointId, snapshot.filePath, snapshot.content)
+      }
     }
   }
 }

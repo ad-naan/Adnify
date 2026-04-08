@@ -109,20 +109,24 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
   }, [currentProviderGroup, llmConfig.model])
 
   const applyProviderConfig = useCallback((providerId: string, modelId: string) => {
-    const builtinProvider = getBuiltinProvider(providerId)
-    const config = providerConfigs[providerId]
-    const newConfig: Partial<typeof llmConfig> = { provider: providerId, model: modelId }
-
-    if (builtinProvider) {
-      newConfig.apiKey = config?.apiKey || (llmConfig.provider === providerId ? llmConfig.apiKey : undefined)
-      newConfig.baseUrl = config?.baseUrl || builtinProvider.baseUrl
-    } else if (providerId.startsWith('custom-') && config) {
-      newConfig.apiKey = config.apiKey || (llmConfig.provider === providerId ? llmConfig.apiKey : undefined)
-      newConfig.baseUrl = config.baseUrl
+    if (llmConfig.provider === providerId) {
+      update('llmConfig', { model: modelId })
+      return
     }
 
-    update('llmConfig', newConfig)
-  }, [llmConfig, providerConfigs, update])
+    const builtinProvider = getBuiltinProvider(providerId)
+    const config = providerConfigs[providerId]
+
+    update('llmConfig', {
+      provider: providerId,
+      model: modelId,
+      apiKey: config?.apiKey || '',
+      baseUrl: config?.baseUrl || builtinProvider?.baseUrl,
+      timeout: config?.timeout || builtinProvider?.defaults.timeout || llmConfig.timeout,
+      protocol: builtinProvider?.protocol || config?.protocol,
+      headers: config?.headers,
+    })
+  }, [llmConfig.provider, llmConfig.timeout, providerConfigs, update])
 
   const filteredGroups = useMemo(() => {
     if (!searchQuery.trim()) return groupedModels

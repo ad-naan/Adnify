@@ -61,6 +61,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   onOpenTerminal
 }: VirtualFileTreeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const lastRootItemsSignatureRef = useRef('')
   const [scrollTop, setScrollTop] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
 
@@ -151,6 +152,16 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   // 当 items (根目录内容) 变化时，增量失效子目录缓存
   // 只重置直接子项缓存，保留其他目录的有效缓存以提升性能
   useEffect(() => {
+    const nextSignature = items
+      .map(item => `${item.path}:${item.isDirectory ? 'dir' : 'file'}`)
+      .sort()
+      .join('|')
+
+    if (nextSignature === lastRootItemsSignatureRef.current) {
+      return
+    }
+
+    lastRootItemsSignatureRef.current = nextSignature
     setChildrenCache(new Map())
     if (items.length > 0 && items[0]?.path) {
       const rootPath = items[0].path.split('/').slice(0, -1).join('/') || items[0].path
