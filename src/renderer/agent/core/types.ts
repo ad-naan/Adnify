@@ -24,6 +24,7 @@ export interface ExecutionContext {
   threadId?: string | null
   requestId?: string
   planTaskId?: string
+  checkpointId?: string
 }
 
 // ===== 工具执行上下文（重新导出 shared 定义） =====

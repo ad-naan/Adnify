@@ -33,7 +33,7 @@ export interface CheckpointActions {
     images?: CheckpointImage[],
     contextItems?: ContextItem[]
   ) => Promise<string>
-  addSnapshotToCurrentCheckpoint: (filePath: string, content: string | null) => void
+  addSnapshotToCheckpoint: (checkpointId: string, filePath: string, content: string | null) => void
   restoreToCheckpoint: (
     checkpointId: string
   ) => Promise<{
@@ -250,8 +250,15 @@ export const createCheckpointSlice: StateCreator<
     return checkpoint.id
   },
 
-  addSnapshotToCurrentCheckpoint: (filePath, content) => {
-    logger.agent.info('[Checkpoint] Adding snapshot for:', filePath, 'content length:', content?.length ?? 'null')
+  addSnapshotToCheckpoint: (checkpointId, filePath, content) => {
+    logger.agent.info(
+      '[Checkpoint] Adding snapshot for checkpoint:',
+      checkpointId,
+      'file:',
+      filePath,
+      'content length:',
+      content?.length ?? 'null'
+    )
 
     const threadId = getCurrentThreadId(get())
     if (!threadId) return
@@ -267,24 +274,29 @@ export const createCheckpointSlice: StateCreator<
       }
 
       const nextCheckpoints = [...checkpoints]
-      const lastCheckpoint = nextCheckpoints[nextCheckpoints.length - 1]
+      const checkpointIndex = nextCheckpoints.findIndex(checkpoint => checkpoint.id === checkpointId)
+      if (checkpointIndex === -1) {
+        logger.agent.warn('[Checkpoint] Target checkpoint not found:', checkpointId)
+        return state
+      }
+      const targetCheckpoint = nextCheckpoints[checkpointIndex]
 
       logger.agent.info(
-        '[Checkpoint] Current checkpoint:',
-        lastCheckpoint.id,
+        '[Checkpoint] Target checkpoint:',
+        targetCheckpoint.id,
         'existing files:',
-        Object.keys(lastCheckpoint.fileSnapshots)
+        Object.keys(targetCheckpoint.fileSnapshots)
       )
 
-      if (filePath in lastCheckpoint.fileSnapshots) {
+      if (filePath in targetCheckpoint.fileSnapshots) {
         logger.agent.info('[Checkpoint] Snapshot already exists for:', filePath)
         return state
       }
 
-      nextCheckpoints[nextCheckpoints.length - 1] = {
-        ...lastCheckpoint,
+      nextCheckpoints[checkpointIndex] = {
+        ...targetCheckpoint,
         fileSnapshots: {
-          ...lastCheckpoint.fileSnapshots,
+          ...targetCheckpoint.fileSnapshots,
           [filePath]: { path: filePath, content },
         },
       }

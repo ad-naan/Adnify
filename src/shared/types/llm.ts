@@ -318,6 +318,7 @@ export interface ToolExecutionContext {
     threadId?: string | null
     requestId?: string
     assistantId?: string | null
+    checkpointId?: string
 }
 
 export type ToolExecutor = (

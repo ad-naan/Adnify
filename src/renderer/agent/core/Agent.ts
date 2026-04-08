@@ -153,9 +153,9 @@ export class AgentClass {
       const checkpointImages = this.extractCheckpointImages(userMessage)
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
       const userMessageId = useAgentStore.getState().threads[threadId]?.messages.filter(m => m.role === 'user').at(-1)?.id
-      if (userMessageId) {
-        await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
-      }
+      const checkpointId = userMessageId
+        ? await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
+        : undefined
 
       // 6. 使用 AgentExecutor 准备执行
       const executionConfig: ExecutionConfig = {
@@ -165,6 +165,7 @@ export class AgentClass {
         assistantId,
         requestId,
         planTaskId: executionOptions?.planTaskId,
+        checkpointId,
       }
 
       const preparation = await agentExecutor.prepare(
@@ -188,6 +189,7 @@ export class AgentClass {
         threadId,
         requestId,
         planTaskId: executionOptions?.planTaskId,
+        checkpointId,
       }
       await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
 

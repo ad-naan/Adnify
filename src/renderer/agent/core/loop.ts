@@ -753,6 +753,7 @@ Try again with the corrected tool call.`
         threadId,
         requestId,
         chatMode: context.chatMode,
+        checkpointId: context.checkpointId,
       },
       threadStore,
       context.abortSignal
