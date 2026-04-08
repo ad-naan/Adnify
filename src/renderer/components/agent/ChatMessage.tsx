@@ -42,7 +42,6 @@ import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
 import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
-import { useFluidTypewriter } from '@renderer/hooks/useFluidTypewriter'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { t } from '../../i18n'
 
@@ -79,28 +78,23 @@ const CodeBlock = React.memo(({ language, children, fontSize, isStreaming }: { l
   const theme = themeManager.getThemeById(currentTheme)
   const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
 
-  // Handle children which might contain the cursor span
-  const { codeText, hasCursor } = React.useMemo(() => {
+  // Flatten text from children
+  const codeText = React.useMemo(() => {
     let text = ''
-    let hasCursor = false
 
     React.Children.forEach(children, child => {
       if (typeof child === 'string') {
         text += child
-      } else if (typeof child === 'object' && child !== null && 'props' in child && (child as React.ReactElement<{ className?: string }>).props?.className?.includes('fuzzy-cursor')) {
-        hasCursor = true
       } else if (Array.isArray(child)) {
-        // Handle nested arrays if any
         child.forEach(c => {
           if (typeof c === 'string') text += c
         })
       }
     })
 
-    // Fallback
     if (!text && typeof children === 'string') text = children
 
-    return { codeText: text.replace(/\n$/, ''), hasCursor }
+    return text.replace(/\n$/, '')
   }, [children])
 
   const handleCopy = useCallback(() => {
@@ -145,7 +139,6 @@ const CodeBlock = React.memo(({ language, children, fontSize, isStreaming }: { l
             {codeText}
           </SyntaxHighlighter>
         )}
-        {hasCursor && <span className="fuzzy-cursor absolute bottom-4 right-4" />}
       </div>
     </div>
   )
@@ -165,13 +158,47 @@ const cleanStreamingContent = (text: string): string => {
   return cleaned.trim()
 }
 
+const RevealKeyframes = () => (
+  <style dangerouslySetInnerHTML={{__html: `
+    @keyframes word-reveal {
+      0% { opacity: 0; filter: blur(4px); }
+      100% { opacity: 1; filter: blur(0px); }
+    }
+    .animate-word-reveal {
+      animation: word-reveal 0.3s ease-out forwards;
+    }
+  `}} />
+)
+
+const FadeInText = ({ children, isStreaming }: { children: React.ReactNode, isStreaming?: boolean }) => {
+  if (!isStreaming) return <>{children}</>;
+
+  const processNode = (node: React.ReactNode): React.ReactNode => {
+    if (typeof node === 'string') {
+      return node.split('').map((char, i) => (
+        <span 
+          key={i} 
+          className="animate-word-reveal"
+          style={{ opacity: 0, filter: 'blur(4px)', whiteSpace: 'pre-wrap' }}
+        >
+          {char}
+        </span>
+      ));
+    }
+    if (Array.isArray(node)) {
+      return node.map((c, i) => <React.Fragment key={i}>{processNode(c)}</React.Fragment>);
+    }
+    return node;
+  };
+  return <>{React.Children.map(children, processNode)}</>;
+};
+
 // ThinkingBlock 组件 - 扁平化折叠样式
 interface ThinkingBlockProps {
   content: string
   startTime?: number
   isStreaming: boolean
   fontSize: number
-  onTypingComplete?: () => void
 }
 
 // 统一上下文面板 — 单个折叠块，无边框扁平设计
@@ -297,25 +324,12 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
 })
 MessageMetaGroup.displayName = 'MessageMetaGroup'
 
-const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, onTypingComplete }: ThinkingBlockProps) => {
+const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
   const [isExpanded, setIsExpanded] = useState(isStreaming)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [shadowClass, setShadowClass] = useState('')
-
-  // Fluid effect for thinking content
-  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(content, isStreaming, {
-    baseSpeed: 1,
-    accelerationFactor: 0.1
-  })
-
-  // Notify parent when typing completes
-  useEffect(() => {
-    if (!isTyping && onTypingComplete) {
-      onTypingComplete()
-    }
-  }, [isTyping, onTypingComplete])
 
   useEffect(() => {
     setIsExpanded(isStreaming)
@@ -371,7 +385,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
       </button>
 
       {isExpanded && (
-        <div className={`relative animate-slide-down scroll-shadow-container ${shadowClass}`}>
+        <div className={`relative scroll-shadow-container ${isStreaming ? 'animate-slide-down' : ''} ${shadowClass}`}>
           <div
             ref={scrollRef}
             className="max-h-[300px] overflow-y-auto scrollbar-none pl-[38px] pr-3 pb-3"
@@ -379,9 +393,9 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
             {content ? (
               <div
                 style={{ fontSize: `${fontSize - 1}px` }}
-                className="text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans thinking-content"
+                className="text-text-muted/70 leading-relaxed font-sans thinking-content"
               >
-                {fluidContent}
+                <FadeInText isStreaming={isStreaming}>{content}</FadeInText>
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -397,7 +411,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize, o
 ThinkingBlock.displayName = 'ThinkingBlock'
 
 // Markdown 渲染组件
-const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming, onTypingComplete }: { content: string; fontSize: number; isStreaming?: boolean; onTypingComplete?: () => void }) => {
+const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
   const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
 
   // 所有 useMemo 必须在前面
@@ -421,15 +435,6 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     }
     return cleanedContent
   }, [cleanedContent, systemAlert])
-
-  // 所有 useState/useRef 必须在 useMemo 之后，useEffect 之前
-  // 流式输出时禁用打字机效果，直接显示内容，避免双重动画
-  const typewriterEnabled = !isStreaming
-
-  // 这个 Hook 必须始终调用，不能有条件分支
-  const { displayedContent: fluidContent, isTyping } = useFluidTypewriter(contentWithoutAlert, !!isStreaming, {
-    enabled: typewriterEnabled
-  })
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
@@ -467,7 +472,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
       if (isInline && looksLikePath) {
         return (
           <code
-            className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all animate-fluid-text cursor-pointer hover:underline decoration-accent/50 underline-offset-2 transition-all"
+            className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all cursor-pointer hover:underline decoration-accent/50 underline-offset-2 transition-all"
             onClick={(e) => {
               e.preventDefault()
               handleOpenFile(codeContent)
@@ -481,31 +486,33 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
       }
 
       return isInline ? (
-        <code className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all animate-fluid-text" {...props}>
+        <code className="bg-surface-muted px-1.5 py-0.5 rounded-md text-accent font-mono text-[0.9em] border border-border break-all" {...props}>
           {children}
         </code>
       ) : (
-        <div className="animate-fluid-block">
+        <div className="w-full relative">
           <CodeBlock language={match?.[1]} fontSize={fontSize} isStreaming={isStreaming}>{children}</CodeBlock>
         </div>
       )
     },
-    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full animate-fluid-block">{children}</div>,
-    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words animate-fluid-block">{children}</p>,
-    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1 animate-fluid-block">{children}</ul>,
-    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1 animate-fluid-block">{children}</ol>,
-    li: ({ children }: any) => <li className="pl-1 animate-fluid-block">{children}</li>,
+    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full">{children}</div>,
+    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></p>,
+    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+    li: ({ children }: any) => <li className="pl-1"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></li>,
     a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium animate-fluid-text">{children}</a>
+      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></a>
     ),
+    strong: ({ children, ...props }: any) => <strong {...props}><FadeInText isStreaming={isStreaming}>{children}</FadeInText></strong>,
+    em: ({ children, ...props }: any) => <em {...props}><FadeInText isStreaming={isStreaming}>{children}</FadeInText></em>,
     blockquote: ({ children }: any) => (
-      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r animate-fluid-block">{children}</blockquote>
+      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r">{children}</blockquote>
     ),
-    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight animate-fluid-block">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight animate-fluid-block">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary animate-fluid-block">{children}</h3>,
+    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></h1>,
+    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></h2>,
+    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></h3>,
     table: ({ children }: any) => (
-      <div className="overflow-x-auto my-4 animate-fluid-block">
+      <div className="overflow-x-auto my-4">
         <table className="min-w-full border-collapse border border-border">{children}</table>
       </div>
     ),
@@ -513,25 +520,8 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     tbody: ({ children }: any) => <tbody>{children}</tbody>,
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
     th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
-    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
+    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></td>,
   }), [fontSize, handleOpenFile, isStreaming])
-
-  // 所有 useEffect 必须在最后
-  // Notify parent when typing finishes
-  React.useEffect(() => {
-    if (!isTyping && onTypingComplete) {
-      const timer = setTimeout(onTypingComplete, 50)
-      return () => clearTimeout(timer)
-    }
-  }, [isTyping, onTypingComplete])
-
-  // 处理空内容的完成回调
-  React.useEffect(() => {
-    if (!contentWithoutAlert && !systemAlert && onTypingComplete) {
-      const timer = setTimeout(onTypingComplete, 0)
-      return () => clearTimeout(timer)
-    }
-  }, [contentWithoutAlert, systemAlert, onTypingComplete])
 
   if (!contentWithoutAlert && !systemAlert) {
     return null
@@ -539,6 +529,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   return (
     <>
+      <RevealKeyframes />
       {systemAlert && (
         <SystemAlert
           type={systemAlert.type}
@@ -548,14 +539,14 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         />
       )}
       {contentWithoutAlert && (
-        <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}>
+        <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden`}>
           <ReactMarkdown
             className="prose prose-invert max-w-none"
             remarkPlugins={[remarkGfm]}
             components={markdownComponents}
             skipHtml
           >
-            {fluidContent}
+            {contentWithoutAlert}
           </ReactMarkdown>
         </div>
       )}
@@ -563,14 +554,6 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
   )
 })
 MarkdownContent.displayName = 'MarkdownContent'
-
-// 用于非流式 Part 的立即完成信号（避免在条件分支中直接调用 useEffect）
-const CompletionSignal = ({ onComplete }: { onComplete?: () => void }) => {
-  useEffect(() => {
-    onComplete?.()
-  }, [])
-  return null
-}
 
 // 渲染单个 Part
 const RenderPart = React.memo(({
@@ -583,8 +566,7 @@ const RenderPart = React.memo(({
   fontSize,
   isStreaming,
   messageId,
-  onTypingComplete,
-}: RenderPartProps & { onTypingComplete?: () => void }) => {
+}: RenderPartProps) => {
   if (isTextPart(part)) {
     const textStr = typeof part.content === 'string' ? part.content : String(part.content ?? '')
     if (!textStr.trim()) return null
@@ -594,7 +576,6 @@ const RenderPart = React.memo(({
         content={textStr}
         fontSize={fontSize}
         isStreaming={isStreaming}
-        onTypingComplete={onTypingComplete}
       />
     )
   }
@@ -609,38 +590,29 @@ const RenderPart = React.memo(({
         startTime={reasoningPart.startTime}
         isStreaming={!!reasoningPart.isStreaming}
         fontSize={fontSize}
-        onTypingComplete={onTypingComplete}
       />
     )
   }
 
-  // Search results are static for now, finish immediately
+  // Search results are static for now
   if (isSearchPart(part)) {
-    return <CompletionSignal onComplete={onTypingComplete} />
+    return null
   }
 
   if (isSystemAlertPart(part)) {
     return (
-      <>
-        <SystemAlert
-          type={part.alertType}
-          title={part.title}
-          message={part.message}
-          suggestion={part.suggestion}
-        />
-        <CompletionSignal onComplete={onTypingComplete} />
-      </>
+      <SystemAlert
+        type={part.alertType}
+        title={part.title}
+        message={part.message}
+        suggestion={part.suggestion}
+      />
     )
   }
 
   // Lint check results
   if (isLintCheckPart(part)) {
-    return (
-      <>
-        <LintCheckCard part={part} />
-        <CompletionSignal onComplete={onTypingComplete} />
-      </>
-    )
+    return <LintCheckCard part={part} />
   }
 
   // Tool calls handled by RenderPart (single)
@@ -652,7 +624,7 @@ const RenderPart = React.memo(({
     // 需要 Diff 预览的工具使用 FileChangeCard
     if (needsDiffPreview(tc.name)) {
       return (
-        <div className="my-3 animate-fade-in">
+        <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
           <FileChangeCard
             key={`tool-${tc.id}-${index}`}
             toolCall={tc}
@@ -693,7 +665,7 @@ const RenderPart = React.memo(({
 
     // 其他工具使用 ToolCallCard
     return (
-      <div className="my-3 animate-fade-in">
+      <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
         <ToolCallCard
           key={`tool-${tc.id}-${index}`}
           toolCall={tc}
@@ -765,48 +737,72 @@ const AssistantMessageContent = React.memo(({
       {groups.map((group) => {
         if (group.type === 'part') {
           return (
-            <RenderPart
-              key={`part-${group.index}`}
-              part={group.part}
-              index={group.index}
-              pendingToolId={pendingToolId}
-              onApproveTool={onApproveTool}
-              onRejectTool={onRejectTool}
-              onOpenDiff={onOpenDiff}
-              fontSize={fontSize}
-              isStreaming={isStreaming}
-              messageId={messageId}
-            />
+            <motion.div
+              layout="position"
+              key={`wrap-part-${group.index}`}
+              initial={isStreaming ? { opacity: 0, y: 5 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, type: 'spring', bounce: 0 }}
+              className="w-full"
+            >
+              <RenderPart
+                part={group.part}
+                index={group.index}
+                pendingToolId={pendingToolId}
+                onApproveTool={onApproveTool}
+                onRejectTool={onRejectTool}
+                onOpenDiff={onOpenDiff}
+                fontSize={fontSize}
+                isStreaming={isStreaming}
+                messageId={messageId}
+              />
+            </motion.div>
           )
         }
 
         if (group.toolCalls.length === 1) {
           return (
-            <RenderPart
-              key={`part-${group.startIndex}`}
-              part={parts[group.startIndex]}
-              index={group.startIndex}
-              pendingToolId={pendingToolId}
-              onApproveTool={onApproveTool}
-              onRejectTool={onRejectTool}
-              onOpenDiff={onOpenDiff}
-              fontSize={fontSize}
-              isStreaming={isStreaming}
-              messageId={messageId}
-            />
+            <motion.div
+              layout="position"
+              key={`wrap-tool-${group.startIndex}`}
+              initial={isStreaming ? { opacity: 0, y: 5 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, type: 'spring', bounce: 0 }}
+              className="w-full"
+            >
+              <RenderPart
+                part={parts[group.startIndex]}
+                index={group.startIndex}
+                pendingToolId={pendingToolId}
+                onApproveTool={onApproveTool}
+                onRejectTool={onRejectTool}
+                onOpenDiff={onOpenDiff}
+                fontSize={fontSize}
+                isStreaming={isStreaming}
+                messageId={messageId}
+              />
+            </motion.div>
           )
         }
 
         return (
-          <ToolCallGroup
-            key={`group-${group.startIndex}`}
-            toolCalls={group.toolCalls}
-            pendingToolId={pendingToolId}
-            onApproveTool={onApproveTool}
-            onRejectTool={onRejectTool}
-            onOpenDiff={onOpenDiff}
-            messageId={messageId}
-          />
+          <motion.div
+            layout="position"
+            key={`wrap-group-${group.startIndex}`}
+            initial={isStreaming ? { opacity: 0, y: 5 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, type: 'spring', bounce: 0 }}
+            className="w-full"
+          >
+            <ToolCallGroup
+              toolCalls={group.toolCalls}
+              pendingToolId={pendingToolId}
+              onApproveTool={onApproveTool}
+              onRejectTool={onRejectTool}
+              onOpenDiff={onOpenDiff}
+              messageId={messageId}
+            />
+          </motion.div>
         )
       })}
     </>

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { Zap, ZapOff, Download, Loader2, CheckCircle2 } from 'lucide-react'
+import { ZapOff, Download, Loader2, CheckCircle2 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
@@ -113,21 +113,65 @@ export default function LspStatusIndicator() {
   const isInstalled = currentStatus?.installed ?? false
   const installInfo = currentServerType ? INSTALL_HINTS[currentServerType] : null
 
-  // 如果没有打开文件或语言不支持 LSP，不显示
-  if (!activeFilePath || !isSupported || !currentServerType) {
+  // 如果没有打开文件，完全不显示
+  if (!activeFilePath) {
     return null
+  }
+
+  const fileExtension = activeFilePath.split('.').pop()?.toUpperCase() || 'TXT'
+
+  const getDisplayName = (id: string | null, ext: string) => {
+    switch (id) {
+      case 'typescriptreact': return 'TSX'
+      case 'javascriptreact': return 'JSX'
+      case 'typescript': return 'TypeScript'
+      case 'javascript': return 'JavaScript'
+      case 'python': return 'Python'
+      case 'rust': return 'Rust'
+      case 'go': return 'Go'
+      case 'vue': return 'Vue'
+      case 'cpp': return 'C++'
+      case 'c': return 'C'
+      case 'json': return 'JSON'
+      case 'html': return 'HTML'
+      case 'css': return 'CSS'
+      default: return ext
+    }
+  }
+
+  const displayName = getDisplayName(currentLanguageId, fileExtension)
+
+  // 如果语言不支持 LSP，只显示带透明圆点的文件后缀
+  if (!isSupported || !currentServerType) {
+    return (
+      <div className="flex items-center gap-1.5 px-2 py-1 h-6 rounded-md transition-colors cursor-default hidden sm:flex opacity-60">
+        <div className="flex items-center justify-center w-4 h-4 text-text-muted font-mono text-[10px] font-bold">
+          {'{}'}
+        </div>
+        <span className="text-[10px] uppercase font-medium tracking-widest text-text-muted transition-colors">
+          {displayName}
+        </span>
+      </div>
+    )
   }
 
   return (
     <BottomBarPopover
       icon={
-        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-white/5 transition-all ${isInstalled ? 'text-emerald-400' : 'text-amber-400'}`}>
-          {isInstalled ? (
-            <Zap className="w-3 h-3 fill-current" />
-          ) : (
-            <ZapOff className="w-3 h-3" />
-          )}
-          <span className="text-[10px] font-bold tracking-tighter">LSP</span>
+        <div className="flex items-center gap-1.5 px-2 py-1 h-6 rounded-md hover:bg-white/5 transition-colors cursor-pointer group hidden sm:flex">
+          <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
+            <span className="text-text-muted group-hover:text-text-primary font-mono text-[10px] font-bold transition-colors">
+              {'{}'}
+            </span>
+            {isInstalled ? (
+              <span className="absolute -top-[1px] -right-[2px] w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+            ) : (
+              <span className="absolute -top-[1px] -right-[2px] w-1.5 h-1.5 bg-amber-400 rounded-full shadow-[0_0_8px_rgba(251,191,36,0.6)]" />
+            )}
+          </div>
+          <span className="text-[10px] uppercase font-medium tracking-widest text-text-muted group-hover:text-text-primary transition-colors">
+            {displayName}
+          </span>
         </div>
       }
       tooltip={
