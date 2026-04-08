@@ -11,7 +11,7 @@ import {
   Terminal,
   CheckCircle2,
   ScrollText,
-  Layers,
+  Maximize2,
   MessageSquare,
   Bug,
   ListTodo,
@@ -252,12 +252,6 @@ export default function StatusBar() {
             <span>Ln {cursorPosition?.line || 1}, Col {cursorPosition?.column || 1}</span>
           </div>
 
-          {activeFilePath && (
-            <div className="text-[9px] font-black uppercase tracking-widest text-text-muted opacity-60 select-none hidden sm:block">
-              {activeFilePath.split('.').pop() || 'TXT'}
-            </div>
-          )}
-
           <LspStatusIndicator />
         </div>
 
@@ -304,7 +298,7 @@ export default function StatusBar() {
                       }}
                       transition={{ duration: 0.8, repeat: Infinity }}
                     >
-                      <Layers className="w-3 h-3 text-accent" />
+                      <Maximize2 className="w-3 h-3 text-accent" />
                     </motion.div>
                     <motion.div
                       className="flex gap-0.5"
@@ -332,7 +326,7 @@ export default function StatusBar() {
                     {/* 上下文使用率 */}
                     <div className="flex items-center gap-1.5">
                       <div className={`flex items-center justify-center transition-all duration-300 w-4 h-4`}>
-                        <Layers className={`w-3 h-3 transition-colors ${layerColorClass}`} />
+                        <Maximize2 className={`w-3 h-3 transition-colors ${layerColorClass}`} />
                       </div>
                       <span className="text-[9px] font-bold font-mono text-text-muted group-hover:text-text-primary transition-colors">
                         {compressionStats ? `${(compressionStats.ratio * 100).toFixed(1)}%` : '0%'}
@@ -386,12 +380,14 @@ export default function StatusBar() {
           <BottomBarPopover
             icon={
               <div className="group flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/5 transition-colors">
-                <div className="flex items-center justify-center w-4 h-4 transition-colors">
-                  <ScrollText className="w-3 h-3 text-text-muted group-hover:text-text-primary transition-colors" />
+                <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
+                  <ScrollText className={`w-3 h-3 transition-colors ${toolCallLogs.length > 0 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.6)]' : 'text-text-muted group-hover:text-text-primary'}`} />
+                  {toolCallLogs.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-400 shadow-[0_0_8px_currentColor] rounded-full" />
+                  )}
                 </div>
               </div>
             }
-            badge={toolCallLogs.length || undefined}
             width={380} height={280} language={language as 'en' | 'zh'}
           >
             <ToolCallLogContent language={language as 'en' | 'zh'} />
