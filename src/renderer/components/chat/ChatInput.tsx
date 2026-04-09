@@ -282,10 +282,10 @@ export default function ChatInput({
           />
 
           {/* Bottom Actions */}
-          <div className="flex items-center justify-between pt-1">
+          <div className="relative flex items-center justify-between pt-1">
             <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
               <ModeSelector mode={chatMode} onModeChange={setChatMode} />
-              <ModelSelector />
+              <ModelSelector alignLeft />
             </div>
             <div className="flex items-center gap-2">
               <input

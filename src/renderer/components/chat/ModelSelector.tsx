@@ -27,14 +27,16 @@ interface ModelGroup {
 
 interface ModelSelectorProps {
   className?: string
+  alignLeft?: boolean
 }
 
-export default function ModelSelector({ className = '' }: ModelSelectorProps) {
+export default function ModelSelector({ className = '', alignLeft = false }: ModelSelectorProps) {
   const { llmConfig, update, providerConfigs } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, update: s.update, providerConfigs: s.providerConfigs })))
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedProviderId, setSelectedProviderId] = useState<string>('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -49,7 +51,18 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
     }
 
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    
+    // 延迟确保渲染后 focus 且不触发滚动条移动（防偏移）
+    const focusTimer = setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus({ preventScroll: true })
+      }
+    }, 50)
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      clearTimeout(focusTimer)
+    }
   }, [isOpen])
 
   const hasApiKey = useCallback((providerId: string) => {
@@ -176,7 +189,7 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
   if (!currentProviderGroup || !currentModel) return null
 
   return (
-    <div ref={containerRef} className={`relative flex items-center gap-2 ${className}`}>
+    <div ref={containerRef} className={`${alignLeft ? '' : 'relative'} flex items-center gap-2 ${className}`}>
       <button
         onClick={() => setIsOpen((prev) => !prev)}
         className={`
@@ -196,17 +209,17 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-[480px] max-w-[min(480px,calc(100vw-32px))] max-h-[360px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in overflow-hidden">
+        <div className="absolute bottom-full left-0 mb-2 w-[400px] max-w-[min(400px,calc(100vw-32px))] max-h-[360px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in overflow-hidden">
           {/* 搜索框 */}
           <div className="p-2 border-b border-border/50 sticky top-0 bg-surface/95 backdrop-blur-sm z-10 rounded-t-xl shrink-0">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="搜索模型或供应商..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                autoFocus
                 className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all custom-scrollbar"
               />
             </div>
