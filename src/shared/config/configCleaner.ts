@@ -10,6 +10,7 @@
 
 export interface EditorConfigSchema {
   fontSize?: number
+  chatFontSize?: number
   fontFamily?: string
   tabSize?: number
   wordWrap?: 'on' | 'off' | 'wordWrapColumn'
@@ -71,6 +72,7 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
 
   // 基础字段
   if (typeof config.fontSize === 'number') cleaned.fontSize = config.fontSize
+  if (typeof config.chatFontSize === 'number') cleaned.chatFontSize = config.chatFontSize
   if (typeof config.fontFamily === 'string') cleaned.fontFamily = config.fontFamily
   if (typeof config.tabSize === 'number') cleaned.tabSize = config.tabSize
   if (config.wordWrap === 'on' || config.wordWrap === 'off' || config.wordWrap === 'wordWrapColumn') {

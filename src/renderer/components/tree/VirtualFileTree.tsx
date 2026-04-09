@@ -801,7 +801,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           await handleDropNextToNode(node, sourcePath)
         }}
         className={`
-          group flex items-center gap-2 pr-2 cursor-pointer transition-colors duration-150 relative select-none rounded-md mx-2 my-[2px]
+          group flex items-center gap-2 pr-2 cursor-pointer transition-colors duration-150 relative select-none rounded-md mx-2 my-[2px] min-w-max
           ${isActive
             ? 'bg-accent/15 text-accent font-medium'
             : isFocused
@@ -817,7 +817,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           position: 'absolute',
           top: (visibleRange.startIndex + index) * ITEM_HEIGHT,
           left: 0,
-          right: 0
+          minWidth: 'calc(100% - 16px)'
         }}
       >
         {/* Indent Guide - Very subtle line */}
@@ -870,7 +870,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
             autoFocus
           />
         ) : (
-          <span className="text-[13px] truncate leading-normal flex-1 opacity-90 group-hover:opacity-100">
+          <span className="text-[13px] leading-normal whitespace-nowrap opacity-90 group-hover:opacity-100">
             {item.name}
           </span>
         )}
@@ -881,7 +881,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar focus:outline-none"
+      className="flex-1 overflow-y-auto overflow-x-auto custom-scrollbar focus:outline-none"
       onScroll={handleScroll}
       onKeyDown={handleKeyDown}
       tabIndex={0}
@@ -897,7 +897,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         setDragOverPath(null)
       }}
     >
-      <div style={{ height: totalHeight, position: 'relative' }}>
+      <div style={{ height: totalHeight, position: 'relative', minWidth: 'max-content', width: '100%' }}>
         {visibleNodes.map((node, index) => renderNode(node, index))}
       </div>
 

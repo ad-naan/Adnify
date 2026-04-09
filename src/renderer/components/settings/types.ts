@@ -24,6 +24,7 @@ export interface ProviderSettingsProps {
 export interface EditorSettingsState {
     // 编辑器外观
     fontSize: number
+    chatFontSize: number
     tabSize: number
     wordWrap: 'on' | 'off' | 'wordWrapColumn'
     lineNumbers: 'on' | 'off' | 'relative'

@@ -13,7 +13,7 @@
 
 export const LAYOUT = {
   ACTIVITY_BAR_WIDTH: 48,
-  SIDEBAR_MIN_WIDTH: 150,
+  SIDEBAR_MIN_WIDTH: 220,
   SIDEBAR_MAX_WIDTH: 600,
   CHAT_MIN_WIDTH: 300,
   CHAT_MAX_WIDTH: 800,
@@ -99,4 +99,3 @@ export const SECURITY_DEFAULTS = {
     'clone', 'init', 'stash', 'tag', 'config', 'symbolic-ref',
   ],
 } as const
-

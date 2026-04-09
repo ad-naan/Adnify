@@ -278,7 +278,7 @@ export default function ChatInput({
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
                        focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide"
             rows={1}
-            style={{ minHeight: '48px', fontSize: `${Math.max(14, editorConfig.fontSize)}px` }}
+            style={{ minHeight: '48px', fontSize: `${Math.max(14, editorConfig.chatFontSize ?? editorConfig.fontSize)}px` }}
           />
 
           {/* Bottom Actions */}
