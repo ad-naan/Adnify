@@ -154,6 +154,10 @@ export default function ChatPanel() {
   const [displayMessages, setDisplayMessages] = useState(filteredRenderableMessages)
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
+  // Virtuoso 初始滚动位置：只在线程切换时重新指向底部，普通追加消息不重算
+  // 避免每次 displayMessages 变化都重新传入新的 initialTopMostItemIndex
+  // 导致 Virtuoso 强制跳回该位置（即滚动条回顶的根因）
+  const initialIndexRef = useRef(Math.max(0, filteredRenderableMessages.length - 1))
 
   // Effect 1：只监听 currentThreadId 变化，控制骨架屏的显示/隐藏
   // 与 filteredMessages 解耦，防止懒加载消息在 350ms 内到达时
@@ -163,6 +167,9 @@ export default function ChatPanel() {
     prevThreadIdRef.current = currentThreadId
 
     if (!threadChanged) return
+
+    // 线程切换时同步更新初始位置索引，指向新线程的底部
+    initialIndexRef.current = Math.max(0, filteredRenderableMessages.length - 1)
 
     // 线程切换：显示骨架屏，350ms 后关闭（骨架屏本身会遮住 Virtuoso 的渲染）
     setIsSwitchingThread(true)
@@ -174,7 +181,7 @@ export default function ChatPanel() {
       })
     }, 350)
     return () => clearTimeout(timer)
-  }, [currentThreadId])
+  }, [currentThreadId, filteredRenderableMessages.length])
 
   // Effect 2：同步 displayMessages，无论是线程切换后懒加载到位，还是流式追加
   useEffect(() => {
@@ -313,9 +320,12 @@ export default function ChatPanel() {
     setShowScrollButton(false)
   }, [displayMessages.length])
   const followOutput = useCallback((isListAtBottom: boolean) => {
-    if (!isStreaming) return false
-    return isListAtBottom ? 'smooth' : false
-  }, [isStreaming])
+    // 流式输出时：在底部则跟随，不在底部则不强制（用户在往上翻）
+    if (isStreaming) return isListAtBottom ? 'smooth' : false
+    // 非流式（如用户刚发送消息导致新消息 push）：无论在不在底部都强制跟随底部
+    // 这解决了「发消息后滚动条跳回顶部」的问题
+    return atBottom ? 'smooth' : false
+  }, [isStreaming, atBottom])
 
   const handleTotalListHeightChanged = useCallback(() => {
     if (!atBottom || !isStreaming) return
@@ -770,8 +780,11 @@ export default function ChatPanel() {
 
     setInput('')
     setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.previewUrl)); return [] })
+    // 发送消息后主动滚到底部，确保用户消息和即将出现的 AI 回复可见
+    // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
+    scrollToBottom('smooth')
     await sendMessage(userMessage)
-  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, handoffRequired])
+  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, handoffRequired, scrollToBottom])
 
   // 编辑消息
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {
@@ -1181,7 +1194,7 @@ export default function ChatPanel() {
               data={displayMessages}
               computeItemKey={(_, item) => item.renderKey}
               atBottomStateChange={handleAtBottomStateChange}
-              initialTopMostItemIndex={Math.max(0, displayMessages.length - 1)}
+              initialTopMostItemIndex={initialIndexRef.current}
               followOutput={followOutput}
               itemContent={(_, item) => renderMessage(item)}
               className="flex-1 custom-scrollbar w-full h-full"

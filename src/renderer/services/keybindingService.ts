@@ -88,8 +88,8 @@ class KeybindingService {
         const modifiersMatch =
             (e.metaKey === meta) &&
             (e.ctrlKey === ctrl) &&
+            (e.shiftKey === shift) &&
             (e.altKey === alt)
-        const shiftMatch = shift || !e.shiftKey
 
         // 按键匹配（忽略大小写）
         let keyMatch = false
@@ -111,7 +111,7 @@ class KeybindingService {
             keyMatch = e.key.toLowerCase() === key.toLowerCase()
         }
 
-        return modifiersMatch && shiftMatch && keyMatch
+        return modifiersMatch && keyMatch
     }
 
     async updateBinding(commandId: string, newKey: string | null) {

@@ -25,6 +25,7 @@ import { composerService } from '@renderer/agent/services/composerService'
 import type { StreamingEditState } from '@renderer/agent/types'
 import type { ThemeName } from '@store/slices/themeSlice'
 import { useEditorBreakpoints } from '@hooks/useEditorBreakpoints'
+import { consumePendingNavigation } from '@services/editorNavigation'
 
 // 子组件
 import { EditorTabs } from './EditorTabs'
@@ -98,7 +99,7 @@ export default function Editor() {
 
   const activeLanguage = activeFile ? getLanguage(activeFile.path) : 'plaintext'
   const activeFileType = activeFile ? getFileType(activeFile.path) : 'text'
-  const activeFileInfo = activeFile ? getFileInfo(activeFile.path, activeFile.content) : null
+  const activeFileInfo = (activeFile && activeFile.content != null) ? getFileInfo(activeFile.path, activeFile.content) : null
   const currentTheme = useStore((state) => state.currentTheme) as ThemeName
 
   // 断点管理
@@ -113,13 +114,22 @@ export default function Editor() {
   }, [currentTheme])
 
   // 文件切换时清除 lint 错误并通知 LSP
+  // 同时检查是否有跨文件 Go-to-Definition 待处理的跳转定位
   useEffect(() => {
     clearLintErrors()
-    if (activeFile) {
+    if (activeFile && activeFile.content != null) {
       notifyFileOpened(activeFile.path, activeFile.content)
+      // 检查是否有跨文件跳转定义的待定位请求
+      const nav = consumePendingNavigation(activeFile.path)
+      if (nav && editorRef.current) {
+        setTimeout(() => {
+          editorRef.current?.setPosition({ lineNumber: nav.line, column: nav.col })
+          editorRef.current?.revealPositionInCenter({ lineNumber: nav.line, column: nav.col })
+          editorRef.current?.focus()
+        }, 80)
+      }
     }
   }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened])
-
   // 清理不再打开的文件的 Monaco Models，防止内存泄漏
   useEffect(() => {
     if (!monacoRef.current) return

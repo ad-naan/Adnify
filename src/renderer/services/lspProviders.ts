@@ -39,6 +39,7 @@ import {
   getDocumentSymbols,
   prepareRename,
   renameSymbol,
+  goToDefinition,
   goToTypeDefinition,
   goToImplementation,
   getInlayHints,
@@ -126,6 +127,31 @@ export function registerLspProviders(monaco: typeof Monaco) {
     // Data
     'json', 'yaml',
   ]
+
+  // 定义提供者（Ctrl+Click / F12 Go to Definition）
+  // 注意：provideDefinition 会在 hover 预览、F12、Ctrl+Click 等多种场景被调用。
+  // 朐此，此处仅返回位置结果，不做任何导航副作用。
+  // 真正的跨文件跳转在 useEditorActions 的 F12 命令 / onMouseDown 中处理。
+  monaco.languages.registerDefinitionProvider(languages, {
+    provideDefinition: async (model, position) => {
+      const filePath = lspUriToPath(model.uri.toString())
+      const result = await goToDefinition(
+        filePath,
+        position.lineNumber - 1,
+        position.column - 1
+      )
+      if (!result || result.length === 0) return null
+      return result.map((loc: any) => ({
+        uri: monaco.Uri.parse(loc.uri),
+        range: {
+          startLineNumber: loc.range.start.line + 1,
+          startColumn: loc.range.start.character + 1,
+          endLineNumber: loc.range.end.line + 1,
+          endColumn: loc.range.end.character + 1,
+        },
+      }))
+    },
+  })
 
   // 悬停提供者
   monaco.languages.registerHoverProvider(languages, {
