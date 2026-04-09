@@ -57,6 +57,7 @@ export default function SettingsModal() {
     const editorConfig = getEditorConfig()
     const [editorSettings, setEditorSettings] = useState<EditorSettingsState>({
         fontSize: editorConfig.fontSize,
+        chatFontSize: editorConfig.chatFontSize ?? editorConfig.fontSize,
         tabSize: editorConfig.tabSize,
         wordWrap: editorConfig.wordWrap,
         lineNumbers: editorConfig.lineNumbers,
@@ -141,6 +142,7 @@ export default function SettingsModal() {
         const finalEditorConfig = {
             ...advancedEditorConfig,
             fontSize: editorSettings.fontSize,
+            chatFontSize: editorSettings.chatFontSize,
             tabSize: editorSettings.tabSize,
             wordWrap: editorSettings.wordWrap,
             lineNumbers: editorSettings.lineNumbers,

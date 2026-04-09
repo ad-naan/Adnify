@@ -144,6 +144,24 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         </div>
                     </section>
 
+                    <section className={sectionClass}>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Type className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? 'Agent 聊天区域' : 'Agent Chat Area'}</h5>
+                        </div>
+                        <div>
+                            <label className={labelClass}>{language === 'zh' ? '字体大小' : 'Font Size'}</label>
+                            <Input
+                                type="number"
+                                value={settings.chatFontSize}
+                                onChange={(e) => setSettings({ ...settings, chatFontSize: parseInt(e.target.value) || 14 })}
+                                min={10}
+                                max={32}
+                                className={inputClass}
+                            />
+                        </div>
+                    </section>
+
                     {/* Terminal Settings (Moved to Left) */}
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">

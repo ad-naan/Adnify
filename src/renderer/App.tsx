@@ -149,7 +149,7 @@ function AppContent() {
               <ActivityBar />
 
               {activeSidePanel && !isShellStudioActive && (
-                <div ref={sidebarRef} style={{ width: sidebarWidth }} className="flex-shrink-0 relative">
+                <div ref={sidebarRef} style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex-shrink-0 relative min-w-[220px]">
                   <Suspense fallback={<PanelSkeleton />}>
                     <Sidebar />
                   </Suspense>
