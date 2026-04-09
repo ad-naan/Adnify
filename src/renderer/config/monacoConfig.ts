@@ -161,7 +161,7 @@ export function getMonacoEditorOptions(
       loop: true,
     },
     
-    // 多光标
+    // 多光标：使用 Alt+Click（与 VS Code 一致，让 Ctrl+Click 触发跳转定义）
     multiCursorModifier: 'alt',
     multiCursorMergeOverlapping: true,
     multiCursorPaste: 'spread',

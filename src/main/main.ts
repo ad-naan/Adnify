@@ -239,14 +239,13 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     }
   })
 
-  // 快捷键
+  // 快捷键：仅处理需要在主进程层面拦截的场景
+  // （Command Palette 需要在 Web 内容区域外也能触发，故保留在此）
+  // DevTools 由菜单 role:toggleDevTools 自动处理，无需在此注册
   win.webContents.on('before-input-event', (_, input) => {
     if (input.type !== 'keyDown') return
     if ((input.control && input.shift && input.key.toLowerCase() === 'p') || input.key === 'F1') {
       win.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
-    }
-    if (input.key === 'F12') {
-      win.webContents.toggleDevTools()
     }
   })
 
