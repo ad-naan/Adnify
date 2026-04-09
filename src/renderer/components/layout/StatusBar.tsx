@@ -177,7 +177,7 @@ export default function StatusBar() {
           'text-text-muted group-hover:text-text-primary'
 
   return (
-    <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-white/5">
+    <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-border/30 shadow-[0_-1px_15px_rgba(0,0,0,0.03)]">
       {/* Left Group */}
       <div className="flex items-center gap-3">
         {/* 情绪呼吸灯 */}

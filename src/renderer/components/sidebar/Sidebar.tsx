@@ -19,7 +19,7 @@ export default function Sidebar() {
     if (!activeSidePanel) return null
 
     return (
-        <div className="w-full bg-background border-r border-border flex flex-col h-full animate-fade-in relative z-10">
+        <div className="w-full bg-background border-r border-border/30 shadow-[1px_0_15px_rgba(0,0,0,0.03)] flex flex-col h-full animate-fade-in relative z-10">
             {activeSidePanel === 'explorer' && <ExplorerView />}
             {activeSidePanel === 'search' && <SearchView />}
             {activeSidePanel === 'git' && <GitView />}

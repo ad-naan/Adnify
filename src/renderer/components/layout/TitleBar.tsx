@@ -15,7 +15,7 @@ const isMac = typeof navigator !== 'undefined' && (
 export default function TitleBar() {
   const { setShowQuickOpen, setShowAbout } = useStore(useShallow(s => ({ setShowQuickOpen: s.setShowQuickOpen, setShowAbout: s.setShowAbout })))
   return (
-    <div className="h-12 flex items-center justify-between px-0 drag-region select-none bg-background/40 backdrop-blur-md z-50 border-b border-border/50">
+    <div className="h-12 flex items-center justify-between px-0 drag-region select-none bg-background/40 backdrop-blur-md z-50 border-b border-border/30 shadow-[0_1px_15px_rgba(0,0,0,0.03)]">
 
       {/* Left - Branding & Workspace */}
       <div className={`

@@ -42,6 +42,7 @@ import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
 import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
+import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { t } from '../../i18n'
 
@@ -158,40 +159,17 @@ const cleanStreamingContent = (text: string): string => {
   return cleaned.trim()
 }
 
-const RevealKeyframes = () => (
+const BlockRevealKeyframes = () => (
   <style dangerouslySetInnerHTML={{__html: `
-    @keyframes word-reveal {
-      0% { opacity: 0; filter: blur(4px); }
-      100% { opacity: 1; filter: blur(0px); }
+    @keyframes block-reveal {
+      0% { opacity: 0; filter: blur(4px); transform: translateY(2px); }
+      100% { opacity: 1; filter: blur(0px); transform: translateY(0); }
     }
-    .animate-word-reveal {
-      animation: word-reveal 0.3s ease-out forwards;
+    .animate-block-reveal {
+      animation: block-reveal 0.3s ease-out forwards;
     }
   `}} />
 )
-
-const FadeInText = ({ children, isStreaming }: { children: React.ReactNode, isStreaming?: boolean }) => {
-  if (!isStreaming) return <>{children}</>;
-
-  const processNode = (node: React.ReactNode): React.ReactNode => {
-    if (typeof node === 'string') {
-      return node.split('').map((char, i) => (
-        <span 
-          key={i} 
-          className="animate-word-reveal"
-          style={{ opacity: 0, filter: 'blur(4px)', whiteSpace: 'pre-wrap' }}
-        >
-          {char}
-        </span>
-      ));
-    }
-    if (Array.isArray(node)) {
-      return node.map((c, i) => <React.Fragment key={i}>{processNode(c)}</React.Fragment>);
-    }
-    return node;
-  };
-  return <>{React.Children.map(children, processNode)}</>;
-};
 
 // ThinkingBlock 组件 - 扁平化折叠样式
 interface ThinkingBlockProps {
@@ -359,12 +337,15 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
     return () => el.removeEventListener('scroll', checkScroll)
   }, [isExpanded, content])
 
+  // Fluid effect for thinking content, ONLY when streaming
+  const fluidContent = useSmoothStream(content, isStreaming, 1.5)
+
   // 流式输出时自动滚动到底部
   useEffect(() => {
     if (isStreaming && isExpanded && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [content, isStreaming, isExpanded])
+  }, [fluidContent, isStreaming, isExpanded])
 
   const durationText = !isStreaming
     ? (lastElapsed.current > 0 ? `Thought for ${lastElapsed.current}s` : 'Thought')
@@ -393,9 +374,9 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
             {content ? (
               <div
                 style={{ fontSize: `${fontSize - 1}px` }}
-                className="text-text-muted/70 leading-relaxed font-sans thinking-content"
+                className={`text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans thinking-content ${isStreaming ? 'animate-block-reveal' : ''}`}
               >
-                <FadeInText isStreaming={isStreaming}>{content}</FadeInText>
+                {fluidContent}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -435,6 +416,9 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     }
     return cleanedContent
   }, [cleanedContent, systemAlert])
+
+  // 平滑流式插入
+  const smoothContent = useSmoothStream(contentWithoutAlert || '', !!isStreaming, 1.5)
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
@@ -495,24 +479,24 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         </div>
       )
     },
-    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full">{children}</div>,
-    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></p>,
-    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
-    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
-    li: ({ children }: any) => <li className="pl-1"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></li>,
+    pre: ({ children }: any) => <div className={`overflow-x-auto max-w-full ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</div>,
+    p: ({ children }: any) => <p className={`mb-3 last:mb-0 leading-7 break-words ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</p>,
+    ul: ({ children }: any) => <ul className={`list-disc pl-5 mb-3 space-y-1 ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</ul>,
+    ol: ({ children }: any) => <ol className={`list-decimal pl-5 mb-3 space-y-1 ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</ol>,
+    li: ({ children }: any) => <li className={`pl-1 ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</li>,
     a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></a>
+      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
     ),
-    strong: ({ children, ...props }: any) => <strong {...props}><FadeInText isStreaming={isStreaming}>{children}</FadeInText></strong>,
-    em: ({ children, ...props }: any) => <em {...props}><FadeInText isStreaming={isStreaming}>{children}</FadeInText></em>,
+    strong: ({ children, ...props }: any) => <strong {...props}>{children}</strong>,
+    em: ({ children, ...props }: any) => <em {...props}>{children}</em>,
     blockquote: ({ children }: any) => (
-      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r">{children}</blockquote>
+      <blockquote className={`border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</blockquote>
     ),
-    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></h1>,
-    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></h2>,
-    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></h3>,
+    h1: ({ children }: any) => <h1 className={`text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</h1>,
+    h2: ({ children }: any) => <h2 className={`text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</h2>,
+    h3: ({ children }: any) => <h3 className={`text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</h3>,
     table: ({ children }: any) => (
-      <div className="overflow-x-auto my-4">
+      <div className={`overflow-x-auto my-4 ${isStreaming ? 'animate-block-reveal' : ''}`}>
         <table className="min-w-full border-collapse border border-border">{children}</table>
       </div>
     ),
@@ -520,7 +504,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     tbody: ({ children }: any) => <tbody>{children}</tbody>,
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
     th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
-    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary"><FadeInText isStreaming={isStreaming}>{children}</FadeInText></td>,
+    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
   }), [fontSize, handleOpenFile, isStreaming])
 
   if (!contentWithoutAlert && !systemAlert) {
@@ -529,7 +513,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   return (
     <>
-      <RevealKeyframes />
+      <BlockRevealKeyframes />
       {systemAlert && (
         <SystemAlert
           type={systemAlert.type}
@@ -546,7 +530,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
             components={markdownComponents}
             skipHtml
           >
-            {contentWithoutAlert}
+            {smoothContent}
           </ReactMarkdown>
         </div>
       )}
