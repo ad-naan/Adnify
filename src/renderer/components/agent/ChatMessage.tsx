@@ -826,7 +826,7 @@ const ChatMessage = React.memo(({
   const [copied, setCopied] = useState(false)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const { editorConfig, language } = useStore(useShallow(s => ({ editorConfig: s.editorConfig, language: s.language })))
-  const fontSize = editorConfig.fontSize
+  const fontSize = editorConfig.chatFontSize ?? editorConfig.fontSize
 
   if (!isUserMessage(message) && !isAssistantMessage(message)) {
     return null
