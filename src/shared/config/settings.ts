@@ -116,6 +116,7 @@ const defaultAgentConfig: AgentConfig = {
 
 const defaultEditorConfig: EditorConfig = {
   fontSize: EDITOR_DEFAULTS.fontSize,
+  chatFontSize: EDITOR_DEFAULTS.fontSize,
   fontFamily: EDITOR_DEFAULTS.fontFamily,
   tabSize: EDITOR_DEFAULTS.tabSize,
   wordWrap: EDITOR_DEFAULTS.wordWrap,

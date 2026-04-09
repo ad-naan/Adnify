@@ -165,6 +165,7 @@ export interface AiCompletionConfig {
 export interface EditorConfig {
   // 编辑器外观
   fontSize: number
+  chatFontSize: number
   fontFamily: string
   tabSize: number
   wordWrap: 'on' | 'off' | 'wordWrapColumn'

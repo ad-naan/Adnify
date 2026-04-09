@@ -33,6 +33,7 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
   const { llmConfig, update, providerConfigs } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, update: s.update, providerConfigs: s.providerConfigs })))
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('')
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -108,6 +109,22 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
     return currentProviderGroup.models.find(model => model.id === llmConfig.model) || currentProviderGroup.models[0] || null
   }, [currentProviderGroup, llmConfig.model])
 
+  useEffect(() => {
+    if (!isOpen) return
+    if (groupedModels.length === 0) {
+      setSelectedProviderId('')
+      return
+    }
+
+    const providerExists = groupedModels.some(group => group.providerId === llmConfig.provider)
+    if (providerExists) {
+      setSelectedProviderId(llmConfig.provider)
+      return
+    }
+
+    setSelectedProviderId(groupedModels[0].providerId)
+  }, [isOpen, groupedModels, llmConfig.provider])
+
   const applyProviderConfig = useCallback((providerId: string, modelId: string) => {
     if (llmConfig.provider === providerId) {
       update('llmConfig', { model: modelId })
@@ -132,15 +149,29 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
     if (!searchQuery.trim()) return groupedModels
 
     const query = searchQuery.toLowerCase()
-    return groupedModels.map(group => ({
-      ...group,
-      models: group.models.filter(m =>
-        m.name.toLowerCase().includes(query) ||
-        m.id.toLowerCase().includes(query) ||
-        group.providerName.toLowerCase().includes(query)
-      )
-    })).filter(group => group.models.length > 0)
+    return groupedModels
+      .map(group => ({
+        ...group,
+        models: group.models.filter(m =>
+          m.name.toLowerCase().includes(query) ||
+          m.id.toLowerCase().includes(query) ||
+          group.providerName.toLowerCase().includes(query)
+        )
+      }))
+      .filter(group => group.models.length > 0 || group.providerName.toLowerCase().includes(query))
   }, [groupedModels, searchQuery])
+
+  const visibleProviderGroup = useMemo(() => {
+    if (filteredGroups.length === 0) return null
+    return filteredGroups.find(group => group.providerId === selectedProviderId) || filteredGroups[0]
+  }, [filteredGroups, selectedProviderId])
+
+  useEffect(() => {
+    if (!isOpen || filteredGroups.length === 0) return
+    if (!visibleProviderGroup) {
+      setSelectedProviderId(filteredGroups[0].providerId)
+    }
+  }, [isOpen, filteredGroups, visibleProviderGroup])
 
   if (!currentProviderGroup || !currentModel) return null
 
@@ -156,16 +187,16 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
             : 'bg-white/[0.03] text-text-secondary hover:text-text-primary hover:bg-white/[0.08]'
           }
         `}
-      >
+        >
         <span className="text-[10px] grayscale opacity-80">{getIcon(currentProviderGroup.providerId)}</span>
-        <span className="max-w-[140px] truncate" title={currentModel.name}>
-          {currentModel.name.split('/').pop()}
+        <span className="max-w-[180px] truncate" title={`${currentProviderGroup.providerName}/${currentModel.name}`}>
+          {currentProviderGroup.providerName}/{currentModel.name.split('/').pop()}
         </span>
         <ChevronDown className={`w-3 h-3 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-62 max-h-[300px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in">
+        <div className="absolute bottom-full left-0 mb-2 w-[480px] max-w-[min(480px,calc(100vw-32px))] max-h-[360px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in overflow-hidden">
           {/* 搜索框 */}
           <div className="p-2 border-b border-border/50 sticky top-0 bg-surface/95 backdrop-blur-sm z-10 rounded-t-xl shrink-0">
             <div className="relative">
@@ -181,47 +212,74 @@ export default function ModelSelector({ className = '' }: ModelSelectorProps) {
             </div>
           </div>
 
-          {/* 列表 */}
-          <div className="overflow-y-auto flex-1 p-1 custom-scrollbar">
-            {filteredGroups.length === 0 ? (
-              <div className="py-6 text-center text-xs text-text-muted">无相关模型</div>
-            ) : (
-              filteredGroups.map(group => (
-                <div key={group.providerId} className="mb-1 last:mb-0">
-                  <div className="px-2 py-1.5 text-[10px] font-bold text-text-muted/80 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="grayscale">{getIcon(group.providerId)}</span>
-                    {group.providerName}
+          <div className="grid grid-cols-[150px_minmax(0,1fr)] min-h-0 flex-1">
+            <div className="border-r border-border/50 overflow-y-auto p-1 custom-scrollbar">
+              {filteredGroups.length === 0 ? (
+                <div className="py-6 text-center text-xs text-text-muted">无相关供应商</div>
+              ) : (
+                filteredGroups.map(group => {
+                  const isSelectedProvider = visibleProviderGroup?.providerId === group.providerId
+                  return (
+                    <button
+                      key={group.providerId}
+                      onClick={() => setSelectedProviderId(group.providerId)}
+                      className={`
+                        w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-left text-xs transition-colors mb-0.5 last:mb-0
+                        ${isSelectedProvider ? 'bg-accent/10 text-accent font-medium' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}
+                      `}
+                    >
+                      <span className="grayscale text-[12px] flex-shrink-0">{getIcon(group.providerId)}</span>
+                      <span className="truncate" title={group.providerName}>{group.providerName}</span>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-1 custom-scrollbar">
+              {!visibleProviderGroup ? (
+                <div className="py-6 text-center text-xs text-text-muted">无相关模型</div>
+              ) : (
+                <>
+                  <div className="px-2 py-1.5 text-[10px] font-bold text-text-muted/80 uppercase tracking-wider flex items-center gap-1.5 sticky top-0 bg-surface z-10 border-b border-border/30">
+                    <span className="grayscale">{getIcon(visibleProviderGroup.providerId)}</span>
+                    {visibleProviderGroup.providerName}
                   </div>
-                  {group.models.map(model => {
-                    const isSelected = llmConfig.provider === group.providerId && llmConfig.model === model.id
-                    return (
-                      <button
-                        key={`${group.providerId}-${model.id}`}
-                        onClick={() => {
-                          applyProviderConfig(group.providerId, model.id)
-                          setIsOpen(false)
-                        }}
-                        className={`
-                          w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs transition-colors mb-0.5 last:mb-0
-                          ${isSelected ? 'bg-accent/10 text-accent font-medium' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}
-                        `}
-                      >
-                        <span className="flex items-center gap-2 min-w-0">
-                          <span className="truncate" title={model.name}>{model.name}</span>
-                          {model.isCustom && (
-                            <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] bg-purple-500/10 text-purple-500 rounded border border-purple-500/20">
-                              Custom
-                            </span>
-                          )}
-                        </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 ml-2" />}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))
-            )}
+                  {visibleProviderGroup.models.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-text-muted">无相关模型</div>
+                  ) : (
+                    visibleProviderGroup.models.map(model => {
+                      const isSelected = llmConfig.provider === visibleProviderGroup.providerId && llmConfig.model === model.id
+                      return (
+                        <button
+                          key={`${visibleProviderGroup.providerId}-${model.id}`}
+                          onClick={() => {
+                            applyProviderConfig(visibleProviderGroup.providerId, model.id)
+                            setIsOpen(false)
+                          }}
+                          className={`
+                            w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs transition-colors mb-0.5 last:mb-0
+                            ${isSelected ? 'bg-accent/10 text-accent font-medium' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}
+                          `}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="truncate" title={model.name}>{model.name}</span>
+                            {model.isCustom && (
+                              <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] bg-purple-500/10 text-purple-500 rounded border border-purple-500/20">
+                                Custom
+                              </span>
+                            )}
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 flex-shrink-0 ml-2" />}
+                        </button>
+                      )
+                    })
+                  )}
+                </>
+              )}
+            </div>
           </div>
+
         </div>
       )}
     </div>
