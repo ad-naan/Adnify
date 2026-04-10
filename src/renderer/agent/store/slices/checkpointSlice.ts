@@ -208,10 +208,10 @@ export const createCheckpointSlice: StateCreator<
     const threadId = getCurrentThreadId(get())
     if (!threadId) return ''
 
+    // Only snapshots collected for the current message should belong to this
+    // checkpoint. Pulling in all pendingChanges here makes rollback spill into
+    // files modified by previous messages that are still awaiting acceptance.
     const fileSnapshots: Record<string, FileSnapshot> = {}
-    for (const change of get().pendingChanges) {
-      fileSnapshots[change.filePath] = { ...change.snapshot }
-    }
 
     const checkpoint: MessageCheckpoint = {
       id: crypto.randomUUID(),

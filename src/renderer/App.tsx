@@ -8,6 +8,7 @@ import { ToastProvider, useToast, setGlobalToast } from './components/common/Toa
 import { GlobalConfirmDialog } from './components/common/ConfirmDialog'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { GlobalErrorHandler } from './components/common/GlobalErrorHandler'
+import GlobalToastContainer from './components/common/GlobalToastContainer'
 import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
@@ -264,6 +265,7 @@ function AppContent() {
         </Suspense>
       )}
       <GlobalConfirmDialog />
+      <GlobalToastContainer />
 
       {/* 情绪组件已合并至状态栏 */}
     </div>

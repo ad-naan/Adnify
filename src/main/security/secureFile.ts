@@ -543,14 +543,16 @@ export function registerSecureFileHandlers(
   // 文件监听（使用拆分的 fileWatcher）
   ipcMain.handle('file:watch', (_, action: string) => {
     if (action === 'start') {
-      setupFileWatcher(getWorkspaceSessionFn, (data: FileWatcherEvent) => {
-        const win = getMainWindowFn()
-        if (win) {
+      const win = getMainWindowFn()
+      const workspace = getWorkspaceSessionFn()
+      if (win && workspace?.roots?.[0]) {
+        void setupFileWatcher(`window-${win.webContents.id}`, workspace.roots[0], (data: FileWatcherEvent) => {
           win.webContents.send('file:changed', data)
-        }
-      })
+        })
+      }
     } else if (action === 'stop') {
-      cleanupFileWatcher()
+      const win = getMainWindowFn()
+      void cleanupFileWatcher(win ? `window-${win.webContents.id}` : undefined)
     }
   })
 
