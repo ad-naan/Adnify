@@ -36,6 +36,7 @@ export function getMonacoEditorOptions(
     smoothScrolling: true,
     padding: { top: 24, bottom: 16 },
     automaticLayout: true,
+    fixedOverflowWidgets: true,
     
     // 光标
     cursorBlinking: 'smooth',

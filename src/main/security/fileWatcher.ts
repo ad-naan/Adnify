@@ -25,6 +25,12 @@ export interface FileWatcherConfig {
   maxWaitTimeMs: number
 }
 
+interface WatcherEntry {
+  subscription: watcher.AsyncSubscription
+  buffer: FileChangeBuffer
+  root: string
+}
+
 const DEFAULT_CONFIG: FileWatcherConfig = {
   ignored: [/node_modules/, /\.git/, /dist/, /build/, /\.adnify/, '**/*.tmp', '**/*.temp'],
   persistent: true,
@@ -34,36 +40,28 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
   maxWaitTimeMs: 5000,
 }
 
-let watcherSubscription: watcher.AsyncSubscription | null = null
-let fileChangeBuffer: FileChangeBuffer | null = null
+const watcherEntries = new Map<string, WatcherEntry>()
 
-// LSP 文件变更类型映射
 const LSP_FILE_CHANGE_TYPE = {
   create: 1,
   update: 2,
   delete: 3,
 } as const
 
-// 创建忽略匹配器
 function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => boolean {
   const regexPatterns = patterns.filter((p): p is RegExp => p instanceof RegExp)
   const globPatterns = patterns.filter((p): p is string => typeof p === 'string')
   const globMatcher = globPatterns.length > 0 ? picomatch(globPatterns) : null
 
   return (filePath: string) => {
-    // 检查正则
     for (const regex of regexPatterns) {
       if (regex.test(filePath)) return true
     }
-    // 检查 glob
     if (globMatcher && globMatcher(filePath)) return true
     return false
   }
 }
 
-/**
- * 通知 LSP 服务器文件变化
- */
 function notifyLspFileChanges(changes: Array<{ path: string; type: 'create' | 'update' | 'delete' }>): void {
   const runningServers = lspManager.getRunningServers()
   if (runningServers.length === 0) return
@@ -78,9 +76,6 @@ function notifyLspFileChanges(changes: Array<{ path: string; type: 'create' | 'u
   }
 }
 
-/**
- * 将文件路径转换为 LSP URI
- */
 function pathToLspUri(filePath: string): string {
   const normalizedPath = filePath.replace(/\\/g, '/')
   if (/^[a-zA-Z]:/.test(normalizedPath)) {
@@ -89,52 +84,49 @@ function pathToLspUri(filePath: string): string {
   return `file://${normalizedPath}`
 }
 
-/**
- * 设置文件监听器
- */
+function getBackend(): watcher.BackendType | undefined {
+  switch (process.platform) {
+    case 'win32':
+      return 'windows'
+    case 'darwin':
+      return 'fs-events'
+    case 'linux':
+      return 'inotify'
+    default:
+      return undefined
+  }
+}
+
 export async function setupFileWatcher(
-  getWorkspaceSessionFn: () => { roots: string[] } | null,
+  watcherId: string,
+  workspaceRoot: string,
   callback: (data: FileWatcherEvent) => void,
   config?: Partial<FileWatcherConfig>
 ): Promise<void> {
-  const workspace = getWorkspaceSessionFn()
-  if (!workspace || workspace.roots.length === 0) return
+  if (!watcherId || !workspaceRoot) return
+
+  await cleanupFileWatcher(watcherId)
 
   const mergedConfig = { ...DEFAULT_CONFIG, ...config }
   const shouldIgnore = createIgnoreMatcher(mergedConfig.ignored)
-
-  // 使用工厂函数创建文件变更缓冲器
-  const indexService = getIndexService(workspace.roots[0])
-  fileChangeBuffer = createFileChangeHandler(indexService, {
+  const indexService = getIndexService(workspaceRoot)
+  const fileChangeBuffer = createFileChangeHandler(indexService, {
     bufferTimeMs: mergedConfig.bufferTimeMs,
     maxBufferSize: mergedConfig.maxBufferSize,
     maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
   })
 
-  // @parcel/watcher 配置
-  // ignore: 要忽略的 glob 模式（只支持字符串）
-  // backend: 根据平台选择最佳后端，避免尝试 watchman 导致的问题
-  const getBackend = (): watcher.BackendType | undefined => {
-    switch (process.platform) {
-      case 'win32': return 'windows'
-      case 'darwin': return 'fs-events'
-      case 'linux': return 'inotify'
-      default: return undefined
-    }
-  }
-  
   const watcherOptions: watcher.Options = {
     ignore: mergedConfig.ignored.filter((p): p is string => typeof p === 'string'),
     backend: getBackend(),
   }
-  
-  watcherSubscription = await watcher.subscribe(workspace.roots[0], (err, events) => {
+
+  const subscription = await watcher.subscribe(workspaceRoot, (err, events) => {
     if (err) {
       logger.security.error('[Watcher] Error:', err)
       return
     }
 
-    // 收集 LSP 通知的变更
     const lspChanges: Array<{ path: string; type: 'create' | 'update' | 'delete' }> = []
 
     for (const event of events) {
@@ -142,61 +134,61 @@ export async function setupFileWatcher(
 
       const eventType = event.type === 'create' ? 'create' : event.type === 'delete' ? 'delete' : 'update'
       callback({ event: eventType, path: event.path })
-      fileChangeBuffer?.add({ type: eventType, path: event.path, timestamp: Date.now() })
-      
-      // 收集用于 LSP 通知
+      fileChangeBuffer.add({ type: eventType, path: event.path, timestamp: Date.now() })
       lspChanges.push({ path: event.path, type: eventType })
     }
 
-    // 批量通知 LSP 服务器
     if (lspChanges.length > 0) {
       notifyLspFileChanges(lspChanges)
     }
   }, watcherOptions)
 
-  logger.security.info('[Watcher] File watcher started for:', workspace.roots[0])
+  watcherEntries.set(watcherId, {
+    subscription,
+    buffer: fileChangeBuffer,
+    root: workspaceRoot,
+  })
+
+  logger.security.info('[Watcher] File watcher started for:', workspaceRoot, 'id:', watcherId)
 }
 
-/**
- * 清理文件监听器
- */
-export async function cleanupFileWatcher(): Promise<void> {
-  // 清理文件变更缓冲器
-  if (fileChangeBuffer) {
-    fileChangeBuffer.destroy()
-    fileChangeBuffer = null
-  }
+export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
+  const entries = watcherId
+    ? (watcherEntries.has(watcherId) ? [[watcherId, watcherEntries.get(watcherId)!] as const] : [])
+    : Array.from(watcherEntries.entries())
 
-  if (watcherSubscription) {
-    logger.security.info('[Watcher] Cleaning up file watcher...')
-    const subscription = watcherSubscription
-    watcherSubscription = null
+  await Promise.all(entries.map(async ([id, entry]) => {
+    entry.buffer.destroy()
+    watcherEntries.delete(id)
+
+    logger.security.info('[Watcher] Cleaning up file watcher...', 'id:', id, 'root:', entry.root)
     try {
-      await subscription.unsubscribe()
+      await entry.subscription.unsubscribe()
     } catch (err) {
       logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
     }
-  }
+  }))
 }
 
-/**
- * 获取监听器状态
- */
 export function getWatcherStatus(): {
   isActive: boolean
   hasBuffer: boolean
   bufferSize: number
 } {
+  const entries = Array.from(watcherEntries.values())
+
   return {
-    isActive: watcherSubscription !== null,
-    hasBuffer: fileChangeBuffer !== null,
-    bufferSize: fileChangeBuffer?.size() ?? 0,
+    isActive: entries.length > 0,
+    hasBuffer: entries.length > 0,
+    bufferSize: entries.reduce((sum, entry) => sum + entry.buffer.size(), 0),
   }
 }
 
-/**
- * 强制刷新缓冲区
- */
-export function flushBuffer(): void {
-  fileChangeBuffer?.flush()
+export function flushBuffer(watcherId?: string): void {
+  if (watcherId) {
+    watcherEntries.get(watcherId)?.buffer.flush()
+    return
+  }
+
+  watcherEntries.forEach(entry => entry.buffer.flush())
 }

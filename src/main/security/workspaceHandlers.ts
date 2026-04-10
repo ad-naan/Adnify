@@ -7,7 +7,7 @@ import { logger } from '@shared/utils/Logger'
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { promises as fsPromises } from 'fs'
 import * as path from 'path'
-import { setupFileWatcher, FileWatcherEvent } from './fileWatcher'
+import { setupFileWatcher, cleanupFileWatcher, FileWatcherEvent } from './fileWatcher'
 import { securityManager } from './securityModule'
 
 // 窗口管理上下文类型
@@ -22,6 +22,30 @@ interface StoredWorkspaceSession {
   configPath: string | null
   roots: string[]
   workspaceId?: string
+}
+
+function getWatcherId(webContentsId: number): string {
+  return `window-${webContentsId}`
+}
+
+async function restartWindowFileWatcher(
+  sender: Electron.WebContents,
+  roots: string[]
+): Promise<void> {
+  const watcherId = getWatcherId(sender.id)
+
+  if (!roots.length) {
+    await cleanupFileWatcher(watcherId)
+    return
+  }
+
+  await setupFileWatcher(watcherId, roots[0], (data: FileWatcherEvent) => {
+    try {
+      sender.send('file:changed', data)
+    } catch {
+      void cleanupFileWatcher(watcherId)
+    }
+  })
 }
 
 async function readWorkspaceMarkerId(root: string): Promise<string | null> {
@@ -88,7 +112,7 @@ async function isWorkspaceSessionRestorable(session: StoredWorkspaceSession): Pr
 export function registerWorkspaceHandlers(
   getMainWindowFn: () => BrowserWindow | null,
   store: any,
-  getWorkspaceSessionFn: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
+  _getWorkspaceSessionFn: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
   windowManager?: WindowManagerContext
 ): void {
   // 辅助函数：添加到最近工作区列表
@@ -139,6 +163,7 @@ export function registerWorkspaceHandlers(
       store.set('lastWorkspacePath', folderPath)
       store.set('lastWorkspaceSession', { configPath: null, roots: [folderPath], workspaceId })
       addRecentWorkspace(folderPath)
+      await restartWindowFileWatcher(event.sender, [folderPath])
       return folderPath
     }
     return null
@@ -205,6 +230,7 @@ export function registerWorkspaceHandlers(
       store.set('lastWorkspaceSession', session)
       store.set('lastWorkspacePath', roots[0])
       roots.forEach(r => addRecentWorkspace(r))
+      await restartWindowFileWatcher(event.sender, roots)
       return session
     }
     return null
@@ -279,12 +305,7 @@ export function registerWorkspaceHandlers(
       securityManager.setWorkspacePath(session.roots[0] || null)
       
       // 自动启动文件监听
-      setupFileWatcher(getWorkspaceSessionFn, (data: FileWatcherEvent) => {
-        const win = getMainWindowFn()
-        if (win) {
-          win.webContents.send('file:changed', data)
-        }
-      })
+      await restartWindowFileWatcher(event.sender, session.roots)
       return session
     }
 
@@ -313,12 +334,7 @@ export function registerWorkspaceHandlers(
       // 更新安全模块的工作区路径
       securityManager.setWorkspacePath(legacyPath)
       
-      setupFileWatcher(getWorkspaceSessionFn, (data: FileWatcherEvent) => {
-        const win = getMainWindowFn()
-        if (win) {
-          win.webContents.send('file:changed', data)
-        }
-      })
+      await restartWindowFileWatcher(event.sender, [legacyPath])
       return legacySession
     }
 
@@ -356,6 +372,7 @@ export function registerWorkspaceHandlers(
     store.set('lastWorkspacePath', roots[0])
     store.set('lastWorkspaceSession', { configPath: null, roots, workspaceId })
     roots.forEach(r => addRecentWorkspace(r))
+    await restartWindowFileWatcher(event.sender, roots)
 
     logger.security.info('[Workspace] Active workspace set:', roots)
     return true

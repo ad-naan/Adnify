@@ -11,6 +11,7 @@ import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
+import { cleanupFileWatcher } from './security/fileWatcher'
 
 // ==========================================
 // 常量定义
@@ -225,6 +226,9 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   })
 
   win.on('closed', () => {
+    if (cachedWebContentsId) {
+      void cleanupFileWatcher(`window-${cachedWebContentsId}`)
+    }
     // 清理该窗口关联的 LLM 服务（中止活跃流、释放 AbortController）
     if (cachedWebContentsId && ipcModule) {
       try { ipcModule.cleanupLLMService(cachedWebContentsId) } catch { /* ignore */ }
