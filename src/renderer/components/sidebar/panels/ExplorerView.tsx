@@ -26,7 +26,6 @@ export function ExplorerView() {
     files,
     setFiles,
     language,
-    triggerFileTreeRefresh,
     gitStatus,
     setGitStatus,
     isGitRepo,
@@ -35,7 +34,7 @@ export function ExplorerView() {
     activeFilePath,
   } = useStore(useShallow(s => ({
     workspacePath: s.workspacePath, workspace: s.workspace, files: s.files, setFiles: s.setFiles,
-    language: s.language, triggerFileTreeRefresh: s.triggerFileTreeRefresh, gitStatus: s.gitStatus,
+    language: s.language, gitStatus: s.gitStatus,
     setGitStatus: s.setGitStatus, isGitRepo: s.isGitRepo, setIsGitRepo: s.setIsGitRepo,
     expandFolder: s.expandFolder, activeFilePath: s.activeFilePath,
   })))
@@ -43,6 +42,7 @@ export function ExplorerView() {
 
   const [creatingIn, setCreatingIn] = useState<{ path: string; type: 'file' | 'folder' } | null>(null)
   const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [treeVersion, setTreeVersion] = useState(0)
 
   // Reveal active file in explorer
   const handleRevealActiveFile = useCallback(() => {
@@ -90,10 +90,10 @@ export function ExplorerView() {
       directoryCacheService.clear()
       const items = await directoryCacheService.getDirectory(workspacePath, true)
       setFiles(items)
-      updateGitStatus()
-      triggerFileTreeRefresh()
+      setTreeVersion((version) => version + 1)
+      void updateGitStatus()
     }
-  }, [workspacePath, setFiles, updateGitStatus, triggerFileTreeRefresh])
+  }, [workspacePath, setFiles, updateGitStatus])
 
   // 工作区变化时更新 Git 状态（只在初始化时执行一次）
   useEffect(() => {
@@ -267,6 +267,7 @@ export function ExplorerView() {
         {workspace && workspace.roots.length > 0 && files.length > 0 ? (
           <VirtualFileTree
             items={files}
+            treeVersion={treeVersion}
             onRefresh={refreshFiles}
             creatingIn={creatingIn}
             onStartCreate={handleStartCreate}

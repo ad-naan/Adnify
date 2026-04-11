@@ -273,7 +273,7 @@ export default function ChatInput({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
-            disabled={!hasApiKey || hasPendingToolCall}
+            disabled={!hasApiKey}
             className="w-full bg-transparent border-none p-0 py-2.5
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
                        focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide"

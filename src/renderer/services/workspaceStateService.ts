@@ -1,8 +1,6 @@
 /**
- * 工作区状态持久化服务
- * 保存和恢复打开的文件、活动文件等状态
- * 
- * 数据通过 adnifyDir 服务统一管理
+ * Workspace state persistence service.
+ * Saves and restores open files, active file, layout, and expanded folders.
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -11,9 +9,32 @@ import { useStore } from '@store'
 import { getEditorConfig } from '@renderer/settings'
 import { adnifyDir, WorkspaceStateData } from './adnifyDirService'
 
-/**
- * 保存工作区状态
- */
+async function readFilesWithConcurrency(
+  filePaths: string[],
+  concurrency = 4
+): Promise<Array<{ path: string; content: string }>> {
+  const results: Array<{ path: string; content: string }> = []
+
+  for (let i = 0; i < filePaths.length; i += concurrency) {
+    const batch = filePaths.slice(i, i + concurrency)
+    const batchResults = await Promise.all(
+      batch.map(async (filePath) => {
+        try {
+          const fileContent = await api.file.read(filePath)
+          return fileContent !== null ? { path: filePath, content: fileContent } : null
+        } catch {
+          logger.system.warn('[WorkspaceState] Failed to restore file:', filePath)
+          return null
+        }
+      })
+    )
+
+    results.push(...batchResults.filter((item): item is { path: string; content: string } => item !== null))
+  }
+
+  return results
+}
+
 export async function saveWorkspaceState(): Promise<void> {
   const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalLayout } = useStore.getState()
 
@@ -28,20 +49,17 @@ export async function saveWorkspaceState(): Promise<void> {
     layout: {
       sidebarWidth,
       chatWidth,
-      terminalVisible: false, // 不保存终端可见状态，每次启动都是关闭的
-      terminalLayout
-    }
+      terminalVisible: false,
+      terminalLayout,
+    },
   }
 
   await adnifyDir.saveWorkspaceState(state)
   logger.system.info('[WorkspaceState] Saved:', state.openFiles.length, 'files')
 }
 
-/**
- * 恢复工作区状态
- */
 export async function restoreWorkspaceState(): Promise<void> {
-  const { openFile, setActiveFile, toggleFolder, setSidebarWidth, setChatWidth, setTerminalVisible, setTerminalLayout } = useStore.getState()
+  const { restoreOpenFiles, setSidebarWidth, setChatWidth, setTerminalVisible, setTerminalLayout } = useStore.getState()
 
   if (!adnifyDir.isInitialized()) return
 
@@ -53,29 +71,23 @@ export async function restoreWorkspaceState(): Promise<void> {
 
   logger.system.info('[WorkspaceState] Restoring:', state.openFiles.length, 'files')
 
-  // 恢复展开的文件夹
-  for (const folder of state.expandedFolders) {
-    toggleFolder(folder)
+  if (state.expandedFolders.length > 0) {
+    useStore.setState((current) => ({
+      expandedFolders: new Set([...current.expandedFolders, ...state.expandedFolders]),
+    }))
   }
 
-  // 恢复打开的文件
-  for (const filePath of state.openFiles) {
-    try {
-      const fileContent = await api.file.read(filePath)
-      if (fileContent !== null) {
-        openFile(filePath, fileContent)
-      }
-    } catch {
-      logger.system.warn('[WorkspaceState] Failed to restore file:', filePath)
+  if (state.openFiles.length > 0) {
+    const prioritizedFiles = state.activeFile
+      ? [state.activeFile, ...state.openFiles.filter(filePath => filePath !== state.activeFile)]
+      : state.openFiles
+
+    const restoredFiles = await readFilesWithConcurrency(prioritizedFiles)
+    if (restoredFiles.length > 0) {
+      restoreOpenFiles(restoredFiles, state.activeFile)
     }
   }
 
-  // 恢复活动文件
-  if (state.activeFile) {
-    setActiveFile(state.activeFile)
-  }
-
-  // 恢复布局
   if (state.layout) {
     setSidebarWidth(state.layout.sidebarWidth)
     setChatWidth(state.layout.chatWidth)
@@ -86,26 +98,19 @@ export async function restoreWorkspaceState(): Promise<void> {
   logger.system.info('[WorkspaceState] Restored successfully')
 }
 
-/**
- * 设置自动保存
- */
 let saveTimeout: NodeJS.Timeout | null = null
 
 export function scheduleStateSave(): void {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
   }
-  // 延迟保存，避免频繁写入
+
   saveTimeout = setTimeout(() => {
     saveWorkspaceState()
   }, getEditorConfig().performance.saveDebounceMs)
 }
 
-/**
- * 监听状态变化并自动保存
- */
 export function initWorkspaceStateSync(): () => void {
-  // 订阅 store 变化
   const unsubscribe = useStore.subscribe(
     (state, prevState) => {
       if (
@@ -122,7 +127,6 @@ export function initWorkspaceStateSync(): () => void {
     }
   )
 
-  // 窗口关闭前保存所有数据
   const handleBeforeUnload = async () => {
     await adnifyDir.flush()
   }

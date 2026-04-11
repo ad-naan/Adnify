@@ -65,6 +65,16 @@ export interface FileSlice {
     encoding?: string
     remote?: OpenFile['remote']
   }) => void
+  restoreOpenFiles: (files: Array<{
+    path: string
+    content: string
+    originalContent?: string
+    options?: {
+      largeFileInfo?: LargeFileInfo
+      encoding?: string
+      remote?: OpenFile['remote']
+    }
+  }>, activeFilePath?: string | null) => void
   closeFile: (path: string) => void
   setActiveFile: (path: string | null) => void
   updateFileContent: (path: string, content: string) => void
@@ -77,9 +87,6 @@ export interface FileSlice {
   markFileDeleted: (path: string) => void
   /** 标记文件已恢复（不再是删除状态） */
   markFileRestored: (path: string) => void
-  // 文件树刷新触发器
-  fileTreeRefreshKey: number
-  triggerFileTreeRefresh: () => void
 }
 
 export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set) => ({
@@ -90,11 +97,6 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
   openFiles: [],
   activeFilePath: null,
   selectedFolderPath: null,
-  fileTreeRefreshKey: 0,
-
-  triggerFileTreeRefresh: () => set((state) => ({
-    fileTreeRefreshKey: state.fileTreeRefreshKey + 1
-  })),
 
   setWorkspace: (workspace) => set((state) => {
     // 自动展开所有根文件夹
@@ -199,6 +201,26 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       return {
         openFiles: resultFiles,
         activeFilePath: normalizedPath,
+      }
+    }),
+
+  restoreOpenFiles: (files, activeFilePath) =>
+    set(() => {
+      const restoredFiles: OpenFile[] = files.map((file, index) => ({
+        path: normalizePath(file.path),
+        content: file.content,
+        isDirty: false,
+        originalContent: file.originalContent,
+        savedVersionId: 1,
+        largeFileInfo: file.options?.largeFileInfo,
+        encoding: file.options?.encoding,
+        remote: file.options?.remote,
+        lastAccessed: Date.now() + index,
+      }))
+
+      return {
+        openFiles: restoredFiles,
+        activeFilePath: activeFilePath ? normalizePath(activeFilePath) : restoredFiles[restoredFiles.length - 1]?.path || null,
       }
     }),
 

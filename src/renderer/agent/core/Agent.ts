@@ -165,7 +165,6 @@ export class AgentClass {
         assistantId,
         requestId,
         planTaskId: executionOptions?.planTaskId,
-        checkpointId,
       }
 
       const preparation = await agentExecutor.prepare(
@@ -276,8 +275,11 @@ export class AgentClass {
    * 批准当前待审批的工具
    */
   approve(requestId?: string): void {
+    const state = useAgentStore.getState()
+    const currentThread = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
     const effectiveRequestId = requestId
-      || useAgentStore.getState().threads[useAgentStore.getState().currentThreadId || '']?.executionMeta?.requestId
+      || currentThread?.streamState?.requestId
+      || currentThread?.executionMeta?.requestId
 
     if (effectiveRequestId) {
       approvalService.approve(effectiveRequestId)
@@ -288,8 +290,11 @@ export class AgentClass {
    * 拒绝当前待审批的工具
    */
   reject(requestId?: string): void {
+    const state = useAgentStore.getState()
+    const currentThread = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
     const effectiveRequestId = requestId
-      || useAgentStore.getState().threads[useAgentStore.getState().currentThreadId || '']?.executionMeta?.requestId
+      || currentThread?.streamState?.requestId
+      || currentThread?.executionMeta?.requestId
 
     if (effectiveRequestId) {
       approvalService.reject(effectiveRequestId)
