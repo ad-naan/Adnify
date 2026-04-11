@@ -136,9 +136,14 @@ export function useAgent() {
   // 中止
   const abort = useCallback(() => { Agent.abort() }, [])
 
+  const pendingApprovalRequestId = useMemo(() => {
+    if (streamState.phase !== 'tool_pending') return undefined
+    return streamState.requestId
+  }, [streamState.phase, streamState.requestId])
+
   // 工具审批
-  const approveCurrentTool = useCallback(() => { Agent.approve() }, [])
-  const rejectCurrentTool = useCallback(() => { Agent.reject() }, [])
+  const approveCurrentTool = useCallback(() => { Agent.approve(pendingApprovalRequestId) }, [pendingApprovalRequestId])
+  const rejectCurrentTool = useCallback(() => { Agent.reject(pendingApprovalRequestId) }, [pendingApprovalRequestId])
 
   // 获取当前等待审批的工具调用
   const pendingToolCall = useMemo((): ToolCall | undefined => {
