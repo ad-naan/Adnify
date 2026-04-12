@@ -12,7 +12,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useCallback, memo } from 
 import { X, Plus, Trash2, Terminal as TerminalIcon, Sparkles, Play, SplitSquareHorizontal, Bot, Loader2, AlertTriangle, Clock3, CheckCircle2 } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { useAgentStore } from '@/renderer/agent'
+import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { Button } from '../ui'
 import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'

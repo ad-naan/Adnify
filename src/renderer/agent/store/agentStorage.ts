@@ -1,22 +1,47 @@
-/**
- * Agent 数据持久化存储
- *
- * 使用 adnifyDir 服务将数据存储到 .adnify/sessions/ 目录
- * 每个线程对应一个独立 JSON 文件，通过 dirty flag 延迟批量写入
- */
-
 import { logger } from '@utils/Logger'
-import { StateStorage } from 'zustand/middleware'
-import { adnifyDir } from '@services/adnifyDirService'
+import { adnifyDir, type AgentSessionSnapshot } from '@services/adnifyDirService'
+import { toPersistedChatThread, type ChatThread } from '@renderer/agent/types'
 
 let lastSerializedValue: string | null = null
 let writeSuspendCount = 0
+let scheduledPersistTimer: ReturnType<typeof setTimeout> | null = null
+let pendingStateGetter: (() => Partial<PersistedAgentSessionState>) | null = null
+const AGENT_STORAGE_VERSION = 0
+const DEFAULT_PERSIST_DEBOUNCE_MS = 240
 
 export interface PersistedAgentSessionState {
   threads: Record<string, unknown>
   currentThreadId: string | null
   branches: Record<string, unknown>
   activeBranchId: Record<string, unknown>
+}
+
+interface PersistedAgentStorageEnvelope {
+  state: PersistedAgentSessionState
+  version: number
+}
+
+const EMPTY_PERSISTED_AGENT_SESSION_STATE: PersistedAgentSessionState = {
+  threads: {},
+  currentThreadId: null,
+  branches: {},
+  activeBranchId: {},
+}
+
+export function buildPersistedAgentSessionState(
+  state: Partial<PersistedAgentSessionState>
+): PersistedAgentSessionState {
+  const rawThreads = state.threads || {}
+  const threads = Object.fromEntries(
+    Object.entries(rawThreads).map(([threadId, thread]) => [threadId, toPersistedChatThread(thread as ChatThread)])
+  )
+
+  return {
+    threads,
+    currentThreadId: state.currentThreadId || null,
+    branches: state.branches || {},
+    activeBranchId: state.activeBranchId || {},
+  }
 }
 
 export function suspendAgentStorageWrites(): void {
@@ -27,14 +52,133 @@ export function resumeAgentStorageWrites(): void {
   writeSuspendCount = Math.max(0, writeSuspendCount - 1)
 }
 
+export async function runWithAgentStorageWritesSuspended<T>(
+  task: () => Promise<T> | T
+): Promise<T> {
+  suspendAgentStorageWrites()
+  try {
+    return await task()
+  } finally {
+    resumeAgentStorageWrites()
+  }
+}
+
+export function areAgentStorageWritesSuspended(): boolean {
+  return writeSuspendCount > 0
+}
+
+export function getSuspendedAgentPersistState(): PersistedAgentSessionState {
+  return EMPTY_PERSISTED_AGENT_SESSION_STATE
+}
+
+export function buildAgentSessionSnapshot(
+  state: Partial<PersistedAgentSessionState>,
+  version = AGENT_STORAGE_VERSION
+): AgentSessionSnapshot {
+  const persistedState = buildPersistedAgentSessionState(state)
+
+  return {
+    threads: persistedState.threads as AgentSessionSnapshot['threads'],
+    currentThreadId: persistedState.currentThreadId,
+    branches: persistedState.branches,
+    activeBranchId: persistedState.activeBranchId,
+    version,
+  }
+}
+
+export function serializeAgentSessionSnapshot(snapshot: AgentSessionSnapshot): string {
+  const envelope: PersistedAgentStorageEnvelope = {
+    state: buildPersistedAgentSessionState(snapshot),
+    version: snapshot.version,
+  }
+
+  return JSON.stringify(envelope)
+}
+
+export function parseAgentStorageValue(value: string): AgentSessionSnapshot {
+  const parsed = JSON.parse(value) as PersistedAgentStorageEnvelope
+
+  return buildAgentSessionSnapshot(parsed.state, parsed.version || AGENT_STORAGE_VERSION)
+}
+
+export function markAgentStorageSnapshotAsCurrent(snapshot: AgentSessionSnapshot | null): void {
+  lastSerializedValue = snapshot ? serializeAgentSessionSnapshot(snapshot) : null
+}
+
+function clearScheduledPersistTimer(): void {
+  if (scheduledPersistTimer !== null) {
+    clearTimeout(scheduledPersistTimer)
+    scheduledPersistTimer = null
+  }
+}
+
+function stagePersistedAgentSessionFromGetter(
+  getState: () => Partial<PersistedAgentSessionState>
+): void {
+  if (writeSuspendCount > 0) {
+    return
+  }
+  if (!adnifyDir.isInitialized()) {
+    return
+  }
+
+  const snapshot = buildAgentSessionSnapshot(getState())
+  const serialized = serializeAgentSessionSnapshot(snapshot)
+  if (serialized === lastSerializedValue) {
+    return
+  }
+
+  adnifyDir.stageAgentSessionSnapshot(snapshot)
+  lastSerializedValue = serialized
+}
+
+export function schedulePersistedAgentSessionState(
+  getState: () => Partial<PersistedAgentSessionState>,
+  delayMs = DEFAULT_PERSIST_DEBOUNCE_MS
+): void {
+  if (writeSuspendCount > 0) {
+    return
+  }
+
+  pendingStateGetter = getState
+  clearScheduledPersistTimer()
+  scheduledPersistTimer = setTimeout(() => {
+    scheduledPersistTimer = null
+    const stateGetter = pendingStateGetter
+    pendingStateGetter = null
+    if (!stateGetter) {
+      return
+    }
+
+    stagePersistedAgentSessionFromGetter(stateGetter)
+  }, delayMs)
+}
+
+export function flushScheduledPersistedAgentSessionState(
+  getState?: () => Partial<PersistedAgentSessionState>
+): void {
+  clearScheduledPersistTimer()
+  const stateGetter = getState || pendingStateGetter
+  pendingStateGetter = null
+  if (!stateGetter) {
+    return
+  }
+
+  stagePersistedAgentSessionFromGetter(stateGetter)
+}
+
+export function stageAgentSessionState(
+  state: Partial<PersistedAgentSessionState>
+): void {
+  stagePersistedAgentSessionFromGetter(() => state)
+}
+
 export async function persistCriticalAgentSessionState(
   state: PersistedAgentSessionState
 ): Promise<void> {
   try {
-    adnifyDir.setFullSessionDataDirty('adnify-agent-store', {
-      state,
-      version: 0,
-    })
+    flushScheduledPersistedAgentSessionState()
+    adnifyDir.stageAgentSessionSnapshot(buildAgentSessionSnapshot(state))
     await adnifyDir.flush()
     lastSerializedValue = null
   } catch (error) {
@@ -42,41 +186,9 @@ export async function persistCriticalAgentSessionState(
   }
 }
 
-/**
- * 自定义 Zustand Storage
- * 通过 adnifyDir 服务存储到 .adnify/sessions/ 目录
- *
- * getItem: 从 _meta.json + 各线程文件组装完整的 store 数据
- * setItem: 拆分到线程级文件，只标记变化的线程为 dirty
- * removeItem: 清除所有 session 数据
- */
-export const agentStorage: StateStorage = {
-  getItem: async (_name: string): Promise<string | null> => {
-    const data = await adnifyDir.getFullSessionData()
-    if (!data) return null
-    const serialized = JSON.stringify(data)
-    lastSerializedValue = serialized
-    return serialized
-  },
-
-  setItem: async (name: string, value: string): Promise<void> => {
-    try {
-      if (writeSuspendCount > 0) {
-        return
-      }
-      if (value === lastSerializedValue) {
-        return
-      }
-      const parsed = JSON.parse(value)
-      adnifyDir.setFullSessionDataDirty(name, parsed)
-      lastSerializedValue = value
-    } catch (error) {
-      logger.agent.error('[AgentStorage] Failed to parse:', error)
-    }
-  },
-
-  removeItem: async (_name: string): Promise<void> => {
-    lastSerializedValue = null
-    await adnifyDir.clearAllSessions()
-  },
+export async function clearPersistedAgentSessionState(): Promise<void> {
+  clearScheduledPersistTimer()
+  pendingStateGetter = null
+  lastSerializedValue = null
+  await adnifyDir.clearAllSessions()
 }

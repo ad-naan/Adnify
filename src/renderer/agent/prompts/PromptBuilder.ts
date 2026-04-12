@@ -32,6 +32,7 @@ import {
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
+import { useAgentStore } from '../store/AgentStore'
 
 // 项目摘要缓存
 let projectSummaryCache: { path: string; summary: string; timestamp: number } | null = null
@@ -322,7 +323,6 @@ export async function buildAgentSystemPrompt(
   // 获取当前线程的任务列表
   let todos: PromptContext['todos'] | undefined
   try {
-    const { useAgentStore } = await import('../store/AgentStore')
     todos = useAgentStore.getState().getTodos() as PromptContext['todos']
     if (todos && todos.length === 0) todos = undefined
   } catch { /* store 未初始化时忽略 */ }

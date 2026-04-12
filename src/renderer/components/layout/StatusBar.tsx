@@ -28,7 +28,13 @@ import ContextStatsContent from '../panels/ContextStatsContent'
 import PlanListContent from '../panels/PlanListContent'
 import NotificationCenterContent from '../panels/NotificationCenterContent'
 import { useInlineToast } from '../common/InlineToast'
-import { useAgentStore, selectMessages, selectCompressionStats, selectHandoffRequired, selectCompressionPhase } from '@renderer/agent'
+import {
+  useAgentStore,
+  selectMessageCount,
+  selectCompressionStats,
+  selectHandoffRequired,
+  selectCompressionPhase,
+} from '@renderer/agent/store/AgentStore'
 import { isAssistantMessage, TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 import LspStatusIndicator from './LspStatusIndicator'
@@ -70,7 +76,7 @@ export default function StatusBar() {
     return getFileStats(diagnostics, activeFilePath)
   }, [activeFilePath, version, diagnostics])
 
-  const messages = useAgentStore(selectMessages)
+  const messageCount = useAgentStore(selectMessageCount)
   const compressionStats = useAgentStore(selectCompressionStats)
   const handoffRequired = useAgentStore(selectHandoffRequired)
   const compressionPhase = useAgentStore(selectCompressionPhase)
@@ -117,6 +123,7 @@ export default function StatusBar() {
   }, [handoffRequired, createHandoffSession])
 
   const tokenStats = useMemo(() => {
+    const messages = useAgentStore.getState().getMessages()
     let totalUsage: TokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
     let lastUsage: TokenUsage | undefined
 
@@ -132,11 +139,7 @@ export default function StatusBar() {
     }
 
     return { totalUsage, lastUsage }
-  }, [messages])
-
-  const messageCount = useMemo(() => {
-    return messages.filter(m => m.role === 'user' || m.role === 'assistant').length
-  }, [messages])
+  }, [messageCount])
 
   useEffect(() => {
     indexWorkerService.initialize()

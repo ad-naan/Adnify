@@ -24,6 +24,12 @@ import { useStore } from '@/renderer/store'
 import { logger } from '@utils/Logger'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { useAgentStore } from '../store/AgentStore'
+import {
+  buildPersistedAgentSessionState,
+  persistCriticalAgentSessionState,
+  resumeAgentStorageWrites,
+  suspendAgentStorageWrites,
+} from '../store/agentStorage'
 import { fileCacheService } from '../services/fileCacheService'
 import { approvalService } from './tools'
 import { EventBus } from './EventBus'
@@ -101,7 +107,11 @@ export class AgentClass {
       ? (store.threads[threadId]?.contextItems || [])
       : (store.getCurrentThread()?.contextItems || [])
 
+    let persistSuspended = false
+
     try {
+      suspendAgentStorageWrites()
+      persistSuspended = true
       // 1. 【性能关键】批量初始化消息环境（合并用户消息、助手气泡、上下文清理）
       const { assistantId, threadId: preparedThreadId } = store.prepareExecution(userMessage, contextItems, executionOptions?.threadId)
 
@@ -200,6 +210,13 @@ export class AgentClass {
       this.showError(formatErrorMessage(appError))
       throw error
     } finally {
+      if (persistSuspended) {
+        resumeAgentStorageWrites()
+        void persistCriticalAgentSessionState(
+          buildPersistedAgentSessionState(useAgentStore.getState())
+        )
+      }
+
       // 确保清理资源（threadId 现在一定存在）
       this.cleanupTask(threadId)
     }

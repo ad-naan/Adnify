@@ -87,6 +87,14 @@ export type MessageSlice = MessageActions
 
 const generateId = () => crypto.randomUUID()
 
+const bumpThreadMessageVersion = (
+    versions: Record<string, number>,
+    threadId: string
+): Record<string, number> => ({
+    ...versions,
+    [threadId]: (versions[threadId] || 0) + 1,
+})
+
 // ===== Slice 创建器 =====
 
 export const createMessageSlice: StateCreator<
@@ -257,14 +265,11 @@ export const createMessageSlice: StateCreator<
 
             // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
             const { _textFinalized: _, ...cleanMsg } = assistantMsg
-            const newMessages = [...thread.messages]
-            newMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
+            thread.messages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
+            thread.lastModified = Date.now()
 
             return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, messages: newMessages, lastModified: Date.now() },
-                },
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
             }
         })
     },

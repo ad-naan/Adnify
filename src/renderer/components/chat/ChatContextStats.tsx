@@ -3,7 +3,7 @@
  */
 import { memo } from 'react'
 import { Database, History, FileText, Code } from 'lucide-react'
-import { ContextStats } from '@/renderer/agent'
+import type { ContextStats } from '@/renderer/agent/store/AgentStore'
 import { Language } from '@renderer/i18n'
 
 interface ChatContextStatsProps {

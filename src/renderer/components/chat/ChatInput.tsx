@@ -2,7 +2,7 @@
  * 聊天输入组件
  * 极致打磨：悬浮光晕、灵动按钮、精致上下文药丸
  */
-import { useRef, useCallback, useMemo, useState, useLayoutEffect } from 'react'
+import { memo, useRef, useCallback, useMemo, useState, useLayoutEffect } from 'react'
 import {
   FileText,
   X,
@@ -60,7 +60,7 @@ interface ChatInputProps {
   onAddFile?: (filePath: string) => void
 }
 
-export default function ChatInput({
+const ChatInput = memo(function ChatInput({
   input,
   images,
   setImages,
@@ -353,7 +353,9 @@ export default function ChatInput({
       </div>
     </div>
   )
-}
+})
+
+export default ChatInput
 
 // 辅助组件：上下文 Chip
 function ContextChip({ icon: Icon, label, color }: { icon: any, label: string, color: string }) {

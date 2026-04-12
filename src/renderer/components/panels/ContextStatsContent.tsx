@@ -1,6 +1,11 @@
 import { Layers, Coins, Zap, AlertTriangle, ChevronRight } from 'lucide-react'
 import { useMemo } from 'react'
-import { useAgentStore, selectCompressionStats, selectContextSummary, selectHandoffRequired } from '@/renderer/agent'
+import {
+  useAgentStore,
+  selectCompressionStats,
+  selectContextSummary,
+  selectHandoffRequired,
+} from '@/renderer/agent/store/AgentStore'
 import type { CompressionLevel } from '@/renderer/agent/domains/context/types'
 import type { TokenUsage } from '@renderer/agent/types'
 

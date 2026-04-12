@@ -5,6 +5,7 @@ import { adnifyDir } from './adnifyDirService'
 import { toAppError } from '@shared/utils/errorHandler'
 import { resetWorkspaceRuntimeState } from './workspaceRuntimeResetService'
 import { loadWorkspace } from './workspaceLoadService'
+import { flushAgentSessionPersistence } from '@renderer/agent/store/AgentStore'
 import type { WorkspaceConfig } from '@store'
 
 function normalizeWorkspaceRoots(roots: string[]): string[] {
@@ -141,6 +142,7 @@ class WorkspaceManager {
     if (!adnifyDir.isInitialized()) return
 
     logger.system.info('[WorkspaceManager] Saving current workspace data...')
+    flushAgentSessionPersistence()
     await adnifyDir.flush()
   }
 

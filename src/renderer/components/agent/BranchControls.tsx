@@ -6,7 +6,7 @@
 import { useState, useCallback } from 'react'
 import { GitBranch, RotateCcw, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent'
+import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent/store/AgentStore'
 import { Button } from '../ui'
 
 /**

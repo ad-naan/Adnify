@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, startTransition, useDeferredValue } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import {
   AlertTriangle,
@@ -15,8 +15,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
-import { useAgent } from '@/renderer/hooks/useAgent'
-import { useAgentStore, selectHandoffRequired } from '@/renderer/agent'
+import { useAgent, useAgentActions } from '@/renderer/hooks/useAgent'
+import { useAgentStore, selectHandoffRequired } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
@@ -91,6 +91,14 @@ export default function ChatPanel() {
   // 从 AgentStore 获取 inputPrompt
   const inputPrompt = useAgentStore(state => state.inputPrompt)
   const setInputPrompt = useAgentStore(state => state.setInputPrompt)
+  const hasActiveThread = useAgentStore(state => {
+    if (!state.currentThreadId) return false
+    return !!state.threads[state.currentThreadId]
+  })
+  const activeThreadMessagesHydrated = useAgentStore(state => {
+    if (!state.currentThreadId) return true
+    return state.threads[state.currentThreadId]?.messagesHydrated !== false
+  })
 
   const chatMode = useModeStore(s => s.currentMode)
   const setChatMode = useModeStore(s => s.setMode)
@@ -106,13 +114,16 @@ export default function ChatPanel() {
     pendingChanges,
     messageCheckpoints,
     contextItems,
-    createThread,
     sendMessage,
     abort,
-    clearMessages,
-    deleteMessagesAfter,
     approveCurrentTool,
     rejectCurrentTool,
+    currentThreadId,
+  } = useAgent()
+  const {
+    createThread,
+    clearMessages,
+    deleteMessagesAfter,
     acceptAllChanges,
     undoAllChanges,
     acceptChange,
@@ -122,8 +133,7 @@ export default function ChatPanel() {
     addContextItem,
     removeContextItem,
     regenerateFromMessage,
-    currentThreadId,
-  } = useAgent()
+  } = useAgentActions()
 
   const [input, setInput] = useState('')
   const [images, setImages] = useState<PendingImage[]>([])
@@ -151,6 +161,7 @@ export default function ChatPanel() {
     () => buildRenderableMessageItems(filteredMessages, checkpointMessageIds),
     [filteredMessages, checkpointMessageIds]
   )
+  const deferredRenderableMessages = useDeferredValue(filteredRenderableMessages)
   const [displayMessages, setDisplayMessages] = useState(filteredRenderableMessages)
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
@@ -185,8 +196,10 @@ export default function ChatPanel() {
 
   // Effect 2：同步 displayMessages，无论是线程切换后懒加载到位，还是流式追加
   useEffect(() => {
-    setDisplayMessages(filteredRenderableMessages)
-  }, [filteredRenderableMessages])
+    startTransition(() => {
+      setDisplayMessages(deferredRenderableMessages)
+    })
+  }, [deferredRenderableMessages])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -306,6 +319,7 @@ export default function ChatPanel() {
   const [showScrollButton, setShowScrollButton] = useState(false)
   // 用于防止工具卡片展开/收缩时误判滚动状态
   const isAutoScrollingRef = useRef(false)
+  const isHydratingActiveThread = hasActiveThread && !activeThreadMessagesHydrated
 
   // 滚动到底部的函数
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
@@ -1177,7 +1191,7 @@ export default function ChatPanel() {
           <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
             {/* 过渡用的骨架屏 */}
             <AnimatePresence>
-              {isSwitchingThread && (
+              {(isSwitchingThread || isHydratingActiveThread) && (
                 <motion.div
                   initial={{ opacity: 1 }}
                   exit={{ opacity: 0 }}

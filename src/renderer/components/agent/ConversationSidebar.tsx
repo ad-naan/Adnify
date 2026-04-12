@@ -12,8 +12,8 @@ import {
   Edit2,
   Plus
 } from 'lucide-react'
-import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent'
-import { useAgent, useAllThreads } from '@/renderer/hooks/useAgent'
+import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent/store/AgentStore'
+import { useAgentActions, useAllThreads } from '@/renderer/hooks/useAgent'
 import { Button } from '../ui'
 import { Tooltip } from '../ui/Tooltip'
 import { ChatThread, getMessageText } from '@/renderer/agent/types'
@@ -172,7 +172,8 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
 }
 
 function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, onClose: () => void, language: string }) {
-  const { currentThreadId, switchThread, deleteThread } = useAgent()
+  const currentThreadId = useAgentStore(state => state.currentThreadId)
+  const { switchThread, deleteThread } = useAgentActions()
   const allThreads = useAllThreads()
 
   const filteredThreads = useMemo(() => {

@@ -13,7 +13,7 @@ import pLimit from 'p-limit'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
-import { getToolApprovalType, isFileEditTool } from '@/shared/config/tools'
+import { getToolApprovalType, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
 import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
@@ -21,6 +21,7 @@ import { truncateToolResult } from '@/renderer/utils/partialJson'
 import { getAgentConfig } from '../utils/AgentConfig'
 import type { ToolCall } from '@/shared/types'
 import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
+import { useAgentStore } from '../store/AgentStore'
 
 // ===== 审批服务 =====
 
@@ -76,12 +77,10 @@ async function saveFileSnapshots(
   context: ToolExecutionContext
 ): Promise<void> {
   // Checkpoint 操作是全局的，不需要 threadStore
-  const { useAgentStore } = await import('../store/AgentStore')
   const store = useAgentStore.getState()
   const { workspacePath } = context
 
   // 找出所有需要保存快照的工具（包括删除操作）
-  const { needsFileSnapshot } = await import('@/shared/config/tools')
   const snapshotTools = toolCalls.filter(tc => needsFileSnapshot(tc.name))
   if (snapshotTools.length === 0) return
 

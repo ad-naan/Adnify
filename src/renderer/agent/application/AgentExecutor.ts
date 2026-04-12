@@ -23,6 +23,7 @@ import type { ContextAssemblyConfig } from '../domains/context/ContextAssembler'
 import { MessageAssembler } from '../domains/message/MessageAssembler'
 import type { CompressionLevel } from '../domains/context/CompressionManager'
 import { countTokens } from '@shared/utils/tokenCounter'
+import { useAgentStore } from '../store/AgentStore'
 
 // ===== Value Objects =====
 
@@ -150,7 +151,6 @@ export class AgentExecutor {
     // 5. 检查是否需要注入 handoff 上下文
     let handoffContext: string | undefined
     if (config.threadId) {
-      const { useAgentStore } = await import('../store/AgentStore')
       const thread = useAgentStore.getState().threads[config.threadId]
       if (thread?.handoffContext) {
         handoffContext = thread.handoffContext

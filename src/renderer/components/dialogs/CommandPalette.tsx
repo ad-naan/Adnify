@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
-import { useAgentStore } from '@/renderer/agent'
+import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useAgent } from '@/renderer/hooks/useAgent'
 import { t } from '@/renderer/i18n'
 import { keybindingService, formatShortcut, isMac } from '@/renderer/services/keybindingService'

@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { rulesService, memoryService, type MemoryItem } from '@/renderer/agent'
+import { rulesService } from '@/renderer/agent/services/rulesService'
+import { memoryService, type MemoryItem } from '@/renderer/agent/services/memoryService'
 import { Button, Input } from '@components/ui'
 import {
   FileText, Brain, Plus, Trash2, Edit2, Check, X,

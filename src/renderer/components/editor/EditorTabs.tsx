@@ -5,7 +5,7 @@ import { memo } from 'react'
 import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff } from 'lucide-react'
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
-import { useAgentStore } from '@renderer/agent'
+import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { t } from '@renderer/i18n'
 
 interface EditorTabsProps {
