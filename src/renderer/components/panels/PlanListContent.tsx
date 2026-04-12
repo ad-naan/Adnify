@@ -4,7 +4,7 @@
  */
 
 import { memo, useMemo } from 'react'
-import { useAgentStore } from '@renderer/agent'
+import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useStore } from '@store'
 import {
     PlayCircle,

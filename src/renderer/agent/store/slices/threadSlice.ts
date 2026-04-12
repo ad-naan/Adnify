@@ -10,10 +10,13 @@ import type { StructuredSummary } from '../../domains/context/types'
 import type { BranchSlice } from './branchSlice'
 import type { ToolStreamingPreview } from '@/shared/types'
 import { adnifyDir } from '@/renderer/services/adnifyDirService'
+import { createRuntimeThreadState } from '../../types'
+import { logger } from '@utils/Logger'
 
 export interface ThreadStoreState {
     threads: Record<string, ChatThread>
     currentThreadId: string | null
+    threadMessageVersions: Record<string, number>
 }
 
 export interface ThreadActions {
@@ -50,16 +53,11 @@ export const createEmptyThread = (): ChatThread => ({
     createdAt: Date.now(),
     lastModified: Date.now(),
     messages: [],
+    messagesHydrated: true,
     contextItems: [],
     messageCheckpoints: [],
-    streamState: { phase: 'idle' },
-    toolStreamingPreviews: {},
-    compressionStats: null,
     contextSummary: null,
-    handoffRequired: false,
-    isCompacting: false,
-    compressionPhase: 'idle',
-    executionMeta: { loopState: 'idle' },
+    ...createRuntimeThreadState(),
 })
 
 const updateThread = (
@@ -118,11 +116,17 @@ export const createThreadSlice: StateCreator<
 > = (set, get) => ({
     threads: {},
     currentThreadId: null,
+    threadMessageVersions: {},
 
     createThread: (options) => {
         const thread = createEmptyThread()
         const activate = options?.activate ?? true
         let shouldFlushImmediately = false
+        logger.agent.warn('[ThreadSlice] createThread invoked', {
+            activate,
+            currentThreadId: get().currentThreadId,
+            stack: new Error().stack,
+        })
 
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
@@ -153,6 +157,10 @@ export const createThreadSlice: StateCreator<
             return {
                 threads: newThreads,
                 currentThreadId: activate ? thread.id : state.currentThreadId,
+                threadMessageVersions: {
+                    ...state.threadMessageVersions,
+                    [thread.id]: 0,
+                },
                 branches: newBranches,
                 activeBranchId: newActiveBranch,
             }
@@ -184,6 +192,8 @@ export const createThreadSlice: StateCreator<
                         [threadId]: {
                             ...state.threads[threadId],
                             messages,
+                            messagesHydrated: true,
+                            messageCount: messages.length,
                         },
                     },
                 }))
@@ -196,6 +206,7 @@ export const createThreadSlice: StateCreator<
                         [threadId]: {
                             ...state.threads[threadId],
                             messages: [],
+                            messagesHydrated: true,
                         },
                     },
                 }))
@@ -211,6 +222,7 @@ export const createThreadSlice: StateCreator<
 
             const { [threadId]: _thread, ...remaining } = state.threads
             const remainingIds = Object.keys(remaining)
+            const { [threadId]: _messageVersion, ...remainingMessageVersions } = state.threadMessageVersions
             const { [threadId]: _branch, ...remainingBranches } = state.branches || {}
             const { [threadId]: _activeBranch, ...remainingActiveBranch } = state.activeBranchId || {}
             didDelete = true
@@ -220,6 +232,7 @@ export const createThreadSlice: StateCreator<
                 currentThreadId: state.currentThreadId === threadId
                     ? (remainingIds[0] || null)
                     : state.currentThreadId,
+                threadMessageVersions: remainingMessageVersions,
                 branches: remainingBranches,
                 activeBranchId: remainingActiveBranch,
             }
@@ -246,7 +259,7 @@ export const createThreadSlice: StateCreator<
             if (!thread) return state
 
             return {
-                threads: updateThread(state.threads, targetId, {
+                threads: updateThreadEphemeral(state.threads, targetId, {
                     streamState: { ...thread.streamState, ...streamState },
                 }),
             }
@@ -262,7 +275,7 @@ export const createThreadSlice: StateCreator<
             if (!thread) return state
 
             return {
-                threads: updateThread(state.threads, targetId, {
+                threads: updateThreadEphemeral(state.threads, targetId, {
                     streamState: { ...thread.streamState, phase },
                 }),
             }
@@ -349,7 +362,7 @@ export const createThreadSlice: StateCreator<
         if (!targetId) return
 
         set(state => ({
-            threads: updateThread(state.threads, targetId, { compressionStats: stats }),
+            threads: updateThreadEphemeral(state.threads, targetId, { compressionStats: stats }),
         }))
     },
 
@@ -367,7 +380,7 @@ export const createThreadSlice: StateCreator<
         if (!targetId) return
 
         set(state => ({
-            threads: updateThread(state.threads, targetId, { compressionPhase: phase }),
+            threads: updateThreadEphemeral(state.threads, targetId, { compressionPhase: phase }),
         }))
     },
 
@@ -376,7 +389,7 @@ export const createThreadSlice: StateCreator<
         if (!targetId) return
 
         set(state => ({
-            threads: updateThread(state.threads, targetId, { handoffRequired: required }),
+            threads: updateThreadEphemeral(state.threads, targetId, { handoffRequired: required }),
         }))
     },
 
@@ -385,7 +398,7 @@ export const createThreadSlice: StateCreator<
         if (!targetId) return
 
         set(state => ({
-            threads: updateThread(state.threads, targetId, { isCompacting: compacting }),
+            threads: updateThreadEphemeral(state.threads, targetId, { isCompacting: compacting }),
         }))
     },
 
@@ -411,7 +424,7 @@ export const createThreadSlice: StateCreator<
         if (!targetId) return
 
         set(state => ({
-            threads: updateThread(state.threads, targetId, { executionMeta: meta || { loopState: 'idle' } }),
+            threads: updateThreadEphemeral(state.threads, targetId, { executionMeta: meta || { loopState: 'idle' } }),
         }))
     },
 
@@ -424,7 +437,7 @@ export const createThreadSlice: StateCreator<
             if (!thread) return state
 
             return {
-                threads: updateThread(state.threads, targetId, {
+                threads: updateThreadEphemeral(state.threads, targetId, {
                     executionMeta: {
                         ...(thread.executionMeta || { loopState: 'idle' }),
                         ...meta,
@@ -439,7 +452,7 @@ export const createThreadSlice: StateCreator<
         if (!targetId) return
 
         set(state => ({
-            threads: updateThread(state.threads, targetId, {
+            threads: updateThreadEphemeral(state.threads, targetId, {
                 executionMeta: { loopState: 'idle' },
                 streamState: {
                     ...state.threads[targetId]?.streamState,

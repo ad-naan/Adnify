@@ -13,7 +13,7 @@ import { useCallback, useMemo, useEffect, useState, useRef } from 'react'
 import { useStore, useModeStore } from '@/renderer/store'
 import {
   useAgentStore,
-  selectMessages,
+  selectMessageListState,
   selectStreamState,
   selectContextItems,
   selectIsStreaming,
@@ -21,7 +21,8 @@ import {
   selectPendingChanges,
   selectMessageCheckpoints,
 } from '@/renderer/agent/store/AgentStore'
-import { Agent, getAgentConfig } from '@/renderer/agent'
+import { Agent } from '@/renderer/agent/core'
+import { getAgentConfig } from '@/renderer/agent/utils/AgentConfig'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
 
 // ========== 独立 selector hooks（按需使用，避免全部订阅） ==========
@@ -68,7 +69,7 @@ export function useAgent() {
   }, [])
 
   // 从 Agent store 获取状态（使用选择器避免不必要的重渲染）
-  const messages = useAgentStore(selectMessages)
+  const { messages } = useAgentStore(selectMessageListState)
   const streamState = useAgentStore(selectStreamState)
   const contextItems = useAgentStore(selectContextItems)
   const isStreaming = useAgentStore(selectIsStreaming)
@@ -200,5 +201,63 @@ export function useAgent() {
     createBranch: getActions().createBranch,
     switchBranch: getActions().switchBranch,
     regenerateFromMessage: getActions().regenerateFromMessage,
+  }
+}
+
+export function useAgentActions() {
+  return useMemo(() => ({
+    createThread: getActions().createThread,
+    switchThread: getActions().switchThread,
+    deleteThread: getActions().deleteThread,
+    deleteMessagesAfter: getActions().deleteMessagesAfter,
+    acceptAllChanges: getActions().acceptAllChanges,
+    undoAllChanges: getActions().undoAllChanges,
+    acceptChange: getActions().acceptChange,
+    undoChange: getActions().undoChange,
+    restoreToCheckpoint: getActions().restoreToCheckpoint,
+    getCheckpointForMessage: getActions().getCheckpointForMessage,
+    addContextItem: getActions().addContextItem,
+    removeContextItem: getActions().removeContextItem,
+    clearContextItems: getActions().clearContextItems,
+    createBranch: getActions().createBranch,
+    switchBranch: getActions().switchBranch,
+    regenerateFromMessage: getActions().regenerateFromMessage,
+    clearMessages: () => {
+      getActions().clearMessages()
+      useStore.getState().clearToolCallLogs()
+      getActions().setHandoffRequired(false)
+      getActions().setHandoffDocument(null)
+      getActions().setCompressionStats(null)
+    },
+  }), [])
+}
+
+export function useAgentViewState() {
+  const { messages } = useAgentStore(selectMessageListState)
+  const streamState = useAgentStore(selectStreamState)
+  const contextItems = useAgentStore(selectContextItems)
+  const isStreaming = useAgentStore(selectIsStreaming)
+  const isAwaitingApproval = useAgentStore(selectIsAwaitingApproval)
+  const pendingChanges = useAgentStore(selectPendingChanges)
+  const messageCheckpoints = useAgentStore(selectMessageCheckpoints)
+  const currentThreadId = useAgentStore(state => state.currentThreadId)
+
+  const pendingToolCall = useMemo((): ToolCall | undefined => {
+    if (streamState.phase === 'tool_pending' && streamState.currentToolCall) {
+      return streamState.currentToolCall
+    }
+    return undefined
+  }, [streamState])
+
+  return {
+    messages,
+    streamState,
+    contextItems,
+    isStreaming,
+    isAwaitingApproval,
+    pendingToolCall,
+    pendingChanges,
+    messageCheckpoints,
+    currentThreadId,
   }
 }

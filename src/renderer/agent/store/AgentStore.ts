@@ -9,9 +9,12 @@
  */
 
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import { logger } from '@utils/Logger'
-import { agentStorage } from './agentStorage'
+import {
+    buildPersistedAgentSessionState,
+    flushScheduledPersistedAgentSessionState,
+    schedulePersistedAgentSessionState,
+} from './agentStorage'
 import { streamingBuffer, flushStreamingBuffer } from './StreamingBuffer'
 import {
     createThreadSlice,
@@ -28,6 +31,7 @@ import {
     createPlanSlice,
     type PlanSlice,
 } from './slices/planSlice'
+import { initializeTools } from '../tools'
 import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
@@ -156,7 +160,6 @@ export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSl
 // ===== Store 实现 =====
 
 export const useAgentStore = create<AgentStore>()(
-    persist(
         (...args) => {
             // 创建各个 slice
             const threadSlice = createThreadSlice(...args)
@@ -356,20 +359,8 @@ export const useAgentStore = create<AgentStore>()(
                 _flushTextBuffer,
                 forThread,
             }
-        },
-        {
-            name: 'adnify-agent-store',
-            storage: createJSONStorage(() => agentStorage),
-            skipHydration: true, // 核心：禁止自动水合，由 initService 在恢复工作区之后手动调用 rehydrate()
-            partialize: (state) => ({
-                threads: state.threads,
-                currentThreadId: state.currentThreadId,
-                branches: state.branches,
-                activeBranchId: state.activeBranchId,
-            }),
         }
     )
-)
 
 // ===== Selectors =====
 
@@ -378,6 +369,20 @@ const EMPTY_CONTEXT_ITEMS: ContextItem[] = []
 const EMPTY_MESSAGE_CHECKPOINTS: MessageCheckpoint[] = []
 const EMPTY_TODOS: TodoItem[] = []
 const DEFAULT_STREAM_STATE: StreamState = { phase: 'idle' }
+const DEFAULT_MESSAGE_LIST_STATE = { messages: EMPTY_MESSAGES, version: 0 }
+let lastMessageListThreadId: string | null = null
+let lastMessageListMessages: ChatMessage[] = EMPTY_MESSAGES
+let lastMessageListVersion = 0
+let lastMessageListState = DEFAULT_MESSAGE_LIST_STATE
+let hasInitializedAgentSessionSync = false
+
+function scheduleAgentSessionPersistence(): void {
+    schedulePersistedAgentSessionState(() => buildPersistedAgentSessionState(useAgentStore.getState()))
+}
+
+export function flushAgentSessionPersistence(): void {
+    flushScheduledPersistedAgentSessionState(() => buildPersistedAgentSessionState(useAgentStore.getState()))
+}
 
 export const selectCurrentThread = (state: AgentStore) => {
     if (!state.currentThreadId) return null
@@ -388,6 +393,39 @@ export const selectMessages = (state: AgentStore) => {
     if (!state.currentThreadId) return EMPTY_MESSAGES
     const thread = state.threads[state.currentThreadId]
     return thread?.messages || EMPTY_MESSAGES
+}
+
+export const selectMessageListState = (state: AgentStore) => {
+    if (!state.currentThreadId) return DEFAULT_MESSAGE_LIST_STATE
+
+    const threadId = state.currentThreadId
+    const thread = state.threads[threadId]
+    if (!thread) return DEFAULT_MESSAGE_LIST_STATE
+
+    const messages = thread.messages || EMPTY_MESSAGES
+    const version = state.threadMessageVersions[threadId] || 0
+
+    if (
+        lastMessageListThreadId === threadId &&
+        lastMessageListMessages === messages &&
+        lastMessageListVersion === version
+    ) {
+        return lastMessageListState
+    }
+
+    lastMessageListThreadId = threadId
+    lastMessageListMessages = messages
+    lastMessageListVersion = version
+    lastMessageListState = { messages, version }
+
+    return lastMessageListState
+}
+
+export const selectMessageCount = (state: AgentStore) => {
+    if (!state.currentThreadId) return 0
+    const thread = state.threads[state.currentThreadId]
+    if (!thread) return 0
+    return thread.messages.filter(m => m.role === 'user' || m.role === 'assistant').length
 }
 
 export const selectToolStreamingPreview = (toolCallId: string) => (state: AgentStore) => {
@@ -515,12 +553,41 @@ export const selectTodos = (state: AgentStore) => {
 // ===== StreamingBuffer 初始化 =====
 // ===== Store 初始化 =====
 
+function initializeAgentSessionSync(): void {
+    if (hasInitializedAgentSessionSync) {
+        return
+    }
+
+    hasInitializedAgentSessionSync = true
+    const rawSetState = useAgentStore.setState
+    useAgentStore.setState = ((partial: any, replace?: boolean) => {
+        const prevState = useAgentStore.getState()
+        if (replace === undefined) {
+            rawSetState(partial)
+        } else if (replace) {
+            rawSetState(partial, true)
+        } else {
+            rawSetState(partial, false)
+        }
+        const nextState = useAgentStore.getState()
+
+        if (
+            prevState.currentThreadId !== nextState.currentThreadId ||
+            prevState.threads !== nextState.threads ||
+            prevState.branches !== nextState.branches ||
+            prevState.activeBranchId !== nextState.activeBranchId
+        ) {
+            scheduleAgentSessionPersistence()
+        }
+    }) as typeof useAgentStore.setState
+}
+
 export async function initializeAgentStore(): Promise<void> {
     try {
         // 注意：不在这里调用 rehydrate()，因为此时 adnifyDir 可能还没有初始化
         // rehydrate() 会在 initService.ts 的 scheduleBackgroundInit() 中延迟调用
 
-        const { initializeTools } = await import('../tools')
+        initializeAgentSessionSync()
         await initializeTools()
         logger.agent.info('[AgentStore] Tools initialized')
     } catch (error) {

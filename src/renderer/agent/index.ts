@@ -10,6 +10,8 @@ export {
     useAgentStore,
     selectCurrentThread,
     selectMessages,
+    selectMessageListState,
+    selectMessageCount,
     selectStreamState,
     selectContextItems,
     selectIsStreaming,

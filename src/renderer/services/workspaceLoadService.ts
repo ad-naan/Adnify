@@ -2,13 +2,20 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
-import { suspendAgentStorageWrites, resumeAgentStorageWrites } from '@renderer/agent/store/agentStorage'
+import {
+  buildAgentSessionSnapshot,
+  markAgentStorageSnapshotAsCurrent,
+  suspendAgentStorageWrites,
+  resumeAgentStorageWrites,
+} from '@renderer/agent/store/agentStorage'
 import { adnifyDir } from './adnifyDirService'
 import { mcpService } from './mcpService'
 import { gitService } from './gitService'
 import { toAppError } from '@shared/utils/errorHandler'
 import type { FileItem } from '@shared/types'
 import type { WorkspaceConfig } from '@store'
+import type { ChatThread } from '@renderer/agent/types'
+import type { Branch } from '@renderer/agent/store/slices'
 
 export interface WorkspaceLoadOptions {
   rehydrateAgentStore?: boolean
@@ -21,21 +28,81 @@ export interface WorkspaceShellState {
   files: FileItem[]
 }
 
-export async function rehydrateWorkspaceAgentStore(): Promise<void> {
-  const store = useAgentStore as typeof useAgentStore & {
-    persist?: { rehydrate: () => Promise<void> }
+function buildThreadMessageVersions(threads: Record<string, ChatThread>): Record<string, number> {
+  const versions: Record<string, number> = {}
+  for (const [threadId, thread] of Object.entries(threads)) {
+    versions[threadId] = thread.messages?.length || 0
   }
+  return versions
+}
 
-  if (!store.persist) return
+export async function rehydrateWorkspaceAgentStore(): Promise<void> {
+  const snapshot = await adnifyDir.getAgentSessionSnapshotWithoutHydration()
+  const threads = snapshot?.threads || {}
+  logger.agent.info('[WorkspaceLoad] Session snapshot loaded', {
+    threadCount: Object.keys(threads).length,
+    currentThreadId: snapshot?.currentThreadId || null,
+    threadIds: Object.keys(threads),
+  })
 
   suspendAgentStorageWrites()
   try {
-    await store.persist.rehydrate()
+    useAgentStore.setState({
+      threads,
+      currentThreadId: snapshot?.currentThreadId || null,
+      threadMessageVersions: buildThreadMessageVersions(threads),
+      branches: (snapshot?.branches || {}) as Record<string, Branch[]>,
+      activeBranchId: (snapshot?.activeBranchId || {}) as Record<string, string | null>,
+    })
+    markAgentStorageSnapshotAsCurrent(snapshot)
   } finally {
     resumeAgentStorageWrites()
   }
 
-  logger.agent.info('[WorkspaceLoad] Agent store rehydrated')
+  logger.agent.info(`[WorkspaceLoad] Agent store restored from workspace snapshot (${Object.keys(threads).length} threads)`)
+}
+
+export async function hydrateThreadMessages(threadId: string): Promise<void> {
+  const state = useAgentStore.getState()
+  const thread = state.threads[threadId]
+  if (!thread || thread.messagesHydrated) {
+    return
+  }
+
+  const messages = await adnifyDir.loadThreadMessages(threadId)
+  suspendAgentStorageWrites()
+  try {
+    useAgentStore.setState(currentState => {
+      const currentThread = currentState.threads[threadId]
+      if (!currentThread || currentThread.messagesHydrated) {
+        return currentState
+      }
+
+      return {
+        threads: {
+          ...currentState.threads,
+          [threadId]: {
+            ...currentThread,
+            messages,
+            messagesHydrated: true,
+            messageCount: messages.length,
+          },
+        },
+        threadMessageVersions: buildThreadMessageVersions({
+          ...currentState.threads,
+          [threadId]: {
+            ...currentThread,
+            messages,
+            messagesHydrated: true,
+            messageCount: messages.length,
+          },
+        }),
+      }
+    })
+    markAgentStorageSnapshotAsCurrent(buildAgentSessionSnapshot(useAgentStore.getState()))
+  } finally {
+    resumeAgentStorageWrites()
+  }
 }
 
 export async function prepareWorkspaceShell(workspace: WorkspaceConfig): Promise<WorkspaceShellState> {
@@ -64,12 +131,7 @@ export async function prepareWorkspaceShell(workspace: WorkspaceConfig): Promise
   }
 }
 
-export async function commitWorkspaceShell(shellState: WorkspaceShellState): Promise<void> {
-  const { setWorkspace, setFiles } = useStore.getState()
-
-  setWorkspace(shellState.workspace)
-  setFiles(shellState.files)
-
+export async function bindWorkspaceRoot(shellState: WorkspaceShellState): Promise<void> {
   if (!shellState.primaryRoot) {
     gitService.setWorkspace(null)
     return
@@ -77,6 +139,12 @@ export async function commitWorkspaceShell(shellState: WorkspaceShellState): Pro
 
   await adnifyDir.setPrimaryRoot(shellState.primaryRoot)
   gitService.setWorkspace(shellState.primaryRoot)
+}
+
+export function commitWorkspaceShell(shellState: WorkspaceShellState): void {
+  const { setWorkspace, setFiles } = useStore.getState()
+  setWorkspace(shellState.workspace)
+  setFiles(shellState.files)
 }
 
 export async function initializeWorkspaceServices(
@@ -102,6 +170,7 @@ export async function loadWorkspace(
   options: WorkspaceLoadOptions = {}
 ): Promise<void> {
   const shellState = await prepareWorkspaceShell(workspace)
-  await commitWorkspaceShell(shellState)
+  await bindWorkspaceRoot(shellState)
   await initializeWorkspaceServices(workspace, options)
+  commitWorkspaceShell(shellState)
 }

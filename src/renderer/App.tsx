@@ -17,6 +17,7 @@ import { emotionDetectionEngine } from './agent/emotion/emotionDetectionEngine'
 import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import { adnifyDir } from './services/adnifyDirService'
+import { flushAgentSessionPersistence } from './agent/store/AgentStore'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -60,6 +61,10 @@ function AppContent() {
 
     // 窗口关闭时清理终端资源（关闭所有 PTY 进程）
     const handleUnload = () => {
+      try {
+        flushAgentSessionPersistence()
+      } catch { /* ignore */ }
+
       try {
         const { terminalManager } = require('@/renderer/services/TerminalManager')
         terminalManager.cleanup()

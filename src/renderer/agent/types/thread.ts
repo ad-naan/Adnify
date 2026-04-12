@@ -52,6 +52,8 @@ export interface ChatThread {
    * 当前线程实时值以 messages.length 为准；非当前线程用此字段
    */
   messageCount?: number
+  /** Runtime-only flag: whether the full message body has been loaded into memory. */
+  messagesHydrated?: boolean
 
   streamState: StreamState
   toolStreamingPreviews?: Record<string, ToolStreamingPreview>
@@ -79,4 +81,70 @@ export interface ChatThread {
   planId?: string
   /** Associated task ID (if origin is plan-task) */
   taskId?: string
+}
+
+export interface PersistedChatThread {
+  id: string
+  createdAt: number
+  lastModified: number
+  messages: ChatMessage[]
+  contextItems: ContextItem[]
+  messageCheckpoints?: MessageCheckpoint[]
+  messageCount?: number
+  contextSummary: StructuredSummary | null
+  todos?: TodoItem[]
+  handoffContext?: string
+  pendingObjective?: string
+  pendingSteps?: string[]
+  mode?: import('@/shared/types/workMode').WorkMode
+  origin?: 'user' | 'plan-task'
+  planId?: string
+  taskId?: string
+}
+
+export function createRuntimeThreadState(): Pick<
+  ChatThread,
+  'streamState' | 'toolStreamingPreviews' | 'compressionStats' | 'handoffRequired' | 'isCompacting' | 'compressionPhase' | 'executionMeta'
+> {
+  return {
+    streamState: { phase: 'idle' },
+    toolStreamingPreviews: {},
+    compressionStats: null,
+    handoffRequired: false,
+    isCompacting: false,
+    compressionPhase: 'idle',
+    executionMeta: { loopState: 'idle' },
+  }
+}
+
+export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
+  return {
+    id: thread.id,
+    createdAt: thread.createdAt,
+    lastModified: thread.lastModified,
+    messages: thread.messages,
+    contextItems: thread.contextItems,
+    messageCheckpoints: thread.messageCheckpoints ?? [],
+    messageCount: thread.messageCount,
+    contextSummary: thread.contextSummary,
+    todos: thread.todos,
+    handoffContext: thread.handoffContext,
+    pendingObjective: thread.pendingObjective,
+    pendingSteps: thread.pendingSteps,
+    mode: thread.mode,
+    origin: thread.origin,
+    planId: thread.planId,
+    taskId: thread.taskId,
+  }
+}
+
+export function fromPersistedChatThread(thread: PersistedChatThread): ChatThread {
+  return {
+    ...thread,
+    messages: thread.messages || [],
+    messagesHydrated: (thread.messages?.length || 0) > 0,
+    contextItems: thread.contextItems || [],
+    messageCheckpoints: thread.messageCheckpoints || [],
+    ...createRuntimeThreadState(),
+  }
 }

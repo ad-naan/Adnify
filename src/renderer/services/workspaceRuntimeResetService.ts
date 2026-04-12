@@ -6,6 +6,11 @@ import { lintService } from '@renderer/agent/services/lintService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { clearHealthCache } from './healthCheckService'
 import { adnifyDir } from './adnifyDirService'
+import {
+  suspendAgentStorageWrites,
+  resumeAgentStorageWrites,
+  markAgentStorageSnapshotAsCurrent,
+} from '@renderer/agent/store/agentStorage'
 
 export function resetWorkspaceRuntimeState(): void {
   useStore.setState({
@@ -15,17 +20,24 @@ export function resetWorkspaceRuntimeState(): void {
     selectedFolderPath: null,
   })
 
-  useAgentStore.setState({
-    threads: {},
-    currentThreadId: null,
-    pendingChanges: [],
-    branches: {},
-    activeBranchId: {},
-    contextStats: null,
-    inputPrompt: '',
-    currentSessionId: null,
-    handoffDocument: null,
-  })
+  suspendAgentStorageWrites()
+  try {
+    useAgentStore.setState({
+      threads: {},
+      currentThreadId: null,
+      threadMessageVersions: {},
+      pendingChanges: [],
+      branches: {},
+      activeBranchId: {},
+      contextStats: null,
+      inputPrompt: '',
+      currentSessionId: null,
+      handoffDocument: null,
+    })
+    markAgentStorageSnapshotAsCurrent(null)
+  } finally {
+    resumeAgentStorageWrites()
+  }
 
   useStore.getState().clearToolCallLogs()
 

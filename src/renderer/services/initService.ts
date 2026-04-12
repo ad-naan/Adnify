@@ -18,7 +18,9 @@ import { restoreWorkspaceAgentData } from './workspaceAgentRestoreService'
 import { mcpService } from './mcpService'
 import { snippetService } from './snippetService'
 import { workerService } from './workerService'
+import { runWithAgentStorageWritesSuspended } from '@renderer/agent/store/agentStorage'
 import {
+  bindWorkspaceRoot,
   commitWorkspaceShell,
   prepareWorkspaceShell,
 } from './workspaceLoadService'
@@ -105,7 +107,16 @@ async function restoreWorkspace(): Promise<boolean> {
 
   await Promise.all(workspaceConfig.roots.map(root => adnifyDir.initialize(root)))
   const shellState = await prepareWorkspaceShell(workspaceConfig)
-  await commitWorkspaceShell(shellState)
+  await runWithAgentStorageWritesSuspended(async () => {
+    await bindWorkspaceRoot(shellState)
+
+    await Promise.all([
+      restoreWorkspaceState(),
+      restoreWorkspaceAgentData(),
+    ])
+  })
+
+  commitWorkspaceShell(shellState)
 
   schedulePostPaintTask(() => {
     try {
@@ -114,11 +125,6 @@ async function restoreWorkspace(): Promise<boolean> {
       logger.system.warn('[Init] Diagnostics listener init failed:', e)
     }
   }, 16)
-
-  await Promise.all([
-    restoreWorkspaceState(),
-    restoreWorkspaceAgentData(),
-  ])
 
   scheduleIdleTask(() => mcpService.initialize(workspaceConfig.roots), 1000)
 

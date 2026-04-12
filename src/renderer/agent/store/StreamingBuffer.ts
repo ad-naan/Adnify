@@ -47,7 +47,7 @@ class StreamingBuffer {
         this.timerId = setTimeout(() => {
             this.timerId = null
             this.flush()
-        }, 100)
+        }, 120)
     }
 
     private flush(): void {

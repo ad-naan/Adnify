@@ -16,6 +16,12 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
+import {
+  fromPersistedChatThread,
+  toPersistedChatThread,
+  type ChatThread,
+  type PersistedChatThread,
+} from '@/renderer/agent/types'
 
 export const ADNIFY_DIR_NAME = '.adnify'
 
@@ -38,6 +44,27 @@ interface SessionIndexMeta {
 interface SessionExtraState {
   branches: Record<string, unknown>
   activeBranchId: Record<string, string | null>
+}
+
+interface LegacyAgentStoreEnvelope {
+  state?: {
+    threads?: Record<string, unknown>
+    currentThreadId?: string | null
+    branches?: Record<string, unknown>
+    activeBranchId?: Record<string, unknown>
+  }
+  version?: number
+}
+
+interface PersistedThreadSummary {
+  id: string
+  lastModified: number
+  messageCount: number
+}
+
+interface SessionCatalog {
+  meta: SessionMeta
+  summaries: PersistedThreadSummary[]
 }
 
 export interface SessionMeta extends SessionIndexMeta {
@@ -72,6 +99,14 @@ export interface ProjectSettingsData {
     autoApproveReadOnly: boolean
     maxToolCallsPerTurn: number
   }
+}
+
+export interface AgentSessionSnapshot {
+  threads: Record<string, ChatThread>
+  currentThreadId: string | null
+  branches: Record<string, unknown>
+  activeBranchId: Record<string, unknown>
+  version: number
 }
 
 const DEFAULT_WORKSPACE_STATE: WorkspaceStateData = {
@@ -164,6 +199,64 @@ function toSessionIndexMeta(meta: SessionMeta): SessionIndexMeta {
   }
 }
 
+function normalizePersistedChatThread(thread: PersistedChatThread): PersistedChatThread {
+  const messages = Array.isArray(thread.messages) ? thread.messages : []
+  const preservedMessageCount =
+    typeof thread.messageCount === 'number'
+      ? thread.messageCount
+      : messages.length
+
+  return {
+    ...thread,
+    messages,
+    contextItems: Array.isArray(thread.contextItems) ? thread.contextItems : [],
+    messageCheckpoints: Array.isArray(thread.messageCheckpoints) ? thread.messageCheckpoints : [],
+    messageCount: preservedMessageCount,
+    contextSummary: thread.contextSummary ?? null,
+  }
+}
+
+function stripThreadMessagesForMetadata(thread: PersistedChatThread): PersistedChatThread {
+  return normalizePersistedChatThread({
+    ...thread,
+    messageCount: typeof thread.messageCount === 'number'
+      ? thread.messageCount
+      : (Array.isArray(thread.messages) ? thread.messages.length : 0),
+    messages: [],
+  })
+}
+
+function normalizeLegacyThreadRecord(threadId: string, value: unknown): ChatThread | null {
+  if (!isPlainRecord(value)) {
+    return null
+  }
+
+  const messages = Array.isArray(value.messages) ? value.messages : []
+  const contextItems = Array.isArray(value.contextItems) ? value.contextItems : []
+  const messageCheckpoints = Array.isArray(value.messageCheckpoints) ? value.messageCheckpoints : []
+  const createdAt = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
+  const lastModified = typeof value.lastModified === 'number' ? value.lastModified : createdAt
+
+  return fromPersistedChatThread({
+    id: typeof value.id === 'string' ? value.id : threadId,
+    createdAt,
+    lastModified,
+    messages,
+    contextItems,
+    messageCheckpoints,
+    messageCount: typeof value.messageCount === 'number' ? value.messageCount : messages.length,
+    contextSummary: null,
+    todos: Array.isArray(value.todos) ? value.todos : undefined,
+    handoffContext: typeof value.handoffContext === 'string' ? value.handoffContext : undefined,
+    pendingObjective: typeof value.pendingObjective === 'string' ? value.pendingObjective : undefined,
+    pendingSteps: Array.isArray(value.pendingSteps) ? value.pendingSteps.filter((step): step is string => typeof step === 'string') : undefined,
+    mode: value.mode as PersistedChatThread['mode'],
+    origin: value.origin === 'plan-task' ? 'plan-task' : value.origin === 'user' ? 'user' : undefined,
+    planId: typeof value.planId === 'string' ? value.planId : undefined,
+    taskId: typeof value.taskId === 'string' ? value.taskId : undefined,
+  })
+}
+
 class AdnifyDirService {
   private primaryRoot: string | null = null
   private initializedRoots: Set<string> = new Set()
@@ -171,7 +264,7 @@ class AdnifyDirService {
 
   private cache: {
     sessionMeta: SessionMeta | null
-    threads: Map<string, unknown>
+    threads: Map<string, PersistedChatThread>
     workspaceState: WorkspaceStateData | null
     settings: ProjectSettingsData | null
   } = {
@@ -242,9 +335,11 @@ class AdnifyDirService {
 
     this.primaryRoot = rootPath
     await this.initialize(rootPath)
-    await this.migrateOldSessions()
-    logger.system.info('[AdnifyDir] About to call migrateToJsonl()')
-    await this.migrateToJsonl()
+    this.cache = { sessionMeta: null, threads: new Map(), workspaceState: null, settings: null }
+    this.dirty = { sessionMeta: false, dirtyThreads: new Set(), workspaceState: false, settings: false }
+    this.threadHashes.clear()
+    this.metaHash = null
+    await this.migrateLegacySessionsIfNeeded()
     await this.loadAllData()
     this.initialized = true
     logger.system.info('[AdnifyDir] Primary root set:', rootPath)
@@ -353,29 +448,277 @@ class AdnifyDirService {
     return `${this.getDirPath(rootPath)}/${file}`
   }
 
-  async getSessionMeta(): Promise<SessionMeta> {
-    if (this.cache.sessionMeta) return this.cache.sessionMeta
-    if (!this.isInitialized()) return { ...DEFAULT_SESSION_META }
+  private getSessionsDirPath(): string {
+    return `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}`
+  }
 
-    const [indexMeta, extra] = await Promise.all([
+  private getLegacySessionsFilePath(): string {
+    return this.getFilePath('sessions.json')
+  }
+
+  private getSessionFilePath(fileName: string): string {
+    return `${this.getSessionsDirPath()}/${fileName}`
+  }
+
+  private getThreadMetaPath(threadId: string): string {
+    return this.getSessionFilePath(`${threadId}.json`)
+  }
+
+  private getThreadMessagesPath(threadId: string): string {
+    return this.getSessionFilePath(`${threadId}.jsonl`)
+  }
+
+  private async listPersistedThreadSummaries(): Promise<PersistedThreadSummary[]> {
+    if (!this.isInitialized()) return []
+
+    try {
+      const entries = await api.file.readDir(this.getSessionsDirPath())
+      const threadFiles = entries.filter(entry =>
+        !entry.isDirectory &&
+        entry.name.endsWith('.json') &&
+        !entry.name.startsWith('_')
+      )
+
+      const summaries = await Promise.all(
+        threadFiles.map(async entry => {
+          const threadId = entry.name.slice(0, -'.json'.length)
+          const data = await this.readSessionFile<PersistedChatThread>(entry.name)
+          if (!data) return null
+
+          return {
+            id: threadId,
+            lastModified: typeof data.lastModified === 'number' ? data.lastModified : 0,
+            messageCount: typeof data.messageCount === 'number' ? data.messageCount : 0,
+          } satisfies PersistedThreadSummary
+        })
+      )
+
+      return summaries.filter((item): item is PersistedThreadSummary => item !== null)
+    } catch (error) {
+      logger.system.error('[AdnifyDir] Failed to list persisted thread summaries:', error)
+      return []
+    }
+  }
+
+  private selectPreferredCurrentThreadId(
+    currentThreadId: string | null,
+    summaries: PersistedThreadSummary[],
+    preferNonEmptyThread: boolean
+  ): string | null {
+    if (summaries.length === 0) return null
+
+    const summaryById = new Map(summaries.map(summary => [summary.id, summary]))
+    const sorted = [...summaries].sort((left, right) => {
+      const leftHasMessages = left.messageCount > 0 ? 1 : 0
+      const rightHasMessages = right.messageCount > 0 ? 1 : 0
+      if (rightHasMessages !== leftHasMessages) {
+        return rightHasMessages - leftHasMessages
+      }
+      if (right.messageCount !== left.messageCount) {
+        return right.messageCount - left.messageCount
+      }
+      return right.lastModified - left.lastModified
+    })
+
+    if (currentThreadId) {
+      const currentSummary = summaryById.get(currentThreadId)
+      if (currentSummary) {
+        if (!preferNonEmptyThread || currentSummary.messageCount > 0 || sorted[0]?.messageCount === 0) {
+          return currentThreadId
+        }
+      }
+    }
+
+    return sorted[0]?.id || null
+  }
+
+  private buildEffectiveSessionMeta(
+    meta: SessionMeta,
+    summaries: PersistedThreadSummary[]
+  ): SessionMeta {
+    if (summaries.length === 0) {
+      return meta.threadIds.length === 0 && !meta.currentThreadId
+        ? meta
+        : { ...DEFAULT_SESSION_META, extra: meta.extra }
+    }
+
+    const hasNonEmptyThread = summaries.some(summary => summary.messageCount > 0)
+    const effectiveSummaries = hasNonEmptyThread
+      ? summaries.filter(summary => summary.messageCount > 0)
+      : summaries
+    const actualThreadIds = effectiveSummaries.map(summary => summary.id).sort()
+    const preferredCurrentThreadId = this.selectPreferredCurrentThreadId(
+      meta.currentThreadId,
+      effectiveSummaries,
+      hasNonEmptyThread
+    )
+
+    return {
+      currentThreadId: preferredCurrentThreadId,
+      threadIds: actualThreadIds,
+      extra: meta.extra,
+      version: meta.version,
+    }
+  }
+
+  private async buildSessionCatalog(): Promise<SessionCatalog> {
+    const [indexMeta, extra, summaries] = await Promise.all([
       this.readSessionFile<SessionIndexMeta>('_meta.json'),
       this.readSessionFile<Record<string, unknown>>('_extra.json'),
+      this.listPersistedThreadSummaries(),
     ])
 
-    this.cache.sessionMeta = {
+    const hydratedMeta: SessionMeta = {
       currentThreadId: indexMeta?.currentThreadId ?? null,
       threadIds: indexMeta?.threadIds ?? [],
       version: indexMeta?.version ?? 0,
       extra: normalizeSessionExtraState(extra),
     }
-    this.metaHash = stableStringify(this.cache.sessionMeta)
-    return this.cache.sessionMeta
+
+    return {
+      meta: this.buildEffectiveSessionMeta(hydratedMeta, summaries),
+      summaries,
+    }
   }
 
-  async getThreadData(threadId: string): Promise<unknown | null> {
+  private async reconcileSessionMeta(meta: SessionMeta): Promise<SessionMeta> {
+    const summaries = await this.listPersistedThreadSummaries()
+    const reconciledMeta = this.buildEffectiveSessionMeta(meta, summaries)
+    const indexedThreadIds = [...meta.threadIds].sort()
+    const actualThreadIds = [...reconciledMeta.threadIds].sort()
+    const hasThreadSetDrift =
+      actualThreadIds.length !== indexedThreadIds.length ||
+      actualThreadIds.some((threadId, index) => threadId !== indexedThreadIds[index])
+    const hasCurrentThreadDrift = reconciledMeta.currentThreadId !== meta.currentThreadId
+
+    if (!hasThreadSetDrift && !hasCurrentThreadDrift) {
+      return meta
+    }
+
+    await this.writeSessionFile('_meta.json', toSessionIndexMeta(reconciledMeta))
+    this.cache.sessionMeta = reconciledMeta
+    this.metaHash = stableStringify(reconciledMeta)
+    this.dirty.sessionMeta = false
+    logger.system.warn('[AdnifyDir] Reconciled session meta from persisted thread files:', {
+      indexedCount: meta.threadIds.length,
+      actualCount: actualThreadIds.length,
+      currentThreadId: reconciledMeta.currentThreadId,
+    })
+
+    return reconciledMeta
+  }
+
+  async getSessionMeta(): Promise<SessionMeta> {
+    if (this.cache.sessionMeta) return this.cache.sessionMeta
+    if (!this.isInitialized()) return { ...DEFAULT_SESSION_META }
+
+    const { meta } = await this.buildSessionCatalog()
+    const reconciledMeta = await this.reconcileSessionMeta(meta)
+
+    this.cache.sessionMeta = reconciledMeta
+    this.metaHash = stableStringify(reconciledMeta)
+    return reconciledMeta
+  }
+
+  private parseLegacyAgentSessionSnapshot(content: string): AgentSessionSnapshot | null {
+    try {
+      const parsed = JSON.parse(content) as Record<string, unknown>
+      const envelope = isPlainRecord(parsed?.['adnify-agent-store'])
+        ? parsed['adnify-agent-store'] as LegacyAgentStoreEnvelope
+        : parsed as LegacyAgentStoreEnvelope
+
+      const rawState = isPlainRecord(envelope.state) ? envelope.state : {}
+      const rawThreads = isPlainRecord(rawState.threads) ? rawState.threads : {}
+      const threads: Record<string, ChatThread> = {}
+
+      for (const [threadId, threadValue] of Object.entries(rawThreads)) {
+        const thread = normalizeLegacyThreadRecord(threadId, threadValue)
+        if (thread) {
+          threads[threadId] = thread
+        }
+      }
+
+      const threadIds = Object.keys(threads)
+      const currentThreadId = typeof rawState.currentThreadId === 'string' && threads[rawState.currentThreadId]
+        ? rawState.currentThreadId
+        : (threadIds[0] || null)
+
+      if (threadIds.length === 0 && !currentThreadId) {
+        return null
+      }
+
+      return {
+        threads,
+        currentThreadId,
+        branches: isPlainRecord(rawState.branches) ? rawState.branches : {},
+        activeBranchId: isPlainRecord(rawState.activeBranchId) ? rawState.activeBranchId : {},
+        version: typeof envelope.version === 'number' ? envelope.version : 0,
+      }
+    } catch (error) {
+      logger.system.error('[AdnifyDir] Failed to parse legacy sessions.json:', error)
+      return null
+    }
+  }
+
+  private async writeAgentSessionSnapshot(snapshot: AgentSessionSnapshot): Promise<void> {
+    const normalizedExtra = normalizeSessionExtraState({
+      branches: snapshot.branches,
+      activeBranchId: snapshot.activeBranchId,
+    })
+    const threadIds = Object.keys(snapshot.threads)
+
+    await this.writeSessionFile('_meta.json', {
+      currentThreadId: snapshot.currentThreadId,
+      threadIds,
+      version: snapshot.version,
+    })
+
+    if (Object.keys(serializeSessionExtraState(normalizedExtra)).length > 0) {
+      await this.writeSessionFile('_extra.json', serializeSessionExtraState(normalizedExtra))
+    } else {
+      await this.deleteSessionFile('_extra.json')
+    }
+
+    await Promise.all(
+      threadIds.map(async threadId => {
+        await this.writeSessionFile(`${threadId}.json`, toPersistedChatThread(snapshot.threads[threadId]))
+      })
+    )
+  }
+
+  private async migrateLegacySessionsIfNeeded(): Promise<void> {
+    if (!this.primaryRoot) return
+
+    const legacySessionsPath = this.getLegacySessionsFilePath()
+    const [legacyExists, metaExists] = await Promise.all([
+      api.file.exists(legacySessionsPath),
+      api.file.exists(this.getSessionFilePath('_meta.json')),
+    ])
+
+    if (!legacyExists || metaExists) {
+      return
+    }
+
+    const legacyContent = await api.file.read(legacySessionsPath)
+    if (!legacyContent) {
+      return
+    }
+
+    const snapshot = this.parseLegacyAgentSessionSnapshot(legacyContent)
+    if (!snapshot) {
+      logger.system.warn('[AdnifyDir] Legacy sessions.json exists but no valid session snapshot was found')
+      return
+    }
+
+    await this.writeAgentSessionSnapshot(snapshot)
+    await api.file.delete(legacySessionsPath).catch(() => { /* ignore */ })
+    logger.system.info(`[AdnifyDir] Migrated legacy sessions.json to thread storage (${Object.keys(snapshot.threads).length} threads)`)
+  }
+
+  async getThreadData(threadId: string): Promise<PersistedChatThread | null> {
     if (this.cache.threads.has(threadId)) return this.cache.threads.get(threadId)!
     if (!this.isInitialized()) return null
-    const data = await this.readSessionFile<unknown>(`${threadId}.json`)
+    const data = await this.readSessionFile<PersistedChatThread>(`${threadId}.json`)
     if (data !== null) {
       this.cache.threads.set(threadId, data)
       this.threadHashes.set(threadId, stableStringify(data))
@@ -391,7 +734,7 @@ class AdnifyDirService {
     if (!this.isInitialized()) return []
 
     try {
-      const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
+      const jsonlPath = this.getThreadMessagesPath(threadId)
       const jsonlExists = await api.file.exists(jsonlPath)
 
       if (!jsonlExists) {
@@ -410,7 +753,7 @@ class AdnifyDirService {
     }
   }
 
-  setThreadDirty(threadId: string, data: unknown): void {
+  setThreadDirty(threadId: string, data: PersistedChatThread): void {
     const nextHash = stableStringify(data)
     const prevHash = this.threadHashes.get(threadId)
     this.cache.threads.set(threadId, data)
@@ -444,11 +787,9 @@ class AdnifyDirService {
 
     if (this.isInitialized()) {
       try {
-        const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
-        const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
         await Promise.all([
-          api.file.delete(jsonPath).catch(() => { }),
-          api.file.delete(jsonlPath).catch(() => { }),
+          api.file.delete(this.getThreadMetaPath(threadId)).catch(() => { }),
+          api.file.delete(this.getThreadMessagesPath(threadId)).catch(() => { }),
         ])
       } catch {
         // ignore
@@ -462,11 +803,9 @@ class AdnifyDirService {
       this.cache.threads.delete(threadId)
       this.threadHashes.delete(threadId)
       try {
-        const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.json`
-        const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
         await Promise.all([
-          api.file.delete(jsonPath).catch(() => { }),
-          api.file.delete(jsonlPath).catch(() => { }),
+          api.file.delete(this.getThreadMetaPath(threadId)).catch(() => { }),
+          api.file.delete(this.getThreadMessagesPath(threadId)).catch(() => { }),
         ])
       } catch {
         // ignore
@@ -482,81 +821,112 @@ class AdnifyDirService {
     ])
   }
 
-  async getFullSessionData(): Promise<Record<string, unknown> | null> {
-    const meta = await this.getSessionMeta()
-    const hasPersistedMeta = meta.threadIds.length > 0 || !!meta.currentThreadId
+  async getAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
+    const { meta, summaries } = await this.buildSessionCatalog()
+    const reconciledMeta = await this.reconcileSessionMeta(meta)
 
-    if (!hasPersistedMeta) {
-      const rebuiltMeta = await this.rebuildMetaFromThreadFiles(meta.extra)
-      if (!rebuiltMeta || (rebuiltMeta.threadIds.length === 0 && !rebuiltMeta.currentThreadId)) {
-        return null
-      }
-      this.cache.sessionMeta = rebuiltMeta
-      this.metaHash = stableStringify(rebuiltMeta)
+    if (reconciledMeta.threadIds.length === 0 && !reconciledMeta.currentThreadId) {
+      this.cache.sessionMeta = reconciledMeta
+      this.metaHash = stableStringify(reconciledMeta)
+      return null
     }
 
-    const effectiveMeta = this.cache.sessionMeta || meta
+    this.cache.sessionMeta = reconciledMeta
+    this.metaHash = stableStringify(reconciledMeta)
+
+    const effectiveMeta = this.buildEffectiveSessionMeta(reconciledMeta, summaries)
+
     const threadEntries = await Promise.all(
       effectiveMeta.threadIds.map(async threadId => [threadId, await this.getThreadData(threadId)] as const)
     )
 
-    const threads: Record<string, unknown> = {}
+    const threads: Record<string, ChatThread> = {}
     for (const [threadId, data] of threadEntries) {
       if (data !== null) {
-        threads[threadId] = data
+        threads[threadId] = fromPersistedChatThread(data)
       }
     }
 
     // 立即加载当前线程的消息（阻塞加载，确保 UI 渲染前消息已就绪）
     const currentThreadId = effectiveMeta.currentThreadId
     if (currentThreadId && threads[currentThreadId]) {
-      const threadData = threads[currentThreadId] as any
+      const threadData = threads[currentThreadId] as ChatThread
       // 只有当消息为空时才加载（避免重复加载）
       if (!threadData.messages || threadData.messages.length === 0) {
         const messages = await this.loadThreadMessages(currentThreadId)
-        if (messages.length > 0) {
-          threadData.messages = messages
-          logger.system.info(`[AdnifyDir] Loaded ${messages.length} messages for current thread in getFullSessionData`)
-        }
+        threadData.messages = messages
+        threadData.messageCount = messages.length
       }
     }
 
     return {
-      state: {
-        threads,
-        currentThreadId: effectiveMeta.currentThreadId,
-        branches: effectiveMeta.extra.branches,
-        activeBranchId: effectiveMeta.extra.activeBranchId,
-      },
+      threads,
+      currentThreadId: effectiveMeta.currentThreadId,
+      branches: effectiveMeta.extra.branches,
+      activeBranchId: effectiveMeta.extra.activeBranchId,
       version: effectiveMeta.version,
     }
   }
 
-  setFullSessionDataDirty(_storeKey: string, parsed: Record<string, unknown>): void {
-    const state = parsed.state as Record<string, unknown> | undefined
-    if (!state) return
+  async getAgentSessionSnapshotWithoutHydration(): Promise<AgentSessionSnapshot | null> {
+    const { meta, summaries } = await this.buildSessionCatalog()
+    const reconciledMeta = await this.reconcileSessionMeta(meta)
 
-    const threads = (state.threads || {}) as Record<string, unknown>
-    const currentThreadId = state.currentThreadId as string | null
-    const extra = normalizeSessionExtraState(state)
+    if (reconciledMeta.threadIds.length === 0 && !reconciledMeta.currentThreadId) {
+      this.cache.sessionMeta = reconciledMeta
+      this.metaHash = stableStringify(reconciledMeta)
+      return null
+    }
+
+    this.cache.sessionMeta = reconciledMeta
+    this.metaHash = stableStringify(reconciledMeta)
+
+    const effectiveMeta = this.buildEffectiveSessionMeta(reconciledMeta, summaries)
+    const threadEntries = await Promise.all(
+      effectiveMeta.threadIds.map(async threadId => [threadId, await this.getThreadData(threadId)] as const)
+    )
+
+    const threads: Record<string, ChatThread> = {}
+    for (const [threadId, data] of threadEntries) {
+      if (data !== null) {
+        threads[threadId] = fromPersistedChatThread(data)
+      }
+    }
+
+    return {
+      threads,
+      currentThreadId: effectiveMeta.currentThreadId,
+      branches: effectiveMeta.extra.branches,
+      activeBranchId: effectiveMeta.extra.activeBranchId,
+      version: effectiveMeta.version,
+    }
+  }
+
+  stageAgentSessionSnapshot(snapshot: AgentSessionSnapshot): void {
+    const threads = snapshot.threads || {}
+    const currentThreadId = snapshot.currentThreadId
+    const extra = normalizeSessionExtraState({
+      branches: snapshot.branches,
+      activeBranchId: snapshot.activeBranchId,
+    })
 
     this.setSessionMetaDirty({
       currentThreadId,
       threadIds: Object.keys(threads),
       extra,
-      version: (parsed.version as number) || 0,
+      version: snapshot.version || 0,
     })
 
     for (const [threadId, data] of Object.entries(threads)) {
-      const threadData = data as any
-      const messages = threadData?.messages
+      const threadData = toPersistedChatThread(data)
+      const messages = threadData.messages
       // 非当前线程且 messages 为空时，说明是懒加载占位符（还未从磁盘读取）
       // 只更新内存缓存，不标记 dirty，避免调度 flush 用空数组覆盖磁盘上的真实 JSONL 消息
-      if (threadId !== currentThreadId && (!messages || messages.length === 0)) {
-        this.cache.threads.set(threadId, data)
+      if (threadId !== currentThreadId && messages.length === 0) {
+        this.cache.threads.set(threadId, threadData)
         continue
       }
-      this.setThreadDirty(threadId, data)
+      this.setThreadDirty(threadId, threadData)
     }
 
     for (const cachedId of [...this.cache.threads.keys()]) {
@@ -566,10 +936,8 @@ class AdnifyDirService {
         this.threadHashes.delete(cachedId)
         if (this.isInitialized()) {
           // Bug 5 fix: 同时删除 .json 和 .jsonl，防止孤儿文件泄漏
-          const jsonPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${cachedId}.json`
-          const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${cachedId}.jsonl`
-          api.file.delete(jsonPath).catch(() => { /* ignore */ })
-          api.file.delete(jsonlPath).catch(() => { /* ignore */ })
+          api.file.delete(this.getThreadMetaPath(cachedId)).catch(() => { /* ignore */ })
+          api.file.delete(this.getThreadMessagesPath(cachedId)).catch(() => { /* ignore */ })
         }
       }
     }
@@ -658,199 +1026,6 @@ class AdnifyDirService {
     }
   }
 
-  private async rebuildMetaFromThreadFiles(extra: SessionExtraState): Promise<SessionMeta | null> {
-    // 如果未初始化，直接返回 null，避免不必要的错误日志
-    if (!this.isInitialized()) {
-      return null
-    }
-
-    try {
-      const sessionsDirPath = this.getFilePath(ADNIFY_FILES.SESSIONS_DIR)
-      const entries = await api.file.readDir(sessionsDirPath)
-
-      // 收集所有线程 ID（支持 .json 和 .jsonl 文件）
-      const threadIdSet = new Set<string>()
-
-      for (const entry of entries) {
-        if (entry.isDirectory) continue
-
-        // 跳过元数据文件
-        if (entry.name === '_meta.json' || entry.name === '_extra.json') continue
-
-        // 提取线程 ID（从 .json 或 .jsonl 文件）
-        if (entry.name.endsWith('.json')) {
-          threadIdSet.add(entry.name.slice(0, -'.json'.length))
-        } else if (entry.name.endsWith('.jsonl')) {
-          threadIdSet.add(entry.name.slice(0, -'.jsonl'.length))
-        }
-      }
-
-      const threadIds = Array.from(threadIdSet).sort()
-
-      if (threadIds.length === 0) {
-        return null
-      }
-
-      // Bug 7 fix: 读取各线程的 lastModified 字段，选最近修改的作为当前线程
-      // 而非按字母序选第一个（可能是最旧的线程）
-      let bestThreadId = threadIds[0]
-      let bestModified = 0
-
-      await Promise.all(threadIds.map(async (threadId) => {
-        try {
-          const jsonPath = `${sessionsDirPath}/${threadId}.json`
-          const content = await api.file.read(jsonPath)
-          if (content) {
-            const data = JSON.parse(content)
-            const lastModified = data?.lastModified || 0
-            if (lastModified > bestModified) {
-              bestModified = lastModified
-              bestThreadId = threadId
-            }
-          }
-        } catch {
-          // 读取失败则忽略，保留已选到的最新线程
-        }
-      }))
-
-      const rebuiltMeta: SessionMeta = {
-        currentThreadId: bestThreadId,
-        threadIds,
-        extra,
-        version: 0,
-      }
-
-      this.setSessionMetaDirty(rebuiltMeta)
-      logger.system.warn('[AdnifyDir] Rebuilt missing session meta from thread files:', threadIds.length, '→ currentThread:', bestThreadId)
-      return rebuiltMeta
-    } catch (error) {
-      logger.system.error('[AdnifyDir] Failed to rebuild session meta:', error)
-      return null
-    }
-  }
-
-  private async migrateOldSessions(): Promise<void> {
-    if (!this.primaryRoot) return
-
-    const oldPath = `${this.getDirPath()}/sessions.json`
-    try {
-      const exists = await api.file.exists(oldPath)
-      if (!exists) return
-
-      const content = await api.file.read(oldPath)
-      if (!content) return
-
-      const oldData = JSON.parse(content)
-      const storeData = oldData['adnify-agent-store']
-      if (!storeData?.state?.threads) {
-        await api.file.delete(oldPath)
-        return
-      }
-
-      const migratedState = storeData.state as Record<string, unknown>
-      const threads = migratedState.threads
-      const currentThreadId = migratedState.currentThreadId
-      const extra = normalizeSessionExtraState(migratedState)
-      const threadsMap = threads as Record<string, unknown>
-      const threadIds = Object.keys(threadsMap)
-
-      await Promise.all(
-        Object.entries(threadsMap).map(([threadId, data]) => this.writeSessionFile(`${threadId}.json`, data))
-      )
-
-      const meta: SessionMeta = {
-        currentThreadId: currentThreadId as string | null,
-        threadIds,
-        extra,
-        version: storeData.version || 0,
-      }
-
-      await Promise.all([
-        this.writeSessionFile('_meta.json', toSessionIndexMeta(meta)),
-        Object.keys(serializeSessionExtraState(meta.extra)).length > 0
-          ? this.writeSessionFile('_extra.json', serializeSessionExtraState(meta.extra))
-          : this.deleteSessionFile('_extra.json'),
-      ])
-
-      await api.file.delete(oldPath)
-      logger.system.info(`[AdnifyDir] Migrated sessions.json → sessions/ (${threadIds.length} threads)`)
-    } catch (error) {
-      logger.system.error('[AdnifyDir] Sessions migration failed:', error)
-    }
-  }
-
-  private async migrateToJsonl(): Promise<void> {
-    if (!this.primaryRoot) {
-      logger.system.warn('[AdnifyDir] JSONL migration skipped: no primary root')
-      return
-    }
-
-    try {
-      const sessionsDir = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}`
-      logger.system.info(`[AdnifyDir] Starting JSONL migration in: ${sessionsDir}`)
-
-      const files = await api.file.readDir(sessionsDir)
-      logger.system.info(`[AdnifyDir] Found ${files.length} files in sessions directory`)
-
-      let migratedCount = 0
-      let skippedCount = 0
-
-      for (const file of files) {
-        // 只处理线程文件（不是 _meta.json 或 _extra.json）
-        if (file.name.endsWith('.json') && !file.name.startsWith('_')) {
-          const threadId = file.name.replace('.json', '')
-          const jsonlPath = `${sessionsDir}/${threadId}.jsonl`
-
-          // 检查是否已经迁移过
-          const jsonlExists = await api.file.exists(jsonlPath)
-          if (jsonlExists) {
-            skippedCount++
-            logger.system.debug(`[AdnifyDir] Skipping ${threadId}: already migrated`)
-            continue
-          }
-
-          // 读取旧的 JSON 文件
-          const jsonPath = `${sessionsDir}/${file.name}`
-          const content = await api.file.read(jsonPath)
-          if (!content) {
-            logger.system.warn(`[AdnifyDir] Skipping ${threadId}: empty file`)
-            continue
-          }
-
-          const threadData = JSON.parse(content) as any
-          if (!threadData.messages || !Array.isArray(threadData.messages)) {
-            logger.system.warn(`[AdnifyDir] Skipping ${threadId}: no messages array`)
-            continue
-          }
-
-          const messageCount = threadData.messages.length
-          logger.system.info(`[AdnifyDir] Migrating ${threadId}: ${messageCount} messages`)
-
-          // 分离消息和元数据
-          const { messages, ...metadata } = threadData
-
-          // 写入元数据（JSON 格式）
-          const metadataContent = JSON.stringify(metadata, null, 2)
-          await api.file.write(jsonPath, metadataContent)
-
-          // 写入消息（JSONL 格式）
-          const jsonlContent = this.serializeMessages(messages)
-          await api.file.write(jsonlPath, jsonlContent)
-
-          migratedCount++
-          logger.system.info(`[AdnifyDir] ✓ Migrated ${threadId}`)
-        }
-      }
-
-      logger.system.info(`[AdnifyDir] JSONL migration complete: ${migratedCount} migrated, ${skippedCount} skipped`)
-    } catch (error) {
-      logger.system.error('[AdnifyDir] JSONL migration failed:', error instanceof Error ? error.message : String(error))
-      if (error instanceof Error && error.stack) {
-        logger.system.error('[AdnifyDir] Stack trace:', error.stack)
-      }
-    }
-  }
-
   private async loadAllData(): Promise<void> {
     const [sessionMeta, workspaceState, settings] = await Promise.all([
       this.getSessionMeta(),
@@ -866,25 +1041,17 @@ class AdnifyDirService {
 
   private async readSessionFile<T>(fileName: string): Promise<T | null> {
     try {
-      const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
+      const filePath = this.getSessionFilePath(fileName)
       const content = await api.file.read(filePath)
       if (!content) return null
 
-      // 线程文件只读取元数据，不自动加载消息（懒加载）
-      // 消息需要通过 loadThreadMessages() 按需加载
-      const threadData = JSON.parse(content) as any
-
-      // 如果是线程文件，确保 messages 字段存在但为空（懒加载标记）
       if (fileName.endsWith('.json') && !fileName.startsWith('_')) {
-        if (!threadData.messages) {
-          threadData.messages = []
-        }
-        if (!Array.isArray(threadData.messageCheckpoints)) {
-          threadData.messageCheckpoints = []
-        }
+        return stripThreadMessagesForMetadata(
+          JSON.parse(content) as PersistedChatThread
+        ) as T
       }
 
-      return threadData as T
+      return JSON.parse(content) as T
     } catch {
       return null
     }
@@ -892,7 +1059,7 @@ class AdnifyDirService {
 
   private async deleteSessionFile(fileName: string): Promise<void> {
     try {
-      const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
+      const filePath = this.getSessionFilePath(fileName)
       const exists = await api.file.exists(filePath)
       if (exists) {
         await api.file.delete(filePath)
@@ -904,37 +1071,33 @@ class AdnifyDirService {
 
   private async writeSessionFile<T>(fileName: string, data: T): Promise<void> {
     try {
-      const filePath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${fileName}`
-
-      // 如果是线程文件，使用 JSONL 格式存储消息
       if (fileName.endsWith('.json') && !fileName.startsWith('_')) {
         const threadId = fileName.replace('.json', '')
-        const threadData = data as any
-
-        // 分离消息和元数据
+        const threadData = normalizePersistedChatThread(data as PersistedChatThread)
         const { messages, ...metadata } = threadData
 
-        // Bug 6 fix: 将消息数量存入元数据，供未加载消息的线程（懒加载占位符）正确显示计数
-        if (messages && Array.isArray(messages)) {
-          (metadata as any).messageCount = messages.length
+        await api.file.write(
+          this.getThreadMetaPath(threadId),
+          JSON.stringify(
+            {
+              ...metadata,
+              messageCount: messages.length,
+            },
+            null,
+            2
+          )
+        )
+
+        if (messages.length > 0) {
+          await api.file.write(this.getThreadMessagesPath(threadId), this.serializeMessages(messages))
+        } else {
+          await this.deleteSessionFile(`${threadId}.jsonl`)
         }
 
-        // 写入元数据（JSON 格式）
-        const metadataContent = JSON.stringify(metadata, null, 2)
-        await api.file.write(filePath, metadataContent)
-
-        // 写入消息（JSONL 格式）
-        // 只有消息非空时才写入，防止懒加载期间 messages=[] 覆盖磁盘上的真实消息
-        if (messages && Array.isArray(messages) && messages.length > 0) {
-          const jsonlPath = `${this.getDirPath()}/${ADNIFY_FILES.SESSIONS_DIR}/${threadId}.jsonl`
-          const jsonlContent = this.serializeMessages(messages)
-          await api.file.write(jsonlPath, jsonlContent)
-        }
-      } else {
-        // 元数据文件保持 JSON 格式
-        const content = JSON.stringify(data, null, 2)
-        await api.file.write(filePath, content)
+        return
       }
+
+      await api.file.write(this.getSessionFilePath(fileName), JSON.stringify(data, null, 2))
     } catch (error) {
       logger.system.error(`[AdnifyDir] Failed to write session file ${fileName}:`, error)
     }

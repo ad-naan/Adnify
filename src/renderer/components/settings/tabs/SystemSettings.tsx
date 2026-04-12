@@ -11,7 +11,7 @@ import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
-import { Agent } from '@/renderer/agent'
+import { Agent } from '@/renderer/agent/core'
 import { memoryService } from '@/renderer/agent/services/memoryService'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 

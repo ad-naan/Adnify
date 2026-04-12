@@ -2,7 +2,7 @@ import { api } from '@/renderer/services/electronAPI'
 import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
-import { persistCriticalAgentSessionState } from '../agentStorage'
+import { buildAgentSessionSnapshot, persistCriticalAgentSessionState } from '../agentStorage'
 import type {
   ChatThread,
   CheckpointImage,
@@ -50,20 +50,13 @@ export interface CheckpointActions {
 
 export type CheckpointSlice = CheckpointState & CheckpointActions
 
-interface PersistedCheckpointState {
+function persistCheckpointState(state: {
   threads: Record<string, unknown>
   currentThreadId: string | null
   branches: Record<string, unknown>
   activeBranchId: Record<string, unknown>
-}
-
-function persistCheckpointState(state: PersistedCheckpointState): void {
-  void persistCriticalAgentSessionState({
-    threads: state.threads,
-    currentThreadId: state.currentThreadId,
-    branches: state.branches,
-    activeBranchId: state.activeBranchId,
-  })
+}): void {
+  void persistCriticalAgentSessionState(buildAgentSessionSnapshot(state))
 }
 
 function getThreadCheckpoints(thread?: ChatThread): MessageCheckpoint[] {
