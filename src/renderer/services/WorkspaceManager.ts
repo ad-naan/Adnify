@@ -8,8 +8,28 @@ import { flushAgentSessionPersistence } from '@renderer/agent/store/AgentStore'
 import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import type { WorkspaceConfig } from '@store'
 
+export class WorkspaceOpenError extends Error {
+  constructor(
+    public readonly code: 'missing-workspace' | 'switch-failed',
+    message: string,
+    public readonly path: string
+  ) {
+    super(message)
+    this.name = 'WorkspaceOpenError'
+  }
+}
+
 function normalizeWorkspaceRoots(roots: string[]): string[] {
   return roots.map(root => root.toLowerCase().replace(/\\/g, '/')).sort()
+}
+
+function normalizeFolderPath(folderPath: string): string {
+  const trimmed = folderPath.trim()
+  if (/^[a-zA-Z]:[\\/]*$/.test(trimmed)) {
+    return `${trimmed.slice(0, 2)}\\`
+  }
+
+  return trimmed.replace(/[\\/]+$/, '')
 }
 
 function isSameWorkspace(a: WorkspaceConfig | null, b: WorkspaceConfig | null): boolean {
@@ -92,16 +112,23 @@ class WorkspaceManager {
   }
 
   async openFolder(folderPath: string): Promise<boolean> {
-    const exists = await api.file.exists(folderPath)
+    const normalizedPath = normalizeFolderPath(folderPath)
+    const exists = await api.workspace.exists(normalizedPath)
     if (!exists) {
       await api.workspace.removeFromRecent(folderPath)
-      throw new Error(`Folder does not exist: ${folderPath}`)
+      throw new WorkspaceOpenError('missing-workspace', `Folder does not exist: ${normalizedPath}`, normalizedPath)
     }
 
-    return this.switchTo({
+    const switched = await this.switchTo({
       configPath: null,
-      roots: [folderPath],
+      roots: [normalizedPath],
     })
+
+    if (!switched) {
+      throw new WorkspaceOpenError('switch-failed', `Failed to open workspace: ${normalizedPath}`, normalizedPath)
+    }
+
+    return true
   }
 
   async closeWorkspace(): Promise<void> {

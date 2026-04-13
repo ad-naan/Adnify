@@ -383,6 +383,17 @@ export function registerWorkspaceHandlers(
     return store.get('recentWorkspaces', []) as string[]
   })
 
+  ipcMain.handle('workspace:exists', async (_, targetPath: string) => {
+    if (!targetPath) return false
+
+    try {
+      const stats = await fsPromises.stat(targetPath)
+      return stats.isDirectory()
+    } catch {
+      return false
+    }
+  })
+
   // 清除最近工作区
   ipcMain.handle('workspace:clearRecent', () => {
     store.set('recentWorkspaces', [])

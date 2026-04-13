@@ -182,6 +182,7 @@ export interface ElectronAPI {
     workspaceId?: string
   } | null>
   getRecentWorkspaces: () => Promise<string[]>
+  workspaceExists: (path: string) => Promise<boolean>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
@@ -456,6 +457,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restoreWorkspace: () => ipcRenderer.invoke('workspace:restore'),
   setActiveWorkspace: (roots: string[]) => ipcRenderer.invoke('workspace:setActive', roots),
   getRecentWorkspaces: () => ipcRenderer.invoke('workspace:getRecent'),
+  workspaceExists: (path: string) => ipcRenderer.invoke('workspace:exists', path),
   clearRecentWorkspaces: () => ipcRenderer.invoke('workspace:clearRecent'),
   removeFromRecentWorkspaces: (path: string) => ipcRenderer.invoke('workspace:removeFromRecent', path),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),

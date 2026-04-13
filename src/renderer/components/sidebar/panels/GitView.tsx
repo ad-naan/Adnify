@@ -29,6 +29,13 @@ import { useClickOutside } from '@renderer/hooks/usePerformance'
 type GitTab = 'changes' | 'branches' | 'stash' | 'history'
 type OperationState = 'normal' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'
 
+const GIT_TABS: GitTab[] = [
+    'changes',
+    'branches',
+    'stash',
+    'history',
+]
+
 // ==================== 子组件 ====================
 
 // 文件状态图标
@@ -802,6 +809,9 @@ Commit message:`
             refreshStatus()
             toast.success(tt('git.operationContinued'))
         } else {
+            if (result?.error?.includes('No rebase in progress') || result?.error?.includes('No cherry-pick or revert in progress')) {
+                await refreshStatus()
+            }
             toast.error(tt('git.mergeFailed'), result?.error)
         }
     }
@@ -825,6 +835,9 @@ Commit message:`
             refreshStatus()
             toast.success(tt('git.operationAborted'))
         } else {
+            if (result?.error?.includes('No rebase in progress') || result?.error?.includes('There is no merge to abort') || result?.error?.includes('no cherry-pick or revert in progress')) {
+                await refreshStatus()
+            }
             toast.error(tt('git.mergeFailed'), result?.error)
         }
     }
@@ -836,6 +849,9 @@ Commit message:`
                 refreshStatus()
                 toast.success(tt('git.commitSkipped'))
             } else {
+                if (result.error?.includes('No rebase in progress')) {
+                    await refreshStatus()
+                }
                 toast.error(tt('git.mergeFailed'), result.error)
             }
         }
@@ -929,6 +945,12 @@ Commit message:`
 
     const localBranches = useMemo(() => branches.filter(b => !b.remote), [branches])
     const remoteBranches = useMemo(() => branches.filter(b => b.remote), [branches])
+    const tabLabels = useMemo(() => ({
+        changes: tt('git.changes'),
+        branches: tt('git.branches'),
+        stash: tt('git.stash'),
+        history: tt('git.history'),
+    }), [tt])
 
     // ==================== 渲染 ====================
 
@@ -961,21 +983,21 @@ Commit message:`
     return (
         <div className="flex flex-col h-full bg-transparent text-sm">
             {/* Header */}
-            <div className="h-10 px-3 flex items-center justify-between border-b border-border-subtle sticky top-0 z-10 bg-surface/50 backdrop-blur-sm">
-                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider whitespace-nowrap">
+            <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-transparent sticky top-0 z-10">
+                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
                     {tt('git.title')}
                 </span>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
-                    <Button variant="icon" size="icon" onClick={handleFetch} title={tt('git.fetch')} className="w-6 h-6">
+                    <Button variant="icon" size="icon" onClick={handleFetch} title={tt('git.fetch')} className="w-7 h-7 rounded-lg">
                         <ArrowDown className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="icon" size="icon" onClick={handlePull} disabled={isPulling} title={tt('git.pull')} className="w-6 h-6">
+                    <Button variant="icon" size="icon" onClick={handlePull} disabled={isPulling} title={tt('git.pull')} className="w-7 h-7 rounded-lg">
                         <ArrowDown className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
                     </Button>
-                    <Button variant="icon" size="icon" onClick={handlePush} disabled={isPushing} title={tt('git.push')} className="w-6 h-6">
+                    <Button variant="icon" size="icon" onClick={handlePush} disabled={isPushing} title={tt('git.push')} className="w-7 h-7 rounded-lg">
                         <ArrowUp className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
                     </Button>
-                    <Button variant="icon" size="icon" onClick={refreshStatus} title={tt('refresh')} className="w-6 h-6">
+                    <Button variant="icon" size="icon" onClick={refreshStatus} title={tt('refresh')} className="w-7 h-7 rounded-lg">
                         <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                     </Button>
                 </div>
@@ -983,41 +1005,72 @@ Commit message:`
 
             {/* Operation State Banner */}
             {operationState !== 'normal' && (
-                <div className="px-3 py-2 bg-warning/10 border-b border-warning/20 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />
-                    <span className="text-xs text-warning flex-1 capitalize">{t('git.operationInProgress', language, { operation: operationState })}</span>
-                    <div className="flex items-center gap-1">
-                        {operationState === 'rebase' && (
-                            <Button variant="ghost" size="sm" onClick={handleSkipOperation} className="h-6 px-2 text-xs">
-                                <SkipForward className="w-3 h-3 mr-1" /> {tt('git.skip')}
-                            </Button>
+                <div className="flex flex-col border-b border-border-subtle bg-surface-active/30">
+                    <div className="px-3 py-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                            </span>
+                            <span className="text-xs font-medium text-text-primary">
+                                {t('git.operationInProgress', language, { operation: operationState })}
+                            </span>
+                        </div>
+                        {status?.branch && (
+                            <span className="text-[10px] text-text-muted font-mono px-1 py-0.5">
+                                {status.branch}
+                            </span>
                         )}
-                        <Button variant="ghost" size="sm" onClick={handleContinueOperation} className="h-6 px-2 text-xs text-green-400">
-                            <Play className="w-3 h-3 mr-1" /> {tt('git.continue')}
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={handleAbortOperation} className="h-6 px-2 text-xs text-red-400">
-                            <X className="w-3 h-3 mr-1" /> {tt('git.abort')}
-                        </Button>
+                    </div>
+                    <div className="px-2 pb-2.5 flex items-center gap-1">
+                        <button
+                            onClick={handleContinueOperation}
+                            className="flex-1 px-2 py-1.5 text-[10px] font-medium rounded text-text-secondary hover:text-orange-400 hover:bg-orange-500/10 transition-colors border border-transparent hover:border-orange-500/20 flex items-center justify-center gap-1.5"
+                        >
+                            <Play className="w-3 h-3" /> {tt('git.continue')}
+                        </button>
+                        {operationState === 'rebase' && (
+                            <button
+                                onClick={handleSkipOperation}
+                                className="flex-1 px-2 py-1.5 text-[10px] font-medium rounded text-text-secondary hover:text-text-primary hover:bg-surface transition-colors border border-transparent hover:border-border-subtle flex items-center justify-center gap-1.5"
+                            >
+                                <SkipForward className="w-3 h-3" /> {tt('git.skip')}
+                            </button>
+                        )}
+                        <button
+                            onClick={handleAbortOperation}
+                            className="flex-1 px-2 py-1.5 text-[10px] font-medium rounded text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors border border-transparent hover:border-red-500/20 flex items-center justify-center gap-1.5"
+                        >
+                            <X className="w-3 h-3" /> {tt('git.abort')}
+                        </button>
                     </div>
                 </div>
             )}
 
             {/* Tabs */}
-            <div className="flex p-2 bg-transparent">
-                <div className="flex w-full bg-surface/50 p-1 rounded-lg border border-border-subtle">
-                    {(['changes', 'branches', 'stash', 'history'] as GitTab[]).map(tab => (
+            <div className="px-3 py-2 border-b border-border-subtle flex gap-1">
+                <div className="grid w-full grid-cols-4 gap-1">
+                    {GIT_TABS.map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`flex-1 px-2 py-1 text-[10px] font-medium transition-all rounded-md ${activeTab === tab
-                                ? 'bg-accent text-white shadow-sm'
-                                : 'text-text-muted hover:text-text-secondary hover:bg-white/5'
+                            className={`min-w-0 px-2 py-1.5 text-[10px] rounded transition-colors truncate ${activeTab === tab
+                                ? 'bg-accent/20 text-accent'
+                                : 'text-text-muted hover:bg-surface-hover'
                                 }`}
+                            title={
+                                tab === 'changes' ? `${tabLabels.changes}${stats.total > 0 ? ` (${stats.total})` : ''}` :
+                                    tab === 'branches' ? tabLabels.branches :
+                                        tab === 'stash' ? `${tabLabels.stash}${stashList.length > 0 ? ` (${stashList.length})` : ''}` :
+                                            tabLabels.history
+                            }
                         >
-                            {tab === 'changes' && `${tt('git.changes')}${stats.total > 0 ? ` (${stats.total})` : ''}`}
-                            {tab === 'branches' && tt('git.branches')}
-                            {tab === 'stash' && `${tt('git.stash')}${stashList.length > 0 ? ` (${stashList.length})` : ''}`}
-                            {tab === 'history' && tt('git.history')}
+                            <span className="block truncate">
+                                {tab === 'changes' && `${tabLabels.changes}${stats.total > 0 ? ` (${stats.total})` : ''}`}
+                                {tab === 'branches' && tabLabels.branches}
+                                {tab === 'stash' && `${tabLabels.stash}${stashList.length > 0 ? ` (${stashList.length})` : ''}`}
+                                {tab === 'history' && tabLabels.history}
+                            </span>
                         </button>
                     ))}
                 </div>

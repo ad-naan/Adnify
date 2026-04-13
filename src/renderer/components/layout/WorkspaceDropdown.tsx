@@ -8,7 +8,7 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Plus, FolderOpen, History, Folder, Monitor, LayoutGrid } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
-import { workspaceManager } from '@services/WorkspaceManager'
+import { workspaceManager, WorkspaceOpenError } from '@services/WorkspaceManager'
 import { toast } from '@components/common/ToastProvider'
 import { getFileName, getDirname, getBasename } from '@shared/utils/pathUtils'
 import { t } from '@renderer/i18n'
@@ -72,8 +72,14 @@ export default function WorkspaceDropdown() {
         try {
             await workspaceManager.openFolder(path)
         } catch (e) {
-            toast.error(t('workspace.folderNotExist', language), getFileName(path))
-            loadRecent()
+            if (e instanceof WorkspaceOpenError && e.code === 'missing-workspace') {
+                toast.error(t('workspace.folderNotExist', language), getFileName(path))
+                loadRecent()
+                return
+            }
+
+            logger.ui.error('[WorkspaceDropdown] Failed to open recent workspace:', e)
+            toast.error(t('workspace.openFolderFailed', language), getFileName(path))
         }
     }
 

@@ -109,6 +109,37 @@ class GitService {
         }
     }
 
+    private async resolveGitPath(pathName: string, rootPath?: string): Promise<string | null> {
+        const result = await this.exec(['rev-parse', '--git-path', pathName], rootPath)
+        if (result.exitCode !== 0) return null
+
+        const resolvedPath = result.stdout.trim()
+        return resolvedPath ? normalizePath(resolvedPath) : null
+    }
+
+    private async gitPathExists(pathName: string, rootPath?: string): Promise<boolean> {
+        try {
+            const resolvedPath = await this.resolveGitPath(pathName, rootPath)
+            if (!resolvedPath) return false
+            return await api.file.exists(resolvedPath)
+        } catch {
+            return false
+        }
+    }
+
+    private async detectOperationState(rootPath?: string): Promise<'normal' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'> {
+        const targetPath = rootPath || this.primaryWorkspacePath
+        if (!targetPath) return 'normal'
+
+        if (await this.gitPathExists('rebase-merge', targetPath)) return 'rebase'
+        if (await this.gitPathExists('rebase-apply', targetPath)) return 'rebase'
+        if (await this.gitPathExists('MERGE_HEAD', targetPath)) return 'merge'
+        if (await this.gitPathExists('CHERRY_PICK_HEAD', targetPath)) return 'cherry-pick'
+        if (await this.gitPathExists('REVERT_HEAD', targetPath)) return 'revert'
+
+        return 'normal'
+    }
+
     /**
      * 检查是否是 Git 仓库
      */
@@ -1072,6 +1103,8 @@ class GitService {
         const targetPath = rootPath || this.primaryWorkspacePath
         if (!targetPath) return 'normal'
 
+        return this.detectOperationState(targetPath ?? undefined)
+
         try {
             // 通过 git rev-parse --verify 检查特殊引用来判断操作状态
             // 这些引用 (REBASE_HEAD, MERGE_HEAD 等) 在对应操作进行时由 git 自动创建
@@ -1079,7 +1112,7 @@ class GitService {
             const checkRef = async (ref: string): Promise<boolean> => {
                 const result = await this.exec(
                     ['rev-parse', '--verify', '--quiet', ref],
-                    targetPath
+                    targetPath ?? undefined
                 ).catch(() => null)
                 return result?.exitCode === 0
             }

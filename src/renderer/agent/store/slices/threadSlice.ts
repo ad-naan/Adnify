@@ -275,9 +275,21 @@ export const createThreadSlice: StateCreator<
             const thread = state.threads[targetId]
             if (!thread) return state
 
+            const nextStreamState = phase === 'idle'
+                ? {
+                    ...thread.streamState,
+                    phase,
+                    currentToolCall: undefined,
+                    error: undefined,
+                    statusText: undefined,
+                    requestId: undefined,
+                    assistantId: undefined,
+                }
+                : { ...thread.streamState, phase }
+
             return {
                 threads: updateThreadEphemeral(state.threads, targetId, {
-                    streamState: { ...thread.streamState, phase },
+                    streamState: nextStreamState,
                 }),
             }
         })
