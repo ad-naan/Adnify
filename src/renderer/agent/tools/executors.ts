@@ -1895,16 +1895,16 @@ export const toolExecutors = Object.fromEntries(
     Object.entries(rawToolExecutors).map(([name, executor]) => [
         name,
         async (args: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
-            // 设置超时时间，对于可能耗时的工具给更长的时间
             const timeoutMs = ['generate_tests', 'run_command', 'edit_file', 'replace_file_content', 'web_search'].includes(name) ? 120000 : 60000
+            let timer: ReturnType<typeof setTimeout>
 
             try {
                 return await Promise.race([
                     executor(args, ctx),
                     new Promise<ToolExecutionResult>((_, reject) => {
-                        setTimeout(() => reject(new Error(`Tool [${name}] execution timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+                        timer = setTimeout(() => reject(new Error(`Tool [${name}] execution timed out after ${timeoutMs / 1000}s`)), timeoutMs)
                     })
-                ])
+                ]).finally(() => clearTimeout(timer))
             } catch (err) {
                 logger.agent.error(`[ToolExecutor] Error executing ${name}:`, err)
                 return {
