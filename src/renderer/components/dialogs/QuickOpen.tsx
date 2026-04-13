@@ -13,6 +13,7 @@ import { keybindingService } from '@services/keybindingService'
 import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 import FileIcon from '../common/FileIcon'
+import { useElevatedToastLayer } from '../common/toastLayerStore'
 
 interface QuickOpenProps {
   onClose: () => void
@@ -166,6 +167,7 @@ const FileMatchItem = memo(function FileMatchItem({
 })
 
 export default function QuickOpen({ onClose }: QuickOpenProps) {
+  useElevatedToastLayer(true)
   const { workspacePath, openFile, language } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, language: s.language })))
   const [query, setQuery] = useState('')
   const [allFiles, setAllFiles] = useState<string[]>([])
