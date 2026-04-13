@@ -83,7 +83,6 @@
     "@electron/notarize": "^2.5.0",
     "@electron/rebuild": "^3.6.0",
     "@types/adm-zip": "^0.5.7",
-    "@types/diff": "^7.0.2",
     "@types/node": "^22.10.2",
     "@types/picomatch": "^4.0.2",
     "@types/ssh2": "^1.15.5",

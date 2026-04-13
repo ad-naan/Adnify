@@ -77,6 +77,7 @@ let securityManager: typeof import('./security').securityManager | null = null
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
+  process.exit(0)
 }
 
 // ==========================================
@@ -248,7 +249,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   // DevTools 由菜单 role:toggleDevTools 自动处理，无需在此注册
   win.webContents.on('before-input-event', (_, input) => {
     if (input.type !== 'keyDown') return
-    if ((input.control && input.shift && input.key.toLowerCase() === 'p') || input.key === 'F1') {
+    if (((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'p') || input.key === 'F1') {
       win.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
     }
   })
@@ -405,7 +406,7 @@ async function initializeModules(firstWin: BrowserWindow) {
         { role: 'togglefullscreen' },
         {
           label: 'Command Palette',
-          accelerator: 'CmdOrCtrl+Shift+O',
+          accelerator: 'CmdOrCtrl+Shift+P',
           click: () => {
             const win = getMainWindow()
             win?.webContents.send('workbench:execute-command', 'workbench.action.showCommands')

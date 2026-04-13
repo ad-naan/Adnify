@@ -23,19 +23,14 @@ export function isPathInWorkspace(path: string, workspacePath: string): boolean 
   }
 
   const normalizedPath = normalizePath(cleanPath)
-  const normalizedWorkspace = normalizePath(workspacePath)
 
-  // 如果路径已经是绝对路径且在 workspace 内
-  const lowerPath = normalizedPath.toLowerCase()
-  const lowerWorkspace = normalizedWorkspace.toLowerCase()
-
-  if (lowerPath.startsWith(lowerWorkspace)) {
+  if (pathStartsWith(normalizedPath, normalizePath(workspacePath))) {
     return true
   }
 
   // 如果是相对路径，转换为绝对路径后检查
   const resolvedPath = normalizePath(toFullPath(cleanPath, workspacePath))
-  return resolvedPath.startsWith(normalizedWorkspace)
+  return pathStartsWith(resolvedPath, normalizePath(workspacePath))
 }
 
 export interface PathValidationResult {
@@ -155,10 +150,8 @@ export function toRelativePath(fullPath: string, workspacePath: string | null): 
   if (!workspacePath) return fullPath
   const normalizedFull = normalizePath(fullPath)
   const normalizedWorkspace = normalizePath(workspacePath)
-  const lowerFull = normalizedFull.toLowerCase()
-  const lowerWorkspace = normalizedWorkspace.toLowerCase()
 
-  if (lowerFull.startsWith(lowerWorkspace)) {
+  if (pathStartsWith(normalizedFull, normalizedWorkspace)) {
     let relative = normalizedFull.slice(normalizedWorkspace.length)
     if (relative.startsWith('/') || relative.startsWith('\\')) relative = relative.slice(1)
     return relative
