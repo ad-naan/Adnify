@@ -3,7 +3,7 @@
  * 用于代码语义搜索、相似度匹配、RAG
  */
 
-import { embed, embedMany, cosineSimilarity } from 'ai'
+import { embed, embedMany, cosineSimilarity as aiCosineSimilarity } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { logger } from '@shared/utils/Logger'
 import { LLMError } from '../types'
@@ -108,7 +108,7 @@ export class EmbeddingService {
    * 计算余弦相似度（使用 AI SDK 内置实现）
    */
   cosineSimilarity(a: number[], b: number[]): number {
-    return cosineSimilarity(a, b)
+    return aiCosineSimilarity(a, b)
   }
 
   /**
