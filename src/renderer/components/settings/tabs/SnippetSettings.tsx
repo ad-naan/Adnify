@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Trash2, Code, Download, Upload, Search } from 'lucide-react'
 import { Button, Input, Select } from '@components/ui'
+import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { snippetService, type CodeSnippet } from '@services/snippetService'
 import { Language } from '@renderer/i18n'
@@ -99,7 +100,6 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
       toast.warning(language === 'zh' ? '默认片段不可删除' : 'Default snippets cannot be deleted')
       return
     }
-    const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
       title: language === 'zh' ? '删除片段' : 'Delete Snippet',
       message: language === 'zh' ? '确定删除此片段？' : 'Delete this snippet?',

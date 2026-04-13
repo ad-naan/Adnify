@@ -27,6 +27,7 @@ import {
   generateHandoffDocument,
 } from '../domains/context'
 import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../domains/context/CompressionManager'
+import { lintService } from '../services/lintService'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { LintCheckFile } from '../types'
 import type { ChatMessage } from '../types'
@@ -233,7 +234,6 @@ async function autoFix(
 
   if (editedFiles.length === 0) return null
 
-  const { lintService } = await import('../services/lintService')
   const uniqueEditedFiles = Array.from(new Set(editedFiles))
   const lintResults = await lintService.getLintErrorsForFiles(uniqueEditedFiles, true)
   const allFiles: LintCheckFile[] = []

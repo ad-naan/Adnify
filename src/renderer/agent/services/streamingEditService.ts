@@ -5,6 +5,7 @@
 
 import { logger } from '@utils/Logger'
 import { StreamingEditState } from '../types'
+import { composerService } from './composerService'
 
 type StreamingEditListener = (state: StreamingEditState) => void
 type FilePathEditListener = (state: StreamingEditState | null) => void
@@ -360,23 +361,17 @@ class StreamingEditService {
 			this.replaceContent(editId, newContent)
 		}
 
-		// Keep composer state aligned with the streaming preview.
-		try {
-			const { composerService } = await import('./composerService')
-			const state = composerService.getState()
-			if (state.currentSession) {
-				const change = state.currentSession.changes.find(c => c.filePath === filePath)
-				if (change) {
-					change.newContent = newContent
-					// Recompute simple line stats for the preview.
-					const oldLines = (change.oldContent || '').split('\n').length
-					const newLines = newContent.split('\n').length
-					change.linesAdded = Math.max(0, newLines - oldLines)
-					change.linesRemoved = Math.max(0, oldLines - newLines)
-				}
+		const state = composerService.getState()
+		if (state.currentSession) {
+			const change = state.currentSession.changes.find(c => c.filePath === filePath)
+			if (change) {
+				change.newContent = newContent
+				// Recompute simple line stats for the preview.
+				const oldLines = (change.oldContent || '').split('\n').length
+				const newLines = newContent.split('\n').length
+				change.linesAdded = Math.max(0, newLines - oldLines)
+				change.linesRemoved = Math.max(0, oldLines - newLines)
 			}
-		} catch (e) {
-			logger.agent.warn('[StreamingEditService] Failed to sync with composerService:', e)
 		}
 	}
 

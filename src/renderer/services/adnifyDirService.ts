@@ -22,6 +22,22 @@ import {
   type ChatThread,
   type PersistedChatThread,
 } from '@/renderer/agent/types'
+import {
+  buildEffectiveSessionMeta,
+  DEFAULT_SESSION_META,
+  isPlainRecord,
+  normalizeLegacyThreadRecord,
+  normalizeSessionExtraState,
+  serializeSessionExtraState,
+  stableStringify,
+  toSessionIndexMeta,
+  type AgentSessionSnapshot,
+  type LegacyAgentStoreEnvelope,
+  type SessionCatalog,
+  type SessionIndexMeta,
+  type SessionMeta,
+} from './sessionStorageSupport'
+import { SessionFileStore } from './sessionFileStore'
 
 export const ADNIFY_DIR_NAME = '.adnify'
 
@@ -34,42 +50,6 @@ export const ADNIFY_FILES = {
 } as const
 
 type AdnifyFile = typeof ADNIFY_FILES[keyof typeof ADNIFY_FILES]
-
-interface SessionIndexMeta {
-  currentThreadId: string | null
-  threadIds: string[]
-  version: number
-}
-
-interface SessionExtraState {
-  branches: Record<string, unknown>
-  activeBranchId: Record<string, string | null>
-}
-
-interface LegacyAgentStoreEnvelope {
-  state?: {
-    threads?: Record<string, unknown>
-    currentThreadId?: string | null
-    branches?: Record<string, unknown>
-    activeBranchId?: Record<string, unknown>
-  }
-  version?: number
-}
-
-interface PersistedThreadSummary {
-  id: string
-  lastModified: number
-  messageCount: number
-}
-
-interface SessionCatalog {
-  meta: SessionMeta
-  summaries: PersistedThreadSummary[]
-}
-
-export interface SessionMeta extends SessionIndexMeta {
-  extra: SessionExtraState
-}
 
 export interface WorkspaceStateData {
   openFiles: string[]
@@ -101,14 +81,6 @@ export interface ProjectSettingsData {
   }
 }
 
-export interface AgentSessionSnapshot {
-  threads: Record<string, ChatThread>
-  currentThreadId: string | null
-  branches: Record<string, unknown>
-  activeBranchId: Record<string, unknown>
-  version: number
-}
-
 const DEFAULT_WORKSPACE_STATE: WorkspaceStateData = {
   openFiles: [],
   activeFile: null,
@@ -133,134 +105,11 @@ const DEFAULT_PROJECT_SETTINGS: ProjectSettingsData = {
   },
 }
 
-const DEFAULT_SESSION_META: SessionMeta = {
-  currentThreadId: null,
-  threadIds: [],
-  extra: {
-    branches: {},
-    activeBranchId: {},
-  },
-  version: 0,
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-function normalizeSessionExtraState(value?: Record<string, unknown> | null): SessionExtraState {
-  const rawBranches = isPlainRecord(value?.branches) ? value.branches : {}
-  const rawActiveBranchId = isPlainRecord(value?.activeBranchId) ? value.activeBranchId : {}
-
-  const activeBranchId: Record<string, string | null> = {}
-  for (const [threadId, branchId] of Object.entries(rawActiveBranchId)) {
-    if (typeof branchId === 'string' || branchId === null) {
-      activeBranchId[threadId] = branchId
-    }
-  }
-
-  return {
-    branches: { ...rawBranches },
-    activeBranchId,
-  }
-}
-
-function serializeSessionExtraState(extra: SessionExtraState): Record<string, unknown> {
-  const serialized: Record<string, unknown> = {}
-
-  if (Object.keys(extra.branches).length > 0) {
-    serialized.branches = extra.branches
-  }
-
-  if (Object.keys(extra.activeBranchId).length > 0) {
-    serialized.activeBranchId = extra.activeBranchId
-  }
-
-  return serialized
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value)
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map(item => stableStringify(item)).join(',')}]`
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
-  return `{${entries.map(([key, val]) => `${JSON.stringify(key)}:${stableStringify(val)}`).join(',')}}`
-}
-
-function toSessionIndexMeta(meta: SessionMeta): SessionIndexMeta {
-  return {
-    currentThreadId: meta.currentThreadId,
-    threadIds: meta.threadIds,
-    version: meta.version,
-  }
-}
-
-function normalizePersistedChatThread(thread: PersistedChatThread): PersistedChatThread {
-  const messages = Array.isArray(thread.messages) ? thread.messages : []
-  const preservedMessageCount =
-    typeof thread.messageCount === 'number'
-      ? thread.messageCount
-      : messages.length
-
-  return {
-    ...thread,
-    messages,
-    contextItems: Array.isArray(thread.contextItems) ? thread.contextItems : [],
-    messageCheckpoints: Array.isArray(thread.messageCheckpoints) ? thread.messageCheckpoints : [],
-    messageCount: preservedMessageCount,
-    contextSummary: thread.contextSummary ?? null,
-  }
-}
-
-function stripThreadMessagesForMetadata(thread: PersistedChatThread): PersistedChatThread {
-  return normalizePersistedChatThread({
-    ...thread,
-    messageCount: typeof thread.messageCount === 'number'
-      ? thread.messageCount
-      : (Array.isArray(thread.messages) ? thread.messages.length : 0),
-    messages: [],
-  })
-}
-
-function normalizeLegacyThreadRecord(threadId: string, value: unknown): ChatThread | null {
-  if (!isPlainRecord(value)) {
-    return null
-  }
-
-  const messages = Array.isArray(value.messages) ? value.messages : []
-  const contextItems = Array.isArray(value.contextItems) ? value.contextItems : []
-  const messageCheckpoints = Array.isArray(value.messageCheckpoints) ? value.messageCheckpoints : []
-  const createdAt = typeof value.createdAt === 'number' ? value.createdAt : Date.now()
-  const lastModified = typeof value.lastModified === 'number' ? value.lastModified : createdAt
-
-  return fromPersistedChatThread({
-    id: typeof value.id === 'string' ? value.id : threadId,
-    createdAt,
-    lastModified,
-    messages,
-    contextItems,
-    messageCheckpoints,
-    messageCount: typeof value.messageCount === 'number' ? value.messageCount : messages.length,
-    contextSummary: null,
-    todos: Array.isArray(value.todos) ? value.todos : undefined,
-    handoffContext: typeof value.handoffContext === 'string' ? value.handoffContext : undefined,
-    pendingObjective: typeof value.pendingObjective === 'string' ? value.pendingObjective : undefined,
-    pendingSteps: Array.isArray(value.pendingSteps) ? value.pendingSteps.filter((step): step is string => typeof step === 'string') : undefined,
-    mode: value.mode as PersistedChatThread['mode'],
-    origin: value.origin === 'plan-task' ? 'plan-task' : value.origin === 'user' ? 'user' : undefined,
-    planId: typeof value.planId === 'string' ? value.planId : undefined,
-    taskId: typeof value.taskId === 'string' ? value.taskId : undefined,
-  })
-}
-
 class AdnifyDirService {
   private primaryRoot: string | null = null
   private initializedRoots: Set<string> = new Set()
   private initialized = false
+  private readonly sessionFiles: SessionFileStore
 
   private cache: {
     sessionMeta: SessionMeta | null
@@ -290,6 +139,15 @@ class AdnifyDirService {
   private threadHashes: Map<string, string> = new Map()
   private metaHash: string | null = null
   private metaWriteRevision = 0
+
+  constructor() {
+    this.sessionFiles = new SessionFileStore({
+      getSessionsDirPath: () => this.getSessionsDirPath(),
+      getSessionFilePath: fileName => this.getSessionFilePath(fileName),
+      getThreadMetaPath: threadId => this.getThreadMetaPath(threadId),
+      getThreadMessagesPath: threadId => this.getThreadMessagesPath(threadId),
+    })
+  }
 
   async initialize(rootPath: string): Promise<boolean> {
     if (this.initializedRoots.has(rootPath)) return true
@@ -376,11 +234,11 @@ class AdnifyDirService {
     const promises: Promise<void>[] = []
 
     if (metaToWrite) {
-      promises.push(this.writeSessionFile('_meta.json', metaToWrite.index))
+      promises.push(this.sessionFiles.writeSessionFile('_meta.json', metaToWrite.index))
       if (Object.keys(metaToWrite.extra).length > 0) {
-        promises.push(this.writeSessionFile('_extra.json', metaToWrite.extra))
+        promises.push(this.sessionFiles.writeSessionFile('_extra.json', metaToWrite.extra))
       } else {
-        promises.push(this.deleteSessionFile('_extra.json'))
+        promises.push(this.sessionFiles.deleteSessionFile('_extra.json'))
       }
     }
 
@@ -388,7 +246,7 @@ class AdnifyDirService {
     for (const threadId of flushedThreadIds) {
       const data = this.cache.threads.get(threadId)
       if (data !== undefined) {
-        promises.push(this.writeSessionFile(`${threadId}.json`, data))
+        promises.push(this.sessionFiles.writeSessionFile(`${threadId}.json`, data))
         this.threadHashes.set(threadId, stableStringify(data))
       }
     }
@@ -468,104 +326,11 @@ class AdnifyDirService {
     return this.getSessionFilePath(`${threadId}.jsonl`)
   }
 
-  private async listPersistedThreadSummaries(): Promise<PersistedThreadSummary[]> {
-    if (!this.isInitialized()) return []
-
-    try {
-      const entries = await api.file.readDir(this.getSessionsDirPath())
-      const threadFiles = entries.filter(entry =>
-        !entry.isDirectory &&
-        entry.name.endsWith('.json') &&
-        !entry.name.startsWith('_')
-      )
-
-      const summaries = await Promise.all(
-        threadFiles.map(async entry => {
-          const threadId = entry.name.slice(0, -'.json'.length)
-          const data = await this.readSessionFile<PersistedChatThread>(entry.name)
-          if (!data) return null
-
-          return {
-            id: threadId,
-            lastModified: typeof data.lastModified === 'number' ? data.lastModified : 0,
-            messageCount: typeof data.messageCount === 'number' ? data.messageCount : 0,
-          } satisfies PersistedThreadSummary
-        })
-      )
-
-      return summaries.filter((item): item is PersistedThreadSummary => item !== null)
-    } catch (error) {
-      logger.system.error('[AdnifyDir] Failed to list persisted thread summaries:', error)
-      return []
-    }
-  }
-
-  private selectPreferredCurrentThreadId(
-    currentThreadId: string | null,
-    summaries: PersistedThreadSummary[],
-    preferNonEmptyThread: boolean
-  ): string | null {
-    if (summaries.length === 0) return null
-
-    const summaryById = new Map(summaries.map(summary => [summary.id, summary]))
-    const sorted = [...summaries].sort((left, right) => {
-      const leftHasMessages = left.messageCount > 0 ? 1 : 0
-      const rightHasMessages = right.messageCount > 0 ? 1 : 0
-      if (rightHasMessages !== leftHasMessages) {
-        return rightHasMessages - leftHasMessages
-      }
-      if (right.messageCount !== left.messageCount) {
-        return right.messageCount - left.messageCount
-      }
-      return right.lastModified - left.lastModified
-    })
-
-    if (currentThreadId) {
-      const currentSummary = summaryById.get(currentThreadId)
-      if (currentSummary) {
-        if (!preferNonEmptyThread || currentSummary.messageCount > 0 || sorted[0]?.messageCount === 0) {
-          return currentThreadId
-        }
-      }
-    }
-
-    return sorted[0]?.id || null
-  }
-
-  private buildEffectiveSessionMeta(
-    meta: SessionMeta,
-    summaries: PersistedThreadSummary[]
-  ): SessionMeta {
-    if (summaries.length === 0) {
-      return meta.threadIds.length === 0 && !meta.currentThreadId
-        ? meta
-        : { ...DEFAULT_SESSION_META, extra: meta.extra }
-    }
-
-    const hasNonEmptyThread = summaries.some(summary => summary.messageCount > 0)
-    const effectiveSummaries = hasNonEmptyThread
-      ? summaries.filter(summary => summary.messageCount > 0)
-      : summaries
-    const actualThreadIds = effectiveSummaries.map(summary => summary.id).sort()
-    const preferredCurrentThreadId = this.selectPreferredCurrentThreadId(
-      meta.currentThreadId,
-      effectiveSummaries,
-      hasNonEmptyThread
-    )
-
-    return {
-      currentThreadId: preferredCurrentThreadId,
-      threadIds: actualThreadIds,
-      extra: meta.extra,
-      version: meta.version,
-    }
-  }
-
   private async buildSessionCatalog(): Promise<SessionCatalog> {
     const [indexMeta, extra, summaries] = await Promise.all([
-      this.readSessionFile<SessionIndexMeta>('_meta.json'),
-      this.readSessionFile<Record<string, unknown>>('_extra.json'),
-      this.listPersistedThreadSummaries(),
+      this.sessionFiles.readSessionFile<SessionIndexMeta>('_meta.json'),
+      this.sessionFiles.readSessionFile<Record<string, unknown>>('_extra.json'),
+      this.sessionFiles.listPersistedThreadSummaries(),
     ])
 
     const hydratedMeta: SessionMeta = {
@@ -576,14 +341,14 @@ class AdnifyDirService {
     }
 
     return {
-      meta: this.buildEffectiveSessionMeta(hydratedMeta, summaries),
+      meta: buildEffectiveSessionMeta(hydratedMeta, summaries),
       summaries,
     }
   }
 
   private async reconcileSessionMeta(meta: SessionMeta): Promise<SessionMeta> {
-    const summaries = await this.listPersistedThreadSummaries()
-    const reconciledMeta = this.buildEffectiveSessionMeta(meta, summaries)
+    const summaries = await this.sessionFiles.listPersistedThreadSummaries()
+    const reconciledMeta = buildEffectiveSessionMeta(meta, summaries)
     const indexedThreadIds = [...meta.threadIds].sort()
     const actualThreadIds = [...reconciledMeta.threadIds].sort()
     const hasThreadSetDrift =
@@ -595,7 +360,7 @@ class AdnifyDirService {
       return meta
     }
 
-    await this.writeSessionFile('_meta.json', toSessionIndexMeta(reconciledMeta))
+    await this.sessionFiles.writeSessionFile('_meta.json', toSessionIndexMeta(reconciledMeta))
     this.cache.sessionMeta = reconciledMeta
     this.metaHash = stableStringify(reconciledMeta)
     this.dirty.sessionMeta = false
@@ -667,21 +432,21 @@ class AdnifyDirService {
     })
     const threadIds = Object.keys(snapshot.threads)
 
-    await this.writeSessionFile('_meta.json', {
+    await this.sessionFiles.writeSessionFile('_meta.json', {
       currentThreadId: snapshot.currentThreadId,
       threadIds,
       version: snapshot.version,
     })
 
     if (Object.keys(serializeSessionExtraState(normalizedExtra)).length > 0) {
-      await this.writeSessionFile('_extra.json', serializeSessionExtraState(normalizedExtra))
+      await this.sessionFiles.writeSessionFile('_extra.json', serializeSessionExtraState(normalizedExtra))
     } else {
-      await this.deleteSessionFile('_extra.json')
+      await this.sessionFiles.deleteSessionFile('_extra.json')
     }
 
     await Promise.all(
       threadIds.map(async threadId => {
-        await this.writeSessionFile(`${threadId}.json`, toPersistedChatThread(snapshot.threads[threadId]))
+        await this.sessionFiles.writeSessionFile(`${threadId}.json`, toPersistedChatThread(snapshot.threads[threadId]))
       })
     )
   }
@@ -718,7 +483,7 @@ class AdnifyDirService {
   async getThreadData(threadId: string): Promise<PersistedChatThread | null> {
     if (this.cache.threads.has(threadId)) return this.cache.threads.get(threadId)!
     if (!this.isInitialized()) return null
-    const data = await this.readSessionFile<PersistedChatThread>(`${threadId}.json`)
+    const data = await this.sessionFiles.readSessionFile<PersistedChatThread>(`${threadId}.json`)
     if (data !== null) {
       this.cache.threads.set(threadId, data)
       this.threadHashes.set(threadId, stableStringify(data))
@@ -732,25 +497,7 @@ class AdnifyDirService {
    */
   async loadThreadMessages(threadId: string): Promise<any[]> {
     if (!this.isInitialized()) return []
-
-    try {
-      const jsonlPath = this.getThreadMessagesPath(threadId)
-      const jsonlExists = await api.file.exists(jsonlPath)
-
-      if (!jsonlExists) {
-        return []
-      }
-
-      const jsonlContent = await api.file.read(jsonlPath)
-      if (!jsonlContent) return []
-
-      const messages = this.parseMessagesFromJsonl(jsonlContent)
-      logger.system.info(`[AdnifyDir] Loaded ${messages.length} messages for thread ${threadId}`)
-      return messages
-    } catch (error) {
-      logger.system.error(`[AdnifyDir] Failed to load messages for thread ${threadId}:`, error)
-      return []
-    }
+    return this.sessionFiles.loadThreadMessages(threadId)
   }
 
   setThreadDirty(threadId: string, data: PersistedChatThread): void {
@@ -816,12 +563,12 @@ class AdnifyDirService {
     this.dirty.sessionMeta = false
     this.dirty.dirtyThreads.clear()
     await Promise.all([
-      this.writeSessionFile('_meta.json', toSessionIndexMeta(this.cache.sessionMeta)),
-      this.deleteSessionFile('_extra.json'),
+      this.sessionFiles.writeSessionFile('_meta.json', toSessionIndexMeta(this.cache.sessionMeta)),
+      this.sessionFiles.deleteSessionFile('_extra.json'),
     ])
   }
 
-  async getAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
+  async getHydratedAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
     const { meta, summaries } = await this.buildSessionCatalog()
     const reconciledMeta = await this.reconcileSessionMeta(meta)
 
@@ -834,7 +581,7 @@ class AdnifyDirService {
     this.cache.sessionMeta = reconciledMeta
     this.metaHash = stableStringify(reconciledMeta)
 
-    const effectiveMeta = this.buildEffectiveSessionMeta(reconciledMeta, summaries)
+    const effectiveMeta = buildEffectiveSessionMeta(reconciledMeta, summaries)
 
     const threadEntries = await Promise.all(
       effectiveMeta.threadIds.map(async threadId => [threadId, await this.getThreadData(threadId)] as const)
@@ -868,7 +615,7 @@ class AdnifyDirService {
     }
   }
 
-  async getAgentSessionSnapshotWithoutHydration(): Promise<AgentSessionSnapshot | null> {
+  async getAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
     const { meta, summaries } = await this.buildSessionCatalog()
     const reconciledMeta = await this.reconcileSessionMeta(meta)
 
@@ -881,7 +628,7 @@ class AdnifyDirService {
     this.cache.sessionMeta = reconciledMeta
     this.metaHash = stableStringify(reconciledMeta)
 
-    const effectiveMeta = this.buildEffectiveSessionMeta(reconciledMeta, summaries)
+    const effectiveMeta = buildEffectiveSessionMeta(reconciledMeta, summaries)
     const threadEntries = await Promise.all(
       effectiveMeta.threadIds.map(async threadId => [threadId, await this.getThreadData(threadId)] as const)
     )
@@ -1039,91 +786,6 @@ class AdnifyDirService {
     logger.system.info('[AdnifyDir] Loaded all data from disk')
   }
 
-  private async readSessionFile<T>(fileName: string): Promise<T | null> {
-    try {
-      const filePath = this.getSessionFilePath(fileName)
-      const content = await api.file.read(filePath)
-      if (!content) return null
-
-      if (fileName.endsWith('.json') && !fileName.startsWith('_')) {
-        return stripThreadMessagesForMetadata(
-          JSON.parse(content) as PersistedChatThread
-        ) as T
-      }
-
-      return JSON.parse(content) as T
-    } catch {
-      return null
-    }
-  }
-
-  private async deleteSessionFile(fileName: string): Promise<void> {
-    try {
-      const filePath = this.getSessionFilePath(fileName)
-      const exists = await api.file.exists(filePath)
-      if (exists) {
-        await api.file.delete(filePath)
-      }
-    } catch (error) {
-      logger.system.error(`[AdnifyDir] Failed to delete session file ${fileName}:`, error)
-    }
-  }
-
-  private async writeSessionFile<T>(fileName: string, data: T): Promise<void> {
-    try {
-      if (fileName.endsWith('.json') && !fileName.startsWith('_')) {
-        const threadId = fileName.replace('.json', '')
-        const threadData = normalizePersistedChatThread(data as PersistedChatThread)
-        const { messages, ...metadata } = threadData
-
-        await api.file.write(
-          this.getThreadMetaPath(threadId),
-          JSON.stringify(
-            {
-              ...metadata,
-              messageCount: messages.length,
-            },
-            null,
-            2
-          )
-        )
-
-        if (messages.length > 0) {
-          await api.file.write(this.getThreadMessagesPath(threadId), this.serializeMessages(messages))
-        } else {
-          await this.deleteSessionFile(`${threadId}.jsonl`)
-        }
-
-        return
-      }
-
-      await api.file.write(this.getSessionFilePath(fileName), JSON.stringify(data, null, 2))
-    } catch (error) {
-      logger.system.error(`[AdnifyDir] Failed to write session file ${fileName}:`, error)
-    }
-  }
-
-  private serializeMessages(messages: any[]): string {
-    if (messages.length === 0) return ''
-    return messages.map(message => JSON.stringify(message)).join('\n')
-  }
-
-  private parseMessagesFromJsonl(content: string): any[] {
-    if (!content.trim()) return []
-
-    const messages: any[] = []
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        messages.push(JSON.parse(trimmed))
-      } catch (error) {
-        logger.system.warn('[AdnifyDir] Skipped invalid JSONL line', error)
-      }
-    }
-    return messages
-  }
-
   private async readJsonFile<T>(file: AdnifyFile): Promise<T | null> {
     return this.readJson<T>(file)
   }
@@ -1135,3 +797,4 @@ class AdnifyDirService {
 
 export const adnifyDir = new AdnifyDirService()
 export { DEFAULT_PROJECT_SETTINGS, DEFAULT_WORKSPACE_STATE }
+export type { AgentSessionSnapshot } from './sessionStorageSupport'

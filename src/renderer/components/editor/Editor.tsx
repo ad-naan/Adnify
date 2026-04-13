@@ -8,7 +8,7 @@ import { Eye, Edit, Columns } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
-import { useAgent } from '@hooks/useAgent'
+import { useAgentChangeState } from '@hooks/useAgent'
 import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
@@ -80,7 +80,7 @@ export default function Editor() {
   const language = useStore((state) => state.language)
   const closeFile = useStore((state) => state.closeFile)
 
-  const { pendingChanges, acceptChange, undoChange } = useAgent()
+  const { pendingChanges, acceptChange, undoChange } = useAgentChangeState()
 
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api') | null>(null)

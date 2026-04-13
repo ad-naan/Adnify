@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useRef, useEffect, useCallback, useMemo, startTransition, useDeferredValue } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 import {
   AlertTriangle,
@@ -15,7 +15,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
-import { useAgent, useAgentActions } from '@/renderer/hooks/useAgent'
+import { useAgentActions, useAgentCommands, useAgentViewState } from '@/renderer/hooks/useAgent'
 import { useAgentStore, selectHandoffRequired } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
@@ -41,6 +41,7 @@ import SlashCommandPopup from './SlashCommandPopup'
 import EmptyChatSuggestions from '../chat/EmptyChatSuggestions'
 import { ChatMessagesSkeleton } from '../ui/Loading'
 import { Button } from '../ui'
+import { globalConfirm } from '../common/ConfirmDialog'
 import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
 import { BranchSelector } from './BranchControls'
@@ -114,12 +115,9 @@ export default function ChatPanel() {
     pendingChanges,
     messageCheckpoints,
     contextItems,
-    sendMessage,
-    abort,
-    approveCurrentTool,
-    rejectCurrentTool,
     currentThreadId,
-  } = useAgent()
+  } = useAgentViewState()
+  const { sendMessage, abort, approveCurrentTool, rejectCurrentTool } = useAgentCommands()
   const {
     createThread,
     clearMessages,
@@ -162,11 +160,10 @@ export default function ChatPanel() {
     [filteredMessages, checkpointMessageIds]
   )
   const deferredRenderableMessages = useDeferredValue(filteredRenderableMessages)
-  const [displayMessages, setDisplayMessages] = useState(filteredRenderableMessages)
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
   // Virtuoso 初始滚动位置：只在线程切换时重新指向底部，普通追加消息不重算
-  // 避免每次 displayMessages 变化都重新传入新的 initialTopMostItemIndex
+  // 避免每次消息列表变化都重新传入新的 initialTopMostItemIndex
   // 导致 Virtuoso 强制跳回该位置（即滚动条回顶的根因）
   const initialIndexRef = useRef(Math.max(0, filteredRenderableMessages.length - 1))
 
@@ -192,14 +189,7 @@ export default function ChatPanel() {
       })
     }, 350)
     return () => clearTimeout(timer)
-  }, [currentThreadId, filteredRenderableMessages.length])
-
-  // Effect 2：同步 displayMessages，无论是线程切换后懒加载到位，还是流式追加
-  useEffect(() => {
-    startTransition(() => {
-      setDisplayMessages(deferredRenderableMessages)
-    })
-  }, [deferredRenderableMessages])
+  }, [currentThreadId])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -317,6 +307,7 @@ export default function ChatPanel() {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const lastAutoScrollAtRef = useRef(0)
   // 用于防止工具卡片展开/收缩时误判滚动状态
   const isAutoScrollingRef = useRef(false)
   const isHydratingActiveThread = hasActiveThread && !activeThreadMessagesHydrated
@@ -325,14 +316,14 @@ export default function ChatPanel() {
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
     requestAnimationFrame(() => {
       virtuosoRef.current?.scrollToIndex({
-        index: displayMessages.length - 1,
+        index: deferredRenderableMessages.length - 1,
         align: 'end',
         behavior
       })
     })
     setAtBottom(true)
     setShowScrollButton(false)
-  }, [displayMessages.length])
+  }, [deferredRenderableMessages.length])
   const followOutput = useCallback((isListAtBottom: boolean) => {
     // 流式输出时：在底部则跟随，不在底部则不强制（用户在往上翻）
     if (isStreaming) return isListAtBottom ? 'smooth' : false
@@ -343,47 +334,19 @@ export default function ChatPanel() {
 
   const handleTotalListHeightChanged = useCallback(() => {
     if (!atBottom || !isStreaming) return
+    const now = Date.now()
+    if (now - lastAutoScrollAtRef.current < 120) return
+
+    lastAutoScrollAtRef.current = now
+    isAutoScrollingRef.current = true
     virtuosoRef.current?.autoscrollToBottom()
+
+    setTimeout(() => {
+      isAutoScrollingRef.current = false
+    }, 50)
   }, [atBottom, isStreaming])
 
   // 流式输出时的自动滚动 - 只在用户处于底部时才滚动
-  useEffect(() => {
-    if (!isStreaming || !atBottom) return
-
-    let rafId: number | null = null
-    let lastScrollTime = 0
-
-    const doScroll = () => {
-      const now = Date.now()
-      // 节流：至少间隔 500ms 才执行一次（降低频率）
-      if (now - lastScrollTime < 500) {
-        rafId = requestAnimationFrame(doScroll)
-        return
-      }
-      lastScrollTime = now
-
-      isAutoScrollingRef.current = true
-      virtuosoRef.current?.scrollToIndex({
-        index: displayMessages.length - 1,
-        align: 'end',
-        behavior: 'auto' // 改为 auto，smooth 会触发额外的重绘
-      })
-
-      setTimeout(() => {
-        isAutoScrollingRef.current = false
-      }, 50)
-
-      rafId = requestAnimationFrame(doScroll)
-    }
-
-    rafId = requestAnimationFrame(doScroll)
-
-    return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId)
-      isAutoScrollingRef.current = false
-    }
-  }, [isStreaming, atBottom, displayMessages.length])
-
   // 处理用户滚动状态变化
   const handleAtBottomStateChange = useCallback((bottom: boolean) => {
     // 如果是自动滚动触发的，忽略状态变化
@@ -908,7 +871,6 @@ export default function ChatPanel() {
       ? (typeof userMessage.content === 'string' ? userMessage.content : getMessageText(userMessage.content))
       : ''
 
-    const { globalConfirm } = await import('../common/ConfirmDialog')
     const confirmed = await globalConfirm({
       title: language === 'zh' ? '恢复检查点' : 'Restore Checkpoint',
       message: t('confirmRestoreCheckpoint', language),
@@ -1196,7 +1158,7 @@ export default function ChatPanel() {
                   initial={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute inset-0 z-10 bg-background-secondary"
+                  className="absolute inset-0 z-30 bg-background-secondary pointer-events-auto"
                 >
                   <ChatMessagesSkeleton />
                 </motion.div>
@@ -1205,7 +1167,7 @@ export default function ChatPanel() {
 
             <Virtuoso
               ref={virtuosoRef}
-              data={displayMessages}
+              data={deferredRenderableMessages}
               computeItemKey={(_, item) => item.renderKey}
               atBottomStateChange={handleAtBottomStateChange}
               initialTopMostItemIndex={initialIndexRef.current}

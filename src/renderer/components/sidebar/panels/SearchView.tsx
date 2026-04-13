@@ -9,6 +9,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
+import { globalConfirm } from '../../common/ConfirmDialog'
 import { Input } from '../../ui'
 import { toast } from '../../common/ToastProvider'
 
@@ -256,7 +257,6 @@ export function SearchView() {
       ? `确定要在 ${fileCount} 个文件中替换 ${matchCount} 处匹配吗？`
       : `Replace ${matchCount} matches in ${fileCount} files?`
 
-    const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
       title: language === 'zh' ? '替换确认' : 'Replace Confirmation',
       message: confirmMessage,

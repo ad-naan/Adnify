@@ -15,6 +15,7 @@ import type {
     PlanStatus,
 } from '../../plan/types'
 import { useStore } from '@store'
+import { api } from '@/renderer/services/electronAPI'
 
 export type { TaskStatus, ExecutionMode, PlanStatus, PlanTask, TaskPlan }
 export type PlanTaskStatus = TaskStatus
@@ -111,7 +112,6 @@ export const createPlanSlice: StateCreator<
 
     loadPlansFromDisk: async (workspacePath) => {
         try {
-            const { api } = await import('@/renderer/services/electronAPI')
             const planDir = `${workspacePath}/.adnify/plan`
             const exists = await api.file.exists(planDir)
             if (!exists) return
@@ -176,7 +176,6 @@ export const createPlanSlice: StateCreator<
                     const workspacePath = useStore.getState().workspacePath
                     if (!workspacePath) return
 
-                    const { api } = await import('@/renderer/services/electronAPI')
                     const planPath = `${workspacePath}/.adnify/plan/${planId}.json`
                     await api.file.write(planPath, JSON.stringify(latestPlan, null, 2))
                 } catch (error) {

@@ -6,23 +6,24 @@
 import { api } from './electronAPI'
 import { logger } from '@utils/Logger'
 import { startupMetrics } from '@shared/utils/startupMetrics'
+import { globalConfirm } from '@components/common/ConfirmDialog'
 import { useStore } from '../store'
 import { initializeAgentStore } from '@renderer/agent/store/AgentStore'
 import { themeManager } from '../config/themeConfig'
 import { keybindingService } from './keybindingService'
 import { registerCoreCommands } from '../config/commands'
-import { adnifyDir } from './adnifyDirService'
 import { initDiagnosticsListener } from './diagnosticsStore'
 import { restoreWorkspaceState } from './workspaceStateService'
-import { restoreWorkspaceAgentData } from './workspaceAgentRestoreService'
 import { mcpService } from './mcpService'
 import { snippetService } from './snippetService'
 import { workerService } from './workerService'
+import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import { runWithAgentStorageWritesSuspended } from '@renderer/agent/store/agentStorage'
 import {
   bindWorkspaceRoot,
   commitWorkspaceShell,
   prepareWorkspaceShell,
+  restoreWorkspaceAgentStore,
 } from './workspaceLoadService'
 
 export interface InitResult {
@@ -105,16 +106,16 @@ async function restoreWorkspace(): Promise<boolean> {
     return false
   }
 
-  await Promise.all(workspaceConfig.roots.map(root => adnifyDir.initialize(root)))
+  await workspaceStorageRuntime.initializeRoots(workspaceConfig.roots)
   const shellState = await prepareWorkspaceShell(workspaceConfig)
-  await runWithAgentStorageWritesSuspended(async () => {
-    await bindWorkspaceRoot(shellState)
+    await runWithAgentStorageWritesSuspended(async () => {
+      await bindWorkspaceRoot(shellState)
 
-    await Promise.all([
-      restoreWorkspaceState(),
-      restoreWorkspaceAgentData(),
-    ])
-  })
+      await Promise.all([
+        restoreWorkspaceState(),
+        restoreWorkspaceAgentStore(),
+      ])
+    })
 
   commitWorkspaceShell(shellState)
 
@@ -250,7 +251,6 @@ function isThemeName(value: unknown): value is import('@store').ThemeName {
 
 export function registerAppErrorListener(): () => void {
   return api.app.onError(async (error) => {
-    const { globalConfirm } = await import('@components/common/ConfirmDialog')
     await globalConfirm({
       title: error.title,
       message: error.message,

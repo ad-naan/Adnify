@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X,
@@ -10,16 +10,15 @@ import {
   Clock,
   Check,
   Edit2,
-  Plus
+  Plus,
 } from 'lucide-react'
 import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent/store/AgentStore'
 import { useAgentActions, useAllThreads } from '@/renderer/hooks/useAgent'
-import { Button } from '../ui'
-import { Tooltip } from '../ui/Tooltip'
 import { ChatThread, getMessageText } from '@/renderer/agent/types'
 import { Branch } from '@/renderer/agent/store/slices/branchSlice'
-
-// 辅助 import Store
+import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
+import { Button } from '../ui'
+import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { getRelativeTime } from '@shared/utils'
 
@@ -36,7 +35,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Sync initialTab when isOpen changes
   React.useEffect(() => {
     if (isOpen) {
       setActiveTab(initialTab)
@@ -48,7 +46,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -58,7 +55,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             onClick={onClose}
           />
 
-          {/* Sidebar */}
           <motion.div
             initial={{ x: '100%', opacity: 0.5 }}
             animate={{ x: 0, opacity: 1 }}
@@ -67,7 +63,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             className="absolute top-0 right-0 bottom-0 w-[340px] bg-background/95 backdrop-blur-2xl border-l border-border/40 z-50 shadow-2xl flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/30 select-none">
               <h2 className="text-base font-semibold text-text-primary tracking-tight">
                 {language === 'zh' ? '对话管理' : 'Conversation'}
@@ -77,7 +72,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
               </Button>
             </div>
 
-            {/* Tabs - Modern Segmented Control */}
             <div className="px-5 pt-4 pb-2">
               <div className="flex p-1 bg-surface/50 rounded-lg select-none border border-border/20">
                 <button
@@ -117,7 +111,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
               </div>
             </div>
 
-            {/* Search */}
             <div className="px-5 py-2">
               <div className="relative group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted/70 group-focus-within:text-accent transition-colors" />
@@ -125,7 +118,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                   type="text"
                   placeholder={language === 'zh' ? '搜索...' : 'Search...'}
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-8 text-xs bg-surface/30 border border-border/30 rounded-lg focus:outline-none focus:border-accent/30 focus:bg-surface/50 transition-all placeholder:text-text-muted/40"
                 />
                 {searchQuery && (
@@ -139,7 +132,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
               </div>
             </div>
 
-            {/* Content List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-4 pt-2">
               {activeTab === 'history' ? (
                 <HistoryList searchQuery={searchQuery} onClose={onClose} language={language} />
@@ -148,7 +140,6 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
               )}
             </div>
 
-            {/* Footer Action */}
             {activeTab === 'history' && (
               <div className="p-4 border-t border-border/30 bg-surface/10 backdrop-blur-sm">
                 <Button
@@ -209,34 +200,32 @@ function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, 
 }
 
 function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
-  thread: ChatThread,
-  isActive: boolean,
-  language: string,
-  onSelect: () => void,
+  thread: ChatThread
+  isActive: boolean
+  language: string
+  onSelect: () => void
   onDelete: () => void
 }) {
   const [preview, setPreview] = React.useState<string>('New chat')
   const timeStr = getRelativeTime(thread.lastModified, language)
 
-  // 懒加载消息以获取预览文本
   React.useEffect(() => {
     const firstUserMsg = thread.messages.find(m => m.role === 'user')
     if (firstUserMsg) {
       setPreview(getMessageText(firstUserMsg.content).slice(0, 60))
-    } else if (thread.messages.length === 0) {
-      // 消息未加载，尝试懒加载
-      import('@/renderer/services/adnifyDirService').then(({ adnifyDir }) => {
-        adnifyDir.loadThreadMessages(thread.id).then(messages => {
-          const firstUser = messages.find(m => m.role === 'user')
-          if (firstUser) {
-            setPreview(getMessageText(firstUser.content).slice(0, 60))
-          }
-        }).catch(() => {
-          // 加载失败，保持 "New chat"
-        })
+      return
+    }
+
+    if (thread.messages.length === 0) {
+      agentSessionRepository.loadThreadMessages(thread.id).then(messages => {
+        const firstUser = messages.find(m => m.role === 'user')
+        if (firstUser) {
+          setPreview(getMessageText(firstUser.content).slice(0, 60))
+        }
+      }).catch(() => {
       })
     }
-  }, [thread.id, thread.messages.length])
+  }, [thread.id, thread.messages])
 
   return (
     <div
@@ -246,7 +235,6 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
         }`}
       onClick={onSelect}
     >
-      {/* Active Indicator (Left Strip) */}
       {isActive && (
         <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
       )}
@@ -274,7 +262,7 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
       </div>
 
       <button
-        onClick={(e) => {
+        onClick={e => {
           e.stopPropagation()
           onDelete()
         }}
@@ -318,7 +306,6 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
 
   return (
     <div className="space-y-4 px-1">
-      {/* Mainline */}
       {!searchQuery && (
         <div
           onClick={() => {
@@ -330,7 +317,6 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
             : 'bg-surface/20 border-border/40 hover:bg-surface/40 hover:border-border/60'
             }`}
         >
-          {/* Active Indicator */}
           {!isOnBranch && (
             <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
           )}
@@ -355,7 +341,6 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
         </div>
       )}
 
-      {/* Branches */}
       <div className="space-y-2">
         {filteredBranches.length > 0 && (
           <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 opacity-70 flex items-center gap-2">
@@ -374,7 +359,6 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                 : 'bg-transparent border-transparent hover:bg-surface/40 hover:border-border/40'
                 }`}
             >
-              {/* Active Indicator */}
               {isActive && (
                 <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
               )}
@@ -402,7 +386,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                         className="w-full bg-surface text-sm px-2 py-1 rounded border border-accent/50 focus:outline-none"
                         onClick={e => e.stopPropagation()}
                       />
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-green-400 hover:bg-green-500/10" onClick={(e) => {
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-green-400 hover:bg-green-500/10" onClick={e => {
                         e.stopPropagation()
                         handleSaveEdit()
                       }}>
@@ -432,13 +416,12 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                   )}
                 </div>
 
-                {/* Actions */}
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 bg-background/50 backdrop-blur-sm rounded-lg">
                   {editingId !== branch.id && (
                     <>
                       <Tooltip content="Rename">
                         <button
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation()
                             handleStartEdit(branch)
                           }}
@@ -449,7 +432,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                       </Tooltip>
                       <Tooltip content="Delete">
                         <button
-                          onClick={(e) => {
+                          onClick={e => {
                             e.stopPropagation()
                             deleteBranch(branch.id)
                           }}
@@ -470,7 +453,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
           <EmptyState
             icon={GitBranch}
             text={language === 'zh' ? '暂无分支' : 'No branches found'}
-            subText={language === 'zh' ? '在消息上点击"重新生成"可创建分支' : 'Click "Regenerate" on messages to create branches'}
+            subText={language === 'zh' ? '在消息上点击“重新生成”可创建分支' : 'Click "Regenerate" on messages to create branches'}
           />
         )}
       </div>

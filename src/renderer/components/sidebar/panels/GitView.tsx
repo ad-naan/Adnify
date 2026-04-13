@@ -18,6 +18,7 @@ import { t, type TranslationKey } from '@renderer/i18n'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
+import { globalConfirm } from '@components/common/ConfirmDialog'
 import { keybindingService } from '@services/keybindingService'
 import { Input, Button, Modal } from '@components/ui'
 import { getFileName, normalizePath, toFullPath } from '@shared/utils/pathUtils'
@@ -566,7 +567,6 @@ Commit message:`
     }
 
     const handleDiscard = async (path: string) => {
-        const { globalConfirm } = await import('@components/common/ConfirmDialog')
         const confirmed = await globalConfirm({
             title: tt('git.discard'),
             message: t('git.discardConfirm', language, { name: getFileName(path) }),
@@ -653,7 +653,6 @@ Commit message:`
     }
 
     const handleDeleteBranch = async (name: string) => {
-        const { globalConfirm } = await import('@components/common/ConfirmDialog')
         const confirmed = await globalConfirm({
             title: tt('git.deleteBranch'),
             message: t('git.deleteBranchConfirm', language, { name }),
@@ -672,7 +671,6 @@ Commit message:`
     }
 
     const handleDeleteRemoteBranch = async (name: string) => {
-        const { globalConfirm } = await import('@components/common/ConfirmDialog')
         const confirmed = await globalConfirm({
             title: tt('git.deleteBranch'),
             message: t('git.deleteBranchConfirm', language, { name }),
@@ -748,7 +746,6 @@ Commit message:`
     }
 
     const handleStashDrop = async (index: number) => {
-        const { globalConfirm } = await import('@components/common/ConfirmDialog')
         const confirmed = await globalConfirm({
             title: tt('git.stashDrop'),
             message: t('git.stashDropConfirm', language, { index: String(index) }),

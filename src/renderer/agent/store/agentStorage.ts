@@ -1,5 +1,5 @@
 import { logger } from '@utils/Logger'
-import { adnifyDir, type AgentSessionSnapshot } from '@services/adnifyDirService'
+import { agentSessionRepository, type AgentSessionSnapshot } from '@services/agentSessionRepository'
 import { toPersistedChatThread, type ChatThread } from '@renderer/agent/types'
 
 let lastSerializedValue: string | null = null
@@ -118,17 +118,13 @@ function stagePersistedAgentSessionFromGetter(
   if (writeSuspendCount > 0) {
     return
   }
-  if (!adnifyDir.isInitialized()) {
-    return
-  }
-
   const snapshot = buildAgentSessionSnapshot(getState())
   const serialized = serializeAgentSessionSnapshot(snapshot)
   if (serialized === lastSerializedValue) {
     return
   }
 
-  adnifyDir.stageAgentSessionSnapshot(snapshot)
+  agentSessionRepository.stageSnapshot(snapshot)
   lastSerializedValue = serialized
 }
 
@@ -178,8 +174,8 @@ export async function persistCriticalAgentSessionState(
 ): Promise<void> {
   try {
     flushScheduledPersistedAgentSessionState()
-    adnifyDir.stageAgentSessionSnapshot(buildAgentSessionSnapshot(state))
-    await adnifyDir.flush()
+    agentSessionRepository.stageSnapshot(buildAgentSessionSnapshot(state))
+    await agentSessionRepository.flush()
     lastSerializedValue = null
   } catch (error) {
     logger.agent.error('[AgentStorage] Failed to persist critical agent session state:', error)
@@ -190,5 +186,5 @@ export async function clearPersistedAgentSessionState(): Promise<void> {
   clearScheduledPersistTimer()
   pendingStateGetter = null
   lastSerializedValue = null
-  await adnifyDir.clearAllSessions()
+  await agentSessionRepository.clear()
 }

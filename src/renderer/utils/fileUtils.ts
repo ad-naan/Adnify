@@ -12,6 +12,7 @@ import {
   isLargeFile
 } from '@services/largeFileService'
 import { toast } from '@components/common/ToastProvider'
+import { globalConfirm } from '../components/common/ConfirmDialog'
 import { getFileName } from '@shared/utils/pathUtils'
 
 // ============ 配置常量 ============
@@ -136,7 +137,6 @@ export async function safeOpenFile(
 
     // 4. 大文件确认
     if (confirmLargeFile && content.length > FILE_CONFIG.confirmThreshold) {
-      const { globalConfirm } = await import('../components/common/ConfirmDialog')
       const { t } = await import('../i18n')
       const size = (content.length / 1024 / 1024).toFixed(1)
 

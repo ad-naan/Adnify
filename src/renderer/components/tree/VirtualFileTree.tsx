@@ -22,6 +22,7 @@ import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
 import { t } from '@renderer/i18n'
 import { getDirPath, joinPath, pathEquals, normalizePath } from '@shared/utils/pathUtils'
+import { globalConfirm } from '../common/ConfirmDialog'
 import { toast } from '../common/ToastProvider'
 import { Input, ContextMenu, ContextMenuItem } from '../ui'
 import { directoryCacheService } from '@services/directoryCacheService'
@@ -408,7 +409,6 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   // 菜单操作
   const handleDelete = useCallback(async (node: FlattenedNode) => {
-    const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
       title: '删除',
       message: t('confirmDelete', 'zh', { name: node.item.name }) || `确定要删除 ${node.item.name} 吗？`,

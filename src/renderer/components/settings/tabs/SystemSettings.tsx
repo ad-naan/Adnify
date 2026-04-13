@@ -7,6 +7,7 @@ import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
 import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
+import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { useStore } from '@store'
@@ -177,7 +178,6 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
     }
 
     const handleReset = async () => {
-        const { globalConfirm } = await import('@components/common/ConfirmDialog')
         const confirmed = await globalConfirm({
             title: language === 'zh' ? '重置设置' : 'Reset Settings',
             message: language === 'zh' ? '确定要重置所有设置吗？这将丢失所有自定义配置。' : 'Are you sure you want to reset all settings? This will lose all custom configurations.',
