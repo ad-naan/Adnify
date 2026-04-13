@@ -193,7 +193,7 @@ export function convertUsage(usage: LanguageModelUsage): TokenUsage {
   return {
     inputTokens: usage.inputTokens || 0,
     outputTokens: usage.outputTokens || 0,
-    totalTokens: usage.totalTokens || 0,
+    totalTokens: usage.totalTokens || ((usage.inputTokens || 0) + (usage.outputTokens || 0)),
     cachedInputTokens:
       readNumber(
         usageAny.inputTokenDetails?.cacheReadTokens,

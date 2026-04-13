@@ -77,6 +77,7 @@ let securityManager: typeof import('./security').securityManager | null = null
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
+  process.exit(0)
 }
 
 // ==========================================
