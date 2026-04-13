@@ -28,6 +28,7 @@ import ContextStatsContent from '../panels/ContextStatsContent'
 import PlanListContent from '../panels/PlanListContent'
 import NotificationCenterContent from '../panels/NotificationCenterContent'
 import { useInlineToast } from '../common/InlineToast'
+import { useHasElevatedToastLayer } from '../common/toastLayerStore'
 import {
   useAgentStore,
   selectMessageCount,
@@ -46,14 +47,11 @@ export default function StatusBar() {
     activeFilePath, workspacePath, setShowSettings, language,
     terminalVisible, setTerminalVisible, debugVisible, setDebugVisible,
     cursorPosition, isGitRepo, gitStatus, setActiveSidePanel,
-    showSettings, showCommandPalette, showComposer, showQuickOpen, showAbout
   } = useStore(useShallow(s => ({
     activeFilePath: s.activeFilePath, workspacePath: s.workspacePath, setShowSettings: s.setShowSettings,
     language: s.language, terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible,
     debugVisible: s.debugVisible, setDebugVisible: s.setDebugVisible, cursorPosition: s.cursorPosition,
     isGitRepo: s.isGitRepo, gitStatus: s.gitStatus, setActiveSidePanel: s.setActiveSidePanel,
-    showSettings: s.showSettings, showCommandPalette: s.showCommandPalette, showComposer: s.showComposer,
-    showQuickOpen: s.showQuickOpen, showAbout: s.showAbout,
   })))
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
   const [workerProgress, setWorkerProgress] = useState<IndexProgress | null>(null)
@@ -64,10 +62,7 @@ export default function StatusBar() {
 
   const latestVisibleToastId = visibleIds[visibleIds.length - 1]
   const activeToast = latestVisibleToastId ? toasts.find(t => t.id === latestVisibleToastId) : null
-
-  // Escape logic: if any modal is active, the GlobalToastContainer will pick it up via layoutId morphing
-  const hasModal = showSettings || showCommandPalette || showComposer || showQuickOpen || showAbout
-  const shouldEject = hasModal
+  const shouldEject = useHasElevatedToastLayer()
 
   const diagnostics = useDiagnosticsStore(state => state.diagnostics)
   const version = useDiagnosticsStore(state => state.version)

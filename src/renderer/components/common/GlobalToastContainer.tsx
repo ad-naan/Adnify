@@ -2,25 +2,16 @@ import { useStore } from '@/renderer/store'
 import { useInlineToast } from './InlineToast'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Volume2 } from 'lucide-react'
+import { useHasElevatedToastLayer } from './toastLayerStore'
 
 export default function GlobalToastContainer() {
   const { toasts, visibleIds } = useInlineToast()
+  const hasElevatedToastLayer = useHasElevatedToastLayer()
 
-  // Select logic for ejection
-  const {
-    showSettings,
-    showCommandPalette,
-    showComposer,
-    showQuickOpen,
-    showAbout,
-    workspace,
-  } = useStore()
-
-  const hasModal = showSettings || showCommandPalette || showComposer || showQuickOpen || showAbout
+  const { workspace } = useStore()
   const hasWorkspace = workspace && workspace.roots.length > 0
 
-  // Eject condition: either a modal is covering the screen, or the workspace (and thus StatusBar) is not present
-  const shouldEject = hasModal || !hasWorkspace
+  const shouldEject = hasElevatedToastLayer || !hasWorkspace
 
   const latestVisibleToastId = visibleIds[visibleIds.length - 1]
   const activeToast = latestVisibleToastId ? toasts.find((t) => t.id === latestVisibleToastId) : null

@@ -1,8 +1,9 @@
-import React, { memo, useMemo } from 'react'
+import React, { memo, useEffect, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { useEscapeKey } from '@/renderer/hooks/usePerformance'
+import { acquireElevatedToastLayer } from '@/renderer/components/common/toastLayerStore'
 
 interface ModalProps {
     isOpen: boolean
@@ -31,6 +32,11 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
     isOpen, onClose, title, children, size = 'md', noPadding = false, className = '', showCloseButton = true
 }) {
     useEscapeKey(onClose, isOpen)
+
+    useEffect(() => {
+        if (!isOpen) return
+        return acquireElevatedToastLayer()
+    }, [isOpen])
 
     const sizeClass = useMemo(() => sizes[size], [size])
 
