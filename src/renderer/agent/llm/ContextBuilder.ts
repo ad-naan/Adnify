@@ -74,7 +74,7 @@ export async function buildContextContent(
   }
 
   // 更新上下文统计信息
-  updateContextStats(validContextItems, totalChars, config)
+  updateContextStats(validContextItems, totalChars, config, threadId)
 
   // 尝试获取隐式上下文 (Auto-Context)
   // 只有在上下文未满且配置开启时尝试
@@ -451,14 +451,16 @@ async function processProblemsContext(
 function updateContextStats(
   contextItems: ContextItem[],
   totalChars: number,
-  config: ReturnType<typeof getAgentConfig>
+  config: ReturnType<typeof getAgentConfig>,
+  threadId?: string
 ): void {
   const agentStore = useAgentStore.getState()
-  const agentMessages = agentStore.getMessages()
+  const targetStore = threadId ? agentStore.forThread(threadId) : null
+  const agentMessages = targetStore ? targetStore.getMessages() : agentStore.getMessages()
   const fileCount = contextItems.filter(item => item.type === 'File').length
   const semanticResultCount = contextItems.filter(item => item.type === 'Codebase').length
 
-  agentStore.setContextStats({
+  const stats = {
     totalChars,
     maxChars: config.maxTotalContextChars,
     fileCount,
@@ -467,7 +469,16 @@ function updateContextStats(
     maxMessages: config.maxHistoryMessages,
     semanticResultCount,
     terminalChars: 0
-  })
+  }
+
+  if (targetStore) {
+    targetStore.setContextStats(stats)
+    return
+  }
+
+  if (agentStore.currentThreadId) {
+    agentStore.forThread(agentStore.currentThreadId).setContextStats(stats)
+  }
 }
 
 /**

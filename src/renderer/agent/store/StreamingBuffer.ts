@@ -11,6 +11,7 @@ class StreamingBuffer {
     private buffer: Map<string, { content: string; threadId?: string }> = new Map()
     private timerId: ReturnType<typeof setTimeout> | null = null
     private flushCallback: FlushCallback | null = null
+    private readonly flushIntervalMs = 120
 
     setFlushCallback(callback: FlushCallback) {
         this.flushCallback = callback
@@ -19,7 +20,6 @@ class StreamingBuffer {
     append(messageId: string, content: string, threadId?: string): void {
         if (!content) return
 
-        const isFirstData = !this.buffer.has(messageId)
         const existing = this.buffer.get(messageId)
 
         if (existing) {
@@ -32,11 +32,7 @@ class StreamingBuffer {
         }
 
         // 优化：第一次数据立即刷新，后续数据节流
-        if (isFirstData) {
-            this.flushNow()
-        } else {
-            this.scheduleFlush()
-        }
+        this.scheduleFlush()
     }
 
     private scheduleFlush(): void {
@@ -47,7 +43,7 @@ class StreamingBuffer {
         this.timerId = setTimeout(() => {
             this.timerId = null
             this.flush()
-        }, 120)
+        }, this.flushIntervalMs)
     }
 
     private flush(): void {

@@ -24,6 +24,7 @@ import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { toast } from '@/renderer/components/common/ToastProvider'
+import { api } from '@/renderer/services/electronAPI'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
 import {
     getPromptTemplateSummary,
@@ -354,7 +355,6 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
         if (!plan?.requirementsDoc || !workspacePath) return
         const loadRequirements = async () => {
             try {
-                const { api } = await import('@/renderer/services/electronAPI')
                 const mdPath = `${workspacePath}/.adnify/plan/${plan.requirementsDoc}`
                 const content = await api.file.read(mdPath)
                 if (content) {

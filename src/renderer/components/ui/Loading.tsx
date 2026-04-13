@@ -111,7 +111,7 @@ EditorSkeleton.displayName = 'EditorSkeleton'
 // ============ 聊天面板骨架屏 ============
 
 export const ChatMessagesSkeleton = memo(() => (
-  <div className="flex-1 p-4 space-y-6 overflow-hidden">
+  <div className="h-full w-full p-4 space-y-6 overflow-hidden bg-background-secondary">
     {/* AI 消息 */}
     <div className="flex gap-3 animate-pulse">
       <div className="w-7 h-7 bg-surface-active/50 rounded-full flex-shrink-0" />

@@ -32,7 +32,7 @@ import {
     type PlanSlice,
 } from './slices/planSlice'
 import { initializeTools } from '../tools'
-import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem } from '../types'
+import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import { buildHandoffContext } from '../domains/context/HandoffManager'
@@ -41,21 +41,11 @@ import type { ToolStreamingPreview } from '@/shared/types'
 
 // 重新导出刷新函数供外部使用
 export { flushStreamingBuffer }
+export type { ContextStats } from '../types'
 
 // ===== Store 类型 =====
 
 // 上下文统计信息（用于底部栏显示）
-export interface ContextStats {
-    totalChars: number
-    maxChars: number
-    fileCount: number
-    maxFiles: number
-    messageCount: number
-    maxMessages: number
-    semanticResultCount: number
-    terminalChars: number
-}
-
 // Handoff 会话创建结果
 interface HandoffSessionResult {
     threadId: string
@@ -67,7 +57,6 @@ interface HandoffSessionResult {
 
 // UI 相关状态（全局，非线程相关）
 interface UIState {
-    contextStats: ContextStats | null
     inputPrompt: string
     currentSessionId: string | null
     handoffDocument: HandoffDocument | null  // Handoff 文档（临时状态）
@@ -77,7 +66,6 @@ interface UIState {
     // 情绪感知状态
     emotionDetection: EmotionDetection | null
     emotionHistory: EmotionHistory[]
-    setContextStats: (stats: ContextStats | null) => void
     setInputPrompt: (prompt: string) => void
     setCurrentSessionId: (id: string | null) => void
     setHandoffDocument: (doc: HandoffDocument | null) => void
@@ -117,6 +105,7 @@ export interface ThreadBoundStore {
     clearToolStreamingPreview: (toolCallId: string) => void
     getToolStreamingPreview: (toolCallId: string) => ToolStreamingPreview | undefined
     setCompressionStats: (stats: CompressionStats | null) => void
+    setContextStats: (stats: ContextStats | null) => void
     setExecutionMeta: (meta: import('../types').ThreadExecutionMeta | null) => void
     updateExecutionMeta: (meta: Partial<import('../types').ThreadExecutionMeta>) => void
     clearExecutionMeta: () => void
@@ -177,7 +166,6 @@ export const useAgentStore = create<AgentStore>()(
 
             // UI 状态（全局）
             const uiState: UIState = {
-                contextStats: null,
                 inputPrompt: '',
                 currentSessionId: null,
                 handoffDocument: null,
@@ -185,7 +173,6 @@ export const useAgentStore = create<AgentStore>()(
                 reviewProgress: null,
                 emotionDetection: null,
                 emotionHistory: [],
-                setContextStats: (stats) => set({ contextStats: stats }),
                 setInputPrompt: (prompt) => set({ inputPrompt: prompt }),
                 setCurrentSessionId: (id) => set({ currentSessionId: id }),
                 setHandoffDocument: (doc) => set({ handoffDocument: doc }),
@@ -312,6 +299,7 @@ export const useAgentStore = create<AgentStore>()(
                 getToolStreamingPreview: (toolCallId) =>
                     threadSlice.getToolStreamingPreview(toolCallId, threadId),
                 setCompressionStats: (stats) => threadSlice.setCompressionStats(stats, threadId),
+                setContextStats: (stats) => threadSlice.setContextStats(stats, threadId),
                 setExecutionMeta: (meta) => threadSlice.setExecutionMeta(meta, threadId),
                 updateExecutionMeta: (meta) => threadSlice.updateExecutionMeta(meta, threadId),
                 clearExecutionMeta: () => threadSlice.clearExecutionMeta(threadId),
@@ -514,7 +502,10 @@ export const selectIsOnBranch = (state: AgentStore) => {
 }
 
 // 从当前线程获取压缩相关状态
-export const selectContextStats = (state: AgentStore) => state.contextStats
+export const selectContextStats = (state: AgentStore): ContextStats | null => {
+    const thread = selectCurrentThread(state)
+    return thread?.contextStats ?? null
+}
 export const selectInputPrompt = (state: AgentStore) => state.inputPrompt
 export const selectCurrentSessionId = (state: AgentStore) => state.currentSessionId
 

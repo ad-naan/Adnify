@@ -8,10 +8,11 @@ import {
   suspendAgentStorageWrites,
   resumeAgentStorageWrites,
 } from '@renderer/agent/store/agentStorage'
-import { adnifyDir } from './adnifyDirService'
+import { agentSessionRepository } from './agentSessionRepository'
 import { mcpService } from './mcpService'
 import { gitService } from './gitService'
 import { toAppError } from '@shared/utils/errorHandler'
+import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import type { FileItem } from '@shared/types'
 import type { WorkspaceConfig } from '@store'
 import type { ChatThread } from '@renderer/agent/types'
@@ -37,7 +38,7 @@ function buildThreadMessageVersions(threads: Record<string, ChatThread>): Record
 }
 
 export async function rehydrateWorkspaceAgentStore(): Promise<void> {
-  const snapshot = await adnifyDir.getAgentSessionSnapshotWithoutHydration()
+  const snapshot = await agentSessionRepository.getSnapshot()
   const threads = snapshot?.threads || {}
   logger.agent.info('[WorkspaceLoad] Session snapshot loaded', {
     threadCount: Object.keys(threads).length,
@@ -62,6 +63,48 @@ export async function rehydrateWorkspaceAgentStore(): Promise<void> {
   logger.agent.info(`[WorkspaceLoad] Agent store restored from workspace snapshot (${Object.keys(threads).length} threads)`)
 }
 
+export async function restoreWorkspaceAgentStore(): Promise<void> {
+  await rehydrateWorkspaceAgentStore()
+
+  const state = useAgentStore.getState()
+  const { threads, currentThreadId } = state
+  const threadIds = Object.keys(threads)
+
+  logger.system.info('[WorkspaceLoad] Store state after restore', {
+    threadCount: threadIds.length,
+    currentThreadId,
+    threadIds,
+  })
+
+  if (threadIds.length === 0) {
+    logger.system.info('[WorkspaceLoad] No persisted threads found, leaving store empty')
+    return
+  }
+
+  if (!currentThreadId || !threads[currentThreadId]) {
+    const firstThreadId = threadIds[0]
+    useAgentStore.setState({ currentThreadId: firstThreadId })
+    logger.system.info(`[WorkspaceLoad] Activated first thread: ${firstThreadId}`)
+  }
+
+  const activeThreadId = useAgentStore.getState().currentThreadId
+  if (!activeThreadId) {
+    return
+  }
+
+  const activeThread = useAgentStore.getState().threads[activeThreadId]
+  if (!activeThread) {
+    return
+  }
+
+  const messageCount = activeThread.messages?.length || 0
+  logger.system.info(`[WorkspaceLoad] Current thread has ${messageCount} messages`)
+
+  void hydrateThreadMessages(activeThreadId).catch(error => {
+    logger.system.warn('[WorkspaceLoad] Active thread hydration failed:', error)
+  })
+}
+
 export async function hydrateThreadMessages(threadId: string): Promise<void> {
   const state = useAgentStore.getState()
   const thread = state.threads[threadId]
@@ -69,7 +112,7 @@ export async function hydrateThreadMessages(threadId: string): Promise<void> {
     return
   }
 
-  const messages = await adnifyDir.loadThreadMessages(threadId)
+  const messages = await agentSessionRepository.loadThreadMessages(threadId)
   suspendAgentStorageWrites()
   try {
     useAgentStore.setState(currentState => {
@@ -137,7 +180,7 @@ export async function bindWorkspaceRoot(shellState: WorkspaceShellState): Promis
     return
   }
 
-  await adnifyDir.setPrimaryRoot(shellState.primaryRoot)
+  await workspaceStorageRuntime.bindPrimaryRoot(shellState.primaryRoot)
   gitService.setWorkspace(shellState.primaryRoot)
 }
 
@@ -157,7 +200,7 @@ export async function initializeWorkspaceServices(
   } = options
 
   if (shouldRehydrateAgentStore) {
-    await rehydrateWorkspaceAgentStore()
+    await restoreWorkspaceAgentStore()
   }
 
   if (shouldInitializeMcp) {

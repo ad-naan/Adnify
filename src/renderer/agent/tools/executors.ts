@@ -9,22 +9,27 @@ import { resolveEditFileRequest } from '@/shared/utils/editFile'
 import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
-import { validatePath, isSensitivePath } from '@shared/utils/pathUtils'
+import { validatePath, isSensitivePath, platform } from '@shared/utils/pathUtils'
 import { pathToLspUri } from '@shared/utils/uriUtils'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
 } from '@/renderer/utils/searchReplace'
-import { smartReplace, normalizeLineEndings } from '@/renderer/utils/smartReplace'
+import { smartReplace, normalizeLineEndings, checkLineReplaceWarnings } from '@/renderer/utils/smartReplace'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { fileCacheService } from '../services/fileCacheService'
 import { lintService } from '../services/lintService'
 import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
+import { agentStorePlanBridge, agentStoreTodoBridge } from '../store/agentStoreBridge'
 import { toRelativePath } from '@shared/utils/pathUtils'
 import { isLongRunningCommand } from './commandRuntime'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
+import { toolRegistry } from './registry'
+import { terminalManager } from '@/renderer/services/TerminalManager'
+import pLimit from 'p-limit'
+import { skillService } from '../services/skillService'
 
 // ===== 辅助函数 =====
 
@@ -369,7 +374,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         // 如果是多个文件，使用并行读取
         if (paths.length > 1) {
-            const pLimit = (await import('p-limit')).default
             const limit = pLimit(5)
 
             const results = await Promise.all(
@@ -625,7 +629,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     linesAdded += newLines.length
 
                     // 检测警告
-                    const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
                     const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, start_line!, end_line!)
                     allWarnings.push(...warnings)
 
@@ -750,7 +753,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const newContent = lines.join('\n')
 
             // Fast-Edit 精华：智能警告检测
-            const { checkLineReplaceWarnings } = await import('../../utils/smartReplace')
             const warnings = checkLineReplaceWarnings(oldLines, newLines, lines, startLine, endLine)
 
             if (warnings.length > 0) {
@@ -943,7 +945,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
             // 先唤出面板，再创建/获取终端，避免竞态：
             // 若先创建终端，notify() 触发时面板还不可见 → useEffect 销毁刚创建的终端
@@ -1060,7 +1061,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const linesCount = (args.lines as number) || 100
 
         try {
-            const { terminalManager } = await import('@/renderer/services/TerminalManager')
             const lines = terminalManager.getOutputBuffer(terminalId)
 
             if (!lines || lines.length === 0) {
@@ -1094,7 +1094,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const isCtrl = args.is_ctrl as boolean
 
         try {
-            const { terminalManager } = await import('@/renderer/services/TerminalManager')
 
             let dataToSend = input
             if (isCtrl) {
@@ -1122,7 +1121,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const terminalId = args.terminal_id as string
 
         try {
-            const { terminalManager } = await import('@/renderer/services/TerminalManager')
             terminalManager.closeTerminal(terminalId)
             return {
                 success: true,
@@ -1328,8 +1326,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             await api.file.write(jsonPath, JSON.stringify(plan, null, 2))
 
             // 添加到 store 并打开 TaskBoard
-            const { useAgentStore } = await import('../store/AgentStore')
-            useAgentStore.getState().addPlan(plan)
+            agentStorePlanBridge.addPlan(plan)
 
             // 打开 plan 文件（触发 TaskBoard 渲染）
             useStore.getState().openFile(jsonPath, JSON.stringify(plan, null, 2))
@@ -1372,9 +1369,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }> | undefined
             const executionMode = args.executionMode as 'sequential' | 'parallel' | undefined
 
-            const { useAgentStore } = await import('../store/AgentStore')
-            const store = useAgentStore.getState()
-            const plan = store.plans.find(p => p.id === planId)
+            const store = agentStorePlanBridge
+            const plan = store.getPlanById(planId)
 
             if (!plan) {
                 return { success: false, result: `Plan not found: ${planId}` }
@@ -1413,7 +1409,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     dependencies: [],
                 }))
 
-                const currentPlan = store.plans.find(p => p.id === planId)
+                const currentPlan = store.getPlanById(planId)
                 if (currentPlan) {
                     store.updatePlan(planId, { tasks: [...currentPlan.tasks, ...newTasks] })
                 }
@@ -1441,7 +1437,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             // 更新 JSON 文件
-            const updatedPlan = store.plans.find(p => p.id === planId)
+            const updatedPlan = store.getPlanById(planId)
             if (updatedPlan) {
                 const jsonPath = `${ctx.workspacePath}/.adnify/plan/${planId}.json`
                 internalWriteTracker.mark(jsonPath)
@@ -1468,11 +1464,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const planId = args.planId as string | undefined
 
             // 验证计划存在且可执行
-            const { useAgentStore } = await import('../store/AgentStore')
-            const store = useAgentStore.getState()
+            const store = agentStorePlanBridge
 
             const plan = planId
-                ? store.plans.find(p => p.id === planId)
+                ? store.getPlanById(planId)
                 : store.getActivePlan()
 
             if (!plan) {
@@ -1658,7 +1653,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         if (!skillName) return { success: false, result: '', error: 'Missing skill_name' }
 
         try {
-            const { skillService } = await import('../services/skillService')
             const skill = await skillService.getSkillByName(skillName)
             if (!skill) {
                 return {
@@ -1670,7 +1664,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // skill 安装目录
             const installPath = skill.filePath.replace(/[/\\]SKILL\.md$/i, '')
-            const { platform } = await import('@shared/utils/pathUtils')
             const isWin = platform.isWindows
             const normalizedPath = isWin ? installPath.replace(/\//g, '\\') : installPath
 
@@ -1736,8 +1729,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             return { success: false, result: '', error: 'todos must be an array' }
         }
 
-        const { useAgentStore } = await import('../store/AgentStore')
-        const store = useAgentStore.getState()
+        const store = agentStoreTodoBridge
 
         // 空数组 = 归档清空
         if (todos.length === 0) {
@@ -1922,7 +1914,6 @@ export const toolExecutors = Object.fromEntries(
  * 注意：每次调用都会更新 globalExecutors，支持热重载
  */
 export async function initializeTools(): Promise<void> {
-    const { toolRegistry } = await import('./registry')
     // 每次都调用 registerAll 以更新 globalExecutors（支持热重载）
     // registerAll 内部会更新 globalExecutors 引用
     toolRegistry.registerAll(toolExecutors)

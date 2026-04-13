@@ -9,6 +9,17 @@ import type { ContextItem } from './context'
 import type { StructuredSummary } from '../domains/context/types'
 import type { CompressionStats } from '../core/types'
 
+export interface ContextStats {
+  totalChars: number
+  maxChars: number
+  fileCount: number
+  maxFiles: number
+  messageCount: number
+  maxMessages: number
+  semanticResultCount: number
+  terminalChars: number
+}
+
 export interface TodoItem {
   content: string
   status: 'pending' | 'in_progress' | 'completed'
@@ -58,6 +69,7 @@ export interface ChatThread {
   streamState: StreamState
   toolStreamingPreviews?: Record<string, ToolStreamingPreview>
 
+  contextStats: ContextStats | null
   compressionStats: CompressionStats | null
   contextSummary: StructuredSummary | null
   handoffRequired: boolean
@@ -104,11 +116,12 @@ export interface PersistedChatThread {
 
 export function createRuntimeThreadState(): Pick<
   ChatThread,
-  'streamState' | 'toolStreamingPreviews' | 'compressionStats' | 'handoffRequired' | 'isCompacting' | 'compressionPhase' | 'executionMeta'
+  'streamState' | 'toolStreamingPreviews' | 'contextStats' | 'compressionStats' | 'handoffRequired' | 'isCompacting' | 'compressionPhase' | 'executionMeta'
 > {
   return {
     streamState: { phase: 'idle' },
     toolStreamingPreviews: {},
+    contextStats: null,
     compressionStats: null,
     handoffRequired: false,
     isCompacting: false,

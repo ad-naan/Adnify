@@ -18,6 +18,7 @@ import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 import { adnifyDir } from './services/adnifyDirService'
 import { flushAgentSessionPersistence } from './agent/store/AgentStore'
+import { terminalManager } from './services/TerminalManager'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -66,7 +67,6 @@ function AppContent() {
       } catch { /* ignore */ }
 
       try {
-        const { terminalManager } = require('@/renderer/services/TerminalManager')
         terminalManager.cleanup()
       } catch { /* ignore */ }
 

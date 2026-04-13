@@ -45,6 +45,8 @@ import { LazyImage } from '../common/LazyImage'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { t } from '../../i18n'
+import { api } from '@/renderer/services/electronAPI'
+import { toFullPath } from '@shared/utils/pathUtils'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -203,7 +205,6 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
   const handleOpenSkill = async (e: React.MouseEvent, skillId: string) => {
     e.stopPropagation()
     if (!workspacePath) return
-    const { api } = await import('@/renderer/services/electronAPI')
     const filePath = `${workspacePath}/.adnify/skills/${skillId}/SKILL.md`.replace(/\//g, '\\')
     const content = await api.file.read(filePath)
     if (content !== null) {
@@ -424,9 +425,6 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   const handleOpenFile = React.useCallback(async (filePath: string) => {
     if (!workspacePath) return
-    const { toFullPath } = await import('@shared/utils/pathUtils')
-    const { api } = await import('@/renderer/services/electronAPI')
-
     const resolvedPath = toFullPath(filePath, workspacePath)
 
     try {

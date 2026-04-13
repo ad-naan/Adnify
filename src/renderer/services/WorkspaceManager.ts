@@ -1,11 +1,11 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
-import { adnifyDir } from './adnifyDirService'
 import { toAppError } from '@shared/utils/errorHandler'
 import { resetWorkspaceRuntimeState } from './workspaceRuntimeResetService'
 import { loadWorkspace } from './workspaceLoadService'
 import { flushAgentSessionPersistence } from '@renderer/agent/store/AgentStore'
+import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import type { WorkspaceConfig } from '@store'
 
 function normalizeWorkspaceRoots(roots: string[]): string[] {
@@ -112,13 +112,13 @@ class WorkspaceManager {
     setWorkspace(null)
     setFiles([])
 
-    adnifyDir.reset()
+    workspaceStorageRuntime.reset()
   }
 
   async addFolder(folderPath: string): Promise<void> {
     const { addRoot } = useStore.getState()
     addRoot(folderPath)
-    await adnifyDir.initialize(folderPath)
+    await workspaceStorageRuntime.initializeRoot(folderPath)
   }
 
   removeFolder(folderPath: string): void {
@@ -139,11 +139,11 @@ class WorkspaceManager {
   }
 
   private async saveCurrentWorkspace(): Promise<void> {
-    if (!adnifyDir.isInitialized()) return
+    if (!workspaceStorageRuntime.isReady()) return
 
     logger.system.info('[WorkspaceManager] Saving current workspace data...')
     flushAgentSessionPersistence()
-    await adnifyDir.flush()
+    await workspaceStorageRuntime.flush()
   }
 
   private resetRuntimeState(): void {

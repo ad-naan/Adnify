@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom'
 import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw } from 'lucide-react'
 import { PROVIDERS, type ApiProtocol, getProviderDefaultHeaders } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
+import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select, ScrollShadow, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
@@ -776,7 +777,6 @@ export function ProviderSettings({
   // 删除自定义 Provider（只更新本地状态）
   const handleDeleteCustomProvider = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
-    const { globalConfirm } = await import('@components/common/ConfirmDialog')
     const confirmed = await globalConfirm({
       title: language === 'zh' ? '删除提供商' : 'Delete Provider',
       message: language === 'zh' ? `删除 ${name}？` : `Delete ${name}?`,

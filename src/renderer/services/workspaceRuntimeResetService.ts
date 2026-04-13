@@ -5,7 +5,7 @@ import { clearExtraLibs } from './monacoTypeService'
 import { lintService } from '@renderer/agent/services/lintService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { clearHealthCache } from './healthCheckService'
-import { adnifyDir } from './adnifyDirService'
+import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import {
   suspendAgentStorageWrites,
   resumeAgentStorageWrites,
@@ -29,7 +29,6 @@ export function resetWorkspaceRuntimeState(): void {
       pendingChanges: [],
       branches: {},
       activeBranchId: {},
-      contextStats: null,
       inputPrompt: '',
       currentSessionId: null,
       handoffDocument: null,
@@ -46,5 +45,5 @@ export function resetWorkspaceRuntimeState(): void {
   lintService.clearCache()
   streamingEditService.clearAll()
   clearHealthCache()
-  adnifyDir.reset()
+  workspaceStorageRuntime.reset()
 }

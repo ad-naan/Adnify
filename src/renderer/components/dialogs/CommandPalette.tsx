@@ -13,7 +13,7 @@ import {
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
-import { useAgent } from '@/renderer/hooks/useAgent'
+import { useAgentHistoryActions } from '@/renderer/hooks/useAgent'
 import { t } from '@/renderer/i18n'
 import { keybindingService, formatShortcut, isMac } from '@/renderer/services/keybindingService'
 import { adnifyDir } from '@/renderer/services/adnifyDirService'
@@ -120,7 +120,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
 
   const setMode = useModeStore(s => s.setMode)
 
-  const { clearMessages, clearCheckpoints } = useAgent()
+  const { clearMessages, clearCheckpoints } = useAgentHistoryActions()
 
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)

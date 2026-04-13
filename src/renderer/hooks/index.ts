@@ -1,7 +1,14 @@
 /**
  * Hooks 导出
  */
-export { useAgent } from './useAgent'
+export {
+  useAgent,
+  useAgentActions,
+  useAgentChangeState,
+  useAgentCommands,
+  useAgentHistoryActions,
+  useAgentViewState,
+} from './useAgent'
 export { useEditorBreakpoints } from './useEditorBreakpoints'
 export { useWindowTitle } from './useWindowTitle'
 export { useFileWatcher } from './useFileWatcher'

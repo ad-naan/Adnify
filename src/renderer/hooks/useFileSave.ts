@@ -7,6 +7,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
+import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { toast } from '@renderer/components/common/ToastProvider'
 import { t } from '@renderer/i18n'
 import { getEditorConfig } from '@renderer/settings'
@@ -63,7 +64,6 @@ export function useFileSave() {
     const file = openFiles.find(f => f.path === filePath)
     if (file?.isDirty) {
       const fileName = getFileName(filePath)
-      const { globalConfirm } = await import('@renderer/components/common/ConfirmDialog')
       const result = await globalConfirm({
         title: language === 'zh' ? '未保存的更改' : 'Unsaved Changes',
         message: t('confirmUnsavedChanges', language, { name: fileName }),

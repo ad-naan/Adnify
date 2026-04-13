@@ -7,7 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { getEditorConfig } from '@renderer/settings'
-import { adnifyDir, WorkspaceStateData } from './adnifyDirService'
+import { workspaceStateRepository, type WorkspaceStateData } from './workspaceStateRepository'
 
 async function readFilesWithConcurrency(
   filePaths: string[],
@@ -38,8 +38,6 @@ async function readFilesWithConcurrency(
 export async function saveWorkspaceState(): Promise<void> {
   const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalLayout } = useStore.getState()
 
-  if (!adnifyDir.isInitialized()) return
-
   const state: WorkspaceStateData = {
     openFiles: openFiles.map((f: { path: string }) => f.path),
     activeFile: activeFilePath,
@@ -54,16 +52,14 @@ export async function saveWorkspaceState(): Promise<void> {
     },
   }
 
-  await adnifyDir.saveWorkspaceState(state)
+  await workspaceStateRepository.save(state)
   logger.system.info('[WorkspaceState] Saved:', state.openFiles.length, 'files')
 }
 
 export async function restoreWorkspaceState(): Promise<void> {
   const { restoreOpenFiles, setSidebarWidth, setChatWidth, setTerminalVisible, setTerminalLayout } = useStore.getState()
 
-  if (!adnifyDir.isInitialized()) return
-
-  const state = await adnifyDir.getWorkspaceState()
+  const state = await workspaceStateRepository.get()
   if (!state.openFiles.length && !state.layout) {
     logger.system.info('[WorkspaceState] No saved state')
     return
@@ -128,7 +124,7 @@ export function initWorkspaceStateSync(): () => void {
   )
 
   const handleBeforeUnload = async () => {
-    await adnifyDir.flush()
+    await workspaceStateRepository.flush()
   }
   window.addEventListener('beforeunload', handleBeforeUnload)
 

@@ -12,7 +12,6 @@ export { initializeApp, registerSettingsSync, type InitResult } from './initServ
 // ===== 工作区管理 =====
 export { workspaceManager } from './WorkspaceManager'
 export { loadWorkspace } from './workspaceLoadService'
-export { restoreWorkspaceAgentData } from './workspaceAgentRestoreService'
 export { resetWorkspaceRuntimeState } from './workspaceRuntimeResetService'
 export { adnifyDir } from './adnifyDirService'
 export { saveWorkspaceState, restoreWorkspaceState, scheduleStateSave, initWorkspaceStateSync } from './workspaceStateService'

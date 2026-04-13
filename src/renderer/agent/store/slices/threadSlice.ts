@@ -4,12 +4,12 @@
  */
 
 import type { StateCreator } from 'zustand'
-import type { ChatThread, StreamState, CompressionPhase, TodoItem } from '../../types'
+import type { ChatThread, StreamState, CompressionPhase, TodoItem, ContextStats } from '../../types'
 import type { CompressionStats } from '../../core/types'
 import type { StructuredSummary } from '../../domains/context/types'
 import type { BranchSlice } from './branchSlice'
 import type { ToolStreamingPreview } from '@/shared/types'
-import { adnifyDir } from '@/renderer/services/adnifyDirService'
+import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
 import { createRuntimeThreadState } from '../../types'
 import { logger } from '@utils/Logger'
 
@@ -32,6 +32,7 @@ export interface ThreadActions {
     clearToolStreamingPreviews: (threadId?: string) => void
     getToolStreamingPreview: (toolCallId: string, threadId?: string) => ToolStreamingPreview | undefined
     setCompressionStats: (stats: CompressionStats | null, threadId?: string) => void
+    setContextStats: (stats: ContextStats | null, threadId?: string) => void
     setContextSummary: (summary: StructuredSummary | null, threadId?: string) => void
     setCompressionPhase: (phase: CompressionPhase, threadId?: string) => void
     setHandoffRequired: (required: boolean, threadId?: string) => void
@@ -167,7 +168,7 @@ export const createThreadSlice: StateCreator<
         })
 
         if (shouldFlushImmediately) {
-            void adnifyDir.flush()
+            void agentSessionRepository.flush()
         }
 
         return thread.id
@@ -178,12 +179,12 @@ export const createThreadSlice: StateCreator<
         if (!state.threads[threadId]) return
         if (state.currentThreadId === threadId) return
         set({ currentThreadId: threadId })
-        void adnifyDir.flush()
+        void agentSessionRepository.flush()
 
         // 懒加载切换后线程的消息
         const thread = state.threads[threadId]
-        if (thread && (!thread.messages || thread.messages.length === 0)) {
-            adnifyDir.loadThreadMessages(threadId).then(messages => {
+        if (thread?.messagesHydrated === false) {
+            agentSessionRepository.loadThreadMessages(threadId).then(messages => {
                 // 无论消息是否为空，都触发一次 set，确保 ChatPanel 的 useEffect
                 // 检测到 filteredMessages 引用变化，能正常退出骨架屏状态
                 set(state => ({
@@ -240,7 +241,7 @@ export const createThreadSlice: StateCreator<
 
         if (didDelete) {
             // 删除 JSONL 文件和元数据
-            void adnifyDir.deleteThreadData(threadId)
+            void agentSessionRepository.deleteThread(threadId)
         }
     },
 
@@ -363,6 +364,15 @@ export const createThreadSlice: StateCreator<
 
         set(state => ({
             threads: updateThreadEphemeral(state.threads, targetId, { compressionStats: stats }),
+        }))
+    },
+
+    setContextStats: (stats, threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => ({
+            threads: updateThreadEphemeral(state.threads, targetId, { contextStats: stats }),
         }))
     },
 
