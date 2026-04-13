@@ -80,11 +80,23 @@ async function findNearestRoot(
       }
     }
 
-    // 检查目标模式
+    // 检查目标模式（支持 glob-like *.ext 匹配）
     for (const pattern of patterns) {
-      const targetPath = path.join(currentDir, pattern)
-      if (fs.existsSync(targetPath)) {
-        return currentDir
+      if (pattern.includes('*')) {
+        try {
+          const entries = fs.readdirSync(currentDir)
+          const re = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
+          if (entries.some(entry => re.test(entry))) {
+            return currentDir
+          }
+        } catch {
+          // directory not readable, skip
+        }
+      } else {
+        const targetPath = path.join(currentDir, pattern)
+        if (fs.existsSync(targetPath)) {
+          return currentDir
+        }
       }
     }
 
