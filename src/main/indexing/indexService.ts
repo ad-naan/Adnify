@@ -55,6 +55,8 @@ export class CodebaseIndexService {
   private embedder: EmbeddingService | null = null
   private vectorStore: VectorStoreService | null = null
   private worker: Worker | null = null
+  private pendingIndexResolve: (() => void) | null = null
+  private pendingIndexReject: ((err: Error) => void) | null = null
 
   private status: IndexStatus = {
     mode: 'structural',
@@ -261,13 +263,15 @@ export class CodebaseIndexService {
       if (this.config.mode === 'structural') {
         await this.buildStructuralIndex()
         await this.saveStructuralIndex()
+        this.status.isIndexing = false
+        this.status.lastIndexedAt = Date.now()
+        this.emitProgress(true)
       } else {
+        // Semantic mode: buildSemanticIndex returns a Promise that resolves
+        // when the worker sends 'complete' or rejects on 'error'.
+        // The worker message handler sets isIndexing/lastIndexedAt.
         await this.buildSemanticIndex()
       }
-
-      this.status.isIndexing = false
-      this.status.lastIndexedAt = Date.now()
-      this.emitProgress(true)
     } catch (e) {
       logger.index.error('[IndexService] Indexing failed:', e)
       this.status.error = e instanceof Error ? e.message : String(e)
@@ -607,11 +611,16 @@ export class CodebaseIndexService {
     const existingHashesMap = await this.vectorStore!.getFileHashes()
     const existingHashes: Record<string, string> = Object.fromEntries(existingHashesMap)
 
-    this.worker?.postMessage({
-      type: 'index',
-      workspacePath: this.workspacePath,
-      config: this.config,
-      existingHashes
+    return new Promise<void>((resolve, reject) => {
+      this.pendingIndexResolve = resolve
+      this.pendingIndexReject = reject
+
+      this.worker?.postMessage({
+        type: 'index',
+        workspacePath: this.workspacePath,
+        config: this.config,
+        existingHashes
+      })
     })
   }
 
@@ -668,21 +677,31 @@ export class CodebaseIndexService {
           case 'complete':
             this.status.isIndexing = false
             this.status.lastIndexedAt = Date.now()
-            this.status.message = undefined // Clear message
+            this.status.message = undefined
             if (typeof message.totalChunks === 'number') {
               this.status.totalChunks = message.totalChunks
             }
             logger.index.info(`[IndexService] Semantic indexing complete: ${this.status.totalChunks} chunks`)
-            this.saveIndex() // Save state
+            this.saveIndex()
             this.emitProgress(true)
+            if (this.pendingIndexResolve) {
+              this.pendingIndexResolve()
+              this.pendingIndexResolve = null
+              this.pendingIndexReject = null
+            }
             break
 
           case 'error':
             logger.index.error('[IndexService] Worker error:', message.error)
             this.status.error = message.error
             this.status.isIndexing = false
-            this.status.message = undefined // Clear message
+            this.status.message = undefined
             this.emitProgress(true)
+            if (this.pendingIndexReject) {
+              this.pendingIndexReject(new Error(message.error))
+              this.pendingIndexResolve = null
+              this.pendingIndexReject = null
+            }
             break
         }
       })
@@ -692,6 +711,11 @@ export class CodebaseIndexService {
         this.status.error = err.message
         this.status.isIndexing = false
         this.emitProgress()
+        if (this.pendingIndexReject) {
+          this.pendingIndexReject(err)
+          this.pendingIndexResolve = null
+          this.pendingIndexReject = null
+        }
       })
     } catch (e) {
       logger.index.error('[IndexService] Failed to initialize worker:', e)

@@ -268,13 +268,8 @@ export class VectorStoreService {
   async upsertFile(filePath: string, chunks: IndexedChunk[]): Promise<void> {
     if (!this.table || !this.db) return
 
-    try {
-      // 使用 filter 方式删除，避免 SQL 注入风险
-      // LanceDB 的 delete 方法使用 SQL 语法，需要安全处理
-      await this.safeDeleteByFilePath(filePath)
-    } catch {
-      // ignore
-    }
+    // Delete existing rows first; if this fails, abort to avoid duplicates
+    await this.safeDeleteByFilePath(filePath)
 
     if (chunks.length === 0) return
 
