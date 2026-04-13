@@ -82,6 +82,7 @@ function createGroupedAPI() {
       restore: () => raw.restoreWorkspace(),
       setActive: (roots: string[]) => raw.setActiveWorkspace(roots),
       getRecent: () => raw.getRecentWorkspaces(),
+      exists: (path: string) => raw.workspaceExists(path),
       clearRecent: () => raw.clearRecentWorkspaces(),
       removeFromRecent: (path: string) => raw.removeFromRecentWorkspaces(path),
     },

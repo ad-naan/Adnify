@@ -37,6 +37,7 @@ import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
+import { useAgentStore, selectStreamState } from '@/renderer/agent/store/AgentStore'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import { Tooltip } from '../ui/Tooltip'
@@ -845,9 +846,14 @@ const ChatMessage = React.memo(({
   }
 
   const [typingIndex, setTypingIndex] = useState(0)
+  const streamState = useAgentStore(selectStreamState)
 
   // 为了类型安全
-  const isStreaming = isAssistantMessage(message) ? message.isStreaming : false
+  const isStreaming = isAssistantMessage(message)
+    ? Boolean(message.isStreaming)
+      && (streamState.phase === 'streaming' || streamState.phase === 'tool_running' || streamState.phase === 'tool_pending')
+      && streamState.assistantId === message.id
+    : false
 
   useEffect(() => {
     if (isStreaming) {

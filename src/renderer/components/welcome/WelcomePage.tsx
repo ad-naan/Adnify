@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react'
 import { FolderOpen, History, Folder, Plus, Settings } from 'lucide-react'
 import { api } from '@/renderer/services/electronAPI'
-import { workspaceManager } from '@/renderer/services/WorkspaceManager'
+import { workspaceManager, WorkspaceOpenError } from '@/renderer/services/WorkspaceManager'
 import { useStore } from '@/renderer/store'
 import { formatShortcut } from '@services/keybindingService'
 import { logger } from '@utils/Logger'
@@ -71,8 +71,14 @@ export default function WelcomePage() {
     try {
       await workspaceManager.openFolder(path)
     } catch (e) {
-      toast.error(t('workspace.folderNotExist', language), getFileName(path))
-      loadRecentWorkspaces()
+      if (e instanceof WorkspaceOpenError && e.code === 'missing-workspace') {
+        toast.error(t('workspace.folderNotExist', language), getFileName(path))
+        loadRecentWorkspaces()
+        return
+      }
+
+      logger.ui.error('[WelcomePage] Failed to open recent workspace:', e)
+      toast.error(t('workspace.openFolderFailed', language), getFileName(path))
     }
   }
 
