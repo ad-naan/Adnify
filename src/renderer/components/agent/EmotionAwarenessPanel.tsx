@@ -30,12 +30,15 @@ import {
   computeInflectionPoints,
   type InflectionPoint,
 } from '@/renderer/agent/emotion'
+import { useEmotionState } from '@/renderer/hooks/useEmotionState'
+import { EmotionVisualization } from './EmotionVisualization'
 
 const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
 
 export const EmotionAwarenessPanel: React.FC = () => {
   const language = useStore(s => s.language)
   const { history, productivity } = useEmotionHistory()
+  const emotion = useEmotionState()
   const [settings, setSettings] = useState(loadEmotionPanelSettings)
 
   const inflectionPoints = useMemo(() => computeInflectionPoints(history), [history])
@@ -237,6 +240,12 @@ export const EmotionAwarenessPanel: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {emotion && (
+                <div className="px-4 pb-4">
+                  <EmotionVisualization emotion={emotion} history={history.slice(-30)} />
+                </div>
+              )}
 
               <div className="px-4 pb-4">
                 <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3 flex items-center gap-1.5">

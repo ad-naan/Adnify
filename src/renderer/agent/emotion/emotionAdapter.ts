@@ -479,14 +479,6 @@ class EmotionAdapter {
     if (!this.settings.companionEnabled) return
 
     const contextSuggestions = detection.suggestions || []
-    const emitLegacy = (message: string) => {
-      EventBus.emit({
-        type: 'emotion:message',
-        message,
-        state,
-      })
-    }
-
     const emitStructured = (message: string, sourceRule: string) => {
       const type: EmotionFeedbackType =
         state === 'frustrated' || state === 'stressed'
@@ -506,7 +498,6 @@ class EmotionAdapter {
 
     if (contextSuggestions.length > 0) {
       const t = setTimeout(() => {
-        emitLegacy(contextSuggestions[0])
         emitStructured(contextSuggestions[0], 'context_suggestion')
       }, 2000)
       this.pendingTimeouts.push(t)
@@ -518,7 +509,6 @@ class EmotionAdapter {
       const randomIndex = Math.floor(Math.random() * messages.length)
       const message = messages[randomIndex]
       const t = setTimeout(() => {
-        emitLegacy(message)
         emitStructured(message, 'default_message')
       }, 3000)
       this.pendingTimeouts.push(t)
