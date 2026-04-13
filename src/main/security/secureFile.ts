@@ -288,13 +288,20 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:save', async (event, content: string, currentPath?: string) => {
     if (currentPath) {
       if (securityManager.isSensitivePath(currentPath)) return null
+
+      const workspace = getWorkspaceSessionFn(event)
+      if (workspace && !securityManager.validateWorkspacePath(currentPath, workspace.roots)) {
+        securityManager.logOperation(OperationType.FILE_WRITE, currentPath, false, {
+          reason: '安全底线：超出工作区边界',
+        })
+        return null
+      }
+
       try {
         const dir = path.dirname(currentPath)
         await fsPromises.mkdir(dir, { recursive: true })
         await fsPromises.writeFile(currentPath, content, 'utf-8')
-        securityManager.logOperation(OperationType.FILE_WRITE, currentPath, true, {
-          bypass: true,
-        })
+        securityManager.logOperation(OperationType.FILE_WRITE, currentPath, true)
         return currentPath
       } catch {
         return null
@@ -336,7 +343,14 @@ export function registerSecureFileHandlers(
   })
 
   // 文件是否存在
-  ipcMain.handle('file:exists', async (_, filePath: string) => {
+  ipcMain.handle('file:exists', async (event, filePath: string) => {
+    if (securityManager.isSensitivePath(filePath)) return false
+
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+      return false
+    }
+
     try {
       await fsPromises.access(filePath)
       return true

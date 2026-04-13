@@ -108,6 +108,7 @@ export class AgentClass {
       : (store.getCurrentThread()?.contextItems || [])
 
     let persistSuspended = false
+    let taskRegistered = false
 
     try {
       suspendAgentStorageWrites()
@@ -137,6 +138,7 @@ export class AgentClass {
         requestId,
         planTaskId: executionOptions?.planTaskId,
       })
+      taskRegistered = true
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
       await new Promise(resolve => setTimeout(resolve, 0))
@@ -217,8 +219,9 @@ export class AgentClass {
         )
       }
 
-      // 确保清理资源（threadId 现在一定存在）
-      this.cleanupTask(threadId)
+      if (taskRegistered) {
+        this.cleanupTask(threadId)
+      }
     }
   }
 

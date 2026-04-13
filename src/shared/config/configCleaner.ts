@@ -19,6 +19,7 @@ export interface EditorConfigSchema {
   minimapScale?: number
   lineNumbers?: 'on' | 'off' | 'relative'
   bracketPairColorization?: boolean
+  enableInlineDiff?: boolean
   formatOnSave?: boolean
   autoSave?: 'off' | 'afterDelay' | 'onFocusChange'
   autoSaveDelay?: number
@@ -85,6 +86,7 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
     cleaned.lineNumbers = config.lineNumbers
   }
   if (typeof config.bracketPairColorization === 'boolean') cleaned.bracketPairColorization = config.bracketPairColorization
+  if (typeof config.enableInlineDiff === 'boolean') cleaned.enableInlineDiff = config.enableInlineDiff
   if (typeof config.formatOnSave === 'boolean') cleaned.formatOnSave = config.formatOnSave
   if (config.autoSave === 'off' || config.autoSave === 'afterDelay' || config.autoSave === 'onFocusChange') {
     cleaned.autoSave = config.autoSave

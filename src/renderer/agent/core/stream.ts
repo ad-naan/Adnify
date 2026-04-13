@@ -156,7 +156,7 @@ export function createStreamProcessor(
 
   const flushToolPreviewUpdates = () => {
     if (toolUpdateRafId !== null) {
-      cancelAnimationFrame(toolUpdateRafId)
+      clearTimeout(toolUpdateRafId)
       toolUpdateRafId = null
     }
 
@@ -206,7 +206,7 @@ export function createStreamProcessor(
     isCleanedUp = true
 
     if (toolUpdateRafId !== null) {
-      cancelAnimationFrame(toolUpdateRafId)
+      clearTimeout(toolUpdateRafId)
       toolUpdateRafId = null
     }
     pendingToolPreviewUpdates.clear()
