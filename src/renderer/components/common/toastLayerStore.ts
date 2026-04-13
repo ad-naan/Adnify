@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 
 type Listener = () => void
 
@@ -37,4 +37,11 @@ function getSnapshot(): boolean {
 
 export function useHasElevatedToastLayer(): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+export function useElevatedToastLayer(active: boolean = true): void {
+  useEffect(() => {
+    if (!active) return
+    return acquireElevatedToastLayer()
+  }, [active])
 }

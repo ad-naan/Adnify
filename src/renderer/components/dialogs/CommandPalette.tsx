@@ -18,6 +18,7 @@ import { t } from '@/renderer/i18n'
 import { keybindingService, formatShortcut, isMac } from '@/renderer/services/keybindingService'
 import { adnifyDir } from '@/renderer/services/adnifyDirService'
 import { toast } from '@/renderer/components/common/ToastProvider'
+import { useElevatedToastLayer } from '@/renderer/components/common/toastLayerStore'
 
 interface Command {
   id: string
@@ -92,6 +93,7 @@ const CommandItem = memo(function CommandItem({
 })
 
 export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: CommandPaletteProps) {
+  useElevatedToastLayer(true)
   // ... (hooks and state logic remains the same)
   const {
     setShowSettings,
