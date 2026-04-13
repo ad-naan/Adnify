@@ -207,8 +207,10 @@ export function registerLspProviders(monaco: typeof Monaco) {
     provideCompletionItems: async (model, position) => {
       const filePath = lspUriToPath(model.uri.toString())
       
-      // 添加超时，避免 LSP 响应慢时阻塞补全
-      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), getEditorConfig().lsp.completionTimeoutMs))
+      let timer: ReturnType<typeof setTimeout>
+      const timeoutPromise = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), getEditorConfig().lsp.completionTimeoutMs)
+      })
       const completionPromise = getCompletions(
         filePath,
         position.lineNumber - 1,
@@ -216,6 +218,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
       )
       
       const result = await Promise.race([completionPromise, timeoutPromise])
+        .finally(() => clearTimeout(timer!))
 
       if (!result) return { suggestions: [] }
 

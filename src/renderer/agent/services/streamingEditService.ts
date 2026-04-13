@@ -133,11 +133,15 @@ class StreamingEditService {
 		setTimeout(() => {
 			const s = this.activeEdits.get(editId)
 			if (s?.isComplete) {
-				this.filePathIndex.delete(s.filePath)
+				// Only remove the index if it still points to THIS edit,
+				// otherwise a newer edit for the same path would lose its entry.
+				if (this.filePathIndex.get(s.filePath) === editId) {
+					this.filePathIndex.delete(s.filePath)
+					this.queueFilePathNotification(s.filePath, null)
+				}
 				this.activeEdits.delete(editId)
 				this.listeners.delete(editId)
 				this.pendingEditNotifications.delete(editId)
-				this.queueFilePathNotification(s.filePath, null)
 				this.queueGlobalNotification()
 			}
 		}, 10000)
@@ -288,12 +292,14 @@ class StreamingEditService {
 
 		for (const [editId, state] of this.activeEdits) {
 			if (state.isComplete && now - state.startTime > maxAge) {
-				this.filePathIndex.delete(state.filePath)
+				if (this.filePathIndex.get(state.filePath) === editId) {
+					this.filePathIndex.delete(state.filePath)
+					this.pendingFilePathNotifications.delete(state.filePath)
+					this.notifyFilePathListeners(state.filePath, null)
+				}
 				this.activeEdits.delete(editId)
 				this.listeners.delete(editId)
 				this.pendingEditNotifications.delete(editId)
-				this.pendingFilePathNotifications.delete(state.filePath)
-				this.notifyFilePathListeners(state.filePath, null)
 				removedAny = true
 			}
 		}

@@ -10,6 +10,7 @@ import { logger } from '@utils/Logger'
 import { EventBus } from '../core/EventBus'
 import { emotionContextAnalyzer } from './emotionContextAnalyzer'
 import { emotionBaseline } from './emotionBaseline'
+import { loadEmotionPanelSettings } from './panelSettings'
 import type {
   EmotionState,
   EmotionDetection,
@@ -29,6 +30,7 @@ class EmotionDetectionEngine {
   private history: EmotionHistory[] = []
   private currentState: EmotionDetection | null = null
   private stateStartTime = Date.now()
+  private sessionStartTime = Date.now()
   private _lastActivityTime = Date.now()
 
   // 定时器
@@ -80,7 +82,7 @@ class EmotionDetectionEngine {
     // 立即发射初始状态，不让 UI 等
     this.emitInitialState()
 
-    logger.agent.info('[EmotionEngine] Started (v2 — real data)')
+    logger.agent.info('[EmotionEngine] Started (v3 — real data + sensitivity)')
   }
 
   /**
@@ -121,6 +123,10 @@ class EmotionDetectionEngine {
   recordTestRun(failed: number, _total: number): void {
     this.liveCounters.testRuns++
     this.liveCounters.testFailures += failed
+  }
+
+  setProject(name: string): void {
+    this.currentProject = name
   }
 
   recordSave(): void {
@@ -512,10 +518,13 @@ class EmotionDetectionEngine {
    */
   private detectEmotionFromBehavior(metrics: BehaviorMetrics): EmotionDetection {
     const factors: EmotionFactor[] = []
+    // sensitivity 影响 neutral 先验：high → 更易触发非 neutral 状态
+    const sensitivity = loadEmotionPanelSettings().sensitivity
+    const neutralBias = sensitivity === 'high' ? 0.40 : sensitivity === 'low' ? 0.70 : 0.55
+
     const scores: Record<EmotionState, number> = {
-      // neutral 基线提高 — 需要多个信号同时触发才能打败 neutral
       focused: 0, frustrated: 0, tired: 0, excited: 0,
-      bored: 0, stressed: 0, flow: 0, neutral: 0.55,
+      bored: 0, stressed: 0, flow: 0, neutral: neutralBias,
     }
 
     // 记录基线样本（持续学习）
@@ -628,8 +637,8 @@ class EmotionDetectionEngine {
     }
     scores.flow -= tabSwitchScore * 0.4
 
-    // 5. 工作时长 — 只有超过 45 分钟才开始累积 tired
-    const sessionDuration = Date.now() - this.stateStartTime
+    // 5. 工作时长 — 基于真实会话开始时间，只有超过 45 分钟才开始累积 tired
+    const sessionDuration = Date.now() - this.sessionStartTime
     const sessionMin = sessionDuration / 1000 / 60
     const sessionScore = sessionMin > 45
       ? Math.min((sessionMin - 45) / 75, 1)  // 45~120 分钟线性增长

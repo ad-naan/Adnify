@@ -13,6 +13,7 @@ import { EventBus } from '../core/EventBus'
 import { useStore } from '@/renderer/store'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
 import { useAgentStore, selectMessages } from '@/renderer/agent/store/AgentStore'
+import { emotionDetectionEngine } from './emotionDetectionEngine'
 
 // ===== 内部统计结构 =====
 interface AIInteractionRecord {
@@ -49,6 +50,23 @@ class EmotionContextAnalyzer {
     if (this.initialized) return
     this.initialized = true
 
+    // 0. 同步引擎检测结果到 AgentStore（让 Store 消费者也能读到情绪数据）
+    this.unsubscribers.push(
+      EventBus.on('emotion:changed', (event) => {
+        if (event.emotion) {
+          const store = useAgentStore.getState()
+          store.setEmotionDetection(event.emotion)
+          store.updateEmotionHistory({
+            timestamp: event.emotion.triggeredAt,
+            state: event.emotion.state,
+            intensity: event.emotion.intensity,
+            project: '',
+            file: '',
+          })
+        }
+      }),
+    )
+
     // 1. 监听 EventBus 的工具/LLM 事件
     this.unsubscribers.push(
       EventBus.on('tool:completed', () => {
@@ -72,13 +90,18 @@ class EmotionContextAnalyzer {
       }),
     )
 
-    // 2. 监听主 Store — 文件切换
+    // 2. 监听主 Store — 文件切换 + 项目名
     let prevFile = useStore.getState().activeFilePath
     this.unsubscribers.push(
       useStore.subscribe((state) => {
+        // 同步项目名到引擎
+        if (state.workspacePath) {
+          emotionDetectionEngine.setProject(state.workspacePath.split('/').pop() || '')
+        }
         if (state.activeFilePath && state.activeFilePath !== prevFile) {
           prevFile = state.activeFilePath
           this.fileSwitchTimestamps.push(Date.now())
+          emotionDetectionEngine.recordFileSwitch(state.activeFilePath)
           // 裁剪旧时间戳
           const cutoff = Date.now() - 60 * 60 * 1000
           while (this.fileSwitchTimestamps.length > 0 && this.fileSwitchTimestamps[0] < cutoff) {
@@ -111,7 +134,7 @@ class EmotionContextAnalyzer {
     )
 
     // 4. 监听 AgentStore — 用户发送消息
-    let prevMsgCount = 0
+    let prevMsgCount = selectMessages(useAgentStore.getState()).length
     this.unsubscribers.push(
       useAgentStore.subscribe((state) => {
         const messages = selectMessages(state)
