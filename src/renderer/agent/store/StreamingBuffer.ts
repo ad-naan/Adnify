@@ -11,7 +11,7 @@ class StreamingBuffer {
     private buffer: Map<string, { content: string; threadId?: string }> = new Map()
     private timerId: ReturnType<typeof setTimeout> | null = null
     private flushCallback: FlushCallback | null = null
-    private readonly flushIntervalMs = 120
+    private readonly flushIntervalMs = 33
 
     setFlushCallback(callback: FlushCallback) {
         this.flushCallback = callback

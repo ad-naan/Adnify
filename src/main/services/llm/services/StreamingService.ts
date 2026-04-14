@@ -478,10 +478,10 @@ export class StreamingService {
       clearTimeout(existingTimer)
     }
 
-    // 设置新的定时器（50ms 批量发送）
+    // 设置新的定时器（30ms 批量发送，更细粒度喂给 renderer 的插值动画）
     const timer = setTimeout(() => {
       this.flushEvents(requestId)
-    }, 50)
+    }, 30)
 
     this.flushTimers.set(requestId, timer)
   }
