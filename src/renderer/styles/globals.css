@@ -487,6 +487,15 @@ textarea,
   animation: reveal-highlight 2s ease-out forwards;
 }
 
+/* --- Streaming block-reveal animation --- */
+@keyframes block-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-block-reveal {
+  animation: block-reveal 0.2s ease-out both;
+}
+
 /* --- Inline Diff Styles (Composer) --- */
 .inline-diff-add-line {
   background-color: rgba(34, 197, 94, 0.15) !important;
