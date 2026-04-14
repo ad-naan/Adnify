@@ -8,9 +8,10 @@ import { useState, useEffect, useRef } from 'react'
  * any remaining buffered text instead of snapping.
  */
 export function useSmoothStream(content: string, isStreaming: boolean, speedMultiplier = 1) {
-  const [displayedContent, setDisplayedContent] = useState('')
+  // 非流式模式下直接用完整内容初始化，避免初次渲染气泡内容为空的问题
+  const [displayedContent, setDisplayedContent] = useState(() => isStreaming ? '' : content)
   const contentRef = useRef(content)
-  const displayedLenRef = useRef(0)
+  const displayedLenRef = useRef(isStreaming ? 0 : content.length)
   const catchUpRafRef = useRef<number | null>(null)
 
   useEffect(() => {

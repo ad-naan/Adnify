@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -47,7 +47,7 @@ import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { t } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
-import { toFullPath } from '@shared/utils/pathUtils'
+import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -76,7 +76,7 @@ interface RenderPartProps {
 }
 
 // 代码块组件 - 更加精致的玻璃质感
-const CodeBlock = React.memo(({ language, children, fontSize, isStreaming }: { language: string | undefined; children: React.ReactNode; fontSize: number; isStreaming?: boolean }) => {
+const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number; isStreaming?: boolean }) => {
   const [copied, setCopied] = useState(false)
   const currentTheme = useStore(s => s.currentTheme)
   const theme = themeManager.getThemeById(currentTheme)
@@ -154,7 +154,8 @@ const cleanStreamingContent = (text: string): string => {
 }
 
 const BlockRevealKeyframes = () => (
-  <style dangerouslySetInnerHTML={{__html: `
+  <style dangerouslySetInnerHTML={{
+    __html: `
     @keyframes block-reveal {
       0% { opacity: 0; filter: blur(4px); transform: translateY(2px); }
       100% { opacity: 1; filter: blur(0px); transform: translateY(0); }
@@ -296,15 +297,11 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
 MessageMetaGroup.displayName = 'MessageMetaGroup'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
-  const [isExpanded, setIsExpanded] = useState(isStreaming)
+  const [isExpanded, setIsExpanded] = useState(true)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [shadowClass, setShadowClass] = useState('')
-
-  useEffect(() => {
-    setIsExpanded(isStreaming)
-  }, [isStreaming])
 
   useEffect(() => {
     if (!startTime || !isStreaming) return
@@ -856,8 +853,8 @@ const ChatMessage = React.memo(({
   // 为了类型安全
   const isStreaming = isAssistantMessage(message)
     ? Boolean(message.isStreaming)
-      && (streamState.phase === 'streaming' || streamState.phase === 'tool_running' || streamState.phase === 'tool_pending')
-      && streamState.assistantId === message.id
+    && (streamState.phase === 'streaming' || streamState.phase === 'tool_running' || streamState.phase === 'tool_pending')
+    && streamState.assistantId === message.id
     : false
 
   useEffect(() => {
@@ -936,6 +933,51 @@ const ChatMessage = React.memo(({
                 </div>
               ) : (
                 <div className="relative bg-surface/60 backdrop-blur-sm text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-sm w-fit max-w-full border border-border/50">
+                  {/* Context Items */}
+                  {message.contextItems && message.contextItems.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2 -mt-1 pt-1 justify-end">
+                      {message.contextItems.map((item: any, i: number) => {
+                        const getContextStyle = (type: string) => {
+                          switch (type) {
+                            case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
+                            case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
+                            case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
+                            case 'Skill': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', Icon: Wrench }
+                            default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
+                          }
+                        }
+                        const style = getContextStyle(item.type)
+                        const label = (() => {
+                          switch (item.type) {
+                            case 'File':
+                            case 'Folder': {
+                              const uri = item.uri || ''
+                              return getFileName(uri) || uri
+                            }
+                            case 'CodeSelection': {
+                              const uri = item.uri || ''
+                              const range = item.range as [number, number] | undefined
+                              const name = getFileName(uri) || uri
+                              return range ? `${name}:${range[0]}-${range[1]}` : name
+                            }
+                            case 'Skill': {
+                              return `@${item.skillId || 'skill'}`
+                            }
+                            default: return 'Context'
+                          }
+                        })()
+                        const IconComponent = style.Icon
+
+                        return (
+                          <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 ${style.bg} ${style.text} text-[10px] font-medium rounded-md border ${style.border} select-none opacity-80 hover:opacity-100 transition-opacity`}>
+                            <IconComponent className="w-3 h-3 opacity-70" />
+                            <span className="max-w-[150px] truncate">{label}</span>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+
                   {/* Images */}
                   {images.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 justify-end">
