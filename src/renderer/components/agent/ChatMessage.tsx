@@ -123,26 +123,17 @@ const CodeBlock = React.memo(({ language, children, fontSize, isStreaming }: { l
         </Tooltip>
       </div>
       <div className="relative">
-        {isStreaming ? (
-          <pre
-            className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono text-text-primary/90"
-            style={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
-          >
-            {codeText}
-          </pre>
-        ) : (
-          <SyntaxHighlighter
-            style={syntaxStyle}
-            language={language}
-            PreTag="div"
-            className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
-            customStyle={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
-            wrapLines
-            wrapLongLines
-          >
-            {codeText}
-          </SyntaxHighlighter>
-        )}
+        <SyntaxHighlighter
+          style={syntaxStyle}
+          language={language}
+          PreTag="div"
+          className="!bg-transparent !p-4 !m-0 custom-scrollbar leading-relaxed font-mono"
+          customStyle={{ backgroundColor: 'transparent', margin: 0, fontSize: `${fontSize}px` }}
+          wrapLines
+          wrapLongLines
+        >
+          {codeText}
+        </SyntaxHighlighter>
       </div>
     </div>
   )
@@ -525,7 +516,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden`}>
           <ReactMarkdown
             className="prose prose-invert max-w-none"
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={isStreaming ? undefined : [remarkGfm]}
             components={markdownComponents}
             skipHtml
           >
@@ -794,7 +785,7 @@ const AssistantMessageContent = React.memo(({
 AssistantMessageContent.displayName = 'AssistantMessageContent'
 
 const ChatMessage = React.memo(({
-  message,
+  message: messageProp,
   onEdit,
   onRegenerate,
   onRestore,
@@ -803,7 +794,21 @@ const ChatMessage = React.memo(({
   onOpenDiff,
   pendingToolId,
   hasCheckpoint,
+  messageId,
 }: ChatMessageProps) => {
+  // _doAppendToAssistant 通过 mutation 更新 message 对象（性能考虑不创建新数组），
+  // 导致 Virtuoso 的 data 引用不变、React.memo 的 prop 引用不变，组件收不到增量更新。
+  // 这里通过 messageId 直接订阅 store，读取 threadMessageVersions 作为变化信号，
+  // 让每次流式 content 追加都触发 re-render。
+  const liveMessage = useAgentStore(state => {
+    const threadId = state.currentThreadId
+    if (!threadId) return null
+    void state.threadMessageVersions[threadId]
+    const thread = state.threads[threadId]
+    return thread?.messages.find(m => m.id === messageId) ?? null
+  })
+  const message = liveMessage || messageProp
+
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
