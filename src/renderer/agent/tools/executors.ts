@@ -30,6 +30,9 @@ import { toolRegistry } from './registry'
 import { terminalManager } from '@/renderer/services/TerminalManager'
 import pLimit from 'p-limit'
 import { skillService } from '../services/skillService'
+import { t } from '@/renderer/i18n'
+import type { TranslationKey } from '@/renderer/i18n'
+import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 
 // ===== 辅助函数 =====
 
@@ -39,6 +42,25 @@ function getLocalizedText(language: string, zh: string, en: string): string {
 
 function getCurrentLanguage(): string {
     return useStore.getState().language
+}
+
+function translate(key: TranslationKey, params?: Record<string, string | number>): string {
+    return t(key, getCurrentLanguage() as 'en' | 'zh', params)
+}
+
+function getReplaceErrorMessage(errorCode?: ReplaceErrorCode): string {
+    switch (errorCode) {
+        case 'IDENTICAL_STRINGS':
+            return translate('agent.tool.edit.identicalStrings')
+        case 'MISSING_OLD_STRING':
+            return translate('agent.tool.edit.missingOldString')
+        case 'MULTIPLE_MATCHES':
+            return translate('agent.tool.edit.multipleMatches')
+        case 'OLD_STRING_NOT_FOUND':
+            return translate('agent.tool.edit.oldStringNotFound')
+        default:
+            return translate('agent.tool.edit.replaceFailed')
+    }
 }
 
 /**
@@ -802,7 +824,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             if (!result.success) {
                 const { findSimilarContent, analyzeEditError, generateFixSuggestion } = await import('../utils/EditRetryStrategy')
 
-                const errorType = analyzeEditError(result.error || '')
+                const errorType = analyzeEditError(result.error, result.errorCode)
                 const hasCache = fileCacheService.hasValidCache(path)
 
                 const similar = findSimilarContent(normalizedContent, normalizedOld)
@@ -814,17 +836,20 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     lineNumber: similar.lineNumber,
                 })
 
-                let errorMsg = result.error || 'Replace failed'
+                let errorMsg = getReplaceErrorMessage(result.errorCode)
 
                 if (similar.found) {
-                    errorMsg += `\n\n📍 Similar content found at line ${similar.lineNumber} (${Math.round((similar.similarity || 0) * 100)}% match)`
+                    errorMsg += `\n\n${translate('agent.tool.edit.similarContentFound', {
+                        line: similar.lineNumber || 0,
+                        similarity: Math.round((similar.similarity || 0) * 100),
+                    })}`
                 }
 
                 if (!hasCache) {
-                    errorMsg += '\n\n⚠️ File was not read before editing. Always use read_file first.'
+                    errorMsg += `\n\n${translate('agent.tool.edit.readBeforeEdit')}`
                 }
 
-                errorMsg += `\n\n💡 Suggestion: ${suggestion}`
+                errorMsg += `\n\n${translate('agent.tool.edit.suggestionPrefix')} ${suggestion}`
 
                 return { success: false, result: '', error: errorMsg }
             }

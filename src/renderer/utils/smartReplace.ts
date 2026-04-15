@@ -17,7 +17,14 @@ export interface ReplaceResult {
     matchedText?: string
     strategy?: string
     error?: string
+    errorCode?: ReplaceErrorCode
 }
+
+export type ReplaceErrorCode =
+    | 'IDENTICAL_STRINGS'
+    | 'MISSING_OLD_STRING'
+    | 'MULTIPLE_MATCHES'
+    | 'OLD_STRING_NOT_FOUND'
 
 // ============================================
 // Levenshtein 距离算法（用于相似度计算）
@@ -421,11 +428,19 @@ export function smartReplace(
     replaceAll = false
 ): ReplaceResult {
     if (oldString === newString) {
-        return { success: false, error: 'old_string and new_string must be different' }
+        return {
+            success: false,
+            errorCode: 'IDENTICAL_STRINGS',
+            error: 'old_string and new_string must be different',
+        }
     }
 
     if (!oldString) {
-        return { success: false, error: 'old_string is required' }
+        return {
+            success: false,
+            errorCode: 'MISSING_OLD_STRING',
+            error: 'old_string is required',
+        }
     }
 
     let foundMatch = false
@@ -464,12 +479,14 @@ export function smartReplace(
     if (foundMatch) {
         return {
             success: false,
+            errorCode: 'MULTIPLE_MATCHES',
             error: 'Found multiple matches for old_string. Include more surrounding context to make it unique.',
         }
     }
 
     return {
         success: false,
+        errorCode: 'OLD_STRING_NOT_FOUND',
         error: 'old_string not found in file. Use read_file to get exact content including whitespace.',
     }
 }

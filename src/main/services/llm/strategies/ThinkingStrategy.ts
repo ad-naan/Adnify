@@ -11,7 +11,7 @@ export interface ThinkingParseResult {
 export abstract class ThinkingStrategy {
   /**
    * 解析流式文本（可选）
-   * 仅用于 AI SDK 无法自动处理的格式（如 MiniMax 的 XML 标签）
+   * 仅用于 AI SDK 无法自动处理的 thinking 标签格式。
    */
   parseStreamText?(text: string): ThinkingParseResult
 
@@ -129,12 +129,12 @@ export class XmlTagThinkingStrategy extends ThinkingStrategy {
 export class ThinkingStrategyFactory {
   /**
    * 创建策略
-   * 只为需要特殊处理的模型创建策略，其他使用标准策略（AI SDK 原生支持）
+   * 只为需要特殊处理的模型创建策略，其他使用标准策略（AI SDK 原生支持）。
    */
   static create(model: string): ThinkingStrategy {
     const modelLower = model.toLowerCase()
 
-    // 需要解析 XML 标签的模型（包括 MiniMax, DeepSeek-R1, 本地 Ollama, 第三方中转）
+    // 需要解析 think 标签的模型。
     if (/minimax|abab|deepseek|r1|reason/i.test(modelLower)) {
       return new XmlTagThinkingStrategy()
     }

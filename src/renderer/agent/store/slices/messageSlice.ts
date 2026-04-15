@@ -22,6 +22,8 @@ import type {
 } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
+import { useStore } from '@/renderer/store'
+import { t } from '@/renderer/i18n'
 
 // ===== 类型定义 =====
 
@@ -64,6 +66,7 @@ export interface MessageActions {
             title?: string
             message: string
             suggestion?: string
+            compact?: boolean
         },
         targetThreadId?: string
     ) => void
@@ -86,6 +89,11 @@ export type MessageSlice = MessageActions
 // ===== 辅助函数 =====
 
 const generateId = () => crypto.randomUUID()
+
+function getInterruptedToolMessage(): string {
+    const language = useStore.getState().language as 'en' | 'zh'
+    return t('agent.tool.interruptedOrParseFailed', language)
+}
 
 const bumpThreadMessageVersion = (
     versions: Record<string, number>,
@@ -289,7 +297,7 @@ export const createMessageSlice: StateCreator<
                     // 清理幽灵工具调用：如果 LLM 已结束，但仍有处于非终态的工具，将它们标记为错误
                     const cleanToolCall = (tc: ToolCall): ToolCall => {
                         if (['pending', 'running', 'awaiting'].includes(tc.status)) {
-                            return { ...tc, status: 'error', result: 'Interrupted or failed to parse' }
+                            return { ...tc, status: 'error', result: getInterruptedToolMessage() }
                         }
                         return tc
                     }
@@ -382,6 +390,18 @@ export const createMessageSlice: StateCreator<
 
             const messages = thread.messages.map(msg => {
                 if (msg.id === messageId) {
+                    if (msg.role === 'assistant') {
+                        const assistantMsg = msg as AssistantMessage
+                        const assistantUpdates = updates as Partial<AssistantMessage>
+
+                        return {
+                            ...assistantMsg,
+                            ...assistantUpdates,
+                            parts: assistantUpdates.parts ?? assistantMsg.parts,
+                            toolCalls: assistantUpdates.toolCalls ?? assistantMsg.toolCalls,
+                        } as ChatMessage
+                    }
+
                     return { ...msg, ...updates } as ChatMessage
                 }
                 return msg
@@ -678,20 +698,7 @@ export const createMessageSlice: StateCreator<
                         return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
                     }
 
-                    // 工具调用不存在，添加新的
-                    updated = true
-
-                    const newToolCall: ToolCall = {
-                        id: toolCallId,
-                        name: (cleanUpdates.name as string) || '',
-                        arguments: (cleanUpdates.arguments as Record<string, unknown>) || {},
-                        status: (cleanUpdates.status as ToolCall['status']) || 'pending',
-                        ...cleanUpdates,
-                    }
-                    const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
-                    const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
-
-                    return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
+                    return msg
                 }
                 return msg
             })
@@ -992,6 +999,7 @@ export const createMessageSlice: StateCreator<
                         title: alert.title,
                         message: alert.message,
                         suggestion: alert.suggestion,
+                        compact: 'compact' in alert ? Boolean((alert as { compact?: boolean }).compact) : false,
                     }
                     return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
                 }

@@ -1,70 +1,64 @@
-/**
- * 统一配置路径管理
- * 管理用户级配置文件的存储位置
- */
-
+import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import Store from 'electron-store'
 
-// Bootstrap store 用于存储配置路径本身（存在默认位置）
-const bootstrapStore = new Store({ name: 'bootstrap' })
+const BOOTSTRAP_STORE_NAME = 'bootstrap'
 
-/**
- * 获取用户配置目录
- * 优先使用用户自定义路径，否则使用默认路径
- */
-export function getUserConfigDir(): string {
-  const customPath = bootstrapStore.get('customConfigPath') as string | undefined
-  if (customPath) {
-    return customPath
+function createBootstrapStore(): Store<Record<string, unknown>> {
+  return new Store({ name: BOOTSTRAP_STORE_NAME })
+}
+
+function resolveExistingDirectory(targetPath: string | undefined): string | undefined {
+  if (!targetPath) {
+    return undefined
   }
-  return app.getPath('userData')
+
+  return fs.existsSync(targetPath) ? targetPath : undefined
 }
 
-/**
- * 设置用户配置目录
- */
-export function setUserConfigDir(newPath: string): void {
-  bootstrapStore.set('customConfigPath', newPath)
+export function getBootstrapStore(): Store<Record<string, unknown>> {
+  return createBootstrapStore()
 }
 
-/**
- * 获取配置文件路径
- * @param filename 配置文件名，如 'config.json', 'mcp.json'
- * @param subdir 可选的子目录，如 'settings'
- */
-export function getConfigFilePath(filename: string, subdir?: string): string {
-  const baseDir = getUserConfigDir()
-  if (subdir) {
-    return path.join(baseDir, subdir, filename)
-  }
-  return path.join(baseDir, filename)
+export function getCustomConfigPath(store: Store<Record<string, unknown>> = getBootstrapStore()): string | undefined {
+  return resolveExistingDirectory(store.get('customConfigPath') as string | undefined)
 }
 
-/**
- * 获取工作区配置文件路径
- * @param workspaceRoot 工作区根目录
- * @param filename 配置文件名
- * @param subdir 可选的子目录
- */
+export function getStoreOptions(name: string, store: Store<Record<string, unknown>> = getBootstrapStore()) {
+  const cwd = getCustomConfigPath(store)
+  return cwd ? { name, cwd } : { name }
+}
+
+export function createScopedStore(name: string, store: Store<Record<string, unknown>> = getBootstrapStore()) {
+  return new Store<Record<string, unknown>>(getStoreOptions(name, store))
+}
+
+export function getUserConfigDir(store: Store<Record<string, unknown>> = getBootstrapStore()): string {
+  return getCustomConfigPath(store) ?? app.getPath('userData')
+}
+
+export function setUserConfigDir(newPath: string, store: Store<Record<string, unknown>> = getBootstrapStore()): void {
+  store.set('customConfigPath', newPath)
+}
+
+export function getConfigFilePath(filename: string, subdir?: string, store?: Store<Record<string, unknown>>): string {
+  const baseDir = getUserConfigDir(store)
+  return subdir ? path.join(baseDir, subdir, filename) : path.join(baseDir, filename)
+}
+
 export function getWorkspaceConfigFilePath(
   workspaceRoot: string,
   filename: string,
   subdir?: string
 ): string {
-  if (subdir) {
-    return path.join(workspaceRoot, '.adnify', subdir, filename)
-  }
-  return path.join(workspaceRoot, '.adnify', filename)
+  return subdir
+    ? path.join(workspaceRoot, '.adnify', subdir, filename)
+    : path.join(workspaceRoot, '.adnify', filename)
 }
 
-/** 配置文件名常量 */
 export const CONFIG_FILES = {
-  /** 主配置文件 */
   MAIN: 'config.json',
-  /** MCP 配置文件 */
   MCP: 'mcp.json',
-  /** 设置子目录 */
   SETTINGS_DIR: 'settings',
 } as const

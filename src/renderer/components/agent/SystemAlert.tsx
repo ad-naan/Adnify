@@ -14,6 +14,7 @@ interface SystemAlertProps {
   title?: string
   message: string
   suggestion?: string
+  compact?: boolean
   className?: string
 }
 
@@ -57,6 +58,7 @@ export const SystemAlert: React.FC<SystemAlertProps> = ({
   title,
   message,
   suggestion,
+  compact = false,
   className = '',
 }) => {
   const config = alertConfig[type]
@@ -67,35 +69,30 @@ export const SystemAlert: React.FC<SystemAlertProps> = ({
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       transition={{ duration: 0.2 }}
-      className={`group my-0.5 relative rounded-lg overflow-hidden transition-colors border ${config.bgColor} ${config.borderColor} ${className}`}
+      className={`group ${compact ? 'my-1 rounded-xl' : 'my-0.5 rounded-lg'} relative overflow-hidden transition-colors border ${config.bgColor} ${config.borderColor} ${className}`}
     >
-      <div className="flex items-start gap-2.5 px-3 py-2.5">
-        {/* 图标 */}
-        <div className="shrink-0 mt-[1.5px] w-4 h-4 flex items-center justify-center">
-          <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${config.iconBgColor}`}>
-            <Icon className={`w-2.5 h-2.5 ${config.iconColor}`} />
+      <div className={`flex items-start ${compact ? 'gap-2 px-2.5 py-2' : 'gap-2.5 px-3 py-2.5'}`}>
+        <div className={`shrink-0 ${compact ? 'mt-[1px] w-3.5 h-3.5' : 'mt-[1.5px] w-4 h-4'} flex items-center justify-center`}>
+          <div className={`${compact ? 'w-3 h-3' : 'w-3.5 h-3.5'} rounded-full flex items-center justify-center ${config.iconBgColor}`}>
+            <Icon className={`${compact ? 'w-2 h-2' : 'w-2.5 h-2.5'} ${config.iconColor}`} />
           </div>
         </div>
 
-        {/* 内容 */}
-        <div className="flex-1 min-w-0 space-y-1">
-          {/* 标题 */}
+        <div className={`flex-1 min-w-0 ${compact ? 'space-y-0.5' : 'space-y-1'}`}>
           {title && (
-            <div className={`text-[12px] font-medium px-0.5 ${config.titleColor} tracking-tight`}>
+            <div className={`${compact ? 'text-[11px]' : 'text-[12px]'} font-medium px-0.5 ${config.titleColor} tracking-tight`}>
               {title}
             </div>
           )}
 
-          {/* 消息 */}
-          <div className={`text-[11px] px-0.5 break-words ${title ? 'text-text-secondary' : config.titleColor} leading-relaxed`}>
+          <div className={`${compact ? 'text-[10.5px]' : 'text-[11px]'} px-0.5 break-words ${title ? 'text-text-secondary' : config.titleColor} leading-relaxed`}>
             {message}
           </div>
 
-          {/* 建议 */}
           {suggestion && (
-            <div className="flex items-start gap-1.5 mt-2 pt-1.5 border-t border-border/30">
-              <Lightbulb className="w-3 h-3 text-accent/70 shrink-0 mt-[1.5px]" />
-              <span className="text-[11px] text-text-muted break-words leading-relaxed">
+            <div className={`flex items-start gap-1.5 ${compact ? 'mt-1 pt-1' : 'mt-2 pt-1.5'} border-t border-border/30`}>
+              <Lightbulb className={`${compact ? 'w-2.5 h-2.5 mt-[1px]' : 'w-3 h-3 mt-[1.5px]'} text-accent/70 shrink-0`} />
+              <span className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-text-muted break-words leading-relaxed`}>
                 {suggestion}
               </span>
             </div>

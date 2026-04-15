@@ -47,6 +47,14 @@ export interface LoopCheckResult {
   reason?: string
   suggestion?: string
   warning?: string
+  details?: {
+    category: 'exact_repeat' | 'same_tool_warning' | 'content_cycle' | 'pattern_loop'
+    toolName?: string
+    count?: number
+    threshold?: number
+    target?: string | null
+    pattern?: string
+  }
 }
 
 // ===== 压缩统计（从 CompressionManager 导出） =====

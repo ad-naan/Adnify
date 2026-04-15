@@ -12,6 +12,7 @@ import { logger } from '@shared/utils/Logger'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
 import { cleanupFileWatcher } from './security/fileWatcher'
+import { createScopedStore, getBootstrapStore } from './services/configPath'
 
 // ==========================================
 // 常量定义
@@ -44,17 +45,8 @@ function resolveStore(_key: string): Store<Record<string, unknown>> {
 }
 
 async function initStores() {
-  const fs = await import('fs')
-  const { default: Store } = await import('electron-store')
-
-  bootstrapStore = new Store({ name: 'bootstrap' })
-  const customConfigPath = bootstrapStore.get('customConfigPath') as string | undefined
-  const baseCwd = (customConfigPath && fs.existsSync(customConfigPath)) ? customConfigPath : undefined
-
-  const mkOpts = (name: string) => baseCwd ? { name, cwd: baseCwd } : { name }
-
-  configStore = new Store(mkOpts('config'))
-
+  bootstrapStore = getBootstrapStore()
+  configStore = createScopedStore('config', bootstrapStore)
 }
 
 // ==========================================

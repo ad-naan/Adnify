@@ -24,6 +24,20 @@ interface StoredWorkspaceSession {
   workspaceId?: string
 }
 
+function normalizeWorkspacePath(targetPath: string): string {
+  const trimmed = targetPath.trim()
+  if (!trimmed) {
+    return trimmed
+  }
+
+  const normalizedSeparators = path.normalize(trimmed)
+  if (/^[a-zA-Z]:\\$/.test(normalizedSeparators)) {
+    return normalizedSeparators
+  }
+
+  return normalizedSeparators.replace(/[\\\/]+$/, '')
+}
+
 function getWatcherId(webContentsId: number): string {
   return `window-${webContentsId}`
 }
@@ -117,9 +131,12 @@ export function registerWorkspaceHandlers(
 ): void {
   // 辅助函数：添加到最近工作区列表
   function addRecentWorkspace(path: string) {
+    const normalizedPath = normalizeWorkspacePath(path)
     const recent = store.get('recentWorkspaces', []) as string[]
-    const filtered = recent.filter((p: string) => p.toLowerCase() !== path.toLowerCase())
-    const updated = [path, ...filtered].slice(0, 10)
+    const filtered = recent.filter(
+      (item: string) => normalizeWorkspacePath(item).toLowerCase() !== normalizedPath.toLowerCase()
+    )
+    const updated = [normalizedPath, ...filtered].slice(0, 10)
     store.set('recentWorkspaces', updated)
     logger.security.info('[Workspace] Updated recent workspaces:', updated.length, 'items')
   }
@@ -134,7 +151,7 @@ export function registerWorkspaceHandlers(
     })
 
     if (!result.canceled && result.filePaths[0]) {
-      const folderPath = result.filePaths[0]
+      const folderPath = normalizeWorkspacePath(result.filePaths[0])
 
       // 检查是否已有窗口打开了该项目
       if (windowManager?.findWindowByWorkspace) {
@@ -190,13 +207,13 @@ export function registerWorkspaceHandlers(
         try {
           const content = await fsPromises.readFile(targetPath, 'utf-8')
           const config = JSON.parse(content)
-          roots = config.folders.map((f: any) => f.path)
+          roots = config.folders.map((f: any) => normalizeWorkspacePath(f.path))
         } catch (e) {
           logger.security.error('Failed to parse workspace file', e)
           return null
         }
       } else {
-        roots = [targetPath]
+        roots = [normalizeWorkspacePath(targetPath)]
       }
 
       // 检查是否已有窗口打开了该项目
@@ -380,7 +397,16 @@ export function registerWorkspaceHandlers(
 
   // 获取最近打开的工作区列表
   ipcMain.handle('workspace:getRecent', () => {
-    return store.get('recentWorkspaces', []) as string[]
+    const recent = store.get('recentWorkspaces', []) as string[]
+    const normalizedRecent = recent
+      .map(item => normalizeWorkspacePath(item))
+      .filter(Boolean)
+
+    if (normalizedRecent.length !== recent.length || normalizedRecent.some((item, index) => item !== recent[index])) {
+      store.set('recentWorkspaces', normalizedRecent)
+    }
+
+    return normalizedRecent
   })
 
   ipcMain.handle('workspace:exists', async (_, targetPath: string) => {
@@ -403,10 +429,13 @@ export function registerWorkspaceHandlers(
   // 从最近工作区列表中移除指定路径
   ipcMain.handle('workspace:removeFromRecent', (_, path: string) => {
     if (!path) return false
+    const normalizedPath = normalizeWorkspacePath(path)
     const recent = store.get('recentWorkspaces', []) as string[]
-    const filtered = recent.filter((p: string) => p.toLowerCase() !== path.toLowerCase())
+    const filtered = recent.filter(
+      (item: string) => normalizeWorkspacePath(item).toLowerCase() !== normalizedPath.toLowerCase()
+    )
     store.set('recentWorkspaces', filtered)
-    logger.security.info('[Workspace] Removed from recent:', path)
+    logger.security.info('[Workspace] Removed from recent:', normalizedPath)
     return true
   })
 

@@ -30,7 +30,6 @@ interface AgentStatusBarProps {
   pendingChanges: PendingChange[]
   isStreaming: boolean
   isAwaitingApproval: boolean
-  streamingStatus?: string
   onStop?: () => void
   onReviewFile?: (filePath: string) => void
   onAcceptFile?: (filePath: string) => void
@@ -48,7 +47,6 @@ function AgentStatusBar({
   pendingChanges,
   isStreaming,
   isAwaitingApproval,
-  streamingStatus,
   onStop,
   onReviewFile,
   onAcceptFile,
@@ -144,7 +142,7 @@ function AgentStatusBar({
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
                   <span className="text-[11px] font-medium text-shimmer">
-                    {streamingStatus || 'Processing...'}
+                    Processing...
                   </span>
                 </>
               ) : (

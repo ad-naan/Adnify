@@ -6,7 +6,7 @@ import { logger } from '@shared/utils/Logger'
 import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import Store from 'electron-store'
-import { getUserConfigDir, setUserConfigDir } from '../services/configPath'
+import { getBootstrapStore, getUserConfigDir, setUserConfigDir } from '../services/configPath'
 import { cleanConfigValue } from '@shared/config/configCleaner'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 
@@ -164,7 +164,7 @@ export function registerSettingsHandlers(
       if (!fs.existsSync(newPath)) {
         fs.mkdirSync(newPath, { recursive: true })
       }
-      setUserConfigDir(newPath)
+      setUserConfigDir(newPath, getBootstrapStore())
       return true
     } catch (err) {
       logger.ipc.error('[Settings] Failed to set config path:', err)

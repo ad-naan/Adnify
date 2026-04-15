@@ -65,7 +65,6 @@ export {
 export type { CompressionLevel, CompressionStats, StructuredSummary, HandoffDocument } from './context'
 
 // 工具函数
-export { parseXMLToolCalls, generateToolCallId } from './utils/XMLToolParser'
 export { MentionParser, SPECIAL_MENTIONS } from './utils/MentionParser'
 export type { MentionCandidate, MentionParseResult } from './utils/MentionParser'
 

@@ -1,14 +1,12 @@
-/**
- * 设置模态框主组件
- * 管理设置标签页切换和状态同步
- */
-
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
 import { getEditorConfig } from '@renderer/settings'
+import { t, type Language } from '@renderer/i18n'
+import { toast } from '@components/common/ToastProvider'
+import { globalConfirm } from '@components/common/ConfirmDialog'
 import KeybindingPanel from '@components/panels/KeybindingPanel'
 import { Button, Modal, Select } from '@components/ui'
 import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
@@ -26,22 +24,102 @@ import {
     SkillSettings
 } from './tabs'
 
+function normalizeForCompare(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        return value.map(normalizeForCompare)
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.keys(value as Record<string, unknown>)
+            .sort()
+            .reduce<Record<string, unknown>>((acc, key) => {
+                acc[key] = normalizeForCompare((value as Record<string, unknown>)[key])
+                return acc
+            }, {})
+    }
+
+    return value
+}
+
+function areEqual(left: unknown, right: unknown): boolean {
+    return JSON.stringify(normalizeForCompare(left)) === JSON.stringify(normalizeForCompare(right))
+}
+
+function toEditorSettingsState(config: ReturnType<typeof getEditorConfig>): EditorSettingsState {
+    return {
+        fontSize: config.fontSize,
+        chatFontSize: config.chatFontSize ?? config.fontSize,
+        tabSize: config.tabSize,
+        wordWrap: config.wordWrap,
+        lineNumbers: config.lineNumbers,
+        minimap: config.minimap,
+        bracketPairColorization: config.bracketPairColorization,
+        formatOnSave: config.formatOnSave,
+        autoSave: config.autoSave,
+        autoSaveDelay: config.autoSaveDelay,
+        theme: 'adnify-dark',
+        completionEnabled: config.ai.completionEnabled,
+        completionDebounceMs: config.performance.completionDebounceMs,
+        completionMaxTokens: config.ai.completionMaxTokens,
+        completionTriggerChars: config.ai.completionTriggerChars,
+        terminalScrollback: config.terminal.scrollback,
+        terminalMaxOutputLines: config.terminal.maxOutputLines,
+        lspTimeoutMs: config.lsp.timeoutMs,
+        lspCompletionTimeoutMs: config.lsp.completionTimeoutMs,
+        largeFileWarningThresholdMB: config.performance.largeFileWarningThresholdMB,
+        largeFileLineCount: config.performance.largeFileLineCount,
+        commandTimeoutMs: config.performance.commandTimeoutMs,
+        workerTimeoutMs: config.performance.workerTimeoutMs,
+        healthCheckTimeoutMs: config.performance.healthCheckTimeoutMs,
+        maxProjectFiles: config.performance.maxProjectFiles,
+        maxFileTreeDepth: config.performance.maxFileTreeDepth,
+        maxSearchResults: config.performance.maxSearchResults,
+        saveDebounceMs: config.performance.saveDebounceMs,
+        flushIntervalMs: config.performance.flushIntervalMs,
+    }
+}
+
 export default function SettingsModal() {
     const {
-        llmConfig, language, autoApprove, providerConfigs, promptTemplateId,
-        agentConfig, aiInstructions, webSearchConfig, mcpConfig, enableFileLogging,
-        set, setProvider, setShowSettings, save
+        llmConfig,
+        language,
+        autoApprove,
+        providerConfigs,
+        promptTemplateId,
+        agentConfig,
+        aiInstructions,
+        webSearchConfig,
+        mcpConfig,
+        enableFileLogging,
+        editorConfig,
+        securitySettings,
+        set,
+        setProvider,
+        setShowSettings,
+        save,
     } = useStore(useShallow(s => ({
-        llmConfig: s.llmConfig, language: s.language, autoApprove: s.autoApprove,
-        providerConfigs: s.providerConfigs, promptTemplateId: s.promptTemplateId,
-        agentConfig: s.agentConfig, aiInstructions: s.aiInstructions,
-        webSearchConfig: s.webSearchConfig, mcpConfig: s.mcpConfig,
-        enableFileLogging: s.enableFileLogging, set: s.set, setProvider: s.setProvider,
-        setShowSettings: s.setShowSettings, save: s.save
+        llmConfig: s.llmConfig,
+        language: s.language,
+        autoApprove: s.autoApprove,
+        providerConfigs: s.providerConfigs,
+        promptTemplateId: s.promptTemplateId,
+        agentConfig: s.agentConfig,
+        aiInstructions: s.aiInstructions,
+        webSearchConfig: s.webSearchConfig,
+        mcpConfig: s.mcpConfig,
+        enableFileLogging: s.enableFileLogging,
+        editorConfig: s.editorConfig,
+        securitySettings: s.securitySettings,
+        set: s.set,
+        setProvider: s.setProvider,
+        setShowSettings: s.setShowSettings,
+        save: s.save,
     })))
 
     const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
     const [showApiKey, setShowApiKey] = useState(false)
+    const [saved, setSaved] = useState(false)
+
     const [localConfig, setLocalConfig] = useState(llmConfig)
     const [localLanguage, setLocalLanguage] = useState(language)
     const [localAutoApprove, setLocalAutoApprove] = useState(autoApprove)
@@ -52,61 +130,131 @@ export default function SettingsModal() {
     const [localWebSearchConfig, setLocalWebSearchConfig] = useState(webSearchConfig)
     const [localMcpConfig, setLocalMcpConfig] = useState(mcpConfig)
     const [localEnableFileLogging, setLocalEnableFileLogging] = useState(enableFileLogging)
-    const [saved, setSaved] = useState(false)
-
-    const editorConfig = getEditorConfig()
-    const [editorSettings, setEditorSettings] = useState<EditorSettingsState>({
-        fontSize: editorConfig.fontSize,
-        chatFontSize: editorConfig.chatFontSize ?? editorConfig.fontSize,
-        tabSize: editorConfig.tabSize,
-        wordWrap: editorConfig.wordWrap,
-        lineNumbers: editorConfig.lineNumbers,
-        minimap: editorConfig.minimap,
-        bracketPairColorization: editorConfig.bracketPairColorization,
-        formatOnSave: editorConfig.formatOnSave,
-        autoSave: editorConfig.autoSave,
-        autoSaveDelay: editorConfig.autoSaveDelay,
-        theme: 'adnify-dark',
-        completionEnabled: editorConfig.ai.completionEnabled,
-        completionDebounceMs: editorConfig.performance.completionDebounceMs,
-        completionMaxTokens: editorConfig.ai.completionMaxTokens,
-        completionTriggerChars: editorConfig.ai.completionTriggerChars,
-        terminalScrollback: editorConfig.terminal.scrollback,
-        terminalMaxOutputLines: editorConfig.terminal.maxOutputLines,
-        lspTimeoutMs: editorConfig.lsp.timeoutMs,
-        lspCompletionTimeoutMs: editorConfig.lsp.completionTimeoutMs,
-        largeFileWarningThresholdMB: editorConfig.performance.largeFileWarningThresholdMB,
-        largeFileLineCount: editorConfig.performance.largeFileLineCount,
-        commandTimeoutMs: editorConfig.performance.commandTimeoutMs,
-        workerTimeoutMs: editorConfig.performance.workerTimeoutMs,
-        healthCheckTimeoutMs: editorConfig.performance.healthCheckTimeoutMs,
-        maxProjectFiles: editorConfig.performance.maxProjectFiles,
-        maxFileTreeDepth: editorConfig.performance.maxFileTreeDepth,
-        maxSearchResults: editorConfig.performance.maxSearchResults,
-        saveDebounceMs: editorConfig.performance.saveDebounceMs,
-        flushIntervalMs: editorConfig.performance.flushIntervalMs,
-    })
-    // 高级编辑器配置（包含所有字段）
+    const [localSecuritySettings, setLocalSecuritySettings] = useState(securitySettings)
+    const [editorSettings, setEditorSettings] = useState<EditorSettingsState>(() => toEditorSettingsState(editorConfig))
     const [advancedEditorConfig, setAdvancedEditorConfig] = useState(editorConfig)
+    const [isClosing, setIsClosing] = useState(false)
 
-    // 合并多个 useEffect 为单个，减少重复渲染
     useEffect(() => {
         setLocalConfig(llmConfig)
-        setLocalProviderConfigs(providerConfigs)
         setLocalLanguage(language)
         setLocalAutoApprove(autoApprove)
+        setLocalPromptTemplateId(promptTemplateId)
         setLocalAgentConfig(agentConfig)
+        setLocalProviderConfigs(providerConfigs)
         setLocalAiInstructions(aiInstructions)
         setLocalWebSearchConfig(webSearchConfig)
         setLocalMcpConfig(mcpConfig)
         setLocalEnableFileLogging(enableFileLogging)
-    }, [llmConfig, providerConfigs, language, autoApprove, agentConfig, aiInstructions, webSearchConfig, mcpConfig, enableFileLogging])
+        setLocalSecuritySettings(securitySettings)
+        setEditorSettings(toEditorSettingsState(editorConfig))
+        setAdvancedEditorConfig(editorConfig)
+    }, [
+        agentConfig,
+        aiInstructions,
+        autoApprove,
+        editorConfig,
+        enableFileLogging,
+        language,
+        llmConfig,
+        mcpConfig,
+        promptTemplateId,
+        providerConfigs,
+        securitySettings,
+        webSearchConfig,
+    ])
+
+    const finalEditorConfig = useMemo(() => ({
+        ...advancedEditorConfig,
+        fontSize: editorSettings.fontSize,
+        chatFontSize: editorSettings.chatFontSize,
+        tabSize: editorSettings.tabSize,
+        wordWrap: editorSettings.wordWrap,
+        lineNumbers: editorSettings.lineNumbers,
+        minimap: editorSettings.minimap,
+        bracketPairColorization: editorSettings.bracketPairColorization,
+        formatOnSave: editorSettings.formatOnSave,
+        autoSave: editorSettings.autoSave,
+        autoSaveDelay: editorSettings.autoSaveDelay,
+        ai: {
+            ...advancedEditorConfig.ai,
+            completionEnabled: editorSettings.completionEnabled,
+            completionMaxTokens: editorSettings.completionMaxTokens,
+            completionTriggerChars: editorSettings.completionTriggerChars,
+        },
+        terminal: {
+            ...advancedEditorConfig.terminal,
+            scrollback: editorSettings.terminalScrollback,
+            maxOutputLines: editorSettings.terminalMaxOutputLines,
+        },
+        lsp: {
+            ...advancedEditorConfig.lsp,
+            timeoutMs: editorSettings.lspTimeoutMs,
+            completionTimeoutMs: editorSettings.lspCompletionTimeoutMs,
+        },
+        performance: {
+            ...advancedEditorConfig.performance,
+            completionDebounceMs: editorSettings.completionDebounceMs,
+            largeFileWarningThresholdMB: editorSettings.largeFileWarningThresholdMB,
+            largeFileLineCount: editorSettings.largeFileLineCount,
+            commandTimeoutMs: editorSettings.commandTimeoutMs,
+            workerTimeoutMs: editorSettings.workerTimeoutMs,
+            healthCheckTimeoutMs: editorSettings.healthCheckTimeoutMs,
+            maxProjectFiles: editorSettings.maxProjectFiles,
+            maxFileTreeDepth: editorSettings.maxFileTreeDepth,
+            maxSearchResults: editorSettings.maxSearchResults,
+            saveDebounceMs: editorSettings.saveDebounceMs,
+            flushIntervalMs: editorSettings.flushIntervalMs,
+        },
+    }), [advancedEditorConfig, editorSettings])
+
+    const isDirty = useMemo(() => {
+        return !areEqual(localConfig, llmConfig) ||
+            localLanguage !== language ||
+            localAutoApprove !== autoApprove ||
+            localPromptTemplateId !== promptTemplateId ||
+            !areEqual(localAgentConfig, agentConfig) ||
+            localAiInstructions !== aiInstructions ||
+            !areEqual(localWebSearchConfig, webSearchConfig) ||
+            !areEqual(localMcpConfig, mcpConfig) ||
+            localEnableFileLogging !== enableFileLogging ||
+            !areEqual(localProviderConfigs, providerConfigs) ||
+            !areEqual(localSecuritySettings, securitySettings) ||
+            !areEqual(finalEditorConfig, editorConfig)
+    }, [
+        agentConfig,
+        aiInstructions,
+        autoApprove,
+        editorConfig,
+        enableFileLogging,
+        finalEditorConfig,
+        language,
+        llmConfig,
+        localAgentConfig,
+        localAiInstructions,
+        localAutoApprove,
+        localConfig,
+        localEnableFileLogging,
+        localLanguage,
+        localMcpConfig,
+        localPromptTemplateId,
+        localProviderConfigs,
+        localSecuritySettings,
+        localWebSearchConfig,
+        mcpConfig,
+        promptTemplateId,
+        providerConfigs,
+        securitySettings,
+        webSearchConfig,
+    ])
 
     const handleSave = useCallback(async () => {
-        // 合并当前 provider 的配置（仅当 provider 仍存在时，避免重建已删除的 provider）
+        if (!isDirty) {
+            return
+        }
+
         const currentProvider = localConfig.provider
-        const providerExists = localProviderConfigs[currentProvider] !== undefined ||
-            !!PROVIDERS[currentProvider]
+        const providerExists = localProviderConfigs[currentProvider] !== undefined || !!PROVIDERS[currentProvider]
 
         const finalProviderConfigs = providerExists
             ? {
@@ -123,125 +271,93 @@ export default function SettingsModal() {
             }
             : { ...localProviderConfigs }
 
-        // 更新 Store 状态（包括 headers）
-        set('llmConfig', localConfig)
-        set('language', localLanguage)
-        set('autoApprove', localAutoApprove)
-        set('promptTemplateId', localPromptTemplateId)
-        set('agentConfig', localAgentConfig)
-        set('aiInstructions', localAiInstructions)
-        set('webSearchConfig', localWebSearchConfig)
-        set('mcpConfig', localMcpConfig)
-        set('enableFileLogging', localEnableFileLogging)
+        try {
+            set('llmConfig', localConfig)
+            set('language', localLanguage)
+            set('autoApprove', localAutoApprove)
+            set('promptTemplateId', localPromptTemplateId)
+            set('agentConfig', localAgentConfig)
+            set('aiInstructions', localAiInstructions)
+            set('webSearchConfig', localWebSearchConfig)
+            set('mcpConfig', localMcpConfig)
+            set('enableFileLogging', localEnableFileLogging)
+            set('securitySettings', localSecuritySettings)
+            set('providerConfigs', finalProviderConfigs)
+            set('editorConfig', finalEditorConfig)
 
-        // 同步 providerConfigs：先删除不存在于 localProviderConfigs 的，再更新/添加
-        // 使用 set 直接替换整个 providerConfigs，确保删除的配置也被移除
-        set('providerConfigs', finalProviderConfigs)
+            await save()
 
-        // 编辑器配置统一保存 - 合并 editorSettings 和 advancedEditorConfig
-        const finalEditorConfig = {
-            ...advancedEditorConfig,
-            fontSize: editorSettings.fontSize,
-            chatFontSize: editorSettings.chatFontSize,
-            tabSize: editorSettings.tabSize,
-            wordWrap: editorSettings.wordWrap,
-            lineNumbers: editorSettings.lineNumbers,
-            minimap: editorSettings.minimap,
-            bracketPairColorization: editorSettings.bracketPairColorization,
-            formatOnSave: editorSettings.formatOnSave,
-            autoSave: editorSettings.autoSave,
-            autoSaveDelay: editorSettings.autoSaveDelay,
-            ai: {
-                ...advancedEditorConfig.ai,
-                completionEnabled: editorSettings.completionEnabled,
-                completionMaxTokens: editorSettings.completionMaxTokens,
-                completionTriggerChars: editorSettings.completionTriggerChars,
-            },
-            terminal: {
-                ...advancedEditorConfig.terminal,
-                scrollback: editorSettings.terminalScrollback,
-                maxOutputLines: editorSettings.terminalMaxOutputLines,
-            },
-            lsp: {
-                ...advancedEditorConfig.lsp,
-                timeoutMs: editorSettings.lspTimeoutMs,
-                completionTimeoutMs: editorSettings.lspCompletionTimeoutMs,
-            },
-            performance: {
-                ...advancedEditorConfig.performance,
-                completionDebounceMs: editorSettings.completionDebounceMs,
-                largeFileWarningThresholdMB: editorSettings.largeFileWarningThresholdMB,
-                largeFileLineCount: editorSettings.largeFileLineCount,
-                commandTimeoutMs: editorSettings.commandTimeoutMs,
-                workerTimeoutMs: editorSettings.workerTimeoutMs,
-                healthCheckTimeoutMs: editorSettings.healthCheckTimeoutMs,
-                maxProjectFiles: editorSettings.maxProjectFiles,
-                maxFileTreeDepth: editorSettings.maxFileTreeDepth,
-                maxSearchResults: editorSettings.maxSearchResults,
-                saveDebounceMs: editorSettings.saveDebounceMs,
-                flushIntervalMs: editorSettings.flushIntervalMs,
+            if (localWebSearchConfig.googleApiKey && localWebSearchConfig.googleCx) {
+                window.electronAPI?.httpSetGoogleSearch?.(localWebSearchConfig.googleApiKey, localWebSearchConfig.googleCx)
             }
+
+            window.electronAPI?.mcpSetAutoConnect?.(localMcpConfig.autoConnect ?? true)
+
+            setSaved(true)
+            window.setTimeout(() => setSaved(false), 2000)
+            toast.success(t('success.settingsSaved', localLanguage as Language))
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error))
+        }
+    }, [
+        finalEditorConfig,
+        isDirty,
+        localAgentConfig,
+        localAiInstructions,
+        localAutoApprove,
+        localConfig,
+        localEnableFileLogging,
+        localLanguage,
+        localMcpConfig,
+        localPromptTemplateId,
+        localProviderConfigs,
+        localSecuritySettings,
+        localWebSearchConfig,
+        save,
+        set,
+    ])
+
+    const requestClose = useCallback(async () => {
+        if (isClosing) {
+            return
         }
 
-        // 更新 store 的 editorConfig
-        set('editorConfig', finalEditorConfig)
+        setIsClosing(true)
 
-        // 保存到文件
-        await save()
-
-        // 应用网络搜索配置到主进程
-        if (localWebSearchConfig.googleApiKey && localWebSearchConfig.googleCx) {
-            window.electronAPI?.httpSetGoogleSearch?.(localWebSearchConfig.googleApiKey, localWebSearchConfig.googleCx)
-        }
-
-        // 同步 MCP 自动连接设置到主进程
-        window.electronAPI?.mcpSetAutoConnect?.(localMcpConfig.autoConnect ?? true)
-
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
-    }, [localConfig, localLanguage, localAutoApprove, localPromptTemplateId, localAgentConfig, localAiInstructions, localWebSearchConfig, localMcpConfig, localEnableFileLogging, localProviderConfigs, editorSettings, advancedEditorConfig, set, setProvider, save])
-
-    // 检测是否有未保存更改（对比本地状态与 store 状态）
-    const isDirty = useMemo(() => {
-        return JSON.stringify(localConfig) !== JSON.stringify(llmConfig) ||
-            localLanguage !== language ||
-            localAutoApprove !== autoApprove ||
-            localPromptTemplateId !== promptTemplateId ||
-            JSON.stringify(localAgentConfig) !== JSON.stringify(agentConfig) ||
-            localAiInstructions !== aiInstructions ||
-            JSON.stringify(localWebSearchConfig) !== JSON.stringify(webSearchConfig) ||
-            JSON.stringify(localMcpConfig) !== JSON.stringify(mcpConfig) ||
-            localEnableFileLogging !== enableFileLogging ||
-            JSON.stringify(localProviderConfigs) !== JSON.stringify(providerConfigs)
-    }, [localConfig, llmConfig, localLanguage, language, localAutoApprove, autoApprove, localPromptTemplateId, promptTemplateId, localAgentConfig, agentConfig, localAiInstructions, aiInstructions, localWebSearchConfig, webSearchConfig, localMcpConfig, mcpConfig, localEnableFileLogging, enableFileLogging, localProviderConfigs, providerConfigs])
-
-    // 关闭设置时检查未保存更改
-    const handleClose = useCallback(() => {
         if (isDirty) {
-            const message = language === 'zh' ? '您有未保存的更改，确定要关闭吗？' : 'You have unsaved changes. Are you sure you want to close?'
-            if (!window.confirm(message)) {
+            const confirmed = await globalConfirm({
+                title: t('settings', language as Language),
+                message: t('unsavedChangesConfirm', language as Language),
+                confirmText: t('discard', language as Language),
+                cancelText: t('cancel', language as Language),
+                variant: 'warning',
+            })
+            if (!confirmed) {
+                setIsClosing(false)
                 return
             }
         }
-        setShowSettings(false)
-    }, [isDirty, language, setShowSettings])
 
-    // 使用 useMemo 缓存计算结果
+        setShowSettings(false)
+        setIsClosing(false)
+    }, [isClosing, isDirty, language, setShowSettings])
+
+    const handleClose = useCallback(() => {
+        void requestClose()
+    }, [requestClose])
+
     const providers = useMemo(() =>
-        Object.entries(PROVIDERS).map(([id, p]) => ({
+        Object.entries(PROVIDERS).map(([id, provider]) => ({
             id,
-            name: p.displayName,
-            models: [...(p.models || []), ...(providerConfigs[id]?.customModels || [])]
+            name: provider.displayName,
+            models: [...(provider.models || []), ...(localProviderConfigs[id]?.customModels || [])]
         })),
-        [providerConfigs]
-    )
+    [localProviderConfigs])
 
     const selectedProvider = useMemo(() =>
-        providers.find(p => p.id === localConfig.provider),
-        [providers, localConfig.provider]
-    )
+        providers.find(provider => provider.id === localConfig.provider),
+    [localConfig.provider, providers])
 
-    // 使用 useMemo 缓存 tabs 配置
     const tabs = useMemo(() => [
         { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
         { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
@@ -260,7 +376,6 @@ export default function SettingsModal() {
     return (
         <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
             <div className="flex h-[75vh] max-h-[800px]">
-                {/* Sidebar - macOS Style */}
                 <div className="w-64 bg-surface/30 backdrop-blur-xl border-r border-border/50 flex flex-col pt-8 pb-6">
                     <div className="px-6 mb-6">
                         <h2 className="text-xl font-bold text-text-primary tracking-tight flex items-center gap-2.5">
@@ -276,10 +391,7 @@ export default function SettingsModal() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group ${activeTab === tab.id
-                                    ? 'bg-accent text-white shadow-md shadow-accent/20'
-                                    : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-                                    }`}
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group ${activeTab === tab.id ? 'bg-accent text-white shadow-md shadow-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}`}
                             >
                                 <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-white' : 'text-text-muted group-hover:text-text-primary'}`}>
                                     {tab.icon}
@@ -297,26 +409,24 @@ export default function SettingsModal() {
                         <Select
                             value={localLanguage}
                             onChange={(value) => setLocalLanguage(value as 'en' | 'zh')}
-                            options={LANGUAGES.map(l => ({ value: l.id, label: l.name }))}
+                            options={LANGUAGES.map(item => ({ value: item.id, label: item.name }))}
                             className="w-full text-xs bg-surface/50 border-border/50 hover:border-accent/50 transition-colors"
                         />
                     </div>
                 </div>
 
-                {/* Main Content */}
                 <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
                     <div className="flex-1 overflow-y-auto px-10 py-10 custom-scrollbar scroll-smooth pb-28">
                         <div className="mb-8 pb-6 border-b border-border/40">
                             <h3 className="text-3xl font-bold text-text-primary tracking-tight">
-                                {tabs.find(t => t.id === activeTab)?.label}
+                                {tabs.find(tab => tab.id === activeTab)?.label}
                             </h3>
                             <p className="text-sm text-text-muted mt-2 opacity-80 font-medium">
-                                {language === 'zh' ? '管理您的应用程序偏好设置' : 'Manage your application preferences and configurations'}
+                                {t('settings.managePreferences', language as Language)}
                             </p>
                         </div>
 
                         <div className="animate-fade-in space-y-8">
-                            {/* Render active tab content */}
                             {activeTab === 'provider' && (
                                 <ProviderSettings
                                     localConfig={localConfig}
@@ -362,39 +472,52 @@ export default function SettingsModal() {
                             {activeTab === 'mcp' && <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} />}
                             {activeTab === 'lsp' && <LspSettings language={language} />}
                             {activeTab === 'indexing' && <IndexSettings language={language} />}
-                            {activeTab === 'security' && <SecuritySettings language={language} />}
-                            {activeTab === 'system' && <SystemSettings language={language} enableFileLogging={localEnableFileLogging} setEnableFileLogging={setLocalEnableFileLogging} />}
+                            {activeTab === 'security' && (
+                                <SecuritySettings
+                                    language={language}
+                                    securitySettings={localSecuritySettings}
+                                    setSecuritySettings={setLocalSecuritySettings}
+                                />
+                            )}
+                            {activeTab === 'system' && (
+                                <SystemSettings
+                                    language={language}
+                                    enableFileLogging={localEnableFileLogging}
+                                    setEnableFileLogging={setLocalEnableFileLogging}
+                                />
+                            )}
                         </div>
                     </div>
 
-                    {/* Floating Action Bar */}
-                    <div className="absolute bottom-6 right-8 left-8 p-4 rounded-2xl bg-surface/80 backdrop-blur-xl border border-border/50 shadow-2xl flex items-center justify-between z-10 transition-all duration-300">
-                        <span className="text-xs text-text-muted ml-2 font-medium">
-                            {saved ? (language === 'zh' ? '所有更改已保存' : 'All changes saved') : (language === 'zh' ? '有未保存的更改' : 'Unsaved changes')}
-                        </span>
-                        <div className="flex items-center gap-3">
-                            <Button variant="ghost" onClick={handleClose} className="hover:bg-text-inverted/[0.05] hover:bg-text-primary/[0.05] text-text-secondary rounded-lg">
-                                {language === 'zh' ? '取消' : 'Cancel'}
-                            </Button>
-                            <Button
-                                variant={saved ? 'success' : 'primary'}
-                                onClick={handleSave}
-                                className={`min-w-[140px] shadow-lg transition-all duration-300 rounded-xl ${saved
-                                    ? 'bg-status-success hover:bg-status-success/90 text-white'
-                                    : 'bg-accent hover:bg-accent-hover text-white shadow-accent/20'
-                                    }`}
-                            >
-                                {saved ? (
-                                    <span className="flex items-center gap-2 justify-center font-bold">
-                                        <Check className="w-4 h-4" />
-                                        {language === 'zh' ? '已保存' : 'Saved'}
-                                    </span>
-                                ) : (
-                                    <span className="font-bold">{language === 'zh' ? '保存更改' : 'Save Changes'}</span>
-                                )}
-                            </Button>
+                    {(isDirty || saved) && (
+                        <div className="absolute bottom-6 right-8 left-8 p-4 rounded-2xl bg-surface/80 backdrop-blur-xl border border-border/50 shadow-2xl flex items-center justify-between z-10 transition-all duration-300">
+                            <span className="text-xs text-text-muted ml-2 font-medium">
+                                {saved && !isDirty
+                                    ? t('settings.allChangesSaved', language as Language)
+                                    : t('settings.unsavedChanges', language as Language)}
+                            </span>
+                            <div className="flex items-center gap-3">
+                                <Button variant="ghost" onClick={handleClose} className="hover:bg-text-inverted/[0.05] hover:bg-text-primary/[0.05] text-text-secondary rounded-lg">
+                                    {t('cancel', language as Language)}
+                                </Button>
+                                <Button
+                                    variant={saved ? 'success' : 'primary'}
+                                    onClick={handleSave}
+                                    disabled={!isDirty}
+                                    className={`min-w-[140px] shadow-lg transition-all duration-300 rounded-xl ${saved ? 'bg-status-success hover:bg-status-success/90 text-white' : 'bg-accent hover:bg-accent-hover text-white shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed'}`}
+                                >
+                                    {saved ? (
+                                        <span className="flex items-center gap-2 justify-center font-bold">
+                                            <Check className="w-4 h-4" />
+                                            {t('saved', language as Language)}
+                                        </span>
+                                    ) : (
+                                        <span className="font-bold">{t('settings.saveChanges', language as Language)}</span>
+                                    )}
+                                </Button>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </Modal>

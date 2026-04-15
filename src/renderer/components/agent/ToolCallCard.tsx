@@ -510,6 +510,10 @@ function ToolPreview({
     if (['read_file', 'read_multiple_files'].includes(effectiveName)) {
         const filePath = effectiveName === 'read_file' ? asString(args.path) : ''
         const paths = asStringArray(args.paths)
+        const hasResolvedReadTarget = effectiveName === 'read_file' ? Boolean(filePath) : paths.length > 0
+        if (!hasResolvedReadTarget && !toolCall.result && !toolCall.richContent?.length) {
+            return null
+        }
         const displayName = effectiveName === 'read_file' ? (filePath ? getFileName(filePath) : '<no path>') : `${paths.length} files`
         const theme = themeManager.getThemeById(currentTheme)
         const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus

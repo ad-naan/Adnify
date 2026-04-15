@@ -1,6 +1,6 @@
 /**
  * 流式服务 - 使用 AI SDK 6.0 streamText
- * AI SDK 6.0 原生支持所有主流模型的 reasoning，只需处理特殊格式（如 MiniMax XML 标签）
+ * 工具调用只接受原生 tool-call 事件；特殊处理仅用于部分模型的 thinking 标签解析。
  */
 
 import { streamText } from 'ai'
@@ -12,11 +12,7 @@ import { createModel, resolveHeaderPlaceholders } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { prepareRequestCache } from '../core/RequestCache'
-import {
-  detectUnsupportedCacheFeature,
-  getCacheFeatureErrorReason,
-  markCacheFeatureUnsupported,
-} from '../core/CacheCompatibility'
+import { executeWithGenerationRecovery } from '../core/GenerationRecovery'
 import { LLMError, convertUsage } from '../types'
 import type { StreamEvent, TokenUsage, ResponseMetadata } from '../types'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
@@ -39,11 +35,263 @@ export interface StreamingResult {
   metadata?: ResponseMetadata
 }
 
-interface StreamingRecoveryState {
-  cacheRetryCount: number
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 15_000
+
+interface PseudoToolCallPayload {
+  name: string
+  arguments: Record<string, unknown>
 }
 
-const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 15_000
+type PseudoToolCaptureMode = 'json-array' | 'xml-tag'
+
+function createCompatToolCallId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `compat-tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function looksLikePseudoToolPayloadStart(text: string): PseudoToolCaptureMode | null {
+  const trimmed = text.trimStart()
+  if (!trimmed) return null
+  if (trimmed.startsWith('<tool_call>')) {
+    return 'xml-tag'
+  }
+
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
+    return null
+  }
+
+  const probe = trimmed.slice(0, 256)
+  if (/"name"\s*:/.test(probe) && /"parameters"\s*:/.test(probe)) {
+    return 'json-array'
+  }
+
+  return null
+}
+
+function tryParsePseudoToolPayload(text: string): PseudoToolCallPayload | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+
+  const payloadText = trimmed.startsWith('<tool_call>') && trimmed.endsWith('</tool_call>')
+    ? trimmed.slice('<tool_call>'.length, trimmed.length - '</tool_call>'.length).trim()
+    : trimmed
+
+  try {
+    const parsed = JSON.parse(payloadText) as unknown
+    const candidate = Array.isArray(parsed) ? parsed[0] : parsed
+    if (!candidate || typeof candidate !== 'object') {
+      return null
+    }
+
+    const name = (candidate as Record<string, unknown>).name
+    const parameters = (candidate as Record<string, unknown>).parameters
+    if (typeof name !== 'string' || !parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
+      return null
+    }
+
+    return {
+      name,
+      arguments: parameters as Record<string, unknown>,
+    }
+  } catch {
+    return null
+  }
+}
+
+function extractPseudoToolName(text: string): string | null {
+  const match = text.match(/"name"\s*:\s*"([^"]+)"/)
+  return match?.[1] ?? null
+}
+
+function findParametersObjectStart(text: string): number {
+  const keyMatch = /"parameters"\s*:/.exec(text)
+  if (!keyMatch) return -1
+  return text.indexOf('{', keyMatch.index + keyMatch[0].length)
+}
+
+function findJsonObjectEnd(text: string, startIndex: number): number {
+  if (startIndex < 0 || text[startIndex] !== '{') {
+    return -1
+  }
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = startIndex; i < text.length; i++) {
+    const ch = text[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (ch === '"') {
+      inString = true
+      continue
+    }
+
+    if (ch === '{') {
+      depth++
+      continue
+    }
+
+    if (ch === '}') {
+      depth--
+      if (depth === 0) {
+        return i
+      }
+    }
+  }
+
+  return -1
+}
+
+class PseudoToolCallStreamAdapter {
+  private mode: 'idle' | 'probing' | 'capturing' | 'disabled' = 'idle'
+  private captureKind: PseudoToolCaptureMode | null = null
+  private probeBuffer = ''
+  private captureBuffer = ''
+  private toolCallId: string | null = null
+  private toolName: string | null = null
+  private emittedArgumentChars = 0
+  private started = false
+  private completed = false
+
+  constructor(private readonly enabled: boolean) {}
+
+  consume(chunk: string): { visibleText: string; events: StreamEvent[] } {
+    if (!this.enabled || !chunk) {
+      return { visibleText: chunk, events: [] }
+    }
+
+    if (this.mode === 'disabled') {
+      return { visibleText: chunk, events: [] }
+    }
+
+    if (this.mode === 'capturing') {
+      return this.consumeCapturedChunk(chunk)
+    }
+
+    this.probeBuffer += chunk
+    const trimmed = this.probeBuffer.trimStart()
+    if (trimmed) {
+      const firstChar = trimmed[0]
+      if (firstChar !== '[' && firstChar !== '{' && firstChar !== '<') {
+        const visibleText = this.probeBuffer
+        this.probeBuffer = ''
+        this.mode = 'disabled'
+        return { visibleText, events: [] }
+      }
+    }
+
+    const detectedMode = looksLikePseudoToolPayloadStart(this.probeBuffer)
+    if (!detectedMode) {
+      if (trimmed.startsWith('<') && !'<tool_call>'.startsWith(trimmed.slice(0, Math.min(trimmed.length, '<tool_call>'.length)))) {
+        const visibleText = this.probeBuffer
+        this.probeBuffer = ''
+        this.mode = 'disabled'
+        return { visibleText, events: [] }
+      }
+
+      if (trimmed && this.probeBuffer.length >= 256) {
+        const visibleText = this.probeBuffer
+        this.probeBuffer = ''
+        this.mode = 'disabled'
+        return { visibleText, events: [] }
+      }
+      return { visibleText: '', events: [] }
+    }
+
+    this.mode = 'capturing'
+    this.captureKind = detectedMode
+    this.captureBuffer = this.probeBuffer
+    this.probeBuffer = ''
+    return this.consumeCapturedChunk('')
+  }
+
+  hasCapturedToolCall(): boolean {
+    return this.started
+  }
+
+  finalize(): { visibleText: string; events: StreamEvent[] } {
+    if (this.mode === 'probing' || this.mode === 'idle') {
+      const visibleText = this.probeBuffer
+      this.probeBuffer = ''
+      return { visibleText, events: [] }
+    }
+
+    return { visibleText: '', events: [] }
+  }
+
+  private consumeCapturedChunk(chunk: string): { visibleText: string; events: StreamEvent[] } {
+    if (chunk) {
+      this.captureBuffer += chunk
+    }
+
+    const events: StreamEvent[] = []
+    const name = extractPseudoToolName(this.captureBuffer)
+
+    if (!this.started && name) {
+      this.toolCallId = createCompatToolCallId()
+      this.toolName = name
+      this.started = true
+      events.push({
+        type: 'tool-call-start',
+        id: this.toolCallId,
+        name,
+      })
+    }
+
+    if (this.started && this.toolCallId) {
+      const paramStart = findParametersObjectStart(this.captureBuffer)
+      if (paramStart >= 0) {
+        const paramEnd = findJsonObjectEnd(this.captureBuffer, paramStart)
+        const availableEnd = paramEnd >= 0 ? paramEnd + 1 : this.captureBuffer.length
+        if (availableEnd > paramStart + this.emittedArgumentChars) {
+          const delta = this.captureBuffer.slice(paramStart + this.emittedArgumentChars, availableEnd)
+          this.emittedArgumentChars += delta.length
+          if (delta) {
+            events.push({
+              type: 'tool-call-delta',
+              id: this.toolCallId,
+              name: this.toolName ?? undefined,
+              argumentsDelta: delta,
+            })
+          }
+        }
+      }
+    }
+
+    if (!this.completed) {
+      const parsed = tryParsePseudoToolPayload(this.captureBuffer)
+      if (parsed && this.toolCallId) {
+        this.completed = true
+        events.push({
+          type: 'tool-call-delta-end',
+          id: this.toolCallId,
+        })
+        events.push({
+          type: 'tool-call-available',
+          id: this.toolCallId,
+          name: parsed.name,
+          arguments: parsed.arguments,
+        })
+      }
+    }
+
+    return { visibleText: '', events }
+  }
+}
 
 function resolveStreamIdleTimeoutMs(config: LLMConfig): number {
   if (typeof config.timeout === 'number' && Number.isFinite(config.timeout) && config.timeout > 0) {
@@ -71,15 +319,25 @@ export class StreamingService {
    * 流式生成文本
    */
   async generate(params: StreamingParams): Promise<StreamingResult> {
-    return this.generateWithRecovery(params, {
-      cacheRetryCount: 0,
-    })
+    const { config, requestId, abortSignal } = params
+    try {
+      return await executeWithGenerationRecovery({
+        config,
+        operation: 'stream-text',
+        requestId,
+        abortSignal,
+        execute: async () => {
+          return this.generateOnce(params)
+        },
+      })
+    } catch (error) {
+      const llmError = error instanceof LLMError ? error : LLMError.fromError(error)
+      this.sendEvent(requestId, { type: 'error', error: llmError })
+      throw llmError
+    }
   }
 
-  private async generateWithRecovery(
-    params: StreamingParams,
-    recoveryState: StreamingRecoveryState
-  ): Promise<StreamingResult> {
+  private async generateOnce(params: StreamingParams): Promise<StreamingResult> {
     const { config, messages, tools, systemPrompt, abortSignal, activeTools, requestId } = params
 
     // 创建 thinking 策略（只为需要特殊处理的模型）
@@ -246,7 +504,8 @@ export class StreamingService {
         result,
         strategy,
         requestId,
-        resolveStreamIdleTimeoutMs(config)
+        resolveStreamIdleTimeoutMs(config),
+        (tools?.length ?? 0) > 0
       )
     } catch (error) {
       if (abortSignal?.aborted) {
@@ -260,43 +519,30 @@ export class StreamingService {
       }
 
       // LLMError.fromError 会自动使用 mapAISDKError 获取友好消息
-      const unsupportedFeature = detectUnsupportedCacheFeature(error, config)
-      if (unsupportedFeature && recoveryState.cacheRetryCount < 1) {
-        markCacheFeatureUnsupported(
-          config,
-          unsupportedFeature,
-          getCacheFeatureErrorReason(error)
-        )
-        return await this.generateWithRecovery(params, {
-          ...recoveryState,
-          cacheRetryCount: recoveryState.cacheRetryCount + 1,
-        })
-      }
-
-      const llmError = LLMError.fromError(error)
-
-      this.sendEvent(requestId, { type: 'error', error: llmError })
-      throw llmError
+      throw LLMError.fromError(error)
     }
   }
 
   /**
    * 处理流式响应
-   * AI SDK 6.0 自动处理 reasoning-delta，我们只需处理特殊格式（如 MiniMax XML 标签）
+   * AI SDK 6.0 自动处理 reasoning-delta；额外解析仅用于部分模型的 thinking 标签。
    */
   private async processStream(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     result: StreamTextResult<any, any>,
     strategy: ThinkingStrategy,
     requestId: string,
-    streamIdleTimeoutMs: number
+    streamIdleTimeoutMs: number,
+    enablePseudoToolAdapter: boolean
   ): Promise<StreamingResult> {
     let reasoning = ''
+    let streamedText = ''
     const hasCustomParser = !!strategy.parseStreamText
     let streamError: Error | null = null
     let sawToolActivity = false
     let sawExecutableToolCall = false
     const iterator = result.fullStream[Symbol.asyncIterator]()
+    const pseudoToolAdapter = new PseudoToolCallStreamAdapter(enablePseudoToolAdapter)
 
     while (true) {
       const next = await this.nextStreamPart(iterator, requestId, streamIdleTimeoutMs)
@@ -314,10 +560,38 @@ export class StreamingService {
                 this.sendEvent(requestId, { type: 'reasoning', content: parsed.thinking })
               }
               if (parsed.content) {
-                this.sendEvent(requestId, { type: 'text', content: parsed.content })
+                const adapted = pseudoToolAdapter.consume(parsed.content)
+                for (const event of adapted.events) {
+                  if (event.type === 'tool-call-start' || event.type === 'tool-call-delta' || event.type === 'tool-call-delta-end') {
+                    sawToolActivity = true
+                  }
+                  if (event.type === 'tool-call-available') {
+                    sawToolActivity = true
+                    sawExecutableToolCall = true
+                  }
+                  this.sendEvent(requestId, event)
+                }
+                if (adapted.visibleText) {
+                  streamedText += adapted.visibleText
+                  this.sendEvent(requestId, { type: 'text', content: adapted.visibleText })
+                }
               }
             } else {
-              this.sendEvent(requestId, { type: 'text', content: part.text })
+              const adapted = pseudoToolAdapter.consume(part.text)
+              for (const event of adapted.events) {
+                if (event.type === 'tool-call-start' || event.type === 'tool-call-delta' || event.type === 'tool-call-delta-end') {
+                  sawToolActivity = true
+                }
+                if (event.type === 'tool-call-available') {
+                  sawToolActivity = true
+                  sawExecutableToolCall = true
+                }
+                this.sendEvent(requestId, event)
+              }
+              if (adapted.visibleText) {
+                streamedText += adapted.visibleText
+                this.sendEvent(requestId, { type: 'text', content: adapted.visibleText })
+              }
             }
             break
 
@@ -381,6 +655,12 @@ export class StreamingService {
       }
     }
 
+    const finalAdapterState = pseudoToolAdapter.finalize()
+    if (finalAdapterState.visibleText) {
+      streamedText += finalAdapterState.visibleText
+      this.sendEvent(requestId, { type: 'text', content: finalAdapterState.visibleText })
+    }
+
     // 如果流中有错误，优先抛出真实错误而不是 NoOutputGeneratedError
     if (streamError) {
       throw streamError
@@ -400,6 +680,10 @@ export class StreamingService {
       if (parsed.thinking) {
         finalReasoning = parsed.thinking
       }
+    }
+
+    if (pseudoToolAdapter.hasCapturedToolCall()) {
+      finalText = streamedText
     }
 
     const finishReason = await result.finishReason

@@ -6,11 +6,12 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
-import { parseXMLToolCalls } from '../utils/XMLToolParser'
 import { EventBus } from './EventBus'
 import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
+import { filterToolMarkupChunk } from '../utils/toolMarkupFilter'
+import { t } from '@/renderer/i18n'
 
 // Tracks active IPC listeners for leak debugging.
 let activeListenerCount = 0
@@ -28,14 +29,69 @@ const STREAMABLE_TOOL_ARG_KEYS = new Set([
   'cwd',
   'line',
   'column',
+  'start_line',
+  'end_line',
+  'after_line',
   'terminal_id',
   'file_pattern',
   'is_background',
   'timeout',
   'refresh',
+  'old_string',
+  'new_string',
+  'content',
+  'code',
+  'replacement',
+  'source',
 ])
 
-const PARTIAL_ARGS_SCAN_LIMIT = 4096
+const PARTIAL_ARGS_SCAN_LIMIT = 16384
+
+function extractPartialStringField(scanTarget: string, key: string): string | null {
+  const marker = `"${key}":`
+  const keyIndex = scanTarget.lastIndexOf(marker)
+  if (keyIndex === -1) return null
+
+  let cursor = keyIndex + marker.length
+  while (cursor < scanTarget.length && /\s/.test(scanTarget[cursor])) {
+    cursor++
+  }
+
+  if (scanTarget[cursor] !== '"') {
+    return null
+  }
+
+  cursor++
+  let value = ''
+  let escaped = false
+
+  while (cursor < scanTarget.length) {
+    const ch = scanTarget[cursor]
+
+    if (escaped) {
+      value += ch
+      escaped = false
+      cursor++
+      continue
+    }
+
+    if (ch === '\\') {
+      value += ch
+      escaped = true
+      cursor++
+      continue
+    }
+
+    if (ch === '"') {
+      break
+    }
+
+    value += ch
+    cursor++
+  }
+
+  return value
+}
 
 function arePartialArgsEqual(
   left?: Record<string, unknown>,
@@ -86,7 +142,7 @@ function parsePartialJsonArgs(argsString: string): Record<string, unknown> | nul
   } catch {
     const result: Record<string, unknown> = {}
 
-    // Match simple string fields.
+    // Match completed string fields.
     const stringFieldRegex = /"(\w+)":\s*"((?:[^"\\]|\\.)*)"/g
     let match
     while ((match = stringFieldRegex.exec(scanTarget)) !== null) {
@@ -96,6 +152,19 @@ function parsePartialJsonArgs(argsString: string): Record<string, unknown> | nul
       } catch {
         result[match[1]] = match[2].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
       }
+    }
+
+    // Match partially streamed string fields even before the closing quote arrives.
+    for (const key of STREAMABLE_TOOL_ARG_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(result, key)) continue
+
+      const partialValue = extractPartialStringField(scanTarget, key)
+      if (partialValue === null) continue
+
+      result[key] = partialValue
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\')
     }
 
     const boolFieldRegex = /"(\w+)":\s*(true|false)/g
@@ -125,8 +194,12 @@ export interface StreamProcessor {
 export function createStreamProcessor(
   assistantId: string | null,
   store: import('../store/AgentStore').ThreadBoundStore,
-  requestId: string
+  requestId: string,
+  options?: {
+    allowToolCalls?: boolean
+  }
 ): StreamProcessor {
+  const allowToolCalls = options?.allowToolCalls ?? true
 
   let content = ''
   let reasoning = ''
@@ -136,6 +209,7 @@ export function createStreamProcessor(
   let usage: TokenUsage | undefined
   let error: string | undefined
   let isCleanedUp = false
+  let filteredToolMarkupBuffer = ''
 
   const streamingToolCalls = new Map<string, {
     id: string
@@ -235,29 +309,22 @@ export function createStreamProcessor(
     switch (data.type) {
       case 'text':
         if (data.content) {
+          const filtered = filterToolMarkupChunk(data.content, filteredToolMarkupBuffer)
+          const visibleChunk = filtered.visibleText
+          filteredToolMarkupBuffer = filtered.buffer
+
           if (isInReasoning && assistantId && reasoningPartId) {
             store.finalizeReasoningPart(assistantId, reasoningPartId)
             EventBus.emit({ type: 'stream:reasoning', text: '', phase: 'end' })
             isInReasoning = false
           }
 
-          content += data.content
-          if (assistantId) {
-            store.appendToAssistant(assistantId, data.content)
+          content += visibleChunk
+          if (assistantId && visibleChunk) {
+            store.appendToAssistant(assistantId, visibleChunk)
           }
-          EventBus.emit({ type: 'stream:text', text: data.content })
-
-          // Detect XML-style tool calls embedded in text streams.
-          const detected = parseXMLToolCalls(content)
-          for (const tc of detected) {
-            if (!toolCalls.find((t) => t.id === tc.id)) {
-              const toolCall: ToolCall = { ...tc, status: 'pending' }
-              toolCalls.push(toolCall)
-              if (assistantId) {
-                store.addToolCallPart(assistantId, toolCall)
-              }
-              EventBus.emit({ type: 'stream:tool_available', id: tc.id, name: tc.name, args: tc.arguments })
-            }
+          if (visibleChunk) {
+            EventBus.emit({ type: 'stream:text', text: visibleChunk })
           }
         }
         break
@@ -288,6 +355,10 @@ export function createStreamProcessor(
       }
 
       case 'tool_call_start': {
+        if (!allowToolCalls) {
+          break
+        }
+
         const toolId = data.id || `tool-${Date.now()}`
         const toolName = data.name || '...'
 
@@ -303,20 +374,11 @@ export function createStreamProcessor(
           argsString: '',
         })
 
-        // Finalize text first so the tool card appears after prior text.
-        if (assistantId && content.length > 0) {
-          store.finalizeTextBeforeToolCall(assistantId)
-        }
-
         if (assistantId) {
-          store.addToolCallPart(assistantId, {
-            id: toolId,
-            name: toolName,
-            arguments: {},
-          })
           store.setToolStreamingPreview(toolId, {
             isStreaming: true,
             name: toolName,
+            lastUpdateTime: Date.now(),
           })
         }
         EventBus.emit({ type: 'stream:tool_start', id: toolId, name: toolName })
@@ -324,6 +386,10 @@ export function createStreamProcessor(
       }
 
       case 'tool_call_delta': {
+        if (!allowToolCalls) {
+          break
+        }
+
         const tcId = data.id
         const argsDelta = data.argumentsDelta
 
@@ -362,6 +428,10 @@ export function createStreamProcessor(
       }
 
       case 'tool_call_delta_end': {
+        if (!allowToolCalls) {
+          break
+        }
+
         const tcId = data.id
         if (tcId && assistantId) {
           const tc = streamingToolCalls.get(tcId)
@@ -392,6 +462,10 @@ export function createStreamProcessor(
       }
 
       case 'tool_call_available': {
+        if (!allowToolCalls) {
+          break
+        }
+
         const tcId = data.id || ''
         const toolName = data.name || ''
         const args = data.arguments as Record<string, unknown>
@@ -414,11 +488,11 @@ export function createStreamProcessor(
         }
 
         if (assistantId && tcId) {
-          store.updateToolCall(assistantId, tcId, {
+          store.setToolStreamingPreview(tcId, {
+            isStreaming: true,
             name: toolName,
-            arguments: args,
-            status: 'pending',
-            streamingState: undefined,
+            partialArgs: args,
+            lastUpdateTime: Date.now(),
           })
         }
 
@@ -475,7 +549,8 @@ export function createStreamProcessor(
         const baseMsg = getErrorMessage(err.code as ErrorCode, language)
         errorMsg = err.message ? `${baseMsg}: ${err.message}` : baseMsg
       } else {
-        errorMsg = err.message || 'Unknown error'
+        const language = useStore.getState().language as 'en' | 'zh'
+        errorMsg = err.message || t('error.unknown', language)
       }
     }
 

@@ -115,7 +115,7 @@ class WorkspaceManager {
     const normalizedPath = normalizeFolderPath(folderPath)
     const exists = await api.workspace.exists(normalizedPath)
     if (!exists) {
-      await api.workspace.removeFromRecent(folderPath)
+      await api.workspace.removeFromRecent(normalizedPath)
       throw new WorkspaceOpenError('missing-workspace', `Folder does not exist: ${normalizedPath}`, normalizedPath)
     }
 
