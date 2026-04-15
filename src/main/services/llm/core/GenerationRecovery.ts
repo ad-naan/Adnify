@@ -99,6 +99,21 @@ export async function executeWithGenerationRecovery<T>(
         continue
       }
 
+      if (state.transientRetryCount > 0 || state.cacheRetryCount > 0) {
+        logger.llm.error('[GenerationRecovery] Generation failed after retries', {
+          operation,
+          provider: config.provider,
+          protocol: config.protocol,
+          model: config.model,
+          requestId,
+          code: llmError.code,
+          message: llmError.message,
+          attempt,
+          cacheRetries: state.cacheRetryCount,
+          transientRetries: state.transientRetryCount,
+        })
+      }
+
       throw llmError
     }
   }

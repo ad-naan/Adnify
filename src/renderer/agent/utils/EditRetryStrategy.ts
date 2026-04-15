@@ -7,6 +7,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { smartReplace, normalizeLineEndings } from '@/renderer/utils/smartReplace'
+import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 
 // ============================================
 // 类型定义
@@ -55,8 +56,18 @@ export type EditErrorType =
 /**
  * 分析编辑错误类型
  */
-export function analyzeEditError(error: string): EditErrorType {
-  const lowerError = error.toLowerCase()
+export function analyzeEditError(error?: string, errorCode?: ReplaceErrorCode): EditErrorType {
+  switch (errorCode) {
+    case 'OLD_STRING_NOT_FOUND':
+    case 'MISSING_OLD_STRING':
+      return 'not_found'
+    case 'MULTIPLE_MATCHES':
+      return 'multiple_matches'
+    case 'IDENTICAL_STRINGS':
+      return 'unknown'
+  }
+
+  const lowerError = (error || '').toLowerCase()
   
   if (lowerError.includes('not found') || lowerError.includes('未找到')) {
     return 'not_found'
@@ -244,7 +255,7 @@ export async function tryEditWithRetry(
   }
 
   // 替换失败，分析错误并提供建议
-  const errorType = analyzeEditError(result.error || '')
+  const errorType = analyzeEditError(result.error, result.errorCode)
 
   switch (errorType) {
     case 'not_found': {

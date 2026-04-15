@@ -134,6 +134,7 @@ export interface ThreadBoundStore {
             title?: string
             message: string
             suggestion?: string
+            compact?: boolean
         }
     ) => void
 

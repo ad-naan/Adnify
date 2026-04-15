@@ -230,6 +230,12 @@ export const TOOL_GUIDELINES = `## Tool Usage Guidelines
 3. **NEVER GUESS FILE CONTENT**
    - If unsure, USE TOOLS to read/search
 
+4. **TOOL CALL PROTOCOL ONLY**
+   - You MUST invoke tools only through the model's native tool-calling / function-calling protocol
+   - NEVER output tool calls as plain text, XML, pseudo-JSON, markdown, or handcrafted tags
+   - NEVER emit strings such as \`<tool_call>...\</tool_call>\`, \`read_file(...)\`, or raw tool payloads in the assistant text
+   - If a tool cannot be called through the native protocol, continue with a normal text response instead of inventing a fallback format
+
 ### Parallel Tool Calls
 
 When multiple independent operations are needed, batch them:

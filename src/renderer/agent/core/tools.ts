@@ -274,11 +274,24 @@ async function executeSingle(
   const identity = buildToolExecutionIdentity(toolCall, context)
   const startTime = Date.now()
 
-  // 更新状态为运行中
   if (currentAssistantId) {
+    store.finalizeTextBeforeToolCall(currentAssistantId)
+    store.addToolCallPart(currentAssistantId, {
+      id: toolCall.id,
+      name: toolCall.name,
+      arguments: toolCall.arguments,
+    })
     store.updateToolCall(currentAssistantId, toolCall.id, {
       status: 'running',
-      streamingState: undefined,  // 清除流式状态
+      streamingState: undefined,
+    })
+    store.clearToolStreamingPreview(toolCall.id)
+    store.setStreamState({
+      phase: 'tool_running',
+      currentToolCall: toolCall,
+      statusText: undefined,
+      requestId: context.requestId,
+      assistantId: currentAssistantId,
     })
   }
   emitToolEvent({ type: 'tool:running', id: toolCall.id, ...identity })
@@ -436,6 +449,7 @@ export async function executeTools(
   if (noApprovalRequired.length > 0) {
     store.setStreamState({
       phase: 'tool_running',
+      statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })
@@ -556,6 +570,7 @@ export async function executeTools(
     store.setStreamState({
       phase: 'tool_pending',
       currentToolCall: tc,
+      statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })
@@ -595,6 +610,7 @@ export async function executeTools(
     store.setStreamState({
       phase: 'tool_running',
       currentToolCall: undefined,
+      statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })
@@ -614,6 +630,7 @@ export async function executeTools(
     store.setStreamState({
       phase: 'streaming',
       currentToolCall: undefined,
+      statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })

@@ -108,7 +108,6 @@ export default function ChatPanel() {
 
   const {
     messages,
-    streamState,
     isStreaming,
     isAwaitingApproval,
     pendingToolCall,
@@ -1250,7 +1249,6 @@ export default function ChatPanel() {
                         pendingChanges={pendingChanges}
                         isStreaming={isStreaming}
                         isAwaitingApproval={isAwaitingApproval}
-                        streamingStatus={streamState.statusText}
                         onStop={abort}
                         headerPrefix={switcherIcons}
                         onReviewFile={handleReviewFile}

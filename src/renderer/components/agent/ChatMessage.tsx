@@ -48,6 +48,8 @@ import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { t } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
+import { stripToolMarkup } from '@renderer/agent/utils/toolMarkupFilter'
+import type { ToolStreamingPreview } from '@shared/types'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -74,6 +76,8 @@ interface RenderPartProps {
   isStreaming?: boolean
   messageId: string
 }
+
+const EMPTY_PREVIEWS: Record<string, ToolStreamingPreview> = {}
 
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number; isStreaming?: boolean }) => {
@@ -141,16 +145,9 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
 
 CodeBlock.displayName = 'CodeBlock'
 
-// 辅助函数：清理流式输出中的 XML 工具调用标签
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
-  // 短路优化：大部分流式 token 不含 XML 标签，无需执行正则
-  if (!text.includes('<')) return text
-  let cleaned = text.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
-  cleaned = cleaned.replace(/<function>[\s\S]*?<\/function>/gi, '')
-  cleaned = cleaned.replace(/<tool_call>[\s\S]*$/gi, '')
-  cleaned = cleaned.replace(/<function>[\s\S]*$/gi, '')
-  return cleaned.trim()
+  return stripToolMarkup(text)
 }
 
 const BlockRevealKeyframes = () => (
@@ -577,6 +574,7 @@ const RenderPart = React.memo(({
         title={part.title}
         message={part.message}
         suggestion={part.suggestion}
+        compact={part.compact}
       />
     )
   }
@@ -849,6 +847,13 @@ const ChatMessage = React.memo(({
 
   const [typingIndex, setTypingIndex] = useState(0)
   const streamState = useAgentStore(selectStreamState)
+  const previewMap = useAgentStore(state => {
+    if (!state.currentThreadId || streamState.assistantId !== message.id) {
+      return EMPTY_PREVIEWS
+    }
+
+    return state.threads[state.currentThreadId]?.toolStreamingPreviews || EMPTY_PREVIEWS
+  })
 
   // 为了类型安全
   const isStreaming = isAssistantMessage(message)
@@ -865,6 +870,22 @@ const ChatMessage = React.memo(({
       return () => clearInterval(interval)
     }
   }, [isStreaming])
+
+  const previewToolCalls = React.useMemo(() => {
+    if (!isAssistantMessage(message)) return []
+
+    const persistedIds = new Set((message.toolCalls || []).map(tc => tc.id))
+
+    return Object.entries(previewMap)
+      .filter(([id, preview]) => preview?.isStreaming && !persistedIds.has(id))
+      .sort(([, left], [, right]) => (left.lastUpdateTime || 0) - (right.lastUpdateTime || 0))
+      .map(([id, preview]) => ({
+        id,
+        name: preview.name || '...',
+        arguments: preview.partialArgs || {},
+        status: 'pending' as const,
+      }))
+  }, [message, previewMap])
 
   return (
     <div className={`
@@ -1120,6 +1141,16 @@ const ChatMessage = React.memo(({
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
                     isStreaming={message.isStreaming}
+                    messageId={message.id}
+                  />
+                )}
+                {previewToolCalls.length > 0 && (
+                  <ToolCallGroup
+                    toolCalls={previewToolCalls}
+                    pendingToolId={pendingToolId}
+                    onApproveTool={onApproveTool}
+                    onRejectTool={onRejectTool}
+                    onOpenDiff={onOpenDiff}
                     messageId={message.id}
                   />
                 )}

@@ -34,6 +34,8 @@ import type { ChatMessage } from '../types'
 import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
+import type { LoopCheckResult } from './types'
+import { t } from '@/renderer/i18n'
 
 // ===== 告警文案 =====
 
@@ -42,6 +44,116 @@ import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
  */
 function getLocalizedText(language: string, zh: string, en: string): string {
   return language === 'zh' ? zh : en
+}
+
+function translate(language: string, key: Parameters<typeof t>[0], params?: Record<string, string | number>): string {
+  return t(key, language as 'en' | 'zh', params)
+}
+
+function getLoopCheckMessage(language: string, loopCheck: LoopCheckResult): string {
+  const details = loopCheck.details
+  if (!details) {
+    return loopCheck.reason || loopCheck.warning || translate(language, 'agent.loop.generic')
+  }
+
+  switch (details.category) {
+    case 'exact_repeat':
+      return translate(language, 'agent.loop.exactRepeat', {
+        tool: details.toolName || 'tool',
+        count: details.count || 0,
+      })
+    case 'same_tool_warning':
+      return translate(language, 'agent.loop.sameToolWarning', {
+        tool: details.toolName || 'tool',
+        count: details.count || 0,
+      })
+    case 'content_cycle':
+      return translate(language, 'agent.loop.contentCycle', {
+        target: details.target || '',
+        count: details.count || 0,
+        states: Math.max(1, details.threshold || 0),
+      })
+    case 'pattern_loop':
+      return translate(language, 'agent.loop.patternLoop', {
+        pattern: details.pattern || '',
+      })
+    default:
+      return loopCheck.reason || loopCheck.warning || translate(language, 'agent.loop.generic')
+  }
+}
+
+function getLoopCheckSuggestion(language: string, loopCheck: LoopCheckResult): string | undefined {
+  const details = loopCheck.details
+  switch (details?.category) {
+    case 'exact_repeat':
+      return translate(language, 'agent.loop.suggestion.exactRepeat')
+    case 'same_tool_warning':
+      return translate(language, 'agent.loop.suggestion.sameToolWarning')
+    case 'content_cycle':
+      return translate(language, 'agent.loop.suggestion.contentCycle')
+    case 'pattern_loop':
+      return translate(language, 'agent.loop.suggestion.patternLoop')
+    default:
+      return loopCheck.suggestion
+  }
+}
+
+function buildSoftLimitFeedback(
+  language: string,
+  title: string,
+  detail: string,
+  suggestion?: string
+): string {
+  if (language === 'zh') {
+    return [
+      `系统警告：${title}`,
+      detail,
+      suggestion ? `建议：${suggestion}` : '',
+      '你本轮接下来禁止继续调用任何工具。',
+      '不要中止会话，也不要把这次限制当作致命错误。',
+      '请基于当前已有信息直接完成收束。',
+      '优先输出当前结论、已完成内容、缺失信息，或更高效的下一步方案。',
+    ].filter(Boolean).join('\n')
+  }
+
+  return [
+    `System warning: ${title}`,
+    detail,
+    suggestion ? `Suggestion: ${suggestion}` : '',
+    'You must not call any more tools in this turn.',
+    'Do not abort the conversation and do not treat this limit as a fatal error.',
+    'Finish by concluding with the information already available.',
+    'Prioritize the current conclusion, completed work, missing information, or a more efficient next step.',
+  ].filter(Boolean).join('\n')
+}
+
+function formatLoopDiagnostic(language: string, loopCheck?: LoopCheckResult): string {
+  const details = loopCheck?.details
+  if (!details) {
+    return ''
+  }
+
+  const lines: string[] = []
+
+  if (language === 'zh') {
+    lines.push('诊断信息：')
+    lines.push(`- 类型：${details.category}`)
+    if (details.toolName) lines.push(`- 工具：${details.toolName}`)
+    if (typeof details.count === 'number') lines.push(`- 次数：${details.count}`)
+    if (typeof details.threshold === 'number') lines.push(`- 阈值：${details.threshold}`)
+    if (details.target) lines.push(`- 目标：${details.target}`)
+    if (details.pattern) lines.push(`- 模式：${details.pattern}`)
+  } else {
+    lines.push('Diagnostics:')
+    lines.push(`- Category: ${details.category}`)
+    if (details.toolName) lines.push(`- Tool: ${details.toolName}`)
+    if (typeof details.count === 'number') lines.push(`- Count: ${details.count}`)
+    if (typeof details.threshold === 'number') lines.push(`- Threshold: ${details.threshold}`)
+    if (details.target) lines.push(`- Target: ${details.target}`)
+    if (details.pattern) lines.push(`- Pattern: ${details.pattern}`)
+  }
+
+  return lines.join('\n')
 }
 
 // ===== 模式后处理钩子 =====
@@ -87,11 +199,14 @@ async function callLLM(
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   requestId: string,
-  tools: import('@/shared/types/llm').ToolDefinition[]
+  tools: import('@/shared/types/llm').ToolDefinition[],
+  options?: {
+    allowToolCalls?: boolean
+  }
 ): Promise<LLMCallResult> {
   performanceMonitor.start(`llm:${config.model}`, 'llm', { provider: config.provider, messageCount: messages.length })
 
-  const processor = createStreamProcessor(assistantId, threadStore, requestId)
+  const processor = createStreamProcessor(assistantId, threadStore, requestId, options)
 
   try {
     // 发送请求（携带 requestId 用于多对话隔离）
@@ -134,7 +249,10 @@ async function callLLMWithRetry(
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   abortSignal?: AbortSignal,
   requestId?: string,
-  tools: import('@/shared/types/llm').ToolDefinition[] = []
+  tools: import('@/shared/types/llm').ToolDefinition[] = [],
+  options?: {
+    allowToolCalls?: boolean
+  }
 ): Promise<LLMCallResult> {
   const retryConfig = getAgentConfig()
   // 确保有 requestId（后备生成）
@@ -158,7 +276,7 @@ async function callLLMWithRetry(
         }
 
         try {
-          const result = await callLLM(config, messages, assistantId, threadStore, reqId, tools)
+          const result = await callLLM(config, messages, assistantId, threadStore, reqId, tools, options)
 
           // 工具调用解析错误不应该导致重试，而是返回给 AI 让它反思
           if (result.error) {
@@ -517,6 +635,74 @@ export async function runLoop(
   let iteration = 0
   let shouldContinue = true
 
+  const completeWithSoftLimitFeedback = async (
+    title: string,
+    detail: string,
+    suggestion?: string,
+    loopCheck?: LoopCheckResult
+  ): Promise<void> => {
+    const { language } = useStore.getState()
+    const diagnosticText = formatLoopDiagnostic(language, loopCheck)
+
+    llmMessages.push({
+      role: 'user',
+      content: [buildSoftLimitFeedback(language, title, detail, suggestion), diagnosticText]
+        .filter(Boolean)
+        .join('\n\n'),
+    })
+
+    const finalResult = await callLLMWithRetry(
+      config,
+      llmMessages,
+      assistantId,
+      threadStore,
+      context.abortSignal,
+      requestId,
+      [],
+      { allowToolCalls: false }
+    )
+
+    if (finalResult.error) {
+      logger.agent.error('[Loop] Soft-limit recovery failed:', finalResult.error)
+      threadStore.addSystemAlertPart(assistantId, {
+        alertType: 'error',
+        title: getLocalizedText(language, '模型错误', 'Model Error'),
+        message: finalResult.error,
+      })
+      threadStore.updateExecutionMeta({ loopState: 'failed' })
+      EventBus.emit({ type: 'loop:end', reason: 'error', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      return
+    }
+
+    threadStore.updateExecutionMeta({ loopState: 'completed' })
+    EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+  }
+
+  const clearUnexecutedToolCards = (toolCallsToClear?: Array<{ id: string }>) => {
+    if (!assistantId) {
+      return
+    }
+
+    const assistantMessage = threadStore.getMessages().find(m => m.id === assistantId)
+    if (assistantMessage?.role !== 'assistant') {
+      return
+    }
+
+    const pendingIds = new Set((toolCallsToClear || []).map(tc => tc.id))
+    threadStore.updateMessage(assistantId, {
+      parts: assistantMessage.parts.filter(part =>
+        part.type !== 'tool_call' || (
+          !pendingIds.has(part.toolCall.id) &&
+          !['pending', 'running', 'awaiting'].includes(part.toolCall.status)
+        )
+      ),
+      toolCalls: (assistantMessage.toolCalls || []).filter(tc =>
+        !pendingIds.has(tc.id) &&
+        !['pending', 'running', 'awaiting'].includes(tc.status)
+      ),
+    })
+  }
+
   EventBus.emit({ type: 'loop:start', threadId, assistantId, requestId, planTaskId: context.planTaskId })
 
   while (shouldContinue && iteration < maxIterations && !context.abortSignal?.aborted) {
@@ -562,10 +748,20 @@ export async function runLoop(
       if (isToolParseError) {
         // 工具解析错误：作为用户消息返回给 AI，让它反思和重试
         logger.agent.warn('[Loop] Tool parse error, adding as feedback:', result.error)
+        const { language } = useStore.getState()
 
         llmMessages.push({
           role: 'user',
-          content: `❌ Tool Call Error: ${result.error}
+          content: language === 'zh'
+            ? `工具调用出错：${result.error}
+
+请修正后重试，并确保：
+1. 已提供所有必填参数
+2. 参数类型正确
+3. 参数名完全匹配
+
+请基于修正后的工具调用继续。`
+            : `Tool call error: ${result.error}
 
 Please fix the tool call and try again. Make sure:
 1. All required parameters are provided
@@ -695,41 +891,49 @@ Try again with the corrected tool call.`
     if (loopCheck.isLoop) {
       logger.agent.warn(`[Loop] Loop detected: ${loopCheck.reason}`)
       const { language } = useStore.getState()
+      const loopTitle = getLocalizedText(language, '检测到循环执行', 'Loop Detected')
+      const loopMessage = getLoopCheckMessage(language, loopCheck)
+      const loopSuggestion = getLoopCheckSuggestion(language, loopCheck)
+      clearUnexecutedToolCards(result.toolCalls)
       threadStore.addSystemAlertPart(assistantId, {
         alertType: 'warning',
-        title: getLocalizedText(language, '检测到循环执行', 'Loop Detected'),
-        message: loopCheck.reason || getLocalizedText(language, '代理似乎在重复执行相同操作。', 'The agent appears to be repeating the same actions.'),
-        suggestion: loopCheck.suggestion,
+        title: loopTitle,
+        message: loopMessage,
+        suggestion: loopSuggestion,
+        compact: true,
       })
-      threadStore.updateExecutionMeta({ loopState: 'failed' })
-      EventBus.emit({ type: 'loop:warning', message: loopCheck.reason || 'Loop detected', threadId, assistantId, requestId, planTaskId: context.planTaskId })
-      EventBus.emit({ type: 'loop:end', reason: 'loop_detected', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      EventBus.emit({ type: 'loop:warning', message: loopMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      await completeWithSoftLimitFeedback(loopTitle, loopMessage, loopSuggestion, loopCheck)
       break
     }
 
     // 非阻断型循环预警也走结构化告警卡片，避免退化成普通文本。
     if (loopCheck.warning) {
       const { language } = useStore.getState()
+      const warningTitle = getLocalizedText(language, '循环预警', 'Loop Warning')
+      const warningMessage = getLoopCheckMessage(language, loopCheck)
+      const warningSuggestion = getLoopCheckSuggestion(language, loopCheck)
       logger.agent.warn(`[Loop] Non-blocking loop warning: ${loopCheck.warning}`)
+      clearUnexecutedToolCards(result.toolCalls)
       threadStore.addSystemAlertPart(assistantId, {
         alertType: 'warning',
-        title: getLocalizedText(language, '循环预警', 'Loop Warning'),
-        message: loopCheck.warning,
-        suggestion: loopCheck.suggestion,
+        title: warningTitle,
+        message: warningMessage,
+        suggestion: warningSuggestion,
+        compact: true,
       })
-      EventBus.emit({ type: 'loop:warning', message: loopCheck.warning, threadId, assistantId, requestId, planTaskId: context.planTaskId })
-    }
+      EventBus.emit({ type: 'loop:warning', message: warningMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
 
-    // 添加工具调用到 UI
-    const currentMsg = store.getMessages().find(m => m.id === assistantId)
-    if (currentMsg?.role === 'assistant') {
-      const assistantMsg = currentMsg as import('../types').AssistantMessage
-      const existing = assistantMsg.toolCalls || []
-      for (const tc of result.toolCalls) {
-        if (!existing.find((e) => e.id === tc.id)) {
-          threadStore.addToolCallPart(assistantId, { id: tc.id, name: tc.name, arguments: tc.arguments })
-        }
-      }
+      llmMessages.push({
+        role: 'user',
+        content: [
+          buildSoftLimitFeedback(language, warningTitle, warningMessage, warningSuggestion),
+          formatLoopDiagnostic(language, loopCheck),
+        ].filter(Boolean).join('\n\n'),
+      })
+
+      shouldContinue = true
+      continue
     }
 
     // 添加到消息历史
@@ -801,9 +1005,12 @@ Try again with the corrected tool call.`
         content: toolResult.content,
       })
 
-      // 记录工具执行结果到循环检测器
+      // 只把真实执行过的工具记入循环历史，避免“工具意图”和“真实执行”混淆。
       const success = !toolResult.content.startsWith('Error:')
-      loopDetector.recordResult(toolCall.id, success)
+      loopDetector.recordExecutedTool({
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+      }, success)
 
       const meta = toolResult.meta
       if (meta?.filePath && typeof meta.filePath === 'string' && typeof meta.newContent === 'string') {
@@ -860,13 +1067,19 @@ Try again with the corrected tool call.`
   if (iteration >= maxIterations) {
     logger.agent.warn('[Loop] Reached maximum iterations')
     const { language } = useStore.getState()
+    const limitTitle = getLocalizedText(language, '达到工具调用上限', 'Tool Call Limit Reached')
+    const limitMessage = getLocalizedText(language, '当前轮次已达到最大工具调用次数。', 'The agent reached the maximum tool call limit for this turn.')
     threadStore.addSystemAlertPart(assistantId, {
       alertType: 'warning',
-      title: getLocalizedText(language, '达到工具调用上限', 'Tool Call Limit Reached'),
-      message: getLocalizedText(language, '当前轮次已达到最大工具调用次数。', 'The agent reached the maximum tool call limit for this turn.'),
+      title: limitTitle,
+      message: limitMessage,
+      compact: true,
     })
-    threadStore.updateExecutionMeta({ loopState: 'failed' })
     EventBus.emit({ type: 'loop:warning', message: 'Max iterations reached', threadId, assistantId, requestId, planTaskId: context.planTaskId })
-    EventBus.emit({ type: 'loop:end', reason: 'max_iterations', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+    await completeWithSoftLimitFeedback(
+      limitTitle,
+      limitMessage,
+      getLocalizedText(language, '请停止继续调工具，直接总结当前进展并调整策略。', 'Stop calling tools, summarize the current progress, and adjust the strategy.'),
+    )
   }
 }

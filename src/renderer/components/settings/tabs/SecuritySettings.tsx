@@ -1,65 +1,66 @@
-/**
- * 安全设置组件
- */
-
-import { useState } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 import { AlertTriangle, Plus, X, RotateCcw } from 'lucide-react'
-import { useStore } from '@store'
-import { useShallow } from 'zustand/react/shallow'
 import { Switch } from '@components/ui'
-import { Language } from '@renderer/i18n'
+import { toast } from '@components/common/ToastProvider'
+import { type Language } from '@renderer/i18n'
 import { api } from '@renderer/services/electronAPI'
+import type { SecuritySettings as SecuritySettingsState } from '@shared/config/types'
 
 interface SecuritySettingsProps {
     language: Language
+    securitySettings: SecuritySettingsState
+    setSecuritySettings: Dispatch<SetStateAction<SecuritySettingsState>>
 }
 
-export function SecuritySettings({ language }: SecuritySettingsProps) {
-    const { securitySettings, update } = useStore(useShallow(s => ({ securitySettings: s.securitySettings, update: s.update })))
+export function SecuritySettings({ language, securitySettings, setSecuritySettings }: SecuritySettingsProps) {
     const [newShellCmd, setNewShellCmd] = useState('')
     const [newGitCmd, setNewGitCmd] = useState('')
+
+    const updateSecuritySettings = (updates: Partial<SecuritySettingsState>) => {
+        setSecuritySettings((current) => ({ ...current, ...updates }))
+    }
 
     const handleAddShellCommand = () => {
         const cmd = newShellCmd.trim().toLowerCase()
         if (cmd && !securitySettings.allowedShellCommands.includes(cmd)) {
-            update('securitySettings', {
-                allowedShellCommands: [...securitySettings.allowedShellCommands, cmd]
+            updateSecuritySettings({
+                allowedShellCommands: [...securitySettings.allowedShellCommands, cmd],
             })
             setNewShellCmd('')
         }
     }
 
     const handleRemoveShellCommand = (cmd: string) => {
-        update('securitySettings', {
-            allowedShellCommands: securitySettings.allowedShellCommands.filter(c => c !== cmd)
+        updateSecuritySettings({
+            allowedShellCommands: securitySettings.allowedShellCommands.filter(item => item !== cmd),
         })
     }
 
     const handleAddGitCommand = () => {
         const cmd = newGitCmd.trim().toLowerCase()
         if (cmd && !securitySettings.allowedGitSubcommands?.includes(cmd)) {
-            update('securitySettings', {
-                allowedGitSubcommands: [...(securitySettings.allowedGitSubcommands || []), cmd]
+            updateSecuritySettings({
+                allowedGitSubcommands: [...(securitySettings.allowedGitSubcommands || []), cmd],
             })
             setNewGitCmd('')
         }
     }
 
     const handleRemoveGitCommand = (cmd: string) => {
-        update('securitySettings', {
-            allowedGitSubcommands: (securitySettings.allowedGitSubcommands || []).filter(c => c !== cmd)
+        updateSecuritySettings({
+            allowedGitSubcommands: (securitySettings.allowedGitSubcommands || []).filter(item => item !== cmd),
         })
     }
 
     const handleResetWhitelist = async () => {
         try {
             const result = await api.settings.resetWhitelist()
-            update('securitySettings', {
+            updateSecuritySettings({
                 allowedShellCommands: result.shell,
-                allowedGitSubcommands: result.git
+                allowedGitSubcommands: result.git,
             })
-        } catch (e) {
-            console.error('Failed to reset whitelist:', e)
+        } catch (error) {
+            toast.error(language === 'zh' ? '重置白名单失败' : 'Failed to reset whitelist', error instanceof Error ? error.message : String(error))
         }
     }
 
@@ -71,12 +72,12 @@ export function SecuritySettings({ language }: SecuritySettingsProps) {
                 </div>
                 <div>
                     <h3 className="text-sm font-bold text-yellow-500 mb-1 tracking-tight">
-                        {language === 'zh' ? '安全沙箱 (开发中)' : 'Security Sandbox (WIP)'}
+                        {language === 'zh' ? '安全沙箱' : 'Security Sandbox'}
                     </h3>
                     <p className="text-xs text-text-secondary leading-relaxed opacity-90">
                         {language === 'zh'
-                            ? 'Adnify 目前直接在您的系统上运行命令。请确保您只运行受信任的代码。未来版本将引入基于 Docker 的沙箱环境。'
-                            : 'Adnify currently runs commands directly on your system. Ensure you only run trusted code. Future versions will introduce a Docker-based sandbox.'}
+                            ? 'Adnify 当前会直接在系统上执行命令，请只运行可信代码。后续我们会继续把执行边界收紧。'
+                            : 'Adnify currently runs commands directly on your system. Only run trusted code while we continue tightening execution boundaries.'}
                     </p>
                 </div>
             </div>
@@ -86,13 +87,12 @@ export function SecuritySettings({ language }: SecuritySettingsProps) {
                     {language === 'zh' ? '安全选项' : 'Security Options'}
                 </h4>
                 <div className="space-y-4">
-                    <Switch label={language === 'zh' ? '启用操作确认' : 'Enable permission confirmation'} checked={securitySettings.enablePermissionConfirm} onChange={(e) => update('securitySettings', { enablePermissionConfirm: e.target.checked })} />
-                    <Switch label={language === 'zh' ? '严格工作区模式' : 'Strict workspace mode'} checked={securitySettings.strictWorkspaceMode} onChange={(e) => update('securitySettings', { strictWorkspaceMode: e.target.checked })} />
-                    <Switch label={language === 'zh' ? '显示安全警告' : 'Show security warnings'} checked={securitySettings.showSecurityWarnings} onChange={(e) => update('securitySettings', { showSecurityWarnings: e.target.checked })} />
+                    <Switch label={language === 'zh' ? '启用操作确认' : 'Enable permission confirmation'} checked={securitySettings.enablePermissionConfirm} onChange={(e) => updateSecuritySettings({ enablePermissionConfirm: e.target.checked })} />
+                    <Switch label={language === 'zh' ? '严格工作区模式' : 'Strict workspace mode'} checked={securitySettings.strictWorkspaceMode} onChange={(e) => updateSecuritySettings({ strictWorkspaceMode: e.target.checked })} />
+                    <Switch label={language === 'zh' ? '显示安全警告' : 'Show security warnings'} checked={securitySettings.showSecurityWarnings} onChange={(e) => updateSecuritySettings({ showSecurityWarnings: e.target.checked })} />
                 </div>
             </section>
 
-            {/* Shell 命令白名单 */}
             <section className="space-y-4 p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
                 <div className="flex items-center justify-between">
                     <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60">
@@ -108,9 +108,7 @@ export function SecuritySettings({ language }: SecuritySettingsProps) {
                     </button>
                 </div>
                 <p className="text-xs text-text-secondary">
-                    {language === 'zh'
-                        ? '只有在此列表中的命令才能被执行'
-                        : 'Only commands in this list can be executed'}
+                    {language === 'zh' ? '只有在此列表中的命令才允许执行。' : 'Only commands in this list are allowed to run.'}
                 </p>
                 <div className="flex flex-wrap gap-2">
                     {securitySettings.allowedShellCommands.map(cmd => (
@@ -141,15 +139,14 @@ export function SecuritySettings({ language }: SecuritySettingsProps) {
                 </div>
             </section>
 
-            {/* Git 子命令白名单 */}
             <section className="space-y-4 p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
                 <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60">
                     {language === 'zh' ? 'Git 子命令白名单' : 'Git Subcommand Whitelist'}
                 </h4>
                 <p className="text-xs text-text-secondary">
                     {language === 'zh'
-                        ? '只有在此列表中的 Git 子命令才能被执行（如 status, commit, push 等）'
-                        : 'Only Git subcommands in this list can be executed (e.g., status, commit, push)'}
+                        ? '只有在此列表中的 Git 子命令才允许执行，例如 status、commit、push。'
+                        : 'Only Git subcommands in this list are allowed to run, such as status, commit, and push.'}
                 </p>
                 <div className="flex flex-wrap gap-2">
                     {(securitySettings.allowedGitSubcommands || []).map(cmd => (

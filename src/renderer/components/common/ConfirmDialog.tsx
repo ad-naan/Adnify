@@ -1,12 +1,8 @@
-/**
- * 自定义确认对话框组件
- * 替代原生 window.confirm，支持国际化和自定义样式
- */
-import { logger } from '@utils/Logger'
-import { useState, useCallback, createContext, useContext, ReactNode, useEffect } from 'react'
+import { useState, useCallback, createContext, useContext, type ReactNode, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
+import { logger } from '@utils/Logger'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 
@@ -21,6 +17,18 @@ interface ConfirmDialogProps {
   onCancel: () => void
 }
 
+interface ConfirmOptions {
+  title?: string
+  message: string
+  confirmText?: string
+  cancelText?: string
+  variant?: 'danger' | 'warning' | 'info'
+}
+
+interface ConfirmContextType {
+  confirm: (options: ConfirmOptions) => Promise<boolean>
+}
+
 export default function ConfirmDialog({
   isOpen,
   title,
@@ -31,7 +39,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  const language = useStore(s => s.language)
+  const language = useStore((state) => state.language)
 
   const variantStyles = {
     danger: {
@@ -57,9 +65,7 @@ export default function ConfirmDialog({
           <AlertTriangle className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0 pt-1">
-          <p className="text-sm text-text-secondary leading-relaxed">
-            {message}
-          </p>
+          <p className="text-sm text-text-secondary leading-relaxed">{message}</p>
         </div>
       </div>
       <div className="flex items-center justify-end gap-2 mt-6">
@@ -72,16 +78,6 @@ export default function ConfirmDialog({
       </div>
     </Modal>
   )
-}
-
-// ============ Hook 版本 ============
-
-interface ConfirmOptions {
-  title?: string
-  message: string
-  confirmText?: string
-  cancelText?: string
-  variant?: 'danger' | 'warning' | 'info'
 }
 
 export function useConfirmDialog() {
@@ -127,12 +123,6 @@ export function useConfirmDialog() {
   return { confirm, DialogComponent }
 }
 
-// ============ 全局确认对话框 ============
-
-interface ConfirmContextType {
-  confirm: (options: ConfirmOptions) => Promise<boolean>
-}
-
 const ConfirmContext = createContext<ConfirmContextType | null>(null)
 
 export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
@@ -153,8 +143,6 @@ export function useConfirm() {
   }
   return context.confirm
 }
-
-// ============ 简单的全局 confirm 函数（不依赖 Context） ============
 
 let globalResolve: ((value: boolean) => void) | null = null
 let globalSetState: ((state: { isOpen: boolean; options: ConfirmOptions | null }) => void) | null = null
@@ -199,18 +187,14 @@ export function GlobalConfirmDialog() {
   )
 }
 
-/**
- * 全局确认函数，可以在任何地方调用
- * 需要在 App 根组件中渲染 <GlobalConfirmDialog />
- */
 export function globalConfirm(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
     if (!globalSetState) {
-      // 如果没有挂载 GlobalConfirmDialog，回退到原生 confirm
-      logger.ui.warn('GlobalConfirmDialog not mounted, falling back to native confirm')
-      resolve(window.confirm(options.message))
+      logger.ui.warn('GlobalConfirmDialog not mounted, canceling confirm request')
+      resolve(false)
       return
     }
+
     globalResolve = resolve
     globalSetState({ isOpen: true, options })
   })

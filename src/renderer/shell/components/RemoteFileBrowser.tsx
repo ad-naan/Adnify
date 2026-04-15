@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Download, FileText, Folder, FolderPlus, Pencil, RefreshCw, Save, SquareArrowOutUpRight, Trash2, Upload, Wifi, X } from 'lucide-react'
 import { Button, Input, Modal } from '@/renderer/components/ui'
+import { globalConfirm } from '@/renderer/components/common/ConfirmDialog'
 import { toast } from '@/renderer/components/common/InlineToast'
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
@@ -190,7 +191,12 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
   }, [currentPath, language, loadEntries, nameDialog, openEmbeddedFile, selectedFilePath, server])
 
   const handleDelete = useCallback(async (entry: RemoteFileEntry) => {
-    const confirmed = window.confirm(language === 'zh' ? `确认删除 ${entry.name} ?` : `Delete ${entry.name}?`)
+    const confirmed = await globalConfirm({
+      title: language === 'zh' ? '删除远程文件' : 'Delete Remote File',
+      message: language === 'zh' ? `确认删除 ${entry.name} 吗？` : `Delete ${entry.name}?`,
+      confirmText: language === 'zh' ? '删除' : 'Delete',
+      variant: 'danger',
+    })
     if (!confirmed) return
     try {
       await api.remoteShell.delete(server, entry.path)

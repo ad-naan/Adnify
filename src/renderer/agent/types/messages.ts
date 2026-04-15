@@ -44,6 +44,7 @@ export interface SystemAlertPart {
   title?: string
   message: string
   suggestion?: string
+  compact?: boolean
 }
 
 /** Lint 自动检查结果 */

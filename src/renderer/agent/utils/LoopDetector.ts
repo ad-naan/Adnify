@@ -25,6 +25,14 @@ export interface LoopCheckResult {
   reason?: string
   suggestion?: string
   warning?: string
+  details?: {
+    category: 'exact_repeat' | 'same_tool_warning' | 'content_cycle' | 'pattern_loop'
+    toolName?: string
+    count?: number
+    threshold?: number
+    target?: string | null
+    pattern?: string
+  }
 }
 
 interface LoopDetectorInternalConfig {
@@ -118,19 +126,22 @@ export class LoopDetector {
       if (patternResult.isLoop) {
         return patternResult
       }
-
-      this.history.push(record)
     }
 
     return { isLoop: false }
   }
 
-  recordResult(toolCallId: string, success: boolean): void {
-    for (let i = this.history.length - 1; i >= 0; i--) {
-      if (this.history[i].argsHash.includes(toolCallId.slice(0, 8))) {
-        this.history[i].success = success
-        break
-      }
+  recordExecutedTool(
+    toolCall: Pick<LLMToolCall, 'name' | 'arguments'>,
+    success: boolean,
+    fileContents?: Map<string, string>
+  ): void {
+    const record = this.createRecord(toolCall, fileContents)
+    record.success = success
+    this.history.push(record)
+
+    if (this.history.length > this.config.maxHistory) {
+      this.history = this.history.slice(-this.config.maxHistory)
     }
   }
 
@@ -149,7 +160,10 @@ export class LoopDetector {
     this.contentHashes.clear()
   }
 
-  private createRecord(tc: LLMToolCall, fileContents?: Map<string, string>): ToolCallRecord {
+  private createRecord(
+    tc: Pick<LLMToolCall, 'name' | 'arguments'>,
+    fileContents?: Map<string, string>
+  ): ToolCallRecord {
     const args = (tc.arguments || {}) as Record<string, unknown>
     const rawTarget = args.path || args.file || args.command || args.query || null
     const target = typeof rawTarget === 'string' ? rawTarget : null
@@ -207,6 +221,13 @@ export class LoopDetector {
         suggestion: isReadOp
           ? 'The file content may not have changed. Consider a different approach.'
           : 'The same operation has been attempted multiple times. Please try a different approach.',
+        details: {
+          category: 'exact_repeat',
+          toolName: record.name,
+          count: exactMatches.length + 1,
+          threshold,
+          target: record.target,
+        },
       }
     }
 
@@ -216,6 +237,13 @@ export class LoopDetector {
         isLoop: false,
         warning: `Tool "${record.name}" has been called ${sameToolCalls.length + 1} times. This may indicate a loop.`,
         suggestion: 'Consider whether a different tool or a broader batch operation would make better progress.',
+        details: {
+          category: 'same_tool_warning',
+          toolName: record.name,
+          count: sameToolCalls.length + 1,
+          threshold: config.maxSameToolCallsWarning + 1,
+          target: record.target,
+        },
       }
     }
 
@@ -240,6 +268,12 @@ export class LoopDetector {
         isLoop: true,
         reason: `File "${record.target}" content is cycling between ${uniqueHashes.size} state(s) after ${recentHashes.length} edits.`,
         suggestion: 'The edits are not making progress. Consider reviewing the approach or asking for clarification.',
+        details: {
+          category: 'content_cycle',
+          count: recentHashes.length,
+          threshold: this.config.maxNoChangeEdits,
+          target: record.target,
+        },
       }
     }
 
@@ -269,6 +303,12 @@ export class LoopDetector {
           isLoop: true,
           reason: `Detected repeating pattern: ${pattern} (repeated 2 times).`,
           suggestion: 'The agent is stuck in a loop. Consider breaking the pattern with a different approach.',
+          details: {
+            category: 'pattern_loop',
+            pattern,
+            count: 2,
+            threshold: 2,
+          },
         }
       }
     }
