@@ -22,7 +22,6 @@ import {
   isTextPart,
   isToolCallPart,
   isReasoningPart,
-  ReasoningPart,
   isSearchPart,
   isSystemAlertPart,
   isLintCheckPart,
@@ -48,7 +47,7 @@ import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { t } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
-import { stripToolMarkup } from '@renderer/agent/utils/toolMarkupFilter'
+import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import type { ToolStreamingPreview } from '@shared/types'
 
 interface ChatMessageProps {
@@ -147,7 +146,7 @@ CodeBlock.displayName = 'CodeBlock'
 
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
-  return stripToolMarkup(text)
+  return stripToolCallLeaks(text)
 }
 
 const BlockRevealKeyframes = () => (
@@ -549,14 +548,13 @@ const RenderPart = React.memo(({
   }
 
   if (isReasoningPart(part)) {
-    const reasoningPart = part as ReasoningPart
-    if (!reasoningPart.content?.trim() && !reasoningPart.isStreaming) return null
+    if (!part.content?.trim() && !part.isStreaming) return null
     return (
       <ThinkingBlock
         key={`reasoning-${index}`}
-        content={reasoningPart.content}
-        startTime={reasoningPart.startTime}
-        isStreaming={!!reasoningPart.isStreaming}
+        content={part.content}
+        startTime={part.startTime}
+        isStreaming={!!part.isStreaming}
         fontSize={fontSize}
       />
     )

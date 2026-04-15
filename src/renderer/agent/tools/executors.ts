@@ -30,22 +30,22 @@ import { toolRegistry } from './registry'
 import { terminalManager } from '@/renderer/services/TerminalManager'
 import pLimit from 'p-limit'
 import { skillService } from '../services/skillService'
-import { t } from '@/renderer/i18n'
 import type { TranslationKey } from '@/renderer/i18n'
 import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
+import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../utils/agentText'
 
 // ===== 辅助函数 =====
 
 function getLocalizedText(language: string, zh: string, en: string): string {
-    return language === 'zh' ? zh : en
+    return pickLocalizedText(zh, en, language as 'en' | 'zh')
 }
 
 function getCurrentLanguage(): string {
-    return useStore.getState().language
+    return getAgentLanguage()
 }
 
 function translate(key: TranslationKey, params?: Record<string, string | number>): string {
-    return t(key, getCurrentLanguage() as 'en' | 'zh', params)
+    return translateAgentText(key, params)
 }
 
 function getReplaceErrorMessage(errorCode?: ReplaceErrorCode): string {

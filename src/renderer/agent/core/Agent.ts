@@ -20,7 +20,6 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { useStore } from '@/renderer/store'
 import { logger } from '@utils/Logger'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { useAgentStore } from '../store/AgentStore'
@@ -39,7 +38,7 @@ import type { CheckpointImage } from '../types'
 import type { LLMConfig, ExecutionContext } from './types'
 import { agentExecutor } from '../application/AgentExecutor'
 import type { ExecutionConfig } from '../application/AgentExecutor'
-import { t } from '@/renderer/i18n'
+import { translateAgentText } from '../utils/agentText'
 
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
@@ -98,8 +97,7 @@ export class AgentClass {
 
     // 验证 API Key
     if (!config.apiKey) {
-      const language = useStore.getState().language as 'en' | 'zh'
-      this.showError(t('apiKeyWarning', language))
+      this.showError(translateAgentText('apiKeyWarning'))
       throw new Error('Missing API key')
     }
 
@@ -439,11 +437,10 @@ export class AgentClass {
    */
   private showError(message: string): void {
     const store = useAgentStore.getState()
-    const language = useStore.getState().language as 'en' | 'zh'
     const id = store.addAssistantMessage()
     store.addSystemAlertPart(id, {
       alertType: 'error',
-      title: t('error', language),
+      title: translateAgentText('error'),
       message,
     })
     store.finalizeAssistant(id)

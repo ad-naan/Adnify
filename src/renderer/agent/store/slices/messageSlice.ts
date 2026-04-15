@@ -734,14 +734,13 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newPart: ReasoningPart = {
+                        id: partId,
                         type: 'reasoning',
                         content: '',
                         startTime: Date.now(),
                         isStreaming: true,
                     }
-                    // 临时添加 id 用于查找，但不包含在类型中
-                    const partWithId = { ...newPart, id: partId }
-                    return { ...assistantMsg, parts: [...assistantMsg.parts, partWithId as ReasoningPart] }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
                 }
                 return msg
             })
@@ -770,10 +769,8 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
-                        // 使用临时 id 属性进行匹配
-                        const partWithId = part as ReasoningPart & { id?: string }
-                        if (part.type === 'reasoning' && partWithId.id === partId) {
-                            return { ...part, content: (part as ReasoningPart).content + content, isStreaming }
+                        if (part.type === 'reasoning' && part.id === partId) {
+                            return { ...part, content: part.content + content, isStreaming }
                         }
                         return part
                     })
@@ -804,9 +801,7 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
-                        // 使用临时 id 属性进行匹配
-                        const partWithId = part as ReasoningPart & { id?: string }
-                        if (part.type === 'reasoning' && partWithId.id === partId) {
+                        if (part.type === 'reasoning' && part.id === partId) {
                             return { ...part, isStreaming: false }
                         }
                         return part
@@ -840,13 +835,12 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newPart: SearchPart = {
+                        id: partId,
                         type: 'search',
                         content: '',
                         isStreaming: true,
                     }
-                    // 临时添加 id 用于查找
-                    const partWithId = { ...newPart, id: partId }
-                    return { ...assistantMsg, parts: [...assistantMsg.parts, partWithId as SearchPart] }
+                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
                 }
                 return msg
             })
@@ -875,9 +869,8 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
-                        const partWithId = part as SearchPart & { id?: string }
-                        if (part.type === 'search' && partWithId.id === partId) {
-                            const newContent = append ? (part as SearchPart).content + content : content
+                        if (part.type === 'search' && part.id === partId) {
+                            const newContent = append ? part.content + content : content
                             return { ...part, content: newContent, isStreaming }
                         }
                         return part
@@ -909,8 +902,7 @@ export const createMessageSlice: StateCreator<
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
-                        const partWithId = part as SearchPart & { id?: string }
-                        if (part.type === 'search' && partWithId.id === partId) {
+                        if (part.type === 'search' && part.id === partId) {
                             return { ...part, isStreaming: false }
                         }
                         return part
