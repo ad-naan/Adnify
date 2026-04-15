@@ -19,6 +19,7 @@ export interface TextPart {
 
 /** 推理部分 */
 export interface ReasoningPart {
+  id: string
   type: 'reasoning'
   content: string
   startTime?: number
@@ -33,6 +34,7 @@ export interface ToolCallPart {
 
 /** 搜索部分 */
 export interface SearchPart {
+  id: string
   type: 'search'
   content: string
   isStreaming?: boolean

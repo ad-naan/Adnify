@@ -81,13 +81,44 @@ const asString = (value: unknown): string => typeof value === 'string' ? value :
 const asStringArray = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
 
-const getPreviewPath = (value: unknown) => getFileName(value)
+const getPathList = (value: unknown): string[] => {
+    if (typeof value === 'string') return value ? [value] : []
+    return asStringArray(value).filter(Boolean)
+}
+
+const getToolPathList = (args: ToolArgs): string[] => {
+    const directPaths = getPathList(args.path)
+    if (directPaths.length > 0) return directPaths
+
+    const pluralPaths = getPathList(args.paths)
+    if (pluralPaths.length > 0) return pluralPaths
+
+    return []
+}
+
+const getPrimaryToolPath = (args: ToolArgs): string => getToolPathList(args)[0] || ''
+
+const getPathDisplayName = (path: string): string => getFileName(path) || path
+
+const getPathSummary = (paths: string[], maxItems = 3): string => {
+    if (paths.length === 0) return ''
+    if (paths.length === 1) return getPathDisplayName(paths[0])
+
+    const preview = paths
+        .slice(0, maxItems)
+        .map(path => `"${getPathDisplayName(path)}"`)
+        .join(', ')
+
+    return `${paths.length} files (${preview}${paths.length > maxItems ? ', ...' : ''})`
+}
 
 function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'], isStreaming: boolean): string {
     const isRunning = status === 'running' || status === 'pending' || isStreaming
     const isSuccess = status === 'success'
     const isError = status === 'error'
-    const path = getPreviewPath(args.path)
+    const paths = getToolPathList(args)
+    const path = getPrimaryToolPath(args)
+    const pathSummary = getPathSummary(paths)
 
     if (name === 'run_command') {
         const cmd = asString(args.command)
@@ -99,25 +130,22 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
     }
 
     if (name === 'read_multiple_files') {
-        const paths = args.paths
-        const stringPaths = asStringArray(paths)
-        if (stringPaths.length > 0) {
-            const preview = stringPaths.slice(0, 3).map(pathItem => `"${getFileName(pathItem)}"`).join(', ') + (stringPaths.length > 3 ? '...' : '')
-            if (isRunning) return `Reading [${preview}]...`
-            if (isSuccess) return `Read [${preview}]`
+        if (paths.length > 0) {
+            if (isRunning) return `Reading ${pathSummary}...`
+            if (isSuccess) return `Read ${pathSummary}`
             if (isError) return 'Failed to read files'
-            return `Reading [${preview}]`
-        }
-        if (typeof paths === 'string') {
-            if (isRunning) return `Reading ${paths}...`
-            if (isSuccess) return `Read ${paths}`
-            if (isError) return `Failed to read ${paths}`
-            return `Reading ${paths}`
+            return `Reading ${pathSummary}`
         }
         return 'Reading files'
     }
 
     if (['read_file', 'list_directory'].includes(name)) {
+        if (paths.length > 1) {
+            if (isRunning) return `Reading ${pathSummary}...`
+            if (isSuccess) return `Read ${pathSummary}`
+            if (isError) return 'Failed to read files'
+            return `Reading ${pathSummary}`
+        }
         if (!path) return isRunning ? 'Reading...' : ''
         if (isRunning) return `Reading ${path}...`
         if (isSuccess) return `Read ${path}`
@@ -409,8 +437,9 @@ function ToolPreview({
     }
 
     if (effectiveName === 'list_directory') {
-        const path = asString(args.path)
-        const displayName = getFileName(path) || path || '.'
+        const paths = getToolPathList(args)
+        const path = paths[0] || ''
+        const displayName = paths.length > 1 ? getPathSummary(paths) : getPathDisplayName(path) || '.'
 
         return (
             <div className="space-y-1 text-[11px]">
@@ -431,7 +460,7 @@ function ToolPreview({
     }
 
     if (['edit_file', 'write_file'].includes(effectiveName)) {
-        const filePath = asString(args.path)
+        const filePath = getPrimaryToolPath(args)
         const oldString = asString(args.old_string)
         const nextContent = asString(args.content) || asString(args.new_string)
         const oldContent = oldString.slice(0, 5000)
@@ -482,10 +511,11 @@ function ToolPreview({
     }
 
     if (['create_file_or_folder', 'delete_file_or_folder'].includes(effectiveName)) {
-        const path = asString(args.path)
+        const paths = getToolPathList(args)
+        const path = paths[0] || ''
         const isDelete = effectiveName === 'delete_file_or_folder'
         const isFolder = path.endsWith('/')
-        const displayName = path ? (getFileName(path) || path) : '<no path>'
+        const displayName = paths.length > 1 ? getPathSummary(paths) : (path ? getPathDisplayName(path) : '<no path>')
 
         return (
             <div className="space-y-1">
@@ -508,13 +538,13 @@ function ToolPreview({
     }
 
     if (['read_file', 'read_multiple_files'].includes(effectiveName)) {
-        const filePath = effectiveName === 'read_file' ? asString(args.path) : ''
-        const paths = asStringArray(args.paths)
-        const hasResolvedReadTarget = effectiveName === 'read_file' ? Boolean(filePath) : paths.length > 0
+        const paths = getToolPathList(args)
+        const filePath = paths[0] || ''
+        const hasResolvedReadTarget = paths.length > 0
         if (!hasResolvedReadTarget && !toolCall.result && !toolCall.richContent?.length) {
             return null
         }
-        const displayName = effectiveName === 'read_file' ? (filePath ? getFileName(filePath) : '<no path>') : `${paths.length} files`
+        const displayName = paths.length > 1 ? getPathSummary(paths) : (filePath ? getPathDisplayName(filePath) : '<no path>')
         const theme = themeManager.getThemeById(currentTheme)
         const syntaxStyle = theme?.type === 'light' ? vs : vscDarkPlus
 
@@ -522,7 +552,7 @@ function ToolPreview({
             <div className="space-y-1 mt-1">
                 <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                     <FileCode className="w-3 h-3" />
-                    <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={filePath || undefined}>
+                    <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={paths.join('\n') || undefined}>
                         <TextWithFileLinks text={displayName} />
                     </span>
                 </div>
@@ -577,7 +607,7 @@ function ToolPreview({
     }
 
     if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(effectiveName)) {
-        const path = asString(args.path)
+        const path = getPrimaryToolPath(args)
         const line = typeof args.line === 'number' ? args.line : undefined
 
         return (

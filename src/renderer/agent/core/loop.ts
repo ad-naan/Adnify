@@ -35,7 +35,7 @@ import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext } from './types'
 import type { LoopCheckResult } from './types'
-import { t } from '@/renderer/i18n'
+import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 
 // ===== 告警文案 =====
 
@@ -43,11 +43,11 @@ import { t } from '@/renderer/i18n'
  * 根据当前界面语言返回对应文案，避免同类告警散落在多处硬编码。
  */
 function getLocalizedText(language: string, zh: string, en: string): string {
-  return language === 'zh' ? zh : en
+  return pickLocalizedText(zh, en, language as 'en' | 'zh')
 }
 
-function translate(language: string, key: Parameters<typeof t>[0], params?: Record<string, string | number>): string {
-  return t(key, language as 'en' | 'zh', params)
+function translate(language: string, key: Parameters<typeof translateAgentText>[0], params?: Record<string, string | number>): string {
+  return translateAgentText(key, params, language as 'en' | 'zh')
 }
 
 function getLoopCheckMessage(language: string, loopCheck: LoopCheckResult): string {

@@ -10,7 +10,7 @@ import { EventBus } from './EventBus'
 import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
-import { filterToolMarkupChunk } from '../utils/toolMarkupFilter'
+import { filterToolCallLeakChunk } from '../utils/toolCallLeakFilter'
 import { t } from '@/renderer/i18n'
 
 // Tracks active IPC listeners for leak debugging.
@@ -309,7 +309,7 @@ export function createStreamProcessor(
     switch (data.type) {
       case 'text':
         if (data.content) {
-          const filtered = filterToolMarkupChunk(data.content, filteredToolMarkupBuffer)
+          const filtered = filterToolCallLeakChunk(data.content, filteredToolMarkupBuffer)
           const visibleChunk = filtered.visibleText
           filteredToolMarkupBuffer = filtered.buffer
 
