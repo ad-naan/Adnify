@@ -189,23 +189,23 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
   if (!currentProviderGroup || !currentModel) return null
 
   return (
-    <div ref={containerRef} className={`${alignLeft ? '' : 'relative'} flex items-center gap-2 ${className}`}>
+    <div ref={containerRef} className={`${alignLeft ? '' : 'relative'} flex items-center gap-2 flex-1 min-w-0 ${className}`}>
       <button
         onClick={() => setIsOpen((prev) => !prev)}
         className={`
           flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium border border-transparent
-          transition-all duration-200
+          transition-all duration-200 w-full min-w-0
           ${isOpen
             ? 'bg-surface-active text-text-primary shadow-[0_0_0_2px_rgba(var(--accent)/0.15)]'
             : 'bg-white/[0.03] text-text-secondary hover:text-text-primary hover:bg-white/[0.08]'
           }
         `}
         >
-        <span className="text-[10px] grayscale opacity-80">{getIcon(currentProviderGroup.providerId)}</span>
-        <span className="max-w-[180px] truncate" title={`${currentProviderGroup.providerName}/${currentModel.name}`}>
+        <span className="text-[10px] grayscale opacity-80 flex-shrink-0">{getIcon(currentProviderGroup.providerId)}</span>
+        <span className="truncate flex-1 min-w-0" title={`${currentProviderGroup.providerName}/${currentModel.name}`}>
           {currentProviderGroup.providerName}/{currentModel.name.split('/').pop()}
         </span>
-        <ChevronDown className={`w-3 h-3 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 text-text-muted transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
