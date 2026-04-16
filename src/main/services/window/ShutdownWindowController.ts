@@ -279,7 +279,6 @@ export class ShutdownWindowController {
   private window: BrowserWindow | null = null
   private ready: Promise<void> | null = null
   private presentation: ShutdownWindowPresentation = DEFAULT_PRESENTATION
-  private reason: ShutdownReason = 'app-quit'
 
   private getIconPath(): string {
     const platform = process.platform
@@ -313,7 +312,6 @@ export class ShutdownWindowController {
     presentation?: Partial<ShutdownWindowPresentation>,
     anchor?: BrowserWindow | null
   ): Promise<void> {
-    this.reason = reason
     this.presentation = { ...DEFAULT_PRESENTATION, ...presentation }
     const state = buildState(reason, 'saving', this.presentation.language)
 
@@ -378,7 +376,6 @@ export class ShutdownWindowController {
     if (presentation) {
       this.presentation = { ...this.presentation, ...presentation }
     }
-    this.reason = reason
 
     if (this.ready) {
       await this.ready

@@ -143,51 +143,9 @@ export default defineConfig({
           if (id.includes('framer-motion')) {
             return 'animation'
           }
-          if (id.includes('react-virtuoso')) {
-            return 'virtual-list'
-          }
-          if (id.includes('/node_modules/ai/') || id.includes('/node_modules/@ai-sdk/')) {
-            return 'ai-sdk'
-          }
-          if (id.includes('/node_modules/zod/')) {
-            return 'schema'
-          }
-          if (id.includes('/node_modules/yaml/')) {
-            return 'yaml'
-          }
-          if (id.includes('/node_modules/diff/')) {
-            return 'diff-core'
-          }
           // Agent 模块
-          if (id.includes('/renderer/agent/store/')) {
-            return 'agent-store'
-          }
-          if (id.includes('/renderer/agent/application/') || id.includes('/renderer/agent/core/')) {
-            return 'agent-engine'
-          }
-          if (id.includes('/renderer/agent/domains/context/summaryService')) {
-            return 'agent-summary'
-          }
-          if (id.includes('/renderer/agent/domains/context/CompressionManager')) {
-            return 'agent-compression'
-          }
-          if (id.includes('/renderer/agent/domains/context/') || id.includes('/renderer/agent/plan/')) {
-            return 'agent-context'
-          }
-          if (id.includes('/renderer/agent/prompts/') || id.includes('/renderer/agent/llm/')) {
-            return 'agent-llm'
-          }
-          if (id.includes('/renderer/agent/services/') || id.includes('/renderer/agent/tools/')) {
-            return 'agent-runtime'
-          }
-          if (id.includes('/renderer/agent/emotion/')) {
-            return 'agent-emotion'
-          }
           if (id.includes('/renderer/agent/')) {
-            return 'agent-core'
-          }
-          if (id.includes('/renderer/components/agent/')) {
-            return 'agent-ui'
+            return 'agent'
           }
           // Sidebar 模块
           if (id.includes('/renderer/components/sidebar/')) {
