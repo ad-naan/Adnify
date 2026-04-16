@@ -282,12 +282,12 @@ const ChatInput = memo(function ChatInput({
           />
 
           {/* Bottom Actions */}
-          <div className="relative flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+          <div className="relative flex items-center justify-between pt-1 gap-2">
+            <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity flex-1 min-w-0 max-w-[60%]">
               <ModeSelector mode={chatMode} onModeChange={setChatMode} />
               <ModelSelector alignLeft />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <input
                 type="file"
                 ref={fileInputRef}
