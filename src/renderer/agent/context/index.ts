@@ -6,13 +6,15 @@
 export {
   prepareMessages,
   updateStats,
-  calculateLevel,
   estimateMessagesTokens,
-  LEVEL_NAMES,
-  type CompressionLevel,
   type CompressionStats,
   type PrepareResult,
 } from '../domains/context/CompressionManager'
+export {
+  calculateLevel,
+  LEVEL_NAMES,
+  type CompressionLevel,
+} from '../domains/context/compressionShared'
 
 // 摘要服务
 export {

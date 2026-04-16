@@ -59,7 +59,8 @@ export interface LoopCheckResult {
 
 // ===== 压缩统计（从 CompressionManager 导出） =====
 
-export type { CompressionStats, CompressionLevel } from '../domains/context/CompressionManager'
+export type { CompressionStats } from '../domains/context/CompressionManager'
+export type { CompressionLevel } from '../domains/context/compressionShared'
 
 // ===== 工具执行结果（Agent 内部使用，包含 toolCall 信息） =====
 

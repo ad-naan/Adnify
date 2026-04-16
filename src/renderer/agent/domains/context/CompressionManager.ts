@@ -12,10 +12,9 @@ import { getAgentConfig } from '../../utils/AgentConfig'
 import { pruneMessages } from 'ai'
 import { countTokens, countContentTokens } from '@shared/utils/tokenCounter'
 import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../../types'
+import { type CompressionLevel } from './compressionShared'
 
 // ===== 类型 =====
-
-export type CompressionLevel = 0 | 1 | 2 | 3 | 4
 
 export interface CompressionStats {
   level: CompressionLevel

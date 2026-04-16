@@ -307,9 +307,16 @@ export default function ChatPanel() {
   const [atBottom, setAtBottom] = useState(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const lastAutoScrollAtRef = useRef(0)
+  const atBottomRef = useRef(true)
+  const pendingBottomSnapRef = useRef(true)
   // 用于防止工具卡片展开/收缩时误判滚动状态
   const isAutoScrollingRef = useRef(false)
   const isHydratingActiveThread = hasActiveThread && !activeThreadMessagesHydrated
+
+  const syncBottomState = useCallback((bottom: boolean) => {
+    atBottomRef.current = bottom
+    setAtBottom(bottom)
+  }, [])
 
   // 滚动到底部的函数
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
@@ -320,16 +327,15 @@ export default function ChatPanel() {
         behavior
       })
     })
-    setAtBottom(true)
-    setShowScrollButton(false)
-  }, [deferredRenderableMessages.length])
+    syncBottomState(true)
+  }, [deferredRenderableMessages.length, syncBottomState])
   const followOutput = useCallback((isListAtBottom: boolean) => {
     // 流式输出时：在底部则跟随，不在底部则不强制（用户在往上翻）
     if (isStreaming) return isListAtBottom ? 'smooth' : false
     // 非流式（如用户刚发送消息导致新消息 push）：无论在不在底部都强制跟随底部
     // 这解决了「发消息后滚动条跳回顶部」的问题
-    return atBottom ? 'smooth' : false
-  }, [isStreaming, atBottom])
+    return isListAtBottom ? (isStreaming ? 'smooth' : 'auto') : false
+  }, [isStreaming])
 
   const handleTotalListHeightChanged = useCallback(() => {
     if (!atBottom || !isStreaming) return
@@ -351,7 +357,7 @@ export default function ChatPanel() {
     // 如果是自动滚动触发的，忽略状态变化
     if (isAutoScrollingRef.current) return
 
-    setAtBottom(bottom)
+    syncBottomState(bottom)
     // 不在底部时显示滚动按钮（流式输出时也显示，方便用户回到底部）
     setShowScrollButton(!bottom)
   }, [])
@@ -365,6 +371,31 @@ export default function ChatPanel() {
   }, [inputPrompt, setInputPrompt])
 
   // 处理文件点击
+  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
+    if (isAutoScrollingRef.current) return
+    const lastIndex = deferredRenderableMessages.length - 1
+    const bottom = lastIndex <= 0 || range.endIndex >= lastIndex
+    if (bottom !== atBottomRef.current) {
+      syncBottomState(bottom)
+    }
+  }, [deferredRenderableMessages.length, syncBottomState])
+
+  useEffect(() => {
+    pendingBottomSnapRef.current = true
+  }, [currentThreadId])
+
+  useEffect(() => {
+    if (!pendingBottomSnapRef.current) return
+    if (isSwitchingThread || isHydratingActiveThread || deferredRenderableMessages.length === 0) return
+
+    pendingBottomSnapRef.current = false
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom('auto')
+      })
+    })
+  }, [isSwitchingThread, isHydratingActiveThread, deferredRenderableMessages.length, scrollToBottom])
+
   const handleFileClick = useCallback(async (filePath: string) => {
     const fullPath = toFullPath(filePath, workspacePath)
     const content = await api.file.read(fullPath)
@@ -1169,12 +1200,13 @@ export default function ChatPanel() {
               data={deferredRenderableMessages}
               computeItemKey={(_, item) => item.renderKey}
               atBottomStateChange={handleAtBottomStateChange}
+              rangeChanged={handleRangeChanged}
               initialTopMostItemIndex={initialIndexRef.current}
               followOutput={followOutput}
               itemContent={(_, item) => renderMessage(item)}
               className="flex-1 custom-scrollbar w-full h-full"
               style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
-              overscan={50}
+              overscan={24}
               atBottomThreshold={100}
               totalListHeightChanged={handleTotalListHeightChanged}
               skipAnimationFrameInResizeObserver

@@ -4,8 +4,8 @@
 
 import type { LLMMessage } from '@/shared/types'
 
-// 从 CompressionManager.ts 导入 CompressionLevel，避免重复定义
-export type { CompressionLevel } from './CompressionManager'
+// 从 compressionShared.ts 导入 CompressionLevel，避免重复定义
+export type { CompressionLevel } from './compressionShared'
 
 /** 压缩级别配置 */
 export interface LevelConfig {
@@ -14,7 +14,7 @@ export interface LevelConfig {
 }
 
 /** 压缩级别配置表 */
-export const COMPRESSION_LEVELS: Record<import('./CompressionManager').CompressionLevel, LevelConfig> = {
+export const COMPRESSION_LEVELS: Record<import('./compressionShared').CompressionLevel, LevelConfig> = {
   0: { threshold: 0, description: 'Full Context' },
   1: { threshold: 0.5, description: 'Truncate Args' },
   2: { threshold: 0.7, description: 'Clear Results' },

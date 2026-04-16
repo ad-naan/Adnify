@@ -10,7 +10,7 @@
  */
 
 import type { WorkMode } from '@/shared/types/workMode'
-import type { CompressionLevel } from '../context/CompressionManager'
+import type { CompressionLevel } from '../context/compressionShared'
 
 // ===== Tool Policy =====
 
