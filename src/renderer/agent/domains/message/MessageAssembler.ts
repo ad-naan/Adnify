@@ -15,7 +15,7 @@
 import { logger } from '@utils/Logger'
 import type { ChatMessage, MessageContent } from '../../types'
 import type { LLMMessage } from '@/shared/types'
-import type { CompressionLevel } from '../context/CompressionManager'
+import type { CompressionLevel } from '../context/compressionShared'
 import { prepareMessages, estimateMessagesTokens } from '../context/CompressionManager'
 import { buildLLMApiMessages } from './MessageConverter'
 import { countTokens } from '@shared/utils/tokenCounter'

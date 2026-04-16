@@ -21,7 +21,7 @@ import type { TokenBudgetController, BudgetReconciliation } from '../domains/bud
 import { ContextAssembler } from '../domains/context/ContextAssembler'
 import type { ContextAssemblyConfig } from '../domains/context/ContextAssembler'
 import { MessageAssembler } from '../domains/message/MessageAssembler'
-import type { CompressionLevel } from '../domains/context/CompressionManager'
+import type { CompressionLevel } from '../domains/context/compressionShared'
 import { countTokens } from '@shared/utils/tokenCounter'
 import { useAgentStore } from '../store/AgentStore'
 

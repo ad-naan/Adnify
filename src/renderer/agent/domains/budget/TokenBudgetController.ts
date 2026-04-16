@@ -17,8 +17,8 @@
 import { logger } from '@utils/Logger'
 import type { WorkMode } from '@/shared/types/workMode'
 import type { ModeDescriptor } from '../mode/ModeDescriptor'
-import type { CompressionLevel } from '../context/CompressionManager'
-import { calculateLevel, LEVEL_NAMES } from '../context/CompressionManager'
+import type { CompressionLevel } from '../context/compressionShared'
+import { calculateLevel, LEVEL_NAMES } from '../context/compressionShared'
 
 // ===== Budget Configuration =====
 

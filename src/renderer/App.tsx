@@ -17,8 +17,8 @@ import { startupMetrics } from '@shared/utils/startupMetrics'
 startupMetrics.mark('app-module-loaded')
 
 const Editor = lazy(() => import('./components/editor/Editor'))
-const Sidebar = lazy(() => import('./components/sidebar').then(m => ({ default: m.Sidebar })))
-const ChatPanel = lazy(() => import('./components/agent').then(m => ({ default: m.ChatPanel })))
+const Sidebar = lazy(() => import('./components/sidebar/Sidebar'))
+const ChatPanel = lazy(() => import('./components/agent/ChatPanel'))
 const ShellStudio = lazy(() => import('./shell/components/ShellStudio'))
 
 const TerminalPanel = lazy(() => import('./components/panels/TerminalPanel'))

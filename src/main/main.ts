@@ -12,8 +12,11 @@ import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
+import { destroyIndexService } from './indexing/indexService'
+import { setCustomLspBinDir } from './lsp/installer'
+import { lspManager as mainLspManager } from './lsp/lspManager'
 import { cleanupFileWatcher } from './security/fileWatcher'
-import { createScopedStore, getBootstrapStore } from './services/configPath'
+import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
 import {
   shutdownWindowController,
   type ShutdownWindowPresentation,
@@ -68,7 +71,7 @@ let appQuitInProgress = false
 
 // 延迟加载的模块
 let ipcModule: typeof import('./ipc') | null = null
-let lspManager: typeof import('./lsp/lspManager').lspManager | null = null
+let lspManager = mainLspManager
 let securityManager: typeof import('./security').securityManager | null = null
 
 ipcMain.handle('app:shutdown-response', (_event, requestId: string, success: boolean) => {
@@ -494,7 +497,6 @@ async function performGlobalCleanup() {
     )
     // 4. 销毁所有 IndexService Worker 线程
     try {
-      const { destroyIndexService } = await import('./indexing/indexService')
       destroyIndexService()
     } catch { /* ignore */ }
     logger.system.info('[Main] Global cleanup completed successfully')
@@ -510,23 +512,20 @@ async function performGlobalCleanup() {
 
 async function initializeModules(firstWin: BrowserWindow) {
   // 并行加载所有模块
-  const [ipc, lsp, security, windowIpc, lspInstaller, updaterService] = await Promise.all([
+  const [ipc, security, windowIpc, updaterService] = await Promise.all([
     import('./ipc'),
-    import('./lsp/lspManager'),
     import('./security'),
     import('./ipc/window'),
-    import('./lsp/installer'),
     import('./services/updater'),
   ])
 
   ipcModule = ipc
-  lspManager = lsp.lspManager
   securityManager = security.securityManager
 
   // 从配置加载自定义 LSP 安装路径
   const customLspPath = configStore.get('lspSettings.customBinDir') as string | undefined
   if (customLspPath) {
-    lspInstaller.setCustomLspBinDir(customLspPath)
+    setCustomLspBinDir(customLspPath)
   }
 
   // 窗口控制已在创建窗口前注册，此处仅确保 window:new 等依赖 createWindow 的 handler 生效
@@ -630,7 +629,6 @@ app.whenReady().then(async () => {
   logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
 
   if (enableFileLogging) {
-    const { getUserConfigDir } = await import('./services/configPath')
     const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
     logger.enableFileLogging(logPath)
     logger.system.info('[Main] File logging enabled', {
