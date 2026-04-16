@@ -325,6 +325,8 @@ function createGroupedAPI() {
     // 应用错误（来自主进程）
     app: {
       onError: (callback: Parameters<typeof raw.onAppError>[0]) => raw.onAppError(callback),
+      respondToShutdownRequest: (requestId: string, success: boolean) => raw.respondToShutdownRequest(requestId, success),
+      onShutdownRequested: (callback: Parameters<typeof raw.onShutdownRequested>[0]) => raw.onShutdownRequested(callback),
     },
 
     // 命令执行

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from './store'
-import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize } from './hooks'
+import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState } from './hooks'
 import TitleBar from './components/layout/TitleBar'
 import ActivityBar from './components/layout/ActivityBar'
 import StatusBar from './components/layout/StatusBar'
@@ -12,29 +12,19 @@ import GlobalToastContainer from './components/common/GlobalToastContainer'
 import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
-import { emotionAdapter } from './agent/emotion/emotionAdapter'
-import { emotionDetectionEngine } from './agent/emotion/emotionDetectionEngine'
-import { terminalWatcher } from './agent/services/terminalWatcher'
 import { startupMetrics } from '@shared/utils/startupMetrics'
-import { adnifyDir } from './services/adnifyDirService'
-import { flushAgentSessionPersistence } from './agent/store/AgentStore'
-import { terminalManager } from './services/TerminalManager'
 
 startupMetrics.mark('app-module-loaded')
 
-// 懒加载组件 - 按使用频率和大小分组
-// 核心编辑区域
 const Editor = lazy(() => import('./components/editor/Editor'))
 const Sidebar = lazy(() => import('./components/sidebar').then(m => ({ default: m.Sidebar })))
 const ChatPanel = lazy(() => import('./components/agent').then(m => ({ default: m.ChatPanel })))
 const ShellStudio = lazy(() => import('./shell/components/ShellStudio'))
 
-// 面板组件
 const TerminalPanel = lazy(() => import('./components/panels/TerminalPanel'))
 const DebugPanel = lazy(() => import('./components/panels/DebugPanel'))
 const ComposerPanel = lazy(() => import('./components/panels/ComposerPanel'))
 
-// 对话框组件
 const OnboardingWizard = lazy(() => import('./components/dialogs/OnboardingWizard'))
 const SettingsModal = lazy(() => import('./components/settings/SettingsModal'))
 const CommandPalette = lazy(() => import('./components/dialogs/CommandPalette'))
@@ -43,49 +33,19 @@ const QuickOpen = lazy(() => import('./components/dialogs/QuickOpen'))
 const AboutDialog = lazy(() => import('./components/dialogs/AboutDialog'))
 const WelcomePage = lazy(() => import('./components/welcome/WelcomePage'))
 
-// Toast 初始化
 function ToastInitializer() {
   const toastContext = useToast()
+
   useEffect(() => {
     setGlobalToast(toastContext)
   }, [toastContext])
+
   return null
 }
 
-// 主应用内容
 function AppContent() {
-  // 初始化情绪适配器和终端监听器（应用级别，只初始化一次）
-  useEffect(() => {
-    emotionDetectionEngine.start()
-    emotionAdapter.initialize()
-    terminalWatcher.start()
+  useAppShutdownState()
 
-    // 窗口关闭时清理终端资源（关闭所有 PTY 进程）
-    const handleUnload = () => {
-      try {
-        flushAgentSessionPersistence()
-      } catch { /* ignore */ }
-
-      try {
-        terminalManager.cleanup()
-      } catch { /* ignore */ }
-
-      try {
-        void adnifyDir.flush()
-      } catch { /* ignore */ }
-    }
-    window.addEventListener('beforeunload', handleUnload)
-
-    return () => {
-      terminalWatcher.stop()
-      emotionAdapter.cleanup()
-      emotionDetectionEngine.stop()
-      window.removeEventListener('beforeunload', handleUnload)
-    }
-  }, [])
-
-  // 使用 selector 优化性能，避免不必要的重渲染
-  // Zustand 会自动优化这些独立的 selector，只订阅相关状态变化
   const workspace = useStore((state) => state.workspace)
   const showSettings = useStore((state) => state.showSettings)
   const activeSidePanel = useStore((state) => state.activeSidePanel)
@@ -106,31 +66,23 @@ function AppContent() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
 
-  // 暴露 store 给插件系统（在组件挂载时设置，避免 SSR 问题）
   useEffect(() => {
     window.__ADNIFY_STORE__ = { getState: () => useStore.getState() }
   }, [])
 
-  // 窗口标题
   useWindowTitle()
-
-  // 文件监听
   useFileWatcher()
+  useGlobalShortcuts()
 
-  // 应用初始化
   useAppInit({
     onInitialized: (result) => {
       setIsInitialized(true)
       if (result.shouldShowOnboarding) {
         setShowOnboarding(true)
       }
-    }
+    },
   })
 
-  // 全局快捷键
-  useGlobalShortcuts()
-
-  // 面板拖拽
   const sidebarRef = useRef<HTMLDivElement>(null)
   const chatRef = useRef<HTMLDivElement>(null)
 
@@ -140,8 +92,7 @@ function AppContent() {
   const handleCloseKeyboardShortcuts = useCallback(() => setShowKeyboardShortcuts(false), [])
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
 
-  // Memoize hasWorkspace 计算
-  const hasWorkspace = useMemo(() => workspace && workspace.roots.length > 0, [workspace])
+  const hasWorkspace = useMemo(() => Boolean(workspace && workspace.roots.length > 0), [workspace])
   const isShellStudioActive = activeSidePanel === 'shell'
 
   return (
@@ -167,7 +118,6 @@ function AppContent() {
               )}
 
               <div className="flex-1 flex min-w-0 bg-background relative">
-                {/* 情绪环境光效 */}
                 <EmotionAmbientGlow />
 
                 <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -227,7 +177,6 @@ function AppContent() {
         )}
       </div>
 
-      {/* 模态框 */}
       {showSettings && (
         <Suspense fallback={<SettingsSkeleton />}>
           <SettingsModal />
@@ -269,10 +218,9 @@ function AppContent() {
           <AboutDialog onClose={() => setShowAbout(false)} />
         </Suspense>
       )}
+
       <GlobalConfirmDialog />
       <GlobalToastContainer />
-
-      {/* 情绪组件已合并至状态栏 */}
     </div>
   )
 }

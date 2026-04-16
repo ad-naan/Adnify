@@ -583,7 +583,6 @@ export const en = {
   'workspace.folderNotExist': 'Folder does not exist, removed from list',
   'workspace.openFolderFailed': 'Failed to open folder, please try again',
   'workspace.openWorkspaceFailed': 'Failed to open workspace, please try again',
-
   // Editor Tabs
   'editor.fileDeleted': 'File has been deleted',
 
