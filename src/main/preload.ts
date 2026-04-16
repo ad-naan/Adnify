@@ -438,6 +438,13 @@ export interface ElectronAPI {
 contextBridge.exposeInMainWorld('electronAPI', {
   appReady: () => ipcRenderer.send('app:ready'),
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  respondToShutdownRequest: (requestId: string, success: boolean) =>
+    ipcRenderer.invoke('app:shutdown-response', requestId, success),
+  onShutdownRequested: (callback: (event: { requestId: string; reason: 'window-close' | 'app-quit' }) => void) => {
+    const handler = (_: IpcRendererEvent, event: { requestId: string; reason: 'window-close' | 'app-quit' }) => callback(event)
+    ipcRenderer.on('app:shutdown-requested', handler)
+    return () => ipcRenderer.removeListener('app:shutdown-requested', handler)
+  },
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),

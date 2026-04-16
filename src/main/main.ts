@@ -6,13 +6,18 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
+import { randomUUID } from 'crypto'
 import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import type Store from 'electron-store'
 import { cleanupFileWatcher } from './security/fileWatcher'
 import { createScopedStore, getBootstrapStore } from './services/configPath'
+import {
+  shutdownWindowController,
+  type ShutdownWindowPresentation,
+} from './services/window/ShutdownWindowController'
 
 // ==========================================
 // 常量定义
@@ -56,12 +61,64 @@ async function initStores() {
 const windows = new Map<number, BrowserWindow>()
 const windowWorkspaces = new Map<number, string[]>()
 let lastActiveWindow: BrowserWindow | null = null
+const pendingShutdownRequests = new Map<string, (success: boolean) => void>()
+const authorizedCloseWindows = new Set<number>()
+let appQuitInProgress = false
 
 
 // 延迟加载的模块
 let ipcModule: typeof import('./ipc') | null = null
 let lspManager: typeof import('./lsp/lspManager').lspManager | null = null
 let securityManager: typeof import('./security').securityManager | null = null
+
+ipcMain.handle('app:shutdown-response', (_event, requestId: string, success: boolean) => {
+  const resolver = pendingShutdownRequests.get(requestId)
+  if (!resolver) {
+    return false
+  }
+
+  pendingShutdownRequests.delete(requestId)
+  resolver(success)
+  return true
+})
+
+async function requestRendererShutdown(
+  win: BrowserWindow,
+  reason: 'window-close' | 'app-quit',
+  timeoutMs = 8000
+): Promise<boolean> {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) {
+    return true
+  }
+
+  const requestId = randomUUID()
+
+  return await new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => {
+      pendingShutdownRequests.delete(requestId)
+      logger.system.warn('[Main] Renderer shutdown save timed out', { windowId: win.id, reason, requestId, timeoutMs })
+      resolve(false)
+    }, timeoutMs)
+
+    pendingShutdownRequests.set(requestId, (success) => {
+      clearTimeout(timeout)
+      resolve(success)
+    })
+
+    try {
+      win.webContents.send('app:shutdown-requested', { requestId, reason })
+    } catch (error) {
+      clearTimeout(timeout)
+      pendingShutdownRequests.delete(requestId)
+      logger.system.warn('[Main] Failed to notify renderer about shutdown request', { windowId: win.id, reason, error })
+      resolve(false)
+    }
+  })
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 // ==========================================
 // 单例锁
@@ -127,6 +184,95 @@ function getThemeBackgroundColor(): string {
     return themes[themeId] || WINDOW_CONFIG.BG_COLOR;
   } catch {
     return WINDOW_CONFIG.BG_COLOR;
+  }
+}
+
+function normalizeRgbColor(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') {
+    return fallback
+  }
+
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  if (/^\d{1,3}( \d{1,3}){2}$/.test(normalized)) {
+    return normalized
+  }
+
+  if (/^#?[0-9a-fA-F]{6}$/.test(normalized)) {
+    const hex = normalized.startsWith('#') ? normalized.slice(1) : normalized
+    return [
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16),
+    ].join(' ')
+  }
+
+  return fallback
+}
+
+function getShutdownFallbackPresentation(): ShutdownWindowPresentation {
+  const themeBg = normalizeRgbColor(configStore?.get('themeBg'), '18 18 21')
+  const themeType = configStore?.get('themeId') === 'dawn' ? 'light' : 'dark'
+
+  return {
+    language: configStore?.get('language') === 'en' ? 'en' : 'zh',
+    themeType,
+    background: themeBg,
+    surface: themeType === 'light' ? '248 249 250' : '25 25 29',
+    border: themeType === 'light' ? '222 226 230' : '40 40 48',
+    text: themeType === 'light' ? '33 37 41' : '242 242 247',
+    muted: themeType === 'light' ? '134 142 150' : '161 161 180',
+    accent: themeType === 'light' ? '37 99 235' : '139 92 246',
+    success: themeType === 'light' ? '22 163 74' : '52 211 153',
+    warning: themeType === 'light' ? '217 119 6' : '251 191 36',
+  }
+}
+
+async function getShutdownPresentation(win?: BrowserWindow | null): Promise<ShutdownWindowPresentation> {
+  const fallback = getShutdownFallbackPresentation()
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) {
+    return fallback
+  }
+
+  try {
+    const snapshot = await win.webContents.executeJavaScript(`(() => {
+      const root = document.documentElement
+      const styles = getComputedStyle(root)
+      const store = window.__ADNIFY_STORE__?.getState?.()
+      const asRgb = (value, fallback) => {
+        if (typeof value !== 'string') return fallback
+        const normalized = value.trim().replace(/\\s+/g, ' ')
+        return /^\\d{1,3}( \\d{1,3}){2}$/.test(normalized) ? normalized : fallback
+      }
+
+      return {
+        language: store?.language === 'en' ? 'en' : 'zh',
+        themeType: root.getAttribute('data-theme') === 'light' ? 'light' : 'dark',
+        background: asRgb(styles.getPropertyValue('--background'), '${fallback.background}'),
+        surface: asRgb(styles.getPropertyValue('--surface'), '${fallback.surface}'),
+        border: asRgb(styles.getPropertyValue('--border'), '${fallback.border}'),
+        text: asRgb(styles.getPropertyValue('--text-primary'), '${fallback.text}'),
+        muted: asRgb(styles.getPropertyValue('--text-muted'), '${fallback.muted}'),
+        accent: asRgb(styles.getPropertyValue('--accent'), '${fallback.accent}'),
+        success: asRgb(styles.getPropertyValue('--status-success'), '${fallback.success}'),
+        warning: asRgb(styles.getPropertyValue('--status-warning'), '${fallback.warning}'),
+      }
+    })()`, true)
+
+    return {
+      language: snapshot?.language === 'en' ? 'en' : fallback.language,
+      themeType: snapshot?.themeType === 'light' ? 'light' : fallback.themeType,
+      background: normalizeRgbColor(snapshot?.background, fallback.background),
+      surface: normalizeRgbColor(snapshot?.surface, fallback.surface),
+      border: normalizeRgbColor(snapshot?.border, fallback.border),
+      text: normalizeRgbColor(snapshot?.text, fallback.text),
+      muted: normalizeRgbColor(snapshot?.muted, fallback.muted),
+      accent: normalizeRgbColor(snapshot?.accent, fallback.accent),
+      success: normalizeRgbColor(snapshot?.success, fallback.success),
+      warning: normalizeRgbColor(snapshot?.warning, fallback.warning),
+    }
+  } catch (error) {
+    logger.system.warn('[Main] Failed to read shutdown presentation snapshot', { error })
+    return fallback
   }
 }
 
@@ -208,8 +354,40 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     lastActiveWindow = win
   })
 
-  win.on('close', () => {
-    logger.system.info(`[Main] Window ${windowId} close event triggered`)
+  win.on('close', (event) => {
+    if (authorizedCloseWindows.delete(windowId) || appQuitInProgress) {
+      logger.system.info(`[Main] Window ${windowId} close event allowed`)
+      return
+    }
+
+    event.preventDefault()
+    logger.system.info(`[Main] Window ${windowId} close event intercepted for state save`)
+
+    void (async () => {
+      const isLastWindowQuit = process.platform !== 'darwin' && windows.size === 1
+      const shutdownReason = isLastWindowQuit ? 'app-quit' : 'window-close'
+      const presentation = await getShutdownPresentation(win)
+      await shutdownWindowController.show(shutdownReason, presentation, win)
+      const success = await requestRendererShutdown(win, shutdownReason)
+      await shutdownWindowController.update(shutdownReason, success ? 'done' : 'error')
+
+      if (isLastWindowQuit) {
+        appQuitInProgress = true
+        await withTimeout(performGlobalCleanup(), 5000, 'performGlobalCleanup total')
+      }
+
+      if (win.isDestroyed()) return
+      authorizedCloseWindows.add(windowId)
+      win.close()
+      await sleep(success ? 700 : 1100)
+      await shutdownWindowController.close()
+
+      if (isLastWindowQuit) {
+        isCleanupDone = true
+        logger.system.info('[Main] Last window close cleanup done, finalizing app quit')
+        app.quit()
+      }
+    })()
   })
 
   // 在 close 事件中提前捕获 webContentsId（closed 时 webContents 可能已销毁）
@@ -498,6 +676,9 @@ app.on('second-instance', () => {
 
 app.on('window-all-closed', () => {
   logger.system.info('[Main] All windows closed, platform:', process.platform)
+  if (appQuitInProgress && !isCleanupDone) {
+    return
+  }
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -513,8 +694,32 @@ app.on('before-quit', async (e) => {
     e.preventDefault()
     logger.system.info('[Main] Intercepting before-quit for cleanup')
 
+    appQuitInProgress = true
+
+    const mainWindow = getMainWindow()
+    const presentation = await getShutdownPresentation(mainWindow)
+    await shutdownWindowController.show('app-quit', presentation, mainWindow)
+
+    const openWindows = [...windows.values()].filter(win => !win.isDestroyed())
+    const results = await Promise.all(openWindows.map(async (win) => {
+      const success = await requestRendererShutdown(win, 'app-quit')
+      authorizedCloseWindows.add(win.id)
+      return success
+    }))
+    const allSucceeded = results.every(Boolean)
+    await shutdownWindowController.update('app-quit', allSucceeded ? 'done' : 'error')
+
     // 总超时 5 秒，防止清理无限挂起导致应用无法退出
     await withTimeout(performGlobalCleanup(), 5000, 'performGlobalCleanup total')
+
+    openWindows.forEach(win => {
+      if (!win.isDestroyed()) {
+        win.close()
+      }
+    })
+
+    await sleep(allSucceeded ? 700 : 1100)
+    await shutdownWindowController.close()
 
     isCleanupDone = true
     logger.system.info('[Main] Cleanup done, re-triggering app.quit()')

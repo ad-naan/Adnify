@@ -315,6 +315,8 @@ export interface ElectronAPI {
   // App
   appReady: () => void
   getAppVersion: () => Promise<string>
+  respondToShutdownRequest: (requestId: string, success: boolean) => Promise<boolean>
+  onShutdownRequested: (callback: (event: { requestId: string; reason: 'window-close' | 'app-quit' }) => void) => () => void
 
   // Window
   minimize: () => void

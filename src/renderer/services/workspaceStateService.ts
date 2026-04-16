@@ -56,6 +56,16 @@ export async function saveWorkspaceState(): Promise<void> {
   logger.system.info('[WorkspaceState] Saved:', state.openFiles.length, 'files')
 }
 
+export async function flushWorkspaceStatePersistence(): Promise<void> {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+
+  await saveWorkspaceState()
+  await workspaceStateRepository.flush()
+}
+
 export async function restoreWorkspaceState(): Promise<void> {
   const { restoreOpenFiles, setSidebarWidth, setChatWidth, setTerminalVisible, setTerminalLayout } = useStore.getState()
 
@@ -124,7 +134,7 @@ export function initWorkspaceStateSync(): () => void {
   )
 
   const handleBeforeUnload = async () => {
-    await workspaceStateRepository.flush()
+    await flushWorkspaceStatePersistence()
   }
   window.addEventListener('beforeunload', handleBeforeUnload)
 

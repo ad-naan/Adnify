@@ -107,6 +107,10 @@ class ShellRegistryService {
     }
   }
 
+  async flush() {
+    await this.persist()
+  }
+
   async load(): Promise<ShellState> {
     if (this.loaded) return this.getState()
     if (this.loadingPromise) return this.loadingPromise
