@@ -4,6 +4,7 @@
 
 import type { ToolCall, ToolStreamingPreview } from '@/shared/types'
 import type { ChatMessage } from './messages'
+import { getMessageText } from './messages'
 import type { MessageCheckpoint } from './checkpoint'
 import type { ContextItem } from './context'
 import type { StructuredSummary } from '../domains/context/types'
@@ -54,6 +55,7 @@ export interface ChatThread {
   id: string
   createdAt: number
   lastModified: number
+  title?: string
 
   messages: ChatMessage[]
   contextItems: ContextItem[]
@@ -99,6 +101,7 @@ export interface PersistedChatThread {
   id: string
   createdAt: number
   lastModified: number
+  title?: string
   messages: ChatMessage[]
   contextItems: ContextItem[]
   messageCheckpoints?: MessageCheckpoint[]
@@ -135,6 +138,7 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
     id: thread.id,
     createdAt: thread.createdAt,
     lastModified: thread.lastModified,
+    title: thread.title,
     messages: thread.messages,
     contextItems: thread.contextItems,
     messageCheckpoints: thread.messageCheckpoints ?? [],
@@ -160,4 +164,19 @@ export function fromPersistedChatThread(thread: PersistedChatThread): ChatThread
     messageCheckpoints: thread.messageCheckpoints || [],
     ...createRuntimeThreadState(),
   }
+}
+
+export function getThreadDisplayTitle(thread: Pick<ChatThread, 'title' | 'messages'>, fallback = 'New Chat'): string {
+  const manualTitle = thread.title?.trim()
+  if (manualTitle) {
+    return manualTitle
+  }
+
+  const firstUserMessage = thread.messages.find(message => message.role === 'user')
+  if (!firstUserMessage) {
+    return fallback
+  }
+
+  const extractedTitle = getMessageText(firstUserMessage.content).trim().slice(0, 60)
+  return extractedTitle || fallback
 }

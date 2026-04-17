@@ -36,6 +36,7 @@ export class SessionFileStore {
 
           return {
             id: threadId,
+            title: typeof data.title === 'string' ? data.title : undefined,
             lastModified: typeof data.lastModified === 'number' ? data.lastModified : 0,
             messageCount: typeof data.messageCount === 'number' ? data.messageCount : 0,
           } satisfies PersistedThreadSummary

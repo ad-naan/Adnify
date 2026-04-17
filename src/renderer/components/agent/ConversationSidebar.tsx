@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent/store/AgentStore'
 import { useAgentActions, useAllThreads } from '@/renderer/hooks/useAgent'
-import { ChatThread, getMessageText } from '@/renderer/agent/types'
+import { ChatThread, getMessageText, getThreadDisplayTitle } from '@/renderer/agent/types'
 import { Branch } from '@/renderer/agent/store/slices/branchSlice'
 import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
 import { Button } from '../ui'
@@ -164,15 +164,31 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
 
 function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, onClose: () => void, language: string }) {
   const currentThreadId = useAgentStore(state => state.currentThreadId)
-  const { switchThread, deleteThread } = useAgentActions()
+  const { switchThread, deleteThread, renameThread } = useAgentActions()
   const allThreads = useAllThreads()
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+
+  const handleStartEdit = (thread: ChatThread) => {
+    setEditingId(thread.id)
+    setEditName(getThreadDisplayTitle(thread))
+  }
+
+  const handleSaveEdit = () => {
+    if (editingId && editName.trim()) {
+      renameThread(editingId, editName.trim())
+    }
+    setEditingId(null)
+  }
 
   const filteredThreads = useMemo(() => {
     return allThreads.filter(thread => {
       if (!searchQuery) return true
+      const title = getThreadDisplayTitle(thread).toLowerCase()
       const firstMsg = thread.messages.find(m => m.role === 'user')
-      const text = firstMsg ? getMessageText(firstMsg.content) : ''
-      return text.toLowerCase().includes(searchQuery.toLowerCase())
+      const text = firstMsg ? getMessageText(firstMsg.content).toLowerCase() : ''
+      const normalizedQuery = searchQuery.toLowerCase()
+      return title.includes(normalizedQuery) || text.includes(normalizedQuery)
     })
   }, [allThreads, searchQuery])
 
@@ -187,32 +203,49 @@ function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, 
           key={thread.id}
           thread={thread}
           isActive={currentThreadId === thread.id}
+          isEditing={editingId === thread.id}
+          editName={editName}
           language={language}
           onSelect={() => {
             switchThread(thread.id)
             onClose()
           }}
           onDelete={() => deleteThread(thread.id)}
+          onStartEdit={() => handleStartEdit(thread)}
+          onEditNameChange={setEditName}
+          onSaveEdit={handleSaveEdit}
+          onCancelEdit={() => setEditingId(null)}
         />
       ))}
     </div>
   )
 }
 
-function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
+function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect, onDelete, onStartEdit, onEditNameChange, onSaveEdit, onCancelEdit }: {
   thread: ChatThread
   isActive: boolean
+  isEditing: boolean
+  editName: string
   language: string
   onSelect: () => void
   onDelete: () => void
+  onStartEdit: () => void
+  onEditNameChange: (value: string) => void
+  onSaveEdit: () => void
+  onCancelEdit: () => void
 }) {
-  const [preview, setPreview] = React.useState<string>('New chat')
+  const [preview, setPreview] = React.useState<string>(getThreadDisplayTitle(thread))
   const timeStr = getRelativeTime(thread.lastModified, language)
 
   React.useEffect(() => {
+    if (thread.title?.trim()) {
+      setPreview(thread.title.trim())
+      return
+    }
+
     const firstUserMsg = thread.messages.find(m => m.role === 'user')
     if (firstUserMsg) {
-      setPreview(getMessageText(firstUserMsg.content).slice(0, 60))
+      setPreview(getThreadDisplayTitle(thread))
       return
     }
 
@@ -224,8 +257,11 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
         }
       }).catch(() => {
       })
+      return
     }
-  }, [thread.id, thread.messages])
+
+    setPreview(getThreadDisplayTitle(thread))
+  }, [thread.id, thread.messages, thread.title])
 
   return (
     <div
@@ -245,11 +281,32 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
       </div>
 
       <div className="flex-1 min-w-0 overflow-hidden pt-0.5">
-        <div className="flex items-center justify-between gap-2">
-          <h4 className={`text-sm font-medium truncate pr-6 ${isActive ? 'text-accent' : 'text-text-primary'}`}>
-            {preview || 'New Chat'}
-          </h4>
-        </div>
+        {isEditing ? (
+          <div className="flex items-center gap-1 pr-6" onClick={e => e.stopPropagation()}>
+            <input
+              autoFocus
+              value={editName}
+              onChange={e => onEditNameChange(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') onSaveEdit()
+                if (e.key === 'Escape') onCancelEdit()
+              }}
+              className="w-full bg-surface text-sm px-2 py-1 rounded border border-accent/50 focus:outline-none"
+            />
+            <Button size="icon" variant="ghost" className="h-7 w-7 text-green-400 hover:bg-green-500/10" onClick={e => {
+              e.stopPropagation()
+              onSaveEdit()
+            }}>
+              <Check className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <h4 className={`text-sm font-medium truncate pr-6 ${isActive ? 'text-accent' : 'text-text-primary'}`}>
+              {preview || 'New Chat'}
+            </h4>
+          </div>
+        )}
         <div className="flex items-center gap-3 mt-1.5">
           <span className="text-[10px] text-text-muted/70 flex items-center gap-1">
             <Clock className="w-3 h-3" />
@@ -261,15 +318,32 @@ function ThreadItem({ thread, isActive, language, onSelect, onDelete }: {
         </div>
       </div>
 
-      <button
-        onClick={e => {
-          e.stopPropagation()
-          onDelete()
-        }}
-        className="absolute right-2 top-2 p-1.5 rounded-lg text-text-muted/60 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500 transition-all scale-90 hover:scale-100"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      {!isEditing && (
+        <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/50 backdrop-blur-sm rounded-lg">
+          <Tooltip content="Rename">
+            <button
+              onClick={e => {
+                e.stopPropagation()
+                onStartEdit()
+              }}
+              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Delete">
+            <button
+              onClick={e => {
+                e.stopPropagation()
+                onDelete()
+              }}
+              className="p-1.5 rounded-lg text-text-muted/60 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+        </div>
+      )}
     </div>
   )
 }
