@@ -169,6 +169,7 @@ export function useAgentCommands() {
 export function useAgentActions() {
   return useMemo(() => ({
     createThread: getAgentActions().createThread,
+    renameThread: getAgentActions().renameThread,
     switchThread: getAgentActions().switchThread,
     deleteThread: getAgentActions().deleteThread,
     deleteMessagesAfter: getAgentActions().deleteMessagesAfter,

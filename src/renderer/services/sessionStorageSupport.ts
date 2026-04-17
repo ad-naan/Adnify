@@ -29,6 +29,7 @@ export interface AgentSessionSnapshot {
 
 export interface PersistedThreadSummary {
   id: string
+  title?: string
   lastModified: number
   messageCount: number
 }
@@ -144,6 +145,7 @@ export function normalizePersistedChatThread(thread: PersistedChatThread): Persi
 
   return {
     ...thread,
+    title: typeof thread.title === 'string' ? thread.title : undefined,
     messages,
     contextItems: Array.isArray(thread.contextItems) ? thread.contextItems : [],
     messageCheckpoints: Array.isArray(thread.messageCheckpoints) ? thread.messageCheckpoints : [],
@@ -177,6 +179,7 @@ export function normalizeLegacyThreadRecord(threadId: string, value: unknown): C
     id: typeof value.id === 'string' ? value.id : threadId,
     createdAt,
     lastModified,
+    title: typeof value.title === 'string' ? value.title : undefined,
     messages,
     contextItems,
     messageCheckpoints,

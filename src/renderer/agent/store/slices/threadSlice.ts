@@ -21,6 +21,7 @@ export interface ThreadStoreState {
 
 export interface ThreadActions {
     createThread: (options?: { activate?: boolean }) => string
+    renameThread: (threadId: string, title: string) => boolean
     switchThread: (threadId: string) => void
     deleteThread: (threadId: string) => void
     getCurrentThread: () => ChatThread | null
@@ -172,6 +173,33 @@ export const createThreadSlice: StateCreator<
         }
 
         return thread.id
+    },
+
+    renameThread: (threadId, title) => {
+        const trimmedTitle = title.trim()
+        if (!trimmedTitle) return false
+
+        let renamed = false
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread || thread.title === trimmedTitle) {
+                return state
+            }
+
+            renamed = true
+            return {
+                threads: updateThread(state.threads, threadId, {
+                    title: trimmedTitle,
+                }),
+            }
+        })
+
+        if (renamed) {
+            void agentSessionRepository.flush()
+        }
+
+        return renamed
     },
 
     switchThread: (threadId) => {
