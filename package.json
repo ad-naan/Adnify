@@ -145,8 +145,7 @@
     "win": {
       "icon": "resources/icon.ico",
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
@@ -159,9 +158,6 @@
       "uninstallerIcon": "resources/icon.ico",
       "installerHeaderIcon": "resources/icon.ico",
       "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-${arch}-Portable.${ext}"
     },
     "mac": {
       "icon": "resources/icon.icns",
@@ -177,8 +173,7 @@
       "icon": "resources/icon.png",
       "artifactName": "${productName}-${version}-${arch}-linux.${ext}",
       "target": [
-        "AppImage",
-        "tar.gz"
+        "AppImage"
       ],
       "category": "Development"
     },

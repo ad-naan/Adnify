@@ -58,7 +58,6 @@ jobs:
           name: windows-${{ matrix.arch }}
           path: |
             release/*.exe
-            release/*.zip
             release/*.yml
             release/*.yaml
             release/*.blockmap
@@ -161,7 +160,6 @@ jobs:
           name: linux-${{ matrix.arch }}
           path: |
             release/*.AppImage
-            release/*.tar.gz
             release/*.yml
             release/*.yaml
           if-no-files-found: ignore
@@ -187,8 +185,8 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p release-files
-          # 复制安装包
-          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
+          # 复制对外发布的安装包
+          find artifacts -type f \( -name "Adnify-Setup-*.exe" -o -name "*.dmg" -o -name "*-mac.zip" -o -name "*.AppImage" \) -exec cp {} release-files/ \;
           # 复制 blockmap 文件
           find artifacts -type f -name "*.blockmap" -exec cp {} release-files/ \;
           
@@ -234,15 +232,13 @@ jobs:
             |------|------|------|
             | Windows 安装版 | x64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-x64.exe` |
             | Windows 安装版 | arm64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-arm64.exe` |
-            | Windows 便携版 | x64 | `Adnify-${{ needs.get-version.outputs.version }}-x64-Portable.exe` |
-            | Windows 便携版 | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64-Portable.exe` |
             | macOS | Intel (x64) | `Adnify-${{ needs.get-version.outputs.version }}-x64-mac.dmg` |
             | macOS | Apple Silicon (arm64) | `Adnify-${{ needs.get-version.outputs.version }}-arm64-mac.dmg` |
             | Linux | x64 | `Adnify-${{ needs.get-version.outputs.version }}-x86_64-linux.AppImage` |
             | Linux | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64-linux.AppImage` |
             
             ### 安装说明
-            - **Windows**: 下载对应架构的 Setup.exe 运行安装，或下载 Portable 版本直接运行
+            - **Windows**: 下载对应架构的 Setup.exe 运行安装
             - **macOS**: 下载对应架构的 .dmg 拖入 Applications。如提示"已损坏"，请在终端执行：`xattr -cr /Applications/Adnify.app`
             - **Linux**: 下载对应架构的 .AppImage，`chmod +x` 后运行
             
@@ -282,7 +278,7 @@ jobs:
           TAG="v$VERSION"
           GITHUB_RELEASE_URL="https://github.com/adnaan-worker/adnify/releases/tag/$TAG"
           
-          BODY="## Adnify v$VERSION\n\n### 下载 / Downloads\n\n请前往 GitHub Release 下载：\n\n👉 **[$GITHUB_RELEASE_URL]($GITHUB_RELEASE_URL)**\n\n| 平台 | 架构 | 文件 |\n|------|------|------|\n| Windows 安装版 | x64 | [Adnify-Setup-$VERSION-x64.exe]($GITHUB_RELEASE_URL) |\n| Windows 安装版 | arm64 | [Adnify-Setup-$VERSION-arm64.exe]($GITHUB_RELEASE_URL) |\n| Windows 便携版 | x64 | [Adnify-$VERSION-x64-Portable.exe]($GITHUB_RELEASE_URL) |\n| Windows 便携版 | arm64 | [Adnify-$VERSION-arm64-Portable.exe]($GITHUB_RELEASE_URL) |\n| macOS | Intel (x64) | [Adnify-$VERSION-x64-mac.dmg]($GITHUB_RELEASE_URL) |\n| macOS | Apple Silicon | [Adnify-$VERSION-arm64-mac.dmg]($GITHUB_RELEASE_URL) |\n| Linux | x64 | [Adnify-$VERSION-x86_64-linux.AppImage]($GITHUB_RELEASE_URL) |\n| Linux | arm64 | [Adnify-$VERSION-arm64-linux.AppImage]($GITHUB_RELEASE_URL) |"
+          BODY="## Adnify v$VERSION\n\n### 下载 / Downloads\n\n请前往 GitHub Release 下载：\n\n👉 **[$GITHUB_RELEASE_URL]($GITHUB_RELEASE_URL)**\n\n| 平台 | 架构 | 文件 |\n|------|------|------|\n| Windows 安装版 | x64 | [Adnify-Setup-$VERSION-x64.exe]($GITHUB_RELEASE_URL) |\n| Windows 安装版 | arm64 | [Adnify-Setup-$VERSION-arm64.exe]($GITHUB_RELEASE_URL) |\n| macOS | Intel (x64) | [Adnify-$VERSION-x64-mac.dmg]($GITHUB_RELEASE_URL) |\n| macOS | Apple Silicon | [Adnify-$VERSION-arm64-mac.dmg]($GITHUB_RELEASE_URL) |\n| Linux | x64 | [Adnify-$VERSION-x86_64-linux.AppImage]($GITHUB_RELEASE_URL) |\n| Linux | arm64 | [Adnify-$VERSION-arm64-linux.AppImage]($GITHUB_RELEASE_URL) |"
           
           RESPONSE=$(curl -s -X POST \
             "https://gitee.com/api/v5/repos/adnaan/adnify/releases" \

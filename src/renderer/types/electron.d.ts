@@ -224,6 +224,7 @@ export interface UpdateStatus {
   downloadUrl?: string
   progress?: number
   error?: string
+  requiresManualDownload: boolean
   isPortable: boolean
 }
 
