@@ -45,6 +45,9 @@ export * from './context'
 // 交互式内容类型
 export * from './interactive'
 
+// 文件变更类型
+export * from './fileChange'
+
 // 检查点类型
 export * from './checkpoint'
 

@@ -105,6 +105,7 @@ export const createCheckpointSlice: StateCreator<
         const updated = [...state.pendingChanges]
         updated[existingIdx] = {
           ...existing,
+          relativePath: change.relativePath,
           toolCallId: change.toolCallId,
           toolName: change.toolName,
           newContent: change.newContent,

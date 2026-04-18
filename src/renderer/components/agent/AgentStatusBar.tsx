@@ -79,7 +79,7 @@ function AgentStatusBar({
   const groupedChanges = useMemo(() => {
     const groups = new Map<string, PendingChange[]>()
     for (const change of pendingChanges) {
-      const dir = getDirname(change.filePath) || '.'
+      const dir = getDirname(change.relativePath || change.filePath) || '.'
       if (!groups.has(dir)) {
         groups.set(dir, [])
       }
@@ -308,7 +308,8 @@ interface FileChangeRowProps {
 }
 
 function FileChangeRow({ change, onAccept, onReject, onReview }: FileChangeRowProps) {
-  const fileName = getFileName(change.filePath)
+  const displayPath = change.relativePath || change.filePath
+  const fileName = getFileName(displayPath)
 
   // 变更类型图标
   const TypeIcon = change.changeType === 'create' ? FilePlus
@@ -328,7 +329,10 @@ function FileChangeRow({ change, onAccept, onReject, onReview }: FileChangeRowPr
       <div className="flex items-center gap-3 min-w-0 flex-1">
         <TypeIcon className={`w-3.5 h-3.5 ${typeColor} shrink-0 group-hover:text-accent/60 transition-colors`} />
         <div className="min-w-0 flex-1">
-          <span className="text-[11px] text-text-muted/80 group-hover:text-text-secondary truncate transition-colors">
+          <span
+            className="text-[11px] text-text-muted/80 group-hover:text-text-secondary truncate transition-colors"
+            title={displayPath}
+          >
             {fileName}
           </span>
         </div>

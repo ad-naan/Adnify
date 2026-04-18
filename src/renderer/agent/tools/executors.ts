@@ -23,7 +23,7 @@ import { memoryService } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
 import { agentStorePlanBridge, agentStoreTodoBridge } from '../store/agentStoreBridge'
-import { toRelativePath } from '@shared/utils/pathUtils'
+import { buildFileChangeDescriptor } from '../utils/fileChangeUtils'
 import { isLongRunningCommand } from './commandRuntime'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 import { toolRegistry } from './registry'
@@ -78,6 +78,9 @@ async function notifyLspAfterWrite(filePath: string, newContent?: string): Promi
         if (newContent !== undefined) {
             await didOpenDocument(filePath, newContent)
         }
+        if (newContent !== undefined && shouldTreatAsLargeWrite(null, newContent)) {
+            return
+        }
         // 2. 等待 LSP 返回诊断信息（最多等待 3 秒）
         await waitForDiagnostics(filePath)
     } catch {
@@ -96,19 +99,27 @@ function notifyComposerChange(opts: {
     changeType: 'create' | 'modify' | 'delete'
     linesAdded: number
     linesRemoved: number
+    isLargeWrite?: boolean
+    contentTruncated?: boolean
+    oldContentLength?: number
+    newContentLength?: number
     toolCallId?: string
 }): void {
     composerService.ensureSession()
-    composerService.addChange({
+    composerService.addChange(buildFileChangeDescriptor({
         filePath: opts.filePath,
-        relativePath: toRelativePath(opts.filePath, opts.workspacePath),
+        workspacePath: opts.workspacePath,
         oldContent: opts.oldContent,
         newContent: opts.newContent,
         changeType: opts.changeType,
         linesAdded: opts.linesAdded,
         linesRemoved: opts.linesRemoved,
+        isLargeWrite: opts.isLargeWrite,
+        contentTruncated: opts.contentTruncated,
+        oldContentLength: opts.oldContentLength,
+        newContentLength: opts.newContentLength,
         toolCallId: opts.toolCallId,
-    })
+    }))
 }
 
 interface DirTreeNode {
@@ -175,6 +186,93 @@ function hashContent(content: string | null): string {
         hash = Math.imul(hash, 16777619)
     }
     return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+const LARGE_WRITE_CHAR_THRESHOLD = 120_000
+const LARGE_WRITE_TOTAL_CHAR_THRESHOLD = 200_000
+const LARGE_META_PREVIEW_CHARS = 4_000
+
+function countLinesFast(content: string | null | undefined): number {
+    if (!content) return 0
+
+    let count = 1
+    for (let i = 0; i < content.length; i++) {
+        if (content.charCodeAt(i) === 10) count++
+    }
+    return count
+}
+
+function getApproxLineChanges(oldContent: string, newContent: string): { added: number; removed: number } {
+    const oldLines = countLinesFast(oldContent)
+    const newLines = countLinesFast(newContent)
+    return {
+        added: Math.max(0, newLines - oldLines),
+        removed: Math.max(0, oldLines - newLines),
+    }
+}
+
+function shouldTreatAsLargeWrite(oldContent: string | null, newContent: string): boolean {
+    const oldLength = oldContent?.length || 0
+    const newLength = newContent.length
+    return (
+        oldLength >= LARGE_WRITE_CHAR_THRESHOLD ||
+        newLength >= LARGE_WRITE_CHAR_THRESHOLD ||
+        oldLength + newLength >= LARGE_WRITE_TOTAL_CHAR_THRESHOLD
+    )
+}
+
+function buildMetaContent(content: string | null, isLargeWrite: boolean): string | null {
+    if (content === null) return null
+    if (!isLargeWrite || content.length <= LARGE_META_PREVIEW_CHARS) return content
+    return `${content.slice(0, LARGE_META_PREVIEW_CHARS)}\n\n/* content truncated for preview */`
+}
+
+function buildWriteMeta(
+    filePath: string,
+    oldContent: string | null,
+    newContent: string | null,
+    lineChanges: { added: number; removed: number },
+    hashes: { preHash: string; postHash: string },
+    extra: Record<string, unknown> = {}
+): Record<string, unknown> {
+    const isLargeWrite = shouldTreatAsLargeWrite(oldContent, newContent || '')
+
+    return {
+        filePath,
+        oldContent: buildMetaContent(oldContent, isLargeWrite),
+        newContent: buildMetaContent(newContent, isLargeWrite),
+        linesAdded: lineChanges.added,
+        linesRemoved: lineChanges.removed,
+        preHash: hashes.preHash,
+        postHash: hashes.postHash,
+        isLargeWrite,
+        contentTruncated: isLargeWrite,
+        oldContentLength: oldContent?.length || 0,
+        newContentLength: newContent?.length || 0,
+        ...extra,
+    }
+}
+
+function getLineChangesForWrite(oldContent: string, newContent: string): { added: number; removed: number } {
+    if (shouldTreatAsLargeWrite(oldContent, newContent)) {
+        return getApproxLineChanges(oldContent, newContent)
+    }
+    return calculateLineChanges(oldContent, newContent)
+}
+
+function getWritePreviewFlags(oldContent: string | null, newContent: string | null): {
+    isLargeWrite: boolean
+    contentTruncated: boolean
+    oldContentLength: number
+    newContentLength: number
+} {
+    const isLargeWrite = shouldTreatAsLargeWrite(oldContent, newContent || '')
+    return {
+        isLargeWrite,
+        contentTruncated: isLargeWrite,
+        oldContentLength: oldContent?.length || 0,
+        newContentLength: newContent?.length || 0,
+    }
 }
 
 function getPathSeparator(basePath: string): string {
@@ -706,7 +804,17 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded, linesRemoved, toolCallId: ctx.toolCallId })
+            notifyComposerChange({
+                filePath: path,
+                workspacePath: ctx.workspacePath || '',
+                oldContent: originalContent,
+                newContent,
+                changeType: 'modify',
+                linesAdded,
+                linesRemoved,
+                ...getWritePreviewFlags(originalContent, newContent),
+                toolCallId: ctx.toolCallId
+            })
 
             await notifyLspAfterWrite(path, newContent)
 
@@ -715,21 +823,22 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const warningsSuffix = allWarnings.length > 0 ? ` (${allWarnings.length} warning${allWarnings.length > 1 ? 's' : ''} detected)` : ''
+            const meta = buildWriteMeta(
+                path,
+                originalContent,
+                newContent,
+                { added: linesAdded, removed: linesRemoved },
+                guardedWrite.meta,
+                {
+                    totalLines: lines.length,
+                    editsApplied: edits.length,
+                    ...(allWarnings.length > 0 && { warnings: allWarnings }),
+                }
+            )
             return {
                 success: true,
                 result: `File updated successfully (batch mode: ${edits.length} edits applied)${warningsSuffix}`,
-                meta: {
-                    filePath: path,
-                    oldContent: originalContent,
-                    newContent,
-                    linesAdded,
-                    linesRemoved,
-                    totalLines: lines.length,
-                    editsApplied: edits.length,
-                    preHash: guardedWrite.meta.preHash,
-                    postHash: guardedWrite.meta.postHash,
-                    ...(allWarnings.length > 0 && { warnings: allWarnings }),
-                }
+                meta
             }
         }
 
@@ -751,7 +860,17 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 })
                 if (guardedWrite.success) fileCacheService.markFileAsRead(path, content)
                 return guardedWrite.success
-                    ? { success: true, result: 'File written (was empty)', meta: { filePath: path, oldContent: '', newContent: content, linesAdded: content.split('\n').length, linesRemoved: 0, preHash: guardedWrite.meta.preHash, postHash: guardedWrite.meta.postHash } }
+                    ? {
+                        success: true,
+                        result: 'File written (was empty)',
+                        meta: buildWriteMeta(
+                            path,
+                            '',
+                            content,
+                            { added: countLinesFast(content), removed: 0 },
+                            guardedWrite.meta
+                        )
+                    }
                     : guardedWrite.result
             }
 
@@ -791,25 +910,36 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            const lineChanges = calculateLineChanges(originalContent, newContent)
-            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
+            const lineChanges = getLineChangesForWrite(originalContent, newContent)
+            notifyComposerChange({
+                filePath: path,
+                workspacePath: ctx.workspacePath || '',
+                oldContent: originalContent,
+                newContent,
+                changeType: 'modify',
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
+                ...getWritePreviewFlags(originalContent, newContent),
+                toolCallId: ctx.toolCallId
+            })
 
             await notifyLspAfterWrite(path, newContent)
 
             const warningsSuffix = warnings.length > 0 ? ` (${warnings.length} warning${warnings.length > 1 ? 's' : ''} detected)` : ''
+            const meta = buildWriteMeta(
+                path,
+                originalContent,
+                newContent,
+                lineChanges,
+                guardedWrite.meta,
+                {
+                    ...(warnings.length > 0 && { warnings }),
+                }
+            )
             return {
                 success: true,
                 result: `File updated successfully (line mode)${warningsSuffix}`,
-                meta: {
-                    filePath: path,
-                    oldContent: originalContent,
-                    newContent,
-                    linesAdded: lineChanges.added,
-                    linesRemoved: lineChanges.removed,
-                    preHash: guardedWrite.meta.preHash,
-                    postHash: guardedWrite.meta.postHash,
-                    ...(warnings.length > 0 && { warnings }),
-                }
+                meta
             }
         } else {
             // 字符串模式（原 edit_file）
@@ -865,26 +995,37 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             fileCacheService.markFileAsRead(path, newContent)
 
-            const lineChanges = calculateLineChanges(originalContent, newContent)
-            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent, changeType: 'modify', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
+            const lineChanges = getLineChangesForWrite(originalContent, newContent)
+            notifyComposerChange({
+                filePath: path,
+                workspacePath: ctx.workspacePath || '',
+                oldContent: originalContent,
+                newContent,
+                changeType: 'modify',
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
+                ...getWritePreviewFlags(originalContent, newContent),
+                toolCallId: ctx.toolCallId
+            })
 
             await notifyLspAfterWrite(path, newContent)
 
             const strategyInfo = result.strategy !== 'exact' ? ` (matched via ${result.strategy} strategy)` : ''
 
+            const meta = buildWriteMeta(
+                path,
+                originalContent,
+                newContent,
+                lineChanges,
+                guardedWrite.meta,
+                {
+                    matchStrategy: result.strategy,
+                }
+            )
             return {
                 success: true,
                 result: `File updated successfully${strategyInfo}`,
-                meta: {
-                    filePath: path,
-                    oldContent: originalContent,
-                    newContent,
-                    linesAdded: lineChanges.added,
-                    linesRemoved: lineChanges.removed,
-                    matchStrategy: result.strategy,
-                    preHash: guardedWrite.meta.preHash,
-                    postHash: guardedWrite.meta.postHash,
-                }
+                meta
             }
         }
     },
@@ -905,10 +1046,24 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         // 通知 LSP 并等待诊断
         await notifyLspAfterWrite(path, content)
 
-        const lineChanges = calculateLineChanges(originalContent, content)
+        const lineChanges = getLineChangesForWrite(originalContent, content)
 
-        notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: originalContent, newContent: content, changeType: originalContent ? 'modify' : 'create', linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, toolCallId: ctx.toolCallId })
-        return { success: true, result: 'File written successfully', meta: { filePath: path, oldContent: originalContent, newContent: content, linesAdded: lineChanges.added, linesRemoved: lineChanges.removed, preHash: guardedWrite.meta.preHash, postHash: guardedWrite.meta.postHash } }
+        notifyComposerChange({
+            filePath: path,
+            workspacePath: ctx.workspacePath || '',
+            oldContent: originalContent,
+            newContent: content,
+            changeType: originalContent ? 'modify' : 'create',
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+            ...getWritePreviewFlags(originalContent, content),
+            toolCallId: ctx.toolCallId
+        })
+        return {
+            success: true,
+            result: 'File written successfully',
+            meta: buildWriteMeta(path, originalContent, content, lineChanges, guardedWrite.meta)
+        }
     },
 
     async create_file_or_folder(args, ctx) {
@@ -933,12 +1088,33 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 通知 LSP 并等待诊断
             await notifyLspAfterWrite(path, content)
 
-            notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: content, changeType: 'create', linesAdded: content.split('\n').length, linesRemoved: 0, toolCallId: ctx.toolCallId })
+            notifyComposerChange({
+                filePath: path,
+                workspacePath: ctx.workspacePath || '',
+                oldContent: null,
+                newContent: content,
+                changeType: 'create',
+                linesAdded: content.split('\n').length,
+                linesRemoved: 0,
+                ...getWritePreviewFlags(null, content),
+                toolCallId: ctx.toolCallId
+            })
         }
 
         if (!guardedWrite.success) return guardedWrite.result
 
-        return { success: true, result: 'File created', meta: { filePath: path, isNewFile: true, newContent: content, linesAdded: content.split('\n').length, preHash: guardedWrite.meta.preHash, postHash: guardedWrite.meta.postHash } }
+        return {
+            success: true,
+            result: 'File created',
+            meta: buildWriteMeta(
+                path,
+                null,
+                content,
+                { added: countLinesFast(content), removed: 0 },
+                guardedWrite.meta,
+                { isNewFile: true }
+            )
+        }
     },
 
     async delete_file_or_folder(args, ctx) {

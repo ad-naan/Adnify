@@ -40,7 +40,7 @@ interface ComposerPanelProps {
 }
 
 export default function ComposerPanel({ onClose, initialChanges }: ComposerPanelProps) {
-  const { openFiles, activeFilePath, llmConfig, updateFileContent, language } = useStore(useShallow(s => ({ openFiles: s.openFiles, activeFilePath: s.activeFilePath, llmConfig: s.llmConfig, updateFileContent: s.updateFileContent, language: s.language })))
+  const { openFiles, activeFilePath, llmConfig, updateFileContent, language, openFile, setActiveFile } = useStore(useShallow(s => ({ openFiles: s.openFiles, activeFilePath: s.activeFilePath, llmConfig: s.llmConfig, updateFileContent: s.updateFileContent, language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
   const [instruction, setInstruction] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
@@ -253,6 +253,18 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
       return next
     })
   }, [])
+
+  const openComposerFile = useCallback(async (filePath: string) => {
+    try {
+      const content = await api.file.read(filePath)
+      if (content !== null) {
+        openFile(filePath, content)
+        setActiveFile(filePath)
+      }
+    } catch (err) {
+      logger.ui.error('[Composer] Failed to open file:', err)
+    }
+  }, [openFile, setActiveFile])
 
   return (
     <Modal
@@ -590,16 +602,39 @@ export default function ComposerPanel({ onClose, initialChanges }: ComposerPanel
                               </div>
                             )}
                           </div>
-                          {expandedEdits.has(change.filePath) && change.oldContent !== null && change.newContent !== null && (
+                      {expandedEdits.has(change.filePath) && change.oldContent !== null && change.newContent !== null && (
                             <div className="border-t border-border-subtle bg-text-inverted/20 animate-in fade-in slide-in-from-top-1 duration-300">
-                              <DiffViewer
-                                originalContent={change.oldContent || ''}
-                                modifiedContent={change.newContent || ''}
-                                filePath={change.filePath}
-                                minimal={true}
-                                onAccept={() => handleAcceptComposerChange(change.filePath)}
-                                onReject={() => handleRejectComposerChange(change.filePath)}
-                              />
+                              {change.isLargeWrite || change.contentTruncated ? (
+                                <div className="p-4 space-y-3">
+                                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-text-secondary">
+                                    <div className="font-bold text-amber-400">
+                                      Large file diff preview is deferred.
+                                    </div>
+                                    <div className="mt-1 opacity-80">
+                                      {typeof change.oldContentLength === 'number' || typeof change.newContentLength === 'number'
+                                        ? `Size: ${change.oldContentLength || 0} -> ${change.newContentLength || 0} chars`
+                                        : 'Open the file to inspect the full content safely.'}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <button
+                                      onClick={() => void openComposerFile(change.filePath)}
+                                      className="px-3 py-1.5 rounded-lg border border-border-subtle bg-surface/20 text-[10px] font-black uppercase tracking-widest text-text-primary hover:border-accent/40 hover:text-accent transition-all duration-300"
+                                    >
+                                      {language === 'zh' ? '打开文件' : 'Open File'}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <DiffViewer
+                                  originalContent={change.oldContent || ''}
+                                  modifiedContent={change.newContent || ''}
+                                  filePath={change.filePath}
+                                  minimal={true}
+                                  onAccept={() => handleAcceptComposerChange(change.filePath)}
+                                  onReject={() => handleRejectComposerChange(change.filePath)}
+                                />
+                              )}
                             </div>
                           )}
                         </div>
