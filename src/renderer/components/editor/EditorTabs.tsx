@@ -2,11 +2,12 @@
  * 编辑器标签栏组件
  */
 import { memo } from 'react'
-import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff, Globe } from 'lucide-react'
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { t } from '@renderer/i18n'
+import { isPreviewDocumentPath } from '@shared/types/preview'
 
 interface EditorTabsProps {
   activeFilePath: string | null
@@ -17,6 +18,7 @@ interface EditorTabsProps {
   lintWarningCount: number
   isLinting: boolean
   onRunLint: () => void
+  activeFileKind?: 'file' | 'diff' | 'preview'
 }
 
 /**
@@ -40,6 +42,7 @@ export const EditorTabs = memo(function EditorTabs({
   lintWarningCount,
   isLinting,
   onRunLint,
+  activeFileKind,
 }: EditorTabsProps) {
   // 获取数据
   const openFiles = useStore(state => state.openFiles)
@@ -75,6 +78,11 @@ export const EditorTabs = memo(function EditorTabs({
           fileName = `Diff: ${getFileName(file.path.slice(7))}`
         }
 
+        const isPreview = file.kind === 'preview' || isPreviewDocumentPath(file.path)
+        if (isPreview) {
+          fileName = file.preview?.title || 'Preview'
+        }
+
         return (
           <div
             key={file.path}
@@ -100,6 +108,7 @@ export const EditorTabs = memo(function EditorTabs({
             )}
 
             {isDiff && <FileDiff className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
+            {isPreview && <Globe className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />}
 
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>
 
@@ -120,7 +129,7 @@ export const EditorTabs = memo(function EditorTabs({
       })}
 
       {/* Lint 状态 */}
-      {activeFilePath && (
+      {activeFilePath && activeFileKind !== 'preview' && (
         <div className="ml-auto flex items-center gap-2 px-3 flex-shrink-0 h-full border-l border-border bg-transparent">
           {(lintErrorCount > 0 || lintWarningCount > 0) && (
             <div className="flex items-center gap-2 text-xs mr-2">

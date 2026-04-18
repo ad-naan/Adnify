@@ -1,7 +1,7 @@
 /**
  * 编辑器主组件
  */
-import { useRef, useCallback, useEffect, useState } from 'react'
+import { useRef, useCallback, useEffect, useState, lazy, Suspense } from 'react'
 import MonacoEditor, { OnMount, BeforeMount, loader } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
@@ -40,6 +40,7 @@ import { SafeDiffEditor } from './SafeDiffEditor'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile } from './FilePreview'
 import { CodeSkeleton } from '../ui/Loading'
 import { TaskBoard } from '../plan/TaskBoard'
+const BrowserPreviewTab = lazy(() => import('./BrowserPreviewTab'))
 
 function isPlanJsonFile(filePath: string): boolean {
   const normalizedPath = normalizePath(filePath)
@@ -54,6 +55,7 @@ function getPlanIdFromPlanFilePath(filePath: string): string {
 import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDiff } from './hooks'
 import { getLanguage } from './utils/languageMap'
 import { defineMonacoTheme } from './utils/monacoTheme'
+import { isPreviewDocumentPath } from '@shared/types/preview'
 
 loader.config({ monaco })
 
@@ -92,18 +94,20 @@ export default function Editor() {
   const { isLinting, runLintCheck, clearLintErrors, errorCount, warningCount } = useLintCheck()
   const { setupCursorTracking } = useEditorEvents(editorRef)
 
-  useComposerInlineDiff(activeFilePath, editorRef.current, monacoRef.current)
+  const isPreviewDocument = Boolean(activeFile && (activeFile.kind === 'preview' || isPreviewDocumentPath(activeFile.path)))
+
+  useComposerInlineDiff(isPreviewDocument ? null : activeFilePath, editorRef.current, monacoRef.current)
 
   const { registerActions } = useEditorActions(setInlineEditState)
-  const { registerProvider: registerAIProvider } = useAICompletion(activeFilePath)
+  const { registerProvider: registerAIProvider } = useAICompletion(isPreviewDocument ? null : activeFilePath)
 
-  const activeLanguage = activeFile ? getLanguage(activeFile.path) : 'plaintext'
-  const activeFileType = activeFile ? getFileType(activeFile.path) : 'text'
+  const activeLanguage = activeFile && !isPreviewDocument ? getLanguage(activeFile.path) : 'plaintext'
+  const activeFileType = activeFile && !isPreviewDocument ? getFileType(activeFile.path) : 'text'
   const activeFileInfo = (activeFile && activeFile.content != null) ? getFileInfo(activeFile.path, activeFile.content) : null
   const currentTheme = useStore((state) => state.currentTheme) as ThemeName
 
   // 断点管理
-  useEditorBreakpoints(editorRef.current, activeFilePath)
+  useEditorBreakpoints(editorRef.current, isPreviewDocument ? null : activeFilePath)
 
   // 主题变化
   useEffect(() => {
@@ -117,7 +121,7 @@ export default function Editor() {
   // 同时检查是否有跨文件 Go-to-Definition 待处理的跳转定位
   useEffect(() => {
     clearLintErrors()
-    if (activeFile && activeFile.content != null) {
+    if (activeFile && activeFile.content != null && !isPreviewDocument) {
       notifyFileOpened(activeFile.path, activeFile.content)
       // 检查是否有跨文件跳转定义的待定位请求
       const nav = consumePendingNavigation(activeFile.path)
@@ -129,7 +133,7 @@ export default function Editor() {
         }, 80)
       }
     }
-  }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened])
+  }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened, isPreviewDocument])
   // 清理不再打开的文件的 Monaco Models，防止内存泄漏
   useEffect(() => {
     if (!monacoRef.current) return
@@ -138,7 +142,7 @@ export default function Editor() {
 
     const validUris = new Set(
       useStore.getState().openFiles.map(f => {
-        if (f.path.startsWith('diff://')) return ''
+        if (f.path.startsWith('diff://') || f.kind === 'preview') return ''
         return monacoInstance.Uri.file(f.path).toString()
       })
     )
@@ -155,7 +159,7 @@ export default function Editor() {
 
   // 流式编辑监听
   useEffect(() => {
-    if (!activeFilePath) return
+    if (!activeFilePath || isPreviewDocument) return
 
     const activeEdit = streamingEditService.getActiveEditForFile(activeFilePath)
     if (activeEdit) {
@@ -173,7 +177,7 @@ export default function Editor() {
       setStreamingEdit(null)
       setShowDiffPreview(false)
     }
-  }, [activeFilePath])
+  }, [activeFilePath, isPreviewDocument])
 
 
   const handleBeforeMount: BeforeMount = (monacoInstance) => {
@@ -269,10 +273,10 @@ export default function Editor() {
   }, [handleSave])
 
   const handleRunLint = useCallback(() => {
-    if (activeFilePath) {
+    if (activeFilePath && !isPreviewDocument) {
       runLintCheck(activeFilePath, editorRef.current, monacoRef.current)
     }
-  }, [activeFilePath, runLintCheck])
+  }, [activeFilePath, runLintCheck, isPreviewDocument])
 
   if (openFileCount === 0) {
     return <EditorWelcome />
@@ -289,9 +293,10 @@ export default function Editor() {
         lintWarningCount={warningCount}
         isLinting={isLinting}
         onRunLint={handleRunLint}
+        activeFileKind={activeFile?.kind}
       />
 
-      {activeFile && (
+      {activeFile && !isPreviewDocument && (
         <EditorBreadcrumbs
           filePath={activeFile.path}
           largeFileInfo={activeFileInfo}
@@ -365,6 +370,10 @@ export default function Editor() {
               closeFile(activeFile.path)
             }}
           />
+        ) : isPreviewDocument && activeFile ? (
+          <Suspense fallback={<CodeSkeleton lines={8} />}>
+            <BrowserPreviewTab file={activeFile} />
+          </Suspense>
         ) : activeFile && (
           <>
             {/* Markdown 工具栏 */}

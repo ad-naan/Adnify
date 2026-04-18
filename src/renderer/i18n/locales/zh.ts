@@ -677,4 +677,11 @@ export const zh = {
   'agent.typing.5': '正在解开宇宙的代码...',
   'agent.typing.6': '深思熟虑中...',
   'agent.typing.7': '正在翻阅阿卡西记录...',
+  'preview.toast.title': '检测到本地站点',
+  'preview.toast.message': '发现可预览的本地站点：{target}',
+  'preview.toast.open': '打开预览',
+  'preview.toast.notNow': '稍后再说',
+  'preview.toast.source.terminal': '终端',
+  'preview.toast.source.workspace': '工作区',
+  'preview.toast.source.discovery': '发现',
 } as const

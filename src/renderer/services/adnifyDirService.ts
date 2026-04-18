@@ -16,6 +16,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
+import type { OpenPreviewMetadata } from '@shared/types/preview'
 import {
   fromPersistedChatThread,
   toPersistedChatThread,
@@ -52,7 +53,11 @@ export const ADNIFY_FILES = {
 type AdnifyFile = typeof ADNIFY_FILES[keyof typeof ADNIFY_FILES]
 
 export interface WorkspaceStateData {
-  openFiles: string[]
+  openFiles: Array<string | {
+    path: string
+    kind?: 'file' | 'diff' | 'preview'
+    preview?: OpenPreviewMetadata
+  }>
   activeFile: string | null
   expandedFolders: string[]
   scrollPositions: Record<string, number>

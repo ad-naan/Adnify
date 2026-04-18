@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from './store'
-import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState } from './hooks'
+import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState, usePreviewDiscoveryToasts } from './hooks'
 import TitleBar from './components/layout/TitleBar'
 import ActivityBar from './components/layout/ActivityBar'
 import StatusBar from './components/layout/StatusBar'
@@ -61,6 +61,8 @@ function AppContent() {
   const setShowAbout = useStore((state) => state.setShowAbout)
   const showCommandPalette = useStore((state) => state.showCommandPalette)
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
+  const terminalVisible = useStore((state) => state.terminalVisible)
+  const debugVisible = useStore((state) => state.debugVisible)
 
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -70,9 +72,13 @@ function AppContent() {
     window.__ADNIFY_STORE__ = { getState: () => useStore.getState() }
   }, [])
 
+  const hasWorkspace = useMemo(() => Boolean(workspace && workspace.roots.length > 0), [workspace])
+  const isShellStudioActive = activeSidePanel === 'shell'
+
   useWindowTitle()
   useFileWatcher()
   useGlobalShortcuts()
+  usePreviewDiscoveryToasts(hasWorkspace && isInitialized)
 
   useAppInit({
     onInitialized: (result) => {
@@ -91,9 +97,6 @@ function AppContent() {
 
   const handleCloseKeyboardShortcuts = useCallback(() => setShowKeyboardShortcuts(false), [])
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
-
-  const hasWorkspace = useMemo(() => Boolean(workspace && workspace.roots.length > 0), [workspace])
-  const isShellStudioActive = activeSidePanel === 'shell'
 
   return (
     <div className="h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
@@ -138,16 +141,20 @@ function AppContent() {
                           </Suspense>
                         </ErrorBoundary>
                       </div>
-                      <ErrorBoundary>
-                        <Suspense fallback={null}>
-                          <TerminalPanel />
-                        </Suspense>
-                      </ErrorBoundary>
-                      <ErrorBoundary>
-                        <Suspense fallback={null}>
-                          <DebugPanel />
-                        </Suspense>
-                      </ErrorBoundary>
+                      {terminalVisible && (
+                        <ErrorBoundary>
+                          <Suspense fallback={null}>
+                            <TerminalPanel />
+                          </Suspense>
+                        </ErrorBoundary>
+                      )}
+                      {debugVisible && (
+                        <ErrorBoundary>
+                          <Suspense fallback={null}>
+                            <DebugPanel />
+                          </Suspense>
+                        </ErrorBoundary>
+                      )}
                     </>
                   )}
                 </div>

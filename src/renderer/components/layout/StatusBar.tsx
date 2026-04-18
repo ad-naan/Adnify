@@ -60,7 +60,10 @@ export default function StatusBar() {
   // 简化的未读/数量展示。当前统一把所有遗留的消息当做未处理(或只看总数)
   const notificationCount = toasts.length
 
-  const latestVisibleToastId = visibleIds[visibleIds.length - 1]
+  const latestVisibleToastId = [...visibleIds].reverse().find((id) => {
+    const toast = toasts.find((item) => item.id === id)
+    return toast?.variant === 'inline'
+  })
   const activeToast = latestVisibleToastId ? toasts.find(t => t.id === latestVisibleToastId) : null
   const shouldEject = useHasElevatedToastLayer()
 
