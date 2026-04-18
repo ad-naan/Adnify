@@ -147,7 +147,7 @@ export const AGENT_DEFAULTS = {
   maxFileContentChars: 15000,
   maxTotalContextChars: 60000,
   maxContextTokens: 128000,
-  maxSingleFileChars: 6000,
+  maxSingleFileChars: 12000,
   maxContextFiles: 6,
   maxSemanticResults: 5,
   maxTerminalChars: 3000,

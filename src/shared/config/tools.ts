@@ -67,10 +67,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     read_file: {
         name: 'read_file',
         displayName: 'Read File',
-        description: 'Read one or more files with line numbers. Pass a single path string or an array of paths. For large files, use start_line/end_line. MUST read before editing.',
-        detailedDescription: `Read file contents from the filesystem with line numbers (1-indexed).
+        description: 'Read one or more files. Code/structured files include line numbers; markdown/plain-text documents are returned in readable text form unless start_line/end_line is requested. MUST read before editing.',
+        detailedDescription: `Read file contents from the filesystem.
 - Single file: path="src/main.ts"
 - Multiple files: path=["src/a.ts", "src/b.ts"]
+- Code files default to line-numbered output for precise edits
+- Markdown/plain-text documents default to readable full-text output
 - Large files will be truncated, use search_files to locate target first`,
         customSchema: z.object({
             path: z.union([
@@ -210,11 +212,14 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 - **String mode**: provide \`old_string\` + \`new_string\` only. Do NOT add start_line/end_line/content.
 - **Line mode**: provide \`start_line\` + \`end_line\` + \`content\` only. Do NOT add old_string/new_string.
 - **Batch mode**: provide \`edits\` array only. Do NOT add any other mode parameters.
-CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call. For large files, prefer line mode or batch mode and keep old_string short and unique.`,
+CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call. Use edit_file for any partial change to an existing file. For large files, prefer line mode or batch mode and keep old_string short and unique.`,
         detailedDescription: `Three mutually exclusive editing modes:
 - String mode: old_string + new_string (include 3-5 lines context around the change)
 - Line mode: start_line + end_line + content (use exact line numbers from read_file)
 - Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)
+- Use string mode only for one small, unique local change
+- Use line mode when line numbers are known or the target file is large
+- Use batch mode when one file needs 2+ separate non-overlapping edits
 - Large-file rule: avoid huge old_string/new_string payloads; prefer line mode or batch mode for broad edits`,
         customSchema: z.object({
             path: z.string().min(1, 'path is required'),
@@ -281,11 +286,12 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
     write_file: {
         name: 'write_file',
         displayName: 'Write File',
-        description: 'Write complete content to a file. Use for: (1) creating a new file, (2) completely rewriting an existing file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead. Avoid repeated full rewrites of large existing files when a targeted edit will do.',
+        description: 'Write complete content to a file. Use ONLY for: (1) creating a new file, (2) replacing nearly all content of an existing file, or (3) intentionally regenerating a full artifact-style file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead.',
         criticalRules: [
             'OVERWRITES entire file — use edit_file for any partial change',
             'Prefer over create_file_or_folder when you have file content ready',
             'Do not rewrite the same large file multiple times in one turn unless absolutely necessary',
+            'If the file already exists and you are only changing a section, DO NOT use write_file',
         ],
         category: 'write',
         approvalType: 'none',

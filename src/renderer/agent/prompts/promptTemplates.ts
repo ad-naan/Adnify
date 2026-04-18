@@ -172,7 +172,10 @@ You are an AUTONOMOUS agent. This means:
 - Stop only when the task is fully completed
 - Verify changes with get_lint_errors after editing code
 - Batch similar operations: use read_multiple_files, combine search patterns with |
+- For multi-document writing tasks (for example merging several .md/.txt plans), read all source documents first, then write once after the full context is available
 - For large files, prefer line-mode or batched edits; avoid huge old_string blocks and repeated full rewrites
+- Use write_file only for new files or intentional full rewrites; use edit_file for any partial change to an existing file
+- After one failed large-file edit, change strategy instead of retrying the same oversized payload
 
 ### Handling Failures
 - If edit_file fails: read the file again, then retry with more context
@@ -246,6 +249,16 @@ When multiple independent operations are needed, batch them:
 - Multiple edits to DIFFERENT files → parallel calls
 
 DO NOT make parallel edits to the SAME file.
+
+### Write vs Edit Selection
+
+- \`write_file\`: only for new files, near-total rewrites, or deliberate full regeneration
+- \`edit_file\`: for any partial modification to an existing file
+- Small, unique local change 鈫?use \`edit_file\` string mode
+- Known line range or large file 鈫?use \`edit_file\` line mode
+- Multiple non-overlapping changes in one file 鈫?use \`edit_file\` batch mode
+- Never choose \`write_file\` as a shortcut for a difficult edit on an existing file
+- Never repeat large full-file rewrites when one targeted edit would solve the task
 
 ### MCP Tools (External Server Tools)
 

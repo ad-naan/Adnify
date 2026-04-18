@@ -22,6 +22,7 @@ import { getAgentConfig } from '../utils/AgentConfig'
 import type { ToolCall } from '@/shared/types'
 import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
 import { useAgentStore } from '../store/AgentStore'
+import { buildExecutionBatches } from './toolExecutionPlan'
 
 // ===== 审批服务 =====
 
@@ -445,7 +446,9 @@ export async function executeTools(
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)
 
-  // 1. 先并行执行不需要审批的工具（使用动态并发限制），但必须尊重依赖关系
+  // 1. 先执行不需要审批的工具。
+  //    注意：即使无需审批，也必须尊重工具的 parallel 配置。
+  //    例如 todo_write / create_task_plan 这类工具绝不能与 read/write 混在同一批并行。
   if (noApprovalRequired.length > 0) {
     store.setStreamState({
       phase: 'tool_running',
@@ -457,10 +460,19 @@ export async function executeTools(
     const concurrency = getDynamicConcurrency()
     const limit = pLimit(concurrency)
 
+    // 记录当前并行批次；遇到非并行工具时会先 flush。
+
     // 用于记录无审批工具的执行 Promise，以支持依赖等待
+    const inFlight: Promise<AgentToolExecutionResult>[] = []
     const noApprovalPromiseMap = new Map<string, Promise<AgentToolExecutionResult>>()
 
-    for (const tc of noApprovalRequired) {
+    for (const batch of buildExecutionBatches(noApprovalRequired)) {
+      for (const tc of batch.toolCalls) {
+      if (!batch.parallel && inFlight.length > 0) {
+        await Promise.allSettled(inFlight)
+        inFlight.length = 0
+      }
+
       const promise = (async () => {
         // 等待被依赖的无审批工具执行完毕
         const tcDeps = deps.get(tc.id) || new Set()
@@ -493,7 +505,7 @@ export async function executeTools(
           }
         }
 
-        return limit(async () => {
+        const run = async () => {
           try {
             const result = await executeSingle(tc, context, store)
             results.push(result)
@@ -528,13 +540,28 @@ export async function executeTools(
             })
             return errorResult
           }
-        })
+        }
+
+        return batch.parallel ? limit(run) : run()
       })()
       noApprovalPromiseMap.set(tc.id, promise)
+
+      if (batch.parallel) {
+        inFlight.push(promise)
+      } else {
+        await promise
+      }
+      }
+
+      if (batch.parallel && inFlight.length > 0) {
+        await Promise.allSettled(inFlight)
+        inFlight.length = 0
+      }
     }
 
-    // 等待所有无审批工具完成
-    await Promise.allSettled(Array.from(noApprovalPromiseMap.values()))
+    if (inFlight.length > 0) {
+      await Promise.allSettled(inFlight)
+    }
   }
 
   // 2. 逐个处理需要审批的工具
