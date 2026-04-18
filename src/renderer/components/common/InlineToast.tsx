@@ -1,21 +1,45 @@
 import { useState, useCallback, createContext, useContext, ReactNode } from 'react'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
+export type ToastVariant = 'inline' | 'card'
+
+export interface ToastAction {
+  id: string
+  label: string
+  style?: 'primary' | 'secondary' | 'ghost'
+  onClick?: () => void
+}
 
 export interface ToastMessage {
   id: string
   type: ToastType
+  variant: ToastVariant
+  title?: string
   message: string
   duration?: number
   timestamp: number
+  source?: string
+  dedupeKey?: string
+  actions?: ToastAction[]
+}
+
+interface ShowCardOptions {
+  type?: ToastType
+  title: string
+  message: string
+  actions?: ToastAction[]
+  duration?: number
+  source?: string
+  dedupeKey?: string
 }
 
 interface ToastContextType {
-  toasts: ToastMessage[] // History
-  visibleIds: string[] // Active current items
+  toasts: ToastMessage[]
+  visibleIds: string[]
   addToast: (type: ToastType, message: string, durationOrDetail?: number | string) => string
-  removeToast: (id: string) => void // Clears from history completely
-  dismissToast: (id: string) => void // Only dismisses from the current visible queue
+  showCard: (options: ShowCardOptions) => string
+  removeToast: (id: string) => void
+  dismissToast: (id: string) => void
   success: (message: string, durationOrDetail?: number | string) => string
   error: (message: string, durationOrDetail?: number | string) => string
   warning: (message: string, durationOrDetail?: number | string) => string
@@ -24,58 +48,115 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null)
 
+function createToastId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
-// Removed ToastContainer and QueueToast as StatusBar handles presentation natively now.
-
-
-// Provider
 export function InlineToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [visibleIds, setVisibleIds] = useState<string[]>([])
 
+  const scheduleDismiss = useCallback((id: string, duration: number) => {
+    if (duration <= 0) {
+      return
+    }
+
+    setTimeout(() => {
+      setVisibleIds((prev) => prev.filter((visibleId) => visibleId !== id))
+    }, duration)
+  }, [])
+
   const addToast = useCallback((type: ToastType, message: string, durationOrDetail?: number | string) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const id = createToastId('toast')
     let finalMessage = message
-    let duration = 5000 // 默认延长到 5s 方便阅读长内容
+    let duration = 5000
+
     if (typeof durationOrDetail === 'string' && durationOrDetail) {
       finalMessage = `${message}: ${durationOrDetail}`
     } else if (typeof durationOrDetail === 'number') {
       duration = durationOrDetail
     }
 
-    const newToast: ToastMessage = { id, type, message: finalMessage, duration, timestamp: Date.now() }
+    const newToast: ToastMessage = {
+      id,
+      type,
+      variant: 'inline',
+      message: finalMessage,
+      duration,
+      timestamp: Date.now(),
+    }
 
-    // 加入历史记录
     setToasts((prev) => {
       const updated = prev.length >= 50 ? prev.slice(1) : prev
       return [...updated, newToast]
     })
 
-    // 加入可见队列
     setVisibleIds((prev) => {
       const newIds = [...prev, id]
       return newIds.length > 5 ? newIds.slice(-5) : newIds
     })
 
-    // 自动清理可见队列
-    if (duration > 0) {
-      setTimeout(() => {
-        setVisibleIds((prev) => prev.filter((vId) => vId !== id))
-      }, duration)
+    scheduleDismiss(id, duration)
+    return id
+  }, [scheduleDismiss])
+
+  const showCard = useCallback((options: ShowCardOptions) => {
+    const existingToast = options.dedupeKey
+      ? toasts.find((toast) => toast.dedupeKey === options.dedupeKey)
+      : null
+
+    if (existingToast) {
+      setToasts((prev) => prev.map((toast) => (
+        toast.id === existingToast.id
+          ? {
+              ...toast,
+              ...options,
+              variant: 'card',
+              timestamp: Date.now(),
+              actions: options.actions,
+            }
+          : toast
+      )))
+
+      setVisibleIds((prev) => (
+        prev.includes(existingToast.id) ? prev : [...prev, existingToast.id]
+      ))
+
+      scheduleDismiss(existingToast.id, options.duration ?? 0)
+      return existingToast.id
     }
 
+    const id = createToastId('card')
+    const newToast: ToastMessage = {
+      id,
+      type: options.type || 'info',
+      variant: 'card',
+      title: options.title,
+      message: options.message,
+      duration: options.duration ?? 0,
+      timestamp: Date.now(),
+      source: options.source,
+      dedupeKey: options.dedupeKey,
+      actions: options.actions,
+    }
+
+    setToasts((prev) => {
+      const updated = prev.length >= 50 ? prev.slice(1) : prev
+      return [...updated, newToast]
+    })
+
+    setVisibleIds((prev) => [...prev.filter((visibleId) => visibleId !== id), id])
+    scheduleDismiss(id, newToast.duration ?? 0)
     return id
-  }, [])
+  }, [scheduleDismiss, toasts])
 
-  // 彻底从历史中删除（供通知中心使用）
   const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id))
-    setVisibleIds((prev) => prev.filter((vId) => vId !== id))
+    setToasts((prev) => prev.filter((toast) => toast.id !== id))
+    setVisibleIds((prev) => prev.filter((visibleId) => visibleId !== id))
   }, [])
 
-  // 仅从屏幕上隐藏（自动超时或用户点击关闭）
   const dismissToast = useCallback((id: string) => {
-    setVisibleIds((prev) => prev.filter((vId) => vId !== id))
+    setVisibleIds((prev) => prev.filter((visibleId) => visibleId !== id))
   }, [])
 
   const success = useCallback((message: string, durationOrDetail?: number | string) => addToast('success', message, durationOrDetail), [addToast])
@@ -84,7 +165,7 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
   const info = useCallback((message: string, durationOrDetail?: number | string) => addToast('info', message, durationOrDetail), [addToast])
 
   return (
-    <ToastContext.Provider value={{ toasts, visibleIds, addToast, removeToast, dismissToast, success, error, warning, info }}>
+    <ToastContext.Provider value={{ toasts, visibleIds, addToast, showCard, removeToast, dismissToast, success, error, warning, info }}>
       {children}
     </ToastContext.Provider>
   )
@@ -98,7 +179,6 @@ export function useInlineToast() {
   return context
 }
 
-// 全局实例
 let globalToast: ToastContextType | null = null
 
 export function setGlobalInlineToast(toast: ToastContextType) {
@@ -110,4 +190,7 @@ export const toast = {
   error: (message: string, durationOrDetail?: number | string) => globalToast?.error(message, durationOrDetail),
   warning: (message: string, durationOrDetail?: number | string) => globalToast?.warning(message, durationOrDetail),
   info: (message: string, durationOrDetail?: number | string) => globalToast?.info(message, durationOrDetail),
+  card: (options: ShowCardOptions) => globalToast?.showCard(options),
+  dismiss: (id: string) => globalToast?.dismissToast(id),
+  remove: (id: string) => globalToast?.removeToast(id),
 }

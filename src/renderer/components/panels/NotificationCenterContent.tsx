@@ -64,6 +64,16 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
                 </div>
                 
                 <div className="flex-1 min-w-0 flex flex-col pr-8">
+                  {toast.title && (
+                    <div className="mb-1 flex items-center gap-2">
+                      <div className="text-[11px] font-semibold text-text-primary">
+                        {toast.title}
+                      </div>
+                      <span className="rounded-full border border-white/8 bg-white/[0.04] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-muted">
+                        {toast.variant}
+                      </span>
+                    </div>
+                  )}
                   <div className="text-[11.5px] font-medium text-text-primary/95 leading-relaxed whitespace-pre-wrap break-words">
                     {toast.message}
                   </div>

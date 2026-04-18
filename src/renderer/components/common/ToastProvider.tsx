@@ -10,4 +10,4 @@ export {
   toast,
 } from './InlineToast'
 
-export type { ToastType, ToastMessage } from './InlineToast'
+export type { ToastType, ToastVariant, ToastAction, ToastMessage } from './InlineToast'

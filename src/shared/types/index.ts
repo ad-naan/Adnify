@@ -9,6 +9,9 @@ export * from './llm'
 // MCP 相关类型
 export * from './mcp'
 
+// Preview 相关类型
+export * from './preview'
+
 // Result 类型
 export * from './result'
 

@@ -39,6 +39,15 @@ const WINDOW_CONFIG = {
   BG_COLOR: '#09090b',
 } as const
 
+type ConsoleMessageLevel = 'info' | 'warning' | 'error' | 'debug'
+
+interface ConsoleMessageDetailsLike {
+  level?: ConsoleMessageLevel
+  message?: string
+  lineNumber?: number
+  sourceId?: string
+}
+
 // ==========================================
 // Store（延迟初始化）
 // ==========================================
@@ -212,6 +221,93 @@ function normalizeRgbColor(value: unknown, fallback: string): string {
   return fallback
 }
 
+function isLocalDevServerUrl(url: string): boolean {
+  return /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{2,5})?(?:[/?#]|$)/i.test(url)
+}
+
+function compactConsoleMessage(message: string, maxLength = 240): string {
+  const normalized = message.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+
+  return `${normalized.slice(0, maxLength)}…`
+}
+
+function getConsoleMessageSeverity(level: ConsoleMessageLevel): 'warn' | 'error' | null {
+  if (level === 'error') {
+    return 'error'
+  }
+
+  if (level === 'warning') {
+    return 'warn'
+  }
+
+  return null
+}
+
+function shouldLogConsoleMessage(level: ConsoleMessageLevel, message: string, sourceId: string): boolean {
+  if (/Logger\.ts/i.test(sourceId)) {
+    return false
+  }
+
+  if (/Electron Security Warning/i.test(message)) {
+    return false
+  }
+
+  return getConsoleMessageSeverity(level) !== null
+    || /(error|exception|failed|unhandled|csp|blocked|warn)/i.test(message)
+}
+
+function logRendererConsoleMessage(win: BrowserWindow, details: ConsoleMessageDetailsLike): void {
+  const level = details.level ?? 'info'
+  const message = details.message ?? ''
+  const sourceId = details.sourceId ?? ''
+
+  if (!shouldLogConsoleMessage(level, message, sourceId)) {
+    return
+  }
+
+  const payload = {
+    windowId: win.id,
+    level,
+    message: compactConsoleMessage(message),
+    line: details.lineNumber ?? 0,
+    sourceId: compactConsoleMessage(sourceId, 120),
+  }
+
+  if (getConsoleMessageSeverity(level) === 'error' || /(error|exception|failed|unhandled|csp|blocked)/i.test(message)) {
+    logger.system.error('[Window] console-message', payload)
+    return
+  }
+
+  logger.system.warn('[Window] console-message', payload)
+}
+
+function registerWindowDiagnostics(win: BrowserWindow): void {
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    logger.system.error('[Window] did-fail-load', {
+      windowId: win.id,
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame,
+    })
+  })
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logger.system.error('[Window] render-process-gone', {
+      windowId: win.id,
+      reason: details.reason,
+      exitCode: details.exitCode,
+    })
+  })
+
+  win.webContents.on('console-message', (details) => {
+    logRendererConsoleMessage(win, details)
+  })
+}
+
 function getShutdownFallbackPresentation(): ShutdownWindowPresentation {
   const themeBg = normalizeRgbColor(configStore?.get('themeBg'), '18 18 21')
   const themeType = configStore?.get('themeId') === 'dawn' ? 'light' : 'dark'
@@ -320,7 +416,8 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   })
 
   // 添加 CSP 头以提升安全性
-  win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  if (app.isPackaged) {
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
@@ -330,12 +427,15 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",  // blob: 支持粘贴图片
           "connect-src 'self' https:",  // 允许所有 HTTPS 连接，支持自定义 baseURL
+          "frame-src 'self' https: http://127.0.0.1:* http://localhost:*",
+          "child-src 'self' https: http://127.0.0.1:* http://localhost:*",
           "font-src 'self' data:",
           "media-src 'self'",
         ].join('; ')
       }
     })
-  })
+    })
+  }
 
   // 等待 DOM 渲染完成后显示窗口，避免白屏闪烁
   win.webContents.once('dom-ready', () => {
@@ -347,6 +447,8 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   if (process.platform === 'darwin') {
     win.setWindowButtonVisibility(true)
   }
+
+  registerWindowDiagnostics(win)
 
   const windowId = win.id
   windows.set(windowId, win)
@@ -429,7 +531,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 
   // 外部链接处理
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('devtools://') || url.startsWith('http://localhost')) {
+    if (url.startsWith('devtools://') || isLocalDevServerUrl(url)) {
       return { action: 'allow' }
     }
     shell.openExternal(url)
@@ -437,7 +539,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   })
 
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('http://localhost') && !url.startsWith('file://')) {
+    if (!isLocalDevServerUrl(url) && !url.startsWith('file://')) {
       event.preventDefault()
       shell.openExternal(url)
     }

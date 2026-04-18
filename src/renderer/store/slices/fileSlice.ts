@@ -3,6 +3,8 @@
  */
 import { StateCreator } from 'zustand'
 import type { FileItem } from '@shared/types'
+import type { OpenPreviewMetadata } from '@shared/types/preview'
+import { buildPreviewDocumentPath } from '@shared/types/preview'
 import { normalizePath } from '@shared/utils/pathUtils'
 
 export interface WorkspaceConfig {
@@ -27,6 +29,7 @@ export interface LargeFileInfo {
 export interface OpenFile {
   path: string
   content: string
+  kind?: 'file' | 'diff' | 'preview'
   isDirty: boolean
   originalContent?: string
   /** 保存时的版本号（Monaco versionId） */
@@ -41,6 +44,8 @@ export interface OpenFile {
   remote?: { server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }; remotePath: string }
   /** 最后访问时间（LRU 淘汰用） */
   lastAccessed?: number
+  /** Preview 文档元数据 */
+  preview?: OpenPreviewMetadata
 }
 
 export interface FileSlice {
@@ -64,7 +69,10 @@ export interface FileSlice {
     largeFileInfo?: LargeFileInfo
     encoding?: string
     remote?: OpenFile['remote']
+    kind?: OpenFile['kind']
+    preview?: OpenFile['preview']
   }) => void
+  openPreview: (preview: OpenPreviewMetadata, options?: { activate?: boolean }) => void
   restoreOpenFiles: (files: Array<{
     path: string
     content: string
@@ -73,6 +81,8 @@ export interface FileSlice {
       largeFileInfo?: LargeFileInfo
       encoding?: string
       remote?: OpenFile['remote']
+      kind?: OpenFile['kind']
+      preview?: OpenFile['preview']
     }
   }>, activeFilePath?: string | null) => void
   closeFile: (path: string) => void
@@ -87,6 +97,23 @@ export interface FileSlice {
   markFileDeleted: (path: string) => void
   /** 标记文件已恢复（不再是删除状态） */
   markFileRestored: (path: string) => void
+  updatePreviewMetadata: (path: string, preview: Partial<OpenPreviewMetadata>) => void
+}
+
+function upsertOpenFiles(
+  openFiles: OpenFile[],
+  nextFile: OpenFile,
+): OpenFile[] {
+  const existing = openFiles.find((file) => normalizePath(file.path) === normalizePath(nextFile.path))
+  if (!existing) {
+    return [...openFiles, nextFile]
+  }
+
+  return openFiles.map((file) =>
+    normalizePath(file.path) === normalizePath(nextFile.path)
+      ? { ...file, ...nextFile, lastAccessed: Date.now() }
+      : file,
+  )
 }
 
 export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set) => ({
@@ -150,35 +177,20 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
 
   openFile: (path, content, originalContent, options) =>
     set((state) => {
-      // 使用规范化路径进行比较，避免路径格式不一致导致重复打开
       const normalizedPath = normalizePath(path)
-      const existing = state.openFiles.find((f) => normalizePath(f.path) === normalizedPath)
-      let resultFiles: OpenFile[]
-      if (existing) {
-        resultFiles = state.openFiles.map((f) =>
-          normalizePath(f.path) === normalizedPath ? {
-            ...f,
-            content,
-            originalContent,
-            largeFileInfo: options?.largeFileInfo,
-            encoding: options?.encoding,
-            remote: options?.remote,
-            lastAccessed: Date.now(),
-          } : f
-        )
-      } else {
-        resultFiles = [...state.openFiles, {
-          path: normalizedPath, // 存储规范化的路径
-          content,
-          isDirty: false,
-          originalContent,
-          savedVersionId: 1, // Monaco 初始版本号
-          largeFileInfo: options?.largeFileInfo,
-          encoding: options?.encoding,
-          remote: options?.remote,
-          lastAccessed: Date.now(),
-        }]
-      }
+      const resultFiles = upsertOpenFiles(state.openFiles, {
+        path: normalizedPath,
+        kind: options?.kind || (normalizedPath.startsWith('diff://') ? 'diff' : 'file'),
+        content,
+        isDirty: false,
+        originalContent,
+        savedVersionId: 1,
+        largeFileInfo: options?.largeFileInfo,
+        encoding: options?.encoding,
+        remote: options?.remote,
+        preview: options?.preview,
+        lastAccessed: Date.now(),
+      })
 
       // LRU 淘汰：当打开文件超过阈值时，卸载最久未访问的非 dirty 文件内容
       const MAX_OPEN_FILES_WITH_CONTENT = 30
@@ -204,17 +216,37 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       }
     }),
 
+  openPreview: (preview, options) =>
+    set((state) => {
+      const path = buildPreviewDocumentPath(preview.sessionId)
+      const resultFiles = upsertOpenFiles(state.openFiles, {
+        path,
+        kind: 'preview',
+        content: '',
+        isDirty: false,
+        preview,
+        lastAccessed: Date.now(),
+      })
+
+      return {
+        openFiles: resultFiles,
+        activeFilePath: options?.activate === false ? state.activeFilePath : path,
+      }
+    }),
+
   restoreOpenFiles: (files, activeFilePath) =>
     set(() => {
       const restoredFiles: OpenFile[] = files.map((file, index) => ({
         path: normalizePath(file.path),
         content: file.content,
+        kind: file.options?.kind || (normalizePath(file.path).startsWith('diff://') ? 'diff' : 'file'),
         isDirty: false,
         originalContent: file.originalContent,
         savedVersionId: 1,
         largeFileInfo: file.options?.largeFileInfo,
         encoding: file.options?.encoding,
         remote: file.options?.remote,
+        preview: file.options?.preview,
         lastAccessed: Date.now() + index,
       }))
 
@@ -285,6 +317,15 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
     set((state) => ({
       openFiles: state.openFiles.map((f) =>
         f.path === path ? { ...f, isDeleted: false } : f
+      ),
+    })),
+
+  updatePreviewMetadata: (path, preview) =>
+    set((state) => ({
+      openFiles: state.openFiles.map((file) =>
+        file.path === path && file.kind === 'preview' && file.preview
+          ? { ...file, preview: { ...file.preview, ...preview }, lastAccessed: Date.now() }
+          : file,
       ),
     })),
 })

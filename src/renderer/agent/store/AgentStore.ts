@@ -31,7 +31,6 @@ import {
     createPlanSlice,
     type PlanSlice,
 } from './slices/planSlice'
-import { initializeTools } from '../tools'
 import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
@@ -580,8 +579,7 @@ export async function initializeAgentStore(): Promise<void> {
         // rehydrate() 会在 initService.ts 的 scheduleBackgroundInit() 中延迟调用
 
         initializeAgentSessionSync()
-        await initializeTools()
-        logger.agent.info('[AgentStore] Tools initialized')
+        logger.agent.info('[AgentStore] Initialized (tool registry deferred until first agent run)')
     } catch (error) {
         logger.agent.error('[AgentStore] Failed to initialize:', error)
     }

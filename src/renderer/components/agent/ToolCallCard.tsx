@@ -8,7 +8,6 @@ import { t } from '@renderer/i18n'
 import type { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { JsonHighlight } from '@utils/jsonHighlight'
-import { terminalManager } from '@/renderer/services/TerminalManager'
 import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
 import InlineDiffPreview from './InlineDiffPreview'
@@ -319,7 +318,7 @@ function ToolPreview({
                         <span className="text-text-primary break-all">{cmd}</span>
                     </div>
                     <button
-                        onClick={event => {
+                        onClick={async event => {
                             event.stopPropagation()
                             if (!terminalId) {
                                 toast.info(
@@ -329,7 +328,9 @@ function ToolPreview({
                                 )
                                 return
                             }
-                            if (terminalId && !terminalManager.hasTerminal(terminalId)) {
+
+                            const { terminalManager } = await import('@/renderer/services/TerminalManager')
+                            if (!terminalManager.hasTerminal(terminalId)) {
                                 toast.info('Terminal has been closed')
                                 return
                             }

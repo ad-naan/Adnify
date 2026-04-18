@@ -6,8 +6,12 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
+import type { OpenFile } from '@store'
 import { getEditorConfig } from '@renderer/settings'
 import { workspaceStateRepository, type WorkspaceStateData } from './workspaceStateRepository'
+import { isPreviewDocumentPath } from '@shared/types/preview'
+
+type PersistedWorkspaceOpenFile = Exclude<WorkspaceStateData['openFiles'][number], string>
 
 async function readFilesWithConcurrency(
   filePaths: string[],
@@ -35,12 +39,60 @@ async function readFilesWithConcurrency(
   return results
 }
 
+function toPersistedOpenFile(file: OpenFile): WorkspaceStateData['openFiles'][number] | null {
+  if (file.kind === 'preview' && file.preview) {
+    return {
+      path: file.path,
+      kind: 'preview',
+      preview: file.preview,
+    }
+  }
+
+  if (file.kind === 'diff') {
+    return null
+  }
+
+  return file.path
+}
+
+function normalizePersistedOpenFiles(
+  openFiles: WorkspaceStateData['openFiles'],
+): {
+  filePaths: string[]
+  previewFiles: PersistedWorkspaceOpenFile[]
+} {
+  const filePaths: string[] = []
+  const previewFiles: PersistedWorkspaceOpenFile[] = []
+
+  for (const item of openFiles) {
+    if (typeof item === 'string') {
+      filePaths.push(item)
+      continue
+    }
+
+    if (item.kind === 'preview' && item.preview) {
+      previewFiles.push(item)
+      continue
+    }
+
+    if (!isPreviewDocumentPath(item.path)) {
+      filePaths.push(item.path)
+    }
+  }
+
+  return { filePaths, previewFiles }
+}
+
 export async function saveWorkspaceState(): Promise<void> {
   const { openFiles, activeFilePath, expandedFolders, sidebarWidth, chatWidth, terminalLayout } = useStore.getState()
+  const persistedOpenFiles = openFiles
+    .map(toPersistedOpenFile)
+    .filter((file): file is WorkspaceStateData['openFiles'][number] => file !== null)
+  const persistedOpenFilePaths = new Set(persistedOpenFiles.map((file) => typeof file === 'string' ? file : file.path))
 
   const state: WorkspaceStateData = {
-    openFiles: openFiles.map((f: { path: string }) => f.path),
-    activeFile: activeFilePath,
+    openFiles: persistedOpenFiles,
+    activeFile: activeFilePath && persistedOpenFilePaths.has(activeFilePath) ? activeFilePath : null,
     expandedFolders: Array.from(expandedFolders),
     scrollPositions: {},
     cursorPositions: {},
@@ -84,13 +136,24 @@ export async function restoreWorkspaceState(): Promise<void> {
   }
 
   if (state.openFiles.length > 0) {
-    const prioritizedFiles = state.activeFile
-      ? [state.activeFile, ...state.openFiles.filter(filePath => filePath !== state.activeFile)]
-      : state.openFiles
+    const { filePaths, previewFiles } = normalizePersistedOpenFiles(state.openFiles)
+    const prioritizedFiles = state.activeFile && !isPreviewDocumentPath(state.activeFile)
+      ? [state.activeFile, ...filePaths.filter(filePath => filePath !== state.activeFile)]
+      : filePaths
 
     const restoredFiles = await readFilesWithConcurrency(prioritizedFiles)
-    if (restoredFiles.length > 0) {
-      restoreOpenFiles(restoredFiles, state.activeFile)
+    const restoredPreviewFiles = previewFiles.map((item) => ({
+      path: item.path,
+      content: '',
+      options: {
+        kind: 'preview' as const,
+        preview: item.preview,
+      },
+    }))
+
+    const mergedFiles = [...restoredFiles, ...restoredPreviewFiles]
+    if (mergedFiles.length > 0) {
+      restoreOpenFiles(mergedFiles, state.activeFile)
     }
   }
 

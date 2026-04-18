@@ -16,6 +16,7 @@ export { useResizePanel, useSidebarResize, useChatResize } from './useResizePane
 export { useAppInit } from './useAppInit'
 export { useAppShutdownState } from './useAppShutdownState'
 export { useGlobalShortcuts } from './useGlobalShortcuts'
+export { usePreviewDiscoveryToasts } from './usePreviewDiscoveryToasts'
 export { useLspIntegration } from './useLspIntegration'
 export { useFileSave } from './useFileSave'
 export { useLintCheck } from './useLintCheck'

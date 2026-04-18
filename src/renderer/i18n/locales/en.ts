@@ -675,4 +675,11 @@ export const en = {
   'agent.typing.5': 'Cracking the code...',
   'agent.typing.6': 'Deep in thought...',
   'agent.typing.7': 'Organizing cosmic data...',
+  'preview.toast.title': 'Detected local site',
+  'preview.toast.message': 'Found a runnable local site at {target}.',
+  'preview.toast.open': 'Open Preview',
+  'preview.toast.notNow': 'Not now',
+  'preview.toast.source.terminal': 'Terminal',
+  'preview.toast.source.workspace': 'Workspace',
+  'preview.toast.source.discovery': 'Discovery',
 } as const

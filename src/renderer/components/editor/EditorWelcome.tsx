@@ -1,7 +1,5 @@
 /**
- * 编辑器欢迎页面组件
- * 
- * 升级版：统一卡片风格，使用 Logo 组件
+ * 编辑器欢迎页组件
  */
 
 import { Search, Terminal } from 'lucide-react'
@@ -14,13 +12,11 @@ export function EditorWelcome() {
 
   return (
     <div className="h-full flex flex-col bg-transparent relative overflow-hidden">
-      {/* Background Decoration */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-accent/5 rounded-full blur-[120px] opacity-50" />
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center relative z-10 animate-fade-in p-8">
-        {/* Hero Section */}
         <div className="text-center mb-12">
           <div className="relative inline-block mb-6 group">
             <div className="absolute inset-0 bg-accent/20 blur-3xl rounded-full group-hover:bg-accent/30 transition-all duration-700" />
@@ -37,7 +33,6 @@ export function EditorWelcome() {
           </p>
         </div>
 
-        {/* Quick Actions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-2xl">
           <QuickActionButton
             icon={<Search className="w-5 h-5 text-accent" />}
@@ -58,7 +53,6 @@ export function EditorWelcome() {
           />
         </div>
 
-        {/* Footer Hints */}
         <div className="mt-16 flex items-center gap-8 text-xs text-text-muted/60 font-medium">
           <div className="flex items-center gap-2">
             <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-border font-mono">Ctrl</kbd>
@@ -77,7 +71,6 @@ export function EditorWelcome() {
   )
 }
 
-// 快捷操作按钮
 interface QuickActionButtonProps {
   icon: React.ReactNode
   iconBg: string
@@ -105,8 +98,8 @@ function QuickActionButton({ icon, iconBg, title, subtitle, shortcut, onClick }:
         </div>
       </div>
       <div className="flex gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
-        {shortcut.map((key, i) => (
-          <kbd key={i} className="h-6 px-2 rounded-md bg-black/20 border border-white/5 text-[10px] font-mono flex items-center text-text-secondary">
+        {shortcut.map((key, index) => (
+          <kbd key={index} className="h-6 px-2 rounded-md bg-black/20 border border-white/5 text-[10px] font-mono flex items-center text-text-secondary">
             {key}
           </kbd>
         ))}

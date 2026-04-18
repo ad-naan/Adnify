@@ -1,18 +1,25 @@
 import { useEffect } from 'react'
 import { emotionAdapter } from '@renderer/agent/emotion/emotionAdapter'
 import { emotionDetectionEngine } from '@renderer/agent/emotion/emotionDetectionEngine'
-import { terminalWatcher } from '@renderer/agent/services/terminalWatcher'
 import { adnifyDir } from '@renderer/services/adnifyDirService'
-import { terminalManager } from '@renderer/services/TerminalManager'
 import { persistAllRuntimeState } from '@renderer/services/appShutdownService'
 import { api } from '@renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 
 export function useAppShutdownState(): void {
   useEffect(() => {
+    let terminalWatcherCleanup: (() => void) | null = null
+
     emotionDetectionEngine.start()
     emotionAdapter.initialize()
-    terminalWatcher.start()
+    void import('@renderer/agent/services/terminalWatcher')
+      .then(({ terminalWatcher }) => {
+        terminalWatcher.start()
+        terminalWatcherCleanup = () => terminalWatcher.stop()
+      })
+      .catch((error) => {
+        logger.system.warn('[App] Failed to initialize terminal watcher:', error)
+      })
 
     const handleUnload = () => {
       try {
@@ -22,7 +29,11 @@ export function useAppShutdownState(): void {
       }
 
       try {
-        terminalManager.cleanup()
+        void import('@renderer/services/TerminalManager')
+          .then(({ terminalManager }) => terminalManager.cleanup())
+          .catch(() => {
+            /* ignore */
+          })
       } catch {
         /* ignore */
       }
@@ -53,7 +64,7 @@ export function useAppShutdownState(): void {
     window.addEventListener('beforeunload', handleUnload)
 
     return () => {
-      terminalWatcher.stop()
+      terminalWatcherCleanup?.()
       emotionAdapter.cleanup()
       emotionDetectionEngine.stop()
       unsubscribeShutdown()

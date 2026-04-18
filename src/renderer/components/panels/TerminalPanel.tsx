@@ -63,6 +63,24 @@ const TerminalPanel = memo(function TerminalPanel() {
     const scriptButtonRef = useRef<HTMLButtonElement>(null)
 
     const prevTerminalVisibleRef = useRef(false)
+    const workspaceRoot = selectedRoot || workspace?.roots?.[0] || workspace?.roots?.find(Boolean) || useStore.getState().workspacePath || ''
+
+    const refitVisibleTerminals = useCallback(() => {
+        const targetIds = isSplitView
+            ? managerState.terminals.map(t => t.id)
+            : managerState.activeId
+                ? [managerState.activeId]
+                : []
+
+        if (targetIds.length === 0) return
+
+        requestAnimationFrame(() => {
+            targetIds.forEach(id => terminalManager.fitTerminal(id))
+            window.setTimeout(() => {
+                targetIds.forEach(id => terminalManager.fitTerminal(id))
+            }, 80)
+        })
+    }, [isSplitView, managerState.activeId, managerState.terminals])
 
     // ===== 订阅 terminalManager =====
 
@@ -124,7 +142,9 @@ const TerminalPanel = memo(function TerminalPanel() {
                 mountedTerminals.current.delete(id)
             }
         }
-    }, [managerState.terminals, managerState.activeId, terminalVisible, isSplitView])
+
+        refitVisibleTerminals()
+    }, [managerState.terminals, managerState.activeId, terminalVisible, isSplitView, refitVisibleTerminals])
 
     // ===== 初始化 =====
 
@@ -152,6 +172,12 @@ const TerminalPanel = memo(function TerminalPanel() {
             oldTerminals.forEach(t => terminalManager.closeTerminal(t.id))
         }
     }, [workspace?.roots?.[0]])
+
+    useEffect(() => {
+        if (!selectedRoot && workspaceRoot) {
+            setSelectedRoot(workspaceRoot)
+        }
+    }, [selectedRoot, workspaceRoot])
 
     useEffect(() => {
         const loadScripts = async () => {
@@ -183,6 +209,11 @@ const TerminalPanel = memo(function TerminalPanel() {
         setTimeout(handleResize, 100)
         return () => window.removeEventListener('resize', handleResize)
     }, [terminalVisible, isCollapsed, managerState.activeId, height, isSplitView, managerState.terminals.length])
+
+    useEffect(() => {
+        if (!terminalVisible) return
+        refitVisibleTerminals()
+    }, [terminalVisible, refitVisibleTerminals])
 
     // ===== 拖拽调整高度 =====
 
@@ -252,36 +283,45 @@ const TerminalPanel = memo(function TerminalPanel() {
     // ===== 操作函数 =====
 
     const createTerminal = useCallback(async (shellPath?: string, shellName?: string) => {
-        const cwd = selectedRoot || workspace?.roots?.[0] || ''
+        const cwd = workspaceRoot
         if (!cwd) return
 
-        await terminalManager.createTerminal({
+        const terminalId = await terminalManager.createTerminal({
             name: shellName || availableShells[0]?.label || 'Terminal',
             cwd,
             shell: shellPath,
         })
         setShowShellMenu(false)
-    }, [selectedRoot, workspace?.roots, availableShells])
+        window.setTimeout(() => {
+            terminalManager.setActiveTerminal(terminalId)
+            refitVisibleTerminals()
+        }, 0)
+        return terminalId
+    }, [workspaceRoot, availableShells, refitVisibleTerminals])
 
-    // 仅在终端面板从关闭 -> 打开时，且当前没有终端时自动创建一个
-    // 避免用户关闭最后一个终端后，又被这个 effect 立即自动创建回来
     useEffect(() => {
-        const hasValidWorkspace = selectedRoot || (workspace?.roots && workspace.roots.length > 0)
-        const wasVisible = prevTerminalVisibleRef.current
-
-        if (terminalVisible && !wasVisible && availableShells.length > 0 && hasValidWorkspace) {
-            const timer = window.setTimeout(() => {
-                const liveState = terminalManager.getState()
-                if (useStore.getState().terminalVisible && liveState.terminals.length === 0) {
-                    createTerminal()
-                }
-            }, 120)
+        if (!terminalVisible || !workspaceRoot) {
             prevTerminalVisibleRef.current = terminalVisible
-            return () => window.clearTimeout(timer)
+            return
         }
 
+        const timer = window.setTimeout(() => {
+            const liveState = terminalManager.getState()
+
+            if (liveState.terminals.length === 0) {
+                void createTerminal()
+                return
+            }
+
+            if (!liveState.activeId && liveState.terminals[0]) {
+                terminalManager.setActiveTerminal(liveState.terminals[0].id)
+                refitVisibleTerminals()
+            }
+        }, prevTerminalVisibleRef.current ? 0 : 120)
+
         prevTerminalVisibleRef.current = terminalVisible
-    }, [terminalVisible, managerState.terminals.length, availableShells.length, selectedRoot, workspace?.roots, createTerminal])
+        return () => window.clearTimeout(timer)
+    }, [terminalVisible, managerState.terminals.length, workspaceRoot, createTerminal, refitVisibleTerminals])
 
     const closeTerminal = useCallback((id: string, e?: React.MouseEvent) => {
         e?.stopPropagation()

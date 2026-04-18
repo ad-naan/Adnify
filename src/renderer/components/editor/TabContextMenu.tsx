@@ -1,11 +1,12 @@
 /**
- * Tab 右键菜单组件
+ * Tab context menu component.
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { useRef, useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { toast } from '../common/ToastProvider'
 import { keybindingService, formatShortcut } from '@services/keybindingService'
+import { isPreviewDocumentPath } from '@shared/types/preview'
 
 interface TabContextMenuProps {
   x: number
@@ -22,20 +23,35 @@ interface TabContextMenuProps {
 }
 
 export function TabContextMenu({
-  x, y, filePath, onClose, onCloseFile, onCloseOthers, onCloseAll, onCloseToRight, onSave, isDirty, language
+  x,
+  y,
+  filePath,
+  onClose,
+  onCloseFile,
+  onCloseOthers,
+  onCloseAll,
+  onCloseToRight,
+  onSave,
+  isDirty,
+  language,
 }: TabContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const isZh = language === 'zh'
+  const isPreview = isPreviewDocumentPath(filePath)
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         onClose()
       }
     }
-    const handleEscape = (e: KeyboardEvent) => {
-      if (keybindingService.matches(e, 'editor.cancel')) onClose()
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (keybindingService.matches(event, 'editor.cancel')) {
+        onClose()
+      }
     }
+
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleEscape)
     return () => {
@@ -50,31 +66,38 @@ export function TabContextMenu({
     { label: isZh ? '关闭右侧' : 'Close to the Right', action: () => onCloseToRight(filePath) },
     { label: isZh ? '关闭全部' : 'Close All', action: () => onCloseAll() },
     { type: 'separator' as const },
-    { label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: formatShortcut('Ctrl+S'), disabled: !isDirty },
-    { type: 'separator' as const },
+    ...(!isPreview
+      ? [{ label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: formatShortcut('Ctrl+S'), disabled: !isDirty }, { type: 'separator' as const }]
+      : []),
     {
       label: isZh ? '复制路径' : 'Copy Path',
       action: () => {
         navigator.clipboard.writeText(filePath)
         toast.success(isZh ? '已复制路径' : 'Path Copied')
-      }
+      },
     },
-    {
-      label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer',
-      action: () => api.file.showInFolder(filePath)
-    },
-    {
-      label: isZh ? '在侧边栏中定位' : 'Reveal in Sidebar',
-      action: () => window.dispatchEvent(new CustomEvent('explorer:reveal-file', { detail: { filePath } }))
-    },
-    { type: 'separator' as const },
-    {
-      label: isZh ? '在浏览器中打开' : 'Open in Browser',
-      action: async () => {
-        const success = await api.file.openInBrowser(filePath)
-        if (!success) toast.error(isZh ? '打开失败' : 'Failed to open')
-      }
-    },
+    ...(!isPreview
+      ? [
+          {
+            label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer',
+            action: () => api.file.showInFolder(filePath),
+          },
+          {
+            label: isZh ? '在侧边栏中定位' : 'Reveal in Sidebar',
+            action: () => window.dispatchEvent(new CustomEvent('explorer:reveal-file', { detail: { filePath } })),
+          },
+          { type: 'separator' as const },
+          {
+            label: isZh ? '在浏览器中打开' : 'Open in Browser',
+            action: async () => {
+              const success = await api.file.openInBrowser(filePath)
+              if (!success) {
+                toast.error(isZh ? '打开失败' : 'Failed to open')
+              }
+            },
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -89,15 +112,19 @@ export function TabContextMenu({
         ) : (
           <button
             key={item.label || `item-${index}`}
-            onClick={() => { item.action?.(); onClose() }}
+            onClick={() => {
+              item.action?.()
+              onClose()
+            }}
             disabled={item.disabled}
             className="w-full px-3 py-1.5 text-left text-sm text-text-primary hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between"
           >
             <span>{item.label}</span>
             {item.shortcut && <span className="text-xs text-text-muted ml-4">{item.shortcut}</span>}
           </button>
-        )
+        ),
       )}
     </div>
   )
 }
+
