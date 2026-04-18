@@ -619,6 +619,8 @@ class TerminalManagerClass {
       lineHeight: termConfig.lineHeight,
       scrollback: termConfig.scrollback,
       allowProposedApi: true,
+      drawBoldTextInBrightColors: true,
+      minimumContrastRatio: 4.5,
       theme: this.currentTheme,
     });
 
