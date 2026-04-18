@@ -7,7 +7,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw } from 'lucide-react'
+import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw, Pencil } from 'lucide-react'
 import { PROVIDERS, type ApiProtocol, getProviderDefaultHeaders } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
 import { globalConfirm } from '@components/common/ConfirmDialog'
@@ -549,6 +549,8 @@ export function ProviderSettings({
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
   const [logitBiasString, setLogitBiasString] = useState('')
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
+  const [editingProviderName, setEditingProviderName] = useState('')
 
   // Headers 状态
   const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string; isCustom?: boolean }>>([])
@@ -563,6 +565,32 @@ export function ProviderSettings({
   // 当前选中的是自定义 Provider 吗？
   const isCustomSelected = isCustomProvider(localConfig.provider)
   const selectedCustomConfig = isCustomSelected ? localProviderConfigs[localConfig.provider] : null
+
+  const startEditingCustomProvider = (id: string, displayName: string) => {
+    setEditingProviderId(id)
+    setEditingProviderName(displayName)
+  }
+
+  const cancelEditingCustomProvider = () => {
+    setEditingProviderId(null)
+    setEditingProviderName('')
+  }
+
+  const saveEditingCustomProvider = () => {
+    const nextName = editingProviderName.trim()
+    if (!editingProviderId || !nextName) return
+
+    setLocalProviderConfigs(prev => ({
+      ...prev,
+      [editingProviderId]: {
+        ...prev[editingProviderId],
+        displayName: nextName,
+        updatedAt: Date.now(),
+      },
+    }))
+
+    cancelEditingCustomProvider()
+  }
 
   // 获取当前 provider 的协议（用于获取默认请求头）
   const getCurrentProtocol = (): ApiProtocol | undefined => {
@@ -679,6 +707,7 @@ export function ProviderSettings({
         ...localProviderConfigs,
         [localConfig.provider]: {
           ...localProviderConfigs[localConfig.provider],
+          displayName: localProviderConfigs[localConfig.provider]?.displayName,
           apiKey: localConfig.apiKey,
           baseUrl: localConfig.baseUrl,
           timeout: localConfig.timeout,
@@ -713,6 +742,7 @@ export function ProviderSettings({
       ...localProviderConfigs,
       [localConfig.provider]: {
         ...localProviderConfigs[localConfig.provider],
+        displayName: localProviderConfigs[localConfig.provider]?.displayName,
         apiKey: localConfig.apiKey,
         baseUrl: localConfig.baseUrl,
         timeout: localConfig.timeout,
@@ -832,6 +862,7 @@ export function ProviderSettings({
           {/* 自定义 Provider */}
           {customProviders.map(({ id, config }) => {
             const displayName = config.displayName || id
+            const isEditing = editingProviderId === id
             return (
               <div
                 key={id}
@@ -841,11 +872,65 @@ export function ProviderSettings({
                   : 'border-border bg-surface/30 text-text-secondary hover:bg-surface/50 hover:border-accent/30 hover:text-text-primary'
                   }`}
               >
-                <span className={`font-bold text-sm truncate w-full text-center ${localConfig.provider === id ? 'text-text-primary' : ''}`}>{displayName}</span>
+                {isEditing ? (
+                  <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <Input
+                      value={editingProviderName}
+                      onChange={(e) => setEditingProviderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          saveEditingCustomProvider()
+                        }
+                        if (e.key === 'Escape') {
+                          e.preventDefault()
+                          cancelEditingCustomProvider()
+                        }
+                      }}
+                      autoFocus
+                      className="h-8 bg-background/80 border-accent/40 text-xs text-center"
+                    />
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          saveEditingCustomProvider()
+                        }}
+                        disabled={!editingProviderName.trim()}
+                        className="h-6 px-2 rounded-md bg-accent text-white text-[10px] font-bold disabled:opacity-40"
+                      >
+                        {language === 'zh' ? '保存' : 'Save'}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          cancelEditingCustomProvider()
+                        }}
+                        className="h-6 px-2 rounded-md bg-surface-hover text-text-secondary text-[10px] font-bold"
+                      >
+                        {language === 'zh' ? '取消' : 'Cancel'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <span className={`font-bold text-sm truncate w-full text-center ${localConfig.provider === id ? 'text-text-primary' : ''}`}>{displayName}</span>
+                )}
                 {localConfig.provider === id && (
                   <div className="absolute top-3 right-3 bg-accent rounded-full p-0.5 shadow-lg shadow-accent/20">
                     <Check className="w-3 h-3 text-white" strokeWidth={3} />
                   </div>
+                )}
+                {!isEditing && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEditingCustomProvider(id, displayName)
+                    }}
+                    className="absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center rounded-full bg-background border border-border text-text-muted shadow-xl opacity-0 group-hover:opacity-100 hover:text-accent hover:border-accent/30 transition-all scale-90 hover:scale-100 z-10"
+                    title={language === 'zh' ? '重命名' : 'Rename'}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
                 )}
                 <button
                   onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
