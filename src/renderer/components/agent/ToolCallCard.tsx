@@ -466,7 +466,9 @@ function ToolPreview({
         const nextContent = asString(args.content) || asString(args.new_string)
         const oldContent = oldString.slice(0, 5000)
         const newContent = nextContent.slice(0, 5000)
-        const isTruncated = nextContent.length > 5000 || oldString.length > 5000
+        const meta = args._meta as Record<string, unknown> | undefined
+        const isLargeWrite = meta?.isLargeWrite === true || meta?.contentTruncated === true
+        const isTruncated = isLargeWrite || nextContent.length > 5000 || oldString.length > 5000
 
         if (newContent || isStreaming) {
             return (
@@ -490,15 +492,21 @@ function ToolPreview({
                         )}
                         {isTruncated && !isStreaming && <span className="text-amber-500">(truncated)</span>}
                     </div>
-                    <div className="max-h-64 overflow-auto custom-scrollbar pl-2 ml-1">
-                        <InlineDiffPreview
-                            oldContent={oldContent}
-                            newContent={newContent}
-                            filePath={filePath}
-                            isStreaming={isStreaming}
-                            maxLines={30}
-                        />
-                    </div>
+                    {isLargeWrite && !isStreaming ? (
+                        <div className="ml-1 rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-2 text-[11px] text-text-muted">
+                            Large file preview deferred. Open the file to inspect the full content safely.
+                        </div>
+                    ) : (
+                        <div className="max-h-64 overflow-auto custom-scrollbar pl-2 ml-1">
+                            <InlineDiffPreview
+                                oldContent={oldContent}
+                                newContent={newContent}
+                                filePath={filePath}
+                                isStreaming={isStreaming}
+                                maxLines={30}
+                            />
+                        </div>
+                    )}
                     {stringResult && !isStreaming && (
                         <ExpandablePreviewContainer language={language} maxHeight="max-h-[100px]">
                             <div className="p-2 text-[11px] text-text-muted">

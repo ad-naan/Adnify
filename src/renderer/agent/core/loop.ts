@@ -28,6 +28,7 @@ import {
 } from '../domains/context'
 import { updateStats, LEVEL_NAMES, estimateMessagesTokens } from '../domains/context/CompressionManager'
 import { lintService } from '../services/lintService'
+import { getRelativeChangePath, isFileWriteToolResult } from '../utils/fileChangeUtils'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { LintCheckFile } from '../types'
 import type { ChatMessage } from '../types'
@@ -1013,12 +1014,19 @@ Try again with the corrected tool call.`
       }, success)
 
       const meta = toolResult.meta
-      if (meta?.filePath && typeof meta.filePath === 'string' && typeof meta.newContent === 'string') {
-        loopDetector.updateContentHash(meta.filePath, meta.newContent)
+      if (isFileWriteToolResult(toolCall.name, meta)) {
+        if (typeof meta.postHash === 'string') {
+          loopDetector.updateContentHashBySignature(meta.filePath, meta.postHash)
+        } else if (typeof meta.newContent === 'string') {
+          loopDetector.updateContentHash(meta.filePath, meta.newContent)
+        }
+
+        const relativePath = getRelativeChangePath(meta.filePath, context.workspacePath ?? null, meta.relativePath)
 
         // 添加待确认的文件变更
         store.addPendingChange({
           filePath: meta.filePath,
+          relativePath,
           toolCallId: toolCall.id,
           toolName: toolCall.name,
           changeType: meta.oldContent ? 'modify' : 'create',
@@ -1027,7 +1035,7 @@ Try again with the corrected tool call.`
             content: (meta.oldContent as string) || null,
             timestamp: Date.now(),
           },
-          newContent: meta.newContent,
+          newContent: typeof meta.newContent === 'string' ? meta.newContent : null,
           linesAdded: (meta.linesAdded as number) || 0,
           linesRemoved: (meta.linesRemoved as number) || 0,
         })

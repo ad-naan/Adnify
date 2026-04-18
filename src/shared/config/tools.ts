@@ -210,11 +210,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 - **String mode**: provide \`old_string\` + \`new_string\` only. Do NOT add start_line/end_line/content.
 - **Line mode**: provide \`start_line\` + \`end_line\` + \`content\` only. Do NOT add old_string/new_string.
 - **Batch mode**: provide \`edits\` array only. Do NOT add any other mode parameters.
-CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call.`,
+CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call. For large files, prefer line mode or batch mode and keep old_string short and unique.`,
         detailedDescription: `Three mutually exclusive editing modes:
 - String mode: old_string + new_string (include 3-5 lines context around the change)
 - Line mode: start_line + end_line + content (use exact line numbers from read_file)
-- Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)`,
+- Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)
+- Large-file rule: avoid huge old_string/new_string payloads; prefer line mode or batch mode for broad edits`,
         customSchema: z.object({
             path: z.string().min(1, 'path is required'),
             old_string: z.string().optional(),
@@ -253,7 +254,7 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root', required: true },
-            old_string: { type: 'string', description: '[STRING MODE ONLY] Exact text to find — include 3-5 lines of context. Do NOT use together with start_line/end_line/content/edits.' },
+            old_string: { type: 'string', description: '[STRING MODE ONLY] Exact text to find — include 3-5 lines of context. Keep it short and unique; avoid huge blocks in large files. Do NOT use together with start_line/end_line/content/edits.' },
             new_string: { type: 'string', description: '[STRING MODE ONLY] Replacement text. Do NOT use together with start_line/end_line/content/edits.' },
             start_line: { type: 'number', description: '[LINE MODE ONLY] First line to replace (1-indexed). Do NOT use together with old_string/new_string/edits.' },
             end_line: { type: 'number', description: '[LINE MODE ONLY] Last line to replace (inclusive). Do NOT use together with old_string/new_string/edits.' },
@@ -280,10 +281,11 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
     write_file: {
         name: 'write_file',
         displayName: 'Write File',
-        description: 'Write complete content to a file. Use for: (1) creating a new file, (2) completely rewriting an existing file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead.',
+        description: 'Write complete content to a file. Use for: (1) creating a new file, (2) completely rewriting an existing file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead. Avoid repeated full rewrites of large existing files when a targeted edit will do.',
         criticalRules: [
             'OVERWRITES entire file — use edit_file for any partial change',
             'Prefer over create_file_or_folder when you have file content ready',
+            'Do not rewrite the same large file multiple times in one turn unless absolutely necessary',
         ],
         category: 'write',
         approvalType: 'none',

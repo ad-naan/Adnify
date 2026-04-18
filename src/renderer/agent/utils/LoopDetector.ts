@@ -147,6 +147,14 @@ export class LoopDetector {
 
   updateContentHash(filePath: string, content: string): void {
     const hash = this.hashContent(content)
+    this.pushContentHash(filePath, hash)
+  }
+
+  updateContentHashBySignature(filePath: string, hash: string): void {
+    this.pushContentHash(filePath, hash)
+  }
+
+  private pushContentHash(filePath: string, hash: string): void {
     const hashes = this.contentHashes.get(filePath) || []
     hashes.push(hash)
     if (hashes.length > 10) {

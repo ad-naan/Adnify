@@ -172,9 +172,11 @@ You are an AUTONOMOUS agent. This means:
 - Stop only when the task is fully completed
 - Verify changes with get_lint_errors after editing code
 - Batch similar operations: use read_multiple_files, combine search patterns with |
+- For large files, prefer line-mode or batched edits; avoid huge old_string blocks and repeated full rewrites
 
 ### Handling Failures
 - If edit_file fails: read the file again, then retry with more context
+- If the target file is large: switch to line mode or batch mode instead of expanding old_string
 - If a command fails: analyze the error, try alternative approach
 - After 2-3 failed attempts: explain the issue and ask for guidance`
 

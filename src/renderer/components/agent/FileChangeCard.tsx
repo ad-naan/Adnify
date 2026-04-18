@@ -45,6 +45,7 @@ function FileChangeCard({
 
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
+    const isLargeWrite = meta?.isLargeWrite === true || meta?.contentTruncated === true
 
     // Local streamed content used by the diff preview.
     const [streamingContent, setStreamingContent] = useState<string | null>(null)
@@ -96,6 +97,27 @@ function FileChangeCard({
         if (meta?.newContent) return meta.newContent as string
         return (args.content || args.code || args.new_string || args.replacement || args.source) as string || ''
     }, [args, meta, streamingContent, isRunning, isStreaming])
+
+    const openFullFile = useMemo(() => async () => {
+        let absPath = filePath
+        const isAbsolute = /^([a-zA-Z]:[\\/]|[/])/.test(absPath)
+        if (!isAbsolute && workspacePath) {
+            absPath = joinPath(workspacePath, absPath)
+        }
+
+        try {
+            const content = await api.file.read(absPath)
+            if (content !== null) {
+                openFile(absPath, content)
+                setActiveFile(absPath)
+                return
+            }
+        } catch {
+            // Best effort fallback below.
+        }
+
+        toast.error(`Failed to open file: ${getFileName(absPath)}`)
+    }, [filePath, workspacePath, openFile, setActiveFile])
 
     const diffStats = useMemo(() => {
         // Prefer precise stats returned by the tool when available.
@@ -198,7 +220,9 @@ function FileChangeCard({
                                     className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-[12px] font-medium' : 'font-medium text-[12px]'} hover:underline hover:text-accent cursor-pointer transition-colors break-all`}
                                     onClick={(e) => {
                                         e.stopPropagation()
-                                        if (onOpenInEditor && newContent) {
+                                        if (isLargeWrite) {
+                                            void openFullFile()
+                                        } else if (onOpenInEditor && newContent) {
                                             onOpenInEditor(filePath, oldContent, newContent)
                                         } else {
                                             let absPath = filePath
@@ -254,6 +278,10 @@ function FileChangeCard({
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation()
+                                    if (isLargeWrite) {
+                                        void openFullFile()
+                                        return
+                                    }
                                     onOpenInEditor(filePath, oldContent, newContent)
                                 }}
                                 className="p-1 text-text-muted hover:text-accent hover:bg-surface-hover rounded-md transition-colors opacity-0 group-hover:opacity-100"
@@ -284,7 +312,29 @@ function FileChangeCard({
                             <div className="relative z-10">
                                 <ExpandablePreviewContainer language={language}>
                                     <div className="relative min-h-[60px] p-2">
-                                        {isExpanded ? (
+                                        {isLargeWrite && !isStreaming && !isRunning ? (
+                                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-text-secondary">
+                                                <div className="font-medium text-amber-400">
+                                                    Large file preview is deferred to keep the UI responsive.
+                                                </div>
+                                                <div className="mt-1 opacity-80">
+                                                    {typeof meta?.oldContentLength === 'number' || typeof meta?.newContentLength === 'number'
+                                                        ? `Size: ${meta?.oldContentLength || 0} -> ${meta?.newContentLength || 0} chars`
+                                                        : 'Open the file in the editor to inspect the full result.'}
+                                                </div>
+                                                <div className="mt-3">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            void openFullFile()
+                                                        }}
+                                                        className="rounded-md border border-border bg-surface-hover px-2.5 py-1.5 text-[11px] font-medium text-text-primary transition-colors hover:border-accent hover:text-accent"
+                                                    >
+                                                        Open full file
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : isExpanded ? (
                                             <InlineDiffPreview
                                                 oldContent={oldContent}
                                                 newContent={newContent}
@@ -336,5 +386,3 @@ function FileChangeCard({
 }
 
 export default memo(FileChangeCard)
-
-

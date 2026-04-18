@@ -10,6 +10,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { composerService } from '@renderer/agent/services/composerService'
+import { buildFileChangeDescriptor } from '@renderer/agent/utils/fileChangeUtils'
 import { toast } from '../common/ToastProvider'
 
 interface InlineEditProps {
@@ -34,7 +35,7 @@ export default function InlineEdit({
 	const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
 	const [originalContent, setOriginalContent] = useState<string>('')
 	const inputRef = useRef<HTMLInputElement>(null)
-	const { llmConfig, language, updateFileContent } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, language: s.language, updateFileContent: s.updateFileContent })))
+	const { llmConfig, language, updateFileContent, workspacePath } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, language: s.language, updateFileContent: s.updateFileContent, workspacePath: s.workspacePath })))
 	const containerRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
@@ -66,15 +67,15 @@ export default function InlineEdit({
 
 		// Create a composer session so inline diff rendering kicks in
 		composerService.ensureSession('Inline Edit', 'AI Inline Edit')
-		composerService.addChange({
+		composerService.addChange(buildFileChangeDescriptor({
 			filePath,
-			relativePath: filePath.split(/[\\/]/).pop() || filePath,
+			workspacePath,
 			oldContent: currentFile.content,
 			newContent: currentFile.content,
 			changeType: 'modify',
 			linesAdded: 0,
 			linesRemoved: 0
-		})
+		}))
 
 		try {
 			const prompt = buildEditPrompt(instruction, selectedCode, filePath, lineRange)
@@ -102,15 +103,15 @@ export default function InlineEdit({
 					updateFileContent(filePath, newFullContent)
 
 					// Update composer service explicitly so diff logic has newContent
-					composerService.addChange({
+					composerService.addChange(buildFileChangeDescriptor({
 						filePath,
-						relativePath: filePath.split(/[\\/]/).pop() || filePath,
+						workspacePath,
 						oldContent: currentFile.content,
 						newContent: newFullContent,
 						changeType: 'modify',
 						linesAdded: 0,
 						linesRemoved: 0
-					})
+					}))
 				}
 			})
 
@@ -150,7 +151,7 @@ export default function InlineEdit({
 			setState('idle')
 			setActiveRequestId(null)
 		}
-	}, [instruction, state, selectedCode, filePath, lineRange, llmConfig, updateFileContent, onClose])
+	}, [instruction, state, selectedCode, filePath, lineRange, llmConfig, updateFileContent, onClose, workspacePath])
 
 	const handleAccept = useCallback(() => {
 		// Just clear composer change pending status by "accepting" it

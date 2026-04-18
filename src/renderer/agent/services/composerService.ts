@@ -14,26 +14,15 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { getDirname } from '@shared/utils/pathUtils'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
+import type { FileChangeDescriptor, FileChangeRecord } from '../types/fileChange'
 
-
-export interface FileChange {
-  filePath: string
-  relativePath: string
-  oldContent: string | null  // null for new files
-  newContent: string | null  // null for deleted files
-  changeType: 'create' | 'modify' | 'delete'
-  linesAdded: number
-  linesRemoved: number
-  // Tracking
-  toolCallId?: string
-  status: 'pending' | 'accepted' | 'rejected'
-}
+export type FileChange = FileChangeRecord
 
 export interface ComposerSession {
   id: string
   title: string
   description?: string
-  changes: FileChange[]
+  changes: FileChangeRecord[]
   createdAt: number
   status: 'active' | 'completed' | 'cancelled'
   // Stats
@@ -115,13 +104,13 @@ class ComposerServiceClass {
   /**
    * Add a file change to the current session
    */
-  addChange(change: Omit<FileChange, 'status'>): void {
+  addChange(change: FileChangeDescriptor): void {
     if (!this.state.currentSession) {
       logger.agent.warn('[Composer] No active session')
       return
     }
 
-    const fullChange: FileChange = {
+    const fullChange: FileChangeRecord = {
       ...change,
       status: 'pending',
     }
