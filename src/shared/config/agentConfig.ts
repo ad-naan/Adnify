@@ -61,8 +61,8 @@ export interface ToolTruncateConfig {
 
 export const TOOL_TRUNCATE_DEFAULTS: Record<string, ToolTruncateConfig> = {
   // 文件读取
-  read_file: { maxLength: 20000, headRatio: 0.8, tailRatio: 0.15 },
-  read_multiple_files: { maxLength: 30000, headRatio: 0.8, tailRatio: 0.15 },
+  read_file: { maxLength: 60000, headRatio: 0.85, tailRatio: 0.1 },
+  read_multiple_files: { maxLength: 120000, headRatio: 0.9, tailRatio: 0.05 },
   // 搜索结果
   search_files: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
   codebase_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
@@ -233,5 +233,4 @@ export function getCacheConfig(type: keyof CacheConfigs, override?: Partial<Cach
 export function getToolTruncateConfig(toolName: string): ToolTruncateConfig {
   return TOOL_TRUNCATE_DEFAULTS[toolName] || TOOL_TRUNCATE_DEFAULTS.default
 }
-
 

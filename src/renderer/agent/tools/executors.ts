@@ -33,6 +33,8 @@ import { skillService } from '../services/skillService'
 import type { TranslationKey } from '@/renderer/i18n'
 import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../utils/agentText'
+import { buildReadTruncationMessage, getReadStrategy } from './readStrategies'
+import { guardWriteFile } from './fileWriteStrategy'
 
 // ===== 辅助函数 =====
 
@@ -1031,9 +1033,25 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async write_file(args, ctx) {
+        // write_file 的职责被严格限定为“新建文件 / 整文件重写”。
+        // 因此在真正落盘前，先经过统一策略守卫，避免把局部修改误用成整文件覆盖。
         const path = resolvePath(args.path, ctx.workspacePath)
         const content = args.content as string
         const originalContent = await api.file.read(path) || ''
+        const writeDecision = guardWriteFile({
+            path,
+            originalContent,
+            nextContent: content,
+            hasRecentRead: fileCacheService.hasValidCache(path),
+        })
+        if (!writeDecision.allow) {
+            return {
+                success: false,
+                result: '',
+                // 把拒绝原因直接返回给模型，促使它切换到 edit_file 的合适模式。
+                error: writeDecision.reason || 'write_file rejected by write strategy',
+            }
+        }
         const guardedWrite = await guardedWriteFile({
             path,
             nextContent: content,
@@ -1042,6 +1060,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             skipStaleCheck: true,
         })
         if (!guardedWrite.success) return guardedWrite.result
+        // 写入成功后立即刷新缓存，保证后续 edit/read 判定看到的是最新内容。
+        fileCacheService.markFileAsRead(path, content)
 
         // 通知 LSP 并等待诊断
         await notifyLspAfterWrite(path, content)
@@ -1062,7 +1082,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         return {
             success: true,
             result: 'File written successfully',
-            meta: buildWriteMeta(path, originalContent, content, lineChanges, guardedWrite.meta)
+            meta: buildWriteMeta(path, originalContent, content, lineChanges, guardedWrite.meta, {
+                writeIntent: writeDecision.intent,
+                writeAnalysis: writeDecision.analysis,
+            })
         }
     },
 
