@@ -3,7 +3,10 @@
  */
 
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-import { Language } from '@renderer/i18n'
+
+// 本地类型定义（避免从 renderer 导入）
+type Language = 'en' | 'zh'
+
 // =================== 类型定义 ===================
 
 interface SearchFilesOptions {
