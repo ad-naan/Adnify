@@ -11,7 +11,7 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 
 <!-- 主界面演示 -->
 <div align="center">
-  <video src="images/main_compressed.mp4" controls autoplay loop muted width="800">
+  <video src="images/main.mp4" controls autoplay loop muted width="800">
     您的浏览器不支持视频标签。
   </video>
 </div>
@@ -24,7 +24,7 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 
 | 微信群 | QQ 群 | 作者微信 |
 |:---:|:---:|:---:|
-| ![微信群二维码](images/wechat-group.png) | ![QQ群二维码](images/qq-group.png) | ![作者微信](images/wechat-author.png) |
+| <img src="images/wechat-group.png" width="200" height="200" alt="微信群二维码" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ群二维码" /> | <img src="images/wechat-author.png" width="200" height="200" alt="作者微信" /> |
 | 扫码加入微信群 | QQ群号: `1076926858` | 微信号: `adnaan_worker` |
 
 > 💡 如有问题或建议，也可以直接在 [Gitee Issues](https://gitee.com/adnaan/adnify/issues) 或[Github Issues](https://github.com/adnaan-worker/adnify/issues)  提交

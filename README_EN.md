@@ -11,7 +11,7 @@ Adnify is more than just an editor—it's your **intelligent programming compani
 
 <!-- Main Interface Demo -->
 <div align="center">
-  <video src="images/main_compressed.mp4" controls autoplay loop muted width="800">
+  <video src="images/main.mp4" controls autoplay loop muted width="800">
     Your browser does not support the video tag.
   </video>
 </div>
@@ -24,7 +24,7 @@ Join our community to discuss Adnify usage and development!
 
 | WeChat Group | QQ Group | Author WeChat |
 |:---:|:---:|:---:|
-| ![WeChat Group QR](images/wechat-group.png) | ![QQ Group QR](images/qq-group.png) | ![Author WeChat](images/wechat-author.png) |
+| <img src="images/wechat-group.png" width="200" height="200" alt="WeChat Group QR" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ Group QR" /> | <img src="images/wechat-author.png" width="200" height="200" alt="Author WeChat" /> |
 | Scan to join WeChat group | QQ Group: `1076926858` | WeChat ID: `adnaan_worker` |
 
 > 💡 For issues or suggestions, submit them on [Gitee Issues](https://gitee.com/adnaan/adnify/issues) or [Github Issues](https://github.com/adnaan-worker/adnify/issues)
