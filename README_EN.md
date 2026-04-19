@@ -313,37 +313,80 @@ graph TB
 ### 🤖 Deep AI Agent Integration
 
 - **Three Core Working Modes**:
-  - **Chat Mode** 💬: Pure conversation mode, quick Q&A, direct response, no active tool calls
-  - **Agent Mode** 🤖: Intelligent agent mode, single-thread task focus, full file system and terminal permissions
-  - **Orchestrator Mode** 🧠: **[NEW]** All-new orchestrator mode supporting multi-turn interactive requirements gathering. Automatically slices high-complexity tasks and distributes them to **8 exclusive core AI expert modules** (including: Balanced, Concise, Coder, Architect, Code Reviewer, Analyst, UI/UX Designer, Orchestrator) for ultimate precision.
+  - **Chat Mode** 💬: Pure conversation mode for quick Q&A and code discussions, direct responses without active tool calls
+  - **Agent Mode** 🤖: Intelligent agent mode with single-thread task focus, full file system read/write and terminal execution permissions, ideal for clear development tasks
+  - **Plan Mode** 🧠: **[NEW]** Task orchestration mode supporting multi-turn interactive requirement gathering, automatically creates deep step-by-step execution plans, decomposes complex tasks into multiple sub-tasks with parallel/serial execution, supports task dependency management and progress tracking
 
-- **24 Built-in Native Core Tools**: Building a universal foundation allowing AI to fully take over projects
-  - 📂 **File System**: `read_file`, `list_directory`
-  - ✍️ **Polymorphic Writes**: `write_file`, `edit_file`, `create_file_or_folder`, `delete_file_or_folder`
-  - 🔎 **Full-scale Search Engine**: `search_files` (ultra-fast regex scan), `codebase_search` (LanceDB vector semantic insight)
-  - 🧠 **Language Service (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors`
-  - 💻 **Sandbox Terminal**: `run_command`, `read_terminal_output`, `send_terminal_input`, `stop_terminal`
+- **24+ Built-in Native Core Tools**: Building a universal foundation allowing AI to fully take over projects
+  - 📂 **File System Management**: `read_file` (supports single/batch file reading), `list_directory` (supports recursive traversal)
+  - ✍️ **Smart Code Editing**: `edit_file` (9-strategy intelligent matching), `write_file`, `create_file_or_folder`, `delete_file_or_folder`
+  - 🔎 **Full-scale Search Engine**: `search_files` (ultra-fast regex scan, supports | pattern combination), `codebase_search` (LanceDB vector semantic insight)
+  - 🧠 **Language Service (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors` (supports force refresh)
+  - 💻 **Sandbox Terminal Control**: `run_command` (supports background execution), `read_terminal_output`, `send_terminal_input` (supports Ctrl key combinations), `stop_terminal`
   - 🌐 **Knowledge Networking**: `web_search` (multi-strategy fusion), `read_url` (Jina deep parsing)
-  - 🤝 **Human-like Interaction**: `ask_user`
-  - ✨ **Super-smart Planning**: `create_task_plan`, `update_task_plan`, `start_task_execution`
-  - 🎨 **Cutting-edge Design Search**: `uiux_search` (global design aesthetics and best practices)
+  - 🤝 **Human-like Interaction**: `ask_user` (supports manual approval and confirmation)
+  - ✨ **Task Planning System**: `create_task_plan`, `update_task_plan`, `start_task_execution` (supports task dependencies and parallel execution)
+  - 🎨 **UI/UX Design Search**: `uiux_search` (global design aesthetics knowledge base and industry best practices)
+  - 💾 **Project Memory Management**: `read_memory`, `write_memory` (supports manual approval mechanism)
 
-- **Smart Context**:
-  - `@filename` Reference file context
-  - `@codebase` Semantic codebase search
-  - `@git` Reference Git changes
-  - `@terminal` Reference terminal output
-  - `@symbols` Reference current file symbols
-  - `@web` Web search
-  - Drag & drop files/folders to chat
+- **Smart Context References**:
+  - `@filename` - Reference file context with fuzzy matching support
+  - `@codebase` - Semantic codebase search based on AI Embedding
+  - `@git` - Reference Git changes, auto-fetch diff info
+  - `@terminal` - Reference terminal output for quick error analysis
+  - `@symbols` - Reference current file symbols, quick navigation to functions/classes
+  - `@web` - Web search for latest technical documentation
+  - Drag & drop files/folders to chat for batch context addition
 
-- **Multi-LLM Support**: OpenAI, Anthropic Claude, Google Gemini, DeepSeek, Ollama, Custom API
-- **Quick Model Switching**: Dropdown selector at bottom of chat panel, grouped by provider
-- **⚡ Skills System (NEW)**: Plugin-based system based on agentskills.io standard, supports installation from marketplace (skills.sh) or GitHub
-- **🔌 MCP Protocol Support**: Integrated Model Context Protocol for external tool extensions
-- **💾 AI Memory & Approval**: Project-level memory storage with manual approval mechanism for AI-written memories
-- **🎨 Enhanced Response Preview**: Tool results support rich rendering (Markdown, Images, Tables) with fluid typewriter animation
-- **🪵 Eye Style Logs**: Redesigned color-highlighted log system for both Main and Renderer processes
+- **Seamless Multi-LLM Switching**: 
+  - Supports OpenAI (GPT-4, GPT-4o, o1 series)
+  - Anthropic Claude (Claude 3.5 Sonnet, Claude 3.7)
+  - Google Gemini (Gemini 2.0, Gemini 1.5 Pro)
+  - DeepSeek (DeepSeek-V3, DeepSeek-R1 with thinking process visualization)
+  - Ollama (local models)
+  - Custom API (OpenAI-compatible format)
+  
+- **Quick Model Switching**: Dropdown selector at bottom of chat panel, grouped by provider, one-click model switching with custom model parameters
+
+- **⚡ Skills System**: 
+  - Plugin-based system based on agentskills.io standard
+  - Search and install community skill packages from skills.sh marketplace
+  - Direct installation from GitHub repositories
+  - Supports project-level and global-level skills, project-level overrides global
+  - Supports Auto mode (AI auto-determines loading) and Manual mode (requires @skill-name reference)
+  - Skill packages support YAML frontmatter metadata configuration
+
+- **🔌 Deep MCP Protocol Integration**: 
+  - Full implementation of Model Context Protocol standard
+  - Supports external tools, resources, and prompt extensions
+  - Built-in OAuth 2.0 authentication flow for third-party service authorization
+  - Config hot-reload without restart for MCP server updates
+  - Supports multi-workspace config merging with priority management
+  - Built-in MCP Registry search for one-click official plugin installation
+
+- **💾 AI Memory & Approval**: 
+  - Project-level memory storage supporting long-term and short-term memory
+  - Manual approval mechanism for AI-written memories to prevent misinformation
+  - Automatic memory categorization and indexing with semantic search
+  - Supports memory export/import for team knowledge sharing
+
+- **🎨 Enhanced Response Preview**: 
+  - Tool execution results support rich rendering: Markdown, code highlighting, images, tables
+  - Fluid typewriter animation with real-time AI content generation
+  - Supports collapse/expand for long content, optimized reading experience
+  - Thinking process visualization (DeepSeek-R1, Claude 3.7 reasoning models)
+
+- **🪵 Eye Style Log System**: 
+  - Redesigned color-highlighted log system
+  - Separate Main/Renderer process logs for clear debugging
+  - Supports log level filtering (Debug, Info, Warn, Error)
+  - Real-time log streaming without refresh
+
+- **🎭 Emotion Awareness System**: 
+  - Real-time detection of user coding state (focused, confused, fatigued, etc.)
+  - Multi-dimensional analysis based on keyboard/mouse behavior and code context
+  - Intelligent suggestions for break times and task switching
+  - Personalized baseline learning adapting to different developer habits
 
 ![alt text](images/tool.png)
 
@@ -373,45 +416,74 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 
 ### 📝 Professional Code Editing
 
-- **Monaco Editor**: Same editor core as VS Code
+- **Monaco Editor**: Same editor core as VS Code with complete editing features
 - **Multi-Language LSP Support**: TypeScript/JavaScript, Python, Go, Rust, C/C++, HTML/CSS/JSON, Vue, Zig, C#, and 10+ languages
 - **Complete LSP Features**: Intelligent completion, go to definition, find references, hover info, code diagnostics, formatting, rename, etc.
 - **Smart Root Detection**: Auto-detect monorepo sub-projects, start independent LSP for each
-- **AI Code Completion**: Context-based intelligent code suggestions (Ghost Text)
-- **Inline Edit (Ctrl+K)**: Let AI modify selected code directly
-- **Diff Preview**: Show diff comparison before AI modifies code, support accept/reject
+- **AI Code Completion**: Context-based intelligent code suggestions (Ghost Text) with real-time AI suggestions
+- **Inline Edit (Ctrl+K)**: Let AI modify selected code directly without switching to chat panel
+- **Diff Preview**: Show diff comparison before AI modifies code, support accept/reject for each change
+- **🎼 Composer Mode (Ctrl+Shift+I)**: 
+  - Multi-file editing mode similar to Cursor Composer
+  - Edit multiple files simultaneously with unified preview of all changes
+  - Changes grouped by directory, one-click accept/reject all modifications
+  - Deep integration with Agent, AI-generated multi-file changes automatically enter Composer
+- **🐛 Built-in Debugger**: 
+  - VSCode-like debugging experience supporting Node.js and browser debugging
+  - Breakpoint management, variable inspection, call stack, console output
+  - Supports DAP (Debug Adapter Protocol)
+  - Visual debugging interface without leaving the editor
 
 ![text](images/editor.png)
 
 ### 🔍 Powerful Search & Tools
 
-- **Quick Open (Ctrl+P)**: Fuzzy search to quickly locate files
-- **Global Search (Ctrl+Shift+F)**: Support regex, case-sensitive, whole word match
-- **Semantic Search**: AI Embedding-based codebase semantic search
+- **Quick Open (Ctrl+P)**: Fuzzy search to quickly locate files with path matching support
+- **Global Search (Ctrl+Shift+F)**: Support regex, case-sensitive, whole word match with real-time results
+- **Semantic Search**: AI Embedding-based codebase semantic search understanding code meaning
 - **Hybrid Search**: Combines semantic and keyword search, uses RRF algorithm to merge results
-- **Integrated Terminal**: Based on xterm.js + node-pty, supports multi-shell, split view, AI fix
-- **Git Version Control**: Complete Git operation interface, change management, commit history, diff view
-- **File Management**: Virtualized rendering supports 10k+ files, Markdown preview, image preview
-- **Code Outline**: Show file symbol structure, quick navigation
-- **Problems Panel**: Real-time diagnostics showing errors and warnings
+- **Integrated Terminal**: 
+  - Based on xterm.js + node-pty, supports multiple shells (PowerShell, CMD, Bash, Zsh)
+  - Supports split view, multiple tabs, terminal reuse
+  - AI error analysis and fix suggestions
+  - 🌐 **Remote SSH Terminal**: Built-in native SSH client for direct remote server connection with key authentication support
+  - Smart terminal output recognition (error highlighting, clickable links)
+- **Git Version Control**: 
+  - Complete Git operation interface with change management, commit history, diff view
+  - Visual branch management and conflict resolution
+  - Supports Git subcommand whitelist for secure control
+- **File Management**: 
+  - Virtualized rendering supports 10k+ files for smooth large project browsing
+  - Real-time Markdown preview, image preview
+  - File tree drag & drop, context menu
+- **Code Outline**: Show file symbol structure (functions, classes, variables) for quick navigation
+- **Problems Panel**: Real-time diagnostics showing errors and warnings with one-click jump
 
 ![text](images/terminal.png)
 
 ### 🔐 Security & Other Features
 
 **Security Features**
-- Workspace isolation, sensitive path protection, command whitelist, audit logging
-- Git subcommand whitelist, permission confirmation, customizable security policies
+- Workspace isolation, sensitive path protection (.ssh, .aws, .gnupg, etc.)
+- Command whitelist, Shell injection detection
+- Git subcommand whitelist, permission confirmation
+- Customizable security policies, audit logging
+
+**Multi-Window & Workspace**
+- Supports multiple windows for different projects simultaneously
+- Multi-workspace management with quick workspace switching
+- Automatic workspace state save and restore
+- Supports monorepo multi-root workspaces
 
 **Other Features**
-- Command palette, multi-window/multi-workspace support, workspace restore
-- Session management, token statistics, complete Chinese and English support
-- Custom shortcuts, onboarding wizard, Tree-sitter parsing for 20+ languages
-
-- **Internationalization**: Complete Chinese and English support
-- **Custom Shortcuts**: Configurable keyboard bindings
-- **Onboarding Wizard**: Configuration guide for first-time use with beautiful animations
-- **Tree-sitter Parsing**: Support syntax tree parsing for 20+ languages
+- Command Palette (Ctrl+Shift+P) for quick access to all features
+- Session management with persistent conversation history
+- Token statistics with real-time consumption display
+- Complete Chinese and English support with automatic system language detection
+- Custom shortcuts supporting VSCode-style keybindings
+- Onboarding wizard for beginner-friendly experience
+- Tree-sitter parsing for 20+ languages with precise code analysis
+- Auto-update with silent download of new versions
 
 ---
 
@@ -475,11 +547,11 @@ Supports OpenAI, Anthropic, Google, DeepSeek, Ollama, and custom APIs
 
 Open Settings → Index tab, select Embedding provider (recommend Jina AI), configure API Key and start indexing. After completion, AI can use semantic search.
 
-### Using Orchestrator Mode
+### Using Plan Mode
 
-Switch to Orchestrator Mode and engage in multi-turn conversations with the AI to clarify requirements. The AI will automatically create an in-depth step-by-step execution plan and distribute tasks to the most appropriate expert modules.
+Switch to Plan Mode and engage in multi-turn conversations with the AI to clarify requirements. The AI will automatically create an in-depth step-by-step execution plan, decomposing complex tasks into multiple sub-tasks and managing dependencies and execution order.
 
-![Orchestrator Mode](images/orchestrator.png)
+![Plan Mode](images/orchestrator.png)
 
 ### ⚡ Skills System Usage
 
@@ -508,15 +580,19 @@ Skills are instruction packages that give AI specialized capabilities (e.g., opt
 | | `Ctrl + B` | Toggle sidebar |
 | **Editor** | `Ctrl + S` | Save file |
 | | `Ctrl + K` | Inline AI edit |
+| | `Ctrl + Shift + I` | Open Composer multi-file edit |
 | | `F12` | Go to definition |
 | | `Shift + F12` | Find references |
 | **Search** | `Ctrl + F` | In-file search |
 | | `Ctrl + Shift + F` | Global search |
 | **AI Chat** | `Enter` | Send message |
+| | `Shift + Enter` | New line |
 | | `@` | Reference context |
 | | `/` | Slash commands |
+| **Other** | `Escape` | Close panel/dialog |
+| | `F5` | Start debugging |
 
-**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (general task agent) / Orchestrator 🧠 (expert orchestration)
+**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (single task agent) / Plan 🧠 (task orchestration)
 
 ---
 
@@ -547,7 +623,7 @@ adnify/
 │   │   │   ├── panels/  # Bottom panels
 │   │   │   ├── dialogs/ # Dialogs
 │   │   │   └── settings/# Settings components
-│   │   ├── modes/       # Multi-mode state machines (Agent, Chat, Orchestrator)
+│   │   ├── modes/       # Multi-mode state machines (Chat, Agent, Plan)
 │   │   ├── services/    # Frontend services
 │   │   │   └── TerminalManager.ts # Terminal manager
 │   │   ├── store/       # Zustand state management
@@ -629,12 +705,25 @@ A huge thank you to our generous supporters. Your coffee, milk tea, and energy d
 
 This project uses a custom license with main terms:
 
-- ✅ Allowed for personal learning, research, non-commercial use
-- ✅ Allowed to modify and distribute (must retain copyright info)
-- ⚠️ **Commercial use requires written authorization from author**
-- ❌ Prohibited to remove software name, author copyright, repository address, etc.
+**✅ Permitted Use**
+- Personal learning, research, non-commercial use
+- Personal development projects (not for external sale)
 
-For commercial licensing, contact: adnaan.worker@gmail.com
+**⚠️ Requires Written Authorization**
+- Team distribution and use (teams with more than 5 members)
+- Commercial use (including but not limited to: external sales, paid services, integration into commercial products)
+- Enterprise internal use (companies, organizations, legal entities)
+
+**❌ Strictly Prohibited**
+- Unauthorized modification and distribution or sale
+- Bundling into other products for sale
+- Removing or modifying software name, author copyright, repository address, etc.
+- Claiming as your own work or concealing original author information
+
+**📧 Authorization Request**
+- Commercial licensing contact: adnaan.worker@gmail.com
+- Team usage authorization contact: adnaan.worker@gmail.com
+- Please specify use case, team size, business model, etc.
 
 See [LICENSE](LICENSE) file for details
 
@@ -651,6 +740,7 @@ Seriously, I've seen too many of these operations:
 - Delete author info and repo address completely, as if the code appeared from nowhere
 - Sell it for money, take outsourcing projects, don't give the original author a penny, won't even give a star
 - Even worse, some use it as training materials, students think the teacher wrote it
+- Companies directly bundle it into their products for sale without mentioning the original author
 
 I'm not against commercialization, really. Want to use it commercially? Come on, send an email, maybe we can even collaborate. But sneakily erasing my name to make money? That's too much, right?
 
@@ -658,18 +748,35 @@ I'm not against commercialization, really. Want to use it commercially? Come on,
 
 A: No! Personal learning, research, graduation projects, side projects—use it freely! As long as you:
 1. Don't delete my name and repo address
-2. Don't sell it for money
-3. If you build something new based on it, just say "Based on Adnify"
+2. Don't sell it or provide paid services
+3. Don't bundle it into other products for sale
 
 That simple, I'm not trying to make things difficult 😊
 
-**Q: If I want to use it internally at my company, does that count as commercial use?**
+**Q: If I want to use it internally at my company/team, does that count as commercial use?**
 
-A: If it's an internal company tool, not sold externally, doesn't generate direct revenue, generally doesn't count. But if unsure, send me an email, I'm easy to talk to (really).
+A: 
+- **Small teams (≤5 people) internal use**: If it's a startup team or small studio internal tool, not sold externally, generally okay, but recommend sending an email to notify
+- **Company/large team use**: Requires written authorization, even for internal tools
+- **External services**: Regardless of team size, if providing paid services or selling products externally, commercial authorization is required
 
-**Q: Why not just use GPL?**
+If unsure, send me an email, I'm easy to talk to (really). Authorization process is simple, fees are reasonable.
 
-A: GPL is a good license, but it can't stop "deleting author info" operations. My license core is one thing: **You can use it, modify it, distribute it, but don't pretend you wrote it**.
+**Q: Can I modify the code? Can I distribute it?**
+
+A: 
+- **Personal modification**: Yes, but for personal use only
+- **Distribute modified version**: No, unless you get written authorization
+- **Contribute code**: Welcome to submit PRs to the official repository, this is encouraged!
+
+**Q: Why not just use GPL or MIT?**
+
+A: 
+- **MIT is too permissive**: Allows anyone to use commercially freely, can't protect author's rights
+- **GPL is too strict**: Requires derivative works to also be open source, limits reasonable commercial cooperation
+- **Custom license**: Protects author's rights while allowing reasonable commercial cooperation, it's a balance
+
+My license core is one thing: **You can use it, you can learn from it, but commercial use and team distribution require authorization, don't pretend you wrote it**.
 
 Simply put, open source isn't "free for you to abuse," it's "I'm willing to share, but please respect my work."
 
