@@ -11,9 +11,7 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 
 <!-- 主界面演示 -->
 <div align="center">
-  <video src="images/main.mp4" controls autoplay loop muted width="800">
-    您的浏览器不支持视频标签。
-  </video>
+  <img src="images/main.gif" alt="Adnify 主界面演示" width="800" />
 </div>
 
 ---

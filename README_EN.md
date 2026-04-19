@@ -11,9 +11,7 @@ Adnify is more than just an editor—it's your **intelligent programming compani
 
 <!-- Main Interface Demo -->
 <div align="center">
-  <video src="images/main.mp4" controls autoplay loop muted width="800">
-    Your browser does not support the video tag.
-  </video>
+  <img src="images/main.gif" alt="Adnify Main Interface Demo" width="800" />
 </div>
 
 ---
