@@ -764,6 +764,10 @@ export function registerSecureTerminalHandlers(
           .on('close', () => {
             if (this.closed) return
             this.closed = true
+            const tail = this.streamUtf8.end()
+            if (tail.length > 0) {
+              this.emit('data', tail)
+            }
             this.emit('exit', { exitCode: 0 })
           })
           .connect(config as any)
@@ -798,6 +802,10 @@ export function registerSecureTerminalHandlers(
     kill() {
       if (this.closed) return
       this.closed = true
+      const tail = this.streamUtf8.end()
+      if (tail.length > 0) {
+        this.emit('data', tail)
+      }
       try {
         this.stream?.end('exit\n')
       } catch {
@@ -846,8 +854,8 @@ export function registerSecureTerminalHandlers(
     terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
       terminals.delete(id)
+      const tail = ptyUtf8.end()
       if (mainWindow && !mainWindow.isDestroyed()) {
-        const tail = ptyUtf8.end()
         if (tail.length > 0) {
           mainWindow.webContents.send('terminal:data', { id, data: tail, ...nextMeta() })
         }
