@@ -3,7 +3,7 @@
  */
 
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
-
+import { Language } from '@renderer/i18n'
 // =================== 类型定义 ===================
 
 interface SearchFilesOptions {
@@ -454,7 +454,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeWindow: (width: number, height: number, minWidth?: number, minHeight?: number) =>
     ipcRenderer.invoke('window:resize', width, height, minWidth, minHeight),
   setTheme: (theme: 'light' | 'dark' | 'system', bgColor?: string) => ipcRenderer.invoke('window:setTheme', theme, bgColor),
-
+  setLanguage: (lang: Language) => ipcRenderer.send('i18n:changed', lang),
   openFile: () => ipcRenderer.invoke('file:open'),
   openFolder: () => ipcRenderer.invoke('file:openFolder'),
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
