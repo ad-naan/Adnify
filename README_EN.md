@@ -9,8 +9,8 @@
 
 Adnify is more than just an editor—it's your **intelligent programming companion**. It replicates and surpasses traditional IDE experiences, blending Cyberpunk glassmorphism design with a powerful built-in AI Agent that supports full-process automation from code generation to file operations.
 
-<!-- Main Interface Screenshot -->
-![alt text](images/main.png)
+<!-- Main Interface Demo -->
+![Adnify Main Interface Demo](images/main.gif)
 
 ---
 
