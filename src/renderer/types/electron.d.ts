@@ -328,7 +328,7 @@ export interface ElectronAPI {
   getWindowId: () => Promise<number>
   resizeWindow: (width: number, height: number, minWidth?: number, minHeight?: number) => Promise<void>
   setTheme: (theme: 'light' | 'dark' | 'system', bgColor?: string) => Promise<boolean>
-
+  setLanguage?: (language: Language) => void,
   // File
   openFile: () => Promise<{ path: string; content: string } | null>
   openFolder: () => Promise<string | null>
