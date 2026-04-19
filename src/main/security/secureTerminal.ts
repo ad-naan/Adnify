@@ -822,7 +822,7 @@ export function registerSecureTerminalHandlers(
   }
 
   /**
-   * 交互式终端创建（默认使用 node-pty；Agent 在 macOS 上可切换为 pipe 会话）
+   * 交互式终端创建（默认 node-pty；渲染进程为 Agent 终端传入 pipe 时可退回 pipe 会话）
    */
   safeIpcHandle('terminal:interactive', async (
     event,
@@ -831,8 +831,7 @@ export function registerSecureTerminalHandlers(
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
     const { id, cwd, shell, backend = 'pty', remote } = options
-    const effectiveBackend: TerminalBackend =
-      process.platform === 'darwin' && !remote?.host ? 'pipe' : backend
+    const effectiveBackend: TerminalBackend = backend
 
     if (effectiveBackend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }
