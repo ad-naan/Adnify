@@ -287,6 +287,13 @@ export default function SettingsModal() {
 
             await save()
 
+            try {
+                window.electronAPI?.setLanguage?.(localLanguage);
+            } catch (e) {
+                console.error('语言同步失败:', e)
+            }
+
+
             if (localWebSearchConfig.googleApiKey && localWebSearchConfig.googleCx) {
                 window.electronAPI?.httpSetGoogleSearch?.(localWebSearchConfig.googleApiKey, localWebSearchConfig.googleCx)
             }
