@@ -7,6 +7,8 @@
  */
 
 import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
+// 补充 Language 类型（与渲染端对齐）
+export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
 import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
@@ -665,27 +667,109 @@ async function initializeModules(firstWin: BrowserWindow) {
   })
 
   // 设置菜单
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'File', submenu: [{ role: 'quit' }] },
-    { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    {
-      label: 'View', submenu: [
-        { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
-        { type: 'separator' },
-        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
-        { type: 'separator' },
-        { role: 'togglefullscreen' },
-        {
-          label: 'Command Palette',
-          accelerator: 'CmdOrCtrl+Shift+P',
-          click: () => {
-            const win = getMainWindow()
-            win?.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
-          }
-        }
-      ]
-    },
-  ]))
+  // Menu.setApplicationMenu(Menu.buildFromTemplate([
+  //   { label: 'File', submenu: [{ role: 'quit' }] },
+  //   { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
+  //   {
+  //     label: 'View', submenu: [
+  //       { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
+  //       { type: 'separator' },
+  //       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+  //       { type: 'separator' },
+  //       { role: 'togglefullscreen' },
+  //       {
+  //         label: 'Command Palette',
+  //         accelerator: 'CmdOrCtrl+Shift+P',
+  //         click: () => {
+  //           const win = getMainWindow()
+  //           win?.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
+  //         }
+  //       }
+  //     ]
+  //   },
+  // ]))
+  // 全局：当前应用语言
+  let currentAppLanguage: Language = 'zh'
+
+  /** 从配置加载并返回当前语言 */
+  function getCurrentLanguage(): Language {
+    const lang = configStore.get('language') as string
+    // 兼容写法：en / zh
+    if (lang?.toLowerCase().includes('en')) return 'en'
+    return 'zh'
+  }
+
+  /** 设置应用菜单（多语言自动适配） */
+  function setApplicationMenu(lang?: Language) {
+    if (lang) currentAppLanguage = lang;
+    const isEn = currentAppLanguage.toLowerCase().includes("en");
+
+    const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+      {
+        label: isEn ? "File" : "文件",
+        submenu: [{ role: "quit", label: isEn ? "Quit" : "退出" }],
+      },
+      {
+        label: isEn ? "Edit" : "编辑",
+        submenu: [
+          { role: "undo", label: isEn ? "Undo" : "撤销" },
+          { role: "redo", label: isEn ? "Redo" : "重做" },
+          { type: "separator" },
+          { role: "cut", label: isEn ? "Cut" : "剪切" },
+          { role: "copy", label: isEn ? "Copy" : "复制" },
+          { role: "paste", label: isEn ? "Paste" : "粘贴" },
+          { role: "selectAll", label: isEn ? "Select All" : "全选" },
+        ],
+      },
+      {
+        label: isEn ? "View" : "视图",
+        submenu: [
+          { role: "reload", label: isEn ? "Reload" : "刷新" },
+          { role: "forceReload", label: isEn ? "Force Reload" : "强制刷新" },
+          { role: "toggleDevTools", label: isEn ? "DevTools" : "开发者工具" },
+          { type: "separator" },
+          { role: "resetZoom", label: isEn ? "Reset Zoom" : "重置缩放" },
+          { role: "zoomIn", label: isEn ? "Zoom In" : "放大" },
+          { role: "zoomOut", label: isEn ? "Zoom Out" : "缩小" },
+          { type: "separator" },
+          { role: "togglefullscreen", label: isEn ? "Full Screen" : "全屏" },
+          {
+            label: isEn ? "Command Palette" : "命令面板",
+            accelerator: "CmdOrCtrl+Shift+P",
+            click: () => {
+              const win = getMainWindow();
+              win?.webContents.send(
+                "workbench:execute-command",
+                "workbench.action.showCommands",
+              );
+            },
+          },
+        ],
+      },
+    ];
+
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
+  }
+  /** 初始化语言：读取配置 + 设置菜单 + 监听切换 */
+  function initLanguageSync() {
+    // 1. 启动时从配置读取语言
+    currentAppLanguage = getCurrentLanguage()
+    setApplicationMenu(currentAppLanguage)
+
+    // 2. 监听渲染进程：语言切换
+    ipcMain.on('i18n:changed', (_event, lang: Language) => {
+      // 保存到配置
+      configStore.set('language', lang)
+      // 更新主进程语言
+      setApplicationMenu(lang)
+      // 可选：通知所有窗口语言已更新
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('i18n:sync', lang)
+      })
+    })
+  }
+  // 👇 最后加这一行
+  initLanguageSync()
 }
 
 // ==========================================
