@@ -10,6 +10,7 @@ import { promisify } from 'util'
 import * as path from 'path'
 const execFileAsync = promisify(execFile)
 import { EventEmitter } from 'events'
+import { StringDecoder } from 'node:string_decoder'
 import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
@@ -564,15 +565,24 @@ export function registerSecureTerminalHandlers(
   type TerminalBackend = 'pty' | 'pipe'
 
   class PipeShellSession extends EventEmitter {
+    private readonly stdoutUtf8 = new StringDecoder('utf8')
+    private readonly stderrUtf8 = new StringDecoder('utf8')
+
     constructor(private readonly child: ChildProcessWithoutNullStreams) {
       super()
 
       this.child.stdout.on('data', (data: Buffer) => {
-        this.emit('data', data.toString())
+        const text = this.stdoutUtf8.write(data)
+        if (text.length > 0) {
+          this.emit('data', text)
+        }
       })
 
       this.child.stderr.on('data', (data: Buffer) => {
-        this.emit('data', data.toString())
+        const text = this.stderrUtf8.write(data)
+        if (text.length > 0) {
+          this.emit('data', text)
+        }
       })
 
       this.child.on('error', (err) => {
@@ -580,6 +590,14 @@ export function registerSecureTerminalHandlers(
       })
 
       this.child.on('close', (code) => {
+        const tailOut = this.stdoutUtf8.end()
+        const tailErr = this.stderrUtf8.end()
+        if (tailOut.length > 0) {
+          this.emit('data', tailOut)
+        }
+        if (tailErr.length > 0) {
+          this.emit('data', tailErr)
+        }
         this.emit('exit', { exitCode: code ?? 0 })
       })
     }
@@ -655,6 +673,7 @@ export function registerSecureTerminalHandlers(
     private closed = false
     private cols: number
     private rows: number
+    private readonly streamUtf8 = new StringDecoder('utf8')
 
     constructor(private readonly server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }, cols = 80, rows = 24) {
       super()
@@ -702,10 +721,23 @@ export function registerSecureTerminalHandlers(
               }
 
               this.stream = stream
-              stream.on('data', (data: Buffer | string) => this.emit('data', Buffer.isBuffer(data) ? data.toString() : data))
+              stream.on('data', (data: Buffer | string) => {
+                if (typeof data === 'string') {
+                  this.emit('data', data)
+                  return
+                }
+                const text = this.streamUtf8.write(data)
+                if (text.length > 0) {
+                  this.emit('data', text)
+                }
+              })
               stream.on('close', () => {
                 if (this.closed) return
                 this.closed = true
+                const tail = this.streamUtf8.end()
+                if (tail.length > 0) {
+                  this.emit('data', tail)
+                }
                 this.emit('exit', { exitCode: 0 })
                 this.connection.end()
               })
@@ -732,6 +764,10 @@ export function registerSecureTerminalHandlers(
           .on('close', () => {
             if (this.closed) return
             this.closed = true
+            const tail = this.streamUtf8.end()
+            if (tail.length > 0) {
+              this.emit('data', tail)
+            }
             this.emit('exit', { exitCode: 0 })
           })
           .connect(config as any)
@@ -766,6 +802,10 @@ export function registerSecureTerminalHandlers(
     kill() {
       if (this.closed) return
       this.closed = true
+      const tail = this.streamUtf8.end()
+      if (tail.length > 0) {
+        this.emit('data', tail)
+      }
       try {
         this.stream?.end('exit\n')
       } catch {
@@ -781,15 +821,20 @@ export function registerSecureTerminalHandlers(
   const bindTerminalProcess = (id: string, terminalProcess: any, mainWindow: BrowserWindow | null) => {
     terminals.set(id, terminalProcess)
     let seq = 0
+    const ptyUtf8 = new StringDecoder('utf8')
 
     const nextMeta = () => ({
       seq: ++seq,
       occurredAt: Date.now(),
     })
 
-    terminalProcess.onData((data: string) => {
+    terminalProcess.onData((data: string | Buffer) => {
+      const text = typeof data === 'string' ? data : ptyUtf8.write(data)
+      if (text.length === 0) {
+        return
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data, ...nextMeta() })
+        mainWindow.webContents.send('terminal:data', { id, data: text, ...nextMeta() })
       }
     })
 
@@ -809,7 +854,11 @@ export function registerSecureTerminalHandlers(
     terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
       terminals.delete(id)
+      const tail = ptyUtf8.end()
       if (mainWindow && !mainWindow.isDestroyed()) {
+        if (tail.length > 0) {
+          mainWindow.webContents.send('terminal:data', { id, data: tail, ...nextMeta() })
+        }
         mainWindow.webContents.send('terminal:exit', {
           id,
           exitCode,
@@ -822,7 +871,7 @@ export function registerSecureTerminalHandlers(
   }
 
   /**
-   * 交互式终端创建（默认使用 node-pty；Agent 在 macOS 上可切换为 pipe 会话）
+   * 交互式终端创建（默认 node-pty；渲染进程为 Agent 终端传入 pipe 时可退回 pipe 会话）
    */
   safeIpcHandle('terminal:interactive', async (
     event,
@@ -831,8 +880,7 @@ export function registerSecureTerminalHandlers(
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
     const { id, cwd, shell, backend = 'pty', remote } = options
-    const effectiveBackend: TerminalBackend =
-      process.platform === 'darwin' && !remote?.host ? 'pipe' : backend
+    const effectiveBackend: TerminalBackend = backend
 
     if (effectiveBackend === 'pty' && !pty) {
       return { success: false, error: 'node-pty not available' }

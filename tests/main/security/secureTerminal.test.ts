@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const handlers = new Map<string, Function>()
 const childSpawnMock = vi.fn()
-const ptySpawnMock = vi.fn()
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => true),
@@ -21,10 +20,6 @@ vi.mock('child_process', () => ({
   spawn: childSpawnMock,
   execSync: vi.fn(),
   execFile: vi.fn(),
-}))
-
-vi.mock('node-pty', () => ({
-  spawn: ptySpawnMock,
 }))
 
 vi.mock('@shared/utils/Logger', () => ({
@@ -65,7 +60,6 @@ describe('secureTerminal', () => {
   beforeEach(() => {
     handlers.clear()
     childSpawnMock.mockReset()
-    ptySpawnMock.mockReset()
     vi.spyOn(fs, 'existsSync').mockReturnValue(true)
   })
 
@@ -75,7 +69,7 @@ describe('secureTerminal', () => {
     vi.restoreAllMocks()
   })
 
-  it('falls back to pipe on macOS even when PTY backend is requested', async () => {
+  it('uses pipe on macOS when backend is pipe', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     const workspaceRoot = process.cwd()
 
@@ -115,12 +109,11 @@ describe('secureTerminal', () => {
       id: 'agent-test',
       cwd: workspaceRoot,
       shell: 'bash',
-      backend: 'pty',
+      backend: 'pipe',
     })
 
     expect(result).toEqual({ success: true })
     expect(childSpawnMock).toHaveBeenCalledTimes(1)
-    expect(ptySpawnMock).not.toHaveBeenCalled()
   })
 })
 
