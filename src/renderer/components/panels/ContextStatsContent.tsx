@@ -4,7 +4,6 @@ import {
   useAgentStore,
   selectCompressionStats,
   selectContextSummary,
-  selectHandoffRequired,
 } from '@/renderer/agent/store/AgentStore'
 import type { CompressionLevel } from '@/renderer/agent/domains/context/types'
 import type { TokenUsage } from '@renderer/agent/types'
@@ -38,9 +37,9 @@ export default function ContextStatsContent({
 }: ContextStatsContentProps) {
   const compressionStats = useAgentStore(selectCompressionStats)
   const contextSummary = useAgentStore(selectContextSummary)
-  const handoffRequired = useAgentStore(selectHandoffRequired)
 
   const currentLevel = (compressionStats?.level ?? 0) as CompressionLevel
+  const needsHandoff = compressionStats?.needsHandoff ?? currentLevel >= 4
   const ratio = compressionStats?.ratio ?? 0
   const contextLimit = compressionStats?.contextLimit ?? 128000
   const inputTokens = compressionStats?.inputTokens ?? 0
@@ -187,7 +186,7 @@ export default function ContextStatsContent({
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
-        {handoffRequired && (
+        {needsHandoff && (
           <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex gap-3 mb-4">
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <div>

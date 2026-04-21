@@ -1,38 +1,26 @@
 /**
- * Message Domain - 消息领域
- *
- * 职责：
- * - 消息组装：将历史消息、上下文、用户输入组装成 LLM 消息
- * - 消息压缩：根据预算策略压缩消息
- * - 消息转换：转换为 LLM API 格式
- *
- * DDD 设计：
- * - MessageAssembler: 聚合根，协调消息构建流程
- * - MessageCompressor: 领域服务，执行压缩策略
- * - MessageConverter: 领域服务，格式转换
+ * Message assembly for LLM requests.
  */
 
 import { logger } from '@utils/Logger'
-import type { ChatMessage, MessageContent } from '../../types'
+import type { ChatMessage, MessageContent, TodoItem } from '../../types'
 import type { LLMMessage } from '@/shared/types'
 import type { CompressionLevel } from '../context/compressionShared'
 import { prepareMessages, estimateMessagesTokens } from '../context/CompressionManager'
 import { buildLLMApiMessages } from './MessageConverter'
 import { countTokens } from '@shared/utils/tokenCounter'
 
-// ===== Value Objects =====
+export interface RuntimeStateContext {
+  handoffContext?: string
+  todos?: TodoItem[]
+  pendingObjective?: string
+  pendingSteps?: string[]
+}
 
-/**
- * 消息组装结果（值对象）
- */
 export interface MessageAssemblyResult {
-  /** LLM 消息列表 */
   messages: LLMMessage[]
-  /** 应用的压缩等级 */
   compressionLevel: CompressionLevel
-  /** 估算的总 token 数 */
   estimatedTokens: number
-  /** 压缩统计 */
   compressionStats: {
     truncatedToolCalls: number
     clearedToolResults: number
@@ -40,31 +28,14 @@ export interface MessageAssemblyResult {
   }
 }
 
-/**
- * 用户消息内容（值对象）
- */
 export interface UserMessageContent {
-  /** 原始消息 */
   raw: MessageContent
-  /** 上下文内容 */
   context: string
-  /** 组合后的内容 */
   combined: MessageContent
-  /** Token 估算 */
   estimatedTokens: number
 }
 
-// ===== Message Compressor (领域服务) =====
-
-/**
- * 消息压缩器
- *
- * 职责：根据压缩等级压缩消息历史
- */
 export class MessageCompressor {
-  /**
-   * 压缩消息历史
-   */
   compress(
     messages: ChatMessage[],
     level: CompressionLevel
@@ -79,8 +50,7 @@ export class MessageCompressor {
     const result = prepareMessages(messages, level)
 
     logger.agent.debug(
-      `[MessageCompressor] Compressed to L${level}: ` +
-      `removed=${result.removedMessages}, truncated=${result.truncatedToolCalls}, cleared=${result.clearedToolResults}`
+      `[MessageCompressor] Compressed to L${level}: removed=${result.removedMessages}, truncated=${result.truncatedToolCalls}, cleared=${result.clearedToolResults}`
     )
 
     return {
@@ -93,25 +63,11 @@ export class MessageCompressor {
     }
   }
 
-  /**
-   * 估算消息 token 数
-   */
   estimateTokens(messages: ChatMessage[]): number {
     return estimateMessagesTokens(messages)
   }
 }
 
-// ===== Message Assembler (聚合根) =====
-
-/**
- * 消息组装器
- *
- * 职责：
- * - 协调消息构建流程
- * - 组装用户消息（原始消息 + 上下文）
- * - 应用压缩策略
- * - 转换为 LLM API 格式
- */
 export class MessageAssembler {
   private compressor: MessageCompressor
 
@@ -119,14 +75,10 @@ export class MessageAssembler {
     this.compressor = new MessageCompressor()
   }
 
-  /**
-   * 组装用户消息内容
-   */
   assembleUserMessage(
     rawMessage: MessageContent,
     contextContent: string
   ): UserMessageContent {
-    // 如果没有上下文，直接返回原始消息
     if (!contextContent) {
       const estimatedTokens = this.estimateMessageTokens(rawMessage)
       return {
@@ -137,79 +89,58 @@ export class MessageAssembler {
       }
     }
 
-    // 构建上下文部分
     const contextPart = {
       type: 'text' as const,
       text: `## Referenced Context\n${contextContent}\n\n## User Request\n`,
     }
 
-    // 组合消息
-    let combined: MessageContent
-    if (typeof rawMessage === 'string') {
-      combined = [contextPart, { type: 'text' as const, text: rawMessage }]
-    } else {
-      combined = [contextPart, ...rawMessage]
-    }
-
-    const estimatedTokens = this.estimateMessageTokens(combined)
+    const combined: MessageContent = typeof rawMessage === 'string'
+      ? [contextPart, { type: 'text' as const, text: rawMessage }]
+      : [contextPart, ...rawMessage]
 
     return {
       raw: rawMessage,
       context: contextContent,
       combined,
-      estimatedTokens,
+      estimatedTokens: this.estimateMessageTokens(combined),
     }
   }
 
-  /**
-   * 组装完整的 LLM 消息列表
-   *
-   * @param messageHistory 历史消息
-   * @param userMessage 用户消息内容
-   * @param systemPrompt 系统提示词
-   * @param compressionLevel 压缩等级
-   * @param handoffContext 可选的 handoff 上下文
-   */
   assemble(
     messageHistory: ChatMessage[],
     userMessage: UserMessageContent,
     systemPrompt: string,
     compressionLevel: CompressionLevel,
-    handoffContext?: string
+    runtimeState?: RuntimeStateContext
   ): MessageAssemblyResult {
-    // 1. 注入 handoff 上下文到系统提示词
-    const enhancedSystemPrompt = handoffContext
-      ? `${systemPrompt}\n\n${handoffContext}`
-      : systemPrompt
-
-    // 2. 压缩历史消息
     const { messages: compressedMessages, stats } = this.compressor.compress(
       messageHistory,
       compressionLevel
     )
 
-    // 3. 转换为 LLM API 格式（排除最后一条用户消息，因为会重新添加）
     const lastMsg = compressedMessages[compressedMessages.length - 1]
     const messagesToConvert = lastMsg?.role === 'user'
       ? compressedMessages.slice(0, -1)
       : compressedMessages
 
-    const llmMessages = buildLLMApiMessages(messagesToConvert, enhancedSystemPrompt)
+    const llmMessages = buildLLMApiMessages(messagesToConvert, systemPrompt)
+    const runtimeStateMessage = this.buildRuntimeStateMessage(runtimeState)
+    if (runtimeStateMessage) {
+      llmMessages.push(runtimeStateMessage)
+    }
 
-    // 4. 添加当前用户消息
     llmMessages.push({
       role: 'user',
       content: userMessage.combined,
     })
 
-    // 5. 估算总 token 数
     const historyTokens = this.compressor.estimateTokens(compressedMessages)
-    const systemPromptTokens = countTokens(enhancedSystemPrompt)
-    const estimatedTokens = historyTokens + systemPromptTokens + userMessage.estimatedTokens
+    const systemPromptTokens = countTokens(systemPrompt)
+    const runtimeTokens = runtimeStateMessage ? countTokens(String(runtimeStateMessage.content || '')) : 0
+    const estimatedTokens = historyTokens + systemPromptTokens + runtimeTokens + userMessage.estimatedTokens
 
     logger.agent.info(
-      `[MessageAssembler] Assembled ${llmMessages.length} messages, ` +
-      `L${compressionLevel}, ~${estimatedTokens} tokens`
+      `[MessageAssembler] Assembled ${llmMessages.length} messages, L${compressionLevel}, ~${estimatedTokens} tokens`
     )
 
     return {
@@ -220,9 +151,39 @@ export class MessageAssembler {
     }
   }
 
-  /**
-   * 估算消息内容的 token 数
-   */
+  private buildRuntimeStateMessage(runtimeState?: RuntimeStateContext): LLMMessage | null {
+    if (!runtimeState) return null
+
+    const sections: string[] = []
+
+    if (runtimeState.handoffContext?.trim()) {
+      sections.push(runtimeState.handoffContext.trim())
+    }
+
+    if (runtimeState.pendingObjective || (runtimeState.pendingSteps && runtimeState.pendingSteps.length > 0)) {
+      const objective = runtimeState.pendingObjective?.trim() || 'None'
+      const steps = runtimeState.pendingSteps?.slice(0, 8).map(step => `- ${step}`).join('\n') || '- None'
+      sections.push(`## Runtime Task State\n\n**Pending Objective**: ${objective}\n\n**Pending Steps**:\n${steps}`)
+    }
+
+    if (runtimeState.todos && runtimeState.todos.length > 0) {
+      const todoLines = runtimeState.todos
+        .slice(0, 12)
+        .map(todo => `- [${todo.status}] ${todo.status === 'in_progress' ? todo.activeForm : todo.content}`)
+        .join('\n')
+      sections.push(`## Runtime Task List\n\nThis is application state, not a fresh user request.\n${todoLines}`)
+    }
+
+    if (sections.length === 0) {
+      return null
+    }
+
+    return {
+      role: 'assistant',
+      content: `Application runtime state snapshot.\nTreat this as resume context only.\n\n${sections.join('\n\n')}`,
+    }
+  }
+
   private estimateMessageTokens(content: MessageContent): number {
     if (typeof content === 'string') {
       return countTokens(content)
@@ -233,7 +194,7 @@ export class MessageAssembler {
       if (part.type === 'text' && part.text) {
         total += countTokens(part.text)
       } else if (part.type === 'image') {
-        total += 1600 // 固定估算
+        total += 1600
       }
     }
     return total

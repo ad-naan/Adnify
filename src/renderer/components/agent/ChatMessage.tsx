@@ -25,6 +25,7 @@ import {
   isSearchPart,
   isSystemAlertPart,
   isLintCheckPart,
+  isContextSnapshotPart,
   ToolCall,
 } from '@renderer/agent/types'
 import FileChangeCard from './FileChangeCard'
@@ -44,6 +45,7 @@ import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
+import { CompressionDigestCard } from './CompressionDigestCard'
 import { t } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
@@ -580,6 +582,10 @@ const RenderPart = React.memo(({
   // Lint check results
   if (isLintCheckPart(part)) {
     return <LintCheckCard part={part} />
+  }
+
+  if (isContextSnapshotPart(part)) {
+    return <CompressionDigestCard part={part} />
   }
 
   // Tool calls handled by RenderPart (single)

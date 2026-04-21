@@ -41,15 +41,6 @@ const WINDOW_CONFIG = {
   BG_COLOR: '#09090b',
 } as const
 
-type ConsoleMessageLevel = 'info' | 'warning' | 'error' | 'debug'
-
-interface ConsoleMessageDetailsLike {
-  level?: ConsoleMessageLevel
-  message?: string
-  lineNumber?: number
-  sourceId?: string
-}
-
 // ==========================================
 // Store（延迟初始化）
 // ==========================================
@@ -227,64 +218,6 @@ function isLocalDevServerUrl(url: string): boolean {
   return /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{2,5})?(?:[/?#]|$)/i.test(url)
 }
 
-function compactConsoleMessage(message: string, maxLength = 240): string {
-  const normalized = message.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) {
-    return normalized
-  }
-
-  return `${normalized.slice(0, maxLength)}…`
-}
-
-function getConsoleMessageSeverity(level: ConsoleMessageLevel): 'warn' | 'error' | null {
-  if (level === 'error') {
-    return 'error'
-  }
-
-  if (level === 'warning') {
-    return 'warn'
-  }
-
-  return null
-}
-
-function shouldLogConsoleMessage(level: ConsoleMessageLevel, message: string, sourceId: string): boolean {
-  if (/Logger\.ts/i.test(sourceId)) {
-    return false
-  }
-
-  if (/Electron Security Warning/i.test(message)) {
-    return false
-  }
-
-  return getConsoleMessageSeverity(level) !== null
-    || /(error|exception|failed|unhandled|csp|blocked|warn)/i.test(message)
-}
-
-function logRendererConsoleMessage(win: BrowserWindow, details: ConsoleMessageDetailsLike): void {
-  const level = details.level ?? 'info'
-  const message = details.message ?? ''
-  const sourceId = details.sourceId ?? ''
-
-  if (!shouldLogConsoleMessage(level, message, sourceId)) {
-    return
-  }
-
-  const payload = {
-    windowId: win.id,
-    level,
-    message: compactConsoleMessage(message),
-    line: details.lineNumber ?? 0,
-    sourceId: compactConsoleMessage(sourceId, 120),
-  }
-
-  if (getConsoleMessageSeverity(level) === 'error' || /(error|exception|failed|unhandled|csp|blocked)/i.test(message)) {
-    logger.system.error('[Window] console-message', payload)
-    return
-  }
-
-  logger.system.warn('[Window] console-message', payload)
-}
 
 function registerWindowDiagnostics(win: BrowserWindow): void {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -305,9 +238,6 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
     })
   })
 
-  win.webContents.on('console-message', (details) => {
-    logRendererConsoleMessage(win, details)
-  })
 }
 
 function getShutdownFallbackPresentation(): ShutdownWindowPresentation {

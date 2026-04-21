@@ -43,9 +43,6 @@ const getAgentActions = () => useAgentStore.getState()
 function clearAgentConversationState(): void {
   getAgentActions().clearMessages()
   useStore.getState().clearToolCallLogs()
-  getAgentActions().setHandoffRequired(false)
-  getAgentActions().setHandoffDocument(null)
-  getAgentActions().setCompressionStats(null)
 }
 
 export function useAgentCommands() {

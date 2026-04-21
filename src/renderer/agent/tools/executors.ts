@@ -33,7 +33,6 @@ import { skillService } from '../services/skillService'
 import type { TranslationKey } from '@/renderer/i18n'
 import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../utils/agentText'
-import { buildReadTruncationMessage, getReadStrategy } from './readStrategies'
 import { guardWriteFile } from './fileWriteStrategy'
 
 // ===== 辅助函数 =====

@@ -45,7 +45,7 @@ export function useAppShutdownState(): void {
       }
     }
 
-    const unsubscribeShutdown = api.app.onShutdownRequested(async ({ requestId, reason }) => {
+    const unsubscribeShutdown = api.app.onShutdownRequested(async ({ requestId }) => {
       let success = true
       try {
         await persistAllRuntimeState()

@@ -31,7 +31,6 @@ export function resetWorkspaceRuntimeState(): void {
       activeBranchId: {},
       inputPrompt: '',
       currentSessionId: null,
-      handoffDocument: null,
     })
     markAgentStorageSnapshotAsCurrent(null)
   } finally {
