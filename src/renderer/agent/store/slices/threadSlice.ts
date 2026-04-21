@@ -4,14 +4,13 @@
  */
 
 import type { StateCreator } from 'zustand'
-import type { ChatThread, StreamState, CompressionPhase, TodoItem, ContextStats } from '../../types'
+import type { ChatThread, StreamState, CompressionPhase, TodoItem, ContextStats, ThreadHandoffState } from '../../types'
 import type { CompressionStats } from '../../core/types'
 import type { StructuredSummary } from '../../domains/context/types'
 import type { BranchSlice } from './branchSlice'
 import type { ToolStreamingPreview } from '@/shared/types'
 import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
-import { createRuntimeThreadState } from '../../types'
-import { logger } from '@utils/Logger'
+import { createIdleHandoffState, createRuntimeThreadState } from '../../types'
 
 export interface ThreadStoreState {
     threads: Record<string, ChatThread>
@@ -36,7 +35,8 @@ export interface ThreadActions {
     setContextStats: (stats: ContextStats | null, threadId?: string) => void
     setContextSummary: (summary: StructuredSummary | null, threadId?: string) => void
     setCompressionPhase: (phase: CompressionPhase, threadId?: string) => void
-    setHandoffRequired: (required: boolean, threadId?: string) => void
+    setHandoffState: (handoff: ThreadHandoffState, threadId?: string) => void
+    clearHandoffState: (threadId?: string) => void
     setIsCompacting: (compacting: boolean, threadId?: string) => void
 
     setTodos: (todos: TodoItem[], threadId?: string) => void
@@ -124,11 +124,6 @@ export const createThreadSlice: StateCreator<
         const thread = createEmptyThread()
         const activate = options?.activate ?? true
         let shouldFlushImmediately = false
-        logger.agent.warn('[ThreadSlice] createThread invoked', {
-            activate,
-            currentThreadId: get().currentThreadId,
-            stack: new Error().stack,
-        })
 
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
@@ -434,12 +429,21 @@ export const createThreadSlice: StateCreator<
         }))
     },
 
-    setHandoffRequired: (required, threadId) => {
+    setHandoffState: (handoff, threadId) => {
         const targetId = threadId ?? get().currentThreadId
         if (!targetId) return
 
         set(state => ({
-            threads: updateThreadEphemeral(state.threads, targetId, { handoffRequired: required }),
+            threads: updateThreadEphemeral(state.threads, targetId, { handoff }),
+        }))
+    },
+
+    clearHandoffState: (threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => ({
+            threads: updateThreadEphemeral(state.threads, targetId, { handoff: createIdleHandoffState() }),
         }))
     },
 

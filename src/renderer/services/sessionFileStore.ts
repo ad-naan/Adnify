@@ -29,7 +29,7 @@ export class SessionFileStore {
       )
 
       const summaries = await Promise.all(
-        threadFiles.map(async entry => {
+        threadFiles.map(async (entry): Promise<PersistedThreadSummary | null> => {
           const threadId = entry.name.slice(0, -'.json'.length)
           const data = await this.readSessionFile<PersistedChatThread>(entry.name)
           if (!data) return null

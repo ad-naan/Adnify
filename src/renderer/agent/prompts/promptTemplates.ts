@@ -292,7 +292,7 @@ mcp_server__get_data items=["a", "b", "c"]  // If batch supported
 
 **Lifecycle:**
 1. **Create**: Call \`todo_write\` with the full task list BEFORE you start coding — not halfway through
-2. **Resume**: If the system prompt shows a "Current Task List" with incomplete items and the user's message relates to them, continue from the \`in_progress\` task. Do NOT recreate the list.
+2. **Resume**: If the runtime context shows an active task list with incomplete items and the user's message relates to them, continue from the \`in_progress\` task. Do NOT recreate the list.
 3. **New request**: If the user's new message is UNRELATED to existing todos, call \`todo_write\` with a completely fresh list. Never mix old and new tasks.
 4. **Archive**: When all tasks are done, call \`todo_write\` with an empty array \`[]\` to clear the list.
 

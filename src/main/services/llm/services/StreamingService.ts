@@ -158,7 +158,6 @@ function findJsonObjectEnd(text: string, startIndex: number): number {
 
 class PseudoToolCallStreamAdapter {
   private mode: 'idle' | 'probing' | 'capturing' | 'disabled' = 'idle'
-  private captureKind: PseudoToolCaptureMode | null = null
   private probeBuffer = ''
   private captureBuffer = ''
   private toolCallId: string | null = null
@@ -213,7 +212,6 @@ class PseudoToolCallStreamAdapter {
     }
 
     this.mode = 'capturing'
-    this.captureKind = detectedMode
     this.captureBuffer = this.probeBuffer
     this.probeBuffer = ''
     return this.consumeCapturedChunk('')

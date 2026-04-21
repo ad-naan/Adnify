@@ -7,7 +7,7 @@ import type { ChatMessage } from './messages'
 import { getMessageText } from './messages'
 import type { MessageCheckpoint } from './checkpoint'
 import type { ContextItem } from './context'
-import type { StructuredSummary } from '../domains/context/types'
+import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import type { CompressionStats } from '../core/types'
 
 export interface ContextStats {
@@ -31,6 +31,14 @@ export interface TodoItem {
 export type StreamPhase = 'idle' | 'streaming' | 'tool_pending' | 'tool_running' | 'error'
 
 export type CompressionPhase = 'idle' | 'analyzing' | 'compressing' | 'summarizing' | 'done'
+export type ThreadHandoffStatus = 'idle' | 'ready' | 'transitioning' | 'failed'
+
+export interface ThreadHandoffState {
+  status: ThreadHandoffStatus
+  document: HandoffDocument | null
+  createdAt?: number
+  error?: string
+}
 
 export interface ThreadExecutionMeta {
   requestId?: string
@@ -74,7 +82,7 @@ export interface ChatThread {
   contextStats: ContextStats | null
   compressionStats: CompressionStats | null
   contextSummary: StructuredSummary | null
-  handoffRequired: boolean
+  handoff: ThreadHandoffState
   isCompacting: boolean
   compressionPhase: CompressionPhase
 
@@ -119,17 +127,24 @@ export interface PersistedChatThread {
 
 export function createRuntimeThreadState(): Pick<
   ChatThread,
-  'streamState' | 'toolStreamingPreviews' | 'contextStats' | 'compressionStats' | 'handoffRequired' | 'isCompacting' | 'compressionPhase' | 'executionMeta'
+  'streamState' | 'toolStreamingPreviews' | 'contextStats' | 'compressionStats' | 'handoff' | 'isCompacting' | 'compressionPhase' | 'executionMeta'
 > {
   return {
     streamState: { phase: 'idle' },
     toolStreamingPreviews: {},
     contextStats: null,
     compressionStats: null,
-    handoffRequired: false,
+    handoff: createIdleHandoffState(),
     isCompacting: false,
     compressionPhase: 'idle',
     executionMeta: { loopState: 'idle' },
+  }
+}
+
+export function createIdleHandoffState(): ThreadHandoffState {
+  return {
+    status: 'idle',
+    document: null,
   }
 }
 

@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
+import type { HandoffDocument } from '@renderer/agent/domains/context/types'
 
 describe('AgentStore', () => {
   beforeEach(() => {
@@ -191,6 +192,104 @@ describe('AgentStore', () => {
 
       const thread = store.getCurrentThread()
       expect(thread?.contextItems).toHaveLength(0)
+    })
+  })
+
+  describe('Handoff Sessions', () => {
+    it('should restore objective, pending steps, and todos into the new thread', () => {
+      const store = useAgentStore.getState()
+      store.createThread()
+
+      const handoff: HandoffDocument = {
+        fromSessionId: 'thread-old',
+        createdAt: Date.now(),
+        workingDirectory: 'E:\\Project\\adnify',
+        keyFileSnapshots: [],
+        lastUserRequest: '继续把压缩内容显示在消息流里',
+        suggestedNextSteps: ['显示压缩卡片'],
+        summary: {
+          objective: '修复上下文续接',
+          completedSteps: ['补齐 handoff 摘要'],
+          pendingSteps: ['显示压缩卡片', '恢复任务列表'],
+          todos: [
+            { content: '显示压缩卡片', activeForm: '正在显示压缩卡片', status: 'in_progress' },
+            { content: '恢复任务列表', activeForm: '正在恢复任务列表', status: 'pending' },
+          ],
+          decisions: [],
+          fileChanges: [],
+          errorsAndFixes: [],
+          userInstructions: [],
+          generatedAt: Date.now(),
+          turnRange: [0, 4],
+        },
+      }
+
+      store.setHandoffState({
+        status: 'ready',
+        document: handoff,
+        createdAt: handoff.createdAt,
+      })
+      const session = store.createHandoffSession()
+
+      expect(session).toBeTruthy()
+      expect(session?.objective).toBe('修复上下文续接')
+
+      const newThread = useAgentStore.getState().threads[session!.threadId]
+      expect(newThread.pendingObjective).toBe('修复上下文续接')
+      expect(newThread.pendingSteps).toEqual(['显示压缩卡片', '恢复任务列表'])
+      expect(newThread.todos).toEqual(handoff.summary.todos)
+      expect(newThread.handoffContext).toContain('## Session Resume Context')
+      expect(newThread.handoffContext).toContain('继续把压缩内容显示在消息流里')
+    })
+    it('should clear thread handoff state when deleting later messages', () => {
+      const store = useAgentStore.getState()
+      store.createThread()
+
+      const userMessageId = store.addUserMessage('keep this')
+      store.addAssistantMessage('reply')
+      store.setCompressionStats({
+        level: 4,
+        levelName: 'Session Handoff',
+        ratio: 1.1,
+        inputTokens: 1000,
+        outputTokens: 100,
+        contextLimit: 1000,
+        savedTokens: 0,
+        savedPercent: 0,
+        messageCount: 2,
+        needsHandoff: true,
+        lastUpdatedAt: Date.now(),
+      })
+      store.setHandoffState({
+        status: 'ready',
+        document: {
+          fromSessionId: 'thread-old',
+          createdAt: Date.now(),
+          workingDirectory: 'E:\\Project\\adnify',
+          keyFileSnapshots: [],
+          lastUserRequest: 'continue',
+          suggestedNextSteps: ['resume work'],
+          summary: {
+            objective: 'resume work',
+            completedSteps: [],
+            pendingSteps: ['resume work'],
+            todos: [],
+            decisions: [],
+            fileChanges: [],
+            errorsAndFixes: [],
+            userInstructions: [],
+            generatedAt: Date.now(),
+            turnRange: [0, 2],
+          },
+        },
+      })
+
+      store.deleteMessagesAfter(userMessageId)
+
+      const thread = useAgentStore.getState().getCurrentThread()
+      expect(thread?.handoff.status).toBe('idle')
+      expect(thread?.handoff.document).toBeNull()
+      expect(thread?.compressionStats).toBeNull()
     })
   })
 })

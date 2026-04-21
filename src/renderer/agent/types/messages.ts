@@ -6,6 +6,7 @@ import type { TextContent, ImageContent, MessageContent, ToolCall, ToolResultTyp
 import type { ContextItem } from './context'
 import type { InteractiveContent } from './interactive'
 import type { FileSnapshot } from './checkpoint'
+import type { StructuredSummary, CompressionLevel } from '../domains/context/types'
 
 // ============================================
 // 消息部分类型
@@ -49,6 +50,17 @@ export interface SystemAlertPart {
   compact?: boolean
 }
 
+export interface ContextSnapshotPart {
+  id: string
+  type: 'context_snapshot'
+  snapshotKind: 'summary' | 'handoff'
+  level: CompressionLevel
+  summary: StructuredSummary
+  generatedAt: number
+  note: string
+  lastUserRequest?: string
+}
+
 /** Lint 自动检查结果 */
 export interface LintCheckPart {
   type: 'lint_check'
@@ -64,7 +76,14 @@ export interface LintCheckFile {
 }
 
 /** 助手消息部分 */
-export type AssistantPart = TextPart | ReasoningPart | ToolCallPart | SearchPart | LintCheckPart | SystemAlertPart
+export type AssistantPart =
+  | TextPart
+  | ReasoningPart
+  | ToolCallPart
+  | SearchPart
+  | LintCheckPart
+  | SystemAlertPart
+  | ContextSnapshotPart
 
 /** Token 使用统计 */
 export interface TokenUsage {
@@ -194,6 +213,10 @@ export function isSystemAlertPart(part: AssistantPart): part is SystemAlertPart 
 
 export function isLintCheckPart(part: AssistantPart): part is LintCheckPart {
   return part.type === 'lint_check'
+}
+
+export function isContextSnapshotPart(part: AssistantPart): part is ContextSnapshotPart {
+  return part.type === 'context_snapshot'
 }
 
 // ============================================

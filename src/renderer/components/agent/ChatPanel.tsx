@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentActions, useAgentCommands, useAgentViewState } from '@/renderer/hooks/useAgent'
-import { useAgentStore, selectHandoffRequired } from '@/renderer/agent/store/AgentStore'
+import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
@@ -218,52 +218,6 @@ export default function ChatPanel() {
     }
     prevTodosLenRef.current = todos.length
   }, [todos.length])
-
-  // Handoff 状态
-  const handoffRequired = useAgentStore(selectHandoffRequired)
-
-  // 监听 Handoff 自动继续事件
-  useEffect(() => {
-    const handleAutoResume = (event: CustomEvent<{
-      objective: string
-      pendingSteps: string[]
-      fileChanges: Array<{ action: string; path: string; summary: string }>
-    }>) => {
-      const { objective, pendingSteps, fileChanges } = event.detail
-
-      // 构建自动继续的消息，包含文件变更信息
-      let resumeMessage = ''
-
-      // 添加文件变更信息（重要：让 AI 知道之前修改了哪些文件）
-      if (fileChanges && fileChanges.length > 0) {
-        const fileList = fileChanges.slice(-10).map(f => `- [${f.action}] ${f.path}`).join('\n')
-        resumeMessage += language === 'zh'
-          ? `**之前修改的文件**:\n${fileList}\n\n`
-          : `**Previously modified files**:\n${fileList}\n\n`
-      }
-
-      // 添加待完成步骤
-      if (pendingSteps && pendingSteps.length > 0) {
-        resumeMessage += language === 'zh'
-          ? `请继续完成以下待完成的步骤：\n${pendingSteps.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
-          : `Please continue with the following pending steps:\n${pendingSteps.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}`
-      } else if (objective) {
-        resumeMessage += language === 'zh'
-          ? `请继续完成目标：${objective}`
-          : `Please continue with the objective: ${objective}`
-      } else {
-        resumeMessage += language === 'zh'
-          ? '请继续完成之前的任务。'
-          : 'Please continue with the previous task.'
-      }
-
-      // 发送消息继续任务
-      sendMessage(resumeMessage)
-    }
-
-    window.addEventListener('handoff-auto-resume', handleAutoResume as EventListener)
-    return () => window.removeEventListener('handoff-auto-resume', handleAutoResume as EventListener)
-  }, [language, sendMessage])
 
   // 监听选项卡片选择事件
   useEffect(() => {
@@ -791,7 +745,7 @@ export default function ChatPanel() {
     // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
     scrollToBottom('smooth')
     await sendMessage(userMessage)
-  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, handoffRequired, scrollToBottom])
+  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom])
 
   // 编辑消息
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {

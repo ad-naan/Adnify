@@ -20,6 +20,7 @@ import type {
     SearchPart,
     InteractiveContent,
 } from '../../types'
+import { createIdleHandoffState } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
 import { useStore } from '@/renderer/store'
@@ -32,6 +33,11 @@ export interface MessageActions {
     addUserMessage: (content: MessageContent, contextItems?: ContextItem[], targetThreadId?: string) => string
     prepareExecution: (content: MessageContent, contextItems: ContextItem[], targetThreadId?: string) => { userMessageId: string, assistantId: string, threadId: string }
     addAssistantMessage: (content?: string, targetThreadId?: string) => string
+    addAssistantPartsMessage: (
+        parts: AssistantPart[],
+        options?: { content?: string; timestamp?: number },
+        targetThreadId?: string
+    ) => string
     appendToAssistant: (messageId: string, content: string, targetThreadId?: string) => void
     finalizeAssistant: (messageId: string, targetThreadId?: string) => void
     finalizeTextBeforeToolCall: (messageId: string, targetThreadId?: string) => void
@@ -112,11 +118,11 @@ export const createMessageSlice: StateCreator<
     MessageSlice
 > = (set, get) => ({
     // 添加用户消息
-    addUserMessage: (content, contextItems) => {
-        let threadId = get().currentThreadId
+    addUserMessage: (content, contextItems, targetThreadId) => {
+        let threadId = targetThreadId || get().currentThreadId
 
         if (!threadId || !get().threads[threadId]) {
-            threadId = get().createThread()
+            threadId = get().createThread({ activate: !targetThreadId })
         }
 
         const message: UserMessage = {
@@ -195,8 +201,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加助手消息
-    addAssistantMessage: (content = '') => {
-        const threadId = get().currentThreadId
+    addAssistantMessage: (content = '', targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const message: AssistantMessage = {
@@ -221,6 +227,39 @@ export const createMessageSlice: StateCreator<
                         messages: [...thread.messages, message],
                         lastModified: Date.now(),
                         streamState: { ...thread.streamState, phase: 'streaming' },
+                    },
+                },
+            }
+        })
+
+        return message.id
+    },
+
+    addAssistantPartsMessage: (parts, options, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return ''
+
+        const message: AssistantMessage = {
+            id: generateId(),
+            role: 'assistant',
+            content: options?.content ?? '',
+            timestamp: options?.timestamp ?? Date.now(),
+            isStreaming: false,
+            parts: [...parts],
+            toolCalls: [],
+        }
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            return {
+                threads: {
+                    ...state.threads,
+                    [threadId]: {
+                        ...thread,
+                        messages: [...thread.messages, message],
+                        lastModified: Date.now(),
                     },
                 },
             }
@@ -511,6 +550,10 @@ export const createMessageSlice: StateCreator<
                         messages: [],
                         contextItems: [],
                         messageCheckpoints: [],
+                        compressionStats: null,
+                        contextSummary: null,
+                        compressionPhase: 'idle',
+                        handoff: createIdleHandoffState(),
                         lastModified: Date.now(),
                         state: { currentCheckpointIdx: null, isStreaming: false },
                     },
@@ -550,13 +593,13 @@ export const createMessageSlice: StateCreator<
                         ...thread,
                         messages: remainingMessages,
                         messageCheckpoints: (thread.messageCheckpoints || []).filter(checkpoint => remainingMessageIds.has(checkpoint.messageId)),
+                        compressionStats: null,
+                        contextSummary: null,
+                        compressionPhase: 'idle',
+                        handoff: createIdleHandoffState(),
                         lastModified: Date.now(),
                     },
                 },
-                // 重置 handoff 相关状态
-                handoffRequired: false,
-                handoffDocument: null,
-                compressionStats: null,
             }
         })
 
@@ -564,8 +607,11 @@ export const createMessageSlice: StateCreator<
     },
 
     // 获取消息列表
-    getMessages: () => {
-        const thread = get().getCurrentThread()
+    getMessages: (targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return []
+
+        const thread = get().threads[threadId]
         return thread?.messages || []
     },
 

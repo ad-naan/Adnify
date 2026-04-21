@@ -1,9 +1,9 @@
 /**
- * 摘要生成服务
- * 
- * 参考 OpenCode 的实现：
- * - 使用 LLM 生成对话摘要
- * - 用于 L3 深度压缩和 L4 会话交接
+ * Summary generation service.
+ *
+ * Used for:
+ * - L3 detailed summary generation
+ * - L4 handoff document generation
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -11,10 +11,14 @@ import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { getAgentConfig } from '../../utils/AgentConfig'
 import type { StructuredSummary, HandoffDocument, FileChangeRecord } from './types'
-import type { ChatMessage, AssistantMessage, UserMessage } from '../../types'
+import type {
+  ChatMessage,
+  AssistantMessage,
+  UserMessage,
+  ToolResultMessage,
+  TodoItem,
+} from '../../types'
 import { getMessageText } from '../../types'
-
-// ===== Prompts =====
 
 const HANDOFF_SYSTEM_PROMPT = `You are analyzing a conversation to extract structured information for session handoff.
 
@@ -25,6 +29,7 @@ Your task is to identify:
 4. Key technical decisions that were made
 5. Any special requirements or constraints the user mentioned
 6. Whether the last user request was completed, partially done, or not started
+7. The active task list and which items are still incomplete
 
 Be thorough and accurate. If the last user message contains a request that wasn't fully addressed, it MUST appear in pendingSteps.`
 
@@ -38,21 +43,70 @@ Rules:
 - Write in first person (I added..., I fixed...)
 - Never ask questions or add new questions`
 
-// ===== Types =====
-
 export interface SummaryResult {
   summary: string
   objective: string
   completedSteps: string[]
   pendingSteps: string[]
   fileChanges: FileChangeRecord[]
+  todos: TodoItem[]
 }
 
-// ===== Helper Functions =====
+function normalizeTodos(todos?: TodoItem[]): TodoItem[] {
+  if (!Array.isArray(todos)) return []
 
-/**
- * 从消息中提取文件变更记录
- */
+  return todos
+    .filter(todo => todo && typeof todo.content === 'string' && typeof todo.activeForm === 'string')
+    .map(todo => ({
+      content: todo.content.trim(),
+      status: todo.status,
+      activeForm: todo.activeForm.trim(),
+    }))
+    .filter(todo => Boolean(todo.content) && Boolean(todo.activeForm))
+}
+
+function buildTodoContext(todos: TodoItem[]): string {
+  if (todos.length === 0) return ''
+
+  const lines = todos.map(todo => {
+    const marker = todo.status === 'completed' ? '[done]' : todo.status === 'in_progress' ? '[doing]' : '[todo]'
+    const text = todo.status === 'in_progress' ? todo.activeForm : todo.content
+    return `${marker} ${text}`
+  })
+
+  return `Active task list:\n${lines.join('\n')}`
+}
+
+function mergePendingSteps(baseSteps: string[], todos: TodoItem[], lastUserRequest?: string): string[] {
+  const merged: string[] = []
+  const seen = new Set<string>()
+
+  const pushUnique = (value: string) => {
+    const normalized = value.trim()
+    if (!normalized) return
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    merged.push(normalized)
+  }
+
+  for (const step of baseSteps) {
+    pushUnique(step)
+  }
+
+  for (const todo of todos) {
+    if (todo.status !== 'completed') {
+      pushUnique(`Task: ${todo.content}`)
+    }
+  }
+
+  if (lastUserRequest) {
+    pushUnique(`Continue: ${lastUserRequest.slice(0, 100)}${lastUserRequest.length > 100 ? '...' : ''}`)
+  }
+
+  return merged
+}
+
 function extractFileChanges(messages: ChatMessage[]): FileChangeRecord[] {
   const changes: FileChangeRecord[] = []
   let turnIndex = 0
@@ -63,32 +117,17 @@ function extractFileChanges(messages: ChatMessage[]): FileChangeRecord[] {
     if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage
       for (const tc of assistantMsg.toolCalls || []) {
-        if (tc.status === 'success') {
-          const args = tc.arguments as Record<string, unknown>
-          const path = args.path as string
+        if (tc.status !== 'success') continue
 
-          if (tc.name === 'write_file' || tc.name === 'create_file') {
-            changes.push({
-              path,
-              action: 'create',
-              summary: `Created ${path}`,
-              turnIndex,
-            })
-          } else if (tc.name === 'edit_file') {
-            changes.push({
-              path,
-              action: 'modify',
-              summary: `Modified ${path}`,
-              turnIndex,
-            })
-          } else if (tc.name === 'delete_file') {
-            changes.push({
-              path,
-              action: 'delete',
-              summary: `Deleted ${path}`,
-              turnIndex,
-            })
-          }
+        const args = tc.arguments as Record<string, unknown>
+        const path = args.path as string
+
+        if (tc.name === 'write_file' || tc.name === 'create_file') {
+          changes.push({ path, action: 'create', summary: `Created ${path}`, turnIndex })
+        } else if (tc.name === 'edit_file') {
+          changes.push({ path, action: 'modify', summary: `Modified ${path}`, turnIndex })
+        } else if (tc.name === 'delete_file') {
+          changes.push({ path, action: 'delete', summary: `Deleted ${path}`, turnIndex })
         }
       }
     }
@@ -97,48 +136,59 @@ function extractFileChanges(messages: ChatMessage[]): FileChangeRecord[] {
   return changes
 }
 
-/**
- * 从消息中提取用户请求
- */
 function extractUserRequests(messages: ChatMessage[]): string[] {
   const requests: string[] = []
 
   for (const msg of messages) {
-    if (msg.role === 'user') {
-      const userMsg = msg as UserMessage
-      const content = getMessageText(userMsg.content)
+    if (msg.role !== 'user') continue
 
-      if (content.trim()) {
-        requests.push(content.slice(0, 200))
-      }
+    const userMsg = msg as UserMessage
+    const content = getMessageText(userMsg.content)
+    if (content.trim()) {
+      requests.push(content.slice(0, 200))
     }
   }
 
   return requests
 }
 
-/**
- * 构建用于摘要的消息文本
- */
+function extractAssistantSummary(message: AssistantMessage): string {
+  const directContent = (message.content || '').trim()
+  if (directContent) return directContent
+
+  const partTexts = message.parts
+    .map(part => {
+      switch (part.type) {
+        case 'text':
+        case 'reasoning':
+        case 'search':
+          return part.content
+        case 'system_alert':
+          return [part.title, part.message, part.suggestion].filter(Boolean).join(' - ')
+        default:
+          return ''
+      }
+    })
+    .filter(Boolean)
+
+  return partTexts.join('\n').trim()
+}
+
 function buildConversationText(messages: ChatMessage[], maxLength = 8000): string {
   const parts: string[] = []
   let totalLength = 0
 
-  // 从后往前取消息，确保最近的对话被包含
   for (let i = messages.length - 1; i >= 0 && totalLength < maxLength; i--) {
     const msg = messages[i]
     let text = ''
 
     if (msg.role === 'user') {
-      const content = typeof (msg as UserMessage).content === 'string'
-        ? (msg as UserMessage).content as string
-        : ''
+      const content = getMessageText((msg as UserMessage).content)
       text = `User: ${content.slice(0, 500)}`
     } else if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage
-      text = `Assistant: ${(assistantMsg.content || '').slice(0, 500)}`
+      text = `Assistant: ${extractAssistantSummary(assistantMsg).slice(0, 500)}`
 
-      // 添加工具调用摘要
       if (assistantMsg.toolCalls?.length) {
         const toolSummary = assistantMsg.toolCalls
           .filter(tc => tc.status === 'success')
@@ -148,51 +198,58 @@ function buildConversationText(messages: ChatMessage[], maxLength = 8000): strin
           text += `\nTools used:\n${toolSummary}`
         }
       }
+    } else if (msg.role === 'tool') {
+      const toolMsg = msg as ToolResultMessage
+      text = `Tool ${toolMsg.name}: ${String(toolMsg.content || '').slice(0, 400)}`
+    } else if (msg.role === 'interrupted_tool') {
+      text = `Interrupted tool: ${msg.name}`
     }
 
-    if (text) {
-      parts.unshift(text)
-      totalLength += text.length
-    }
+    if (!text) continue
+
+    parts.unshift(text)
+    totalLength += text.length
   }
 
   return parts.join('\n\n')
 }
 
-// ===== Main Service =====
-
-/**
- * 使用 LLM 生成对话摘要
- */
 export async function generateSummary(
   messages: ChatMessage[],
   options: {
     type: 'quick' | 'detailed' | 'handoff'
     maxTokens?: number
+    todos?: TodoItem[]
   } = { type: 'quick' }
 ): Promise<SummaryResult> {
   const { llmConfig } = useStore.getState()
+  const todos = normalizeTodos(options.todos)
+  const userRequests = extractUserRequests(messages)
+  const lastUserRequest = userRequests[userRequests.length - 1]
 
-  // 如果没有配置 API Key，返回基于规则的摘要
   if (!llmConfig.apiKey) {
-    return generateRuleBasedSummary(messages)
+    return generateRuleBasedSummary(
+      messages,
+      options.type === 'handoff' ? lastUserRequest : undefined,
+      todos
+    )
   }
 
-  // 从配置中获取上下文长度限制
   const agentConfig = getAgentConfig()
   const maxContextLength = agentConfig.summaryMaxContextChars[options.type]
   const conversationText = buildConversationText(messages, maxContextLength)
+  const todoContext = buildTodoContext(todos)
   const fileChanges = extractFileChanges(messages)
-  const userRequests = extractUserRequests(messages)
 
-  // Handoff 模式：使用结构化提示词
   if (options.type === 'handoff') {
-    return generateHandoffSummary(messages, conversationText, fileChanges, userRequests, llmConfig)
+    return generateHandoffSummary(messages, conversationText, fileChanges, userRequests, todos, todoContext, llmConfig)
   }
 
-  // Quick/Detailed 模式：使用简单摘要
-  const prompt = SUMMARY_PROMPT
-  const userPrompt = `Please summarize the following conversation:\n\n${conversationText}`
+  const userPrompt = [
+    'Please summarize the following conversation:',
+    todoContext,
+    conversationText,
+  ].filter(Boolean).join('\n\n')
 
   try {
     const result = await api.llm.compactContext({
@@ -206,48 +263,48 @@ export async function generateSummary(
         temperature: 0.3,
       },
       messages: [
-        { role: 'system', content: prompt },
+        { role: 'system', content: SUMMARY_PROMPT },
         { role: 'user', content: userPrompt },
       ],
     })
 
     if (result.error) {
       logger.agent.warn('[SummaryService] LLM error, falling back to rule-based:', result.error)
-      return generateRuleBasedSummary(messages)
+      return generateRuleBasedSummary(messages, undefined, todos)
     }
 
-    const summary = result.content || ''
-
     return {
-      summary,
+      summary: result.content || '',
       objective: userRequests[0] || 'Unknown objective',
       completedSteps: extractCompletedSteps(messages),
-      pendingSteps: [],
+      pendingSteps: mergePendingSteps([], todos),
       fileChanges,
+      todos,
     }
   } catch (error) {
     logger.agent.error('[SummaryService] Error generating summary:', error)
-    return generateRuleBasedSummary(messages)
+    return generateRuleBasedSummary(messages, undefined, todos)
   }
 }
 
-/**
- * 生成 Handoff 专用的结构化摘要（使用 AI SDK generateObject）
- */
 async function generateHandoffSummary(
   messages: ChatMessage[],
   conversationText: string,
   fileChanges: FileChangeRecord[],
   userRequests: string[],
+  todos: TodoItem[],
+  todoContext: string,
   llmConfig: import('@store').LLMConfig
 ): Promise<SummaryResult> {
   const lastUserRequest = userRequests[userRequests.length - 1] || ''
-
-  const userPrompt = `Analyze the following conversation:\n\n${conversationText}\n\nLast user request: "${lastUserRequest}"`
+  const userPrompt = [
+    'Analyze the following conversation:',
+    todoContext,
+    conversationText,
+    `Last user request: "${lastUserRequest}"`,
+  ].filter(Boolean).join('\n\n')
 
   try {
-    // 使用 generateObject 确保结构化输出
-    // 注意：schema 需要转换为可序列化的格式传递给主进程
     const result = await api.llm.generateObject({
       config: {
         provider: llmConfig.provider,
@@ -258,7 +315,6 @@ async function generateHandoffSummary(
         maxTokens: 1000,
         temperature: 0.2,
       },
-      // 将 Zod schema 转换为 JSON Schema（主进程会重新构建 Zod schema）
       schema: {
         type: 'object',
         properties: {
@@ -267,9 +323,13 @@ async function generateHandoffSummary(
           pendingSteps: { type: 'array', items: { type: 'string' }, description: 'What still needs to be done' },
           keyDecisions: { type: 'array', items: { type: 'string' }, description: 'Important technical decisions' },
           userConstraints: { type: 'array', items: { type: 'string' }, description: 'Special requirements' },
-          lastRequestStatus: { type: 'string', enum: ['completed', 'partial', 'not_started'], description: 'Status of last request' }
+          lastRequestStatus: {
+            type: 'string',
+            enum: ['completed', 'partial', 'not_started'],
+            description: 'Status of last request',
+          },
         },
-        required: ['objective', 'completedSteps', 'pendingSteps', 'keyDecisions', 'userConstraints', 'lastRequestStatus']
+        required: ['objective', 'completedSteps', 'pendingSteps', 'keyDecisions', 'userConstraints', 'lastRequestStatus'],
       },
       system: HANDOFF_SYSTEM_PROMPT,
       prompt: userPrompt,
@@ -277,29 +337,22 @@ async function generateHandoffSummary(
 
     if (result.error || !result.object) {
       logger.agent.warn('[SummaryService] Handoff generation failed, falling back to rule-based:', result.error)
-      return generateRuleBasedSummary(messages, lastUserRequest)
+      return generateRuleBasedSummary(messages, lastUserRequest, todos)
     }
 
     const parsed = result.object
-
-    // 验证并提取字段
     const objective = parsed.objective || userRequests[0] || 'Unknown objective'
     const completedSteps = parsed.completedSteps || extractCompletedSteps(messages)
-    let pendingSteps = parsed.pendingSteps || []
-
-    // 确保最后一个未完成的请求在 pendingSteps 中
-    if (parsed.lastRequestStatus !== 'completed' && lastUserRequest) {
-      const lastRequestInPending = pendingSteps.some((step: string) =>
-        step.toLowerCase().includes(lastUserRequest.slice(0, 30).toLowerCase())
-      )
-      if (!lastRequestInPending) {
-        pendingSteps.unshift(`Continue: ${lastUserRequest.slice(0, 100)}${lastUserRequest.length > 100 ? '...' : ''}`)
-      }
-    }
+    const pendingSteps = mergePendingSteps(
+      parsed.pendingSteps || [],
+      todos,
+      parsed.lastRequestStatus !== 'completed' ? lastUserRequest : undefined
+    )
 
     const summary = `**Objective**: ${objective}\n\n` +
       `**Completed**: ${completedSteps.length} steps\n` +
       `**Pending**: ${pendingSteps.length} steps\n` +
+      `**Task List**: ${todos.length} item(s)\n` +
       (parsed.keyDecisions?.length > 0 ? `**Key Decisions**: ${parsed.keyDecisions.join('; ')}\n` : '') +
       (parsed.userConstraints?.length > 0 ? `**Constraints**: ${parsed.userConstraints.join('; ')}` : '')
 
@@ -309,29 +362,29 @@ async function generateHandoffSummary(
       completedSteps,
       pendingSteps,
       fileChanges,
+      todos,
     }
   } catch (error) {
     logger.agent.error('[SummaryService] Error generating handoff summary:', error)
-    return generateRuleBasedSummary(messages, lastUserRequest)
+    return generateRuleBasedSummary(messages, lastUserRequest, todos)
   }
 }
 
-/**
- * 基于规则生成摘要（不使用 LLM）
- */
-function generateRuleBasedSummary(messages: ChatMessage[], lastUserRequest?: string): SummaryResult {
+function generateRuleBasedSummary(
+  messages: ChatMessage[],
+  lastUserRequest?: string,
+  todos: TodoItem[] = []
+): SummaryResult {
   const fileChanges = extractFileChanges(messages)
   const userRequests = extractUserRequests(messages)
   const completedSteps = extractCompletedSteps(messages)
 
-  // 检测最后一个请求是否完成
-  const pendingSteps: string[] = []
+  let pendingSteps: string[] = []
   if (lastUserRequest) {
-    // 简单启发式：如果最后几条消息中没有成功的工具调用，认为请求未完成
     const lastMessages = messages.slice(-5)
     const hasRecentSuccess = lastMessages.some(m =>
       m.role === 'assistant' &&
-      (m as import('../../types').AssistantMessage).toolCalls?.some(tc => tc.status === 'success')
+      (m as AssistantMessage).toolCalls?.some(tc => tc.status === 'success')
     )
 
     if (!hasRecentSuccess) {
@@ -339,7 +392,8 @@ function generateRuleBasedSummary(messages: ChatMessage[], lastUserRequest?: str
     }
   }
 
-  // 构建简单摘要
+  pendingSteps = mergePendingSteps(pendingSteps, todos)
+
   const parts: string[] = []
 
   if (userRequests.length > 0) {
@@ -359,61 +413,65 @@ function generateRuleBasedSummary(messages: ChatMessage[], lastUserRequest?: str
     parts.push(`Pending: ${pendingSteps.join('; ')}`)
   }
 
+  if (todos.length > 0) {
+    parts.push(`Task list: ${todos.length} item(s), ${todos.filter(todo => todo.status === 'completed').length} completed`)
+  }
+
   return {
     summary: parts.join('\n'),
     objective: userRequests[0] || 'Unknown objective',
     completedSteps,
     pendingSteps,
     fileChanges,
+    todos,
   }
 }
 
-/**
- * 从消息中提取已完成的步骤
- */
 function extractCompletedSteps(messages: ChatMessage[]): string[] {
   const steps: string[] = []
 
   for (const msg of messages) {
-    if (msg.role === 'assistant') {
-      const assistantMsg = msg as AssistantMessage
-      for (const tc of assistantMsg.toolCalls || []) {
-        if (tc.status === 'success') {
-          const args = tc.arguments as Record<string, unknown>
+    if (msg.role !== 'assistant') continue
 
-          switch (tc.name) {
-            case 'write_file':
-            case 'create_file':
-              steps.push(`Created file: ${args.path}`)
-              break
-            case 'edit_file':
-              steps.push(`Modified file: ${args.path}`)
-              break
-            case 'execute_command':
-            case 'run_terminal_command':
-              steps.push(`Executed: ${String(args.command || args.cmd).slice(0, 50)}`)
-              break
-            case 'read_file':
-              steps.push(`Read file: ${args.path}`)
-              break
-          }
-        }
+    const assistantMsg = msg as AssistantMessage
+    for (const tc of assistantMsg.toolCalls || []) {
+      if (tc.status !== 'success') continue
+
+      const args = tc.arguments as Record<string, unknown>
+      switch (tc.name) {
+        case 'write_file':
+        case 'create_file':
+          steps.push(`Created file: ${args.path}`)
+          break
+        case 'edit_file':
+          steps.push(`Modified file: ${args.path}`)
+          break
+        case 'execute_command':
+        case 'run_terminal_command':
+          steps.push(`Executed: ${String(args.command || args.cmd).slice(0, 50)}`)
+          break
+        case 'read_file':
+          steps.push(`Read file: ${args.path}`)
+          break
       }
     }
   }
 
-  return steps.slice(-20) // 保留最近 20 个步骤
+  return steps.slice(-20)
 }
 
-/**
- * 生成 Handoff 文档
- */
 export async function generateHandoffDocument(
   sessionId: string,
   messages: ChatMessage[],
-  workspacePath: string
+  workspacePath: string,
+  todos: TodoItem[] = []
 ): Promise<HandoffDocument> {
-  const summaryResult = await generateSummary(messages, { type: 'handoff', maxTokens: 1000 })
+  const normalizedTodos = normalizeTodos(todos)
+  const summaryResult = await generateSummary(messages, {
+    type: 'handoff',
+    maxTokens: 1000,
+    todos: normalizedTodos,
+  })
   const userRequests = extractUserRequests(messages)
   const lastUserRequest = userRequests[userRequests.length - 1] || ''
 
@@ -421,6 +479,7 @@ export async function generateHandoffDocument(
     objective: summaryResult.objective,
     completedSteps: summaryResult.completedSteps,
     pendingSteps: summaryResult.pendingSteps,
+    todos: summaryResult.todos,
     decisions: [],
     fileChanges: summaryResult.fileChanges,
     errorsAndFixes: [],
@@ -439,5 +498,3 @@ export async function generateHandoffDocument(
     suggestedNextSteps: summaryResult.pendingSteps,
   }
 }
-
-logger.agent.info('[SummaryService] Module loaded')

@@ -23,6 +23,7 @@ export {
     selectInputPrompt,
     selectCurrentSessionId,
     selectCompressionStats,
+    selectHandoffState,
     selectHandoffDocument,
     selectHandoffRequired,
     selectContextSummary,

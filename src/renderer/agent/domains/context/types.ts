@@ -3,6 +3,7 @@
  */
 
 import type { LLMMessage } from '@/shared/types'
+import type { TodoItem } from '../../types/thread'
 
 // 从 compressionShared.ts 导入 CompressionLevel，避免重复定义
 export type { CompressionLevel } from './compressionShared'
@@ -57,6 +58,7 @@ export interface StructuredSummary {
   objective: string
   completedSteps: string[]
   pendingSteps: string[]
+  todos: TodoItem[]
   decisions: DecisionPoint[]
   fileChanges: FileChangeRecord[]
   errorsAndFixes: { error: string; fix: string }[]

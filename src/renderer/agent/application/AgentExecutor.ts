@@ -20,7 +20,7 @@ import { createBudgetController } from '../domains/budget/TokenBudgetController'
 import type { TokenBudgetController, BudgetReconciliation } from '../domains/budget/TokenBudgetController'
 import { ContextAssembler } from '../domains/context/ContextAssembler'
 import type { ContextAssemblyConfig } from '../domains/context/ContextAssembler'
-import { MessageAssembler } from '../domains/message/MessageAssembler'
+import { MessageAssembler, type RuntimeStateContext } from '../domains/message/MessageAssembler'
 import type { CompressionLevel } from '../domains/context/compressionShared'
 import { countTokens } from '@shared/utils/tokenCounter'
 import { useAgentStore } from '../store/AgentStore'
@@ -149,17 +149,24 @@ export class AgentExecutor {
     )
 
     // 5. 检查是否需要注入 handoff 上下文
-    let handoffContext: string | undefined
+    let runtimeState: RuntimeStateContext | undefined
     if (config.threadId) {
       const thread = useAgentStore.getState().threads[config.threadId]
-      if (thread?.handoffContext) {
-        handoffContext = thread.handoffContext
-        logger.agent.info('[AgentExecutor] Injected handoff context')
+      if (thread) {
+        runtimeState = {
+          handoffContext: thread.handoffContext,
+          todos: thread.todos,
+          pendingObjective: thread.pendingObjective,
+          pendingSteps: thread.pendingSteps,
+        }
+        if (thread.handoffContext || (thread.todos && thread.todos.length > 0) || thread.pendingObjective || (thread.pendingSteps && thread.pendingSteps.length > 0)) {
+          logger.agent.info('[AgentExecutor] Injected runtime state context')
+        }
       }
     }
 
     // 6. 计算各部分的 token
-    const systemPromptTokens = countTokens(systemPrompt) + (handoffContext ? countTokens(handoffContext) : 0)
+    const systemPromptTokens = countTokens(systemPrompt)
     const contextTokens = contextResult.totalTokens
     const userMessageTokens = userMessageContent.estimatedTokens
 
@@ -170,7 +177,7 @@ export class AgentExecutor {
       userMessageContent,
       systemPrompt,
       compressionLevel,
-      handoffContext
+      runtimeState
     )
 
     // 迭代压缩直到满足预算
@@ -207,7 +214,7 @@ export class AgentExecutor {
         userMessageContent,
         systemPrompt,
         compressionLevel,
-        handoffContext
+        runtimeState
       )
     }
 

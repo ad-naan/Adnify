@@ -177,6 +177,7 @@ export class AgentClass {
         assistantId,
         requestId,
         planTaskId: executionOptions?.planTaskId,
+        contextLimit: config.contextLimit,
       }
 
       const preparation = await agentExecutor.prepare(

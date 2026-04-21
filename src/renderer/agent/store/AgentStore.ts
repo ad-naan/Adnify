@@ -31,7 +31,8 @@ import {
     createPlanSlice,
     type PlanSlice,
 } from './slices/planSlice'
-import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats } from '../types'
+import { createIdleHandoffState } from '../types'
+import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats, ThreadHandoffState, AssistantMessage } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import { buildHandoffContext } from '../domains/context/HandoffManager'
@@ -46,11 +47,12 @@ export type { ContextStats } from '../types'
 
 // 上下文统计信息（用于底部栏显示）
 // Handoff 会话创建结果
-interface HandoffSessionResult {
+export interface HandoffSessionResult {
     threadId: string
-    autoResume: boolean
     objective: string
     pendingSteps: string[]
+    todos: TodoItem[]
+    lastUserRequest: string
     fileChanges: Array<{ action: string; path: string; summary: string }>
 }
 
@@ -58,7 +60,6 @@ interface HandoffSessionResult {
 interface UIState {
     inputPrompt: string
     currentSessionId: string | null
-    handoffDocument: HandoffDocument | null  // Handoff 文档（临时状态）
     // 代码审查状态
     codeReviewSession: import('../types/codeReview').CodeReviewSession | null
     reviewProgress: { current: number; total: number; currentFile: string } | null
@@ -67,8 +68,7 @@ interface UIState {
     emotionHistory: EmotionHistory[]
     setInputPrompt: (prompt: string) => void
     setCurrentSessionId: (id: string | null) => void
-    setHandoffDocument: (doc: HandoffDocument | null) => void
-    createHandoffSession: () => HandoffSessionResult | null
+    createHandoffSession: (threadId?: string) => HandoffSessionResult | null
     // 代码审查方法
     setCodeReviewSession: (session: import('../types/codeReview').CodeReviewSession | null) => void
     updateReviewProgress: (current: number, total: number, currentFile: string) => void
@@ -86,6 +86,10 @@ export interface ThreadBoundStore {
 
     // 消息操作
     addAssistantMessage: (content?: string) => string
+    addAssistantPartsMessage: (
+        parts: import('../types').AssistantPart[],
+        options?: { content?: string; timestamp?: number }
+    ) => string
     appendToAssistant: (messageId: string, content: string) => void
     finalizeAssistant: (messageId: string) => void
     finalizeTextBeforeToolCall: (messageId: string) => void
@@ -110,7 +114,8 @@ export interface ThreadBoundStore {
     clearExecutionMeta: () => void
     setContextSummary: (summary: StructuredSummary | null) => void
     setCompressionPhase: (phase: import('../types').CompressionPhase) => void
-    setHandoffRequired: (required: boolean) => void
+    setHandoffState: (handoff: ThreadHandoffState) => void
+    clearHandoffState: () => void
     setIsCompacting: (compacting: boolean) => void
 
     // Reasoning 操作
@@ -146,6 +151,29 @@ export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSl
     forThread: (threadId: string) => ThreadBoundStore
 }
 
+function createHandoffDigestMessage(handoff: HandoffDocument): AssistantMessage {
+    const createdAt = handoff.createdAt
+
+    return {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: '',
+        timestamp: createdAt,
+        isStreaming: false,
+        parts: [{
+            id: `context-handoff-${createdAt}`,
+            type: 'context_snapshot',
+            snapshotKind: 'handoff',
+            level: 4,
+            summary: handoff.summary,
+            generatedAt: createdAt,
+            note: 'This thread was created from an automatic handoff packet.',
+            lastUserRequest: handoff.lastUserRequest,
+        }],
+        toolCalls: [],
+    }
+}
+
 // ===== Store 实现 =====
 
 export const useAgentStore = create<AgentStore>()(
@@ -168,17 +196,22 @@ export const useAgentStore = create<AgentStore>()(
             const uiState: UIState = {
                 inputPrompt: '',
                 currentSessionId: null,
-                handoffDocument: null,
                 codeReviewSession: null,
                 reviewProgress: null,
                 emotionDetection: null,
                 emotionHistory: [],
                 setInputPrompt: (prompt) => set({ inputPrompt: prompt }),
                 setCurrentSessionId: (id) => set({ currentSessionId: id }),
-                setHandoffDocument: (doc) => set({ handoffDocument: doc }),
-                createHandoffSession: () => {
+                createHandoffSession: (threadId) => {
                     const state = get()
-                    const handoff = state.handoffDocument
+                    const sourceThreadId = threadId ?? state.currentThreadId
+                    if (!sourceThreadId) {
+                        logger.agent.warn('[AgentStore] No source thread for handoff session')
+                        return null
+                    }
+
+                    const sourceThread = state.threads[sourceThreadId]
+                    const handoff = sourceThread?.handoff.document
 
                     if (!handoff) {
                         logger.agent.warn('[AgentStore] No handoff document to create session from')
@@ -186,10 +219,11 @@ export const useAgentStore = create<AgentStore>()(
                     }
 
                     // 创建新线程
-                    const newThreadId = threadSlice.createThread()
+                    const newThreadId = threadSlice.createThread({ activate: false })
 
                     // 构建 handoff 上下文
                     const handoffContext = buildHandoffContext(handoff)
+                    const handoffDigestMessage = createHandoffDigestMessage(handoff)
 
                     // 更新新线程的元数据
                     set(s => {
@@ -198,15 +232,25 @@ export const useAgentStore = create<AgentStore>()(
                         return {
                             threads: {
                                 ...s.threads,
+                                [sourceThreadId]: {
+                                    ...s.threads[sourceThreadId],
+                                    handoff: createIdleHandoffState(),
+                                },
                                 [newThreadId]: {
                                     ...thread,
+                                    messages: [handoffDigestMessage],
                                     handoffContext,
                                     pendingObjective: handoff.summary.objective,
                                     pendingSteps: handoff.summary.pendingSteps,
+                                    todos: handoff.summary.todos || [],
                                     contextSummary: handoff.summary,
                                 }
                             },
-                            handoffDocument: null,  // 清除 handoff 文档
+                            currentThreadId: newThreadId,
+                            threadMessageVersions: {
+                                ...s.threadMessageVersions,
+                                [newThreadId]: 1,
+                            },
                         }
                     })
 
@@ -214,9 +258,10 @@ export const useAgentStore = create<AgentStore>()(
 
                     return {
                         threadId: newThreadId,
-                        autoResume: true,
                         objective: handoff.summary.objective,
                         pendingSteps: handoff.summary.pendingSteps,
+                        todos: handoff.summary.todos || [],
+                        lastUserRequest: handoff.lastUserRequest,
                         fileChanges: handoff.summary.fileChanges,
                     }
                 },
@@ -268,6 +313,8 @@ export const useAgentStore = create<AgentStore>()(
                 // 消息操作
                 addAssistantMessage: (content) =>
                     messageSlice.addAssistantMessage(content, threadId),
+                addAssistantPartsMessage: (parts, options) =>
+                    messageSlice.addAssistantPartsMessage(parts, options, threadId),
                 appendToAssistant: (messageId, content) => {
                     // 调用公开方法（经过 StreamingBuffer 缓冲），绑定 threadId
                     messageSlice.appendToAssistant(messageId, content, threadId)
@@ -305,7 +352,8 @@ export const useAgentStore = create<AgentStore>()(
                 clearExecutionMeta: () => threadSlice.clearExecutionMeta(threadId),
                 setContextSummary: (summary) => threadSlice.setContextSummary(summary, threadId),
                 setCompressionPhase: (phase) => threadSlice.setCompressionPhase(phase, threadId),
-                setHandoffRequired: (required) => threadSlice.setHandoffRequired(required, threadId),
+                setHandoffState: (handoff) => threadSlice.setHandoffState(handoff, threadId),
+                clearHandoffState: () => threadSlice.clearHandoffState(threadId),
                 setIsCompacting: (compacting) => threadSlice.setIsCompacting(compacting, threadId),
 
                 // Reasoning 操作
@@ -357,6 +405,7 @@ const EMPTY_CONTEXT_ITEMS: ContextItem[] = []
 const EMPTY_MESSAGE_CHECKPOINTS: MessageCheckpoint[] = []
 const EMPTY_TODOS: TodoItem[] = []
 const DEFAULT_STREAM_STATE: StreamState = { phase: 'idle' }
+const IDLE_HANDOFF_STATE = createIdleHandoffState()
 const DEFAULT_MESSAGE_LIST_STATE = { messages: EMPTY_MESSAGES, version: 0 }
 let lastMessageListThreadId: string | null = null
 let lastMessageListMessages: ChatMessage[] = EMPTY_MESSAGES
@@ -514,11 +563,16 @@ export const selectCompressionStats = (state: AgentStore): CompressionStats | nu
     return thread?.compressionStats ?? null
 }
 
-export const selectHandoffDocument = (state: AgentStore) => state.handoffDocument
+export const selectHandoffState = (state: AgentStore): ThreadHandoffState => {
+    const thread = selectCurrentThread(state)
+    return thread?.handoff ?? IDLE_HANDOFF_STATE
+}
+
+export const selectHandoffDocument = (state: AgentStore) => selectHandoffState(state).document
 
 export const selectHandoffRequired = (state: AgentStore): boolean => {
-    const thread = selectCurrentThread(state)
-    return thread?.handoffRequired ?? false
+    const handoff = selectHandoffState(state)
+    return handoff.status === 'ready' && !!handoff.document
 }
 
 export const selectContextSummary = (state: AgentStore): StructuredSummary | null => {
