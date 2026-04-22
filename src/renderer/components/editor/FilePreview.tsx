@@ -7,6 +7,8 @@ import { logger } from '@utils/Logger'
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Eye, Edit, FileQuestion, Image as ImageIcon, AlertTriangle, Columns } from 'lucide-react'
@@ -56,7 +58,8 @@ export function MarkdownPreview({ content, fontSize = 14 }: MarkdownPreviewProps
         >
             <div className="max-w-3xl mx-auto prose prose-invert">
                 <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
                     components={{
                         code({ className, children, node, ...props }) {
                             const match = /language-(\w+)/.exec(className || '')

@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import 'katex/dist/katex.min.css'
 import './styles/globals.css'
 import { logger } from '@utils/Logger'
 
