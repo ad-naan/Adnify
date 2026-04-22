@@ -1,7 +1,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue } from 'react'
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
+import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue, forwardRef, type ComponentPropsWithoutRef } from 'react'
+import { Virtuoso } from 'react-virtuoso'
 import {
   AlertTriangle,
   History,
@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentActions, useAgentCommands, useAgentViewState } from '@/renderer/hooks/useAgent'
+import { useChatScrollController } from '@/renderer/hooks'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
@@ -257,64 +258,24 @@ export default function ChatPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const inputContainerRef = useRef<HTMLDivElement>(null)
 
-  const virtuosoRef = useRef<VirtuosoHandle>(null)
-  const [atBottom, setAtBottom] = useState(true)
-  const [showScrollButton, setShowScrollButton] = useState(false)
-  const lastAutoScrollAtRef = useRef(0)
-  const atBottomRef = useRef(true)
-  const pendingBottomSnapRef = useRef(true)
   // 用于防止工具卡片展开/收缩时误判滚动状态
-  const isAutoScrollingRef = useRef(false)
   const isHydratingActiveThread = hasActiveThread && !activeThreadMessagesHydrated
-
-  const syncBottomState = useCallback((bottom: boolean) => {
-    atBottomRef.current = bottom
-    setAtBottom(bottom)
-  }, [])
-
-  // 滚动到底部的函数
-  const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
-    requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index: deferredRenderableMessages.length - 1,
-        align: 'end',
-        behavior
-      })
-    })
-    syncBottomState(true)
-  }, [deferredRenderableMessages.length, syncBottomState])
-  const followOutput = useCallback((isListAtBottom: boolean) => {
-    // 流式输出时：在底部则跟随，不在底部则不强制（用户在往上翻）
-    if (isStreaming) return isListAtBottom ? 'smooth' : false
-    // 非流式（如用户刚发送消息导致新消息 push）：无论在不在底部都强制跟随底部
-    // 这解决了「发消息后滚动条跳回顶部」的问题
-    return isListAtBottom ? (isStreaming ? 'smooth' : 'auto') : false
-  }, [isStreaming])
-
-  const handleTotalListHeightChanged = useCallback(() => {
-    if (!atBottom || !isStreaming) return
-    const now = Date.now()
-    if (now - lastAutoScrollAtRef.current < 120) return
-
-    lastAutoScrollAtRef.current = now
-    isAutoScrollingRef.current = true
-    virtuosoRef.current?.autoscrollToBottom()
-
-    setTimeout(() => {
-      isAutoScrollingRef.current = false
-    }, 50)
-  }, [atBottom, isStreaming])
-
-  // 流式输出时的自动滚动 - 只在用户处于底部时才滚动
-  // 处理用户滚动状态变化
-  const handleAtBottomStateChange = useCallback((bottom: boolean) => {
-    // 如果是自动滚动触发的，忽略状态变化
-    if (isAutoScrollingRef.current) return
-
-    syncBottomState(bottom)
-    // 不在底部时显示滚动按钮（流式输出时也显示，方便用户回到底部）
-    setShowScrollButton(!bottom)
-  }, [])
+  const {
+    attachScrollerNode,
+    followOutput,
+    handleBottomStateChange,
+    handleTotalListHeightChanged,
+    handleVisibleRangeChanged,
+    scrollToBottom,
+    showScrollButton,
+    virtuosoRef,
+  } = useChatScrollController({
+    isHydratingActiveThread,
+    isStreaming,
+    isSwitchingThread,
+    messageCount: deferredRenderableMessages.length,
+    threadId: currentThreadId,
+  })
 
   // 一次性同步 inputPrompt 到本地 input
   useEffect(() => {
@@ -324,42 +285,6 @@ export default function ChatPanel() {
     }
   }, [inputPrompt, setInputPrompt])
 
-  // 处理文件点击
-  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
-    if (isAutoScrollingRef.current) return
-    const lastIndex = deferredRenderableMessages.length - 1
-    const bottom = lastIndex <= 0 || range.endIndex >= lastIndex
-    if (bottom !== atBottomRef.current) {
-      syncBottomState(bottom)
-    }
-  }, [deferredRenderableMessages.length, syncBottomState])
-
-  useEffect(() => {
-    pendingBottomSnapRef.current = true
-  }, [currentThreadId])
-
-  useEffect(() => {
-    if (!pendingBottomSnapRef.current) return
-    if (isSwitchingThread || isHydratingActiveThread || deferredRenderableMessages.length === 0) return
-
-    pendingBottomSnapRef.current = false
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        scrollToBottom('auto')
-      })
-    })
-  }, [isSwitchingThread, isHydratingActiveThread, deferredRenderableMessages.length, scrollToBottom])
-
-  const handleFileClick = useCallback(async (filePath: string) => {
-    const fullPath = toFullPath(filePath, workspacePath)
-    const content = await api.file.read(fullPath)
-    if (content === null) return
-    openFile(fullPath, content)
-    setActiveFile(fullPath)
-  }, [workspacePath, openFile, setActiveFile])
-
-  // 暴露给子组件使用
-  void handleFileClick
 
   // 处理显示 diff
   const handleShowDiff = useCallback(async (filePath: string, oldContent: string, newContent: string) => {
@@ -974,6 +899,20 @@ export default function ChatPanel() {
   }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id])
 
   const virtuosoComponents = useMemo(() => ({
+    Scroller: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>((props, ref) => (
+        <div
+        {...props}
+        ref={node => {
+          attachScrollerNode(node)
+
+          if (typeof ref === 'function') {
+            ref(node)
+          } else if (ref) {
+            ref.current = node
+          }
+        }}
+      />
+    )),
     EmptyPlaceholder: () => (
       <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
         {/* Background Ambience - More subtle & Animated */}
@@ -1008,7 +947,7 @@ export default function ChatPanel() {
         </div>
       </div>
     )
-  }), [language, setInput, textareaRef])
+  }), [attachScrollerNode, language, setInput, textareaRef])
 
   return (
     <div
@@ -1153,8 +1092,8 @@ export default function ChatPanel() {
               ref={virtuosoRef}
               data={deferredRenderableMessages}
               computeItemKey={(_, item) => item.renderKey}
-              atBottomStateChange={handleAtBottomStateChange}
-              rangeChanged={handleRangeChanged}
+              atBottomStateChange={handleBottomStateChange}
+              rangeChanged={handleVisibleRangeChanged}
               initialTopMostItemIndex={initialIndexRef.current}
               followOutput={followOutput}
               itemContent={(_, item) => renderMessage(item)}

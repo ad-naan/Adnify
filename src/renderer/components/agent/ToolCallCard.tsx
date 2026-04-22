@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Search, Terminal, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
@@ -7,6 +7,7 @@ import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import type { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
+import { useToolCardExpansion } from '@renderer/hooks'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
@@ -694,19 +695,17 @@ const ToolCallCard = memo(function ToolCallCard({
     onReject,
     defaultExpanded = true,
 }: ToolCallCardProps) {
-    const [isExpanded, setIsExpanded] = useState(defaultExpanded)
     const { language, setTerminalVisible, currentTheme } = useStore(useShallow(state => ({
         language: state.language,
         setTerminalVisible: state.setTerminalVisible,
         currentTheme: state.currentTheme,
     })))
     const { args, effectiveName, isSuccess, isError, isRejected, isRunning, isStreaming } = useToolDisplayState(toolCall)
-
-    useEffect(() => {
-        if (isRunning || isStreaming) {
-            setIsExpanded(true)
-        }
-    }, [isRunning, isStreaming])
+    const isActive = isRunning || isStreaming
+    const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
+        defaultExpanded,
+        isActive,
+    })
 
     const statusText = useMemo(
         () => getStatusText(effectiveName, args, toolCall.status, isStreaming),
@@ -720,6 +719,39 @@ const ToolCallCard = memo(function ToolCallCard({
         return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
+    const contentBody = (
+        <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
+            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+
+            <div className="relative z-10 space-y-2 mt-1">
+                <ToolPreview
+                    toolCall={toolCall}
+                    args={args}
+                    effectiveName={effectiveName}
+                    isRunning={isRunning}
+                    isStreaming={isStreaming}
+                    language={language}
+                    currentTheme={currentTheme}
+                    onCopyResult={() => {
+                        if (toolCall.result) {
+                            navigator.clipboard.writeText(toolCall.result)
+                        }
+                    }}
+                    setTerminalVisible={setTerminalVisible}
+                />
+                {toolCall.error && (
+                    <div className="px-3 py-2 bg-red-500/10 rounded-md">
+                        <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Error
+                        </div>
+                        <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+
     return (
         <div className={`group my-0.5 relative ${cardStyle}`}>
             {(isStreaming || isRunning) && (
@@ -728,7 +760,7 @@ const ToolCallCard = memo(function ToolCallCard({
                 </div>
             )}
 
-            <div className="flex items-center gap-2 py-1.5 cursor-pointer select-none" onClick={() => setIsExpanded(!isExpanded)}>
+            <div className="flex min-h-[32px] items-center gap-2 py-1.5 cursor-pointer select-none" onClick={handleToggleExpanded}>
                 <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 hover:text-text-muted">
                     <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
                 </motion.div>
@@ -766,48 +798,22 @@ const ToolCallCard = memo(function ToolCallCard({
                 </div>
             </div>
 
-            <AnimatePresence initial={false}>
-                {isExpanded && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] }}
-                        className="overflow-hidden"
-                    >
-                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
-                            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
-
-                            <div className="relative z-10 space-y-2 mt-1">
-                                <ToolPreview
-                                    toolCall={toolCall}
-                                    args={args}
-                                    effectiveName={effectiveName}
-                                    isRunning={isRunning}
-                                    isStreaming={isStreaming}
-                                    language={language}
-                                    currentTheme={currentTheme}
-                                    onCopyResult={() => {
-                                        if (toolCall.result) {
-                                            navigator.clipboard.writeText(toolCall.result)
-                                        }
-                                    }}
-                                    setTerminalVisible={setTerminalVisible}
-                                />
-                                {toolCall.error && (
-                                    <div className="px-3 py-2 bg-red-500/10 rounded-md">
-                                        <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            Error
-                                        </div>
-                                        <p className="text-[11px] text-red-300 font-mono break-all">{toolCall.error}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {isExpanded && (
+                animateContent ? (
+                    <AnimatePresence initial={false}>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                        >
+                            {contentBody}
+                        </motion.div>
+                    </AnimatePresence>
+                ) : (
+                    contentBody
+                )
+            )}
 
             {isAwaitingApproval && (
                 <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-yellow-500/10 bg-yellow-500/5">

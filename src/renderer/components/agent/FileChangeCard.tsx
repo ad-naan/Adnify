@@ -1,17 +1,12 @@
-/**
- * File change card with diff preview.
- * UI is unchanged; data flow is optimized for streaming updates.
- */
-
 import { useState, useEffect, useMemo, memo } from 'react'
 import { Check, X, ChevronDown, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
+import { useToolCardExpansion } from '@renderer/hooks'
 import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
-import { CodeSkeleton } from '../ui/Loading'
 import { ExpandablePreviewContainer } from './ToolCallCard'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -34,7 +29,6 @@ function FileChangeCard({
     onReject,
     onOpenInEditor,
 }: FileChangeCardProps) {
-    const [isExpanded, setIsExpanded] = useState(true)
     const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
         openFile: s.openFile,
         setActiveFile: s.setActiveFile,
@@ -42,6 +36,11 @@ function FileChangeCard({
         language: s.language
     })))
     const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
+    const isActive = isRunning || isStreaming
+    const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
+        defaultExpanded: true,
+        isActive,
+    })
 
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
@@ -138,18 +137,8 @@ function FileChangeCard({
         }
     }, [oldContent, newContent, meta, isRunning, isStreaming])
 
-    // Auto-expand while the tool is active.
-    useEffect(() => {
-        if (isRunning || isStreaming) {
-            setIsExpanded(true)
-        }
-    }, [isRunning, isStreaming])
-
     const isNewFile = ['create_file', 'create_file_or_folder'].includes(toolCall.name) ||
         (!oldContent && !!newContent && !['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name))
-
-
-
     // Card style only; visual design remains unchanged.
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
@@ -158,13 +147,52 @@ function FileChangeCard({
         return 'hover:bg-text-primary/[0.02] transition-colors rounded-lg'
     }, [isAwaitingApproval, isError, isStreaming, isRunning])
 
+    const contentBody = (
+        <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
+            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
+
+            <div className="relative z-10">
+                <ExpandablePreviewContainer language={language}>
+                    <div className="relative min-h-[60px] p-2">
+                        {isLargeWrite && !isStreaming && !isRunning ? (
+                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-text-secondary">
+                                <div className="font-medium text-amber-400">
+                                    Large file preview is deferred to keep the UI responsive.
+                                </div>
+                                <div className="mt-1 opacity-80">
+                                    {typeof meta?.oldContentLength === 'number' || typeof meta?.newContentLength === 'number'
+                                        ? `Size: ${meta?.oldContentLength || 0} -> ${meta?.newContentLength || 0} chars`
+                                        : 'Open the file in the editor to inspect the full result.'}
+                                </div>
+                                <div className="mt-3">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            void openFullFile()
+                                        }}
+                                        className="rounded-md border border-border bg-surface-hover px-2.5 py-1.5 text-[11px] font-medium text-text-primary transition-colors hover:border-accent hover:text-accent"
+                                    >
+                                        Open full file
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <InlineDiffPreview
+                                oldContent={oldContent}
+                                newContent={newContent}
+                                filePath={filePath}
+                                isStreaming={isActive}
+                                maxLines={50}
+                            />
+                        )}
+                    </div>
+                </ExpandablePreviewContainer>
+            </div>
+        </div>
+    )
+
     return (
-        <motion.div
-            layout
-            initial={{ opacity: 0, y: 10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+        <div
             className={`group my-0.5 relative ${cardStyle} overflow-hidden`}
         >
             {/* ToolCall Card Background Sweeping Effect */}
@@ -175,8 +203,8 @@ function FileChangeCard({
             )}
             {/* Header - Flat Outline Style */}
             <div
-                className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
-                onClick={() => setIsExpanded(!isExpanded)}
+                className="flex min-h-[32px] items-center gap-2 py-1.5 cursor-pointer select-none"
+                onClick={handleToggleExpanded}
             >
                 {/* Expand Toggle (Moved to far left) */}
                 <motion.div
@@ -258,11 +286,7 @@ function FileChangeCard({
 
                     <div className="flex items-center gap-2">
                         {(isSuccess || newContent) && (
-                            <motion.span
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-text-primary/[0.05] rounded border border-border"
-                            >
+                            <span className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-text-primary/[0.05] rounded border border-border">
                                 {diffStats.added > 0 && (
                                     <span className="text-green-400">+{diffStats.added}</span>
                                 )}
@@ -272,7 +296,7 @@ function FileChangeCard({
                                 {isNewFile && diffStats.added === 0 && (
                                     <span className="text-blue-400">new</span>
                                 )}
-                            </motion.span>
+                            </span>
                         )}
                         {isSuccess && onOpenInEditor && (
                             <button
@@ -295,65 +319,22 @@ function FileChangeCard({
             </div>
 
             {/* Expanded Content */}
-            <AnimatePresence initial={false}>
-                {isExpanded && newContent && (
-                    <motion.div
-                        layout
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.25, ease: "easeInOut" }}
-                        className="overflow-hidden"
-                    >
-                        <div className="pl-[26px] pr-3 pb-3 pt-0 relative">
-                            {/* Visual Threading Line */}
-                            <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
-
-                            <div className="relative z-10">
-                                <ExpandablePreviewContainer language={language}>
-                                    <div className="relative min-h-[60px] p-2">
-                                        {isLargeWrite && !isStreaming && !isRunning ? (
-                                            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-text-secondary">
-                                                <div className="font-medium text-amber-400">
-                                                    Large file preview is deferred to keep the UI responsive.
-                                                </div>
-                                                <div className="mt-1 opacity-80">
-                                                    {typeof meta?.oldContentLength === 'number' || typeof meta?.newContentLength === 'number'
-                                                        ? `Size: ${meta?.oldContentLength || 0} -> ${meta?.newContentLength || 0} chars`
-                                                        : 'Open the file in the editor to inspect the full result.'}
-                                                </div>
-                                                <div className="mt-3">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation()
-                                                            void openFullFile()
-                                                        }}
-                                                        className="rounded-md border border-border bg-surface-hover px-2.5 py-1.5 text-[11px] font-medium text-text-primary transition-colors hover:border-accent hover:text-accent"
-                                                    >
-                                                        Open full file
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ) : isExpanded ? (
-                                            <InlineDiffPreview
-                                                oldContent={oldContent}
-                                                newContent={newContent}
-                                                filePath={filePath}
-                                                isStreaming={isStreaming || isRunning}
-                                                maxLines={50}
-                                            />
-                                        ) : (
-                                            <div className="min-h-[160px] opacity-50 pt-2">
-                                                <CodeSkeleton lines={5} />
-                                            </div>
-                                        )}
-                                    </div>
-                                </ExpandablePreviewContainer>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {isExpanded && newContent && (
+                animateContent ? (
+                    <AnimatePresence initial={false}>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.16, ease: 'easeOut' }}
+                        >
+                            {contentBody}
+                        </motion.div>
+                    </AnimatePresence>
+                ) : (
+                    contentBody
+                )
+            )}
 
             {/* Error Message */}
             {toolCall.error && isExpanded && (
@@ -381,7 +362,7 @@ function FileChangeCard({
                     </button>
                 </div>
             )}
-        </motion.div>
+        </div>
     )
 }
 
