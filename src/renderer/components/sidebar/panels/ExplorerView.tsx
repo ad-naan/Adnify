@@ -8,7 +8,7 @@ import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalL
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
-import { joinPath, pathStartsWith } from '@shared/utils/pathUtils'
+import { getDirPath, joinPath, pathStartsWith } from '@shared/utils/pathUtils'
 import { gitService } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '../../common/ToastProvider'
@@ -18,6 +18,13 @@ import { Button, Tooltip, ContextMenu, ContextMenuItem } from '../../ui'
 import { TreeSkeleton } from '../../ui/Loading'
 import { VirtualFileTree } from '../../tree/VirtualFileTree'
 import { terminalManager } from '@/renderer/services/TerminalManager'
+
+export interface TreeRefreshOptions {
+  resetTree?: boolean
+  affectedPaths?: string[]
+  deletedPaths?: string[]
+  refreshRoot?: boolean
+}
 
 export function ExplorerView() {
   const {
@@ -43,6 +50,11 @@ export function ExplorerView() {
   const [creatingIn, setCreatingIn] = useState<{ path: string; type: 'file' | 'folder' } | null>(null)
   const [rootContextMenu, setRootContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [treeVersion, setTreeVersion] = useState(0)
+  const [treeRefreshSignal, setTreeRefreshSignal] = useState<{ tick: number; affectedPaths: string[]; deletedPaths: string[] }>({
+    tick: 0,
+    affectedPaths: [],
+    deletedPaths: [],
+  })
 
   // Reveal active file in explorer
   const handleRevealActiveFile = useCallback(() => {
@@ -85,14 +97,39 @@ export function ExplorerView() {
   }, [workspacePath, setGitStatus, setIsGitRepo])
 
   // 刷新文件列表
-  const refreshFiles = useCallback(async () => {
-    if (workspacePath) {
+  const refreshFiles = useCallback(async (options?: TreeRefreshOptions) => {
+    if (!workspacePath) return
+
+    const affectedPaths = Array.from(new Set(options?.affectedPaths?.filter(Boolean) ?? []))
+    const deletedPaths = Array.from(new Set(options?.deletedPaths?.filter(Boolean) ?? []))
+    const shouldResetTree = options?.resetTree === true
+    const shouldRefreshRoot = shouldResetTree
+      || options?.refreshRoot === true
+      || affectedPaths.some(path => path === workspacePath)
+
+    if (shouldResetTree) {
       directoryCacheService.clear()
+    } else {
+      affectedPaths.forEach(path => directoryCacheService.invalidate(path))
+      deletedPaths.forEach(path => directoryCacheService.invalidateTree(path))
+    }
+
+    if (shouldRefreshRoot) {
       const items = await directoryCacheService.getDirectory(workspacePath, true)
       setFiles(items)
-      setTreeVersion((version) => version + 1)
-      void updateGitStatus()
     }
+
+    if (shouldResetTree) {
+      setTreeVersion((version) => version + 1)
+    } else if (affectedPaths.length > 0 || deletedPaths.length > 0) {
+      setTreeRefreshSignal(prev => ({
+        tick: prev.tick + 1,
+        affectedPaths,
+        deletedPaths,
+      }))
+    }
+
+    void updateGitStatus()
   }, [workspacePath, setFiles, updateGitStatus])
 
   // 工作区变化时更新 Git 状态（只在初始化时执行一次）
@@ -116,19 +153,34 @@ export function ExplorerView() {
 
         if (debounceTimer) clearTimeout(debounceTimer)
         debounceTimer = setTimeout(() => {
-          let shouldRefreshTree = false
+          const affectedDirectoryPaths = new Set<string>()
+          const deletedPaths = new Set<string>()
+          let shouldRefreshRoot = false
 
           pendingChanges.forEach((change) => {
             const eventType = change.event === 'create' ? 'create' : change.event === 'delete' ? 'delete' : 'update'
             directoryCacheService.handleFileChange(change.path, eventType)
             if (eventType === 'create' || eventType === 'delete') {
-              shouldRefreshTree = true
+              const parentPath = getDirPath(change.path) || workspacePath
+              if (parentPath) {
+                affectedDirectoryPaths.add(parentPath)
+                if (parentPath === workspacePath) {
+                  shouldRefreshRoot = true
+                }
+              }
+              if (eventType === 'delete') {
+                deletedPaths.add(change.path)
+              }
             }
           })
           pendingChanges = []
 
-          if (shouldRefreshTree) {
-            refreshFiles()
+          if (affectedDirectoryPaths.size > 0 || deletedPaths.size > 0) {
+            refreshFiles({
+              affectedPaths: Array.from(affectedDirectoryPaths),
+              deletedPaths: Array.from(deletedPaths),
+              refreshRoot: shouldRefreshRoot,
+            })
           }
         }, config.performance.fileChangeDebounceMs)
         
@@ -150,7 +202,6 @@ export function ExplorerView() {
   const handleOpenFolder = async () => {
     const path = await api.file.openFolder()
     if (path && typeof path === 'string') {
-      directoryCacheService.clear()
       await workspaceManager.openFolder(path)
     }
   }
@@ -177,13 +228,15 @@ export function ExplorerView() {
       }
 
       if (success) {
-        directoryCacheService.invalidate(parentPath)
-        await refreshFiles()
+        await refreshFiles({
+          affectedPaths: [parentPath],
+          refreshRoot: parentPath === workspacePath,
+        })
         toast.success(type === 'file' ? 'File created' : 'Folder created')
       }
       setCreatingIn(null)
     },
-    [refreshFiles]
+    [refreshFiles, workspacePath]
   )
 
   const handleRootCreate = useCallback(
@@ -224,7 +277,7 @@ export function ExplorerView() {
       onClick: () => workspacePath && openTerminalAtPath(workspacePath),
     },
     { id: 'sep2', label: '', separator: true },
-    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: refreshFiles },
+    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ resetTree: true, refreshRoot: true }) },
     {
       id: 'reveal',
       label: '在资源管理器中显示',
@@ -256,7 +309,7 @@ export function ExplorerView() {
             </button>
           </Tooltip>
           <Tooltip content={t('refresh', language)}>
-            <button onClick={refreshFiles} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
+            <button onClick={() => refreshFiles({ resetTree: true, refreshRoot: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
@@ -268,6 +321,7 @@ export function ExplorerView() {
           <VirtualFileTree
             items={files}
             treeVersion={treeVersion}
+            refreshSignal={treeRefreshSignal}
             onRefresh={refreshFiles}
             creatingIn={creatingIn}
             onStartCreate={handleStartCreate}

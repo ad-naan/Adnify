@@ -28,6 +28,7 @@ import { Input, ContextMenu, ContextMenuItem } from '../ui'
 import { directoryCacheService } from '@services/directoryCacheService'
 import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
+import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
 
 // 每个节点的高度（像素）
 const ITEM_HEIGHT = 30
@@ -45,7 +46,8 @@ interface FlattenedNode {
 interface VirtualFileTreeProps {
   items: FileItem[]
   treeVersion: number
-  onRefresh: () => void
+  refreshSignal: { tick: number; affectedPaths: string[]; deletedPaths: string[] }
+  onRefresh: (options?: TreeRefreshOptions) => void | Promise<void>
   creatingIn: { path: string; type: 'file' | 'folder' } | null
   onStartCreate: (path: string, type: 'file' | 'folder') => void
   onCancelCreate: () => void
@@ -56,6 +58,7 @@ interface VirtualFileTreeProps {
 export const VirtualFileTree = memo(function VirtualFileTree({
   items,
   treeVersion,
+  refreshSignal,
   onRefresh,
   creatingIn,
   onStartCreate,
@@ -129,12 +132,20 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   }, [])
 
   // 加载子目录
-  const loadChildren = useCallback(async (path: string) => {
-    if (childrenCache.has(path) || loadingDirs.has(path)) return
+  const loadChildren = useCallback(async (
+    path: string,
+    options?: { forceRefresh?: boolean; showLoading?: boolean }
+  ) => {
+    const forceRefresh = options?.forceRefresh === true
+    const hasCachedChildren = childrenCache.has(path)
+    if ((!forceRefresh && hasCachedChildren) || loadingDirs.has(path)) return
 
-    setLoadingDirs((prev) => new Set(prev).add(path))
+    const shouldShowLoading = options?.showLoading ?? !hasCachedChildren
+    if (shouldShowLoading) {
+      setLoadingDirs((prev) => new Set(prev).add(path))
+    }
     try {
-      const children = await directoryCacheService.getDirectory(path)
+      const children = await directoryCacheService.getDirectory(path, forceRefresh)
       setChildrenCache((prev) => new Map(prev).set(path, children))
 
       // 预加载下一层
@@ -143,11 +154,13 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         directoryCacheService.preload(subDirs.map((d) => d.path))
       }
     } finally {
-      setLoadingDirs((prev) => {
-        const next = new Set(prev)
-        next.delete(path)
-        return next
-      })
+      if (shouldShowLoading) {
+        setLoadingDirs((prev) => {
+          const next = new Set(prev)
+          next.delete(path)
+          return next
+        })
+      }
     }
   }, [childrenCache, loadingDirs])
 
@@ -157,6 +170,36 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     setFocusedPath(null)
     setHighlightPath(null)
   }, [treeVersion, workspacePath])
+
+  useEffect(() => {
+    if (!refreshSignal.tick) return
+
+    setChildrenCache((prev) => {
+      const next = new Map(prev)
+
+      refreshSignal.affectedPaths.forEach((path) => {
+        if (!expandedFolders.has(path)) {
+          next.delete(path)
+        }
+      })
+
+      refreshSignal.deletedPaths.forEach((deletedPath) => {
+        for (const key of next.keys()) {
+          if (pathEquals(key, deletedPath) || key.startsWith(`${deletedPath}/`) || key.startsWith(`${deletedPath}\\`)) {
+            next.delete(key)
+          }
+        }
+      })
+
+      return next
+    })
+
+    refreshSignal.affectedPaths.forEach((path) => {
+      if (expandedFolders.has(path)) {
+        void loadChildren(path, { forceRefresh: true, showLoading: false })
+      }
+    })
+  }, [refreshSignal, expandedFolders, loadChildren])
 
   // 展开文件夹时加载子目录
   useEffect(() => {
@@ -424,9 +467,13 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         next.delete(node.item.path)
         return next
       })
-      onRefresh()
+      onRefresh({
+        affectedPaths: [getDirPath(node.item.path)],
+        deletedPaths: [node.item.path],
+        refreshRoot: pathEquals(getDirPath(node.item.path), workspacePath || ''),
+      })
     }
-  }, [language, onRefresh])
+  }, [language, onRefresh, workspacePath])
 
   const handleRenameStart = useCallback((node: FlattenedNode) => {
     setRenamingPath(node.item.path)
@@ -454,10 +501,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         next.delete(renamingPath)
         return next
       })
-      onRefresh()
+      onRefresh({
+        affectedPaths: [getDirPath(renamingPath), getDirPath(newPath)],
+        deletedPaths: [renamingPath],
+        refreshRoot: pathEquals(getDirPath(renamingPath), workspacePath || ''),
+      })
     }
     setRenamingPath(null)
-  }, [renamingPath, renameValue, flattenedNodes, onRefresh])
+  }, [renamingPath, renameValue, flattenedNodes, onRefresh, workspacePath])
 
   const handleCopyFile = useCallback(async (node: FlattenedNode) => {
     if (node.item.isDirectory) {
@@ -483,17 +534,15 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     const success = await api.file.copy(node.item.path, candidatePath)
     if (success) {
       directoryCacheService.invalidate(parentPath)
-      setChildrenCache((prev) => {
-        const next = new Map(prev)
-        next.delete(parentPath)
-        return next
+      onRefresh({
+        affectedPaths: [parentPath],
+        refreshRoot: pathEquals(parentPath, workspacePath || ''),
       })
-      onRefresh()
       toast.success(language === 'zh' ? '文件已复制' : 'File copied')
     } else {
       toast.error(language === 'zh' ? '复制文件失败' : 'Failed to copy file')
     }
-  }, [language, onRefresh])
+  }, [language, onRefresh, workspacePath])
 
   // 全局快捷键处理 (F2 重命名)
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -567,17 +616,19 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       directoryCacheService.invalidate(targetDirectoryPath)
       setChildrenCache((prev) => {
         const next = new Map(prev)
-        next.delete(sourceParentPath)
-        next.delete(targetDirectoryPath)
         next.delete(sourcePath)
         return next
       })
       expandFolder(targetDirectoryPath)
-      onRefresh()
+      onRefresh({
+        affectedPaths: [sourceParentPath, targetDirectoryPath],
+        deletedPaths: [sourcePath],
+        refreshRoot: pathEquals(sourceParentPath, workspacePath || '') || pathEquals(targetDirectoryPath, workspacePath || ''),
+      })
     } else {
       toast.error('Move failed')
     }
-  }, [expandFolder, onRefresh])
+  }, [expandFolder, onRefresh, workspacePath])
 
   const handleDropOnDirectory = useCallback(async (targetNode: FlattenedNode, sourcePath: string) => {
     if (!targetNode.item.isDirectory) return
