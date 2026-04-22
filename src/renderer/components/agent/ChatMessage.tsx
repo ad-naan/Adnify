@@ -640,17 +640,18 @@ const RenderPart = React.memo(({
     }
 
     // 其他工具使用 ToolCallCard
-    return (
-      <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
-        <ToolCallCard
-          key={`tool-${tc.id}-${index}`}
-          toolCall={tc}
-          isAwaitingApproval={isPending}
-          onApprove={isPending ? onApproveTool : undefined}
-          onReject={isPending ? onRejectTool : undefined}
-        />
-      </div>
-    )
+      return (
+        <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
+          <ToolCallCard
+            key={`tool-${tc.id}-${index}`}
+            toolCall={tc}
+            isAwaitingApproval={isPending}
+            onApprove={isPending ? onApproveTool : undefined}
+            onReject={isPending ? onRejectTool : undefined}
+            defaultExpanded
+          />
+        </div>
+      )
   }
 
   return null
@@ -714,11 +715,10 @@ const AssistantMessageContent = React.memo(({
         if (group.type === 'part') {
           return (
             <motion.div
-              layout="position"
               key={`wrap-part-${group.index}`}
-              initial={isStreaming ? { opacity: 0, y: 5 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, type: 'spring', bounce: 0 }}
+              initial={isStreaming ? { opacity: 0 } : false}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               className="w-full"
             >
               <RenderPart
@@ -739,11 +739,10 @@ const AssistantMessageContent = React.memo(({
         if (group.toolCalls.length === 1) {
           return (
             <motion.div
-              layout="position"
               key={`wrap-tool-${group.startIndex}`}
-              initial={isStreaming ? { opacity: 0, y: 5 } : false}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, type: 'spring', bounce: 0 }}
+              initial={isStreaming ? { opacity: 0 } : false}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
               className="w-full"
             >
               <RenderPart
@@ -763,11 +762,10 @@ const AssistantMessageContent = React.memo(({
 
         return (
           <motion.div
-            layout="position"
             key={`wrap-group-${group.startIndex}`}
-            initial={isStreaming ? { opacity: 0, y: 5 } : false}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, type: 'spring', bounce: 0 }}
+            initial={isStreaming ? { opacity: 0 } : false}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
             className="w-full"
           >
             <ToolCallGroup

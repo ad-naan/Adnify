@@ -66,6 +66,23 @@ function isEmptyStringPlaceholder(data: Record<string, unknown>): boolean {
   return data.old_string === '' && data.new_string === ''
 }
 
+function stripBatchConflicts(normalized: Record<string, unknown>) {
+  delete normalized.start_line
+  delete normalized.end_line
+  delete normalized.content
+  delete normalized.old_string
+  delete normalized.new_string
+  delete normalized.replace_all
+}
+
+function getRequestedModes(data: Record<string, unknown>) {
+  return {
+    batch: hasBatchFields(data),
+    line: hasLineFields(data),
+    string: hasStringFields(data),
+  }
+}
+
 export function normalizeEditFileArgs(data: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...data }
 
@@ -73,9 +90,12 @@ export function normalizeEditFileArgs(data: Record<string, unknown>): Record<str
     delete normalized.edits
   }
 
-  const stringFields = hasStringFields(normalized)
-  const lineFields = hasLineFields(normalized)
-  const batchFields = hasBatchFields(normalized)
+  const { string: stringFields, line: lineFields, batch: batchFields } = getRequestedModes(normalized)
+
+  if (batchFields) {
+    stripBatchConflicts(normalized)
+    return normalized
+  }
 
   if ((stringFields || batchFields) && isLinePlaceholder(normalized)) {
     delete normalized.start_line
@@ -95,9 +115,7 @@ export function normalizeEditFileArgs(data: Record<string, unknown>): Record<str
 export function resolveEditFileRequest(data: Record<string, unknown>): EditFileResolution {
   const normalized = normalizeEditFileArgs(data)
 
-  const stringMode = hasStringFields(normalized)
-  const lineMode = hasLineFields(normalized)
-  const batchMode = hasBatchFields(normalized)
+  const { string: stringMode, line: lineMode, batch: batchMode } = getRequestedModes(normalized)
 
   const modeCount = [stringMode, lineMode, batchMode].filter(Boolean).length
   if (modeCount > 1) {
