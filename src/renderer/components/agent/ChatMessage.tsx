@@ -40,6 +40,8 @@ import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore, selectStreamState } from '@/renderer/agent/store/AgentStore'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { Tooltip } from '../ui/Tooltip'
 import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
@@ -511,7 +513,8 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden`}>
           <ReactMarkdown
             className="prose prose-invert max-w-none"
-            remarkPlugins={isStreaming ? undefined : [remarkGfm]}
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
             components={markdownComponents}
             skipHtml
           >

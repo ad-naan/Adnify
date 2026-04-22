@@ -513,3 +513,19 @@ textarea,
   border-bottom: 1px dashed rgba(239, 68, 68, 0.3);
   background-color: rgba(239, 68, 68, 0.05);
 }
+
+/* KaTeX */
+.katex {
+  font-size: 1.05em;
+}
+
+.katex-display {
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
+.katex-display > .katex {
+  white-space: nowrap;
+}
