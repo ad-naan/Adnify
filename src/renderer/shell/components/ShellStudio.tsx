@@ -348,8 +348,10 @@ export default function ShellStudio() {
   const selectedSession = selection?.kind === 'session' ? managerState.terminals.find((item) => item.id === selection.id) || null : null
   const selectedRoot = selection?.kind === 'root' ? selection.root : null
   const activeBufferStats = activeSession ? terminalManager.getBufferStats(activeSession.id) : null
-  const activeBuffer = activeSession ? terminalManager.getOutputBuffer(activeSession.id) : []
-  const terminalPreview = useMemo(() => activeBuffer.join('').trim().split('\n').slice(-12).join('\n').trim(), [activeBuffer])
+  const terminalPreview = useMemo(
+    () => (activeSession ? terminalManager.getOutputPreview(activeSession.id) : ''),
+    [activeSession?.id, managerState.commandInfoByTerminal, managerState.activeId],
+  )
 
   const { startResize: startNavResize } = useResizePanel({
     direction: 'left',
