@@ -66,6 +66,32 @@ function isEmptyStringPlaceholder(data: Record<string, unknown>): boolean {
   return data.old_string === '' && data.new_string === ''
 }
 
+function hasMeaningfulTopLevelContent(data: Record<string, unknown>): boolean {
+  return typeof data.content === 'string' && data.content.length > 0
+}
+
+function getBatchConflictError(data: Record<string, unknown>): string | null {
+  if (!hasBatchFields(data)) {
+    return null
+  }
+
+  if (hasMeaningfulTopLevelContent(data)) {
+    return 'Batch mode cannot be combined with top-level content. Put replacement text inside each edit, or remove the edits array.'
+  }
+
+  const hasMeaningfulLineFields = hasLineFields(data) && !isLinePlaceholder(data)
+  if (hasMeaningfulLineFields) {
+    return 'Batch mode cannot be combined with top-level line mode fields'
+  }
+
+  const hasMeaningfulStringFields = hasStringFields(data) && !isEmptyStringPlaceholder(data)
+  if (hasMeaningfulStringFields) {
+    return 'Batch mode cannot be combined with top-level string mode fields'
+  }
+
+  return null
+}
+
 function stripBatchConflicts(normalized: Record<string, unknown>) {
   delete normalized.start_line
   delete normalized.end_line
@@ -113,6 +139,15 @@ export function normalizeEditFileArgs(data: Record<string, unknown>): Record<str
 }
 
 export function resolveEditFileRequest(data: Record<string, unknown>): EditFileResolution {
+  const batchConflictError = getBatchConflictError(data)
+  if (batchConflictError) {
+    return {
+      ok: false,
+      normalized: { ...data },
+      error: batchConflictError,
+    }
+  }
+
   const normalized = normalizeEditFileArgs(data)
 
   const { string: stringMode, line: lineMode, batch: batchMode } = getRequestedModes(normalized)

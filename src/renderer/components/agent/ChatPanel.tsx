@@ -1089,6 +1089,7 @@ export default function ChatPanel() {
             </AnimatePresence>
 
             <Virtuoso
+              key={currentThreadId ?? 'no-thread'}
               ref={virtuosoRef}
               data={deferredRenderableMessages}
               computeItemKey={(_, item) => item.renderKey}

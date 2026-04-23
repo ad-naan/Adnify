@@ -138,6 +138,7 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId!),
                 threads: {
                     ...state.threads,
                     [threadId!]: {
@@ -184,6 +185,7 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId!),
                 threads: {
                     ...state.threads,
                     [threadId!]: {
@@ -220,6 +222,7 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -254,6 +257,7 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -355,6 +359,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -407,6 +412,7 @@ export const createMessageSlice: StateCreator<
                 }
 
                 return {
+                    threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                     threads: {
                         ...state.threads,
                         [threadId]: { ...thread, messages: newMessages },
@@ -447,6 +453,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages, lastModified: Date.now() },
@@ -476,6 +483,7 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -543,6 +551,7 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -587,6 +596,7 @@ export const createMessageSlice: StateCreator<
             const remainingMessageIds = new Set(remainingMessages.map(message => message.id))
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -655,6 +665,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -753,6 +764,7 @@ export const createMessageSlice: StateCreator<
             if (!updated) return state
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages, lastModified: Date.now() },
@@ -792,6 +804,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -826,6 +839,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -858,6 +872,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -892,6 +907,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -927,6 +943,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -959,6 +976,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -986,6 +1004,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: { ...state.threads, [threadId]: { ...thread, messages } },
             }
         })
@@ -1015,6 +1034,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: { ...state.threads, [threadId]: { ...thread, messages } },
             }
         })
@@ -1045,6 +1065,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: { ...state.threads, [threadId]: { ...thread, messages, lastModified: Date.now() } },
             }
         })
@@ -1067,6 +1088,7 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -1106,7 +1128,10 @@ export const createMessageSlice: StateCreator<
                 return { ...aMsg, contextItems: [...items, ...newItems] }
             })
 
-            return { threads: { ...state.threads, [threadId!]: { ...thread, messages } } }
+            return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId!),
+                threads: { ...state.threads, [threadId!]: { ...thread, messages } }
+            }
         })
     },
 

@@ -339,8 +339,11 @@ const TerminalPanel = memo(function TerminalPanel() {
 
     const handleFixWithAI = useCallback(() => {
         if (!managerState.activeId) return
-        const buffer = terminalManager.getOutputBuffer(managerState.activeId)
-        const content = buffer.join('').replace(/\u001b\[[0-9;]*m/g, '').slice(-2000).trim()
+        const content = terminalManager
+            .getOutputPreview(managerState.activeId, 24, 6000)
+            .replace(/\u001b\[[0-9;]*m/g, '')
+            .slice(-2000)
+            .trim()
         if (!content) return
         setMode('chat')
         setInputPrompt(`I'm getting this error in the terminal. Please analyze it and fix the code:\n\n\`\`\`\n${content}\n\`\`\``)

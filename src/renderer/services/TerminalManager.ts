@@ -169,6 +169,17 @@ function getOutputBufferConfig() {
   };
 }
 
+const MAX_COMMAND_OUTPUT_CHARS = 120_000
+const MAX_RAW_SENTINEL_BUFFER_CHARS = 24_000
+
+function trimRetainedText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value
+  }
+
+  return value.slice(value.length - maxChars)
+}
+
 /**
  * 环形缓冲区 — O(1) 写入和裁剪
  * 替代原来的 array.splice O(n) 方案
@@ -213,6 +224,14 @@ class RingBuffer {
     this.head = 0
     this.count = 0
     this.totalChars = 0
+  }
+
+  trimToMaxChars(maxChars: number): void {
+    while (this.count > 0 && this.totalChars > maxChars) {
+      this.totalChars -= this.buf[this.head].length
+      this.head = (this.head + 1) % this.capacity
+      this.count--
+    }
   }
 }
 
@@ -379,6 +398,7 @@ class TerminalManagerClass {
 
     // RingBuffer 自动处理容量溢出（O(1) 覆盖最旧数据）
     buffer.push(data);
+    buffer.trimToMaxChars(getOutputBufferConfig().maxTotalChars);
   }
 
   private getDerivedRunningCommand(): RunningCommandInfo | null {
@@ -838,6 +858,35 @@ class TerminalManagerClass {
     return this.outputBuffers.get(id)?.toArray() || [];
   }
 
+  getOutputPreview(id: string, lineCount = 12, maxChars = 4000): string {
+    const entries = this.outputBuffers.get(id)?.toArray() || []
+    if (entries.length === 0) {
+      return ''
+    }
+
+    const chunks: string[] = []
+    let chars = 0
+    let lines = 0
+
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]
+      chunks.push(entry)
+      chars += entry.length
+
+      for (let j = 0; j < entry.length; j++) {
+        if (entry.charCodeAt(j) === 10) {
+          lines++
+        }
+      }
+
+      if (chars >= maxChars || lines >= lineCount + 1) {
+        break
+      }
+    }
+
+    return chunks.reverse().join('').trim().split('\n').slice(-lineCount).join('\n').trim()
+  }
+
   getXterm(id: string): XTerminal | null {
     return this.xtermInstances.get(id)?.terminal || null;
   }
@@ -1054,8 +1103,14 @@ class TerminalManagerClass {
         clearIdleTimer()
         this.activeExecutions.delete(termId)
 
-        const partialOutput = override?.partialOutput ?? getVisibleOutput()
-        const output = override?.output ?? partialOutput
+        const partialOutput = trimRetainedText(
+          override?.partialOutput ?? getVisibleOutput(),
+          MAX_COMMAND_OUTPUT_CHARS,
+        )
+        const output = trimRetainedText(
+          override?.output ?? partialOutput,
+          MAX_COMMAND_OUTPUT_CHARS,
+        )
         const finalStatus = override?.finalStatus ?? 'failed'
         const exitCode = override?.exitCode ?? null
         const timedOut = override?.timedOut ?? finalStatus === 'timed_out'
@@ -1120,8 +1175,8 @@ class TerminalManagerClass {
 
       const unsubRaw = this.onRawData((event) => {
         if (event.id !== termId || settled) return
-        rawAccumulator += event.data
-        textAccumulator += stripAnsi(event.data)
+        rawAccumulator = trimRetainedText(rawAccumulator + event.data, MAX_RAW_SENTINEL_BUFFER_CHARS)
+        textAccumulator = trimRetainedText(textAccumulator + stripAnsi(event.data), MAX_COMMAND_OUTPUT_CHARS)
 
         if (textAtStart === -1 && rawAccumulator.includes(`${OSC}${START_PAYLOAD}${BEL}`)) {
           textAtStart = textAccumulator.length
@@ -1132,7 +1187,7 @@ class TerminalManagerClass {
           }))
         }
 
-        const visibleOutput = getVisibleOutput()
+        const visibleOutput = trimRetainedText(getVisibleOutput(), MAX_COMMAND_OUTPUT_CHARS)
         updatePartialOutput(visibleOutput)
 
         // 在原始数据中检测 OSC end sentinel：ESC]9001;ADNIFY_CMD_END_..._N BEL
