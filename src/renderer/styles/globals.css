@@ -365,92 +365,16 @@ textarea,
   opacity: 1;
 }
 
-/* Thinking content fade-in animation */
-@keyframes thinking-line-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.thinking-line {
-  animation: thinking-line-in 0.3s ease-out forwards;
-}
-
-/* Thinking content - smooth fade in for streaming */
-.thinking-content {
-  animation: thinking-fade-in 0.15s ease-out;
-}
-
-@keyframes thinking-fade-in {
-  from {
-    opacity: 0.7;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-/* --- Fluid Rendering Engine Animations --- */
-
-/* Text Node: Opacity 0 -> 1 & Blur 2px -> 0 */
-@keyframes fluid-text-reveal {
-  0% {
-    opacity: 0;
-    filter: blur(2px);
-  }
-
-  100% {
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
-.animate-fluid-text {
-  animation: fluid-text-reveal 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-/* Block Node: TranslateY 5px -> 0 & Opacity */
-@keyframes fluid-block-slide {
-  0% {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fluid-block {
-  animation: fluid-block-slide 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
 /* Ink Blur Fade-In Animation - Smooth Character Fade */
 @keyframes ink-fade-in {
   0% {
     opacity: 0;
-    filter: blur(8px);
-  }
-  40% {
-    opacity: 0.6;
-    filter: blur(3px);
+    filter: blur(4px);
   }
   100% {
     opacity: 1;
     filter: blur(0);
   }
-}
-
-.ink-fade-tail {
-  animation: ink-fade-in 0.4s ease-out forwards;
 }
 
 /* Apply ink effect to streaming content */
@@ -460,7 +384,7 @@ textarea,
 
 .inline-stream-char {
   display: inline;
-  animation: ink-fade-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation: ink-fade-in 0.5s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
   will-change: opacity, filter;
 }
 

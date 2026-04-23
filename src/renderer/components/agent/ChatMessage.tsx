@@ -28,13 +28,9 @@ import {
   isContextSnapshotPart,
   ToolCall,
 } from '@renderer/agent/types'
-import FileChangeCard from './FileChangeCard'
-import ToolCallCard from './ToolCallCard'
 import { LintCheckCard } from './LintCheckCard'
-import ToolCallGroup from './ToolCallGroup'
+import ToolCallGroup, { renderToolCallCard } from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
-import { MemoryApprovalInline } from './MemoryApprovalInline'
-import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
@@ -83,10 +79,10 @@ const EMPTY_PREVIEWS: Record<string, ToolStreamingPreview> = {}
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
 const ACTIVE_STREAM_PHASES = new Set(['streaming', 'tool_running', 'tool_pending'])
-const STREAMING_TAIL_LENGTH = 30
+const STREAMING_TAIL_LENGTH = 40
 
 // 代码块组件 - 更加精致的玻璃质感
-const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number; isStreaming?: boolean }) => {
+const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
   const [copied, setCopied] = useState(false)
   const currentTheme = useStore(s => s.currentTheme)
   const theme = themeManager.getThemeById(currentTheme)
@@ -424,9 +420,9 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
             {content ? (
               <div
                 style={{ fontSize: `${fontSize - 1}px` }}
-                className={`text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans thinking-content ${isStreaming ? 'animate-block-reveal' : ''}`}
+                className={`text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans ${isStreaming ? 'animate-block-reveal' : ''}`}
               >
-                {fluidContent}
+                {isStreaming ? renderStreamingTailText(fluidContent, 'think-tail') : fluidContent}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -528,7 +524,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         </code>
       ) : (
         <div className="w-full relative">
-          <CodeBlock language={match?.[1]} fontSize={fontSize} isStreaming={isStreaming}>{children}</CodeBlock>
+          <CodeBlock language={match?.[1]} fontSize={fontSize}>{children}</CodeBlock>
         </div>
       )
     },
@@ -659,67 +655,20 @@ const RenderPart = React.memo(({
     return <CompressionDigestCard part={part} />
   }
 
-  // Tool calls handled by RenderPart (single)
+  // Tool calls: 统一由 renderToolCallCard 处理
   if (isToolCallPart(part)) {
-
     const tc = part.toolCall
-    const isPending = tc.id === pendingToolId
-
-    // 需要 Diff 预览的工具使用 FileChangeCard
-    if (needsDiffPreview(tc.name)) {
-      return (
-        <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
-          <FileChangeCard
-            key={`tool-${tc.id}-${index}`}
-            toolCall={tc}
-            isAwaitingApproval={isPending}
-            onApprove={isPending ? onApproveTool : undefined}
-            onReject={isPending ? onRejectTool : undefined}
-            onOpenInEditor={onOpenDiff}
-            messageId={messageId}
-          />
-        </div>
-      )
-    }
-
-    // AI 记忆提议
-    if (tc.name === 'remember') {
-      return (
-        <MemoryApprovalInline
-          key={`tool-${tc.id}-${index}`}
-          content={tc.arguments.content as string}
-          isAwaitingApproval={isPending}
-          isSuccess={tc.status === 'success'}
-          messageId={messageId}
-          toolCallId={tc.id}
-          args={tc.arguments}
-        />
-      )
-    }
-
-    // ask_user 由 InteractiveCard 独立渲染，跳过原始工具卡片
-    if (tc.name === 'ask_user') {
-      return null
-    }
-
-    // todo_write 通过底部 TodoListPanel 展示，不在聊天流中渲染卡片
-    if (tc.name === 'todo_write') {
-      return null
-    }
-
-    // 其他工具使用 ToolCallCard
-      return (
-        <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
-          <ToolCallCard
-            key={`tool-${tc.id}-${index}`}
-            toolCall={tc}
-            isAwaitingApproval={isPending}
-            onApprove={isPending ? onApproveTool : undefined}
-            onReject={isPending ? onRejectTool : undefined}
-            defaultExpanded
-          />
-        </div>
-      )
+    return (
+      <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
+        {renderToolCallCard(tc, {
+          pendingToolId,
+          onApproveTool,
+          onRejectTool,
+          onOpenDiff,
+          messageId,
+        })}
+      </div>
+    )
   }
 
   return null
