@@ -12,176 +12,18 @@ import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
 import { filterToolCallLeakChunk } from '../utils/toolCallLeakFilter'
 import { t } from '@/renderer/i18n'
+import { StreamingEditPreviewCoordinator } from '../services/streamingEditPreview'
+import {
+  arePartialArgsEqual,
+  parseFinalJsonArgs,
+  parsePartialJsonArgs,
+} from './toolArgumentStreamParser'
 
 // Tracks active IPC listeners for leak debugging.
 let activeListenerCount = 0
 
 export function getActiveListenerCount(): number {
   return activeListenerCount
-}
-
-const STREAMABLE_TOOL_ARG_KEYS = new Set([
-  'path',
-  'command',
-  'query',
-  'pattern',
-  'url',
-  'cwd',
-  'line',
-  'column',
-  'start_line',
-  'end_line',
-  'after_line',
-  'terminal_id',
-  'file_pattern',
-  'is_background',
-  'timeout',
-  'refresh',
-  'old_string',
-  'new_string',
-  'content',
-  'code',
-  'replacement',
-  'source',
-])
-
-const PARTIAL_ARGS_SCAN_LIMIT = 16384
-
-function extractPartialStringField(scanTarget: string, key: string): string | null {
-  const marker = `"${key}":`
-  const keyIndex = scanTarget.lastIndexOf(marker)
-  if (keyIndex === -1) return null
-
-  let cursor = keyIndex + marker.length
-  while (cursor < scanTarget.length && /\s/.test(scanTarget[cursor])) {
-    cursor++
-  }
-
-  if (scanTarget[cursor] !== '"') {
-    return null
-  }
-
-  cursor++
-  let value = ''
-  let escaped = false
-
-  while (cursor < scanTarget.length) {
-    const ch = scanTarget[cursor]
-
-    if (escaped) {
-      value += ch
-      escaped = false
-      cursor++
-      continue
-    }
-
-    if (ch === '\\') {
-      value += ch
-      escaped = true
-      cursor++
-      continue
-    }
-
-    if (ch === '"') {
-      break
-    }
-
-    value += ch
-    cursor++
-  }
-
-  return value
-}
-
-function arePartialArgsEqual(
-  left?: Record<string, unknown>,
-  right?: Record<string, unknown>
-): boolean {
-  if (left === right) return true
-  if (!left || !right) return !left && !right
-
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  if (leftKeys.length !== rightKeys.length) return false
-
-  for (const key of leftKeys) {
-    if (left[key] !== right[key]) {
-      return false
-    }
-  }
-
-  return true
-}
-
-function parseFinalJsonArgs(argsString: string): Record<string, unknown> | null {
-  if (!argsString) return null
-
-  try {
-    const parsed = JSON.parse(argsString)
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null
-  } catch {
-    return null
-  }
-}
-
-function parsePartialJsonArgs(argsString: string): Record<string, unknown> | null {
-  if (!argsString) return null
-  const scanTarget = argsString.length > PARTIAL_ARGS_SCAN_LIMIT
-    ? argsString.slice(0, PARTIAL_ARGS_SCAN_LIMIT)
-    : argsString
-
-  try {
-    const parsed = JSON.parse(scanTarget)
-    if (!parsed || typeof parsed !== 'object') return null
-    const filtered = Object.fromEntries(
-      Object.entries(parsed).filter(([key, value]) =>
-        STREAMABLE_TOOL_ARG_KEYS.has(key) && typeof value !== 'object'
-      )
-    )
-    return Object.keys(filtered).length > 0 ? filtered : null
-  } catch {
-    const result: Record<string, unknown> = {}
-
-    // Match completed string fields.
-    const stringFieldRegex = /"(\w+)":\s*"((?:[^"\\]|\\.)*)"/g
-    let match
-    while ((match = stringFieldRegex.exec(scanTarget)) !== null) {
-      if (!STREAMABLE_TOOL_ARG_KEYS.has(match[1])) continue
-      try {
-        result[match[1]] = JSON.parse(`"${match[2]}"`)
-      } catch {
-        result[match[1]] = match[2].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
-      }
-    }
-
-    // Match partially streamed string fields even before the closing quote arrives.
-    for (const key of STREAMABLE_TOOL_ARG_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(result, key)) continue
-
-      const partialValue = extractPartialStringField(scanTarget, key)
-      if (partialValue === null) continue
-
-      result[key] = partialValue
-        .replace(/\\n/g, '\n')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\')
-    }
-
-    const boolFieldRegex = /"(\w+)":\s*(true|false)/g
-    while ((match = boolFieldRegex.exec(scanTarget)) !== null) {
-      if (!STREAMABLE_TOOL_ARG_KEYS.has(match[1])) continue
-      result[match[1]] = match[2] === 'true'
-    }
-
-    // Match numeric fields.
-    const numFieldRegex = /"(\w+)":\s*(-?\d+(?:\.\d+)?)/g
-    while ((match = numFieldRegex.exec(scanTarget)) !== null) {
-      if (!STREAMABLE_TOOL_ARG_KEYS.has(match[1])) continue
-      result[match[1]] = parseFloat(match[2])
-    }
-
-    return Object.keys(result).length > 0 ? result : null
-  }
 }
 
 // ===== Stream Processor =====
@@ -217,6 +59,7 @@ export function createStreamProcessor(
     argsString: string
     lastPreviewArgs?: Record<string, unknown>
   }>()
+  const streamingEditPreviewCoordinator = new StreamingEditPreviewCoordinator()
 
   let toolUpdateRafId: number | null = null
   const pendingToolPreviewUpdates = new Map<string, {
@@ -275,6 +118,15 @@ export function createStreamProcessor(
     scheduleToolPreviewUpdates()
   }
 
+  const syncStreamingEditPreview = async (toolId: string, toolName: string, partialArgs?: Record<string, unknown>) => {
+    await streamingEditPreviewCoordinator.sync(
+      toolId,
+      toolName,
+      partialArgs,
+      useStore.getState().workspacePath
+    )
+  }
+
   const cleanup = () => {
     if (isCleanedUp) return
     isCleanedUp = true
@@ -284,6 +136,7 @@ export function createStreamProcessor(
       toolUpdateRafId = null
     }
     pendingToolPreviewUpdates.clear()
+    streamingEditPreviewCoordinator.releaseAll()
 
     for (const fn of cleanups) {
       try {
@@ -408,6 +261,7 @@ export function createStreamProcessor(
                       partialArgs,
                       timestamp: Date.now(),
                     })
+                    void syncStreamingEditPreview(tc.id, tc.name, partialArgs)
                   }
                 }
               }
@@ -438,6 +292,7 @@ export function createStreamProcessor(
           if (tc) {
             flushToolPreviewUpdates()
             const finalArgs = parseFinalJsonArgs(tc.argsString) || {}
+            void syncStreamingEditPreview(tc.id, tc.name, finalArgs)
             if (finalArgs) {
               store.updateToolCall(assistantId, tc.id, {
                 arguments: finalArgs,
@@ -495,6 +350,8 @@ export function createStreamProcessor(
             lastUpdateTime: Date.now(),
           })
         }
+
+        void syncStreamingEditPreview(tcId, toolName, args)
 
         EventBus.emit({ type: 'stream:tool_available', id: tcId, name: toolName, args })
         break
@@ -560,9 +417,23 @@ export function createStreamProcessor(
     doResolve({ content, toolCalls, usage, error: errorMsg })
   }
 
-  const handleDone = (result: { usage?: unknown }) => {
+  const handleDone = (result: { reasoning?: string; usage?: unknown }) => {
     if (result?.usage) {
       usage = result.usage as TokenUsage
+    }
+    if (typeof result?.reasoning === 'string' && result.reasoning.length >= reasoning.length) {
+      const missingReasoning = result.reasoning.slice(reasoning.length)
+      reasoning = result.reasoning
+
+      if (assistantId && missingReasoning && reasoningPartId) {
+        store.updateReasoningPart(assistantId, reasoningPartId, missingReasoning, true)
+      }
+
+      if (assistantId) {
+        store.updateMessage(assistantId, {
+          reasoning,
+        } as Partial<import('../types').AssistantMessage>)
+      }
     }
     flushToolPreviewUpdates()
 
@@ -570,7 +441,7 @@ export function createStreamProcessor(
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
       finalizeReasoning()
-      doResolve({ content, toolCalls, usage, error })
+      doResolve({ content, reasoning, toolCalls, usage, error })
     }, 0)
   }
 

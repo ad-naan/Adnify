@@ -16,7 +16,6 @@ import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } f
 import { useAgentActions, useAllThreads } from '@/renderer/hooks/useAgent'
 import { ChatThread, getMessageText, getThreadDisplayTitle } from '@/renderer/agent/types'
 import { Branch } from '@/renderer/agent/store/slices/branchSlice'
-import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
 import { Button } from '../ui'
 import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
@@ -234,34 +233,19 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
   onSaveEdit: () => void
   onCancelEdit: () => void
 }) {
-  const [preview, setPreview] = React.useState<string>(getThreadDisplayTitle(thread))
-  const timeStr = getRelativeTime(thread.lastModified, language)
-
-  React.useEffect(() => {
+  const preview = React.useMemo(() => {
     if (thread.title?.trim()) {
-      setPreview(thread.title.trim())
-      return
+      return thread.title.trim()
     }
 
     const firstUserMsg = thread.messages.find(m => m.role === 'user')
     if (firstUserMsg) {
-      setPreview(getThreadDisplayTitle(thread))
-      return
+      return getMessageText(firstUserMsg.content).slice(0, 60)
     }
 
-    if (thread.messages.length === 0) {
-      agentSessionRepository.loadThreadMessages(thread.id).then(messages => {
-        const firstUser = messages.find(m => m.role === 'user')
-        if (firstUser) {
-          setPreview(getMessageText(firstUser.content).slice(0, 60))
-        }
-      }).catch(() => {
-      })
-      return
-    }
-
-    setPreview(getThreadDisplayTitle(thread))
-  }, [thread.id, thread.messages, thread.title])
+    return getThreadDisplayTitle(thread)
+  }, [thread])
+  const timeStr = getRelativeTime(thread.lastModified, language)
 
   return (
     <div
@@ -271,9 +255,6 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
         }`}
       onClick={onSelect}
     >
-      {isActive && (
-        <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
-      )}
 
       <div className={`mt-0.5 shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:bg-surface group-hover:text-text-primary'
         }`}>
@@ -391,9 +372,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
             : 'bg-surface/20 border-border/40 hover:bg-surface/40 hover:border-border/60'
             }`}
         >
-          {!isOnBranch && (
-            <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
-          )}
+
 
           <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${!isOnBranch ? 'bg-accent/20 text-accent' : 'bg-surface/80 text-text-muted group-hover:text-text-primary'
             }`}>
@@ -433,9 +412,6 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                 : 'bg-transparent border-transparent hover:bg-surface/40 hover:border-border/40'
                 }`}
             >
-              {isActive && (
-                <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-accent rounded-r-full" />
-              )}
 
               <div className="flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:bg-surface group-hover:text-text-primary'

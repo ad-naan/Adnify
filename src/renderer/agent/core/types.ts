@@ -35,6 +35,7 @@ export type { ToolExecutionContext } from '@/shared/types'
 
 export interface LLMCallResult {
   content?: string
+  reasoning?: string
   toolCalls?: ToolCall[]
   usage?: TokenUsage
   error?: string

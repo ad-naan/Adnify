@@ -433,18 +433,16 @@ textarea,
   animation: fluid-block-slide 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
-/* Ink Blur Fade-In Animation */
+/* Ink Blur Fade-In Animation - Smooth Character Fade */
 @keyframes ink-fade-in {
   0% {
     opacity: 0;
-    filter: blur(4px);
+    filter: blur(8px);
   }
-
-  50% {
-    opacity: 0.7;
-    filter: blur(2px);
+  40% {
+    opacity: 0.6;
+    filter: blur(3px);
   }
-
   100% {
     opacity: 1;
     filter: blur(0);
@@ -457,12 +455,13 @@ textarea,
 
 /* Apply ink effect to streaming content */
 .streaming-ink-effect {
-  /* Subtle text shadow for depth */
-  text-shadow: 0 0 1px rgba(255, 255, 255, 0.1);
+  text-shadow: 0 0 1px rgba(var(--text-primary) / 0.1);
 }
 
-.streaming-ink-effect>*:last-child {
-  animation: ink-fade-in 0.3s ease-out;
+.inline-stream-char {
+  display: inline;
+  animation: ink-fade-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  will-change: opacity, filter;
 }
 
 /* Reveal in Explorer - File highlight flash */
@@ -489,11 +488,12 @@ textarea,
 
 /* --- Streaming block-reveal animation --- */
 @keyframes block-reveal {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0; filter: blur(4px); transform: translateY(2px); }
+  100% { opacity: 1; filter: blur(0); transform: translateY(0); }
 }
 .animate-block-reveal {
-  animation: block-reveal 0.2s ease-out both;
+  animation: block-reveal 0.28s ease-out both;
+  will-change: opacity, filter, transform;
 }
 
 /* --- Inline Diff Styles (Composer) --- */

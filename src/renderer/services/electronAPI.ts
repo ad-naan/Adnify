@@ -110,7 +110,7 @@ function createGroupedAPI() {
         raw.onLLMStream(requestId, callback),
       onError: (requestId: string, callback: (error: { message: string; code: string; retryable: boolean }) => void) =>
         raw.onLLMError(requestId, callback),
-      onDone: (requestId: string, callback: (data: { usage?: unknown }) => void) =>
+      onDone: (requestId: string, callback: (data: { reasoning?: string; usage?: unknown }) => void) =>
         raw.onLLMDone(requestId, callback),
       // Structured Output
       analyzeCode: (params: Parameters<typeof raw.analyzeCode>[0]) => raw.analyzeCode(params),

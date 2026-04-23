@@ -34,9 +34,6 @@ export default function ActivityBar() {
                   : 'text-text-muted hover:text-text-primary hover:bg-surface-hover active:scale-95'}
               `}
             >
-              {activeSidePanel === item.id && (
-                <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-[3px] h-6 bg-accent shadow-[0_0_8px_rgba(var(--accent)/0.6)] rounded-r-full" />
-              )}
               <item.icon
                 className={`w-[22px] h-[22px] transition-all duration-300 
                   ${activeSidePanel === item.id ? 'drop-shadow-[0_0_10px_rgba(var(--accent)/0.6)] scale-105' : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'}

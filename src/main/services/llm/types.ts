@@ -102,7 +102,7 @@ export type StreamEvent =
   | { type: 'tool-call-delta-end'; id: string }
   | { type: 'tool-call-available'; id: string; name: string; arguments: Record<string, unknown> }
   | { type: 'error'; error: LLMError }
-  | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata }
+  | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata; reasoning?: string }
 
 // ============================================
 // 结构化输出类型

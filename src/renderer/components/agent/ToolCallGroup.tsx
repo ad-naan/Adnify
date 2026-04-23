@@ -8,7 +8,6 @@
  */
 
 import { useCallback, memo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@/renderer/agent/types'
 import ToolCallCard from './ToolCallCard'
 import FileChangeCard from './FileChangeCard'
@@ -90,19 +89,11 @@ function ToolCallGroup({
 
     return (
         <div className="my-2 animate-slide-in-right space-y-2">
-            <AnimatePresence initial={false}>
-                {toolCalls.map(tc => (
-                    <motion.div
-                        key={tc.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.18, ease: 'easeOut' }}
-                    >
-                        {renderToolCard(tc)}
-                    </motion.div>
-                ))}
-            </AnimatePresence>
+            {toolCalls.map(tc => (
+                <div key={tc.id}>
+                    {renderToolCard(tc)}
+                </div>
+            ))}
         </div>
     )
 }

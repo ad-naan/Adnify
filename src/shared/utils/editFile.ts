@@ -49,6 +49,53 @@ function hasBatchFields(data: Record<string, unknown>): boolean {
   return Array.isArray(data.edits) && data.edits.length > 0
 }
 
+function isEmptyEditContent(value: unknown): boolean {
+  return value === undefined || value === ''
+}
+
+function isBatchPlaceholderEdit(
+  edit: unknown,
+  data: Record<string, unknown>
+): boolean {
+  if (!edit || typeof edit !== 'object' || Array.isArray(edit)) {
+    return false
+  }
+
+  const candidate = edit as Record<string, unknown>
+  const action = candidate.action
+  if (action !== 'replace' && action !== 'insert' && action !== 'delete') {
+    return false
+  }
+
+  if (action === 'replace') {
+    const mirrorsTopLevelLineRange =
+      typeof candidate.start_line === 'number' &&
+      typeof candidate.end_line === 'number' &&
+      candidate.start_line === data.start_line &&
+      candidate.end_line === data.end_line
+
+    return mirrorsTopLevelLineRange && isEmptyEditContent(candidate.content)
+  }
+
+  if (action === 'insert') {
+    const mirrorsTopLevelInsertPoint =
+      typeof candidate.after_line === 'number' &&
+      candidate.after_line === data.after_line
+
+    return mirrorsTopLevelInsertPoint && isEmptyEditContent(candidate.content)
+  }
+
+  return false
+}
+
+function isBatchPlaceholder(data: Record<string, unknown>): boolean {
+  if (!Array.isArray(data.edits) || data.edits.length === 0) {
+    return false
+  }
+
+  return data.edits.every(edit => isBatchPlaceholderEdit(edit, data))
+}
+
 function isLinePlaceholder(data: Record<string, unknown>): boolean {
   if (data.content !== '') {
     return false
@@ -72,6 +119,10 @@ function hasMeaningfulTopLevelContent(data: Record<string, unknown>): boolean {
 
 function getBatchConflictError(data: Record<string, unknown>): string | null {
   if (!hasBatchFields(data)) {
+    return null
+  }
+
+  if (isBatchPlaceholder(data)) {
     return null
   }
 
@@ -113,6 +164,10 @@ export function normalizeEditFileArgs(data: Record<string, unknown>): Record<str
   const normalized = { ...data }
 
   if (Array.isArray(normalized.edits) && normalized.edits.length === 0) {
+    delete normalized.edits
+  }
+
+  if (isBatchPlaceholder(normalized)) {
     delete normalized.edits
   }
 

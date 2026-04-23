@@ -316,10 +316,18 @@ export const createMessageSlice: StateCreator<
 
             // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
             const { _textFinalized: _, ...cleanMsg } = assistantMsg
-            thread.messages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
+            const nextMessages = [...thread.messages]
+            nextMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                threads: {
+                    ...state.threads,
+                    [threadId]: {
+                        ...thread,
+                        messages: nextMessages,
+                    },
+                },
             }
         })
     },

@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue, forwardRef, type ComponentPropsWithoutRef } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import {
   AlertTriangle,
@@ -116,6 +116,7 @@ export default function ChatPanel() {
     messageCheckpoints,
     contextItems,
     currentThreadId,
+    messageListVersion,
   } = useAgentViewState()
   const { sendMessage, abort, approveCurrentTool, rejectCurrentTool } = useAgentCommands()
   const {
@@ -151,15 +152,14 @@ export default function ChatPanel() {
   // 缓存过滤后的消息列表，避免每次渲染都创建新数组
   const filteredMessages = useMemo(
     () => messages.filter(m => m.role === 'user' || m.role === 'assistant'),
-    [messages]
+    [messages, messageListVersion]
   )
 
   // 骨架屏转场状态：避免大量消息的突现造成卡顿
   const filteredRenderableMessages = useMemo<RenderableMessageItem[]>(
     () => buildRenderableMessageItems(filteredMessages, checkpointMessageIds),
-    [filteredMessages, checkpointMessageIds]
+    [filteredMessages, checkpointMessageIds, messageListVersion]
   )
-  const deferredRenderableMessages = useDeferredValue(filteredRenderableMessages)
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
   // Virtuoso 初始滚动位置：只在线程切换时重新指向底部，普通追加消息不重算
@@ -179,16 +179,14 @@ export default function ChatPanel() {
     // 线程切换时同步更新初始位置索引，指向新线程的底部
     initialIndexRef.current = Math.max(0, filteredRenderableMessages.length - 1)
 
-    // 线程切换：显示骨架屏，350ms 后关闭（骨架屏本身会遮住 Virtuoso 的渲染）
+    // 线程切换：已加载线程只保留一帧过渡，未加载线程继续由 hydration 骨架接管
     setIsSwitchingThread(true)
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setIsSwitchingThread(false)
-        })
+        setIsSwitchingThread(false)
       })
-    }, 350)
-    return () => clearTimeout(timer)
+    }, 16)
+    return () => window.clearTimeout(timer)
   }, [currentThreadId])
 
   // Unified Sidebar State
@@ -273,7 +271,7 @@ export default function ChatPanel() {
     isHydratingActiveThread,
     isStreaming,
     isSwitchingThread,
-    messageCount: deferredRenderableMessages.length,
+    messageCount: filteredRenderableMessages.length,
     threadId: currentThreadId,
   })
 
@@ -884,7 +882,6 @@ export default function ChatPanel() {
     return (
       <ChatMessageUI
         key={msg.id}
-        messageId={msg.id}
         message={msg}
         onEdit={handleEditMessage}
         onRegenerate={handleRegenerate}
@@ -1091,7 +1088,7 @@ export default function ChatPanel() {
             <Virtuoso
               key={currentThreadId ?? 'no-thread'}
               ref={virtuosoRef}
-              data={deferredRenderableMessages}
+              data={filteredRenderableMessages}
               computeItemKey={(_, item) => item.renderKey}
               atBottomStateChange={handleBottomStateChange}
               rangeChanged={handleVisibleRangeChanged}

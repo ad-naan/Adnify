@@ -10,7 +10,7 @@ import { createModel } from '../modelFactory'
 import { executePreparedRequest } from '../core/RequestExecution'
 import { LLMError, convertUsage } from '../types'
 import type { LLMResponse, CodeAnalysis, Refactoring, CodeFix, TestCase } from '../types'
-import type { LLMConfig } from '@shared/types'
+import type { LLMConfig, LLMMessage } from '@shared/types'
 
 const CodeIssueSchema = z.object({
   severity: z.enum(['error', 'warning', 'info', 'hint']),
@@ -125,16 +125,18 @@ export class StructuredService {
   private async executeStructuredText<T>(options: {
     config: LLMConfig
     operation: string
+    originalMessages?: LLMMessage[]
     messages: ModelMessage[]
     schema: z.ZodTypeAny
     onData?: (data: T) => void
   }): Promise<LLMResponse<T>> {
-    const { config, operation, messages, schema, onData } = options
+    const { config, operation, originalMessages, messages, schema, onData } = options
     const model = createModel(config)
 
     const result = await executePreparedRequest({
       config,
       operation,
+      originalMessages,
       baseMessages: messages,
       execute: async ({ messages: preparedMessages, providerOptions }) =>
         await generateText({
@@ -155,15 +157,17 @@ export class StructuredService {
   private async executeStructuredObjectRequest<T>(options: {
     config: LLMConfig
     operation: string
+    originalMessages?: LLMMessage[]
     messages: ModelMessage[]
     schema: z.ZodTypeAny
   }): Promise<LLMResponse<T>> {
-    const { config, operation, messages, schema } = options
+    const { config, operation, originalMessages, messages, schema } = options
     const model = createModel(config)
 
     const result = await executePreparedRequest({
       config,
       operation,
+      originalMessages,
       baseMessages: messages,
       execute: async ({ messages: preparedMessages, providerOptions }) =>
         await generateObject({

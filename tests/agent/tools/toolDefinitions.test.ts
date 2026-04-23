@@ -150,6 +150,36 @@ describe('Tool Definitions', () => {
 
       expect(result.success).toBe(false)
     })
+
+    it('should accept line mode when batch fields are only empty mirrored placeholders', () => {
+      const editFileSchema = TOOL_SCHEMAS.edit_file
+      expect(editFileSchema).toBeDefined()
+
+      const result = editFileSchema.safeParse({
+        path: 'app/page.tsx',
+        content: 'export default function HomePage() {\n  return null\n}',
+        edits: [
+          {
+            action: 'replace',
+            start_line: 1,
+            end_line: 356,
+            content: '',
+          },
+        ],
+        start_line: 1,
+        end_line: 356,
+        old_string: '',
+        new_string: '',
+        replace_all: false,
+      })
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.edits).toBeUndefined()
+        expect(result.data.old_string).toBeUndefined()
+        expect(result.data.new_string).toBeUndefined()
+      }
+    })
   })
 
   describe('toolRegistry', () => {

@@ -37,7 +37,7 @@ import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { useAgentStore, selectStreamState } from '@/renderer/agent/store/AgentStore'
+import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { MessageBranchActions } from './BranchControls'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -65,7 +65,6 @@ interface ChatMessageProps {
   onSelectOption?: (messageId: string, selectedIds: string[]) => void
   pendingToolId?: string
   hasCheckpoint?: boolean
-  messageId: string
 }
 
 interface RenderPartProps {
@@ -81,6 +80,10 @@ interface RenderPartProps {
 }
 
 const EMPTY_PREVIEWS: Record<string, ToolStreamingPreview> = {}
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
+const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
+const ACTIVE_STREAM_PHASES = new Set(['streaming', 'tool_running', 'tool_pending'])
+const STREAMING_TAIL_LENGTH = 30
 
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number; isStreaming?: boolean }) => {
@@ -153,18 +156,75 @@ const cleanStreamingContent = (text: string): string => {
   return stripToolCallLeaks(text)
 }
 
-const BlockRevealKeyframes = () => (
-  <style dangerouslySetInnerHTML={{
-    __html: `
-    @keyframes block-reveal {
-      0% { opacity: 0; filter: blur(4px); transform: translateY(2px); }
-      100% { opacity: 1; filter: blur(0px); transform: translateY(0); }
-    }
-    .animate-block-reveal {
-      animation: block-reveal 0.3s ease-out forwards;
-    }
-  `}} />
-)
+const renderStreamingTailText = (value: string, key: string) => {
+  if (!value) return value
+
+  const tailLength = Math.min(STREAMING_TAIL_LENGTH, value.length)
+  if (tailLength <= 0) return value
+
+  const stableText = value.slice(0, -tailLength)
+  const animatedTail = value.slice(-tailLength)
+
+  return (
+    <React.Fragment key={key}>
+      {stableText}
+      {animatedTail.split('').map((char, i) => {
+        const charIndex = value.length - tailLength + i
+        return (
+          <span key={`${key}-${charIndex}`} className="inline-stream-char">
+            {char}
+          </span>
+        )
+      })}
+    </React.Fragment>
+  )
+}
+
+const decorateStreamingChild = (child: React.ReactNode, path: string): { changed: boolean; node: React.ReactNode } => {
+  if (typeof child === 'string') {
+    return { changed: true, node: renderStreamingTailText(child, path) }
+  }
+
+  if (typeof child === 'number') {
+    return { changed: true, node: renderStreamingTailText(String(child), path) }
+  }
+
+  if (!React.isValidElement(child)) {
+    return { changed: false, node: child }
+  }
+
+  const childProps = child.props as { children?: React.ReactNode } | null
+  if (!childProps || childProps.children == null) {
+    return { changed: false, node: child }
+  }
+
+  const decoratedChildren = decorateStreamingChildren(childProps.children, path)
+  if (decoratedChildren === childProps.children) {
+    return { changed: false, node: child }
+  }
+
+  return {
+    changed: true,
+    node: React.cloneElement(child, undefined, decoratedChildren),
+  }
+}
+
+const decorateStreamingChildren = (children: React.ReactNode, basePath = 'tail'): React.ReactNode => {
+  const childArray = React.Children.toArray(children)
+  for (let index = childArray.length - 1; index >= 0; index -= 1) {
+    const currentChild = childArray[index]
+    const decorated = decorateStreamingChild(currentChild, `${basePath}-${index}`)
+    if (!decorated.changed) continue
+    if (decorated.node == null || typeof decorated.node === 'boolean') continue
+
+    const nextChildren = [...childArray]
+    nextChildren[index] = decorated.node
+    return nextChildren
+  }
+
+  return children
+}
+
 
 // ThinkingBlock 组件 - 扁平化折叠样式
 interface ThinkingBlockProps {
@@ -409,6 +469,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   // 平滑流式插入
   const smoothContent = useSmoothStream(contentWithoutAlert || '', !!isStreaming, 1.5)
+  const enableBlockReveal = !!isStreaming
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
@@ -426,6 +487,11 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
       console.warn('Failed to open file from markdown:', err)
     }
   }, [workspacePath, openFile, setActiveFile])
+
+  const renderStreamingChildren = React.useCallback((children: React.ReactNode) => {
+    if (!isStreaming) return children
+    return decorateStreamingChildren(children)
+  }, [isStreaming])
 
   const markdownComponents = React.useMemo(() => ({
     code({ className, children, node, ...props }: any) {
@@ -466,33 +532,33 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         </div>
       )
     },
-    pre: ({ children }: any) => <div className={`overflow-x-auto max-w-full ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</div>,
-    p: ({ children }: any) => <p className={`mb-3 last:mb-0 leading-7 break-words ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</p>,
-    ul: ({ children }: any) => <ul className={`list-disc pl-5 mb-3 space-y-1 ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</ul>,
-    ol: ({ children }: any) => <ol className={`list-decimal pl-5 mb-3 space-y-1 ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</ol>,
-    li: ({ children }: any) => <li className={`pl-1 ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</li>,
+    pre: ({ children }: any) => <div className={`overflow-x-auto max-w-full ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{children}</div>,
+    p: ({ children }: any) => <p className={`mb-3 last:mb-0 leading-7 break-words ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</p>,
+    ul: ({ children }: any) => <ul className={`list-disc pl-5 mb-3 space-y-1 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{children}</ul>,
+    ol: ({ children }: any) => <ol className={`list-decimal pl-5 mb-3 space-y-1 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{children}</ol>,
+    li: ({ children }: any) => <li className={`pl-1 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</li>,
     a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
+      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{renderStreamingChildren(children)}</a>
     ),
-    strong: ({ children, ...props }: any) => <strong {...props}>{children}</strong>,
-    em: ({ children, ...props }: any) => <em {...props}>{children}</em>,
+    strong: ({ children, ...props }: any) => <strong {...props}>{renderStreamingChildren(children)}</strong>,
+    em: ({ children, ...props }: any) => <em {...props}>{renderStreamingChildren(children)}</em>,
     blockquote: ({ children }: any) => (
-      <blockquote className={`border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</blockquote>
+      <blockquote className={`border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</blockquote>
     ),
-    h1: ({ children }: any) => <h1 className={`text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</h1>,
-    h2: ({ children }: any) => <h2 className={`text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</h2>,
-    h3: ({ children }: any) => <h3 className={`text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary ${isStreaming ? 'animate-block-reveal' : ''}`}>{children}</h3>,
+    h1: ({ children }: any) => <h1 className={`text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</h1>,
+    h2: ({ children }: any) => <h2 className={`text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</h2>,
+    h3: ({ children }: any) => <h3 className={`text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</h3>,
     table: ({ children }: any) => (
-      <div className={`overflow-x-auto my-4 ${isStreaming ? 'animate-block-reveal' : ''}`}>
+      <div className={`overflow-x-auto my-4 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>
         <table className="min-w-full border-collapse border border-border">{children}</table>
       </div>
     ),
     thead: ({ children }: any) => <thead className="bg-surface/50">{children}</thead>,
     tbody: ({ children }: any) => <tbody>{children}</tbody>,
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
-    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
-    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
-  }), [fontSize, handleOpenFile, isStreaming])
+    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{renderStreamingChildren(children)}</th>,
+    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{renderStreamingChildren(children)}</td>,
+  }), [enableBlockReveal, fontSize, handleOpenFile, isStreaming, renderStreamingChildren])
 
   if (!contentWithoutAlert && !systemAlert) {
     return null
@@ -500,7 +566,6 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   return (
     <>
-      <BlockRevealKeyframes />
       {systemAlert && (
         <SystemAlert
           type={systemAlert.type}
@@ -510,11 +575,14 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         />
       )}
       {contentWithoutAlert && (
-        <div style={{ fontSize: `${fontSize}px` }} className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden`}>
+        <div
+          style={{ fontSize: `${fontSize}px` }}
+          className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}
+        >
           <ReactMarkdown
             className="prose prose-invert max-w-none"
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
+            remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+            rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
             components={markdownComponents}
             skipHtml
           >
@@ -714,13 +782,7 @@ const AssistantMessageContent = React.memo(({
       {groups.map((group) => {
         if (group.type === 'part') {
           return (
-            <motion.div
-              key={`wrap-part-${group.index}`}
-              initial={isStreaming ? { opacity: 0 } : false}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="w-full"
-            >
+            <div key={`wrap-part-${group.index}`} className="w-full">
               <RenderPart
                 part={group.part}
                 index={group.index}
@@ -732,19 +794,13 @@ const AssistantMessageContent = React.memo(({
                 isStreaming={isStreaming}
                 messageId={messageId}
               />
-            </motion.div>
+            </div>
           )
         }
 
         if (group.toolCalls.length === 1) {
           return (
-            <motion.div
-              key={`wrap-tool-${group.startIndex}`}
-              initial={isStreaming ? { opacity: 0 } : false}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="w-full"
-            >
+            <div key={`wrap-tool-${group.startIndex}`} className="w-full">
               <RenderPart
                 part={parts[group.startIndex]}
                 index={group.startIndex}
@@ -756,18 +812,12 @@ const AssistantMessageContent = React.memo(({
                 isStreaming={isStreaming}
                 messageId={messageId}
               />
-            </motion.div>
+            </div>
           )
         }
 
         return (
-          <motion.div
-            key={`wrap-group-${group.startIndex}`}
-            initial={isStreaming ? { opacity: 0 } : false}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="w-full"
-          >
+          <div key={`wrap-group-${group.startIndex}`} className="w-full">
             <ToolCallGroup
               toolCalls={group.toolCalls}
               pendingToolId={pendingToolId}
@@ -776,7 +826,7 @@ const AssistantMessageContent = React.memo(({
               onOpenDiff={onOpenDiff}
               messageId={messageId}
             />
-          </motion.div>
+          </div>
         )
       })}
     </>
@@ -794,20 +844,8 @@ const ChatMessage = React.memo(({
   onOpenDiff,
   pendingToolId,
   hasCheckpoint,
-  messageId,
 }: ChatMessageProps) => {
-  // _doAppendToAssistant 通过 mutation 更新 message 对象（性能考虑不创建新数组），
-  // 导致 Virtuoso 的 data 引用不变、React.memo 的 prop 引用不变，组件收不到增量更新。
-  // 这里通过 messageId 直接订阅 store，读取 threadMessageVersions 作为变化信号，
-  // 让每次流式 content 追加都触发 re-render。
-  const liveMessage = useAgentStore(state => {
-    const threadId = state.currentThreadId
-    if (!threadId) return null
-    void state.threadMessageVersions[threadId]
-    const thread = state.threads[threadId]
-    return thread?.messages.find(m => m.id === messageId) ?? null
-  })
-  const message = liveMessage || messageProp
+  const message = messageProp
 
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
@@ -851,21 +889,39 @@ const ChatMessage = React.memo(({
   }
 
   const [typingIndex, setTypingIndex] = useState(0)
-  const streamState = useAgentStore(selectStreamState)
-  const previewMap = useAgentStore(state => {
-    if (!state.currentThreadId || streamState.assistantId !== message.id) {
-      return EMPTY_PREVIEWS
+  const { isStreaming, previewMap, liveParts, liveInteractive } = useAgentStore(useShallow(state => {
+    if (!isAssistantMessage(message)) {
+      return {
+        isStreaming: false,
+        previewMap: EMPTY_PREVIEWS,
+        liveParts: undefined,
+        liveInteractive: undefined,
+      }
     }
 
-    return state.threads[state.currentThreadId]?.toolStreamingPreviews || EMPTY_PREVIEWS
-  })
+    const threadId = state.currentThreadId
+    const threadStreamState = threadId ? state.threads[threadId]?.streamState : undefined
+    const liveMessage = threadId
+      ? state.threads[threadId]?.messages.find(msg => msg.id === message.id && msg.role === 'assistant')
+      : undefined
+    const isActiveAssistant =
+      Boolean(message.isStreaming) &&
+      !!threadId &&
+      threadStreamState?.assistantId === message.id &&
+      ACTIVE_STREAM_PHASES.has(threadStreamState?.phase ?? 'idle')
 
-  // 为了类型安全
-  const isStreaming = isAssistantMessage(message)
-    ? Boolean(message.isStreaming)
-    && (streamState.phase === 'streaming' || streamState.phase === 'tool_running' || streamState.phase === 'tool_pending')
-    && streamState.assistantId === message.id
-    : false
+    return {
+      isStreaming: isActiveAssistant,
+      liveParts: liveMessage && isAssistantMessage(liveMessage) ? liveMessage.parts : undefined,
+      liveInteractive: liveMessage && isAssistantMessage(liveMessage) ? liveMessage.interactive : undefined,
+      previewMap: isActiveAssistant
+        ? state.threads[threadId!]?.toolStreamingPreviews || EMPTY_PREVIEWS
+        : EMPTY_PREVIEWS,
+    }
+  }))
+
+  const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
+  const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined
 
   useEffect(() => {
     if (isStreaming) {
@@ -1128,18 +1184,18 @@ const ChatMessage = React.memo(({
 
             <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
               {/* System Context Widget at the top of the content */}
-              {isAssistantMessage(message) && (message.contextItems?.some((item: any) => item.type === 'Skill') || message.parts?.some(isSearchPart)) && (
+              {isAssistantMessage(message) && (message.contextItems?.some((item: any) => item.type === 'Skill') || assistantParts?.some(isSearchPart)) && (
                 <MessageMetaGroup
                   autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
                   manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
-                  searchContent={message.parts?.find(isSearchPart)?.content || undefined}
-                  isSearchStreaming={(message.parts?.find(isSearchPart) as any)?.isStreaming}
+                  searchContent={assistantParts?.find(isSearchPart)?.content || undefined}
+                  isSearchStreaming={(assistantParts?.find(isSearchPart) as any)?.isStreaming}
                 />
               )}
               <div className="prose-custom w-full max-w-none">
-                {message.parts && (
+                {assistantParts && (
                   <AssistantMessageContent
-                    parts={message.parts}
+                    parts={assistantParts}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
                     onRejectTool={onRejectTool}
@@ -1161,12 +1217,12 @@ const ChatMessage = React.memo(({
                 )}
               </div>
 
-              {message.interactive && !message.isStreaming && (
+              {assistantInteractive && !message.isStreaming && (
                 <div className="mt-2 w-full">
                   <InteractiveCard
-                    content={message.interactive}
+                    content={assistantInteractive}
                     onSelect={(selectedIds, customText) => {
-                      const selectedLabels = message.interactive!.options
+                      const selectedLabels = assistantInteractive.options
                         .filter(opt => selectedIds.includes(opt.id))
                         .map(opt => opt.label)
                       // 有自定义文本时，用自定义文本作为消息内容
@@ -1174,7 +1230,7 @@ const ChatMessage = React.memo(({
                       window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds } }))
                       window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: message.id } }))
                     }}
-                    disabled={!!message.interactive.selectedIds?.length}
+                    disabled={!!assistantInteractive.selectedIds?.length}
                   />
                 </div>
               )}
