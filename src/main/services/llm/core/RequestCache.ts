@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { ModelMessage, ProviderOptions } from '@ai-sdk/provider-utils'
+import type { ModelMessage } from '@ai-sdk/provider-utils'
 import type { LLMConfig } from '@shared/types'
 import { logger } from '@shared/utils/Logger'
 import { countTokens } from '@shared/utils/tokenCounter'
@@ -7,8 +7,7 @@ import { resolveHeaderPlaceholders } from '../modelFactory'
 import { applyCaching, getCacheConfig } from './PromptCache'
 import { isCacheFeatureUnsupported, markCacheFeatureUnsupported } from './CacheCompatibility'
 import { resolveCacheProtocol } from './cacheProtocol'
-
-type RequestProviderOptions = ProviderOptions
+import { mergeProviderOptions, type RequestProviderOptions } from './ProviderCompatibility'
 
 interface RequestCacheResult {
   messages: ModelMessage[]
@@ -302,22 +301,6 @@ function getSimpleMessageText(message: ModelMessage): string | null {
 
   const text = textParts.join('\n').trim()
   return text || null
-}
-
-function mergeProviderOptions(
-  base: RequestProviderOptions | undefined,
-  extra: RequestProviderOptions
-): RequestProviderOptions {
-  const result: RequestProviderOptions = { ...(base ?? {}) }
-
-  for (const [key, value] of Object.entries(extra)) {
-    result[key] = {
-      ...(result[key] ?? {}),
-      ...value,
-    }
-  }
-
-  return result
 }
 
 function normalizeGoogleModelName(model: string): string {

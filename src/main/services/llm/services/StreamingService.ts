@@ -11,7 +11,7 @@ import { ErrorCode } from '@shared/utils/errorHandler'
 import { createModel, resolveHeaderPlaceholders } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
-import { prepareRequestCache } from '../core/RequestCache'
+import { prepareExecutionRequest } from '../core/RequestExecution'
 import { executeWithGenerationRecovery } from '../core/GenerationRecovery'
 import { LLMError, convertUsage } from '../types'
 import type { StreamEvent, TokenUsage, ResponseMetadata } from '../types'
@@ -324,8 +324,8 @@ export class StreamingService {
         operation: 'stream-text',
         requestId,
         abortSignal,
-        execute: async () => {
-          return this.generateOnce(params)
+        execute: async (useCache) => {
+          return this.generateOnce(params, useCache)
         },
       })
     } catch (error) {
@@ -335,7 +335,7 @@ export class StreamingService {
     }
   }
 
-  private async generateOnce(params: StreamingParams): Promise<StreamingResult> {
+  private async generateOnce(params: StreamingParams, useCache: boolean): Promise<StreamingResult> {
     const { config, messages, tools, systemPrompt, abortSignal, activeTools, requestId } = params
 
     // 创建 thinking 策略（只为需要特殊处理的模型）
@@ -358,9 +358,13 @@ export class StreamingService {
       // 转换消息
       let coreMessages = this.messageConverter.convert(messages, systemPrompt)
 
-      // 应用 Prompt Caching
-      const cachePreparation = await prepareRequestCache(config, coreMessages)
-      coreMessages = cachePreparation.messages
+      const preparedRequest = await prepareExecutionRequest({
+        config,
+        baseMessages: coreMessages,
+        originalMessages: messages,
+        useCache,
+      })
+      coreMessages = preparedRequest.messages
 
       // 转换工具
       const coreTools = tools ? this.toolConverter.convert(tools) : undefined
@@ -390,7 +394,7 @@ export class StreamingService {
         headers: resolveHeaderPlaceholders(config.headers, config.apiKey),
         timeout: config.timeout,  // 超时配置
         abortSignal,
-        providerOptions: cachePreparation.providerOptions,
+        providerOptions: preparedRequest.providerOptions,
       }
 
       // OpenAI 特定参数
@@ -398,57 +402,6 @@ export class StreamingService {
         if (config.logitBias) {
           // @ts-expect-error - OpenAI specific parameter
           streamParams.logitBias = config.logitBias
-        }
-        if (config.parallelToolCalls !== undefined) {
-          streamParams.providerOptions = {
-            ...streamParams.providerOptions,
-            openai: {
-              ...streamParams.providerOptions?.openai,
-              parallelToolCalls: config.parallelToolCalls,
-            },
-          }
-        }
-      }
-
-      // 启用 thinking 模式（各厂商配置不同）
-      // 使用 spread 合并，避免覆盖已有的 providerOptions（如 parallelToolCalls）
-      if (config.enableThinking) {
-        const protocol = config.protocol || ''
-
-        if (config.provider === 'gemini' || protocol === 'google') {
-          // Google Gemini: 区分 Gemini 3 (thinkingLevel) 和 Gemini 2.5 (thinkingBudget)
-          const isGemini3 = /gemini-3/i.test(config.model)
-          streamParams.providerOptions = {
-            ...streamParams.providerOptions,
-            google: {
-              ...(streamParams.providerOptions?.google as object),
-              thinkingConfig: isGemini3
-                ? { thinkingLevel: config.reasoningEffort || 'medium', includeThoughts: true }
-                : { thinkingBudget: config.thinkingBudget || 10000, includeThoughts: true },
-            },
-          }
-        } else if (config.provider === 'anthropic' || protocol === 'anthropic') {
-          // Anthropic Claude: thinking 需要 type + budgetTokens（必须参数）
-          streamParams.providerOptions = {
-            ...streamParams.providerOptions,
-            anthropic: {
-              ...(streamParams.providerOptions?.anthropic as object),
-              thinking: {
-                type: 'enabled',
-                budgetTokens: config.thinkingBudget || 10000,
-              },
-            },
-          }
-        } else {
-          // OpenAI (chat/responses) 及其他兼容协议
-          streamParams.providerOptions = {
-            ...streamParams.providerOptions,
-            openai: {
-              ...(streamParams.providerOptions?.openai as object),
-              reasoningEffort: config.reasoningEffort || 'medium',
-              reasoningSummary: 'detailed',
-            },
-          }
         }
       }
 
@@ -725,6 +678,7 @@ export class StreamingService {
 
     this.sendEvent(requestId, {
       type: 'done',
+      reasoning: streamingResult.reasoning,
       usage: streamingResult.usage,
       metadata: streamingResult.metadata,
     })
@@ -854,6 +808,7 @@ export class StreamingService {
         case 'done':
           logger.llm.info('[StreamingService] Sending done event', { requestId, channel: `llm:done:${requestId}` })
           this.window.webContents.send(`llm:done:${requestId}`, {
+            reasoning: event.reasoning,
             usage: event.usage ? {
               promptTokens: event.usage.inputTokens,
               completionTokens: event.usage.outputTokens,

@@ -827,20 +827,6 @@ const ToolCallCard = memo(function ToolCallCard({
             )}
         </div>
     )
-}, (prevProps, nextProps) => {
-    if (
-        prevProps.toolCall.id !== nextProps.toolCall.id ||
-        prevProps.toolCall.name !== nextProps.toolCall.name ||
-        prevProps.toolCall.status !== nextProps.toolCall.status ||
-        prevProps.toolCall.error !== nextProps.toolCall.error ||
-        prevProps.toolCall.result !== nextProps.toolCall.result ||
-        prevProps.isAwaitingApproval !== nextProps.isAwaitingApproval ||
-        prevProps.defaultExpanded !== nextProps.defaultExpanded
-    ) {
-        return false
-    }
-
-    return true
 })
 
 export default ToolCallCard

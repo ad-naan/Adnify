@@ -179,6 +179,12 @@ async function callLLM(
       logger.agent.warn('[Loop] No usage data in LLM result')
     }
 
+    if (assistantId && result.reasoning) {
+      useAgentStore.getState().updateMessage(assistantId, {
+        reasoning: result.reasoning,
+      } as Partial<AssistantMessage>)
+    }
+
     processor.cleanup()
     return result
   } catch (error) {
@@ -646,6 +652,7 @@ Try again with the corrected tool call.`,
     llmMessages.push({
       role: 'assistant',
       content: result.content || null,
+      reasoning_content: result.reasoning,
       tool_calls: result.toolCalls.map(tc => ({
         id: tc.id,
         type: 'function' as const,

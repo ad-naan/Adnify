@@ -123,8 +123,6 @@ export const createThreadSlice: StateCreator<
     createThread: (options) => {
         const thread = createEmptyThread()
         const activate = options?.activate ?? true
-        let shouldFlushImmediately = false
-
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
             let newBranches = state.branches
@@ -149,8 +147,6 @@ export const createThreadSlice: StateCreator<
                 }
             }
 
-            shouldFlushImmediately = activate && state.currentThreadId !== thread.id
-
             return {
                 threads: newThreads,
                 currentThreadId: activate ? thread.id : state.currentThreadId,
@@ -162,10 +158,6 @@ export const createThreadSlice: StateCreator<
                 activeBranchId: newActiveBranch,
             }
         })
-
-        if (shouldFlushImmediately) {
-            void agentSessionRepository.flush()
-        }
 
         return thread.id
     },
@@ -190,10 +182,6 @@ export const createThreadSlice: StateCreator<
             }
         })
 
-        if (renamed) {
-            void agentSessionRepository.flush()
-        }
-
         return renamed
     },
 
@@ -202,7 +190,6 @@ export const createThreadSlice: StateCreator<
         if (!state.threads[threadId]) return
         if (state.currentThreadId === threadId) return
         set({ currentThreadId: threadId })
-        void agentSessionRepository.flush()
 
         // 懒加载切换后线程的消息
         const thread = state.threads[threadId]

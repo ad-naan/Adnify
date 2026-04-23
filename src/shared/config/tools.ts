@@ -208,19 +208,22 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: `Edit an existing file. Choose EXACTLY ONE mode — NEVER mix parameters from different modes:
-- **String mode**: provide \`old_string\` + \`new_string\` only. Do NOT add start_line/end_line/content.
-- **Line mode**: provide \`start_line\` + \`end_line\` + \`content\` only. Do NOT add old_string/new_string.
-- **Batch mode**: provide \`edits\` array only. Do NOT add any other mode parameters.
-CRITICAL: Read the file first. NEVER pass parameters from two different modes in the same call. Use edit_file for any partial change to an existing file. For large files, prefer line mode or batch mode and keep old_string short and unique.`,
-        detailedDescription: `Three mutually exclusive editing modes:
-- String mode: old_string + new_string (include 3-5 lines context around the change)
-- Line mode: start_line + end_line + content (use exact line numbers from read_file)
-- Batch mode: edits=[{action, start_line, end_line, content}, ...] (auto-sorted, prevents line number shifts)
-- Use string mode only for one small, unique local change
-- Use line mode when line numbers are known or the target file is large
-- Use batch mode when one file needs 2+ separate non-overlapping edits
-- Large-file rule: avoid huge old_string/new_string payloads; prefer line mode or batch mode for broad edits`,
+        description: `Edit part of an existing file after reading it first.
+Choose one mode only: string mode (old_string + new_string), line mode (start_line + end_line + content), or batch mode (edits array).
+Never mix modes, never send empty placeholder edits, and never use edit_file to replace a whole file; use write_file for full replacement.`,
+        detailedDescription: `When to use:
+- Use edit_file for partial changes to an existing file after read_file.
+- Use write_file for new files or intentional full-file replacement.
+
+Choose one mode:
+- String mode: old_string + new_string for one small unique replacement.
+- Line mode: start_line + end_line + content when exact line numbers are known.
+- Batch mode: edits array for multiple non-overlapping changes in one file.
+
+Avoid:
+- Do not combine edits with top-level old_string/new_string/start_line/end_line/content.
+- Do not include empty mirrored placeholders such as content="".
+- Keep old_string short and unique; prefer line or batch mode for large files.`,
         customSchema: z.object({
             path: z.string().min(1, 'path is required'),
             old_string: z.string().optional(),
@@ -239,14 +242,16 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
                 })
             ).optional(),
         }).passthrough()
-            .transform((data) => normalizeEditFileArgs(data as Record<string, unknown>))
-            .refine(
-                (data) => resolveEditFileRequest(data as Record<string, unknown>).ok,
-                (data) => {
-                    const resolution = resolveEditFileRequest(data as Record<string, unknown>)
-                    return { message: resolution.ok ? 'Validation failed' : resolution.error }
-                }
-            ),
+            .superRefine((data, ctx) => {
+                const resolution = resolveEditFileRequest(data as Record<string, unknown>)
+                if (resolution.ok) return
+
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: resolution.error,
+                })
+            })
+            .transform((data) => normalizeEditFileArgs(data as Record<string, unknown>)),
         category: 'write',
         approvalType: 'none',
         parallel: false,
@@ -259,24 +264,24 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root', required: true },
-            old_string: { type: 'string', description: '[STRING MODE ONLY] Exact text to find — include 3-5 lines of context. Keep it short and unique; avoid huge blocks in large files. Do NOT use together with start_line/end_line/content/edits.' },
-            new_string: { type: 'string', description: '[STRING MODE ONLY] Replacement text. Do NOT use together with start_line/end_line/content/edits.' },
-            start_line: { type: 'number', description: '[LINE MODE ONLY] First line to replace (1-indexed). Do NOT use together with old_string/new_string/edits.' },
-            end_line: { type: 'number', description: '[LINE MODE ONLY] Last line to replace (inclusive). Do NOT use together with old_string/new_string/edits.' },
-            content: { type: 'string', description: '[LINE MODE ONLY] New content for the line range. Do NOT use together with old_string/new_string/edits.' },
-            replace_all: { type: 'boolean', description: '[STRING MODE ONLY] Replace all occurrences instead of just the first', default: false },
+            old_string: { type: 'string', description: '[string mode] Exact unique text to replace. Do not use with line or batch fields.' },
+            new_string: { type: 'string', description: '[string mode] Replacement text. Do not use with line or batch fields.' },
+            start_line: { type: 'number', description: '[line mode] First line to replace, 1-indexed. Do not use with string or batch fields.' },
+            end_line: { type: 'number', description: '[line mode] Last line to replace, inclusive. Do not use with string or batch fields.' },
+            content: { type: 'string', description: '[line mode] New content for the selected line range. Do not use with string or batch fields.' },
+            replace_all: { type: 'boolean', description: '[string mode] Replace all matches instead of the first match', default: false },
             edits: {
                 type: 'array',
-                description: 'Batch edits array (batch mode). Each edit: {action: "replace"|"insert"|"delete", start_line?, end_line?, after_line?, content?}. Auto-sorted to prevent line shifts.',
+                description: '[batch mode] Only field besides path. Each edit is replace, insert, or delete.',
                 items: {
                     type: 'object',
-                    description: 'Individual edit operation',
+                    description: '[batch mode] Individual edit operation',
                     properties: {
-                        action: { type: 'string', description: 'Action type ("replace", "insert", "delete")', enum: ['replace', 'insert', 'delete'] },
-                        start_line: { type: 'number', description: 'Start line (1-indexed, required for replace/delete)' },
-                        end_line: { type: 'number', description: 'End line (inclusive, required for replace/delete)' },
-                        after_line: { type: 'number', description: 'Line after which to insert (required for insert)' },
-                        content: { type: 'string', description: 'New content (required for replace/insert)' }
+                        action: { type: 'string', description: '[batch mode] replace, insert, or delete', enum: ['replace', 'insert', 'delete'] },
+                        start_line: { type: 'number', description: '[batch mode] Required for replace/delete' },
+                        end_line: { type: 'number', description: '[batch mode] Required for replace/delete' },
+                        after_line: { type: 'number', description: '[batch mode] Required for insert' },
+                        content: { type: 'string', description: '[batch mode] Required for replace/insert' }
                     }
                 }
             },
@@ -286,9 +291,11 @@ CRITICAL: Read the file first. NEVER pass parameters from two different modes in
     write_file: {
         name: 'write_file',
         displayName: 'Write File',
-        description: 'Write complete content to a file. Use ONLY for: (1) creating a new file, (2) replacing nearly all content of an existing file, or (3) intentionally regenerating a full artifact-style file. WARNING: overwrites all existing content. For partial changes to an existing file, use edit_file instead.',
+        description: `Write complete file content.
+Use for new files, intentional full-file replacement, or generated artifact files.
+Do not use for partial edits; write_file overwrites the whole file, so use edit_file for targeted changes.`,
         criticalRules: [
-            'OVERWRITES entire file — use edit_file for any partial change',
+            'Overwrites the entire file; use edit_file for partial changes',
             'Prefer over create_file_or_folder when you have file content ready',
             'Do not rewrite the same large file multiple times in one turn unless absolutely necessary',
             'If the file already exists and you are only changing a section, DO NOT use write_file',
@@ -1004,22 +1011,19 @@ Available skills are listed in the system prompt under "Available Skills". Each 
 export const FILE_EDIT_DECISION_GUIDE = `
 ## File Editing Decision Guide
 
-**Which tool to use:**
-1. NEW file that doesn't exist → \`write_file\` or \`create_file_or_folder\`
-2. REPLACE ENTIRE file content → \`write_file\`
-3. Edit part of an existing file → \`edit_file\` (choose one mode below)
+**1. Pick the tool**
+- New file or full-file replacement: use \`write_file\`.
+- Partial change to an existing file: use \`edit_file\` after \`read_file\`.
 
-**edit_file modes — pick EXACTLY ONE, NEVER mix:**
-| You have... | Use mode | Parameters |
-|-------------|----------|------------|
-| Exact text to find/replace | String mode | \`old_string\` + \`new_string\` |
-| Exact line numbers (from read_file) | Line mode | \`start_line\` + \`end_line\` + \`content\` |
-| Multiple non-overlapping edits | Batch mode | \`edits\` array |
+**2. Pick exactly one edit_file mode**
+- String mode: \`old_string\` + \`new_string\`.
+- Line mode: \`start_line\` + \`end_line\` + \`content\`.
+- Batch mode: \`edits\` array only.
 
-**⚠️ CRITICAL RULE: Each call to edit_file must use ONLY ONE mode.**
-- String mode: old_string + new_string → DO NOT add start_line/end_line/content
-- Line mode: start_line + end_line + content → DO NOT add old_string/new_string
-- Batch mode: edits array → DO NOT add any other parameters
+**3. Avoid invalid payloads**
+- Never mix string, line, and batch fields in one call.
+- Never send empty placeholder edits.
+- Prefer line or batch mode for large files.
 `
 
 /**

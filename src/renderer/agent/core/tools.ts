@@ -23,6 +23,8 @@ import type { ToolCall } from '@/shared/types'
 import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
 import { useAgentStore } from '../store/AgentStore'
 import { buildExecutionBatches } from './toolExecutionPlan'
+import { streamingEditService } from '../services/streamingEditService'
+import { resolveStreamingEditFilePath } from '../services/streamingEditPreview'
 
 // ===== 审批服务 =====
 
@@ -345,6 +347,16 @@ async function executeSingle(
 
     const meta = result.meta || {}
     const richContent = result.richContent
+    const previewPath = resolveStreamingEditFilePath(toolCall.arguments?.path, workspacePath)
+
+    if (toolCall.name === 'edit_file' && previewPath) {
+      if (result.success) {
+        const finalContent = typeof meta.newContent === 'string' ? meta.newContent : undefined
+        streamingEditService.completeEditByFilePath(previewPath, finalContent)
+      } else {
+        streamingEditService.cancelEditByFilePath(previewPath)
+      }
+    }
 
     // 更新状态，并将 meta 数据合并到 arguments._meta
     if (currentAssistantId) {
@@ -396,6 +408,11 @@ async function executeSingle(
       success: false,
       error: errorMsg,
     })
+
+    const previewPath = resolveStreamingEditFilePath(toolCall.arguments?.path, workspacePath)
+    if (toolCall.name === 'edit_file' && previewPath) {
+      streamingEditService.cancelEditByFilePath(previewPath)
+    }
 
     if (currentAssistantId) {
       store.updateToolCall(currentAssistantId, toolCall.id, {

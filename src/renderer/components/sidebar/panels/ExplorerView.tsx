@@ -4,7 +4,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
-import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair, Terminal } from 'lucide-react'
+import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair, Terminal, Clipboard } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
@@ -18,6 +18,8 @@ import { Button, Tooltip, ContextMenu, ContextMenuItem } from '../../ui'
 import { TreeSkeleton } from '../../ui/Loading'
 import { VirtualFileTree } from '../../tree/VirtualFileTree'
 import { terminalManager } from '@/renderer/services/TerminalManager'
+import { explorerClipboardService, type ExplorerClipboardItem } from '@/renderer/services/explorerClipboardService'
+import { formatShortcut } from '@/renderer/services/keybindingService'
 
 export interface TreeRefreshOptions {
   resetTree?: boolean
@@ -55,6 +57,9 @@ export function ExplorerView() {
     affectedPaths: [],
     deletedPaths: [],
   })
+  const [clipboardItem, setClipboardItem] = useState<ExplorerClipboardItem | null>(
+    () => explorerClipboardService.getState().item
+  )
 
   // Reveal active file in explorer
   const handleRevealActiveFile = useCallback(() => {
@@ -137,6 +142,12 @@ export function ExplorerView() {
     if (!workspacePath) return
     updateGitStatus()
   }, [workspacePath])
+
+  useEffect(() => {
+    return explorerClipboardService.subscribe(state => {
+      setClipboardItem(state.item)
+    })
+  }, [])
 
   // 监听文件变化事件
   useEffect(() => {
@@ -266,6 +277,13 @@ export function ExplorerView() {
     })
   }, [language, setTerminalVisible])
 
+  const handlePasteToWorkspaceRoot = useCallback(() => {
+    if (!workspacePath || !clipboardItem) return
+    window.dispatchEvent(new CustomEvent('explorer:paste-into', {
+      detail: { targetDirectoryPath: workspacePath },
+    }))
+  }, [clipboardItem, workspacePath])
+
   const rootMenuItems: ContextMenuItem[] = [
     { id: 'newFile', label: t('newFile', 'zh'), icon: FilePlus, onClick: () => handleRootCreate('file') },
     { id: 'newFolder', label: t('newFolder', 'zh'), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
@@ -277,6 +295,15 @@ export function ExplorerView() {
       onClick: () => workspacePath && openTerminalAtPath(workspacePath),
     },
     { id: 'sep2', label: '', separator: true },
+    {
+      id: 'paste',
+      label: t('paste', 'zh') || '粘贴',
+      icon: Clipboard,
+      shortcut: formatShortcut('Ctrl+V'),
+      disabled: !clipboardItem,
+      onClick: handlePasteToWorkspaceRoot,
+    },
+    { id: 'sepPaste', label: '', separator: true },
     { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ resetTree: true, refreshRoot: true }) },
     {
       id: 'reveal',
@@ -311,6 +338,15 @@ export function ExplorerView() {
           <Tooltip content={t('refresh', language)}>
             <button onClick={() => refreshFiles({ resetTree: true, refreshRoot: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
               <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+          <Tooltip content={t('paste', language) || 'Paste'}>
+            <button
+              onClick={handlePasteToWorkspaceRoot}
+              disabled={!clipboardItem}
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary disabled:text-text-muted/35 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-all active:scale-90 disabled:active:scale-100"
+            >
+              <Clipboard className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
         </div>

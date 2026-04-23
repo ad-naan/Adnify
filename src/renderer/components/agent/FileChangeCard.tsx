@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
+import { resolveStreamingEditFilePath } from '@renderer/agent/services/streamingEditPreview'
 import { useToolCardExpansion } from '@renderer/hooks'
 import InlineDiffPreview, { getApproxLineDeltaStats, getDiffStats } from './InlineDiffPreview'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
@@ -44,6 +45,9 @@ function FileChangeCard({
 
     const meta = args._meta as Record<string, unknown> | undefined
     const filePath = (args.path || meta?.filePath) as string || ''
+    const resolvedStreamingFilePath = useMemo(() => {
+        return resolveStreamingEditFilePath(filePath, workspacePath) || ''
+    }, [filePath, workspacePath])
     const isLargeWrite = meta?.isLargeWrite === true || meta?.contentTruncated === true
 
     // Local streamed content used by the diff preview.
@@ -56,17 +60,17 @@ function FileChangeCard({
             return
         }
 
-        const editState = streamingEditService.getEditByFilePath(filePath)
+        const editState = streamingEditService.getEditByFilePath(resolvedStreamingFilePath)
         if (editState) {
             setStreamingContent(editState.currentContent)
         }
 
-        const unsubscribe = streamingEditService.subscribeByFilePath(filePath, state => {
+        const unsubscribe = streamingEditService.subscribeByFilePath(resolvedStreamingFilePath, state => {
             setStreamingContent(state?.currentContent ?? null)
         })
 
         return unsubscribe
-    }, [filePath, isRunning, isStreaming])
+    }, [resolvedStreamingFilePath, isRunning, isStreaming])
 
     // Build old content for diffing.
     const oldContent = useMemo(() => {

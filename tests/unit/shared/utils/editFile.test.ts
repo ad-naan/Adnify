@@ -93,6 +93,56 @@ describe('editFile utils', () => {
     }
   })
 
+  it('resolves line mode when an empty batch placeholder mirrors the same line range', () => {
+    const result = resolveEditFileRequest({
+      path: 'app/page.tsx',
+      content: 'export default function HomePage() {\n  return null\n}',
+      edits: [
+        {
+          action: 'replace',
+          start_line: 1,
+          end_line: 356,
+          content: '',
+        },
+      ],
+      start_line: 1,
+      end_line: 356,
+      old_string: '',
+      new_string: '',
+      replace_all: false,
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok && result.mode === 'line') {
+      expect(result.args.content).toContain('HomePage')
+      expect(result.normalized.edits).toBeUndefined()
+      expect(result.normalized.old_string).toBeUndefined()
+      expect(result.normalized.new_string).toBeUndefined()
+    }
+  })
+
+  it('still rejects meaningful batch edits mixed with top-level content', () => {
+    const result = resolveEditFileRequest({
+      path: 'app/page.tsx',
+      content: 'export default function HomePage() {}',
+      edits: [
+        {
+          action: 'replace',
+          start_line: 1,
+          end_line: 10,
+          content: 'const fromBatch = true',
+        },
+      ],
+      start_line: 1,
+      end_line: 356,
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toContain('Batch mode cannot be combined')
+    }
+  })
+
   it('rejects genuine mixed modes', () => {
     const result = resolveEditFileRequest({
       path: 'src/example.ts',

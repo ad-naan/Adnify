@@ -634,6 +634,8 @@ export const zh = {
 
   // Context Menu
   'copyFile': '复制当前文件',
+  'copy': '复制',
+  'paste': '粘贴',
   'copyPath': '复制路径',
   'copyRelativePath': '复制相对路径',
   'revealInExplorer': '在资源管理器中显示',

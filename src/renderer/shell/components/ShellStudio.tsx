@@ -266,8 +266,13 @@ export default function ShellStudio() {
     if (!container || !activeSession) return
 
     terminalManager.mountTerminal(activeSession.id, container)
-    const frame = window.requestAnimationFrame(() => terminalManager.fitTerminal(activeSession.id))
-    const observer = new ResizeObserver(() => terminalManager.fitTerminal(activeSession.id))
+    const fitIfVisible = () => {
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        terminalManager.fitTerminal(activeSession.id)
+      }
+    }
+    const frame = window.requestAnimationFrame(fitIfVisible)
+    const observer = new ResizeObserver(fitIfVisible)
     observer.observe(container)
 
     return () => {
@@ -384,47 +389,37 @@ export default function ShellStudio() {
     setShowComposer(true)
   }, [language, setInputPrompt, setShowComposer, terminalPreview])
 
+  const fitActiveTerminalIfVisible = useCallback(() => {
+    if (activeSession?.id && terminalContainerRef.current && terminalContainerRef.current.clientWidth > 0 && terminalContainerRef.current.clientHeight > 0) {
+      terminalManager.fitTerminal(activeSession.id)
+    }
+  }, [activeSession?.id])
+
   const toggleFocusMode = useCallback(() => {
     setFocusMode((prev) => !prev)
-    window.requestAnimationFrame(() => {
-      if (activeSession?.id) {
-        terminalManager.fitTerminal(activeSession.id)
-      }
-    })
-  }, [activeSession?.id])
+    window.requestAnimationFrame(fitActiveTerminalIfVisible)
+  }, [fitActiveTerminalIfVisible])
 
   const toggleNavCollapsed = useCallback(() => {
     setNavCollapsed((prev) => !prev)
-    window.requestAnimationFrame(() => {
-      if (activeSession?.id) {
-        terminalManager.fitTerminal(activeSession.id)
-      }
-    })
-  }, [activeSession?.id])
+    window.requestAnimationFrame(fitActiveTerminalIfVisible)
+  }, [fitActiveTerminalIfVisible])
 
   const resetNavWidth = useCallback(() => {
     setNavWidth(DEFAULT_NAV_WIDTH)
     if (navRef.current) {
       navRef.current.style.width = `${DEFAULT_NAV_WIDTH}px`
     }
-    window.requestAnimationFrame(() => {
-      if (activeSession?.id) {
-        terminalManager.fitTerminal(activeSession.id)
-      }
-    })
-  }, [activeSession?.id])
+    window.requestAnimationFrame(fitActiveTerminalIfVisible)
+  }, [fitActiveTerminalIfVisible])
 
   const resetInspectorWidth = useCallback(() => {
     setInspectorWidth(DEFAULT_INSPECTOR_WIDTH)
     if (inspectorRef.current) {
       inspectorRef.current.style.width = `${DEFAULT_INSPECTOR_WIDTH}px`
     }
-    window.requestAnimationFrame(() => {
-      if (activeSession?.id) {
-        terminalManager.fitTerminal(activeSession.id)
-      }
-    })
-  }, [activeSession?.id])
+    window.requestAnimationFrame(fitActiveTerminalIfVisible)
+  }, [fitActiveTerminalIfVisible])
 
   const openSftpPanel = useCallback((server: RemoteServerConfig, label: string) => {
     setSftpPanelServer(server)
@@ -658,14 +653,22 @@ export default function ShellStudio() {
                     const commandSession = commandInfo?.current || commandInfo?.last || null
                     const commandStatus = getCommandStatusMeta(commandSession, language)
                     return (
-                      <button
+                      <div
                         key={session.id}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            terminalManager.setActiveTerminal(session.id)
+                            setSelection({ kind: 'session', id: session.id })
+                          }
+                        }}
                         onClick={() => {
                           terminalManager.setActiveTerminal(session.id)
                           setSelection({ kind: 'session', id: session.id })
                         }}
                         title={sessionContent.subtitle ? `${sessionContent.title}\n${sessionContent.subtitle}` : sessionContent.title}
-                        className={`group min-w-[120px] max-w-[220px] rounded-2xl border px-3 py-2 text-left transition-all ${active ? 'border-accent/40 bg-accent/10' : 'border-border bg-surface/30 hover:border-border-active hover:bg-surface/70'}`}
+                        className={`group cursor-pointer min-w-[120px] max-w-[220px] rounded-2xl border px-3 py-2 text-left transition-all ${active ? 'border-accent/40 bg-accent/10' : 'border-border bg-surface/30 hover:border-border-active hover:bg-surface/70'}`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0 flex-1">
@@ -690,7 +693,7 @@ export default function ShellStudio() {
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                      </button>
+                      </div>
                     )
                   })}
                 </div>

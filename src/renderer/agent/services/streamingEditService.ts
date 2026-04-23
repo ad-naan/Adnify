@@ -5,7 +5,6 @@
 
 import { logger } from '@utils/Logger'
 import { StreamingEditState } from '../types'
-import { composerService } from './composerService'
 
 type StreamingEditListener = (state: StreamingEditState) => void
 type FilePathEditListener = (state: StreamingEditState | null) => void
@@ -42,13 +41,18 @@ class StreamingEditService {
 	private listeners: Map<string, Set<StreamingEditListener>> = new Map()
 	private filePathListeners: Map<string, Set<FilePathEditListener>> = new Map()
 	private globalListeners: Set<GlobalChangeListener> = new Set()
-	private cleanupTimer: ReturnType<typeof setInterval> | null = null
 
 	private filePathIndex: Map<string, string> = new Map()
 	private pendingEditNotifications: Map<string, StreamingEditState> = new Map()
 	private pendingFilePathNotifications: Map<string, StreamingEditState | null> = new Map()
 	private pendingGlobalNotification = false
 	private notificationFrame: ScheduledFrame | null = null
+
+	constructor() {
+		setInterval(() => {
+			this.cleanup()
+		}, 30000)
+	}
 
 	/**
 	 * Start a streamed edit session.
@@ -84,17 +88,6 @@ class StreamingEditService {
 	}
 
 	/**
-	 * Append streamed content to an active edit.
-	 */
-	appendContent(editId: string, content: string): void {
-		const state = this.activeEdits.get(editId)
-		if (!state) return
-
-		state.currentContent += content
-		this.queueStateNotification(state)
-	}
-
-	/**
 	 * Replace the current streamed content.
 	 */
 	replaceContent(editId: string, newContent: string): void {
@@ -103,22 +96,6 @@ class StreamingEditService {
 
 		state.currentContent = newContent
 		this.queueStateNotification(state)
-	}
-
-	/**
-	 * Apply an incremental replacement update.
-	 */
-	applyDelta(editId: string, oldString: string, newString: string): boolean {
-		const state = this.activeEdits.get(editId)
-		if (!state) return false
-
-		if (state.currentContent.includes(oldString)) {
-			state.currentContent = state.currentContent.replace(oldString, newString)
-			this.queueStateNotification(state)
-			return true
-		}
-
-		return false
 	}
 
 	/**
@@ -150,6 +127,17 @@ class StreamingEditService {
 		return state
 	}
 
+	completeEditByFilePath(filePath: string, finalContent?: string): StreamingEditState | null {
+		const editId = this.filePathIndex.get(filePath)
+		if (!editId) return null
+
+		if (typeof finalContent === 'string') {
+			this.replaceContent(editId, finalContent)
+		}
+
+		return this.completeEdit(editId)
+	}
+
 	/**
 	 * Cancel a streamed edit.
 	 */
@@ -164,6 +152,12 @@ class StreamingEditService {
 		this.activeEdits.delete(editId)
 		this.listeners.delete(editId)
 		this.notifyGlobalListeners()
+	}
+
+	cancelEditByFilePath(filePath: string): void {
+		const editId = this.filePathIndex.get(filePath)
+		if (!editId) return
+		this.cancelEdit(editId)
 	}
 
 	/**
@@ -352,29 +346,6 @@ class StreamingEditService {
 		return this.activeEdits.get(editId) || null
 	}
 
-	/**
-	 * Update streamed content and mirror it to composer state.
-	 */
-	async updateStreamingContent(filePath: string, newContent: string): Promise<void> {
-		const editId = this.filePathIndex.get(filePath)
-		if (editId) {
-			this.replaceContent(editId, newContent)
-		}
-
-		const state = composerService.getState()
-		if (state.currentSession) {
-			const change = state.currentSession.changes.find(c => c.filePath === filePath)
-			if (change) {
-				change.newContent = newContent
-				// Recompute simple line stats for the preview.
-				const oldLines = (change.oldContent || '').split('\n').length
-				const newLines = newContent.split('\n').length
-				change.linesAdded = Math.max(0, newLines - oldLines)
-				change.linesRemoved = Math.max(0, oldLines - newLines)
-			}
-		}
-	}
-
 	private queueStateNotification(state: StreamingEditState): void {
 		this.pendingEditNotifications.set(state.editId, state)
 		this.pendingFilePathNotifications.set(state.filePath, state)
@@ -426,9 +397,3 @@ class StreamingEditService {
 
 // Singleton export.
 export const streamingEditService = new StreamingEditService()
-
-if (!streamingEditService['cleanupTimer']) {
-	streamingEditService['cleanupTimer'] = setInterval(() => {
-		streamingEditService.cleanup()
-	}, 30000)
-}

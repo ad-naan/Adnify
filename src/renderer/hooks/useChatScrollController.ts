@@ -26,7 +26,6 @@ export function useChatScrollController({
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const isAutoScrollingRef = useRef(false)
-  const lastAutoScrollAtRef = useRef(0)
   const atBottomRef = useRef(true)
   const pendingBottomSnapRef = useRef(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
@@ -58,40 +57,48 @@ export function useChatScrollController({
   }, [getBottomMetrics, syncBottomState])
 
   const scrollToBottom = useCallback((behavior: 'auto' | 'smooth' = 'smooth') => {
+    if (messageCount <= 0) return
+
+    atBottomRef.current = true
+    setShowScrollButton(false)
+
     requestAnimationFrame(() => {
       virtuosoRef.current?.scrollToIndex({
         index: messageCount - 1,
         align: 'end',
         behavior,
       })
+      requestAnimationFrame(syncBottomStateFromScroller)
     })
-    syncBottomState(true, false)
-  }, [messageCount, syncBottomState])
+  }, [messageCount, syncBottomStateFromScroller])
 
   const followOutput = useCallback((isListAtBottom: boolean) => {
-    if (isStreaming) return isListAtBottom ? 'smooth' : false
+    if (isStreaming) return isListAtBottom ? 'auto' : false
     return isListAtBottom ? 'auto' : false
   }, [isStreaming])
 
   const handleTotalListHeightChanged = useCallback(() => {
-    const { bottom } = getBottomMetrics()
-    if (!bottom || !isStreaming) {
-      syncBottomStateFromScroller()
+    if (!isStreaming) {
+      requestAnimationFrame(syncBottomStateFromScroller)
       return
     }
 
-    const now = Date.now()
-    if (now - lastAutoScrollAtRef.current < 120) return
+    if (!atBottomRef.current) {
+      requestAnimationFrame(syncBottomStateFromScroller)
+      return
+    }
 
-    lastAutoScrollAtRef.current = now
     isAutoScrollingRef.current = true
-    virtuosoRef.current?.autoscrollToBottom()
+    setShowScrollButton(false)
 
-    setTimeout(() => {
-      isAutoScrollingRef.current = false
-      syncBottomStateFromScroller()
-    }, 50)
-  }, [getBottomMetrics, isStreaming, syncBottomStateFromScroller])
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.autoscrollToBottom()
+      requestAnimationFrame(() => {
+        isAutoScrollingRef.current = false
+        syncBottomStateFromScroller()
+      })
+    })
+  }, [isStreaming, syncBottomStateFromScroller])
 
   const handleBottomStateChange = useCallback((bottom: boolean) => {
     if (isAutoScrollingRef.current) return
@@ -100,20 +107,10 @@ export function useChatScrollController({
     syncBottomState(bottom, hasOverflow)
   }, [getBottomMetrics, syncBottomState])
 
-  const isRangeAtBottom = useCallback((range: VisibleRange) => {
-    const lastIndex = messageCount - 1
-    return lastIndex <= 0 || range.endIndex >= lastIndex
-  }, [messageCount])
-
-  const handleVisibleRangeChanged = useCallback((range: VisibleRange) => {
-    if (isAutoScrollingRef.current) return
-
-    const bottom = isRangeAtBottom(range)
-    if (bottom !== atBottomRef.current || !bottom) {
-      const { hasOverflow } = getBottomMetrics()
-      syncBottomState(bottom, hasOverflow)
-    }
-  }, [getBottomMetrics, isRangeAtBottom, syncBottomState])
+  const handleVisibleRangeChanged = useCallback((_range: VisibleRange) => {
+    // Scroll metrics are the source of truth. Virtuoso range updates can arrive
+    // before DOM scroll measurements settle and cause stale bottom-button state.
+  }, [])
 
   const attachScrollerNode = useCallback((node: HTMLDivElement | null) => {
     scrollerRef.current = node

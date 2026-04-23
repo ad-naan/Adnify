@@ -480,15 +480,19 @@ export function registerSecureFileHandlers(
 
     try {
       const stat = await fsPromises.stat(sourcePath)
-      if (!stat.isFile()) {
-        logger.security.warn('[File] copy skipped, source is not a file:', sourcePath)
-        return false
-      }
-
       await fsPromises.mkdir(path.dirname(destinationPath), { recursive: true })
-      await fsPromises.copyFile(sourcePath, destinationPath)
+      if (stat.isDirectory()) {
+        await fsPromises.cp(sourcePath, destinationPath, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        })
+      } else {
+        await fsPromises.copyFile(sourcePath, destinationPath)
+      }
       securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, true, {
         destinationPath,
+        isDirectory: stat.isDirectory(),
         bypass: true,
       })
       return true

@@ -206,6 +206,7 @@ export function useAgentChangeState() {
 export function useAgentViewState() {
   const {
     messages,
+    messageListVersion,
     streamState,
     contextItems,
     isStreaming,
@@ -215,6 +216,7 @@ export function useAgentViewState() {
     currentThreadId,
   } = useAgentStore(useShallow(state => ({
     messages: selectMessageListState(state).messages,
+    messageListVersion: selectMessageListState(state).version,
     streamState: selectStreamState(state),
     contextItems: selectContextItems(state),
     isStreaming: selectIsStreaming(state),
@@ -234,6 +236,7 @@ export function useAgentViewState() {
 
   return {
     messages,
+    messageListVersion,
     streamState,
     contextItems,
     isStreaming,

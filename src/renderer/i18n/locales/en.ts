@@ -633,6 +633,8 @@ export const en = {
 
   // Context Menu
   'copyFile': 'Copy File',
+  'copy': 'Copy',
+  'paste': 'Paste',
   'copyPath': 'Copy Path',
   'copyRelativePath': 'Copy Relative Path',
   'revealInExplorer': 'Reveal in Explorer',

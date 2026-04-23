@@ -22,10 +22,12 @@ import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
 import { t } from '@renderer/i18n'
 import { getDirPath, joinPath, pathEquals, normalizePath } from '@shared/utils/pathUtils'
+import { formatShortcut, keybindingService } from '@services/keybindingService'
 import { globalConfirm } from '../common/ConfirmDialog'
 import { toast } from '../common/ToastProvider'
 import { Input, ContextMenu, ContextMenuItem } from '../ui'
 import { directoryCacheService } from '@services/directoryCacheService'
+import { explorerClipboardService, type ExplorerClipboardItem } from '@services/explorerClipboardService'
 import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
@@ -106,6 +108,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     y: number
     node: FlattenedNode
   } | null>(null)
+  const [clipboardItem, setClipboardItem] = useState<ExplorerClipboardItem | null>(
+    () => explorerClipboardService.getState().item
+  )
 
   // 重命名状态
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
@@ -113,6 +118,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const renameInputRef = useRef<HTMLInputElement>(null)
   const [dragOverPath, setDragOverPath] = useState<string | null>(null)
   const dragSourcePathRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    return explorerClipboardService.subscribe(state => {
+      setClipboardItem(state.item)
+    })
+  }, [])
 
   // 监听容器尺寸变化
   useEffect(() => {
@@ -131,14 +142,22 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     return () => observer.disconnect()
   }, [])
 
+  const childrenCacheRef = useRef(childrenCache)
+  const loadingDirsRef = useRef(loadingDirs)
+  
+  useEffect(() => {
+    childrenCacheRef.current = childrenCache
+    loadingDirsRef.current = loadingDirs
+  }, [childrenCache, loadingDirs])
+
   // 加载子目录
   const loadChildren = useCallback(async (
     path: string,
     options?: { forceRefresh?: boolean; showLoading?: boolean }
   ) => {
     const forceRefresh = options?.forceRefresh === true
-    const hasCachedChildren = childrenCache.has(path)
-    if ((!forceRefresh && hasCachedChildren) || loadingDirs.has(path)) return
+    const hasCachedChildren = childrenCacheRef.current.has(path)
+    if ((!forceRefresh && hasCachedChildren) || loadingDirsRef.current.has(path)) return
 
     const shouldShowLoading = options?.showLoading ?? !hasCachedChildren
     if (shouldShowLoading) {
@@ -162,7 +181,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         })
       }
     }
-  }, [childrenCache, loadingDirs])
+  }, [])
 
   useEffect(() => {
     setChildrenCache(new Map())
@@ -175,11 +194,15 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     if (!refreshSignal.tick) return
 
     setChildrenCache((prev) => {
+      let changed = false
       const next = new Map(prev)
 
       refreshSignal.affectedPaths.forEach((path) => {
         if (!expandedFolders.has(path)) {
-          next.delete(path)
+          if (next.has(path)) {
+            next.delete(path)
+            changed = true
+          }
         }
       })
 
@@ -187,11 +210,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         for (const key of next.keys()) {
           if (pathEquals(key, deletedPath) || key.startsWith(`${deletedPath}/`) || key.startsWith(`${deletedPath}\\`)) {
             next.delete(key)
+            changed = true
           }
         }
       })
 
-      return next
+      return changed ? next : prev
     })
 
     refreshSignal.affectedPaths.forEach((path) => {
@@ -204,11 +228,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   // 展开文件夹时加载子目录
   useEffect(() => {
     expandedFolders.forEach((path) => {
-      if (!childrenCache.has(path)) {
+      if (!childrenCacheRef.current.has(path)) {
         loadChildren(path)
       }
     })
-  }, [expandedFolders, childrenCache, loadChildren])
+  }, [expandedFolders, loadChildren])
 
   // 滚动到指定文件的状态（使用文件路径作为触发器）
   const [scrollToFile, setScrollToFile] = useState<string | null>(null)
@@ -216,7 +240,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   // 加载目录并返回子项（直接返回，不依赖状态更新）
   const loadDirectoryChildren = useCallback(async (dirPath: string): Promise<FileItem[]> => {
     // 先检查缓存
-    const cached = childrenCache.get(dirPath)
+    const cached = childrenCacheRef.current.get(dirPath)
     if (cached) return cached
 
     try {
@@ -227,7 +251,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     } catch {
       return []
     }
-  }, [childrenCache])
+  }, [])
 
   // 展开文件所在的所有父目录
   const revealFile = useCallback(async (filePath: string) => {
@@ -510,41 +534,86 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     setRenamingPath(null)
   }, [renamingPath, renameValue, flattenedNodes, onRefresh, workspacePath])
 
-  const handleCopyFile = useCallback(async (node: FlattenedNode) => {
-    if (node.item.isDirectory) {
-      toast.warning(language === 'zh' ? '暂不支持复制文件夹' : 'Copying folders is not supported yet')
-      return
-    }
+  // 全局快捷键处理 (F2 重命名)
+  const handleCopyItem = useCallback((node: FlattenedNode) => {
+    explorerClipboardService.setItem({
+      path: node.item.path,
+      name: node.item.name,
+      isDirectory: node.item.isDirectory,
+      copiedAt: Date.now(),
+    })
+    toast.success(node.item.isDirectory
+      ? (language === 'zh' ? '目录已复制' : 'Folder copied')
+      : (language === 'zh' ? '文件已复制' : 'File copied'))
+  }, [language])
 
-    const parentPath = getDirPath(node.item.path)
-    const nameParts = node.item.name.match(/^(.*?)(\.[^.]*)?$/)
-    const baseName = nameParts?.[1] || node.item.name
-    const extension = nameParts?.[2] || ''
+  const getCopyDestinationPath = useCallback(async (targetDirectoryPath: string, item: ExplorerClipboardItem) => {
+    const nameParts = item.isDirectory ? null : item.name.match(/^(.*?)(\.[^.]*)?$/)
+    const baseName = item.isDirectory ? item.name : (nameParts?.[1] || item.name)
+    const extension = item.isDirectory ? '' : (nameParts?.[2] || '')
 
     let candidateName = `${baseName} - 副本${extension}`
-    let candidatePath = joinPath(parentPath, candidateName)
+    let candidatePath = joinPath(targetDirectoryPath, candidateName)
     let counter = 2
 
     while (await api.file.exists(candidatePath)) {
       candidateName = `${baseName} - 副本 ${counter}${extension}`
-      candidatePath = joinPath(parentPath, candidateName)
+      candidatePath = joinPath(targetDirectoryPath, candidateName)
       counter += 1
     }
 
-    const success = await api.file.copy(node.item.path, candidatePath)
-    if (success) {
-      directoryCacheService.invalidate(parentPath)
-      onRefresh({
-        affectedPaths: [parentPath],
-        refreshRoot: pathEquals(parentPath, workspacePath || ''),
-      })
-      toast.success(language === 'zh' ? '文件已复制' : 'File copied')
-    } else {
-      toast.error(language === 'zh' ? '复制文件失败' : 'Failed to copy file')
-    }
-  }, [language, onRefresh, workspacePath])
+    return candidatePath
+  }, [])
 
-  // 全局快捷键处理 (F2 重命名)
+  const handlePasteIntoDirectory = useCallback(async (targetDirectoryPath: string) => {
+    const item = explorerClipboardService.getState().item
+    if (!item) return
+
+    const normalizedSourcePath = normalizePath(item.path)
+    const normalizedTargetDirectoryPath = normalizePath(targetDirectoryPath)
+    if (!normalizedSourcePath || !normalizedTargetDirectoryPath) return
+
+    if (item.isDirectory && normalizedTargetDirectoryPath.startsWith(`${normalizedSourcePath}/`)) {
+      toast.error(language === 'zh' ? '不能将目录粘贴到自身内部' : 'Cannot paste a folder inside itself')
+      return
+    }
+
+    const destinationPath = await getCopyDestinationPath(targetDirectoryPath, item)
+    const success = await api.file.copy(item.path, destinationPath)
+    if (!success) {
+      toast.error(language === 'zh' ? '粘贴失败' : 'Paste failed')
+      return
+    }
+
+    directoryCacheService.invalidate(targetDirectoryPath)
+    onRefresh({
+      affectedPaths: [targetDirectoryPath],
+      refreshRoot: pathEquals(targetDirectoryPath, workspacePath || ''),
+    })
+    toast.success(item.isDirectory
+      ? (language === 'zh' ? '目录已粘贴' : 'Folder pasted')
+      : (language === 'zh' ? '文件已粘贴' : 'File pasted'))
+  }, [getCopyDestinationPath, language, onRefresh, workspacePath])
+
+  const handlePasteForNode = useCallback((node: FlattenedNode) => {
+    const targetDirectoryPath = node.item.isDirectory ? node.item.path : getDirPath(node.item.path)
+    void handlePasteIntoDirectory(targetDirectoryPath)
+  }, [handlePasteIntoDirectory])
+
+  useEffect(() => {
+    const handlePasteInto = (event: Event) => {
+      const customEvent = event as CustomEvent<{ targetDirectoryPath?: string }>
+      const targetDirectoryPath = customEvent.detail?.targetDirectoryPath
+      if (!targetDirectoryPath) return
+      void handlePasteIntoDirectory(targetDirectoryPath)
+    }
+
+    window.addEventListener('explorer:paste-into', handlePasteInto)
+    return () => {
+      window.removeEventListener('explorer:paste-into', handlePasteInto)
+    }
+  }, [handlePasteIntoDirectory])
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'F2' && focusedPath && !renamingPath) {
       e.preventDefault()
@@ -552,8 +621,31 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       if (node) {
         handleRenameStart(node)
       }
+      return
     }
-  }, [focusedPath, renamingPath, flattenedNodes, handleRenameStart])
+
+    if (keybindingService.matches(e, 'explorer.copy') && focusedPath) {
+      const node = flattenedNodes.find(n => pathEquals(n.item.path, focusedPath))
+      if (node) {
+        e.preventDefault()
+        handleCopyItem(node)
+      }
+      return
+    }
+
+    if (keybindingService.matches(e, 'explorer.paste') && clipboardItem) {
+      e.preventDefault()
+      const node = focusedPath
+        ? flattenedNodes.find(n => pathEquals(n.item.path, focusedPath))
+        : null
+
+      if (node) {
+        handlePasteForNode(node)
+      } else if (workspacePath) {
+        void handlePasteIntoDirectory(workspacePath)
+      }
+    }
+  }, [clipboardItem, focusedPath, flattenedNodes, handleCopyItem, handlePasteForNode, handlePasteIntoDirectory, renamingPath, workspacePath, handleRenameStart])
 
   const handleCopyPath = useCallback((node: FlattenedNode) => {
     navigator.clipboard.writeText(node.item.path)
@@ -664,6 +756,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'sep1', label: '', separator: true },
         { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
         { id: 'sep2', label: '', separator: true },
+        { id: 'copy', label: t('copy', contextMenuLanguage) || '复制', icon: Copy, shortcut: formatShortcut('Ctrl+C'), onClick: () => handleCopyItem(node) },
+        { id: 'paste', label: t('paste', contextMenuLanguage) || '粘贴', icon: Clipboard, shortcut: formatShortcut('Ctrl+V'), disabled: !clipboardItem, onClick: () => handlePasteForNode(node) },
+        { id: 'sepClipboard', label: '', separator: true },
         { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
         { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
         { id: 'sep3', label: '', separator: true },
@@ -678,7 +773,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     const items: ContextMenuItem[] = [
       { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
       { id: 'sep1', label: '', separator: true },
-      { id: 'copyFile', label: t('copyFile', contextMenuLanguage) || '复制当前文件', icon: Copy, onClick: () => handleCopyFile(node) },
+      { id: 'copy', label: t('copy', contextMenuLanguage) || '复制', icon: Copy, shortcut: formatShortcut('Ctrl+C'), onClick: () => handleCopyItem(node) },
+      { id: 'paste', label: t('paste', contextMenuLanguage) || '粘贴', icon: Clipboard, shortcut: formatShortcut('Ctrl+V'), disabled: !clipboardItem, onClick: () => handlePasteForNode(node) },
+      { id: 'sepClipboard', label: '', separator: true },
       { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
       { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
       { id: 'sep2', label: '', separator: true },
@@ -694,7 +791,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
 
     return items
-  }, [handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyFile, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
+  }, [clipboardItem, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyItem, handlePasteForNode, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {

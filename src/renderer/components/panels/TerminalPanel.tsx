@@ -98,25 +98,6 @@ const TerminalPanel = memo(function TerminalPanel() {
     // ===== 挂载/卸载 xterm 到/从 容器 =====
 
     useEffect(() => {
-        // 面板隐藏时的资源释放策略：
-        // - Agent 终端：仅 unmount xterm（释放 DOM/WebGL），保留 PTY 进程以便复用
-        // - 用户终端：完全销毁（PTY + buffer），避免后台资源空占
-        if (!terminalVisible) {
-            const ids = managerState.terminals.map(t => t.id)
-            for (const id of ids) {
-                const terminal = managerState.terminals.find(t => t.id === id)
-                if (terminal?.isAgent) {
-                    // Agent 终端：只释放前端资源，保留 PTY
-                    terminalManager.unmountTerminal(id)
-                } else {
-                    // 用户终端：完全销毁
-                    terminalManager.closeTerminal(id)
-                }
-            }
-            mountedTerminals.current.clear()
-            return
-        }
-
         // 遍历所有终端实例
         for (const terminal of managerState.terminals) {
             const container = containerRefs.current.get(terminal.id)
@@ -145,6 +126,15 @@ const TerminalPanel = memo(function TerminalPanel() {
 
         refitVisibleTerminals()
     }, [managerState.terminals, managerState.activeId, terminalVisible, isSplitView, refitVisibleTerminals])
+
+    useEffect(() => {
+        return () => {
+            for (const id of mountedTerminals.current) {
+                terminalManager.unmountTerminal(id)
+            }
+            mountedTerminals.current.clear()
+        }
+    }, [])
 
     // ===== 初始化 =====
 
@@ -332,8 +322,6 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [managerState.terminals.length, setTerminalLayout])
 
     const closePanel = useCallback(() => {
-        // 只隐藏面板，保留所有终端进程和 buffer
-        // 参考 VS Code / Cursor：关闭面板不销毁终端，重新打开时 replay 历史内容
         setTerminalVisible(false)
     }, [setTerminalVisible])
 

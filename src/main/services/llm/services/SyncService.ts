@@ -43,6 +43,7 @@ export class SyncService {
       const result = await executePreparedRequest({
         config,
         operation: 'sync',
+        originalMessages: messages,
         baseMessages,
         abortSignal,
         execute: async ({ messages: preparedMessages, providerOptions }) =>
