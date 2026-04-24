@@ -28,6 +28,12 @@ export interface TreeRefreshOptions {
   refreshRoot?: boolean
 }
 
+interface WorkspaceFilesChangedDetail {
+  affectedPaths?: string[]
+  deletedPaths?: string[]
+  refreshRoot?: boolean
+}
+
 export function ExplorerView() {
   const {
     workspacePath,
@@ -148,6 +154,36 @@ export function ExplorerView() {
       setClipboardItem(state.item)
     })
   }, [])
+
+  useEffect(() => {
+    if (!workspacePath) return
+
+    const handleWorkspaceFilesChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<WorkspaceFilesChangedDetail>
+      const affectedPaths = (customEvent.detail?.affectedPaths ?? [])
+        .filter((path): path is string => Boolean(path))
+        .filter((path) => path === workspacePath || pathStartsWith(path, workspacePath))
+      const deletedPaths = (customEvent.detail?.deletedPaths ?? [])
+        .filter((path): path is string => Boolean(path))
+        .filter((path) => path === workspacePath || pathStartsWith(path, workspacePath))
+      const refreshRoot = customEvent.detail?.refreshRoot === true
+
+      if (affectedPaths.length === 0 && deletedPaths.length === 0 && !refreshRoot) {
+        return
+      }
+
+      void refreshFiles({
+        affectedPaths,
+        deletedPaths,
+        refreshRoot,
+      })
+    }
+
+    window.addEventListener('workspace:files-changed', handleWorkspaceFilesChanged)
+    return () => {
+      window.removeEventListener('workspace:files-changed', handleWorkspaceFilesChanged)
+    }
+  }, [refreshFiles, workspacePath])
 
   // 监听文件变化事件
   useEffect(() => {

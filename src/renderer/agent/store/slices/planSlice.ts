@@ -38,6 +38,7 @@ export interface PlanSliceActions {
     markTaskCompleted: (planId: string, taskId: string, output: string) => void
     markTaskFailed: (planId: string, taskId: string, error: string) => void
     markTaskSkipped: (planId: string, taskId: string, reason: string) => void
+    resetTasksForExecution: (planId: string, options?: { includeCompleted?: boolean }) => void
 
     startExecution: (planId: string) => void
     pauseExecution: (planId?: string) => void
@@ -225,6 +226,41 @@ export const createPlanSlice: StateCreator<
             error: reason,
             completedAt: Date.now(),
         })
+    },
+
+    resetTasksForExecution: (planId, options) => {
+        const includeCompleted = options?.includeCompleted === true
+
+        set((state) => ({
+            plans: state.plans.map((plan) => {
+                if (plan.id !== planId) return plan
+
+                return withRevision(plan, {
+                    status: 'approved',
+                    tasks: plan.tasks.map((task) => {
+                        if (task.status === 'completed' && !includeCompleted) {
+                            return task
+                        }
+
+                        return {
+                            ...task,
+                            status: 'pending',
+                            error: undefined,
+                            output: includeCompleted ? undefined : task.output,
+                            startedAt: undefined,
+                            completedAt: undefined,
+                            threadId: undefined,
+                            assistantId: undefined,
+                            requestId: undefined,
+                            dependencySummary: undefined,
+                            executionClass: undefined,
+                        }
+                    }),
+                })
+            }),
+            currentTaskId: null,
+        }))
+        void get().savePlan(planId)
     },
 
     startExecution: (planId) => {

@@ -9,6 +9,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
+import { scheduleSavedVersionSync } from '@renderer/services/fileSavedVersionSync'
 import { globalConfirm } from '../../common/ConfirmDialog'
 import { Input } from '../../ui'
 import { toast } from '../../common/ToastProvider'
@@ -229,6 +230,7 @@ export function SearchView() {
       const { openFiles, reloadFileFromDisk } = useStore.getState()
       if (openFiles.some(f => f.path === filePath)) {
         reloadFileFromDisk(filePath, newContent)
+        scheduleSavedVersionSync(filePath, newContent)
       }
       handleSearch()
     }
@@ -290,6 +292,7 @@ export function SearchView() {
         const { openFiles: currentOpenFiles, reloadFileFromDisk } = useStore.getState()
         if (currentOpenFiles.some(f => f.path === filePath)) {
           reloadFileFromDisk(filePath, newContent)
+          scheduleSavedVersionSync(filePath, newContent)
         }
         replacedCount++
       }
