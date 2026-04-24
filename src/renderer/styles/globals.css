@@ -215,12 +215,23 @@ textarea,
   font-family: 'JetBrains Mono', 'JetBrainsMono', 'Fira Code', 'FiraCode-Retina', 'Consolas', 'Monaco', 'Hannotate SC', monospace, -apple-system !important;
 }
 
-/* Fix Monaco Find Widget Clipping (Push down enough to clear its own tooltips) */
+/* Keep Monaco find widget controls above hover overlays without changing its layout. */
 .monaco-editor .find-widget {
-  top: 32px !important;
-  right: 18px !important;
-  border-radius: 6px !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+  z-index: 2600 !important;
+}
+
+.monaco-editor .find-widget > .find-part,
+.monaco-editor .find-widget > .replace-part,
+.monaco-editor .find-widget > .button,
+.monaco-editor .find-widget .button.toggle,
+.monaco-editor .find-widget .find-actions,
+.monaco-editor .find-widget .replace-actions {
+  position: relative;
+  z-index: 2601;
+}
+
+.monaco-editor .find-widget .monaco-sash {
+  z-index: 2599;
 }
 
 

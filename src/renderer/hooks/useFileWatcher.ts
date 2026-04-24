@@ -6,6 +6,7 @@ import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { getFileName, pathEquals } from '@shared/utils/pathUtils'
 import { removeFileFromTypeService } from '@renderer/services/monacoTypeService'
 import { internalWriteTracker } from '@renderer/services/internalWriteTracker'
+import { scheduleSavedVersionSync } from '@renderer/services/fileSavedVersionSync'
 
 export function useFileWatcher() {
   useEffect(() => {
@@ -28,6 +29,7 @@ export function useFileWatcher() {
           const newContent = await api.file.read(event.path)
           if (newContent !== null) {
             reloadFileFromDisk(openFile.path, newContent)
+            scheduleSavedVersionSync(openFile.path, newContent)
           } else {
             markFileRestored(openFile.path)
           }
@@ -47,6 +49,7 @@ export function useFileWatcher() {
 
       if (isInternal) {
         reloadFileFromDisk(openFile.path, newContent)
+        scheduleSavedVersionSync(openFile.path, newContent)
         return
       }
 
@@ -61,11 +64,13 @@ export function useFileWatcher() {
 
         if (confirmed) {
           reloadFileFromDisk(openFile.path, newContent)
+          scheduleSavedVersionSync(openFile.path, newContent)
         }
         return
       }
 
       reloadFileFromDisk(openFile.path, newContent)
+      scheduleSavedVersionSync(openFile.path, newContent)
     })
 
     return unsubscribe

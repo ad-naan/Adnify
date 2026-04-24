@@ -9,7 +9,7 @@ import { resolveEditFileRequest } from '@/shared/utils/editFile'
 import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
-import { validatePath, isSensitivePath, platform } from '@shared/utils/pathUtils'
+import { validatePath, isSensitivePath, platform, getDirname } from '@shared/utils/pathUtils'
 import { pathToLspUri } from '@shared/utils/uriUtils'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
@@ -120,6 +120,43 @@ function notifyComposerChange(opts: {
         oldContentLength: opts.oldContentLength,
         newContentLength: opts.newContentLength,
         toolCallId: opts.toolCallId,
+    }))
+    notifyWorkspaceTreeChange({
+        workspacePath: opts.workspacePath,
+        targetPath: opts.filePath,
+        changeType: opts.changeType,
+    })
+}
+
+function notifyWorkspaceTreeChange(opts: {
+    workspacePath: string
+    targetPath: string
+    changeType: 'create' | 'modify' | 'delete'
+    isDirectory?: boolean
+}): void {
+    if (typeof window === 'undefined' || !opts.targetPath) return
+
+    const parentPath = getDirname(opts.targetPath)
+    const affectedPaths = new Set<string>()
+
+    if (parentPath) {
+        affectedPaths.add(parentPath)
+    }
+
+    if (opts.isDirectory && opts.changeType === 'create') {
+        affectedPaths.add(opts.targetPath)
+    }
+
+    if (opts.workspacePath && parentPath === opts.workspacePath) {
+        affectedPaths.add(opts.workspacePath)
+    }
+
+    window.dispatchEvent(new CustomEvent('workspace:files-changed', {
+        detail: {
+            affectedPaths: Array.from(affectedPaths),
+            deletedPaths: opts.changeType === 'delete' ? [opts.targetPath] : [],
+            refreshRoot: Boolean(opts.workspacePath && parentPath === opts.workspacePath),
+        },
     }))
 }
 
@@ -1094,6 +1131,14 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         if (isFolder) {
             const success = await api.file.mkdir(path)
+            if (success) {
+                notifyWorkspaceTreeChange({
+                    workspacePath: ctx.workspacePath || '',
+                    targetPath: path,
+                    changeType: 'create',
+                    isDirectory: true,
+                })
+            }
             return { success, result: success ? 'Folder created' : 'Failed to create folder' }
         }
 

@@ -135,7 +135,7 @@ export async function startPlanExecution(
 ): Promise<{ success: boolean; message: string }> {
     const store = useAgentStore.getState()
 
-    const plan = planId
+    let plan = planId
         ? store.plans.find(p => p.id === planId)
         : store.getActivePlan()
 
@@ -149,6 +149,20 @@ export async function startPlanExecution(
 
     if (getSessionByPlanId(plan.id)) {
         return { success: false, message: 'Plan is already executing' }
+    }
+
+    const hasPendingTasks = plan.tasks.some(task => task.status === 'pending')
+    const hasRetryableTasks = plan.tasks.some(task =>
+        task.status === 'failed' || task.status === 'skipped' || task.status === 'running'
+    )
+
+    if (!hasPendingTasks && hasRetryableTasks) {
+        store.resetTasksForExecution(plan.id)
+        plan = store.getPlan(plan.id) || plan
+    }
+
+    if (!plan.tasks.some(task => task.status === 'pending')) {
+        return { success: false, message: 'Plan has no pending tasks to execute' }
     }
 
     const workspacePath = gitService.getWorkspace()
