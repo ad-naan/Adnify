@@ -1,12 +1,15 @@
-import { Layers, Coins, Zap, AlertTriangle, ChevronRight } from 'lucide-react'
-import { useMemo } from 'react'
+import { Layers, Coins, Zap, AlertTriangle, ChevronRight, ArrowRightCircle, Loader2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import {
   useAgentStore,
   selectCompressionStats,
-  selectContextSummary,
+  selectCurrentThread,
+  selectLatestContextSnapshot,
 } from '@/renderer/agent/store/AgentStore'
+import { createManualHandoffSession } from '@/renderer/agent/services/handoffSessionService'
 import type { CompressionLevel } from '@/renderer/agent/domains/context/types'
 import type { TokenUsage } from '@renderer/agent/types'
+import { toast } from '../common/ToastProvider'
 
 interface ContextStatsContentProps {
   totalUsage: TokenUsage
@@ -36,7 +39,9 @@ export default function ContextStatsContent({
   language = 'en',
 }: ContextStatsContentProps) {
   const compressionStats = useAgentStore(selectCompressionStats)
-  const contextSummary = useAgentStore(selectContextSummary)
+  const currentThread = useAgentStore(selectCurrentThread)
+  const latestSnapshot = useAgentStore(selectLatestContextSnapshot)
+  const [isCreatingHandoff, setIsCreatingHandoff] = useState(false)
 
   const currentLevel = (compressionStats?.level ?? 0) as CompressionLevel
   const needsHandoff = compressionStats?.needsHandoff ?? currentLevel >= 4
@@ -68,6 +73,36 @@ export default function ContextStatsContent({
     if (ratio >= 0.7) return 'bg-yellow-500'
     return 'bg-emerald-500'
   }, [ratio])
+
+  const handleManualCompress = async () => {
+    if (!currentThread || isCreatingHandoff) return
+
+    if (currentThread.messages.length === 0) {
+      toast.error(
+        language === 'zh' ? '无法压缩' : 'Cannot compress',
+        language === 'zh' ? '当前对话还没有可压缩的内容' : 'There is no conversation content to compress yet.',
+      )
+      return
+    }
+
+    setIsCreatingHandoff(true)
+
+    try {
+      await createManualHandoffSession(currentThread.id)
+      toast.success(
+        language === 'zh' ? '已切换到新线程' : 'Switched to new thread',
+        language === 'zh' ? '已基于最新上下文快照创建续接线程' : 'Created a new thread from the latest context snapshot.',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      toast.error(
+        language === 'zh' ? '压缩失败' : 'Compression failed',
+        message || (language === 'zh' ? '未能生成上下文续接快照' : 'Could not generate a handoff snapshot.'),
+      )
+    } finally {
+      setIsCreatingHandoff(false)
+    }
+  }
 
   return (
     <div className="flex flex-col h-full bg-background/50 backdrop-blur-xl select-none">
@@ -194,16 +229,34 @@ export default function ContextStatsContent({
                 {language === 'zh' ? '上下文已满' : 'Context Full'}
               </h4>
               <p className="text-[10px] text-red-400/70">
-                {language === 'zh' ? '请开始新会话继续' : 'Please start a new session'}
+                {language === 'zh' ? '建议压缩后切换到新线程继续' : 'Compress and continue in a new thread.'}
               </p>
             </div>
           </div>
         )}
 
         <div className="space-y-2">
-          <div className="text-[9px] text-text-muted uppercase tracking-wider mb-2">
-            {language === 'zh' ? '压缩策略' : 'Compression Strategy'}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="text-[9px] text-text-muted uppercase tracking-wider">
+              {language === 'zh' ? '压缩策略' : 'Compression Strategy'}
+            </div>
+            <button
+              type="button"
+              onClick={handleManualCompress}
+              disabled={!currentThread || isCreatingHandoff}
+              className="inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-2 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isCreatingHandoff ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <ArrowRightCircle className="w-3 h-3" />
+              )}
+              <span>
+                {language === 'zh' ? '手动压缩并新开线程' : 'Compress to New Thread'}
+              </span>
+            </button>
           </div>
+
           {([0, 1, 2, 3, 4] as CompressionLevel[]).map(level => (
             <div
               key={level}
@@ -226,13 +279,34 @@ export default function ContextStatsContent({
           ))}
         </div>
 
-        {contextSummary && (
+        {latestSnapshot ? (
           <div className="mt-4 p-3 rounded-xl bg-surface/30 border border-border/40">
-            <div className="text-[9px] text-accent font-bold uppercase tracking-wider mb-1">
-              {language === 'zh' ? '当前任务' : 'Current Task'}
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="text-[9px] text-accent font-bold uppercase tracking-wider">
+                {language === 'zh' ? '当前任务' : 'Current Task'}
+              </div>
+              <span className="text-[9px] text-text-muted uppercase tracking-wider">
+                {latestSnapshot.source === 'handoff'
+                  ? (language === 'zh' ? '续接快照' : 'Handoff Snapshot')
+                  : (language === 'zh' ? '压缩快照' : 'Compression Snapshot')}
+              </span>
             </div>
             <p className="text-[11px] text-text-secondary leading-relaxed line-clamp-3">
-              {contextSummary.objective}
+              {latestSnapshot.summary.objective}
+            </p>
+            {latestSnapshot.summary.pendingSteps[0] && (
+              <p className="mt-2 text-[10px] text-text-muted leading-relaxed line-clamp-2">
+                {language === 'zh' ? '下一步：' : 'Next:'} {latestSnapshot.summary.pendingSteps[0]}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 p-3 rounded-xl bg-surface/20 border border-border/30">
+            <div className="text-[9px] text-text-muted uppercase tracking-wider mb-1">
+              {language === 'zh' ? '当前任务' : 'Current Task'}
+            </div>
+            <p className="text-[11px] text-text-muted leading-relaxed">
+              {language === 'zh' ? '暂无上下文快照' : 'No context snapshot yet'}
             </p>
           </div>
         )}

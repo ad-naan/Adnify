@@ -36,6 +36,8 @@ import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import { buildHandoffContext } from '../domains/context/HandoffManager'
+import { createLatestContextSnapshotSelector } from '../domains/context/contextSnapshot'
+import { resolveContextIndicatorKind, type ContextIndicatorKind } from '../domains/context/contextIndicator'
 import type { EmotionDetection, EmotionHistory } from '../types/emotion'
 import type { ToolStreamingPreview } from '@/shared/types'
 
@@ -219,6 +221,19 @@ export const useAgentStore = create<AgentStore>()(
                     }
 
                     // 创建新线程
+                    set(s => ({
+                        threads: {
+                            ...s.threads,
+                            [sourceThreadId]: {
+                                ...s.threads[sourceThreadId],
+                                handoff: {
+                                    ...s.threads[sourceThreadId].handoff,
+                                    status: 'transitioning',
+                                },
+                            },
+                        },
+                    }))
+
                     const newThreadId = threadSlice.createThread({ activate: false })
 
                     // 构建 handoff 上下文
@@ -412,6 +427,7 @@ let lastMessageListMessages: ChatMessage[] = EMPTY_MESSAGES
 let lastMessageListVersion = 0
 let lastMessageListState = DEFAULT_MESSAGE_LIST_STATE
 let hasInitializedAgentSessionSync = false
+const selectLatestContextSnapshotCached = createLatestContextSnapshotSelector()
 
 function scheduleAgentSessionPersistence(): void {
     schedulePersistedAgentSessionState(() => buildPersistedAgentSessionState(useAgentStore.getState()))
@@ -575,14 +591,29 @@ export const selectHandoffRequired = (state: AgentStore): boolean => {
     return handoff.status === 'ready' && !!handoff.document
 }
 
+export const selectIsHandoffTransitioning = (state: AgentStore): boolean => {
+    const handoff = selectHandoffState(state)
+    return handoff.status === 'transitioning'
+}
+
 export const selectContextSummary = (state: AgentStore): StructuredSummary | null => {
     const thread = selectCurrentThread(state)
     return thread?.contextSummary ?? null
 }
 
+export const selectLatestContextSnapshot = (state: AgentStore) => {
+    const thread = selectCurrentThread(state)
+    return selectLatestContextSnapshotCached(thread)
+}
+
 export const selectCompressionPhase = (state: AgentStore) => {
     const thread = selectCurrentThread(state)
     return thread?.compressionPhase ?? 'idle'
+}
+
+export const selectContextIndicatorKind = (state: AgentStore): ContextIndicatorKind => {
+    const thread = selectCurrentThread(state)
+    return resolveContextIndicatorKind(thread)
 }
 
 export const selectIsCompacting = (state: AgentStore): boolean => {

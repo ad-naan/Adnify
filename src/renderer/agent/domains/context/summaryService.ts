@@ -11,6 +11,12 @@ import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { getAgentConfig } from '../../utils/AgentConfig'
 import type { StructuredSummary, HandoffDocument, FileChangeRecord } from './types'
+import {
+  HandoffSummarySchema,
+  getStructuredOutputErrorMessage,
+  isRecoverableStructuredOutputError,
+  normalizeHandoffSummary,
+} from './handoffSummaryContract'
 import type {
   ChatMessage,
   AssistantMessage,
@@ -50,6 +56,8 @@ export interface SummaryResult {
   pendingSteps: string[]
   fileChanges: FileChangeRecord[]
   todos: TodoItem[]
+  source: 'llm' | 'rule_based'
+  fallbackReason?: string
 }
 
 function normalizeTodos(todos?: TodoItem[]): TodoItem[] {
@@ -231,7 +239,7 @@ export async function generateSummary(
     return generateRuleBasedSummary(
       messages,
       options.type === 'handoff' ? lastUserRequest : undefined,
-      todos
+      todos,
     )
   }
 
@@ -280,10 +288,12 @@ export async function generateSummary(
       pendingSteps: mergePendingSteps([], todos),
       fileChanges,
       todos,
+      source: 'llm',
     }
   } catch (error) {
-    logger.agent.error('[SummaryService] Error generating summary:', error)
-    return generateRuleBasedSummary(messages, undefined, todos)
+    const fallbackReason = getStructuredOutputErrorMessage(error)
+    logger.agent.warn('[SummaryService] Summary generation failed, falling back to rule-based:', error)
+    return generateRuleBasedSummary(messages, undefined, todos, fallbackReason)
   }
 }
 
@@ -297,6 +307,8 @@ async function generateHandoffSummary(
   llmConfig: import('@store').LLMConfig
 ): Promise<SummaryResult> {
   const lastUserRequest = userRequests[userRequests.length - 1] || ''
+  const objectiveFallback = userRequests[0] || 'Unknown objective'
+  const completedStepsFallback = extractCompletedSteps(messages)
   const userPrompt = [
     'Analyze the following conversation:',
     todoContext,
@@ -315,36 +327,26 @@ async function generateHandoffSummary(
         maxTokens: 1000,
         temperature: 0.2,
       },
-      schema: {
-        type: 'object',
-        properties: {
-          objective: { type: 'string', description: 'What the user is trying to achieve' },
-          completedSteps: { type: 'array', items: { type: 'string' }, description: 'What has been done' },
-          pendingSteps: { type: 'array', items: { type: 'string' }, description: 'What still needs to be done' },
-          keyDecisions: { type: 'array', items: { type: 'string' }, description: 'Important technical decisions' },
-          userConstraints: { type: 'array', items: { type: 'string' }, description: 'Special requirements' },
-          lastRequestStatus: {
-            type: 'string',
-            enum: ['completed', 'partial', 'not_started'],
-            description: 'Status of last request',
-          },
-        },
-        required: ['objective', 'completedSteps', 'pendingSteps', 'keyDecisions', 'userConstraints', 'lastRequestStatus'],
-      },
+      schema: HandoffSummarySchema,
       system: HANDOFF_SYSTEM_PROMPT,
       prompt: userPrompt,
     })
 
     if (result.error || !result.object) {
-      logger.agent.warn('[SummaryService] Handoff generation failed, falling back to rule-based:', result.error)
-      return generateRuleBasedSummary(messages, lastUserRequest, todos)
+      const fallbackReason = result.error || 'Structured handoff summary returned no object.'
+      logger.agent.warn('[SummaryService] Handoff generation failed, falling back to rule-based:', fallbackReason)
+      return generateRuleBasedSummary(messages, lastUserRequest, todos, fallbackReason)
     }
 
-    const parsed = result.object
-    const objective = parsed.objective || userRequests[0] || 'Unknown objective'
-    const completedSteps = parsed.completedSteps || extractCompletedSteps(messages)
+    const parsed = normalizeHandoffSummary(result.object, {
+      objective: objectiveFallback,
+      completedSteps: completedStepsFallback,
+      pendingSteps: [],
+    })
+    const objective = parsed.objective || objectiveFallback
+    const completedSteps = parsed.completedSteps.length > 0 ? parsed.completedSteps : completedStepsFallback
     const pendingSteps = mergePendingSteps(
-      parsed.pendingSteps || [],
+      parsed.pendingSteps,
       todos,
       parsed.lastRequestStatus !== 'completed' ? lastUserRequest : undefined
     )
@@ -363,17 +365,21 @@ async function generateHandoffSummary(
       pendingSteps,
       fileChanges,
       todos,
+      source: 'llm',
     }
   } catch (error) {
-    logger.agent.error('[SummaryService] Error generating handoff summary:', error)
-    return generateRuleBasedSummary(messages, lastUserRequest, todos)
+    const fallbackReason = getStructuredOutputErrorMessage(error)
+    const logMethod = isRecoverableStructuredOutputError(error) ? logger.agent.warn : logger.agent.error
+    logMethod('[SummaryService] Handoff summary failed, falling back to rule-based:', error)
+    return generateRuleBasedSummary(messages, lastUserRequest, todos, fallbackReason)
   }
 }
 
 function generateRuleBasedSummary(
   messages: ChatMessage[],
   lastUserRequest?: string,
-  todos: TodoItem[] = []
+  todos: TodoItem[] = [],
+  fallbackReason?: string,
 ): SummaryResult {
   const fileChanges = extractFileChanges(messages)
   const userRequests = extractUserRequests(messages)
@@ -424,6 +430,8 @@ function generateRuleBasedSummary(
     pendingSteps,
     fileChanges,
     todos,
+    source: 'rule_based',
+    fallbackReason,
   }
 }
 
@@ -465,7 +473,7 @@ export async function generateHandoffDocument(
   messages: ChatMessage[],
   workspacePath: string,
   todos: TodoItem[] = []
-): Promise<HandoffDocument> {
+): Promise<{ handoff: HandoffDocument; source: SummaryResult['source']; error?: string }> {
   const normalizedTodos = normalizeTodos(todos)
   const summaryResult = await generateSummary(messages, {
     type: 'handoff',
@@ -489,12 +497,16 @@ export async function generateHandoffDocument(
   }
 
   return {
-    fromSessionId: sessionId,
-    createdAt: Date.now(),
-    summary: structuredSummary,
-    workingDirectory: workspacePath,
-    keyFileSnapshots: [],
-    lastUserRequest,
-    suggestedNextSteps: summaryResult.pendingSteps,
+    handoff: {
+      fromSessionId: sessionId,
+      createdAt: Date.now(),
+      summary: structuredSummary,
+      workingDirectory: workspacePath,
+      keyFileSnapshots: [],
+      lastUserRequest,
+      suggestedNextSteps: summaryResult.pendingSteps,
+    },
+    source: summaryResult.source,
+    error: summaryResult.source === 'rule_based' ? summaryResult.fallbackReason : undefined,
   }
 }
