@@ -2,23 +2,19 @@ import { logger } from '@utils/Logger'
 import { useStore } from '@store'
 import { useAgentStore, type ThreadBoundStore } from '../store/AgentStore'
 import { EventBus } from './EventBus'
-import { generateSummary, generateHandoffDocument } from '../domains/context'
+import { generateSummary } from '../domains/context'
 import { LEVEL_NAMES, updateStats, type CompressionStats } from '../domains/context/CompressionManager'
 import { executeAutoHandoff } from '../services/autoHandoffService'
+import { prepareHandoffForThread, type PreparedHandoffResult } from '../services/handoffSessionService'
 import { getMessageText, type AssistantMessage, type ChatMessage, type ContextSnapshotPart, type ChatThread, type UserMessage } from '../types'
 import { pickLocalizedText } from '../utils/agentText'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
-import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
+import type { StructuredSummary } from '../domains/context/types'
 import type { ExecutionContext } from './types'
 
 export interface CompressionCheckResult {
   level: 0 | 1 | 2 | 3 | 4
   needsHandoff: boolean
-}
-
-interface HandoffPacketResult {
-  handoff: HandoffDocument
-  error?: string
 }
 
 function getLocalizedText(language: string, zh: string, en: string): string {
@@ -32,12 +28,6 @@ function shouldRefreshSummary(summary: StructuredSummary | null | undefined, use
 
 function getLiveThread(threadId: string): ChatThread | null {
   return useAgentStore.getState().threads[threadId] || null
-}
-
-function getExistingHandoffTurns(thread: ChatThread | null | undefined): number {
-  const handoffDocument = thread?.handoff.document
-  if (!handoffDocument) return -1
-  return handoffDocument.summary.turnRange?.[1] ?? -1
 }
 
 function getRecentUserRequests(messages: ChatMessage[], limit = 5): string[] {
@@ -67,97 +57,9 @@ function buildStructuredSummary(
   }
 }
 
-function buildFallbackHandoffDocument(thread: ChatThread, workspacePath: string): HandoffDocument {
-  const userRequests = thread.messages
-    .filter((message): message is UserMessage => message.role === 'user')
-    .map(message => getMessageText(message.content).trim())
-    .filter(Boolean)
-
-  const generatedAt = Date.now()
-  const lastUserRequest = userRequests[userRequests.length - 1] || thread.pendingObjective || 'Continue the previous task.'
-  const summary: StructuredSummary = thread.contextSummary ? {
-    ...thread.contextSummary,
-    pendingSteps: thread.contextSummary.pendingSteps?.length
-      ? thread.contextSummary.pendingSteps
-      : [lastUserRequest],
-    todos: thread.todos || thread.contextSummary.todos || [],
-    userInstructions: thread.contextSummary.userInstructions?.length
-      ? thread.contextSummary.userInstructions
-      : userRequests.slice(-5),
-    generatedAt,
-    turnRange: [0, userRequests.length],
-  } : {
-    objective: thread.pendingObjective || lastUserRequest,
-    completedSteps: [],
-    pendingSteps: thread.pendingSteps?.length ? thread.pendingSteps : [lastUserRequest],
-    todos: thread.todos || [],
-    decisions: [],
-    fileChanges: [],
-    errorsAndFixes: [],
-    userInstructions: userRequests.slice(-5),
-    generatedAt,
-    turnRange: [0, userRequests.length],
-  }
-
-  return {
-    fromSessionId: thread.id,
-    createdAt: generatedAt,
-    summary,
-    workingDirectory: workspacePath,
-    keyFileSnapshots: [],
-    lastUserRequest,
-    suggestedNextSteps: summary.pendingSteps,
-  }
-}
-
-async function ensureHandoffPacket(
-  thread: ChatThread,
-  workspacePath: string,
-  threadStore: ThreadBoundStore
-): Promise<HandoffPacketResult | null> {
-  const userTurns = thread.messages.filter(message => message.role === 'user').length
-  const existingHandoffTurns = getExistingHandoffTurns(thread)
-
-  if (userTurns <= existingHandoffTurns && thread.handoff.document) {
-    if (thread.handoff.status !== 'ready') {
-      threadStore.setHandoffState({
-        ...thread.handoff,
-        status: 'ready',
-        error: undefined,
-      })
-    }
-
-    return {
-      handoff: thread.handoff.document,
-    }
-  }
-
-  try {
-    const handoff = await generateHandoffDocument(thread.id, thread.messages, workspacePath, thread.todos)
-    threadStore.setHandoffState({
-      status: 'ready',
-      document: handoff,
-      createdAt: handoff.createdAt,
-    })
-    return { handoff }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    logger.agent.error('[Compression] Failed to generate handoff document, using fallback packet:', error)
-
-    const handoff = buildFallbackHandoffDocument(thread, workspacePath)
-    threadStore.setHandoffState({
-      status: 'ready',
-      document: handoff,
-      createdAt: handoff.createdAt,
-      error: message,
-    })
-    return { handoff, error: message }
-  }
-}
-
 async function executeAutoHandoffIfNeeded(
   threadId: string,
-  handoffResult: HandoffPacketResult | null,
+  handoffResult: PreparedHandoffResult | null,
   autoHandoff: boolean
 ): Promise<boolean> {
   if (!handoffResult || !autoHandoff) {
@@ -180,8 +82,8 @@ function createSummarySnapshotPart(summary: StructuredSummary, lastUserRequest?:
   }
 }
 
-function createHandoffSnapshotPart(handoffResult: HandoffPacketResult): ContextSnapshotPart {
-  const { handoff, error } = handoffResult
+function createHandoffSnapshotPart(handoffResult: PreparedHandoffResult): ContextSnapshotPart {
+  const { handoff, error, source } = handoffResult
 
   return {
     id: `context-handoff-${handoff.createdAt}`,
@@ -192,6 +94,8 @@ function createHandoffSnapshotPart(handoffResult: HandoffPacketResult): ContextS
     generatedAt: handoff.createdAt,
     note: error
       ? 'Context reached the handoff threshold. A fallback resume packet was created because the primary handoff summary failed.'
+      : source === 'rule_based'
+        ? 'Context reached the handoff threshold. A rule-based resume packet was created because structured handoff summary is unavailable.'
       : 'Context reached the handoff threshold. A new thread should resume from this packet.',
     lastUserRequest: handoff.lastUserRequest,
   }
@@ -279,7 +183,10 @@ async function ensureHandoffSnapshot(
   if (!thread) return false
 
   const handoffWorkspace = context.workspacePath || useStore.getState().workspacePath || ''
-  const handoffResult = await ensureHandoffPacket(thread, handoffWorkspace, threadStore)
+  const handoffResult = await prepareHandoffForThread(thread.id, {
+    threadStore,
+    workspacePath: handoffWorkspace,
+  })
   const didAutoHandoff = await executeAutoHandoffIfNeeded(thread.id, handoffResult, autoHandoff)
 
   if (handoffResult) {

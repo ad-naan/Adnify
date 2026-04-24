@@ -33,8 +33,7 @@ import {
   useAgentStore,
   selectMessageCount,
   selectCompressionStats,
-  selectHandoffRequired,
-  selectCompressionPhase,
+  selectContextIndicatorKind,
 } from '@renderer/agent/store/AgentStore'
 import { isAssistantMessage, type TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
@@ -89,8 +88,7 @@ export default function StatusBar() {
 
   const messageCount = useAgentStore(selectMessageCount)
   const compressionStats = useAgentStore(selectCompressionStats)
-  const handoffRequired = useAgentStore(selectHandoffRequired)
-  const compressionPhase = useAgentStore(selectCompressionPhase)
+  const contextIndicatorKind = useAgentStore(selectContextIndicatorKind)
 
   const tokenStats = useMemo(() => {
     const messages = useAgentStore.getState().getMessages()
@@ -156,6 +154,13 @@ export default function StatusBar() {
         compressionStats?.level === 2 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
           compressionStats?.level === 1 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
             'text-text-muted group-hover:text-text-primary'
+
+  const contextIndicatorCopy = useMemo(() => ({
+    compressing: language === 'zh' ? '压缩中' : 'Compressing',
+    handoffReady: language === 'zh' ? '已生成交接包' : 'Handoff Ready',
+    switching: language === 'zh' ? '切换中' : 'Switching',
+    switched: language === 'zh' ? '已切换' : 'Switched',
+  }), [language])
 
   return (
     <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-border/30 shadow-[0_-1px_15px_rgba(0,0,0,0.03)]">
@@ -234,7 +239,7 @@ export default function StatusBar() {
           <BottomBarPopover
             icon={
               <AnimatePresence mode="wait">
-                {handoffRequired ? (
+                {contextIndicatorKind === 'switching' ? (
                   <motion.div
                     key="transitioning"
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -250,10 +255,10 @@ export default function StatusBar() {
                       <Loader2 className="w-3 h-3" />
                     </motion.div>
                     <span className="text-[9px] font-medium">
-                      {language === 'zh' ? 'Switching' : 'Switching'}
+                      {contextIndicatorCopy.switching}
                     </span>
                   </motion.div>
-                ) : compressionPhase !== 'idle' && compressionPhase !== 'done' ? (
+                ) : contextIndicatorKind === 'compressing' ? (
                   <motion.div
                     key="compressing"
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -268,16 +273,39 @@ export default function StatusBar() {
                     >
                       <Maximize2 className="w-3 h-3 text-accent" />
                     </motion.div>
-                    <motion.div className="flex gap-0.5" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                      {[0, 1, 2].map(i => (
-                        <motion.span
-                          key={i}
-                          className="w-1 h-1 rounded-full bg-accent"
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.2 }}
-                        />
-                      ))}
-                    </motion.div>
+                    <span className="text-[9px] font-medium text-accent">
+                      {contextIndicatorCopy.compressing}
+                    </span>
+                  </motion.div>
+                ) : contextIndicatorKind === 'handoff_ready' ? (
+                  <motion.div
+                    key="handoff-ready"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    className="flex items-center gap-1.5 text-amber-400 px-2 h-6 hover:bg-white/5 rounded-md transition-colors"
+                  >
+                    <div className="flex items-center justify-center w-4 h-4 drop-shadow-[0_0_6px_rgba(251,191,36,0.45)]">
+                      <ScrollText className="w-3 h-3" />
+                    </div>
+                    <span className="text-[9px] font-medium">
+                      {contextIndicatorCopy.handoffReady}
+                    </span>
+                  </motion.div>
+                ) : contextIndicatorKind === 'switched' ? (
+                  <motion.div
+                    key="switched"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    className="flex items-center gap-1.5 text-emerald-400 px-2 h-6 hover:bg-white/5 rounded-md transition-colors"
+                  >
+                    <div className="flex items-center justify-center w-4 h-4 drop-shadow-[0_0_6px_rgba(52,211,153,0.45)]">
+                      <CheckCircle2 className="w-3 h-3" />
+                    </div>
+                    <span className="text-[9px] font-medium">
+                      {contextIndicatorCopy.switched}
+                    </span>
                   </motion.div>
                 ) : (
                   <motion.div

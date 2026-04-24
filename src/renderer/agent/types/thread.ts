@@ -36,6 +36,7 @@ export type ThreadHandoffStatus = 'idle' | 'ready' | 'transitioning' | 'failed'
 export interface ThreadHandoffState {
   status: ThreadHandoffStatus
   document: HandoffDocument | null
+  source?: 'llm' | 'rule_based'
   createdAt?: number
   error?: string
 }
