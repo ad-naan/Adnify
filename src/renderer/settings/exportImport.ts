@@ -41,6 +41,7 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
       baseUrl: config.baseUrl,
       timeout: config.timeout,
       customModels: config.customModels,
+      openAICompatibilityProfile: config.openAICompatibilityProfile,
       headers: config.headers,  // 导出 headers
     }
 

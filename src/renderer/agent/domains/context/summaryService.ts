@@ -12,10 +12,11 @@ import { useStore } from '@store'
 import { getAgentConfig } from '../../utils/AgentConfig'
 import type { StructuredSummary, HandoffDocument, FileChangeRecord } from './types'
 import {
-  HandoffSummarySchema,
+  HANDOFF_SUMMARY_JSON_SCHEMA,
   getStructuredOutputErrorMessage,
   isRecoverableStructuredOutputError,
   normalizeHandoffSummary,
+  type NormalizedHandoffSummary,
 } from './handoffSummaryContract'
 import type {
   ChatMessage,
@@ -28,16 +29,38 @@ import { getMessageText } from '../../types'
 
 const HANDOFF_SYSTEM_PROMPT = `You are analyzing a conversation to extract structured information for session handoff.
 
-Your task is to identify:
-1. The main objective the user is trying to achieve
-2. What has been completed so far
-3. What still needs to be done (CRITICAL: include the last user request if it wasn't fully completed)
-4. Key technical decisions that were made
-5. Any special requirements or constraints the user mentioned
-6. Whether the last user request was completed, partially done, or not started
-7. The active task list and which items are still incomplete
+Return exactly one JSON object using these exact keys and no aliases:
+- objective: string
+- completedSteps: string[]
+- pendingSteps: string[]
+- keyDecisions: string[]
+- userConstraints: string[]
+- lastRequestStatus: "completed" | "partial" | "not_started"
 
-Be thorough and accurate. If the last user message contains a request that wasn't fully addressed, it MUST appear in pendingSteps.`
+Rules:
+- Do not use alternate keys such as mainObjective, completedSoFar, technicalDecisions, specialRequirementsOrConstraints, or lastUserRequestStatus.
+- Do not add extra top-level keys.
+- pendingSteps must include the last user request when it was not fully completed.
+- Arrays must contain short plain strings only.
+- Output valid JSON only. No markdown.`
+
+const HANDOFF_TEXT_FALLBACK_SYSTEM_PROMPT = `You are generating a strict handoff JSON document.
+
+Return valid JSON only, with exactly these top-level keys:
+- objective
+- completedSteps
+- pendingSteps
+- keyDecisions
+- userConstraints
+- lastRequestStatus
+
+Constraints:
+- objective is a string
+- completedSteps, pendingSteps, keyDecisions, userConstraints are arrays of strings
+- lastRequestStatus must be one of: "completed", "partial", "not_started"
+- Do not use any alias keys
+- Do not add any other keys
+- Do not wrap the JSON in markdown fences`
 
 const SUMMARY_PROMPT = `Summarize what was done in this conversation. Write like a pull request description.
 
@@ -49,6 +72,8 @@ Rules:
 - Write in first person (I added..., I fixed...)
 - Never ask questions or add new questions`
 
+const HANDOFF_TEXT_FALLBACK_MAX_TOKENS = 2000
+
 export interface SummaryResult {
   summary: string
   objective: string
@@ -58,6 +83,52 @@ export interface SummaryResult {
   todos: TodoItem[]
   source: 'llm' | 'rule_based'
   fallbackReason?: string
+}
+
+function extractJSONObject(text: string): string | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return trimmed
+  }
+
+  const start = trimmed.indexOf('{')
+  const end = trimmed.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) {
+    return null
+  }
+
+  return trimmed.slice(start, end + 1)
+}
+
+async function generateHandoffSummaryFromTextFallback(
+  userPrompt: string,
+  llmConfig: import('@store').LLMConfig,
+) {
+  const fallbackResult = await api.llm.compactContext({
+    config: {
+      ...llmConfig,
+      maxTokens: HANDOFF_TEXT_FALLBACK_MAX_TOKENS,
+      temperature: 0,
+      toolChoice: 'none',
+    },
+    messages: [
+      { role: 'system', content: HANDOFF_TEXT_FALLBACK_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ],
+  })
+
+  if (fallbackResult.error || !fallbackResult.content) {
+    throw new Error(fallbackResult.error || 'Text fallback did not return any content.')
+  }
+
+  const jsonText = extractJSONObject(fallbackResult.content)
+  if (!jsonText) {
+    throw new Error('Text fallback did not return a valid JSON object.')
+  }
+
+  return JSON.parse(jsonText) as unknown
 }
 
 function normalizeTodos(todos?: TodoItem[]): TodoItem[] {
@@ -158,6 +229,42 @@ function extractUserRequests(messages: ChatMessage[]): string[] {
   }
 
   return requests
+}
+
+function buildHandoffSummaryResult(
+  parsed: NormalizedHandoffSummary,
+  options: {
+    objectiveFallback: string
+    completedStepsFallback: string[]
+    fileChanges: FileChangeRecord[]
+    todos: TodoItem[]
+    lastUserRequest: string
+  },
+): SummaryResult {
+  const objective = parsed.objective || options.objectiveFallback
+  const completedSteps = parsed.completedSteps.length > 0
+    ? parsed.completedSteps
+    : options.completedStepsFallback
+  const pendingSteps = mergePendingSteps(
+    parsed.pendingSteps,
+    options.todos,
+    parsed.lastRequestStatus !== 'completed' ? options.lastUserRequest : undefined,
+  )
+
+  return {
+    summary: `**Objective**: ${objective}\n\n` +
+      `**Completed**: ${completedSteps.length} steps\n` +
+      `**Pending**: ${pendingSteps.length} steps\n` +
+      `**Task List**: ${options.todos.length} item(s)\n` +
+      (parsed.keyDecisions.length > 0 ? `**Key Decisions**: ${parsed.keyDecisions.join('; ')}\n` : '') +
+      (parsed.userConstraints.length > 0 ? `**Constraints**: ${parsed.userConstraints.join('; ')}` : ''),
+    objective,
+    completedSteps,
+    pendingSteps,
+    fileChanges: options.fileChanges,
+    todos: options.todos,
+    source: 'llm',
+  }
 }
 
 function extractAssistantSummary(message: AssistantMessage): string {
@@ -262,11 +369,7 @@ export async function generateSummary(
   try {
     const result = await api.llm.compactContext({
       config: {
-        provider: llmConfig.provider,
-        model: llmConfig.model,
-        apiKey: llmConfig.apiKey,
-        baseUrl: llmConfig.baseUrl,
-        timeout: llmConfig.timeout,
+        ...llmConfig,
         maxTokens: options.maxTokens || 500,
         temperature: 0.3,
       },
@@ -319,23 +422,33 @@ async function generateHandoffSummary(
   try {
     const result = await api.llm.generateObject({
       config: {
-        provider: llmConfig.provider,
-        model: llmConfig.model,
-        apiKey: llmConfig.apiKey,
-        baseUrl: llmConfig.baseUrl,
-        timeout: llmConfig.timeout,
+        ...llmConfig,
         maxTokens: 1000,
         temperature: 0.2,
       },
-      schema: HandoffSummarySchema,
+      schema: HANDOFF_SUMMARY_JSON_SCHEMA,
       system: HANDOFF_SYSTEM_PROMPT,
       prompt: userPrompt,
     })
 
     if (result.error || !result.object) {
       const fallbackReason = result.error || 'Structured handoff summary returned no object.'
-      logger.agent.warn('[SummaryService] Handoff generation failed, falling back to rule-based:', fallbackReason)
-      return generateRuleBasedSummary(messages, lastUserRequest, todos, fallbackReason)
+      logger.agent.warn('[SummaryService] Structured handoff failed, trying text JSON fallback:', fallbackReason)
+
+      const fallbackObject = await generateHandoffSummaryFromTextFallback(userPrompt, llmConfig)
+      const parsedFallback = normalizeHandoffSummary(fallbackObject, {
+        objective: objectiveFallback,
+        completedSteps: completedStepsFallback,
+        pendingSteps: [],
+      })
+
+      return buildHandoffSummaryResult(parsedFallback, {
+        objectiveFallback,
+        completedStepsFallback,
+        fileChanges,
+        todos,
+        lastUserRequest,
+      })
     }
 
     const parsed = normalizeHandoffSummary(result.object, {
@@ -343,34 +456,38 @@ async function generateHandoffSummary(
       completedSteps: completedStepsFallback,
       pendingSteps: [],
     })
-    const objective = parsed.objective || objectiveFallback
-    const completedSteps = parsed.completedSteps.length > 0 ? parsed.completedSteps : completedStepsFallback
-    const pendingSteps = mergePendingSteps(
-      parsed.pendingSteps,
-      todos,
-      parsed.lastRequestStatus !== 'completed' ? lastUserRequest : undefined
-    )
-
-    const summary = `**Objective**: ${objective}\n\n` +
-      `**Completed**: ${completedSteps.length} steps\n` +
-      `**Pending**: ${pendingSteps.length} steps\n` +
-      `**Task List**: ${todos.length} item(s)\n` +
-      (parsed.keyDecisions?.length > 0 ? `**Key Decisions**: ${parsed.keyDecisions.join('; ')}\n` : '') +
-      (parsed.userConstraints?.length > 0 ? `**Constraints**: ${parsed.userConstraints.join('; ')}` : '')
-
-    return {
-      summary,
-      objective,
-      completedSteps,
-      pendingSteps,
+    return buildHandoffSummaryResult(parsed, {
+      objectiveFallback,
+      completedStepsFallback,
       fileChanges,
       todos,
-      source: 'llm',
-    }
+      lastUserRequest,
+    })
   } catch (error) {
     const fallbackReason = getStructuredOutputErrorMessage(error)
-    const logMethod = isRecoverableStructuredOutputError(error) ? logger.agent.warn : logger.agent.error
-    logMethod('[SummaryService] Handoff summary failed, falling back to rule-based:', error)
+    if (isRecoverableStructuredOutputError(error)) {
+      try {
+        logger.agent.warn('[SummaryService] Handoff summary failed, trying text JSON fallback:', fallbackReason)
+        const fallbackObject = await generateHandoffSummaryFromTextFallback(userPrompt, llmConfig)
+        const parsed = normalizeHandoffSummary(fallbackObject, {
+          objective: objectiveFallback,
+          completedSteps: completedStepsFallback,
+          pendingSteps: [],
+        })
+        return buildHandoffSummaryResult(parsed, {
+          objectiveFallback,
+          completedStepsFallback,
+          fileChanges,
+          todos,
+          lastUserRequest,
+        })
+      } catch (fallbackError) {
+        logger.agent.warn('[SummaryService] Text JSON fallback failed, using rule-based handoff:', fallbackError)
+      }
+    } else {
+      logger.agent.error('[SummaryService] Handoff summary failed, falling back to rule-based:', fallbackReason)
+    }
+
     return generateRuleBasedSummary(messages, lastUserRequest, todos, fallbackReason)
   }
 }

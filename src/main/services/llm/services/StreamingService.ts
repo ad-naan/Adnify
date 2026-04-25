@@ -8,7 +8,7 @@ import type { StreamTextResult } from 'ai'
 import { BrowserWindow } from 'electron'
 import { logger } from '@shared/utils/Logger'
 import { ErrorCode } from '@shared/utils/errorHandler'
-import { createModel, resolveHeaderPlaceholders } from '../modelFactory'
+import { createModel } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { prepareExecutionRequest } from '../core/RequestExecution'
@@ -156,6 +156,27 @@ function findJsonObjectEnd(text: string, startIndex: number): number {
   return -1
 }
 
+function normalizeToolCallArguments(input: unknown): Record<string, unknown> {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return input as Record<string, unknown>
+  }
+
+  if (typeof input !== 'string' || !input.trim()) {
+    return {}
+  }
+
+  try {
+    const parsed = JSON.parse(input) as unknown
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    // Ignore malformed provider payloads and fall back to an empty object.
+  }
+
+  return {}
+}
+
 class PseudoToolCallStreamAdapter {
   private mode: 'idle' | 'probing' | 'capturing' | 'disabled' = 'idle'
   private probeBuffer = ''
@@ -291,9 +312,9 @@ class PseudoToolCallStreamAdapter {
   }
 }
 
-function resolveStreamIdleTimeoutMs(config: LLMConfig): number {
-  if (typeof config.timeout === 'number' && Number.isFinite(config.timeout) && config.timeout > 0) {
-    return config.timeout
+function resolveStreamIdleTimeoutMs(timeoutMs?: number): number {
+  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return timeoutMs
   }
 
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS
@@ -348,7 +369,8 @@ export class StreamingService {
       messageCount: messages.length,
       toolCount: tools?.length || 0,
       requestId,
-      headers: config.headers,
+      protocol: config.protocol,
+      hasCustomHeaders: Boolean(config.headers && Object.keys(config.headers).length > 0),
     })
 
     try {
@@ -375,34 +397,10 @@ export class StreamingService {
         messages: coreMessages,
         tools: coreTools,
         activeTools,  // 动态限制可用工具
-
-        // 核心参数
-        maxOutputTokens: config.maxTokens,
-        temperature: config.temperature,
-        // topP 为 1 时等于默认行为（不过滤），无需传递
-        // 且部分模型（如 Claude）不允许 temperature 和 topP 同时指定
-        topP: config.topP !== undefined && config.topP < 1 ? config.topP : undefined,
-        topK: config.topK,
-        frequencyPenalty: config.frequencyPenalty,
-        presencePenalty: config.presencePenalty,
-        stopSequences: config.stopSequences,
-        seed: config.seed,
-
-        // AI SDK 高级参数
-        maxRetries: config.maxRetries,
-        toolChoice: config.toolChoice,
-        headers: resolveHeaderPlaceholders(config.headers, config.apiKey),
-        timeout: config.timeout,  // 超时配置
+        ...preparedRequest.settings,
+        ...preparedRequest.callOptions,
         abortSignal,
         providerOptions: preparedRequest.providerOptions,
-      }
-
-      // OpenAI 特定参数
-      if (config.provider === 'openai') {
-        if (config.logitBias) {
-          // @ts-expect-error - OpenAI specific parameter
-          streamParams.logitBias = config.logitBias
-        }
       }
 
       // 流式生成 - AI SDK 6.0 自动处理所有 reasoning
@@ -455,7 +453,7 @@ export class StreamingService {
         result,
         strategy,
         requestId,
-        resolveStreamIdleTimeoutMs(config),
+        resolveStreamIdleTimeoutMs(preparedRequest.callOptions.timeout),
         (tools?.length ?? 0) > 0
       )
     } catch (error) {
@@ -488,6 +486,8 @@ export class StreamingService {
   ): Promise<StreamingResult> {
     let reasoning = ''
     let streamedText = ''
+    let streamedResponseMetadata: ResponseMetadata | undefined
+    let sawNonTextOutput = false
     const hasCustomParser = !!strategy.parseStreamText
     let streamError: Error | null = null
     let sawToolActivity = false
@@ -503,6 +503,25 @@ export class StreamingService {
 
       try {
         switch (part.type) {
+          case 'text-start':
+          case 'text-end':
+          case 'reasoning-start':
+          case 'reasoning-end':
+          case 'start':
+          case 'finish':
+          case 'raw':
+          case 'abort':
+            break
+
+          case 'start-step':
+            if (part.warnings.length > 0) {
+              logger.llm.warn('[StreamingService] Provider warnings', {
+                requestId,
+                warnings: part.warnings,
+              })
+            }
+            break
+
           case 'text-delta':
             if (hasCustomParser && strategy.parseStreamText) {
               const parsed = strategy.parseStreamText(part.text)
@@ -586,8 +605,55 @@ export class StreamingService {
               type: 'tool-call-available',
               id: part.toolCallId,
               name: part.toolName,
-              arguments: part.input as Record<string, unknown>,
+              arguments: normalizeToolCallArguments(part.input),
             })
+            break
+
+          case 'tool-result':
+          case 'tool-error':
+          case 'tool-output-denied':
+          case 'tool-approval-request':
+          case 'file':
+            sawNonTextOutput = true
+            break
+
+          case 'source':
+            sawNonTextOutput = true
+            this.sendEvent(requestId, {
+              type: 'source',
+              source: {
+                id: part.id,
+                sourceType: part.sourceType,
+                ...(part.sourceType === 'url'
+                  ? {
+                      url: part.url,
+                      title: part.title,
+                    }
+                  : {
+                      mediaType: part.mediaType,
+                      title: part.title,
+                      filename: part.filename,
+                    }),
+              },
+            })
+            break
+
+          case 'response-metadata':
+            streamedResponseMetadata = {
+              id: part.id,
+              modelId: part.modelId,
+              timestamp: part.timestamp,
+            }
+            break
+
+          case 'finish-step':
+            if (!streamedResponseMetadata) {
+              streamedResponseMetadata = {
+                id: part.response.id,
+                modelId: part.response.modelId,
+                timestamp: part.response.timestamp,
+              }
+            }
             break
 
           case 'error':
@@ -647,7 +713,7 @@ export class StreamingService {
       )
     }
 
-    if (!finalText.trim() && !finalReasoning.trim() && !sawToolActivity) {
+    if (!finalText.trim() && !finalReasoning.trim() && !sawToolActivity && !sawNonTextOutput) {
       throw new LLMError(
         'Model returned an empty response after the API call completed',
         ErrorCode.LLM_EMPTY_RESPONSE,
@@ -661,6 +727,7 @@ export class StreamingService {
       reasoningLength: finalReasoning.length,
       sawToolActivity,
       sawExecutableToolCall,
+      sawNonTextOutput,
       finishReason,
     })
 
@@ -669,9 +736,9 @@ export class StreamingService {
       reasoning: finalReasoning || undefined,
       usage: usage ? convertUsage(usage) : undefined,
       metadata: {
-        id: response.id,
-        modelId: response.modelId,
-        timestamp: response.timestamp,
+        id: streamedResponseMetadata?.id ?? response.id,
+        modelId: streamedResponseMetadata?.modelId ?? response.modelId,
+        timestamp: streamedResponseMetadata?.timestamp ?? response.timestamp,
         finishReason: finishReason || undefined,
       },
     }
@@ -767,6 +834,8 @@ export class StreamingService {
         }
       case 'tool-call-delta-end':
         return { type: 'tool_call_delta_end', id: event.id }
+      case 'source':
+        return { type: 'source', source: event.source }
       default:
         return event
     }

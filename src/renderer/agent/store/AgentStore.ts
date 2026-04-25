@@ -37,9 +37,14 @@ import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import { buildHandoffContext } from '../domains/context/HandoffManager'
 import { createLatestContextSnapshotSelector } from '../domains/context/contextSnapshot'
-import { resolveContextIndicatorKind, type ContextIndicatorKind } from '../domains/context/contextIndicator'
+import {
+    resolveContextIndicatorKindForThread,
+    type ContextIndicatorKind,
+    type ContextIndicatorTransition,
+} from '../domains/context/contextIndicator'
 import type { EmotionDetection, EmotionHistory } from '../types/emotion'
 import type { ToolStreamingPreview } from '@/shared/types'
+import type { LLMStreamSource } from '@/shared/types/llm'
 
 // 重新导出刷新函数供外部使用
 export { flushStreamingBuffer }
@@ -58,10 +63,17 @@ export interface HandoffSessionResult {
     fileChanges: Array<{ action: string; path: string; summary: string }>
 }
 
+export interface ContextTransitionState extends ContextIndicatorTransition {
+    sourceThreadId?: string
+    targetThreadId?: string
+    startedAt?: number
+}
+
 // UI 相关状态（全局，非线程相关）
 interface UIState {
     inputPrompt: string
     currentSessionId: string | null
+    contextTransition: ContextTransitionState
     // 代码审查状态
     codeReviewSession: import('../types/codeReview').CodeReviewSession | null
     reviewProgress: { current: number; total: number; currentFile: string } | null
@@ -70,6 +82,8 @@ interface UIState {
     emotionHistory: EmotionHistory[]
     setInputPrompt: (prompt: string) => void
     setCurrentSessionId: (id: string | null) => void
+    setContextTransition: (transition: ContextTransitionState) => void
+    clearContextTransition: () => void
     createHandoffSession: (threadId?: string) => HandoffSessionResult | null
     // 代码审查方法
     setCodeReviewSession: (session: import('../types/codeReview').CodeReviewSession | null) => void
@@ -129,6 +143,9 @@ export interface ThreadBoundStore {
     addSearchPart: (messageId: string) => string
     updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean) => void
     finalizeSearchPart: (messageId: string, partId: string) => void
+
+    // Sources 操作
+    upsertSourcesPart: (messageId: string, source: LLMStreamSource) => void
 
     // Lint Check 操作
     addLintCheckPart: (messageId: string) => void
@@ -198,12 +215,15 @@ export const useAgentStore = create<AgentStore>()(
             const uiState: UIState = {
                 inputPrompt: '',
                 currentSessionId: null,
+                contextTransition: { status: 'idle' },
                 codeReviewSession: null,
                 reviewProgress: null,
                 emotionDetection: null,
                 emotionHistory: [],
                 setInputPrompt: (prompt) => set({ inputPrompt: prompt }),
                 setCurrentSessionId: (id) => set({ currentSessionId: id }),
+                setContextTransition: (transition) => set({ contextTransition: transition }),
+                clearContextTransition: () => set({ contextTransition: { status: 'idle' } }),
                 createHandoffSession: (threadId) => {
                     const state = get()
                     const sourceThreadId = threadId ?? state.currentThreadId
@@ -234,6 +254,14 @@ export const useAgentStore = create<AgentStore>()(
                         },
                     }))
 
+                    set({
+                        contextTransition: {
+                            status: 'switching',
+                            sourceThreadId,
+                            startedAt: Date.now(),
+                        },
+                    })
+
                     const newThreadId = threadSlice.createThread({ activate: false })
 
                     // 构建 handoff 上下文
@@ -255,6 +283,10 @@ export const useAgentStore = create<AgentStore>()(
                                     ...thread,
                                     messages: [handoffDigestMessage],
                                     handoffContext,
+                                    handoffResume: {
+                                        sourceThreadId,
+                                        createdAt: handoff.createdAt,
+                                    },
                                     pendingObjective: handoff.summary.objective,
                                     pendingSteps: handoff.summary.pendingSteps,
                                     todos: handoff.summary.todos || [],
@@ -262,6 +294,12 @@ export const useAgentStore = create<AgentStore>()(
                                 }
                             },
                             currentThreadId: newThreadId,
+                            contextTransition: {
+                                status: 'switching',
+                                sourceThreadId,
+                                targetThreadId: newThreadId,
+                                startedAt: Date.now(),
+                            },
                             threadMessageVersions: {
                                 ...s.threadMessageVersions,
                                 [newThreadId]: 1,
@@ -270,6 +308,14 @@ export const useAgentStore = create<AgentStore>()(
                     })
 
                     logger.agent.info('[AgentStore] Created handoff session:', newThreadId)
+
+                    setTimeout(() => {
+                        const latestState = get()
+                        const transition = latestState.contextTransition
+                        if (transition.status === 'switching' && transition.targetThreadId === newThreadId) {
+                            latestState.clearContextTransition()
+                        }
+                    }, 900)
 
                     return {
                         threadId: newThreadId,
@@ -386,6 +432,8 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.updateSearchPart(messageId, partId, content, isStreaming, append, threadId),
                 finalizeSearchPart: (messageId, partId) =>
                     messageSlice.finalizeSearchPart(messageId, partId, threadId),
+                upsertSourcesPart: (messageId, source) =>
+                    messageSlice.upsertSourcesPart(messageId, source, threadId),
 
                 // Lint Check 操作
                 addLintCheckPart: (messageId) =>
@@ -613,7 +661,7 @@ export const selectCompressionPhase = (state: AgentStore) => {
 
 export const selectContextIndicatorKind = (state: AgentStore): ContextIndicatorKind => {
     const thread = selectCurrentThread(state)
-    return resolveContextIndicatorKind(thread)
+    return resolveContextIndicatorKindForThread(thread, state.contextTransition, state.currentThreadId)
 }
 
 export const selectIsCompacting = (state: AgentStore): boolean => {

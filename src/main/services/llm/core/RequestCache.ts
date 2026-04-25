@@ -7,7 +7,11 @@ import { resolveHeaderPlaceholders } from '../modelFactory'
 import { applyCaching, getCacheConfig } from './PromptCache'
 import { isCacheFeatureUnsupported, markCacheFeatureUnsupported } from './CacheCompatibility'
 import { resolveCacheProtocol } from './cacheProtocol'
-import { mergeProviderOptions, type RequestProviderOptions } from './ProviderCompatibility'
+import {
+  buildOpenAIStyleProviderOptions,
+  mergeProviderOptions,
+  type RequestProviderOptions,
+} from './ProviderCompatibility'
 
 interface RequestCacheResult {
   messages: ModelMessage[]
@@ -263,12 +267,7 @@ function buildOpenAICacheOptions(
     cacheOptions.promptCacheRetention = '24h'
   }
 
-  return mergeProviderOptions(undefined, {
-    openai: cacheOptions,
-    openaiCompatible: cacheOptions,
-    'custom-openai': cacheOptions,
-    custom: cacheOptions,
-  })
+  return mergeProviderOptions(undefined, buildOpenAIStyleProviderOptions(config, cacheOptions))
 }
 
 function extractStablePrefix(messages: ModelMessage[]): ModelMessage[] {

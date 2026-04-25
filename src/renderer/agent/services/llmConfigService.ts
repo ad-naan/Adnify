@@ -6,7 +6,8 @@
  */
 
 import { useStore } from '@store'
-import { getBuiltinProvider, BUILTIN_PROVIDERS } from '@shared/config/providers'
+import { BUILTIN_PROVIDERS, getBuiltinProvider } from '@shared/config/providers'
+import { resolveTaskLLMConfig } from '@shared/config/llmConfigResolver'
 import type { LLMConfig } from '@shared/types/llm'
 
 /**
@@ -21,46 +22,7 @@ export async function getLLMConfigForTask(
     modelId: string
 ): Promise<LLMConfig | null> {
     const store = useStore.getState()
-
-    // 获取用户配置的提供商信息
-    const providerConfig = store.providerConfigs[providerId]
-
-    // 获取内置提供商定义
-    const builtinProvider = getBuiltinProvider(providerId)
-
-    if (!providerConfig?.apiKey && !builtinProvider) {
-        return null
-    }
-
-    // 获取 API Key（优先使用用户配置）
-    const apiKey = providerConfig?.apiKey || ''
-    if (!apiKey) {
-        // 如果没有 API Key，检查是否可以使用默认配置
-        const defaultConfig = store.llmConfig
-        if (defaultConfig.provider === providerId && defaultConfig.apiKey) {
-            // 使用默认配置的 API Key
-            return {
-                provider: providerId,
-                model: modelId,
-                apiKey: defaultConfig.apiKey,
-                baseUrl: providerConfig?.baseUrl || builtinProvider?.baseUrl,
-                maxTokens: builtinProvider?.defaults?.maxTokens || 8192,
-                temperature: builtinProvider?.defaults?.temperature || 0.7,
-                protocol: providerConfig?.protocol || builtinProvider?.protocol,
-            }
-        }
-        return null
-    }
-
-    return {
-        provider: providerId,
-        model: modelId,
-        apiKey,
-        baseUrl: providerConfig?.baseUrl || builtinProvider?.baseUrl,
-        maxTokens: builtinProvider?.defaults?.maxTokens || 8192,
-        temperature: builtinProvider?.defaults?.temperature || 0.7,
-        protocol: providerConfig?.protocol || builtinProvider?.protocol,
-    }
+    return resolveTaskLLMConfig(providerId, modelId, store.providerConfigs, store.llmConfig)
 }
 
 /**

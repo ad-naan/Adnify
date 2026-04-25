@@ -4,6 +4,7 @@
 
 import type { LanguageModelUsage } from 'ai'
 import { mapAISDKError, ErrorCode } from '@shared/utils/errorHandler'
+import type { LLMStreamSource } from '@shared/types/llm'
 
 // ============================================
 // 基础类型
@@ -24,6 +25,8 @@ export interface ResponseMetadata {
   timestamp: Date
   finishReason?: string
 }
+
+export type StreamSource = LLMStreamSource
 
 export interface LLMResponse<T> {
   data: T
@@ -101,6 +104,7 @@ export type StreamEvent =
   | { type: 'tool-call-delta'; id: string; name?: string; argumentsDelta: string }
   | { type: 'tool-call-delta-end'; id: string }
   | { type: 'tool-call-available'; id: string; name: string; arguments: Record<string, unknown> }
+  | { type: 'source'; source: StreamSource }
   | { type: 'error'; error: LLMError }
   | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata; reasoning?: string }
 

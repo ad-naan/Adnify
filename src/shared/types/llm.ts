@@ -65,6 +65,20 @@ export type ProviderType =
     | 'ollama'
     | 'custom'
 
+export type OpenAICompatibilityProfile = import('@shared/config/providers').OpenAICompatibilityProfile
+
+export interface LLMProviderOptions {
+    /**
+     * Canonical OpenAI-style provider options.
+     * Applies to builtin OpenAI, OpenAI Responses, and OpenAI-compatible routes.
+     */
+    openai?: Record<string, unknown>
+    /** Canonical Anthropic provider options. */
+    anthropic?: Record<string, unknown>
+    /** Canonical Google provider options. */
+    google?: Record<string, unknown>
+}
+
 export interface LLMConfig {
     provider: string
     model: string
@@ -91,12 +105,19 @@ export interface LLMConfig {
 
     /** Provider protocol selection for AI SDK adapters. */
     protocol?: import('@shared/config/providers').ApiProtocol
+    /** Capability profile for OpenAI-style custom endpoints. */
+    openAICompatibilityProfile?: OpenAICompatibilityProfile
     /** Enables reasoning / thinking mode where supported. */
     enableThinking?: boolean
     /** Thinking token budget for providers that support it. */
     thinkingBudget?: number
     /** Reasoning effort level for providers that support it. */
-    reasoningEffort?: 'low' | 'medium' | 'high'
+    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    /**
+     * Advanced protocol-specific AI SDK provider options.
+     * Uses canonical protocol keys instead of transport-specific aliases.
+     */
+    providerOptions?: LLMProviderOptions
 }
 
 export interface LLMParameters {
@@ -121,6 +142,15 @@ export interface LLMToolCall {
     arguments: Record<string, unknown>
 }
 
+export interface LLMStreamSource {
+    id: string
+    sourceType: 'url' | 'document'
+    url?: string
+    title?: string
+    mediaType?: string
+    filename?: string
+}
+
 export interface LLMStreamChunk {
     type:
         | 'text'
@@ -131,6 +161,7 @@ export interface LLMStreamChunk {
         | 'tool_call_end'
         | 'tool_call_available'
         | 'reasoning'
+        | 'source'
         | 'error'
     content?: string
     toolCall?: LLMToolCall
@@ -139,6 +170,7 @@ export interface LLMStreamChunk {
         name?: string
         args?: string
     }
+    source?: LLMStreamSource
     error?: string
 }
 

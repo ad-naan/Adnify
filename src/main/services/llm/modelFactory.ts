@@ -9,9 +9,21 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 import type { LLMConfig } from '@shared/types/llm'
 import { BUILTIN_PROVIDERS, isBuiltinProvider } from '@shared/config/providers'
+import type { ApiProtocol } from '@shared/config/providers'
+import { supportsFullOpenAIStyleFeatures } from '@shared/config/providers'
 
 export interface ModelOptions {
     enableThinking?: boolean
+}
+
+interface ResolvedModelRoute {
+    providerId: string
+    protocol: ApiProtocol
+    model: string
+    apiKey: string
+    baseUrl?: string
+    isBuiltin: boolean
+    openAICompatibilityProfile?: LLMConfig['openAICompatibilityProfile']
 }
 
 /**
@@ -45,20 +57,8 @@ function normalizeBaseUrl(baseUrl: string | undefined, protocol: string): string
 }
 
 export function createModel(config: LLMConfig, options: ModelOptions = {}): LanguageModel {
-    const { provider } = config
-    const resolvedHeaders = resolveHeaderPlaceholders(config.headers, config.apiKey)
-
-    if (isBuiltinProvider(provider)) {
-        return createBuiltinModel({ ...config, headers: resolvedHeaders }, options)
-    }
-
-    const protocol = config.protocol || 'openai'
-    const customOptions = {
-        ...options,
-        headers: resolvedHeaders,
-    }
-
-    return createCustomModel(protocol, config.model, config.apiKey, config.baseUrl, customOptions)
+    const route = resolveModelRoute(config)
+    return createModelFromRoute(route, options)
 }
 
 export function resolveHeaderPlaceholders(
@@ -74,115 +74,129 @@ export function resolveHeaderPlaceholders(
     return resolved
 }
 
-function createBuiltinModel(
-    config: LLMConfig,
+function resolveModelRoute(config: LLMConfig): ResolvedModelRoute {
+    const builtinProvider = isBuiltinProvider(config.provider)
+        ? BUILTIN_PROVIDERS[config.provider]
+        : undefined
+
+    const protocol = (config.protocol || builtinProvider?.protocol || 'openai') as ApiProtocol
+
+    return {
+        providerId: config.provider,
+        protocol,
+        model: config.model,
+        apiKey: config.apiKey,
+        baseUrl: normalizeBaseUrl(config.baseUrl || builtinProvider?.baseUrl, protocol),
+        isBuiltin: Boolean(builtinProvider),
+        openAICompatibilityProfile: config.openAICompatibilityProfile,
+    }
+}
+
+function createModelFromRoute(
+    route: ResolvedModelRoute,
     _options: ModelOptions = {}
 ): LanguageModel {
-    const { provider, model, apiKey, baseUrl, protocol } = config
-    const providerDef = BUILTIN_PROVIDERS[provider]
-    if (!providerDef) {
-        throw new Error(`Unknown builtin provider: ${provider}`)
+    if (route.isBuiltin) {
+        return createBuiltinModel(route)
     }
 
-    const normalizedBaseUrl = normalizeBaseUrl(baseUrl || providerDef.baseUrl, protocol || providerDef.protocol)
+    return createCustomModel(route)
+}
 
-    switch (provider) {
+function createBuiltinModel(route: ResolvedModelRoute): LanguageModel {
+    switch (route.providerId) {
         case 'openai': {
             const openai = createOpenAI({
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: config.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
             })
 
-            if (config.protocol === 'openai-responses') {
-                return openai.responses(model)
+            if (route.protocol === 'openai-responses') {
+                return openai.responses(route.model)
             }
 
-            return openai.chat(model)
+            return openai.chat(route.model)
         }
 
         case 'anthropic': {
             const anthropic = createAnthropic({
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: config.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
             })
-            return anthropic(model)
+            return anthropic(route.model)
         }
 
         case 'gemini': {
             const google = createGoogleGenerativeAI({
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: config.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
             })
-            return google(model)
+            return google(route.model)
         }
 
         default:
-            throw new Error(`Unsupported builtin provider: ${provider}`)
+            throw new Error(`Unsupported builtin provider: ${route.providerId}`)
     }
 }
 
 function createCustomModel(
-    protocol: string,
-    model: string,
-    apiKey: string,
-    baseUrl?: string,
-    options: ModelOptions & { headers?: Record<string, string> } = {}
+    route: ResolvedModelRoute
 ): LanguageModel {
-    if (!baseUrl) {
+    if (!route.baseUrl) {
         throw new Error('Custom provider requires baseUrl')
     }
 
-    const normalizedBaseUrl = normalizeBaseUrl(baseUrl, protocol) || baseUrl
-
-    switch (protocol) {
+    switch (route.protocol) {
         case 'openai': {
             const provider = createOpenAICompatible({
                 name: 'custom-openai',
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: options.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
+                supportsStructuredOutputs: supportsFullOpenAIStyleFeatures(
+                    route.providerId,
+                    route.protocol,
+                    route.openAICompatibilityProfile,
+                ),
             })
-            return provider(model)
+            return provider(route.model)
         }
 
         case 'openai-responses': {
             const openai = createOpenAI({
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: options.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
             })
-            return openai.responses(model)
+            return openai.responses(route.model)
         }
 
         case 'anthropic': {
             const anthropic = createAnthropic({
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: options.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
             })
-            return anthropic(model)
+            return anthropic(route.model)
         }
 
         case 'google': {
             const google = createGoogleGenerativeAI({
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: options.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
             })
-            return google(model)
+            return google(route.model)
         }
 
         default: {
             const fallback = createOpenAICompatible({
                 name: 'custom',
-                apiKey,
-                baseURL: normalizedBaseUrl,
-                headers: options.headers,
+                apiKey: route.apiKey,
+                baseURL: route.baseUrl,
+                supportsStructuredOutputs: supportsFullOpenAIStyleFeatures(
+                    route.providerId,
+                    route.protocol,
+                    route.openAICompatibilityProfile,
+                ),
             })
-            return fallback(model)
+            return fallback(route.model)
         }
     }
 }

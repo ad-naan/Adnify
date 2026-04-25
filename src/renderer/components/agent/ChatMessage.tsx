@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -26,8 +26,10 @@ import {
   isSystemAlertPart,
   isLintCheckPart,
   isContextSnapshotPart,
+  isSourcesPart,
   ToolCall,
 } from '@renderer/agent/types'
+import type { LLMStreamSource } from '@/shared/types/llm'
 import { LintCheckCard } from './LintCheckCard'
 import ToolCallGroup, { renderToolCallCard } from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
@@ -591,6 +593,63 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 })
 MarkdownContent.displayName = 'MarkdownContent'
 
+function getSourceHref(source: LLMStreamSource): string | null {
+  return source.sourceType === 'url' && source.url ? source.url : null
+}
+
+function getSourceLabel(source: LLMStreamSource): string {
+  return source.title || source.filename || source.url || source.id
+}
+
+const SourcesBlock = React.memo(({ sources }: { sources: LLMStreamSource[] }) => {
+  if (sources.length === 0) return null
+
+  return (
+    <div className="my-3 rounded-xl border border-border/60 bg-surface/30 px-3 py-2.5">
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+        <Link2 className="h-3.5 w-3.5" />
+        Sources
+      </div>
+      <div className="space-y-1.5">
+        {sources.map((source) => {
+          const href = getSourceHref(source)
+          const label = getSourceLabel(source)
+          const meta = source.sourceType === 'document'
+            ? source.mediaType || source.filename
+            : source.url
+
+          return (
+            <div
+              key={source.id || `${source.sourceType}:${label}`}
+              className="rounded-lg border border-border/50 bg-background/35 px-2.5 py-2"
+            >
+              {href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-sm font-medium text-accent transition-colors hover:text-accent-hover hover:underline"
+                >
+                  {label}
+                </a>
+              ) : (
+                <div className="text-sm font-medium text-text-primary">{label}</div>
+              )}
+              {meta && (
+                <div className="mt-0.5 break-all text-[11px] text-text-muted">
+                  {meta}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+})
+
+SourcesBlock.displayName = 'SourcesBlock'
+
 // 渲染单个 Part
 const RenderPart = React.memo(({
   part,
@@ -656,6 +715,10 @@ const RenderPart = React.memo(({
   }
 
   // Tool calls: 统一由 renderToolCallCard 处理
+  if (isSourcesPart(part)) {
+    return <SourcesBlock sources={part.sources} />
+  }
+
   if (isToolCallPart(part)) {
     const tc = part.toolCall
     return (

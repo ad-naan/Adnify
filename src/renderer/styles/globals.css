@@ -218,6 +218,7 @@ textarea,
 /* Keep Monaco find widget controls above hover overlays without changing its layout. */
 .monaco-editor .find-widget {
   z-index: 2600 !important;
+  isolation: isolate;
 }
 
 .monaco-editor .find-widget > .find-part,
@@ -228,6 +229,11 @@ textarea,
 .monaco-editor .find-widget .replace-actions {
   position: relative;
   z-index: 2601;
+}
+
+.monaco-editor .find-widget .monaco-action-bar {
+  position: relative;
+  z-index: 2602;
 }
 
 .monaco-editor .find-widget .monaco-sash {

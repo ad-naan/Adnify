@@ -3,6 +3,7 @@
  */
 
 import type { TextContent, ImageContent, MessageContent, ToolCall, ToolResultType } from '@/shared/types'
+import type { LLMStreamSource } from '@/shared/types/llm'
 import type { ContextItem } from './context'
 import type { InteractiveContent } from './interactive'
 import type { FileSnapshot } from './checkpoint'
@@ -61,6 +62,11 @@ export interface ContextSnapshotPart {
   lastUserRequest?: string
 }
 
+export interface SourcesPart {
+  type: 'sources'
+  sources: LLMStreamSource[]
+}
+
 /** Lint 自动检查结果 */
 export interface LintCheckPart {
   type: 'lint_check'
@@ -84,6 +90,7 @@ export type AssistantPart =
   | LintCheckPart
   | SystemAlertPart
   | ContextSnapshotPart
+  | SourcesPart
 
 /** Token 使用统计 */
 export interface TokenUsage {
@@ -217,6 +224,10 @@ export function isLintCheckPart(part: AssistantPart): part is LintCheckPart {
 
 export function isContextSnapshotPart(part: AssistantPart): part is ContextSnapshotPart {
   return part.type === 'context_snapshot'
+}
+
+export function isSourcesPart(part: AssistantPart): part is SourcesPart {
+  return part.type === 'sources'
 }
 
 // ============================================

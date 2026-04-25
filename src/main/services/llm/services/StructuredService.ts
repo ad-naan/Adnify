@@ -1,8 +1,8 @@
 /**
- * Structured-output service built on AI SDK generateText / generateObject.
+ * Structured-output service built on AI SDK generateObject.
  */
 
-import { generateObject, generateText, Output } from 'ai'
+import { generateObject } from 'ai'
 import type { ModelMessage } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { logger } from '@shared/utils/Logger'
@@ -138,18 +138,27 @@ export class StructuredService {
       operation,
       originalMessages,
       baseMessages: messages,
-      execute: async ({ messages: preparedMessages, providerOptions }) =>
-        await generateText({
+      execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
+        await generateObject({
           model,
           messages: preparedMessages,
+          schema: schema as any,
+          ...settings,
+          ...callOptions,
           providerOptions,
-          experimental_output: Output.object({
-            schema: schema as any,
-          }),
         }),
     })
 
-    const data = result.experimental_output as unknown as T
+    if (result.warnings && result.warnings.length > 0) {
+      logger.llm.warn('[StructuredService] Provider warnings', {
+        operation,
+        provider: config.provider,
+        model: config.model,
+        warnings: result.warnings,
+      })
+    }
+
+    const data = result.object as T
     onData?.(data)
     return this.buildResponse(result, data)
   }
@@ -169,15 +178,25 @@ export class StructuredService {
       operation,
       originalMessages,
       baseMessages: messages,
-      execute: async ({ messages: preparedMessages, providerOptions }) =>
+      execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
         await generateObject({
           model,
           schema: schema as any,
           messages: preparedMessages as any,
+          ...settings,
+          ...callOptions,
           providerOptions,
-          temperature: config.temperature,
         }),
     })
+
+    if (result.warnings && result.warnings.length > 0) {
+      logger.llm.warn('[StructuredService] Provider warnings', {
+        operation,
+        provider: config.provider,
+        model: config.model,
+        warnings: result.warnings,
+      })
+    }
 
     return this.buildResponse(result, result.object as T)
   }
@@ -404,36 +423,51 @@ Return structured analysis with issues, suggestions, and summary.`,
 }
 
 function jsonSchemaToZod(schema: any): z.ZodTypeAny {
-  if (schema.type === 'object') {
+  const resolved = buildJsonSchemaZod(schema)
+  return schema?.description ? resolved.describe(schema.description) : resolved
+}
+
+function buildJsonSchemaZod(schema: any): z.ZodTypeAny {
+  const rawType = Array.isArray(schema?.type)
+    ? schema.type.filter((value: unknown) => value !== 'null')
+    : schema?.type
+
+  const type = Array.isArray(rawType) ? rawType[0] : rawType
+  const isNullable = Array.isArray(schema?.type)
+    ? schema.type.includes('null')
+    : schema?.nullable === true
+
+  let resolved: z.ZodTypeAny
+
+  if (type === 'object') {
+    const required = new Set<string>(Array.isArray(schema?.required) ? schema.required : [])
     const shape: Record<string, z.ZodTypeAny> = {}
-    for (const [key, value] of Object.entries(schema.properties || {})) {
-      const propSchema = value as any
-      shape[key] = jsonSchemaToZod(propSchema)
-      if (propSchema.description) {
-        shape[key] = shape[key].describe(propSchema.description)
-      }
+
+    for (const [key, value] of Object.entries(schema?.properties || {})) {
+      const propertySchema = buildJsonSchemaZod(value)
+      shape[key] = required.has(key) ? propertySchema : propertySchema.optional()
     }
-    return z.object(shape)
-  }
 
-  if (schema.type === 'array') {
-    return z.array(jsonSchemaToZod(schema.items))
-  }
-
-  if (schema.type === 'string') {
-    if (schema.enum) {
-      return z.enum(schema.enum as [string, ...string[]])
+    resolved = z.object(shape)
+  } else if (type === 'array') {
+    resolved = z.array(buildJsonSchemaZod(schema?.items ?? {}))
+  } else if (type === 'string') {
+    if (Array.isArray(schema?.enum) && schema.enum.length > 0) {
+      resolved = z.enum(schema.enum as [string, ...string[]])
+    } else {
+      resolved = z.string()
     }
-    return z.string()
+  } else if (type === 'integer') {
+    resolved = z.number().int()
+  } else if (type === 'number') {
+    resolved = z.number()
+  } else if (type === 'boolean') {
+    resolved = z.boolean()
+  } else if (type === 'null') {
+    resolved = z.null()
+  } else {
+    resolved = z.any()
   }
 
-  if (schema.type === 'number') {
-    return z.number()
-  }
-
-  if (schema.type === 'boolean') {
-    return z.boolean()
-  }
-
-  return z.any()
+  return isNullable ? resolved.nullable() : resolved
 }
