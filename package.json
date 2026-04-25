@@ -146,7 +146,7 @@
       "!.adnify/**"
     ],
     "win": {
-      "icon": "resources/icon.ico",
+      "icon": "public/brand/icons/app.ico",
       "target": [
         "nsis"
       ]
@@ -157,13 +157,13 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Adnify",
-      "installerIcon": "resources/icon.ico",
-      "uninstallerIcon": "resources/icon.ico",
-      "installerHeaderIcon": "resources/icon.ico",
+      "installerIcon": "public/brand/icons/app.ico",
+      "uninstallerIcon": "public/brand/icons/app.ico",
+      "installerHeaderIcon": "public/brand/icons/app.ico",
       "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
     },
     "mac": {
-      "icon": "resources/icon.icns",
+      "icon": "public/brand/icons/app.icns",
       "artifactName": "${productName}-${version}-${arch}-mac.${ext}",
       "target": [
         "dmg",
@@ -173,7 +173,7 @@
       "identity": null
     },
     "linux": {
-      "icon": "resources/icon.png",
+      "icon": "public/brand/icons/app.png",
       "artifactName": "${productName}-${version}-${arch}-linux.${ext}",
       "target": [
         "AppImage"

@@ -9,7 +9,6 @@ import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, 
 import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import aiAvatar from '../../assets/icon/ai-avatar.gif'
 import { themeManager } from '../../config/themeConfig'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -1149,7 +1148,7 @@ const ChatMessage = React.memo(({
             <div className="flex items-center gap-3 px-1">
               <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0">
                 <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
-                <img src={aiAvatar} alt="AI" className="w-full h-full object-cover" />
+                <img src="/brand/ip/ai-avatar.gif" alt="AI" className="w-full h-full object-cover" />
               </div>
               <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>

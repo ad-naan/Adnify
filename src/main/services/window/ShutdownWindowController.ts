@@ -282,15 +282,10 @@ export class ShutdownWindowController {
 
   private getIconPath(): string {
     const platform = process.platform
-    if (app.isPackaged) {
-      if (platform === 'win32') return path.join(process.resourcesPath, 'icon.ico')
-      if (platform === 'darwin') return path.join(process.resourcesPath, 'icon.icns')
-      return path.join(process.resourcesPath, 'icon.png')
-    }
-
-    if (platform === 'win32') return path.join(app.getAppPath(), 'public/icon.ico')
-    if (platform === 'darwin') return path.join(app.getAppPath(), 'resources/icon.icns')
-    return path.join(app.getAppPath(), 'public/icon.png')
+    const brandIconDir = path.join(app.getAppPath(), 'public/brand/icons')
+    if (platform === 'win32') return path.join(brandIconDir, 'app.ico')
+    if (platform === 'darwin') return path.join(brandIconDir, 'app.icns')
+    return path.join(brandIconDir, 'app.png')
   }
 
   private positionWindow(anchor?: BrowserWindow | null): void {

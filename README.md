@@ -514,8 +514,9 @@ npm run dev
 ### 打包发布
 
 ```bash
-# 1. 生成图标资源 (首次运行或图标变更时)
-node scripts/generate-icons.js
+# 1. 替换品牌资源
+# 统一放在 public/brand/：
+# icons/ 应用图标，logos/ 应用内 Logo，ip/ IP 形象，welcome/ 欢迎/启动页素材
 
 # 2. 构建安装包
 npm run dist
