@@ -16,6 +16,7 @@ export const registerCoreCommands = () => {
         { id: 'view.toggleSidebar',                     title: 'Toggle Sidebar',                category: 'View',       defaultKey: 'Ctrl+B' },
         { id: 'view.toggleTerminal',                    title: 'Toggle Terminal',               category: 'View',       defaultKey: 'Ctrl+`' },
         { id: 'view.toggleDebug',                       title: 'Toggle Debug Panel',            category: 'View',       defaultKey: 'Ctrl+Shift+D' },
+        { id: 'view.toggleAiPanel',                     title: 'Toggle AI Panel',               category: 'View',       defaultKey: 'Ctrl+L' },
 
         // --- Workbench ---
         // 注意：F1 在 useGlobalShortcuts 中作为备用键单独处理

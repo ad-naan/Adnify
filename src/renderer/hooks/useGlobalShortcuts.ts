@@ -25,12 +25,14 @@ export function useGlobalShortcuts() {
   const setShowAbout = useStore((state) => state.setShowAbout)
   const setTerminalVisible = useStore((state) => state.setTerminalVisible)
   const setDebugVisible = useStore((state) => state.setDebugVisible)
+  const setChatVisible = useStore((state) => state.setChatVisible)
   const closeFile = useStore((state) => state.closeFile)
 
   // 动态值通过 ref 访问，避免回调依赖
   const stateRef = useRef({
     terminalVisible: false,
     debugVisible: false,
+    chatVisible: true,
     showCommandPalette: false,
     showComposer: false,
     showQuickOpen: false,
@@ -41,6 +43,7 @@ export function useGlobalShortcuts() {
   // 订阅动态值但不触发 handleKeyDown 重建
   const terminalVisible = useStore((state) => state.terminalVisible)
   const debugVisible = useStore((state) => state.debugVisible)
+  const chatVisible = useStore((state) => state.chatVisible)
   const showCommandPalette = useStore((state) => state.showCommandPalette)
   const showComposer = useStore((state) => state.showComposer)
   const showQuickOpen = useStore((state) => state.showQuickOpen)
@@ -50,6 +53,7 @@ export function useGlobalShortcuts() {
   stateRef.current = {
     terminalVisible,
     debugVisible,
+    chatVisible,
     showCommandPalette,
     showComposer,
     showQuickOpen,
@@ -111,6 +115,13 @@ export function useGlobalShortcuts() {
     if (kb.matches(e, 'view.toggleDebug')) {
       e.preventDefault()
       setDebugVisible(!s.debugVisible)
+      return
+    }
+
+    // AI Panel: view.toggleAiPanel (Ctrl+L)
+    if (kb.matches(e, 'view.toggleAiPanel')) {
+      e.preventDefault()
+      setChatVisible(!s.chatVisible)
       return
     }
 
