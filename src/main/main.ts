@@ -311,15 +311,10 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   // 根据平台选择正确的图标格式
   const getIconPath = () => {
     const platform = process.platform
-    if (app.isPackaged) {
-      if (platform === 'win32') return path.join(process.resourcesPath, 'icon.ico')
-      if (platform === 'darwin') return path.join(process.resourcesPath, 'icon.icns')
-      return path.join(process.resourcesPath, 'icon.png')
-    } else {
-      if (platform === 'win32') return path.join(app.getAppPath(), 'public/icon.ico')
-      if (platform === 'darwin') return path.join(app.getAppPath(), 'resources/icon.icns')
-      return path.join(app.getAppPath(), 'public/icon.png')
-    }
+    const brandIconDir = path.join(app.getAppPath(), 'public/brand/icons')
+    if (platform === 'win32') return path.join(brandIconDir, 'app.ico')
+    if (platform === 'darwin') return path.join(brandIconDir, 'app.icns')
+    return path.join(brandIconDir, 'app.png')
   }
   const iconPath = getIconPath()
 

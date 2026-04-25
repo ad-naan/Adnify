@@ -1,6 +1,4 @@
 import { useStore } from '@renderer/store'
-import iconPng from '@renderer/assets/icon.png'
-import dawnIconPng from '@renderer/assets/dawn_icon.png'
 
 export function Logo({ className = "w-6 h-6", glow = false }: { className?: string; glow?: boolean }) {
   const currentTheme = useStore(s => s.currentTheme)
@@ -8,7 +6,7 @@ export function Logo({ className = "w-6 h-6", glow = false }: { className?: stri
 
   return (
     <img
-      src={isDawn ? dawnIconPng : iconPng}
+      src={isDawn ? '/brand/logos/app-light.png' : '/brand/logos/app.png'}
       alt="Adnify"
       className={`${className} ${glow ? 'drop-shadow-[0_0_8px_rgba(var(--accent),0.6)]' : ''}`}
     />

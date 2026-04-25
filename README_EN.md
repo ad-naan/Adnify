@@ -514,8 +514,9 @@ npm run dev
 ### Build & Package
 
 ```bash
-# 1. Generate icon resources (first run or when icons change)
-node scripts/generate-icons.js
+# 1. Replace brand assets
+# Put them under public/brand/:
+# icons/ app icons, logos/ in-app logos, ip/ character assets, welcome/ splash/welcome assets
 
 # 2. Build installer
 npm run dist
