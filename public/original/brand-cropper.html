@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adnify Brand Cropper</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080d18;
+      --panel: #111827;
+      --panel-2: #0c1424;
+      --border: #263247;
+      --text: #edf3ff;
+      --muted: #9aa8bf;
+      --accent: #2f80ff;
+      --accent-2: #6c5ce7;
+      --danger: #ff5d73;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      height: 100vh;
+    }
+
+    .stage-wrap {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-width: 0;
+      border-right: 1px solid var(--border);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 56px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(12, 20, 36, 0.92);
+    }
+
+    .file-warning {
+      display: none;
+      border-bottom: 1px solid rgba(255, 183, 77, 0.26);
+      padding: 8px 14px;
+      background: rgba(255, 183, 77, 0.1);
+      color: #ffd89a;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .file-warning.visible {
+      display: block;
+    }
+
+    .toolbar-title {
+      min-width: 160px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .toolbar-spacer {
+      flex: 1;
+    }
+
+    .stage-scroll {
+      overflow: auto;
+      padding: 28px;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,0.035) 25%, transparent 25%) 0 0 / 18px 18px,
+        linear-gradient(-45deg, rgba(255,255,255,0.035) 25%, transparent 25%) 0 9px / 18px 18px,
+        var(--bg);
+    }
+
+    .stage {
+      position: relative;
+      width: max-content;
+      margin: 0 auto;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+      user-select: none;
+    }
+
+    #sourceImage {
+      display: block;
+      width: calc(var(--image-width) * var(--zoom));
+      height: calc(var(--image-height) * var(--zoom));
+      max-width: none;
+      pointer-events: none;
+    }
+
+    .selection {
+      position: absolute;
+      left: calc(var(--crop-x) * var(--zoom));
+      top: calc(var(--crop-y) * var(--zoom));
+      width: calc(var(--crop-w) * var(--zoom));
+      height: calc(var(--crop-h) * var(--zoom));
+      border: 2px solid #34d5ff;
+      background: rgba(47, 128, 255, 0.12);
+      box-shadow:
+        0 0 0 9999px rgba(0, 0, 0, 0.46),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+      cursor: move;
+    }
+
+    .selection::before,
+    .selection::after {
+      content: "";
+      position: absolute;
+      inset: 33.333% 0 auto;
+      border-top: 1px dashed rgba(255, 255, 255, 0.7);
+    }
+
+    .selection::after {
+      inset: 66.666% 0 auto;
+    }
+
+    .grid-lines {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, transparent 33.1%, rgba(255,255,255,0.7) 33.1%, rgba(255,255,255,0.7) 33.5%, transparent 33.5%, transparent 66.4%, rgba(255,255,255,0.7) 66.4%, rgba(255,255,255,0.7) 66.8%, transparent 66.8%),
+        linear-gradient(0deg, transparent 33.1%, rgba(255,255,255,0.7) 33.1%, rgba(255,255,255,0.7) 33.5%, transparent 33.5%, transparent 66.4%, rgba(255,255,255,0.7) 66.4%, rgba(255,255,255,0.7) 66.8%, transparent 66.8%);
+      opacity: 0.42;
+    }
+
+    .handle {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #07111f;
+      border-radius: 999px;
+      background: #34d5ff;
+    }
+
+    .handle.nw { left: -8px; top: -8px; cursor: nwse-resize; }
+    .handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
+    .handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
+    .handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+    .handle.n { left: 50%; top: -8px; transform: translateX(-50%); cursor: ns-resize; }
+    .handle.s { left: 50%; bottom: -8px; transform: translateX(-50%); cursor: ns-resize; }
+    .handle.w { left: -8px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+    .handle.e { right: -8px; top: 50%; transform: translateY(-50%); cursor: ew-resize; }
+
+    .side {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      height: 100vh;
+      background: var(--panel);
+    }
+
+    .side-scroll {
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .section {
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-2);
+    }
+
+    .section-header {
+      padding: 12px 12px 0;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .section-body {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+    }
+
+    .row label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .input,
+    .select {
+      width: 100%;
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 10px;
+      outline: none;
+      color: var(--text);
+      background: #09111f;
+    }
+
+    .coords {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .coord {
+      display: grid;
+      gap: 4px;
+    }
+
+    .coord label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 10px;
+      color: var(--text);
+      background: #101a2d;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      border-color: #3b82f6;
+      background: #14213a;
+    }
+
+    .btn.primary {
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white;
+      font-weight: 700;
+    }
+
+    .btn.danger {
+      border-color: rgba(255, 93, 115, 0.35);
+      color: #ffb4c0;
+    }
+
+    .preview-box {
+      display: grid;
+      min-height: 180px;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,0.08) 25%, transparent 25%) 0 0 / 16px 16px,
+        linear-gradient(-45deg, rgba(255,255,255,0.08) 25%, transparent 25%) 0 8px / 16px 16px,
+        #0b1220;
+    }
+
+    #previewCanvas {
+      max-width: 100%;
+      max-height: 260px;
+    }
+
+    .hint {
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .preset-list {
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .preset {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 8px;
+      color: var(--text);
+      background: #09111f;
+      cursor: pointer;
+    }
+
+    .preset.active {
+      border-color: #34d5ff;
+      background: rgba(47, 128, 255, 0.16);
+    }
+
+    .preset span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .preset small {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .json-output {
+      width: 100%;
+      height: 116px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      color: var(--text);
+      background: #09111f;
+      font-family: Consolas, "SFMono-Regular", monospace;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="stage-wrap">
+      <header class="toolbar">
+        <div class="toolbar-title">Adnify 素材手动截取</div>
+        <button class="btn" id="zoomOut">-</button>
+        <input class="input" id="zoomInput" type="number" min="0.2" max="4" step="0.1" value="1" style="width: 76px" />
+        <button class="btn" id="zoomIn">+</button>
+        <div class="toolbar-spacer"></div>
+        <input id="fileInput" type="file" accept="image/*" hidden />
+        <button class="btn" id="loadImage">载入图片</button>
+        <button class="btn primary" id="downloadPng">导出 PNG</button>
+      </header>
+
+      <div class="file-warning" id="fileWarning">
+        直接用 file:// 打开时，默认图片只能预览，导出前请点击“载入图片”并选择 main.png。
+      </div>
+
+      <div class="stage-scroll" id="stageScroll">
+        <div class="stage" id="stage">
+          <img id="sourceImage" src="./main.png" alt="source" draggable="false" />
+          <div class="selection" id="selection">
+            <div class="grid-lines"></div>
+            <div class="handle nw" data-handle="nw"></div>
+            <div class="handle n" data-handle="n"></div>
+            <div class="handle ne" data-handle="ne"></div>
+            <div class="handle e" data-handle="e"></div>
+            <div class="handle se" data-handle="se"></div>
+            <div class="handle s" data-handle="s"></div>
+            <div class="handle sw" data-handle="sw"></div>
+            <div class="handle w" data-handle="w"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="side">
+      <div class="side-scroll">
+        <section class="section">
+          <div class="section-header">当前素材</div>
+          <div class="section-body">
+            <div class="row">
+              <label for="assetName">文件名</label>
+              <input class="input" id="assetName" value="custom-crop" />
+            </div>
+            <div class="row">
+              <label for="assetGroup">分类</label>
+              <select class="select" id="assetGroup">
+                <option value="icons">icons</option>
+                <option value="logos">logos</option>
+                <option value="ip">ip</option>
+                <option value="welcome">welcome</option>
+              </select>
+            </div>
+            <div class="coords">
+              <div class="coord"><label>X</label><input class="input" id="cropX" type="number" min="0" step="1" /></div>
+              <div class="coord"><label>Y</label><input class="input" id="cropY" type="number" min="0" step="1" /></div>
+              <div class="coord"><label>W</label><input class="input" id="cropW" type="number" min="1" step="1" /></div>
+              <div class="coord"><label>H</label><input class="input" id="cropH" type="number" min="1" step="1" /></div>
+            </div>
+            <div class="button-row">
+              <button class="btn" id="copyRect">复制坐标</button>
+              <button class="btn" id="addPreset">保存到列表</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">预览</div>
+          <div class="section-body">
+            <div class="preview-box">
+              <canvas id="previewCanvas"></canvas>
+            </div>
+            <div class="hint" id="meta"></div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">裁切列表</div>
+          <div class="section-body">
+            <div class="preset-list" id="presetList"></div>
+            <div class="button-row">
+              <button class="btn" id="downloadAll">逐个导出</button>
+              <button class="btn danger" id="clearPresets">清空列表</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-header">脚本坐标 JSON</div>
+          <div class="section-body">
+            <textarea class="json-output" id="jsonOutput" spellcheck="false"></textarea>
+            <button class="btn" id="copyJson">复制 JSON</button>
+            <p class="hint">可以把这里的坐标贴回 <code>scripts/extract-brand-assets.js</code> 的 crops 配置里。方向键移动选区，Shift + 方向键每次移动 10px。</p>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const image = document.getElementById('sourceImage')
+    const stage = document.getElementById('stage')
+    const selection = document.getElementById('selection')
+    const preview = document.getElementById('previewCanvas')
+    const previewCtx = preview.getContext('2d')
+    const fileInput = document.getElementById('fileInput')
+    const fileWarning = document.getElementById('fileWarning')
+    const state = {
+      imageWidth: 1536,
+      imageHeight: 1024,
+      zoom: 1,
+      crop: { x: 44, y: 70, w: 222, h: 218 },
+      activeIndex: -1,
+      presets: [
+        { group: 'icons', name: 'app', rect: { left: 44, top: 70, width: 222, height: 218 } },
+        { group: 'icons', name: 'app-light', rect: { left: 289, top: 70, width: 229, height: 218 } },
+        { group: 'logos', name: 'wordmark-dark', rect: { left: 610, top: 72, width: 330, height: 105 } },
+        { group: 'logos', name: 'wordmark-light', rect: { left: 568, top: 206, width: 372, height: 134 } },
+        { group: 'welcome', name: 'dark', rect: { left: 16, top: 401, width: 524, height: 398 } },
+        { group: 'welcome', name: 'light', rect: { left: 556, top: 401, width: 488, height: 398 } },
+        { group: 'ip', name: 'thinking', rect: { left: 1088, top: 424, width: 124, height: 140 } },
+        { group: 'ip', name: 'happy', rect: { left: 1234, top: 430, width: 126, height: 133 } },
+        { group: 'ip', name: 'focused', rect: { left: 1366, top: 432, width: 136, height: 132 } },
+        { group: 'ip', name: 'done', rect: { left: 1083, top: 623, width: 138, height: 132 } },
+        { group: 'ip', name: 'exploring', rect: { left: 1226, top: 623, width: 138, height: 132 } },
+        { group: 'ip', name: 'coding', rect: { left: 1363, top: 622, width: 142, height: 134 } },
+      ],
+    }
+
+    const fields = {
+      name: document.getElementById('assetName'),
+      group: document.getElementById('assetGroup'),
+      x: document.getElementById('cropX'),
+      y: document.getElementById('cropY'),
+      w: document.getElementById('cropW'),
+      h: document.getElementById('cropH'),
+      zoom: document.getElementById('zoomInput'),
+      meta: document.getElementById('meta'),
+      presetList: document.getElementById('presetList'),
+      jsonOutput: document.getElementById('jsonOutput'),
+    }
+
+    function clampCrop(crop) {
+      crop.w = Math.max(1, Math.round(crop.w))
+      crop.h = Math.max(1, Math.round(crop.h))
+      crop.x = Math.max(0, Math.min(Math.round(crop.x), state.imageWidth - crop.w))
+      crop.y = Math.max(0, Math.min(Math.round(crop.y), state.imageHeight - crop.h))
+      if (crop.x + crop.w > state.imageWidth) crop.w = state.imageWidth - crop.x
+      if (crop.y + crop.h > state.imageHeight) crop.h = state.imageHeight - crop.y
+    }
+
+    function setCrop(next) {
+      state.crop = { ...state.crop, ...next }
+      clampCrop(state.crop)
+      render()
+    }
+
+    function setZoom(next) {
+      state.zoom = Math.max(0.2, Math.min(4, Number(next) || 1))
+      render()
+    }
+
+    function render() {
+      document.documentElement.style.setProperty('--image-width', state.imageWidth + 'px')
+      document.documentElement.style.setProperty('--image-height', state.imageHeight + 'px')
+      document.documentElement.style.setProperty('--zoom', state.zoom)
+      document.documentElement.style.setProperty('--crop-x', state.crop.x + 'px')
+      document.documentElement.style.setProperty('--crop-y', state.crop.y + 'px')
+      document.documentElement.style.setProperty('--crop-w', state.crop.w + 'px')
+      document.documentElement.style.setProperty('--crop-h', state.crop.h + 'px')
+      fields.zoom.value = state.zoom.toFixed(1)
+      fields.x.value = state.crop.x
+      fields.y.value = state.crop.y
+      fields.w.value = state.crop.w
+      fields.h.value = state.crop.h
+      fields.meta.textContent = `${state.crop.w} x ${state.crop.h}px，源图 ${state.imageWidth} x ${state.imageHeight}px`
+      renderPreview()
+      renderPresets()
+      renderJson()
+    }
+
+    function renderPreview() {
+      preview.width = state.crop.w
+      preview.height = state.crop.h
+      previewCtx.clearRect(0, 0, preview.width, preview.height)
+      previewCtx.drawImage(
+        image,
+        state.crop.x,
+        state.crop.y,
+        state.crop.w,
+        state.crop.h,
+        0,
+        0,
+        state.crop.w,
+        state.crop.h
+      )
+    }
+
+    function currentPreset() {
+      return {
+        group: fields.group.value,
+        name: fields.name.value.trim() || 'custom-crop',
+        rect: {
+          left: state.crop.x,
+          top: state.crop.y,
+          width: state.crop.w,
+          height: state.crop.h,
+        },
+      }
+    }
+
+    function renderJson() {
+      const grouped = state.presets.reduce((acc, item) => {
+        acc[item.group] ||= []
+        acc[item.group].push({ name: item.name, rect: item.rect })
+        return acc
+      }, {})
+      fields.jsonOutput.value = JSON.stringify(grouped, null, 2)
+    }
+
+    function renderPresets() {
+      fields.presetList.innerHTML = ''
+      state.presets.forEach((item, index) => {
+        const button = document.createElement('button')
+        button.className = 'preset' + (index === state.activeIndex ? ' active' : '')
+        button.innerHTML = `<span>${item.group}/${item.name}</span><small>${item.rect.width}x${item.rect.height}</small>`
+        button.addEventListener('click', () => loadPreset(index))
+        fields.presetList.appendChild(button)
+      })
+    }
+
+    function loadPreset(index) {
+      const item = state.presets[index]
+      state.activeIndex = index
+      fields.name.value = item.name
+      fields.group.value = item.group
+      setCrop({
+        x: item.rect.left,
+        y: item.rect.top,
+        w: item.rect.width,
+        h: item.rect.height,
+      })
+    }
+
+    function downloadCanvas(canvas, filename) {
+      try {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            showExportHelp()
+            return
+          }
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          a.click()
+          URL.revokeObjectURL(url)
+        }, 'image/png')
+      } catch (error) {
+        showExportHelp()
+      }
+    }
+
+    function showExportHelp() {
+      fileWarning.classList.add('visible')
+      alert('浏览器阻止了 file:// 默认图片导出。请点击“载入图片”，选择 public/original/main.png 后再导出。')
+    }
+
+    function cropToCanvas(item = currentPreset()) {
+      const canvas = document.createElement('canvas')
+      canvas.width = item.rect.width
+      canvas.height = item.rect.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(
+        image,
+        item.rect.left,
+        item.rect.top,
+        item.rect.width,
+        item.rect.height,
+        0,
+        0,
+        item.rect.width,
+        item.rect.height
+      )
+      return canvas
+    }
+
+    function downloadCurrent() {
+      const item = currentPreset()
+      downloadCanvas(cropToCanvas(item), `${item.group}-${item.name}.png`)
+    }
+
+    let drag = null
+    selection.addEventListener('pointerdown', (event) => {
+      const handle = event.target.dataset.handle || 'move'
+      drag = {
+        handle,
+        startX: event.clientX,
+        startY: event.clientY,
+        crop: { ...state.crop },
+      }
+      selection.setPointerCapture(event.pointerId)
+    })
+
+    selection.addEventListener('pointermove', (event) => {
+      if (!drag) return
+      const dx = (event.clientX - drag.startX) / state.zoom
+      const dy = (event.clientY - drag.startY) / state.zoom
+      const next = { ...drag.crop }
+
+      if (drag.handle === 'move') {
+        next.x += dx
+        next.y += dy
+      } else {
+        if (drag.handle.includes('w')) {
+          next.x += dx
+          next.w -= dx
+        }
+        if (drag.handle.includes('e')) {
+          next.w += dx
+        }
+        if (drag.handle.includes('n')) {
+          next.y += dy
+          next.h -= dy
+        }
+        if (drag.handle.includes('s')) {
+          next.h += dy
+        }
+      }
+
+      setCrop(next)
+    })
+
+    selection.addEventListener('pointerup', () => {
+      drag = null
+    })
+
+    stage.addEventListener('pointerdown', (event) => {
+      if (event.target !== stage && event.target !== image) return
+      const rect = stage.getBoundingClientRect()
+      const x = Math.round((event.clientX - rect.left) / state.zoom)
+      const y = Math.round((event.clientY - rect.top) / state.zoom)
+      setCrop({ x, y, w: 160, h: 160 })
+    })
+
+    ;[fields.x, fields.y, fields.w, fields.h].forEach((field) => {
+      field.addEventListener('change', () => {
+        setCrop({
+          x: Number(fields.x.value),
+          y: Number(fields.y.value),
+          w: Number(fields.w.value),
+          h: Number(fields.h.value),
+        })
+      })
+    })
+
+    fields.zoom.addEventListener('change', () => setZoom(fields.zoom.value))
+    document.getElementById('zoomOut').addEventListener('click', () => setZoom(state.zoom - 0.1))
+    document.getElementById('zoomIn').addEventListener('click', () => setZoom(state.zoom + 0.1))
+    document.getElementById('downloadPng').addEventListener('click', downloadCurrent)
+    document.getElementById('copyRect').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(JSON.stringify(currentPreset(), null, 2))
+    })
+    document.getElementById('copyJson').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(fields.jsonOutput.value)
+    })
+    document.getElementById('addPreset').addEventListener('click', () => {
+      const item = currentPreset()
+      if (state.activeIndex >= 0) {
+        state.presets[state.activeIndex] = item
+      } else {
+        state.presets.push(item)
+        state.activeIndex = state.presets.length - 1
+      }
+      render()
+    })
+    document.getElementById('clearPresets').addEventListener('click', () => {
+      state.presets = []
+      state.activeIndex = -1
+      render()
+    })
+    document.getElementById('downloadAll').addEventListener('click', () => {
+      state.presets.forEach((item, index) => {
+        setTimeout(() => downloadCanvas(cropToCanvas(item), `${item.group}-${item.name}.png`), index * 180)
+      })
+    })
+    document.getElementById('loadImage').addEventListener('click', () => fileInput.click())
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.addEventListener('load', () => {
+        image.src = String(reader.result)
+        fileWarning.classList.remove('visible')
+      })
+      reader.readAsDataURL(file)
+    })
+
+    window.addEventListener('keydown', (event) => {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const step = event.shiftKey ? 10 : 1
+      if (event.key === 'ArrowLeft') setCrop({ x: state.crop.x - step })
+      if (event.key === 'ArrowRight') setCrop({ x: state.crop.x + step })
+      if (event.key === 'ArrowUp') setCrop({ y: state.crop.y - step })
+      if (event.key === 'ArrowDown') setCrop({ y: state.crop.y + step })
+    })
+
+    image.addEventListener('load', () => {
+      state.imageWidth = image.naturalWidth
+      state.imageHeight = image.naturalHeight
+      clampCrop(state.crop)
+      render()
+    })
+
+    if (window.location.protocol === 'file:') {
+      fileWarning.classList.add('visible')
+    }
+
+    render()
+  </script>
+</body>
+</html>

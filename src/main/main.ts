@@ -345,22 +345,22 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   // 添加 CSP 头以提升安全性
   if (app.isPackaged) {
     win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  // Monaco 编辑器需要
-          "style-src 'self' 'unsafe-inline'",
-          "img-src 'self' data: https: blob:",  // blob: 支持粘贴图片
-          "connect-src 'self' https:",  // 允许所有 HTTPS 连接，支持自定义 baseURL
-          "frame-src 'self' https: http://127.0.0.1:* http://localhost:*",
-          "child-src 'self' https: http://127.0.0.1:* http://localhost:*",
-          "font-src 'self' data:",
-          "media-src 'self'",
-        ].join('; ')
-      }
-    })
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  // Monaco 编辑器需要
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: https: blob:",  // blob: 支持粘贴图片
+            "connect-src 'self' https:",  // 允许所有 HTTPS 连接，支持自定义 baseURL
+            "frame-src 'self' https: http://127.0.0.1:* http://localhost:*",
+            "child-src 'self' https: http://127.0.0.1:* http://localhost:*",
+            "font-src 'self' data:",
+            "media-src 'self'",
+          ].join('; ')
+        }
+      })
     })
   }
 
@@ -521,7 +521,7 @@ async function performGlobalCleanup() {
     )
     // 3. 停止所有调试会话（超时 2 秒）
     await withTimeout(
-      import('./services/debugger').then(m => m.debugService.stopAll()).catch(() => {}),
+      import('./services/debugger').then(m => m.debugService.stopAll()).catch(() => { }),
       2000, 'DebugService stopAll'
     )
     // 4. 销毁所有 IndexService Worker 线程
@@ -591,28 +591,6 @@ async function initializeModules(firstWin: BrowserWindow) {
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,
   })
 
-  // 设置菜单
-  // Menu.setApplicationMenu(Menu.buildFromTemplate([
-  //   { label: 'File', submenu: [{ role: 'quit' }] },
-  //   { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-  //   {
-  //     label: 'View', submenu: [
-  //       { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' },
-  //       { type: 'separator' },
-  //       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
-  //       { type: 'separator' },
-  //       { role: 'togglefullscreen' },
-  //       {
-  //         label: 'Command Palette',
-  //         accelerator: 'CmdOrCtrl+Shift+P',
-  //         click: () => {
-  //           const win = getMainWindow()
-  //           win?.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
-  //         }
-  //       }
-  //     ]
-  //   },
-  // ]))
   // 全局：当前应用语言
   let currentAppLanguage: Language = 'zh'
 

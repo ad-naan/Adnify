@@ -70,8 +70,8 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                         className="mb-10 relative group cursor-default"
                     >
                         <div className="absolute inset-0 bg-accent/40 blur-3xl rounded-full opacity-60 group-hover:opacity-80 transition-opacity duration-700" />
-                        <div className="relative w-28 h-28 bg-surface/60 backdrop-blur-xl rounded-[2rem] border border-white/20 dark:border-white/10 flex items-center justify-center shadow-2xl ring-1 ring-black/5 dark:ring-white/10 transform group-hover:scale-105 transition-transform duration-500 ease-out">
-                            <Logo className="w-16 h-16 text-accent drop-shadow-lg" />
+                        <div className="relative w-28 h-28 flex items-center justify-center transform group-hover:scale-105 transition-transform duration-500 ease-out">
+                            <Logo className="w-full text-accent drop-shadow-lg" />
                         </div>
                         {/* Version Badge */}
                         <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-surface border border-border shadow-md text-[10px] font-mono font-bold text-text-secondary whitespace-nowrap z-20">

@@ -28,7 +28,7 @@ export default function TitleBar() {
           className="no-drag flex items-center gap-2.5 opacity-80 hover:opacity-100 transition-all cursor-pointer group"
         >
           <div className="relative w-7 h-7 flex items-center justify-center bg-text-primary/[0.03] rounded-lg border border-text-primary/[0.05] group-hover:border-accent/20 group-hover:bg-accent/5 transition-all shadow-sm">
-            <Logo className="w-4 h-4 transition-all duration-500 group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.6)]" glow />
+            <Logo className="w-full transition-all duration-500 group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.6)]" glow />
           </div>
           <span className="text-[11px] font-black text-text-primary tracking-[0.2em] font-sans uppercase leading-tight hidden xl:block opacity-60 group-hover:opacity-100 transition-all">
             ADNIFY

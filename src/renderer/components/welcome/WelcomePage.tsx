@@ -6,7 +6,6 @@ import { workspaceManager, WorkspaceOpenError } from '@/renderer/services/Worksp
 import { useStore } from '@/renderer/store'
 import { logger } from '@utils/Logger'
 import { toast } from '@components/common/ToastProvider'
-import { Logo } from '../common/Logo'
 import { getFileName } from '@shared/utils/pathUtils'
 import { t, type Language } from '@renderer/i18n'
 
@@ -88,7 +87,6 @@ export default function WelcomePage() {
           <div className="adnify-welcome-card">
             <div className="adnify-welcome-main">
               <div className="adnify-welcome-copy">
-                <BrandLockup language={language} />
                 <p className="adnify-welcome-eyebrow">{t('welcome.eyebrow', language)}</p>
                 <h2 className="adnify-welcome-title">{t('welcome.title', language)}</h2>
                 <p className="adnify-welcome-subtitle">{t('welcome.subtitle', language)}</p>
@@ -111,24 +109,25 @@ export default function WelcomePage() {
             <FeatureGrid language={language} />
           </div>
 
-          <div className="adnify-welcome-footer-actions">
-            <button className="adnify-welcome-secondary-button" onClick={() => api.window.new()}>
-              <Plus className="h-4 w-4" />
-              <span>{t('welcome.newWindow', language)}</span>
-            </button>
-            <button className="adnify-welcome-secondary-button" onClick={() => setShowSettings(true)}>
-              <Settings className="h-4 w-4" />
-              <span>{t('settings', language)}</span>
-            </button>
-          </div>
-
           <section className="adnify-welcome-recent">
             <div className="adnify-welcome-recent-header">
-              <h3>
-                <History className="h-3.5 w-3.5" />
-                {t('welcome.recent', language)}
-              </h3>
-              <span>{recentWorkspaces.length}/8</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <h3>
+                  <History className="h-4 w-4" />
+                  {t('welcome.recent', language)}
+                </h3>
+                <span>{recentWorkspaces.length}/8</span>
+              </div>
+              <div className="adnify-welcome-footer-actions">
+                <button className="adnify-welcome-secondary-button" onClick={() => api.window.new()}>
+                  <Plus className="h-4 w-4" />
+                  <span>{t('welcome.newWindow', language)}</span>
+                </button>
+                <button className="adnify-welcome-secondary-button" onClick={() => setShowSettings(true)}>
+                  <Settings className="h-4 w-4" />
+                  <span>{t('settings', language)}</span>
+                </button>
+              </div>
             </div>
 
             <div className="adnify-welcome-recent-list custom-scrollbar">
@@ -155,18 +154,6 @@ export default function WelcomePage() {
           </section>
         </section>
       </main>
-    </div>
-  )
-}
-
-function BrandLockup({ language }: { language: Language }) {
-  return (
-    <div className="adnify-welcome-brand">
-      <Logo className="h-10 w-10" glow />
-      <div className="min-w-0">
-        <h1>{t('welcome.brandName', language)}</h1>
-        <p>{t('welcome.brandTagline', language)}</p>
-      </div>
     </div>
   )
 }
@@ -206,11 +193,11 @@ function FeatureGrid({ language }: { language: Language }) {
 function FeatureCard({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
   return (
     <div className="adnify-welcome-feature-card">
-      <span className="adnify-welcome-feature-icon">{icon}</span>
-      <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-text-primary">{title}</span>
-        <span className="mt-1 block truncate text-xs text-text-muted">{subtitle}</span>
-      </span>
+      <div className="adnify-welcome-feature-icon">{icon}</div>
+      <div className="adnify-welcome-feature-text">
+        <h4 className="adnify-welcome-feature-title">{title}</h4>
+        <p className="adnify-welcome-feature-desc">{subtitle}</p>
+      </div>
     </div>
   )
 }
@@ -226,7 +213,10 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         width: 100%;
         max-width: 1200px;
         margin: 0 auto;
-        padding: clamp(24px, 5cqw, 64px) clamp(24px, 5cqw, 48px);
+        padding: clamp(16px, 3cqw, 32px) clamp(24px, 5cqw, 48px);
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
       }
 
       .${rootClass} .adnify-welcome-card {
@@ -246,30 +236,6 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         max-width: 540px;
         position: relative;
         z-index: 2;
-      }
-
-      .${rootClass} .adnify-welcome-brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: clamp(24px, 4cqw, 40px);
-        padding: 8px 16px 8px 8px;
-        border-radius: 999px;
-        background: rgba(var(--surface), 0.5);
-        border: 1px solid rgba(var(--border), 0.5);
-        backdrop-filter: blur(12px);
-      }
-
-      .${rootClass} .adnify-welcome-brand h1 {
-        font-size: 15px;
-        font-weight: 700;
-        color: rgb(var(--text-primary));
-        line-height: 1.2;
-      }
-
-      .${rootClass} .adnify-welcome-brand p {
-        font-size: 11px;
-        color: rgb(var(--text-muted));
       }
 
       .${rootClass} .adnify-welcome-eyebrow {
@@ -414,65 +380,117 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .adnify-welcome-feature-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 16px;
-        margin-top: 32px;
-        padding-top: 32px;
-        border-top: 1px solid rgba(var(--border), 0.5);
+        gap: 20px;
+        margin-top: 40px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .${rootClass} .adnify-welcome-feature-grid::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 100%;
+        height: 140%;
+        background: radial-gradient(ellipse at center, rgba(var(--accent), 0.35) 0%, transparent 70%);
+        filter: blur(50px);
+        transform: translate(-50%, -50%);
+        z-index: -1;
+        pointer-events: none;
       }
 
       .${rootClass} .adnify-welcome-feature-card {
         display: flex;
+        flex-direction: column;
         align-items: flex-start;
-        gap: 16px;
-        padding: 16px;
+        gap: 12px;
+        padding: 20px;
         border-radius: 16px;
-        background: transparent;
-        transition: background 0.2s ease;
+        background: linear-gradient(135deg, rgba(var(--text-primary), 0.08) 0%, rgba(var(--text-primary), 0.02) 100%);
+        backdrop-filter: blur(32px) saturate(180%);
+        -webkit-backdrop-filter: blur(32px) saturate(180%);
+        border: 1px solid rgba(var(--text-primary), 0.08);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgba(var(--text-primary), 0.12);
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .${rootClass} .adnify-welcome-feature-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(var(--accent), 0.5), transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
       }
 
       .${rootClass} .adnify-welcome-feature-card:hover {
-        background: rgba(var(--surface), 0.4);
+        transform: translateY(-4px);
+        background: linear-gradient(135deg, rgba(var(--text-primary), 0.12) 0%, rgba(var(--text-primary), 0.04) 100%);
+        border-color: rgba(var(--accent), 0.5);
+        box-shadow: 0 20px 48px rgba(0,0,0,0.2), inset 0 1px 1px rgba(var(--text-primary), 0.2), 0 0 0 1px rgba(var(--accent), 0.15);
+      }
+
+      .${rootClass} .adnify-welcome-feature-card:hover::before {
+        opacity: 1;
       }
 
       .${rootClass} .adnify-welcome-feature-icon {
         display: flex;
-        width: 44px;
-        height: 44px;
+        width: 42px;
+        height: 42px;
         flex-shrink: 0;
         align-items: center;
         justify-content: center;
         border-radius: 12px;
         color: rgb(var(--accent));
-        background: rgba(var(--accent), 0.1);
-        border: 1px solid rgba(var(--accent), 0.15);
+        background: linear-gradient(135deg, rgba(var(--accent), 0.15) 0%, rgba(var(--accent), 0.05) 100%);
+        border: 1px solid rgba(var(--accent), 0.2);
+        transition: transform 0.3s ease, background 0.3s ease;
       }
 
-      .${rootClass} .adnify-welcome-feature-card .min-w-0 {
-        padding-top: 2px;
+      .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-icon {
+        transform: scale(1.05);
+        background: linear-gradient(135deg, rgba(var(--accent), 0.25) 0%, rgba(var(--accent), 0.1) 100%);
+      }
+
+      .${rootClass} .adnify-welcome-feature-text {
         min-width: 0;
         flex: 1;
       }
 
-      .${rootClass} .adnify-welcome-feature-card span.font-semibold {
+      .${rootClass} .adnify-welcome-feature-title {
         font-size: 15px;
+        font-weight: 600;
         color: rgb(var(--text-primary));
-        margin-bottom: 4px;
-        display: block;
+        margin: 0 0 6px 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: color 0.3s ease;
       }
 
-      .${rootClass} .adnify-welcome-feature-card span.text-xs {
+      .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-title {
+        color: rgb(var(--accent));
+      }
+
+      .${rootClass} .adnify-welcome-feature-desc {
         font-size: 13px;
         color: rgb(var(--text-muted));
-        line-height: 1.5;
+        line-height: 1.6;
+        margin: 0;
         white-space: normal;
-        display: block;
       }
 
       .${rootClass} .adnify-welcome-footer-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        margin-top: 32px;
       }
 
       .${rootClass} .adnify-welcome-shortcuts {
@@ -486,7 +504,8 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       }
       
       .${rootClass} .adnify-welcome-recent {
-        margin-top: 32px;
+        margin-top: auto;
+        padding-top: 48px;
         max-width: 800px;
       }
 
@@ -494,8 +513,8 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 16px;
-        padding-bottom: 8px;
+        margin-bottom: 24px;
+        padding-bottom: 12px;
         border-bottom: 1px solid rgba(var(--border), 0.5);
       }
 
