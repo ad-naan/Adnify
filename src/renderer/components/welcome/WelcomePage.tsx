@@ -592,6 +592,21 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         background: rgba(var(--surface), 0.2);
       }
 
+      @container (max-width: 440px) {
+        .${rootClass} .adnify-welcome-feature-grid {
+          grid-template-columns: 1fr;
+          max-width: 320px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+      }
+
+      @container (min-width: 441px) and (max-width: 900px) {
+        .${rootClass} .adnify-welcome-feature-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
       @container (max-width: 900px) {
         .${rootClass} .adnify-welcome-title {
           font-size: clamp(26px, 4.5cqw, 36px);
@@ -611,10 +626,6 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
           min-width: 120px;
           padding: 0 16px;
           font-size: 13px;
-        }
-
-        .${rootClass} .adnify-welcome-feature-grid {
-          grid-template-columns: 1fr;
         }
         
         .${rootClass} .adnify-welcome-feature-card {
