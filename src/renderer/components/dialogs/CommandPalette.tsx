@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import {
   Search, FolderOpen, Settings, Terminal,
   MessageSquare, History, Trash2, RefreshCw, Save,
-  X, Zap, Keyboard, Sparkles, Plus, FolderPlus
+  X, Zap, Keyboard, Sparkles, Plus, FolderPlus, PanelRight
 } from 'lucide-react'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -105,6 +105,8 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     setShowQuickOpen,
     setShowComposer,
     setShowAbout,
+    chatVisible,
+    setChatVisible,
   } = useStore(useShallow(s => ({
     setShowSettings: s.setShowSettings,
     setTerminalVisible: s.setTerminalVisible,
@@ -115,6 +117,8 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     setShowQuickOpen: s.setShowQuickOpen,
     setShowComposer: s.setShowComposer,
     setShowAbout: s.setShowAbout,
+    chatVisible: s.chatVisible,
+    setChatVisible: s.setChatVisible,
   })))
 
   // 从 AgentStore 获取 setInputPrompt
@@ -139,6 +143,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: Sparkles,
       category: 'AI',
       action: () => {
+        setChatVisible(true)
         setMode('chat')
         if (query) setInputPrompt(query)
       }
@@ -151,6 +156,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       category: 'AI Helper',
       action: () => {
         if (activeFilePath) {
+          setChatVisible(true)
           setMode('chat')
           setInputPrompt(`Explain the file ${activeFilePath} in detail.`)
         }
@@ -164,6 +170,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       category: 'AI Helper',
       action: () => {
         if (activeFilePath) {
+          setChatVisible(true)
           setMode('chat')
           setInputPrompt(`Analyze ${activeFilePath} and suggest refactoring improvements for readability and performance.`)
         }
@@ -177,6 +184,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       category: 'AI Helper',
       action: () => {
         if (activeFilePath) {
+          setChatVisible(true)
           setMode('chat')
           setInputPrompt(`Find potential bugs in ${activeFilePath} and provide fixes.`)
         }
@@ -282,6 +290,15 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       category: 'View',
       action: () => setTerminalVisible(!terminalVisible),
       shortcut: formatShortcut('Ctrl+`'),
+    },
+    {
+      id: 'toggle-ai-panel',
+      label: chatVisible ? 'Hide AI Panel' : 'Show AI Panel',
+      description: 'Toggle the AI assistant panel',
+      icon: PanelRight,
+      category: 'View',
+      action: () => setChatVisible(!chatVisible),
+      shortcut: formatShortcut('Ctrl+L'),
     },
     {
       id: 'open-composer',

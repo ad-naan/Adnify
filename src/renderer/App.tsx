@@ -63,6 +63,7 @@ function AppContent() {
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
   const terminalVisible = useStore((state) => state.terminalVisible)
   const debugVisible = useStore((state) => state.debugVisible)
+  const chatVisible = useStore((state) => state.chatVisible)
 
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -159,17 +160,19 @@ function AppContent() {
                   )}
                 </div>
 
-                <div ref={chatRef} style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border/30 shadow-[-1px_0_15px_rgba(0,0,0,0.03)] z-20 bg-background">
-                  <div
-                    className="absolute top-0 left-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 -translate-x-[2px]"
-                    onMouseDown={startChatResize}
-                  />
-                  <ErrorBoundary>
-                    <Suspense fallback={<ChatSkeleton />}>
-                      <ChatPanel />
-                    </Suspense>
-                  </ErrorBoundary>
-                </div>
+                {chatVisible && (
+                  <div ref={chatRef} style={{ width: chatWidth }} className="flex-shrink-0 relative border-l border-border/30 shadow-[-1px_0_15px_rgba(0,0,0,0.03)] z-20 bg-background">
+                    <div
+                      className="absolute top-0 left-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 -translate-x-[2px]"
+                      onMouseDown={startChatResize}
+                    />
+                    <ErrorBoundary>
+                      <Suspense fallback={<ChatSkeleton />}>
+                        <ChatPanel />
+                      </Suspense>
+                    </ErrorBoundary>
+                  </div>
+                )}
               </div>
             </div>
 
