@@ -1,0 +1,53 @@
+{
+  "generatedAt": "2026-04-25T15:04:10.279Z",
+  "note": "System icons are generated from public/brand/logos/*.png without applying masks. Keep logos as source/internal assets; keep icons as generated platform assets.",
+  "defaultSystemIcon": {
+    "win": "public/brand/icons/app.ico",
+    "mac": "public/brand/icons/app.icns",
+    "linux": "public/brand/icons/app.png"
+  },
+  "generated": [
+    {
+      "id": "app",
+      "label": "Default system icon",
+      "source": "public/brand/logos/app.png",
+      "outputs": {
+        "png": "public/brand/icons/app.png",
+        "ico": "public/brand/icons/app.ico",
+        "icns": "public/brand/icons/app.icns",
+        "sizes": [
+          "public/brand/icons/sizes/app/16.png",
+          "public/brand/icons/sizes/app/24.png",
+          "public/brand/icons/sizes/app/32.png",
+          "public/brand/icons/sizes/app/48.png",
+          "public/brand/icons/sizes/app/64.png",
+          "public/brand/icons/sizes/app/128.png",
+          "public/brand/icons/sizes/app/256.png",
+          "public/brand/icons/sizes/app/512.png",
+          "public/brand/icons/sizes/app/1024.png"
+        ]
+      }
+    },
+    {
+      "id": "app-light",
+      "label": "Optional light-theme system icon variant",
+      "source": "public/brand/logos/app-light.png",
+      "outputs": {
+        "png": "public/brand/icons/variants/app-light/app-light.png",
+        "ico": "public/brand/icons/variants/app-light/app-light.ico",
+        "icns": "public/brand/icons/variants/app-light/app-light.icns",
+        "sizes": [
+          "public/brand/icons/sizes/app-light/16.png",
+          "public/brand/icons/sizes/app-light/24.png",
+          "public/brand/icons/sizes/app-light/32.png",
+          "public/brand/icons/sizes/app-light/48.png",
+          "public/brand/icons/sizes/app-light/64.png",
+          "public/brand/icons/sizes/app-light/128.png",
+          "public/brand/icons/sizes/app-light/256.png",
+          "public/brand/icons/sizes/app-light/512.png",
+          "public/brand/icons/sizes/app-light/1024.png"
+        ]
+      }
+    }
+  ]
+}

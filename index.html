@@ -49,8 +49,10 @@
 
       document.documentElement.style.background = bg;
       document.documentElement.style.setProperty('--loader-bg', loaderBg);
+      document.documentElement.style.setProperty('--loader-logo-url', "url('/brand/logos/app.png')");
 
       if (isLight) {
+        document.documentElement.style.setProperty('--loader-logo-url', "url('/brand/logos/app-light.png')");
         document.documentElement.style.setProperty('--loader-text', '#333333');
         document.documentElement.style.setProperty('--loader-text-dim', '#738087');
         document.documentElement.style.setProperty('--loader-surface', '#f1f3f5');
@@ -72,6 +74,7 @@
       --loader-text: #fafafa;
       --loader-text-dim: #71717a;
       --loader-surface: #18181b;
+      --loader-logo-url: url('/brand/logos/app.png');
     }
 
     * {
@@ -147,6 +150,10 @@
     .loader-logo-icon {
       width: 44px;
       height: 44px;
+      background-image: var(--loader-logo-url);
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
       filter: drop-shadow(0 0 12px var(--loader-accent));
     }
 
@@ -256,7 +263,7 @@
         <div class="loader-glow"></div>
         <div class="loader-ring"></div>
         <div class="loader-logo-bg">
-          <img class="loader-logo-icon" src="/brand/welcome/loader-logo.png" alt="Adnify" />
+          <div class="loader-logo-icon" role="img" aria-label="Adnify"></div>
         </div>
       </div>
       <div class="loader-title">Adnify</div>
