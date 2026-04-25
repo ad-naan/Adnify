@@ -24,13 +24,21 @@ interface SearchFileResult {
 }
 
 interface LLMStreamChunk {
-  type: 'text' | 'reasoning' | 'error' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available'
+  type: 'text' | 'reasoning' | 'error' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available' | 'source'
   content?: string
   error?: string
   id?: string
   name?: string
   arguments?: Record<string, unknown>
   argumentsDelta?: string
+  source?: {
+    id: string
+    sourceType: 'url' | 'document'
+    url?: string
+    title?: string
+    mediaType?: string
+    filename?: string
+  }
 }
 
 interface LLMError {

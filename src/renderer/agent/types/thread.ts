@@ -59,6 +59,11 @@ export interface StreamState {
   assistantId?: string
 }
 
+export interface HandoffResumeMeta {
+  sourceThreadId: string
+  createdAt: number
+}
+
 /** Complete persisted thread record plus thread-scoped ephemeral preview state. */
 export interface ChatThread {
   id: string
@@ -92,6 +97,7 @@ export interface ChatThread {
   executionMeta?: ThreadExecutionMeta
 
   handoffContext?: string
+  handoffResume?: HandoffResumeMeta
   pendingObjective?: string
   pendingSteps?: string[]
 
@@ -118,6 +124,7 @@ export interface PersistedChatThread {
   contextSummary: StructuredSummary | null
   todos?: TodoItem[]
   handoffContext?: string
+  handoffResume?: HandoffResumeMeta
   pendingObjective?: string
   pendingSteps?: string[]
   mode?: import('@/shared/types/workMode').WorkMode
@@ -162,6 +169,7 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
     contextSummary: thread.contextSummary,
     todos: thread.todos,
     handoffContext: thread.handoffContext,
+    handoffResume: thread.handoffResume,
     pendingObjective: thread.pendingObjective,
     pendingSteps: thread.pendingSteps,
     mode: thread.mode,

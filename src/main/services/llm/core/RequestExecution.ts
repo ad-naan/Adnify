@@ -1,6 +1,12 @@
 import type { ModelMessage, ProviderOptions } from '@ai-sdk/provider-utils'
 import type { LLMConfig, LLMMessage } from '@shared/types'
 import { prepareRequestCache } from './RequestCache'
+import {
+  buildGenerationSettings,
+  buildRequestExecutionOptions,
+  type GenerationSettings,
+  type RequestExecutionOptions,
+} from './RequestSettings'
 import { executeWithGenerationRecovery } from './GenerationRecovery'
 import {
   buildProtocolProviderOptions,
@@ -11,6 +17,8 @@ import {
 
 export interface PreparedRequest {
   messages: ModelMessage[]
+  settings: GenerationSettings
+  callOptions: RequestExecutionOptions
   providerOptions?: ProviderOptions
 }
 
@@ -55,6 +63,8 @@ export async function executePreparedRequest<T>(
 
       return await execute({
         messages: prepared.messages,
+        settings: prepared.settings,
+        callOptions: prepared.callOptions,
         providerOptions: prepared.providerOptions,
       }, attempt)
     },
@@ -72,6 +82,8 @@ export async function prepareExecutionRequest(
   options: PrepareExecutionRequestOptions,
 ): Promise<PreparedRequest> {
   const { config, baseMessages, originalMessages, useCache } = options
+  const settings = buildGenerationSettings(config)
+  const callOptions = buildRequestExecutionOptions(config)
 
   const prepared = useCache
     ? await prepareRequestCache(config, baseMessages)
@@ -82,19 +94,19 @@ export async function prepareExecutionRequest(
     buildProtocolProviderOptions(config),
   )
 
-  if (originalMessages) {
-    const thinkingDecision = resolveThinkingCompatibility(config, originalMessages)
+  const thinkingDecision = resolveThinkingCompatibility(config, originalMessages ?? [])
 
-    if (thinkingDecision.enabled) {
-      providerOptions = mergeProviderOptions(
-        providerOptions,
-        buildThinkingProviderOptions(config),
-      )
-    }
+  if (thinkingDecision.enabled) {
+    providerOptions = mergeProviderOptions(
+      providerOptions,
+      buildThinkingProviderOptions(config),
+    )
   }
 
   return {
     messages: prepared.messages,
+    settings,
+    callOptions,
     providerOptions,
   }
 }

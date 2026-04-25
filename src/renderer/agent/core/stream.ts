@@ -13,6 +13,7 @@ import type { LLMCallResult } from './types'
 import { filterToolCallLeakChunk } from '../utils/toolCallLeakFilter'
 import { t } from '@/renderer/i18n'
 import { StreamingEditPreviewCoordinator } from '../services/streamingEditPreview'
+import type { LLMStreamSource } from '@/shared/types/llm'
 import {
   arePartialArgsEqual,
   parseFinalJsonArgs,
@@ -48,6 +49,7 @@ export function createStreamProcessor(
   let isInReasoning = false
   let reasoningPartId: string | null = null
   let toolCalls: ToolCall[] = []
+  let sources: LLMStreamSource[] = []
   let usage: TokenUsage | undefined
   let error: string | undefined
   let isCleanedUp = false
@@ -158,6 +160,7 @@ export function createStreamProcessor(
     arguments?: unknown
     argumentsDelta?: string
     usage?: unknown
+    source?: LLMStreamSource
   }) => {
     switch (data.type) {
       case 'text':
@@ -362,6 +365,15 @@ export function createStreamProcessor(
           usage = data.usage as TokenUsage
         }
         break
+
+      case 'source':
+        if (data.source) {
+          sources.push(data.source)
+          if (assistantId) {
+            store.upsertSourcesPart(assistantId, data.source)
+          }
+        }
+        break
     }
   }
 
@@ -414,7 +426,7 @@ export function createStreamProcessor(
     logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg
     finalizeReasoning()
-    doResolve({ content, toolCalls, usage, error: errorMsg })
+    doResolve({ content, toolCalls, sources, usage, error: errorMsg })
   }
 
   const handleDone = (result: { reasoning?: string; usage?: unknown }) => {
@@ -441,7 +453,7 @@ export function createStreamProcessor(
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
       finalizeReasoning()
-      doResolve({ content, reasoning, toolCalls, usage, error })
+      doResolve({ content, reasoning, toolCalls, sources, usage, error })
     }, 0)
   }
 

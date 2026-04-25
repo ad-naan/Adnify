@@ -44,7 +44,8 @@ describe('summaryService handoff', () => {
       },
     ]
 
-    const handoff = await generateHandoffDocument('thread-1', messages, 'E:\\Project\\adnify', todos)
+    const result = await generateHandoffDocument('thread-1', messages, 'E:\\Project\\adnify', todos)
+    const { handoff } = result
 
     expect(handoff.lastUserRequest).toBe('新起线程时还要把最新消息一起带过去，并且在聊天面板显示压缩内容')
     expect(handoff.summary.todos).toEqual(todos)

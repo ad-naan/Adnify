@@ -106,6 +106,12 @@ export async function prepareHandoffForThread(
     workspacePath,
   })
 
+  state.setContextTransition({
+    status: 'compressing',
+    sourceThreadId: threadId,
+    startedAt: Date.now(),
+  })
+
   try {
     const generated = await generateHandoffDocument(
       thread.id,
@@ -147,6 +153,11 @@ export async function prepareHandoffForThread(
       handoff,
       source: 'rule_based',
       error: message,
+    }
+  } finally {
+    const transition = useAgentStore.getState().contextTransition
+    if (transition.status === 'compressing' && transition.sourceThreadId === threadId) {
+      useAgentStore.getState().clearContextTransition()
     }
   }
 }

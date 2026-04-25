@@ -151,6 +151,14 @@ export function normalizePersistedChatThread(thread: PersistedChatThread): Persi
     messageCheckpoints: Array.isArray(thread.messageCheckpoints) ? thread.messageCheckpoints : [],
     messageCount: preservedMessageCount,
     contextSummary: thread.contextSummary ?? null,
+    handoffResume: isPlainRecord(thread.handoffResume) &&
+      typeof thread.handoffResume.sourceThreadId === 'string' &&
+      typeof thread.handoffResume.createdAt === 'number'
+      ? {
+        sourceThreadId: thread.handoffResume.sourceThreadId,
+        createdAt: thread.handoffResume.createdAt,
+      }
+      : undefined,
   }
 }
 
@@ -187,6 +195,14 @@ export function normalizeLegacyThreadRecord(threadId: string, value: unknown): C
     contextSummary: null,
     todos: Array.isArray(value.todos) ? value.todos : undefined,
     handoffContext: typeof value.handoffContext === 'string' ? value.handoffContext : undefined,
+    handoffResume: isPlainRecord(value.handoffResume) &&
+      typeof value.handoffResume.sourceThreadId === 'string' &&
+      typeof value.handoffResume.createdAt === 'number'
+      ? {
+        sourceThreadId: value.handoffResume.sourceThreadId,
+        createdAt: value.handoffResume.createdAt,
+      }
+      : undefined,
     pendingObjective: typeof value.pendingObjective === 'string' ? value.pendingObjective : undefined,
     pendingSteps: Array.isArray(value.pendingSteps) ? value.pendingSteps.filter((step): step is string => typeof step === 'string') : undefined,
     mode: value.mode as PersistedChatThread['mode'],

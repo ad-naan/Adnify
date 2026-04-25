@@ -27,7 +27,7 @@ export class SyncService {
   }
 
   async generate(params: SyncParams): Promise<LLMResponse<string>> {
-    const { config, messages, tools, systemPrompt, abortSignal, timeout = 120_000 } = params
+    const { config, messages, tools, systemPrompt, abortSignal, timeout } = params
 
     logger.system.info('[SyncService] Starting generation', {
       provider: config.provider,
@@ -46,21 +46,26 @@ export class SyncService {
         originalMessages: messages,
         baseMessages,
         abortSignal,
-        execute: async ({ messages: preparedMessages, providerOptions }) =>
+        execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
           await generateText({
             model,
             messages: preparedMessages,
             tools: coreTools,
-            maxOutputTokens: config.maxTokens || 1000,
-            temperature: config.temperature ?? 0.3,
-            topP: config.topP !== undefined && config.topP < 1 ? config.topP : undefined,
-            topK: config.topK,
-            seed: config.seed,
+            ...settings,
+            ...callOptions,
             providerOptions,
             abortSignal,
-            timeout,
+            timeout: timeout ?? callOptions.timeout ?? 120_000,
           }),
       })
+
+      if (result.warnings && result.warnings.length > 0) {
+        logger.llm.warn('[SyncService] Provider warnings', {
+          provider: config.provider,
+          model: config.model,
+          warnings: result.warnings,
+        })
+      }
 
       return {
         data: result.text,

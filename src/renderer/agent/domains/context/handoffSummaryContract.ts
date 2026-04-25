@@ -13,10 +13,73 @@ export interface NormalizedHandoffSummary {
   lastRequestStatus: HandoffRequestStatus
 }
 
+export const HANDOFF_SUMMARY_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    objective: { type: 'string', description: 'What the user is trying to achieve' },
+    completedSteps: { type: 'array', items: { type: 'string' }, description: 'What has been done' },
+    pendingSteps: { type: 'array', items: { type: 'string' }, description: 'What still needs to be done' },
+    keyDecisions: { type: 'array', items: { type: 'string' }, description: 'Important technical decisions' },
+    userConstraints: { type: 'array', items: { type: 'string' }, description: 'Special requirements' },
+    lastRequestStatus: {
+      type: 'string',
+      enum: [...HANDOFF_REQUEST_STATUSES],
+      description: 'Status of last request',
+    },
+  },
+  required: ['objective', 'completedSteps', 'pendingSteps', 'keyDecisions', 'userConstraints', 'lastRequestStatus'],
+} as const
+
 interface HandoffSummaryFallbacks {
   objective: string
   completedSteps: string[]
   pendingSteps: string[]
+}
+
+const HANDOFF_SUMMARY_ALIASES: Record<string, string[]> = {
+  objective: ['mainObjective'],
+  completedSteps: ['completedSoFar'],
+  pendingSteps: ['remainingSteps', 'nextSteps'],
+  keyDecisions: ['technicalDecisions'],
+  userConstraints: ['specialRequirementsOrConstraints'],
+  lastRequestStatus: ['lastUserRequestStatus'],
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeStatus(value: unknown): string {
+  const normalized = normalizeString(value).toLowerCase().replace(/\s+/g, '_')
+
+  if (normalized === 'incomplete' || normalized === 'in_progress') {
+    return 'partial'
+  }
+
+  if (normalized === 'notstarted') {
+    return 'not_started'
+  }
+
+  return normalized
+}
+
+function normalizeCandidateAliases(candidate: unknown): unknown {
+  if (!isPlainRecord(candidate)) {
+    return candidate
+  }
+
+  const normalized: Record<string, unknown> = { ...candidate }
+
+  for (const [canonicalKey, aliases] of Object.entries(HANDOFF_SUMMARY_ALIASES)) {
+    if (normalized[canonicalKey] !== undefined) continue
+
+    const aliasKey = aliases.find(alias => normalized[alias] !== undefined)
+    if (aliasKey) {
+      normalized[canonicalKey] = normalized[aliasKey]
+    }
+  }
+
+  return normalized
 }
 
 function normalizeString(value: unknown): string {
@@ -59,16 +122,18 @@ export const HandoffSummarySchema = z.object({
   keyDecisions: z.preprocess(value => normalizeStringList(value), z.array(z.string())),
   userConstraints: z.preprocess(value => normalizeStringList(value), z.array(z.string())),
   lastRequestStatus: z.preprocess(
-    value => normalizeString(value).toLowerCase(),
+    value => normalizeStatus(value),
     z.enum(HANDOFF_REQUEST_STATUSES).catch('partial'),
   ),
 }).passthrough()
+
+const NormalizedHandoffSummarySchema = z.preprocess(normalizeCandidateAliases, HandoffSummarySchema)
 
 export function normalizeHandoffSummary(
   candidate: unknown,
   fallbacks: HandoffSummaryFallbacks,
 ): NormalizedHandoffSummary {
-  const parsed = HandoffSummarySchema.safeParse(candidate)
+  const parsed = NormalizedHandoffSummarySchema.safeParse(candidate)
   if (!parsed.success) {
     return {
       objective: fallbacks.objective,
@@ -93,6 +158,11 @@ export function normalizeHandoffSummary(
 }
 
 export function getStructuredOutputErrorMessage(error: unknown): string {
+  if (Array.isArray(error)) {
+    if (error.length === 0) return 'Unknown structured output error'
+    return error.map(item => getStructuredOutputErrorMessage(item)).join(' | ')
+  }
+
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -101,7 +171,10 @@ export function isRecoverableStructuredOutputError(error: unknown): boolean {
 
   return [
     'No object generated',
+    'did not return a response',
     'did not match schema',
+    'finishReason: \'length\'',
+    'finishReason: "length"',
     'No available channel',
     'generateObject',
   ].some(pattern => message.includes(pattern))

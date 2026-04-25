@@ -5,6 +5,7 @@
 import type { WorkMode } from '@/renderer/modes/types'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMConfig as SharedLLMConfig } from '@/shared/types/llm'
+import type { LLMStreamSource } from '@/shared/types/llm'
 
 // ===== LLM 配置（扩展 shared 定义，添加 contextLimit） =====
 
@@ -37,6 +38,7 @@ export interface LLMCallResult {
   content?: string
   reasoning?: string
   toolCalls?: ToolCall[]
+  sources?: LLMStreamSource[]
   usage?: TokenUsage
   error?: string
 }

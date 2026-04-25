@@ -8,7 +8,15 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw, Pencil } from 'lucide-react'
-import { PROVIDERS, type ApiProtocol, getProviderDefaultHeaders } from '@/shared/config/providers'
+import {
+  PROVIDERS,
+  type ApiProtocol,
+  type OpenAICompatibilityProfile,
+  getProviderDefaultHeaders,
+  isOpenAIStyleProtocol,
+  resolveOpenAICompatibilityProfile,
+} from '@/shared/config/providers'
+import { REASONING_EFFORT_VALUES } from '@/shared/config/llmPersistence'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
@@ -27,6 +35,177 @@ const PROTOCOL_OPTIONS = [
   { value: 'google', label: 'Google (Gemini)' },
   { value: 'custom', label: 'Custom' },
 ]
+
+type EditableHeader = { key: string; value: string; isCustom?: boolean }
+
+const PREDEFINED_HEADER_OPTIONS = [
+  { value: '', label: 'Select header' },
+  { value: 'X-Request-ID', label: 'X-Request-ID' },
+  { value: 'X-Organization', label: 'X-Organization' },
+  { value: 'X-Project-ID', label: 'X-Project-ID' },
+  { value: 'User-Agent', label: 'User-Agent' },
+  { value: 'Content-Type', label: 'Content-Type' },
+  { value: 'Accept', label: 'Accept' },
+]
+
+const PREDEFINED_HEADER_KEYS = new Set(PREDEFINED_HEADER_OPTIONS.map(option => option.value).filter(Boolean))
+
+type ReasoningEffortValue = typeof REASONING_EFFORT_VALUES[number]
+
+const OPENAI_COMPATIBILITY_PROFILE_OPTIONS: Array<{
+  value: OpenAICompatibilityProfile
+  label: { en: string; zh: string }
+}> = [
+    {
+      value: 'compatible',
+      label: { en: 'Compatible (Safe)', zh: '兼容模式（安全）' },
+    },
+    {
+      value: 'full',
+      label: { en: 'Full OpenAI', zh: '完整 OpenAI' },
+    },
+  ]
+
+function getReasoningEffortOptions(
+  provider: string,
+  protocol: ApiProtocol | undefined,
+  openAICompatibilityProfile: OpenAICompatibilityProfile | undefined,
+  language: 'en' | 'zh',
+): Array<{ value: ReasoningEffortValue; label: string }> {
+  const optionLabels: Record<ReasoningEffortValue, { en: string; zh: string }> = {
+    none: { en: 'None', zh: '关闭' },
+    minimal: { en: 'Minimal', zh: '极低' },
+    low: { en: 'Low', zh: '低' },
+    medium: { en: 'Medium', zh: '中' },
+    high: { en: 'High', zh: '高' },
+    xhigh: { en: 'X-High', zh: '极高' },
+  }
+
+  const supportedValues: ReasoningEffortValue[] =
+    provider === 'anthropic' || protocol === 'anthropic'
+      ? ['low', 'medium', 'high']
+      : provider === 'gemini' || protocol === 'google'
+        ? ['minimal', 'low', 'medium', 'high']
+        : isOpenAIStyleProtocol(protocol) && openAICompatibilityProfile === 'compatible'
+          ? ['minimal', 'low', 'medium', 'high']
+          : [...REASONING_EFFORT_VALUES]
+
+  return supportedValues.map(value => ({
+    value,
+    label: optionLabels[value][language],
+  }))
+}
+
+function getReasoningEffortDescription(
+  provider: string,
+  protocol: ApiProtocol | undefined,
+  openAICompatibilityProfile: OpenAICompatibilityProfile | undefined,
+  language: 'en' | 'zh',
+): string {
+  if (provider === 'anthropic' || protocol === 'anthropic') {
+    return language === 'zh'
+      ? 'Anthropic 使用 low / medium / high 三档 effort'
+      : 'Anthropic uses low / medium / high effort levels'
+  }
+
+  if (provider === 'gemini' || protocol === 'google') {
+    return language === 'zh'
+      ? 'Gemini 3 使用 thinking level；Gemini 2.5 主要看下方 thinking budget'
+      : 'Gemini 3 uses thinking level; Gemini 2.5 mainly relies on the thinking budget below'
+  }
+
+  if (isOpenAIStyleProtocol(protocol) && openAICompatibilityProfile === 'compatible') {
+    return language === 'zh'
+      ? '第三方 OpenAI Compatible 接口通常只兼容 minimal / low / medium / high'
+      : 'Compatible mode only sends the safer OpenAI subset for broader third-party gateway support'
+  }
+
+  if (isOpenAIStyleProtocol(protocol)) {
+    return language === 'zh'
+      ? '完整 OpenAI 会启用更完整的 reasoning、并行工具和结构化输出能力'
+      : 'Full OpenAI enables richer reasoning, parallel tool, and structured output support'
+  }
+
+  return language === 'zh'
+    ? 'OpenAI 协议使用 reasoning effort；不同模型支持范围可能不同'
+    : 'OpenAI-style protocols use reasoning effort; exact support depends on the model'
+}
+
+function getOpenAICompatibilityProfileDescription(
+  protocol: ApiProtocol | undefined,
+  language: 'en' | 'zh',
+): string {
+  if (protocol === 'openai-responses') {
+    return language === 'zh'
+      ? 'Responses 协议下也会按这个档位决定是否发送更完整的 OpenAI 专属参数'
+      : 'This profile also decides whether Responses requests send richer OpenAI-only parameters'
+  }
+
+  return language === 'zh'
+    ? '决定第三方 OpenAI 风格接口使用保守兼容参数，还是完整 OpenAI 参数集'
+    : 'Choose between the safer compatibility subset and the full OpenAI parameter set'
+}
+
+function getHeaderSelectOptions(language: 'en' | 'zh') {
+  return [
+    ...PREDEFINED_HEADER_OPTIONS.map(option => ({
+      value: option.value,
+      label: option.value ? option.label : language === 'zh' ? '选择请求头' : 'Select header',
+    })),
+    { value: 'X-Custom-Header', label: language === 'zh' ? '自定义...' : 'Custom...' },
+  ]
+}
+
+function splitCustomHeaders(
+  headers: Record<string, string> | undefined,
+  defaultHeaders: Record<string, string>,
+): EditableHeader[] {
+  if (!headers) return []
+
+  return Object.entries(headers)
+    .filter(([key]) => !Object.prototype.hasOwnProperty.call(defaultHeaders, key))
+    .map(([key, value]) => ({
+      key,
+      value,
+      isCustom: !PREDEFINED_HEADER_KEYS.has(key),
+    }))
+}
+
+function mergeHeaders(
+  defaultHeaders: Record<string, string>,
+  customHeaders: EditableHeader[],
+): Record<string, string> | undefined {
+  const merged: Record<string, string> = { ...defaultHeaders }
+
+  for (const header of customHeaders) {
+    if (header.key) {
+      merged[header.key] = header.value || ''
+    }
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function isIncompleteHeaderDraft(header: EditableHeader): boolean {
+  return !header.key.trim()
+}
+
+function reconcileCustomHeaderDrafts(
+  persistedHeaders: Record<string, string> | undefined,
+  defaultHeaders: Record<string, string>,
+  currentDrafts: EditableHeader[],
+  preserveDrafts: boolean,
+): EditableHeader[] {
+  const syncedHeaders = splitCustomHeaders(persistedHeaders, defaultHeaders)
+  if (!preserveDrafts) {
+    return syncedHeaders
+  }
+
+  const incompleteDrafts = currentDrafts.filter(isIncompleteHeaderDraft)
+  return incompleteDrafts.length > 0
+    ? [...syncedHeaders, ...incompleteDrafts]
+    : syncedHeaders
+}
 
 function TestConnectionButton({ localConfig, language }: { localConfig: any; language: 'en' | 'zh' }) {
   const [testing, setTesting] = useState(false)
@@ -551,9 +730,10 @@ export function ProviderSettings({
   const [logitBiasString, setLogitBiasString] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [editingProviderName, setEditingProviderName] = useState('')
+  const previousProviderRef = useRef(localConfig.provider)
 
   // Headers 状态
-  const [customHeaders, setCustomHeaders] = useState<Array<{ key: string; value: string; isCustom?: boolean }>>([])
+  const [customHeaders, setCustomHeaders] = useState<EditableHeader[]>([])
 
   // 从 localProviderConfigs 获取自定义厂商列表
   const customProviders = useMemo(() => {
@@ -565,6 +745,80 @@ export function ProviderSettings({
   // 当前选中的是自定义 Provider 吗？
   const isCustomSelected = isCustomProvider(localConfig.provider)
   const selectedCustomConfig = isCustomSelected ? localProviderConfigs[localConfig.provider] : null
+  const selectedProviderProtocol = (selectedProvider as { protocol?: ApiProtocol } | undefined)?.protocol
+
+  const currentProtocol = useMemo<ApiProtocol | undefined>(() => {
+    return localConfig.protocol
+      ?? selectedCustomConfig?.protocol
+      ?? selectedProviderProtocol
+  }, [localConfig.protocol, selectedCustomConfig?.protocol, selectedProviderProtocol])
+
+  const currentOpenAICompatibilityProfile = useMemo(
+    () => resolveOpenAICompatibilityProfile(
+      localConfig.provider,
+      currentProtocol,
+      localConfig.openAICompatibilityProfile ?? selectedCustomConfig?.openAICompatibilityProfile,
+    ),
+    [
+      currentProtocol,
+      localConfig.openAICompatibilityProfile,
+      localConfig.provider,
+      selectedCustomConfig?.openAICompatibilityProfile,
+    ],
+  )
+
+  const defaultHeaders = useMemo(
+    () => getProviderDefaultHeaders(localConfig.provider, currentProtocol),
+    [localConfig.provider, currentProtocol],
+  )
+
+  const reasoningEffortOptions = useMemo(
+    () => getReasoningEffortOptions(
+      localConfig.provider,
+      currentProtocol,
+      currentOpenAICompatibilityProfile,
+      language,
+    ),
+    [currentOpenAICompatibilityProfile, currentProtocol, language, localConfig.provider],
+  )
+
+  const reasoningEffortDescription = useMemo(
+    () => getReasoningEffortDescription(
+      localConfig.provider,
+      currentProtocol,
+      currentOpenAICompatibilityProfile,
+      language,
+    ),
+    [currentOpenAICompatibilityProfile, currentProtocol, language, localConfig.provider],
+  )
+
+  const openAICompatibilityProfileOptions = useMemo(
+    () => OPENAI_COMPATIBILITY_PROFILE_OPTIONS.map(option => ({
+      value: option.value,
+      label: option.label[language],
+    })),
+    [language],
+  )
+
+  const openAICompatibilityProfileDescription = useMemo(
+    () => getOpenAICompatibilityProfileDescription(currentProtocol, language),
+    [currentProtocol, language],
+  )
+
+  const selectedReasoningEffort = useMemo(() => {
+    const currentValue = localConfig.reasoningEffort ?? 'medium'
+    const preferredFallback = reasoningEffortOptions.find(option => option.value === 'medium')?.value
+      ?? reasoningEffortOptions[0]?.value
+
+    return reasoningEffortOptions.some(option => option.value === currentValue)
+      ? currentValue
+      : preferredFallback ?? 'medium'
+  }, [localConfig.reasoningEffort, reasoningEffortOptions])
+
+  const headerSelectOptions = useMemo(
+    () => getHeaderSelectOptions(language),
+    [language],
+  )
 
   const startEditingCustomProvider = (id: string, displayName: string) => {
     setEditingProviderId(id)
@@ -592,12 +846,12 @@ export function ProviderSettings({
     cancelEditingCustomProvider()
   }
 
-  // 获取当前 provider 的协议（用于获取默认请求头）
-  const getCurrentProtocol = (): ApiProtocol | undefined => {
-    if (isCustomSelected && selectedCustomConfig) {
-      return selectedCustomConfig.protocol
-    }
-    return undefined // 内置 provider 不需要传协议
+  const syncCustomHeaders = (nextHeaders: EditableHeader[]) => {
+    setCustomHeaders(nextHeaders)
+    setLocalConfig(prev => ({
+      ...prev,
+      headers: mergeHeaders(defaultHeaders, nextHeaders),
+    }))
   }
 
   // Sync logitBiasString with localConfig
@@ -608,32 +862,21 @@ export function ProviderSettings({
   // 不再使用 useEffect 同步，而是在初始化时设置
   // customHeaders 只用于额外的请求头，不包括默认请求头
   useEffect(() => {
-    // 每次切换 provider 或者 config.headers 被外部重新加载时，我们需要恢复 customHeaders UI 状态
-    const protocol = getCurrentProtocol()
-    const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
+    const preserveDrafts = previousProviderRef.current === localConfig.provider
 
-    // 如果 localConfig.headers 里有数据，并且这些数据不在 defaultHeaders 里，那就是用户自己添加的 custom headers
-    if (localConfig.headers) {
-      const newCustomHeaders: Array<{ key: string; value: string; isCustom?: boolean }> = []
-      Object.entries(localConfig.headers).forEach(([key, value]) => {
-        // 过滤掉默认请求头（比如 x-api-key, anthropic-version）
-        if (!defaultHeaders.hasOwnProperty(key)) {
-          // 查看是不是下拉框里没有的值，没的话就是 isCustom
-          const predefinedKeys = ['X-Request-ID', 'X-Organization', 'X-Project-ID', 'User-Agent', 'Content-Type', 'Accept']
-          newCustomHeaders.push({
-            key,
-            value,
-            isCustom: !predefinedKeys.includes(key)
-          })
-        }
-      })
+    // 每次切换 provider 或者 config.headers 被外部重新加载时，我们需要恢复 customHeaders UI 状态。
+    // 未完成的自定义 header 草稿只保留在本地 UI，不写入持久化 headers。
+    setCustomHeaders(currentDrafts =>
+      reconcileCustomHeaderDrafts(
+        localConfig.headers,
+        defaultHeaders,
+        currentDrafts,
+        preserveDrafts,
+      ),
+    )
 
-      setCustomHeaders(newCustomHeaders)
-    } else {
-      setCustomHeaders([])
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- localConfig.headers 由 onChange 手动管理，加入依赖会导致循环覆盖
-  }, [localConfig.provider])
+    previousProviderRef.current = localConfig.provider
+  }, [defaultHeaders, localConfig.headers, localConfig.provider])
 
   // 添加模型到本地配置
   const handleAddModel = (name?: string) => {
@@ -713,6 +956,7 @@ export function ProviderSettings({
           timeout: localConfig.timeout,
           model: localConfig.model,
           headers: localConfig.headers,
+          openAICompatibilityProfile: localConfig.openAICompatibilityProfile,
           protocol: localConfig.protocol,
         },
       }
@@ -730,6 +974,11 @@ export function ProviderSettings({
       timeout: nextConfig.timeout || providerInfo?.defaults.timeout || 120000,
       model: nextConfig.model || providerInfo?.models[0] || '',
       headers: nextConfig.headers,
+      openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+        providerId,
+        nextConfig.protocol || providerInfo?.protocol,
+        nextConfig.openAICompatibilityProfile,
+      ),
       protocol: nextConfig.protocol || providerInfo?.protocol,
     })
     setIsAddingCustom(false)
@@ -747,7 +996,9 @@ export function ProviderSettings({
         baseUrl: localConfig.baseUrl,
         timeout: localConfig.timeout,
         model: localConfig.model,
-        headers: localConfig.headers,  // 保存当前 provider 的 headers
+        headers: localConfig.headers,
+        openAICompatibilityProfile: localConfig.openAICompatibilityProfile,
+        protocol: localConfig.protocol,
       },
     }
     setLocalProviderConfigs(updatedConfigs)
@@ -763,8 +1014,13 @@ export function ProviderSettings({
       baseUrl: customConfig.baseUrl || '',
       timeout: customConfig.timeout || 120000,
       model: customConfig.model || models[0] || '',
-      headers: customConfig.headers,  // 加载新 provider 的 headers
-      protocol: customConfig.protocol, // 增加协议同步
+      headers: customConfig.headers,
+      openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+        id,
+        customConfig.protocol,
+        customConfig.openAICompatibilityProfile,
+      ),
+      protocol: customConfig.protocol,
     })
     setIsAddingCustom(false)
   }
@@ -778,6 +1034,10 @@ export function ProviderSettings({
       apiKey: config.apiKey,
       protocol: config.protocol as ApiProtocol,
       model: config.model,
+      openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+        id,
+        config.protocol as ApiProtocol,
+      ),
       customModels: config.customModels || (config.model ? [config.model] : []),
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -799,6 +1059,10 @@ export function ProviderSettings({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       timeout: 120000,
+      openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+        id,
+        config.protocol as ApiProtocol,
+      ),
       model: config.model,
       protocol: config.protocol as ApiProtocol, // 增加协议同步
     })
@@ -986,6 +1250,9 @@ export function ProviderSettings({
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Box className="w-4 h-4 text-accent" />
+                  <h5 className="sr-only text-sm font-medium text-text-primary">
+                    {language === 'zh' ? '模型配置' : 'Model Configuration'}
+                  </h5>
                   <h5 className="text-sm font-medium text-text-primary">
                     {language === 'zh' ? '模型配置' : 'Model Configuration'}
                   </h5>
@@ -1018,6 +1285,9 @@ export function ProviderSettings({
               <ScrollShadow maxHeight="500px" className="pr-2">
                 <div className="space-y-4 pr-2">
                   <div className="space-y-1.5">
+                    <label className="sr-only text-xs font-medium text-text-secondary">
+                      {language === 'zh' ? '选择模型' : 'Select Model'}
+                    </label>
                     <label className="text-xs font-medium text-text-secondary">
                       {language === 'zh' ? '选择模型' : 'Select Model'}
                     </label>
@@ -1236,19 +1506,13 @@ export function ProviderSettings({
                               {language === 'zh' ? '推理深度' : 'Reasoning Effort'}
                             </label>
                             <p className="text-[10px] text-text-muted">
-                              {language === 'zh'
-                                ? 'OpenAI / Gemini 3 使用此参数控制推理深度'
-                                : 'Controls reasoning depth for OpenAI / Gemini 3'}
+                              {reasoningEffortDescription}
                             </p>
                           </div>
                           <Select
-                            options={[
-                              { value: 'low', label: language === 'zh' ? '低' : 'Low' },
-                              { value: 'medium', label: language === 'zh' ? '中' : 'Medium' },
-                              { value: 'high', label: language === 'zh' ? '高' : 'High' },
-                            ]}
-                            value={localConfig.reasoningEffort || 'medium'}
-                            onChange={(val) => setLocalConfig({ ...localConfig, reasoningEffort: val as 'low' | 'medium' | 'high' })}
+                            options={reasoningEffortOptions}
+                            value={selectedReasoningEffort}
+                            onChange={(val) => setLocalConfig({ ...localConfig, reasoningEffort: val as typeof REASONING_EFFORT_VALUES[number] })}
                           />
                         </div>
 
@@ -1288,6 +1552,99 @@ export function ProviderSettings({
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  <div className="space-y-4 pt-3 border-t border-border/50">
+                    <div className="space-y-0.5">
+                      <label className="sr-only text-xs font-medium text-text-secondary">
+                        {language === 'zh' ? '请求行为' : 'Request Behavior'}
+                      </label>
+                      <label className="text-xs font-medium text-text-secondary">
+                        {language === 'zh' ? '请求行为' : 'Request Behavior'}
+                      </label>
+                      <p className="sr-only text-[10px] text-text-muted">
+                        {language === 'zh'
+                          ? '控制重试、工具调用策略和并行工具执行方式'
+                          : 'Controls retries, tool policy, and parallel tool execution'}
+                      </p>
+                      <p className="text-[10px] text-text-muted">
+                        {language === 'zh'
+                          ? '控制重试、工具调用策略和并行工具执行方式'
+                          : 'Controls retries, tool policy, and parallel tool execution'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <label className="sr-only text-xs text-text-secondary">
+                          {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                        </label>
+                        <label className="text-xs text-text-secondary">
+                          {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                        </label>
+                        <Select
+                          value={typeof localConfig.toolChoice === 'string' ? localConfig.toolChoice : 'required'}
+                          onChange={(value) => setLocalConfig({
+                            ...localConfig,
+                            toolChoice: value as 'auto' | 'none' | 'required',
+                          })}
+                          options={[
+                            { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
+                            { value: 'required', label: language === 'zh' ? '需要工具' : 'Required' },
+                            { value: 'none', label: language === 'zh' ? '禁用工具' : 'None' },
+                          ]}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="sr-only text-xs text-text-secondary">
+                          {language === 'zh' ? '最大重试次数' : 'Max Retries'}
+                        </label>
+                        <label className="text-xs text-text-secondary">
+                          {language === 'zh' ? '最大重试次数' : 'Max Retries'}
+                        </label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={10}
+                          value={localConfig.maxRetries ?? LLM_DEFAULTS.maxRetries}
+                          onChange={(e) => setLocalConfig({
+                            ...localConfig,
+                            maxRetries: Math.max(0, parseInt(e.target.value || '0', 10) || 0),
+                          })}
+                          className="bg-surface-active border-border text-xs h-9"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2.5">
+                      <div className="space-y-0.5 pr-4">
+                        <label className="sr-only text-xs text-text-secondary">
+                          {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                        </label>
+                        <label className="text-xs text-text-secondary">
+                          {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                        </label>
+                        <p className="sr-only text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '允许模型在一次回复中同时规划多个工具调用'
+                            : 'Allows the model to plan multiple tool calls in one response'}
+                        </p>
+                        <p className="text-[10px] text-text-muted">
+                          {language === 'zh'
+                            ? '允许模型在一次回复中同时规划多个工具调用'
+                            : 'Allows the model to plan multiple tool calls in one response'}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={localConfig.parallelToolCalls ?? LLM_DEFAULTS.parallelToolCalls}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          parallelToolCalls: e.target.checked,
+                        })}
+                        className="flex-shrink-0"
+                      />
+                    </div>
                   </div>
 
                   {/* Frequency Penalty */}
@@ -1468,8 +1825,6 @@ export function ProviderSettings({
 
                     {/* 默认请求头（可编辑） */}
                     {(() => {
-                      const protocol = getCurrentProtocol()
-                      const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
                       const defaultKeys = Object.keys(defaultHeaders)
 
                       return defaultKeys.length > 0 && (
@@ -1533,7 +1888,7 @@ export function ProviderSettings({
                     {/* 自定义请求头 */}
                     {customHeaders.length > 0 && (
                       <div className="space-y-2">
-                        {Object.keys(getProviderDefaultHeaders(localConfig.provider, getCurrentProtocol())).length > 0 && (
+                        {Object.keys(defaultHeaders).length > 0 && (
                           <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
                             {language === 'zh' ? '额外请求头' : 'Additional Headers'}
                           </div>
@@ -1553,33 +1908,9 @@ export function ProviderSettings({
                                       newHeaders[index].isCustom = false
                                       newHeaders[index].key = value
                                     }
-                                    setCustomHeaders(newHeaders)
-                                    // 更新 localConfig - 合并默认请求头和自定义请求头
-                                    const protocol = getCurrentProtocol()
-                                    const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                                    const customHeadersObj: Record<string, string> = {}
-                                    newHeaders.forEach(h => {
-                                      if (h.key) {
-                                        customHeadersObj[h.key] = h.value || ''
-                                      }
-                                    })
-                                    // 合并：默认请求头 + 自定义请求头（自定义会覆盖默认）
-                                    const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                                    setLocalConfig({
-                                      ...localConfig,
-                                      headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                                    })
+                                    syncCustomHeaders(newHeaders)
                                   }}
-                                  options={[
-                                    { value: '', label: language === 'zh' ? '选择请求头' : 'Select header' },
-                                    { value: 'X-Request-ID', label: 'X-Request-ID' },
-                                    { value: 'X-Organization', label: 'X-Organization' },
-                                    { value: 'X-Project-ID', label: 'X-Project-ID' },
-                                    { value: 'User-Agent', label: 'User-Agent' },
-                                    { value: 'Content-Type', label: 'Content-Type' },
-                                    { value: 'Accept', label: 'Accept' },
-                                    { value: 'X-Custom-Header', label: language === 'zh' ? '自定义...' : 'Custom...' }
-                                  ]}
+                                  options={headerSelectOptions}
                                   className="w-full bg-surface-active border-border text-xs h-8"
                                 />
                                 {header.isCustom && (
@@ -1589,22 +1920,7 @@ export function ProviderSettings({
                                     onChange={(e) => {
                                       const newHeaders = [...customHeaders]
                                       newHeaders[index].key = e.target.value
-                                      setCustomHeaders(newHeaders)
-
-                                      // 更新 localConfig
-                                      const protocol = getCurrentProtocol()
-                                      const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                                      const customHeadersObj: Record<string, string> = {}
-                                      newHeaders.forEach(h => {
-                                        if (h.key) {
-                                          customHeadersObj[h.key] = h.value || ''
-                                        }
-                                      })
-                                      const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                                      setLocalConfig({
-                                        ...localConfig,
-                                        headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                                      })
+                                      syncCustomHeaders(newHeaders)
                                     }}
                                     placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
                                     className="bg-surface-active border-border text-xs font-mono h-8"
@@ -1616,21 +1932,7 @@ export function ProviderSettings({
                                   onChange={(e) => {
                                     const newHeaders = [...customHeaders]
                                     newHeaders[index].value = e.target.value
-                                    setCustomHeaders(newHeaders)
-                                    // 更新 localConfig - 合并默认请求头和自定义请求头
-                                    const protocol = getCurrentProtocol()
-                                    const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                                    const customHeadersObj: Record<string, string> = {}
-                                    newHeaders.forEach(h => {
-                                      if (h.key) {
-                                        customHeadersObj[h.key] = h.value || ''
-                                      }
-                                    })
-                                    const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                                    setLocalConfig({
-                                      ...localConfig,
-                                      headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                                    })
+                                    syncCustomHeaders(newHeaders)
                                   }}
                                   placeholder={language === 'zh' ? '值' : 'Value'}
                                   className="bg-surface-active border-border text-xs font-mono h-8"
@@ -1639,21 +1941,7 @@ export function ProviderSettings({
                               <button
                                 onClick={() => {
                                   const newHeaders = customHeaders.filter((_, i) => i !== index)
-                                  setCustomHeaders(newHeaders)
-                                  // 更新 localConfig - 合并默认请求头和自定义请求头
-                                  const protocol = getCurrentProtocol()
-                                  const defaultHeaders = getProviderDefaultHeaders(localConfig.provider, protocol)
-                                  const customHeadersObj: Record<string, string> = {}
-                                  newHeaders.forEach(h => {
-                                    if (h.key) {
-                                      customHeadersObj[h.key] = h.value || ''
-                                    }
-                                  })
-                                  const allHeaders = { ...defaultHeaders, ...customHeadersObj }
-                                  setLocalConfig({
-                                    ...localConfig,
-                                    headers: Object.keys(allHeaders).length > 0 ? allHeaders : undefined
-                                  })
+                                  syncCustomHeaders(newHeaders)
                                 }}
                                 className="p-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition-colors flex-shrink-0 mt-0.5"
                               >
@@ -1665,7 +1953,7 @@ export function ProviderSettings({
                       </div>
                     )}
 
-                    {customHeaders.length === 0 && Object.keys(getProviderDefaultHeaders(localConfig.provider, getCurrentProtocol())).length === 0 && (
+                    {customHeaders.length === 0 && Object.keys(defaultHeaders).length === 0 && (
                       <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
                         {language === 'zh'
                           ? '点击"添加"按钮添加自定义请求头'
@@ -1692,6 +1980,25 @@ export function ProviderSettings({
                   <p className="text-[10px] text-text-muted mt-0.5">
                     {language === 'zh' ? '配置 API 访问密钥和服务器连接参数' : 'Configure API keys and server connection parameters'}
                   </p>
+                  {false && currentOpenAICompatibilityProfile && (
+                    <div className="space-y-1.5 pt-1">
+                      <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                        {language === 'zh' ? 'OpenAI 能力档位' : 'OpenAI Capability'}
+                      </label>
+                      <Select
+                        value={currentOpenAICompatibilityProfile ?? 'compatible'}
+                        onChange={(value) => setLocalConfig({
+                          ...localConfig,
+                          openAICompatibilityProfile: value as OpenAICompatibilityProfile,
+                        })}
+                        options={openAICompatibilityProfileOptions}
+                        className="w-56 bg-background/40 border-border/60 h-9 text-xs"
+                      />
+                      <p className="text-[10px] text-text-muted leading-relaxed">
+                        {openAICompatibilityProfileDescription}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1751,37 +2058,55 @@ export function ProviderSettings({
             </div>
 
             {/* 底部功能栏：协议选择 + 提示信息 */}
-            <div className="flex flex-col md:flex-row items-start md:items-end justify-between pt-5 border-t border-border/50 gap-4">
-              <div className="space-y-2.5 max-w-sm">
-                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                  {language === 'zh' ? 'API 协议' : 'API Protocol'}
-                </label>
-                <div className="flex flex-col gap-1.5">
-                  <Select
-                    value={localConfig.protocol || (isCustomSelected ? selectedCustomConfig?.protocol : (selectedProvider as any)?.protocol) || 'openai'}
-                    onChange={(val) => setLocalConfig({ ...localConfig, protocol: val as ApiProtocol })}
-                    options={PROTOCOL_OPTIONS}
-                    className="w-56 bg-background/40 border-border/60 h-9 text-xs"
-                  />
-                  <p className="text-[10px] text-text-muted leading-relaxed">
-                    {language === 'zh' ? '对于兼容模型，通常建议使用 OpenAI Compatible' : 'For compatible models, OpenAI Compatible is generally recommended'}
-                  </p>
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] items-start gap-4 pt-5 border-t border-border/50">
+              <div className="w-full space-y-3">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                      {language === 'zh' ? 'API 协议' : 'API Protocol'}
+                    </label>
+                    <Select
+                      value={localConfig.protocol || (isCustomSelected ? selectedCustomConfig?.protocol : (selectedProvider as any)?.protocol) || 'openai'}
+                      onChange={(val) => {
+                        const nextProtocol = val as ApiProtocol
+                        setLocalConfig({
+                          ...localConfig,
+                          protocol: nextProtocol,
+                          openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+                            localConfig.provider,
+                            nextProtocol,
+                            localConfig.openAICompatibilityProfile,
+                          ),
+                        })
+                      }}
+                      options={PROTOCOL_OPTIONS}
+                      className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
+                    />
+                    <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
+                      {language === 'zh' ? '对于兼容模型，通常建议使用 OpenAI Compatible' : 'For compatible models, OpenAI Compatible is generally recommended'}
+                    </p>
+                  </div>
+                  {isCustomSelected && isOpenAIStyleProtocol(currentProtocol) && currentOpenAICompatibilityProfile && (
+                    <div className="space-y-2 md:pt-0">
+                      <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                        {language === 'zh' ? 'OpenAI 能力档位' : 'OpenAI Capability'}
+                      </label>
+                      <Select
+                        value={currentOpenAICompatibilityProfile}
+                        onChange={(value) => setLocalConfig({
+                          ...localConfig,
+                          openAICompatibilityProfile: value as OpenAICompatibilityProfile,
+                        })}
+                        options={openAICompatibilityProfileOptions}
+                        className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
+                      />
+                      <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
+                        {openAICompatibilityProfileDescription}
+                      </p>
+                    </div>
+                  )}
                 </div>
-              </div>
-
-              {!isCustomSelected && PROVIDERS[localConfig.provider]?.auth.helpUrl && (
-                <a
-                  href={PROVIDERS[localConfig.provider]?.auth.helpUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[10px] text-text-muted hover:text-accent hover:underline flex items-center gap-1.5 px-3 py-2 bg-surface/50 rounded-lg border border-border/50 transition-colors"
-                >
-                  {language === 'zh' ? '获取 API Key' : 'Get API Key'} <span className="opacity-50">↗</span>
-                </a>
-              )}
-
-              <div className="text-[10px] text-text-muted italic bg-surface/50 px-3 py-2 rounded-lg border border-border/50">
-                {language === 'zh' ? '留空端点使用默认值，超时建议 60-300 秒' : 'Leave endpoint blank for default, timeout 60-300s recommended'}
               </div>
             </div>
           </section>

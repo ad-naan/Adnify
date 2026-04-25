@@ -22,13 +22,16 @@ import {
   type ProviderModelConfig,
   getAllDefaults,
 } from '@shared/config/settings'
+import { resolveRuntimeLLMConfig } from '@shared/config/llmConfigResolver'
 import {
   isBuiltinProvider,
   getBuiltinProvider,
+  getDefaultOpenAICompatibilityProfile,
+  resolveOpenAICompatibilityProfile,
 } from '@shared/config/providers'
+import { serializePersistedLLMConfig } from '@shared/config/llmPersistence'
 import type {
   ProviderConfig,
-  LLMConfig,
   PersistedLLMConfig,
 } from '@shared/config/types'
 
@@ -76,6 +79,8 @@ function cleanProviderConfig(
 ): Partial<ProviderConfig> | null {
   const builtinDef = getBuiltinProvider(providerId)
   const cleaned: Partial<ProviderConfig> = {}
+  const resolvedProtocol = config.protocol ?? builtinDef?.protocol
+  const defaultOpenAIProfile = getDefaultOpenAICompatibilityProfile(providerId, resolvedProtocol)
 
   if (config.apiKey) cleaned.apiKey = config.apiKey
 
@@ -95,10 +100,16 @@ function cleanProviderConfig(
 
   if (config.customModels?.length) cleaned.customModels = config.customModels
   if (config.headers && Object.keys(config.headers).length > 0) cleaned.headers = config.headers
+  if (config.protocol && config.protocol !== builtinDef?.protocol) cleaned.protocol = config.protocol
+  if (
+    config.openAICompatibilityProfile &&
+    config.openAICompatibilityProfile !== defaultOpenAIProfile
+  ) {
+    cleaned.openAICompatibilityProfile = config.openAICompatibilityProfile
+  }
 
   if (!isBuiltinProvider(providerId)) {
     if (config.displayName) cleaned.displayName = config.displayName
-    if (config.protocol) cleaned.protocol = config.protocol
     if (config.createdAt) cleaned.createdAt = config.createdAt
     if (config.updatedAt) cleaned.updatedAt = config.updatedAt
     if (config.baseUrl) cleaned.baseUrl = config.baseUrl
@@ -117,36 +128,29 @@ function mergeProviderConfigs(
 
   for (const [id, config] of Object.entries(saved)) {
     if (isBuiltinProvider(id)) {
-      merged[id] = { ...defaults[id], ...config }
+      const resolved = { ...defaults[id], ...config }
+      merged[id] = {
+        ...resolved,
+        openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+          id,
+          resolved.protocol ?? defaults[id]?.protocol,
+          resolved.openAICompatibilityProfile,
+        ),
+      }
       continue
     }
 
-    merged[id] = { ...config }
+    merged[id] = {
+      ...config,
+      openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+        id,
+        config.protocol,
+        config.openAICompatibilityProfile,
+      ),
+    }
   }
 
   return merged
-}
-
-function serializeLLMConfig(config: LLMConfig): PersistedLLMConfig {
-  return {
-    provider: config.provider,
-    model: config.model,
-    temperature: config.temperature,
-    maxTokens: config.maxTokens,
-    topP: config.topP,
-    topK: config.topK,
-    frequencyPenalty: config.frequencyPenalty,
-    presencePenalty: config.presencePenalty,
-    stopSequences: config.stopSequences,
-    seed: config.seed,
-    logitBias: config.logitBias,
-    maxRetries: config.maxRetries,
-    toolChoice: config.toolChoice,
-    parallelToolCalls: config.parallelToolCalls,
-    enableThinking: config.enableThinking,
-    thinkingBudget: config.thinkingBudget,
-    reasoningEffort: config.reasoningEffort,
-  }
 }
 
 function buildPersistedSettingsPayload(
@@ -154,7 +158,7 @@ function buildPersistedSettingsPayload(
   providerConfigs: Record<string, unknown>,
 ) {
   return {
-    llmConfig: serializeLLMConfig(settings.llmConfig),
+    llmConfig: serializePersistedLLMConfig(settings.llmConfig),
     language: settings.language,
     autoApprove: settings.autoApprove,
     promptTemplateId: settings.promptTemplateId,
@@ -165,43 +169,6 @@ function buildPersistedSettingsPayload(
     webSearchConfig: settings.webSearchConfig,
     mcpConfig: settings.mcpConfig,
     enableFileLogging: settings.enableFileLogging,
-  }
-}
-
-function mergeLLMConfig(
-  saved: Partial<PersistedLLMConfig> | undefined,
-  providerConfigs: Record<string, ProviderModelConfig>,
-): LLMConfig {
-  const defaults = SETTINGS.llmConfig.default
-  if (!saved) return defaults
-
-  const providerId = saved.provider ?? defaults.provider
-  const providerConfig = providerConfigs[providerId] ?? {}
-  const builtinDef = getBuiltinProvider(providerId)
-
-  return {
-    provider: providerId,
-    model: saved.model ?? providerConfig.model ?? builtinDef?.defaultModel ?? defaults.model,
-    apiKey: providerConfig.apiKey ?? defaults.apiKey,
-    baseUrl: providerConfig.baseUrl ?? builtinDef?.baseUrl ?? defaults.baseUrl,
-    timeout: providerConfig.timeout ?? builtinDef?.defaults.timeout ?? defaults.timeout,
-    temperature: saved.temperature ?? defaults.temperature,
-    maxTokens: saved.maxTokens ?? defaults.maxTokens,
-    topP: saved.topP ?? defaults.topP,
-    topK: saved.topK ?? defaults.topK,
-    frequencyPenalty: saved.frequencyPenalty ?? defaults.frequencyPenalty,
-    presencePenalty: saved.presencePenalty ?? defaults.presencePenalty,
-    stopSequences: saved.stopSequences ?? defaults.stopSequences,
-    seed: saved.seed ?? defaults.seed,
-    logitBias: saved.logitBias ?? defaults.logitBias,
-    maxRetries: saved.maxRetries ?? defaults.maxRetries,
-    toolChoice: saved.toolChoice ?? defaults.toolChoice,
-    parallelToolCalls: saved.parallelToolCalls ?? defaults.parallelToolCalls,
-    headers: providerConfig.headers ?? defaults.headers,
-    enableThinking: saved.enableThinking ?? defaults.enableThinking,
-    thinkingBudget: saved.thinkingBudget ?? defaults.thinkingBudget,
-    reasoningEffort: saved.reasoningEffort ?? defaults.reasoningEffort,
-    protocol: providerConfig.protocol,
   }
 }
 
@@ -296,7 +263,7 @@ class SettingsService {
     const providerConfigs = mergeProviderConfigs(
       saved.providerConfigs as Record<string, ProviderConfig> | undefined,
     )
-    const llmConfig = mergeLLMConfig(
+    const llmConfig = resolveRuntimeLLMConfig(
       saved.llmConfig as Partial<PersistedLLMConfig> | undefined,
       providerConfigs,
     )

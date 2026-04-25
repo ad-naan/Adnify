@@ -266,6 +266,7 @@ export default function SettingsModal() {
                     timeout: localConfig.timeout,
                     model: localConfig.model,
                     headers: localConfig.headers,
+                    openAICompatibilityProfile: localConfig.openAICompatibilityProfile,
                     protocol: localConfig.protocol,
                 }
             }

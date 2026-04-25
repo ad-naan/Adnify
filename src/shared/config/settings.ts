@@ -34,7 +34,10 @@ import type {
   McpConfig,
   ProviderConfig,
 } from './types'
-import { BUILTIN_PROVIDERS } from './providers'
+import {
+  BUILTIN_PROVIDERS,
+  getDefaultOpenAICompatibilityProfile,
+} from './providers'
 import type { ApiProtocol } from './providers'
 
 // ============================================
@@ -69,6 +72,7 @@ const defaultLLMConfig: LLMConfig = {
   provider: LLM_DEFAULTS.defaultProvider,
   model: LLM_DEFAULTS.defaultModel,
   apiKey: '',
+  openAICompatibilityProfile: 'full',
   timeout: LLM_DEFAULTS.timeout,
   temperature: LLM_DEFAULTS.temperature,
   maxTokens: LLM_DEFAULTS.maxTokens,
@@ -167,6 +171,7 @@ function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
       customModels: [],
       model: provider.defaultModel || '',
       baseUrl: provider.baseUrl,
+      openAICompatibilityProfile: getDefaultOpenAICompatibilityProfile(id, provider.protocol),
     }
   }
   return configs

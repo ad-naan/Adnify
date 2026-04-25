@@ -18,8 +18,10 @@ import type {
     AssistantPart,
     ReasoningPart,
     SearchPart,
+    SourcesPart,
     InteractiveContent,
 } from '../../types'
+import type { LLMStreamSource } from '@/shared/types/llm'
 import { createIdleHandoffState } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
@@ -61,6 +63,9 @@ export interface MessageActions {
     addSearchPart: (messageId: string, targetThreadId?: string) => string
     updateSearchPart: (messageId: string, partId: string, content: string, isStreaming?: boolean, append?: boolean, targetThreadId?: string) => void
     finalizeSearchPart: (messageId: string, partId: string, targetThreadId?: string) => void
+
+    // Sources 操作
+    upsertSourcesPart: (messageId: string, source: LLMStreamSource, targetThreadId?: string) => void
 
     // Lint Check 操作
     addLintCheckPart: (messageId: string, targetThreadId?: string) => void
@@ -108,6 +113,37 @@ const bumpThreadMessageVersion = (
     ...versions,
     [threadId]: (versions[threadId] || 0) + 1,
 })
+
+function isHandoffSnapshotOnlyAssistantMessage(message: AssistantMessage): boolean {
+    return (
+        message.parts.length > 0 &&
+        message.parts.every(part => part.type === 'context_snapshot' && part.snapshotKind === 'handoff')
+    )
+}
+
+function getSourceStableKey(source: LLMStreamSource): string {
+    return source.id || source.url || source.filename || `${source.sourceType}:${source.title || 'unknown'}`
+}
+
+function mergeSourceEntry(current: LLMStreamSource, incoming: LLMStreamSource): LLMStreamSource {
+    const merged: LLMStreamSource = {
+        ...current,
+        ...incoming,
+        id: incoming.id || current.id,
+        sourceType: incoming.sourceType || current.sourceType,
+    }
+
+    return (
+        merged.id === current.id &&
+        merged.sourceType === current.sourceType &&
+        merged.url === current.url &&
+        merged.title === current.title &&
+        merged.mediaType === current.mediaType &&
+        merged.filename === current.filename
+    )
+        ? current
+        : merged
+}
 
 // ===== Slice 创建器 =====
 
@@ -378,6 +414,26 @@ export const createMessageSlice: StateCreator<
                 },
             }
         })
+
+        const latestState = get() as any as {
+            threads: Record<string, { handoffResume?: unknown; messages: ChatMessage[] }>
+            contextTransition?: { status?: string; targetThreadId?: string }
+            clearContextTransition?: () => void
+        }
+        const latestThread = latestState.threads[threadId]
+        const finalizedMessage = latestThread?.messages.find(
+            msg => msg.id === messageId && msg.role === 'assistant'
+        ) as AssistantMessage | undefined
+
+        if (
+            latestThread?.handoffResume &&
+            finalizedMessage &&
+            !isHandoffSnapshotOnlyAssistantMessage(finalizedMessage) &&
+            latestState.contextTransition?.status === 'switching' &&
+            latestState.contextTransition.targetThreadId === threadId
+        ) {
+            latestState.clearContextTransition?.()
+        }
 
         get().clearToolStreamingPreviews(threadId)
     },
@@ -988,6 +1044,80 @@ export const createMessageSlice: StateCreator<
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
+                },
+            }
+        })
+    },
+
+    upsertSourcesPart: (messageId, source, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            let updated = false
+            const sourceKey = getSourceStableKey(source)
+
+            const messages = thread.messages.map(msg => {
+                if (msg.id !== messageId || msg.role !== 'assistant') {
+                    return msg
+                }
+
+                const assistantMsg = msg as AssistantMessage
+                const partIndex = assistantMsg.parts.findIndex(part => part.type === 'sources')
+                const existingPart = partIndex >= 0 ? assistantMsg.parts[partIndex] as SourcesPart : undefined
+
+                const nextSources = existingPart
+                    ? (() => {
+                        const existingIndex = existingPart.sources.findIndex(item => getSourceStableKey(item) === sourceKey)
+                        if (existingIndex === -1) {
+                            return [...existingPart.sources, source]
+                        }
+
+                        const merged = mergeSourceEntry(existingPart.sources[existingIndex], source)
+                        if (merged === existingPart.sources[existingIndex]) {
+                            return existingPart.sources
+                        }
+
+                        const cloned = [...existingPart.sources]
+                        cloned[existingIndex] = merged
+                        return cloned
+                    })()
+                    : [source]
+
+                if (existingPart && nextSources === existingPart.sources) {
+                    return msg
+                }
+
+                updated = true
+
+                if (!existingPart) {
+                    const createdSourcesPart: SourcesPart = {
+                        type: 'sources',
+                        sources: nextSources,
+                    }
+                    const updatedMessage: AssistantMessage = {
+                        ...assistantMsg,
+                        parts: [...assistantMsg.parts, createdSourcesPart],
+                    }
+                    return updatedMessage
+                }
+
+                const nextParts: AssistantMessage['parts'] = [...assistantMsg.parts]
+                nextParts[partIndex] = { ...existingPart, sources: nextSources }
+                const updatedMessage: AssistantMessage = { ...assistantMsg, parts: nextParts }
+                return updatedMessage
+            })
+
+            if (!updated) return state
+
+            return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                threads: {
+                    ...state.threads,
+                    [threadId]: { ...thread, messages, lastModified: Date.now() },
                 },
             }
         })

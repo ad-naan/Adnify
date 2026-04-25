@@ -4,6 +4,8 @@
  * 在保存配置时自动移除不存在的字段，保持配置文件干净
  */
 
+import { sanitizePersistedLLMConfig } from './llmPersistence'
+
 // ============================================
 // EditorConfig 清理
 // ============================================
@@ -236,7 +238,7 @@ export interface AppSettingsSchema {
     model?: string
     enableThinking?: boolean
     thinkingBudget?: number
-    reasoningEffort?: 'low' | 'medium' | 'high'
+    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
     // 核心参数
     temperature?: number
     maxTokens?: number
@@ -251,6 +253,11 @@ export interface AppSettingsSchema {
     maxRetries?: number
     toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
     parallelToolCalls?: boolean
+    providerOptions?: {
+      openai?: Record<string, unknown>
+      anthropic?: Record<string, unknown>
+      google?: Record<string, unknown>
+    }
   }
   language?: string
   autoApprove?: {
@@ -277,58 +284,7 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
 
   // llmConfig
   if (config.llmConfig && typeof config.llmConfig === 'object') {
-    const llm = config.llmConfig as Record<string, unknown>
-    cleaned.llmConfig = {}
-
-    // 基础字段
-    if (typeof llm.provider === 'string') cleaned.llmConfig.provider = llm.provider
-    if (typeof llm.model === 'string') cleaned.llmConfig.model = llm.model
-    if (typeof llm.enableThinking === 'boolean') cleaned.llmConfig.enableThinking = llm.enableThinking
-    if (typeof llm.thinkingBudget === 'number') cleaned.llmConfig.thinkingBudget = llm.thinkingBudget
-    if (llm.reasoningEffort === 'low' || llm.reasoningEffort === 'medium' || llm.reasoningEffort === 'high') {
-      cleaned.llmConfig.reasoningEffort = llm.reasoningEffort
-    }
-
-    // 核心参数
-    if (typeof llm.temperature === 'number') cleaned.llmConfig.temperature = llm.temperature
-    if (typeof llm.maxTokens === 'number') cleaned.llmConfig.maxTokens = llm.maxTokens
-    if (typeof llm.topP === 'number') cleaned.llmConfig.topP = llm.topP
-    if (typeof llm.topK === 'number') cleaned.llmConfig.topK = llm.topK
-    if (typeof llm.frequencyPenalty === 'number') cleaned.llmConfig.frequencyPenalty = llm.frequencyPenalty
-    if (typeof llm.presencePenalty === 'number') cleaned.llmConfig.presencePenalty = llm.presencePenalty
-    if (typeof llm.seed === 'number') cleaned.llmConfig.seed = llm.seed
-
-    if (Array.isArray(llm.stopSequences)) {
-      cleaned.llmConfig.stopSequences = llm.stopSequences.filter(s => typeof s === 'string')
-    }
-
-    if (llm.logitBias && typeof llm.logitBias === 'object') {
-      const bias = llm.logitBias as Record<string, unknown>
-      const cleanedBias: Record<string, number> = {}
-      for (const [key, value] of Object.entries(bias)) {
-        if (typeof value === 'number') cleanedBias[key] = value
-      }
-      if (Object.keys(cleanedBias).length > 0) {
-        cleaned.llmConfig.logitBias = cleanedBias
-      }
-    }
-
-    // AI SDK 高级参数
-    if (typeof llm.maxRetries === 'number') cleaned.llmConfig.maxRetries = llm.maxRetries
-    if (typeof llm.parallelToolCalls === 'boolean') cleaned.llmConfig.parallelToolCalls = llm.parallelToolCalls
-
-    // toolChoice 验证
-    if (llm.toolChoice) {
-      if (llm.toolChoice === 'auto' || llm.toolChoice === 'none' || llm.toolChoice === 'required') {
-        cleaned.llmConfig.toolChoice = llm.toolChoice
-      } else if (typeof llm.toolChoice === 'object') {
-        const tc = llm.toolChoice as Record<string, unknown>
-        if (tc.type === 'tool' && typeof tc.toolName === 'string') {
-          cleaned.llmConfig.toolChoice = { type: 'tool', toolName: tc.toolName }
-        }
-      }
-    }
-
+    cleaned.llmConfig = sanitizePersistedLLMConfig(config.llmConfig)
   }
 
   if (typeof config.language === 'string') cleaned.language = config.language
