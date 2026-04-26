@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Sparkles, Code, FileText, Bug, ArrowRight } from 'lucide-react'
 import { useStore } from '@store'
+import { publicAsset } from '@utils/publicAsset'
 
 interface EmptyChatSuggestionsProps {
     onSelectSuggestion: (text: string) => void
@@ -48,7 +49,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent/20 blur-[50px] rounded-full w-40 h-40 pointer-events-none" />
 
                 <div className="relative w-14 h-14 rounded-2xl flex items-center justify-center mb-6 overflow-hidden">
-                    <img src="/brand/ip/ai-avatar.gif" alt="AI" className="w-full h-full object-cover" draggable={false} />
+                    <img src={publicAsset('brand/ip/ai-avatar.gif')} alt="AI" className="w-full h-full object-cover" draggable={false} />
                 </div>
 
                 <h1 className="text-xl font-semibold text-text-primary tracking-tight mb-2">

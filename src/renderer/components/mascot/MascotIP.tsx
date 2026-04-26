@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
+import { publicAsset } from '@utils/publicAsset'
 
 export function MascotIP() {
   const { chatVisible, setChatVisible, language } = useStore(useShallow(s => ({
@@ -16,7 +17,7 @@ export function MascotIP() {
     setChatVisible(!chatVisible)
   }
 
-  const mascotSrc = '/brand/ip/ai-avatar.gif'
+  const mascotSrc = publicAsset('brand/ip/ai-avatar.gif')
 
   return (
     <div className="relative no-drag flex items-center justify-center w-8 h-8">
