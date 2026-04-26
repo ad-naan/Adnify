@@ -92,14 +92,19 @@ export default function WelcomePage() {
                 <p className="adnify-welcome-subtitle">{t('welcome.subtitle', language)}</p>
 
                 <div className="adnify-welcome-actions">
-                  <button className="adnify-welcome-primary-button" onClick={handleOpenFolder}>
-                    <FolderOpen className="h-4 w-4" />
-                    <span>{t('welcome.openFolder', language)}</span>
-                  </button>
-                  <button className="adnify-welcome-outline-button" onClick={handleOpenWorkspace}>
-                    <Folder className="h-4 w-4" />
-                    <span>{t('welcome.openWorkspace', language)}</span>
-                  </button>
+                  <InteractiveIPButton 
+                    className="adnify-welcome-primary-button" 
+                    onClick={handleOpenFolder}
+                    icon={<FolderOpen className="h-4 w-4" />}
+                    label={t('welcome.openFolder', language)}
+                    ipSrc="/brand/ip/4.png"
+                  />
+                  <InteractiveIPButton 
+                    className="adnify-welcome-outline-button" 
+                    onClick={handleOpenWorkspace}
+                    icon={<Folder className="h-4 w-4" />}
+                    label={t('welcome.openWorkspace', language)}
+                  />
                 </div>
               </div>
 
@@ -119,14 +124,20 @@ export default function WelcomePage() {
                 <span>{recentWorkspaces.length}/8</span>
               </div>
               <div className="adnify-welcome-footer-actions">
-                <button className="adnify-welcome-secondary-button" onClick={() => api.window.new()}>
-                  <Plus className="h-4 w-4" />
-                  <span>{t('welcome.newWindow', language)}</span>
-                </button>
-                <button className="adnify-welcome-secondary-button" onClick={() => setShowSettings(true)}>
-                  <Settings className="h-4 w-4" />
-                  <span>{t('settings', language)}</span>
-                </button>
+                <InteractiveIPButton 
+                  onClick={() => api.window.new()} 
+                  className="adnify-welcome-secondary-button"
+                  icon={<Plus className="h-4 w-4" />} 
+                  label={t('welcome.newWindow', language)} 
+                  ipSrc="/brand/ip/5.png" 
+                />
+                <InteractiveIPButton 
+                  onClick={() => setShowSettings(true)} 
+                  className="adnify-welcome-secondary-button"
+                  icon={<Settings className="h-4 w-4" />} 
+                  label={t('settings', language)} 
+                  ipSrc="/brand/ip/6.png" 
+                />
               </div>
             </div>
 
@@ -168,6 +179,34 @@ function WelcomeArtwork({ src }: { src: string }) {
   )
 }
 
+function InteractiveIPButton({
+  icon,
+  label,
+  onClick,
+  ipSrc,
+  className
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  ipSrc?: string;
+  className: string;
+}) {
+  return (
+    <button className={`${className} group`} onClick={onClick}>
+      <div className="relative z-10 flex items-center gap-2 pointer-events-none">
+        {icon}
+        <span>{label}</span>
+      </div>
+      {ipSrc && (
+        <div className="adnify-welcome-button-mascot">
+          <img src={ipSrc} alt="" draggable={false} />
+        </div>
+      )}
+    </button>
+  )
+}
+
 function FeatureGrid({ language }: { language: Language }) {
   return (
     <div className="adnify-welcome-feature-grid">
@@ -175,28 +214,38 @@ function FeatureGrid({ language }: { language: Language }) {
         icon={<Workflow className="h-5 w-5" />}
         title={t('welcome.feature.visual.title', language)}
         subtitle={t('welcome.feature.visual.subtitle', language)}
+        imageSrc="/brand/ip/1.png"
       />
       <FeatureCard
         icon={<Network className="h-5 w-5" />}
         title={t('welcome.feature.connect.title', language)}
         subtitle={t('welcome.feature.connect.subtitle', language)}
+        imageSrc="/brand/ip/2.png"
       />
       <FeatureCard
         icon={<Boxes className="h-5 w-5" />}
         title={t('welcome.feature.modular.title', language)}
         subtitle={t('welcome.feature.modular.subtitle', language)}
+        imageSrc="/brand/ip/3.png"
       />
     </div>
   )
 }
 
-function FeatureCard({ icon, title, subtitle }: { icon: ReactNode; title: string; subtitle: string }) {
+function FeatureCard({ icon, title, subtitle, imageSrc }: { icon: ReactNode; title: string; subtitle: string; imageSrc?: string }) {
   return (
-    <div className="adnify-welcome-feature-card">
-      <div className="adnify-welcome-feature-icon">{icon}</div>
-      <div className="adnify-welcome-feature-text">
-        <h4 className="adnify-welcome-feature-title">{title}</h4>
-        <p className="adnify-welcome-feature-desc">{subtitle}</p>
+    <div className="adnify-welcome-feature-card group">
+      {imageSrc && (
+        <div className="adnify-welcome-feature-illustration">
+          <img src={imageSrc} alt="" draggable={false} />
+        </div>
+      )}
+      <div className="relative z-10 flex flex-col gap-3 h-full">
+        <div className="adnify-welcome-feature-icon">{icon}</div>
+        <div className="adnify-welcome-feature-text mt-auto">
+          <h4 className="adnify-welcome-feature-title">{title}</h4>
+          <p className="adnify-welcome-feature-desc">{subtitle}</p>
+        </div>
       </div>
     </div>
   )
@@ -275,6 +324,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .adnify-welcome-outline-button,
       .${rootClass} .adnify-welcome-secondary-button {
         display: inline-flex;
+        position: relative;
         min-width: 140px;
         height: 46px;
         align-items: center;
@@ -286,6 +336,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         font-weight: 600;
         white-space: nowrap;
         transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: visible;
       }
 
       .${rootClass} .adnify-welcome-primary-button {
@@ -328,6 +379,56 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .adnify-welcome-secondary-button:hover {
         color: rgb(var(--text-primary));
         background: rgba(var(--surface-hover), 0.6);
+      }
+
+      /* IP Button Mascot Animations */
+      .${rootClass} .adnify-welcome-primary-button:has(.adnify-welcome-button-mascot) {
+        padding: 0 44px 0 20px;
+      }
+      .${rootClass} .adnify-welcome-secondary-button:has(.adnify-welcome-button-mascot) {
+        padding: 0 40px 0 16px;
+      }
+
+      .${rootClass} .adnify-welcome-button-mascot {
+        position: absolute;
+        right: -8px;
+        top: -16px;
+        width: 48px;
+        height: 48px;
+        pointer-events: none;
+        z-index: 20;
+        opacity: 0.85;
+        transform-origin: bottom center;
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .${rootClass} .adnify-welcome-primary-button .adnify-welcome-button-mascot {
+        width: 64px;
+        height: 64px;
+        top: -24px;
+        right: -12px;
+      }
+
+      .${rootClass} .adnify-welcome-button-mascot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        /* Feather out the edges to remove solid backgrounds */
+        -webkit-mask-image: radial-gradient(circle at 50% 60%, black 30%, transparent 70%);
+        mask-image: radial-gradient(circle at 50% 60%, black 30%, transparent 70%);
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      .${rootClass} .group:hover .adnify-welcome-button-mascot {
+        transform: scale(1.3) translateY(-8px) rotate(-8deg);
+        opacity: 1;
+        filter: drop-shadow(0 8px 16px rgba(var(--accent) / 0.5));
+      }
+
+      .${rootClass} .group:hover .adnify-welcome-button-mascot img {
+        -webkit-mask-image: radial-gradient(circle at 50% 50%, black 45%, transparent 80%);
+        mask-image: radial-gradient(circle at 50% 50%, black 45%, transparent 80%);
+        filter: saturate(1.2) brightness(1.1);
       }
 
       .${rootClass} .adnify-welcome-visual {
@@ -415,6 +516,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         position: relative;
         overflow: hidden;
+        min-height: 150px;
       }
 
       .${rootClass} .adnify-welcome-feature-card::before {
@@ -457,6 +559,36 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-icon {
         transform: scale(1.05);
         background: linear-gradient(135deg, rgb(var(--accent) / 0.25) 0%, rgb(var(--accent) / 0.1) 100%);
+      }
+
+      .${rootClass} .adnify-welcome-feature-illustration {
+        position: absolute;
+        bottom: -30px;
+        right: -30px;
+        width: 160px;
+        height: 160px;
+        z-index: 0;
+        opacity: 0.25;
+        transform: scale(0.9) rotate(-5deg);
+        transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: none;
+        /* Feather the entire container to guarantee no hard edges */
+        -webkit-mask-image: radial-gradient(circle at 60% 60%, black 20%, transparent 70%);
+        mask-image: radial-gradient(circle at 60% 60%, black 20%, transparent 70%);
+      }
+
+      .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-illustration {
+        opacity: 0.8;
+        transform: scale(1.05) rotate(0deg) translate(-10px, -10px);
+        filter: saturate(1.2) brightness(1.1);
+        -webkit-mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 80%);
+        mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 80%);
+      }
+
+      .${rootClass} .adnify-welcome-feature-illustration img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .${rootClass} .adnify-welcome-feature-text {
