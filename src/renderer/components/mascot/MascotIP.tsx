@@ -32,7 +32,7 @@ export function MascotIP() {
         <img
           src={mascotSrc}
           alt="Adnify Mascot"
-          className="w-5 h-5 object-contain"
+          className="w-full object-contain"
           draggable={false}
         />
 
