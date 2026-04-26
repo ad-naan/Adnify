@@ -9,19 +9,20 @@ import {
     GitBranch, GitCommit as GitCommitIcon, GitMerge, GitPullRequest,
     ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Trash2,
     ArrowUp, ArrowDown, Check, X, MoreHorizontal, FolderGit2,
-    Undo2, RotateCcw, Copy, Archive, AlertTriangle,
+    FolderOpen, Download, Undo2, RotateCcw, Copy, Archive, AlertTriangle,
     Play, SkipForward, Loader2, Sparkles
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@renderer/i18n'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/services/gitService'
+import { workspaceManager } from '@renderer/services/WorkspaceManager'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { keybindingService } from '@services/keybindingService'
 import { Input, Button, Modal } from '@components/ui'
-import { getFileName, normalizePath, toFullPath } from '@shared/utils/pathUtils'
+import { getFileName, joinPath, normalizePath, toFullPath } from '@shared/utils/pathUtils'
 import { ConflictResolver } from '@components/git/ConflictResolver'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 
@@ -369,6 +370,12 @@ function getTimeAgo(date: Date, language: 'en' | 'zh'): string {
     return date.toLocaleDateString()
 }
 
+function getCloneFolderName(url: string): string {
+    const trimmed = url.trim().replace(/[/\\]+$/, '').replace(/\.git$/i, '')
+    const lastSegment = trimmed.split(/[/\\:]/).filter(Boolean).pop()
+    return lastSegment?.replace(/[<>:"|?*]/g, '-').trim() || 'repository'
+}
+
 // ==================== 主组件 ====================
 export function GitView() {
     const { workspacePath, language, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile })))
@@ -380,6 +387,7 @@ export function GitView() {
     const [branches, setBranches] = useState<GitBranchType[]>([])
     const [stashList, setStashList] = useState<GitStashEntry[]>([])
     const [operationState, setOperationState] = useState<OperationState>('normal')
+    const [isGitRepository, setIsGitRepository] = useState<boolean | null>(null)
 
     // UI 状态
     const [commitMessage, setCommitMessage] = useState('')
@@ -389,6 +397,9 @@ export function GitView() {
     const [isPulling, setIsPulling] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [isGeneratingMessage, setIsGeneratingMessage] = useState(false)
+    const [showCloneInput, setShowCloneInput] = useState(false)
+    const [cloneUrl, setCloneUrl] = useState('')
+    const [isCloning, setIsCloning] = useState(false)
 
     // 展开状态
     const [expandedSections, setExpandedSections] = useState({
@@ -415,12 +426,31 @@ export function GitView() {
 
     // 刷新数据
     const refreshStatus = useCallback(async () => {
-        if (!workspacePath) return
+        if (!workspacePath) {
+            setStatus(null)
+            setCommits([])
+            setBranches([])
+            setStashList([])
+            setOperationState('normal')
+            setIsGitRepository(null)
+            return
+        }
         setIsRefreshing(true)
         setError(null)
 
         try {
             gitService.setWorkspace(workspacePath)
+            const isRepo = await gitService.isGitRepo()
+            setIsGitRepository(isRepo)
+
+            if (!isRepo) {
+                setStatus(null)
+                setCommits([])
+                setBranches([])
+                setStashList([])
+                setOperationState('normal')
+                return
+            }
 
             const [s, c, b, st, op] = await Promise.all([
                 gitService.getStatus(),
@@ -438,15 +468,16 @@ export function GitView() {
         } catch (e: unknown) {
             logger.ui.error('Git status error:', e)
             setError(tt('error.unknown'))
+            setIsGitRepository(null)
         } finally {
             setIsRefreshing(false)
         }
-    }, [workspacePath])
+    }, [workspacePath, tt])
 
     // 初始化时刷新一次
     useEffect(() => {
         refreshStatus()
-    }, [workspacePath])
+    }, [refreshStatus])
 
     // 监听 .git 目录变化，自动刷新（如果启用）
     useEffect(() => {
@@ -544,9 +575,61 @@ Commit message:`
 
     const handleInit = async () => {
         if (!workspacePath) return
-        await gitService.init()
-        refreshStatus()
-        toast.success(tt('git.repoInitialized'))
+        const success = await gitService.init()
+        if (success) {
+            await refreshStatus()
+            toast.success(tt('git.repoInitialized'))
+        } else {
+            toast.error(tt('git.initFailed'))
+        }
+    }
+
+    const handleOpenFolder = async () => {
+        const selectedPath = await api.file.openFolder()
+        if (!selectedPath) return
+
+        try {
+            await workspaceManager.openFolder(selectedPath)
+        } catch (e) {
+            logger.ui.error('Failed to open folder from Git view:', e)
+            toast.error(tt('workspace.openFolderFailed'))
+        }
+    }
+
+    const handleClone = async () => {
+        const trimmedUrl = cloneUrl.trim()
+        if (!trimmedUrl) {
+            toast.warning(tt('git.cloneUrlRequired'))
+            return
+        }
+
+        const parentPath = await api.file.selectFolder()
+        if (!parentPath) return
+
+        const folderName = getCloneFolderName(trimmedUrl)
+        const targetPath = joinPath(parentPath, folderName)
+
+        setIsCloning(true)
+        setError(null)
+        try {
+            const result = await gitService.clone(trimmedUrl, targetPath, parentPath)
+            if (!result.success) {
+                const message = result.error || tt('git.cloneFailed')
+                setError(message)
+                toast.error(tt('git.cloneFailed'), message)
+                return
+            }
+
+            setCloneUrl('')
+            setShowCloneInput(false)
+            toast.success(tt('git.cloneSuccess'))
+            await workspaceManager.openFolder(targetPath)
+        } catch (e) {
+            logger.ui.error('Failed to clone repository:', e)
+            toast.error(tt('git.cloneFailed'))
+        } finally {
+            setIsCloning(false)
+        }
     }
 
     const handleStage = async (path: string) => {
@@ -956,26 +1039,98 @@ Commit message:`
 
     if (!workspacePath) {
         return (
-            <div className="p-4 text-xs text-text-muted text-center">
-                {tt('noFolderOpened')}
+            <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
+                    <FolderOpen className="h-7 w-7 text-text-muted opacity-70" />
+                </div>
+                <p className="mb-1 text-sm font-medium text-text-secondary">{tt('noFolderOpened')}</p>
+                <p className="mb-4 max-w-[240px] text-xs leading-5 text-text-muted">{tt('git.noWorkspaceDesc')}</p>
+                <Button onClick={handleOpenFolder} size="sm" className="px-4">
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    {tt('openFolder')}
+                </Button>
             </div>
         )
     }
 
     // 非 Git 仓库
-    if (!status && !isRefreshing) {
+    if (isGitRepository === false && !isRefreshing) {
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                <div className="w-14 h-14 bg-surface-hover rounded-2xl flex items-center justify-center mb-4">
-                    <FolderGit2 className="w-7 h-7 text-text-muted opacity-50" />
+            <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
+                    <FolderGit2 className="w-7 h-7 text-text-muted opacity-60" />
                 </div>
-                <p className="text-sm text-text-secondary mb-2">{tt('git.noRepo')}</p>
-                <p className="text-xs text-text-muted mb-4">{tt('git.noRepoDesc')}</p>
-                <Button onClick={handleInit} className="px-4 py-2">
-                    <Plus className="w-4 h-4 mr-2" />
-                    {tt('git.initRepo')}
+                <p className="mb-1 text-sm font-medium text-text-secondary">{tt('git.noRepo')}</p>
+                <p className="mb-3 max-w-[260px] text-xs leading-5 text-text-muted">{tt('git.noRepoDesc')}</p>
+                <div className="mb-4 max-w-full rounded-md border border-border-subtle bg-surface/50 px-2.5 py-1.5 text-[10px] text-text-muted">
+                    <span className="mr-1 text-text-secondary">{tt('git.currentFolder')}</span>
+                    <span className="break-all font-mono">{workspacePath}</span>
+                </div>
+
+                <div className="flex w-full max-w-[260px] flex-col gap-2">
+                    <Button onClick={handleInit} size="sm" className="w-full">
+                        <Plus className="w-3.5 h-3.5" />
+                        {tt('git.initRepo')}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setShowCloneInput(prev => !prev)}
+                        className="w-full"
+                    >
+                        <Download className="w-3.5 h-3.5" />
+                        {tt('git.cloneRepo')}
+                    </Button>
+                    {showCloneInput && (
+                        <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface/40 p-2">
+                            <Input
+                                value={cloneUrl}
+                                onChange={(e) => setCloneUrl(e.target.value)}
+                                placeholder={tt('git.cloneUrlPlaceholder')}
+                                className="h-8 text-xs"
+                                disabled={isCloning}
+                            />
+                            <Button onClick={handleClone} size="sm" isLoading={isCloning} className="w-full">
+                                {isCloning ? tt('git.cloning') : tt('git.clone')}
+                            </Button>
+                        </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" size="sm" onClick={handleOpenFolder}>
+                            <FolderOpen className="w-3.5 h-3.5" />
+                            {tt('openFolder')}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={refreshStatus}>
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            {tt('git.retry')}
+                        </Button>
+                    </div>
+                </div>
+                {error && <p className="mt-3 max-w-[260px] break-words text-[10px] leading-4 text-status-error">{error}</p>}
+            </div>
+        )
+    }
+
+    if (!status && (isRefreshing || isGitRepository === null || error)) {
+        return (
+            <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
+                    {isRefreshing ? (
+                        <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
+                    ) : (
+                        <AlertTriangle className="h-6 w-6 text-status-warning" />
+                    )}
+                </div>
+                <p className="mb-1 text-sm font-medium text-text-secondary">
+                    {isRefreshing ? tt('git.loadingStatus') : tt('git.statusUnavailable')}
+                </p>
+                <p className="mb-4 max-w-[260px] break-words text-xs leading-5 text-text-muted">
+                    {error || tt('git.statusUnavailableDesc')}
+                </p>
+                <Button variant="outline" size="sm" onClick={refreshStatus} disabled={isRefreshing}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    {tt('git.retry')}
                 </Button>
-                {error && <p className="text-[10px] text-status-error mt-2">{error}</p>}
             </div>
         )
     }

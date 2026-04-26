@@ -423,6 +423,24 @@ class GitService {
         return result.exitCode === 0
     }
 
+    async clone(url: string, targetDirectory: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const trimmedUrl = url.trim()
+            const trimmedTarget = targetDirectory.trim()
+            if (!trimmedUrl || !trimmedTarget) {
+                return { success: false, error: 'Repository URL and target directory are required' }
+            }
+
+            const result = await this.exec(['clone', trimmedUrl, trimmedTarget], rootPath)
+            return {
+                success: result.exitCode === 0,
+                error: result.exitCode !== 0 ? result.stderr || result.stdout : undefined,
+            }
+        } catch (err) {
+            return { success: false, error: handleGitError(err) }
+        }
+    }
+
     // ==================== 远程操作 ====================
 
     async pull(rootPath?: string): Promise<{ success: boolean; error?: string }> {
@@ -1104,29 +1122,6 @@ class GitService {
         if (!targetPath) return 'normal'
 
         return this.detectOperationState(targetPath ?? undefined)
-
-        try {
-            // 通过 git rev-parse --verify 检查特殊引用来判断操作状态
-            // 这些引用 (REBASE_HEAD, MERGE_HEAD 等) 在对应操作进行时由 git 自动创建
-            // 比解析 git status 的本地化文本输出更可靠
-            const checkRef = async (ref: string): Promise<boolean> => {
-                const result = await this.exec(
-                    ['rev-parse', '--verify', '--quiet', ref],
-                    targetPath ?? undefined
-                ).catch(() => null)
-                return result?.exitCode === 0
-            }
-
-            // 检查顺序: rebase > merge > cherry-pick > revert
-            if (await checkRef('REBASE_HEAD')) return 'rebase'
-            if (await checkRef('MERGE_HEAD')) return 'merge'
-            if (await checkRef('CHERRY_PICK_HEAD')) return 'cherry-pick'
-            if (await checkRef('REVERT_HEAD')) return 'revert'
-
-            return 'normal'
-        } catch {
-            return 'normal'
-        }
     }
 
     /**
