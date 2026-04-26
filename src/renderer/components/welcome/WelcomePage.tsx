@@ -393,7 +393,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         left: 50%;
         width: 100%;
         height: 140%;
-        background: radial-gradient(ellipse at center, rgba(var(--accent), 0.35) 0%, transparent 70%);
+        background: radial-gradient(ellipse at center, rgb(var(--accent) / 0.35) 0%, transparent 70%);
         filter: blur(50px);
         transform: translate(-50%, -50%);
         z-index: -1;
@@ -407,11 +407,11 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         gap: 12px;
         padding: 20px;
         border-radius: 16px;
-        background: linear-gradient(135deg, rgba(var(--text-primary), 0.08) 0%, rgba(var(--text-primary), 0.02) 100%);
+        background: linear-gradient(135deg, rgb(var(--text-primary) / 0.08) 0%, rgb(var(--text-primary) / 0.02) 100%);
         backdrop-filter: blur(32px) saturate(180%);
         -webkit-backdrop-filter: blur(32px) saturate(180%);
-        border: 1px solid rgba(var(--text-primary), 0.08);
-        box-shadow: 0 16px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgba(var(--text-primary), 0.12);
+        border: 1px solid rgb(var(--text-primary) / 0.08);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgb(var(--text-primary) / 0.12);
         transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         position: relative;
         overflow: hidden;
@@ -431,9 +431,9 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
 
       .${rootClass} .adnify-welcome-feature-card:hover {
         transform: translateY(-4px);
-        background: linear-gradient(135deg, rgba(var(--text-primary), 0.12) 0%, rgba(var(--text-primary), 0.04) 100%);
-        border-color: rgba(var(--accent), 0.5);
-        box-shadow: 0 20px 48px rgba(0,0,0,0.2), inset 0 1px 1px rgba(var(--text-primary), 0.2), 0 0 0 1px rgba(var(--accent), 0.15);
+        background: linear-gradient(135deg, rgb(var(--text-primary) / 0.12) 0%, rgb(var(--text-primary) / 0.04) 100%);
+        border-color: rgb(var(--accent) / 0.5);
+        box-shadow: 0 20px 48px rgba(0,0,0,0.2), inset 0 1px 1px rgb(var(--text-primary) / 0.2), 0 0 0 1px rgb(var(--accent) / 0.15);
       }
 
       .${rootClass} .adnify-welcome-feature-card:hover::before {
@@ -449,14 +449,14 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         justify-content: center;
         border-radius: 12px;
         color: rgb(var(--accent));
-        background: linear-gradient(135deg, rgba(var(--accent), 0.15) 0%, rgba(var(--accent), 0.05) 100%);
-        border: 1px solid rgba(var(--accent), 0.2);
+        background: linear-gradient(135deg, rgb(var(--accent) / 0.15) 0%, rgb(var(--accent) / 0.05) 100%);
+        border: 1px solid rgb(var(--accent) / 0.2);
         transition: transform 0.3s ease, background 0.3s ease;
       }
 
       .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-icon {
         transform: scale(1.05);
-        background: linear-gradient(135deg, rgba(var(--accent), 0.25) 0%, rgba(var(--accent), 0.1) 100%);
+        background: linear-gradient(135deg, rgb(var(--accent) / 0.25) 0%, rgb(var(--accent) / 0.1) 100%);
       }
 
       .${rootClass} .adnify-welcome-feature-text {
@@ -515,7 +515,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         justify-content: space-between;
         margin-bottom: 24px;
         padding-bottom: 12px;
-        border-bottom: 1px solid rgba(var(--border), 0.5);
+        border-bottom: 1px solid rgb(var(--border) / 0.5);
       }
 
       .${rootClass} .adnify-welcome-recent-header h3 {
