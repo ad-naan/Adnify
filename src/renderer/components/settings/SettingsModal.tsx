@@ -360,11 +360,11 @@ export default function SettingsModal() {
             name: provider.displayName,
             models: [...(provider.models || []), ...(localProviderConfigs[id]?.customModels || [])]
         })),
-    [localProviderConfigs])
+        [localProviderConfigs])
 
     const selectedProvider = useMemo(() =>
         providers.find(provider => provider.id === localConfig.provider),
-    [localConfig.provider, providers])
+        [localConfig.provider, providers])
 
     const tabs = useMemo(() => [
         { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
@@ -394,7 +394,7 @@ export default function SettingsModal() {
                         </h2>
                     </div>
 
-                    <nav className="flex-1 px-4 space-y-1 overflow-y-auto no-scrollbar">
+                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
                         {tabs.map(tab => (
                             <button
                                 key={tab.id}

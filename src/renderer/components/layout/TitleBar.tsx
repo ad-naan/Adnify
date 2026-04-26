@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '../common/Logo'
 import WorkspaceDropdown from './WorkspaceDropdown'
 import UpdateIndicator from './UpdateIndicator'
+import { MascotIP } from '../mascot/MascotIP'
 
 // 检测是否为 Mac 平台
 const isMac = typeof navigator !== 'undefined' && (
@@ -73,6 +74,11 @@ export default function TitleBar() {
           >
             <HelpCircle className="w-4 h-4" />
           </button>
+          
+          <div className="w-[1px] h-4 bg-border/50 mx-1"></div>
+
+          {/* Mascot IP */}
+          <MascotIP />
         </div>
 
         {/* Windows Controls */}

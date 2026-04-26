@@ -12,7 +12,6 @@ import GlobalToastContainer from './components/common/GlobalToastContainer'
 import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
-import { MascotIP } from './components/mascot/MascotIP'
 import { startupMetrics } from '@shared/utils/startupMetrics'
 
 startupMetrics.mark('app-module-loaded')
@@ -232,7 +231,6 @@ function AppContent() {
 
       <GlobalConfirmDialog />
       <GlobalToastContainer />
-      <MascotIP />
     </div>
   )
 }

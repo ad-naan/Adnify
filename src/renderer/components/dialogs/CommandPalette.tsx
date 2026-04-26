@@ -56,10 +56,6 @@ const CommandItem = memo(function CommandItem({
           : 'text-text-secondary hover:bg-surface-hover'}
       `}
     >
-      {/* Active Indicator */}
-      {isSelected && (
-        <div className="absolute left-0 top-2 bottom-2 w-1 bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.6)]" />
-      )}
 
       <div className={`p-1.5 rounded-md transition-colors flex-shrink-0 ${isSelected ? 'bg-accent/20 text-accent' : 'bg-surface/50 text-text-muted group-hover:text-text-primary'}`}>
         <Icon className="w-4 h-4" />

@@ -136,10 +136,6 @@ const FileMatchItem = memo(function FileMatchItem({
         ${isSelected ? 'bg-surface-active text-text-primary' : 'text-text-secondary hover:bg-surface-hover'}
       `}
     >
-      {/* Active Indicator */}
-      {isSelected && (
-        <div className="absolute left-0 top-2 bottom-2 w-1 bg-accent rounded-r-full shadow-[0_0_8px_rgba(var(--accent),0.6)]" />
-      )}
 
       <div className="flex-shrink-0">
         <FileIcon filename={fileName} size={18} />
