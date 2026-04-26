@@ -207,9 +207,17 @@ export class ExecutionScheduler {
         return { taskId: task.id, success: false, output: '', error, duration }
     }
 
+    markTaskPending(task: PlanTask): void {
+        task.status = 'pending'
+        task.error = undefined
+        task.startedAt = undefined
+        task.completedAt = undefined
+        this.runningTasks.delete(task.id)
+    }
+
     isComplete(plan: TaskPlan): boolean {
         return plan.tasks.every(t =>
-            t.status === 'completed' || t.status === 'failed' || t.status === 'skipped'
+            t.status === 'completed' || t.status === 'failed' || t.status === 'skipped' || t.status === 'cancelled'
         )
     }
 

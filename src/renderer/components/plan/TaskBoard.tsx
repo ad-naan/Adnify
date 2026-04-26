@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
     Play,
     Pause,
+    Square,
     CheckCircle2,
     Circle,
     AlertCircle,
@@ -311,25 +312,37 @@ const ExecutionModeToggle = memo(function ExecutionModeToggle({
     onChange: (mode: ExecutionMode) => void
     disabled?: boolean
 }) {
+    const optionClass = (value: ExecutionMode) => [
+        'h-8 px-3 text-xs font-medium rounded-md transition-all border',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        mode === value
+            ? 'bg-accent text-accent-foreground border-accent shadow-sm shadow-accent/20'
+            : 'bg-transparent text-text-secondary border-transparent hover:bg-surface-hover hover:text-text-primary',
+    ].join(' ')
+
     return (
-        <div className="flex items-center gap-2 p-1 rounded-lg bg-surface/50 border border-border">
+        <div
+            className="flex items-center gap-1 p-1 rounded-lg bg-surface/50 border border-border"
+            title="顺序执行一次运行一个任务；并行执行会同时运行互不依赖且资源不冲突的任务。"
+        >
             <button
-                className={`px-3 py-1 text-xs rounded transition-colors ${mode === 'sequential'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-text-primary'
-                    }`}
+                type="button"
+                className={optionClass('sequential')}
                 onClick={() => onChange('sequential')}
                 disabled={disabled}
+                aria-pressed={mode === 'sequential'}
+                title="顺序执行：一次只运行一个任务，最稳妥。"
             >
                 顺序执行
             </button>
             <button
-                className={`px-3 py-1 text-xs rounded transition-colors ${mode === 'parallel'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-text-primary'
-                    }`}
+                type="button"
+                className={optionClass('parallel')}
                 onClick={() => onChange('parallel')}
                 disabled={disabled}
+                aria-pressed={mode === 'parallel'}
+                title="并行执行：同时运行可并发的任务，依赖未满足或文件冲突的任务仍会等待。"
             >
                 并行执行
             </button>
@@ -348,7 +361,8 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
     const updatePlan = useAgentStore((s) => s.updatePlan)
     const workspacePath = useStore((s) => s.workspacePath)
     const language = useStore((s) => s.language)
-    const isExecuting = plan?.status === 'executing'
+    const isExecuting = plan?.status === 'executing' || plan?.status === 'pausing' || plan?.status === 'stopping'
+    const isPaused = plan?.status === 'paused'
 
     // 加载需求文档内容
     useEffect(() => {
@@ -406,6 +420,16 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
         stopPlanExecution(planId)
     }, [planId])
 
+    const handlePause = useCallback(async () => {
+        const { pausePlanExecution } = await import('@/renderer/agent/plan/planExecutor')
+        pausePlanExecution(planId)
+    }, [planId])
+
+    const handleResume = useCallback(async () => {
+        const { resumePlanExecution } = await import('@/renderer/agent/plan/planExecutor')
+        await resumePlanExecution(planId)
+    }, [planId])
+
     if (!plan) {
         return (
             <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -434,10 +458,27 @@ export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
                             disabled={isExecuting}
                         />
                         {isExecuting ? (
-                            <Button variant="danger" size="sm" onClick={handleStop}>
-                                <Pause className="w-4 h-4 mr-1" />
-                                停止
-                            </Button>
+                            <>
+                                <Button variant="secondary" size="sm" onClick={handlePause} disabled={plan.status === 'pausing' || plan.status === 'stopping'}>
+                                    <Pause className="w-4 h-4 mr-1" />
+                                    暂停
+                                </Button>
+                                <Button variant="danger" size="sm" onClick={handleStop} disabled={plan.status === 'stopping'}>
+                                    <Square className="w-4 h-4 mr-1" />
+                                    停止
+                                </Button>
+                            </>
+                        ) : isPaused ? (
+                            <>
+                                <Button variant="primary" size="sm" onClick={handleResume}>
+                                    <Play className="w-4 h-4 mr-1" />
+                                    继续
+                                </Button>
+                                <Button variant="danger" size="sm" onClick={handleStop}>
+                                    <Square className="w-4 h-4 mr-1" />
+                                    停止
+                                </Button>
+                            </>
                         ) : (
                             <Button variant="primary" size="sm" onClick={handleStart}>
                                 <Play className="w-4 h-4 mr-1" />

@@ -65,7 +65,9 @@ export function useAgentCommands() {
 
   const planPhase = useAgentStore<'planning' | 'executing'>(state => {
     const activePlan = state.plans.find(plan => plan.id === state.activePlanId)
-    return activePlan?.status === 'executing' ? 'executing' : 'planning'
+    return activePlan?.status === 'executing' || activePlan?.status === 'pausing' || activePlan?.status === 'stopping'
+      ? 'executing'
+      : 'planning'
   })
   const streamState = useAgentStore(selectStreamState)
 

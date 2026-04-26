@@ -146,7 +146,9 @@ export default function StatusBar() {
     }
   }, [workspacePath, loadPlansFromDisk])
 
-  const executingPlansCount = plans.filter(plan => plan.status === 'executing').length
+  const executingPlansCount = plans.filter(plan =>
+    plan.status === 'executing' || plan.status === 'pausing' || plan.status === 'stopping'
+  ).length
 
   const layerColorClass =
     compressionStats?.level === 4 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :

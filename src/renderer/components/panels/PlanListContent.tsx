@@ -28,6 +28,8 @@ interface PlanListContentProps {
 function StatusIcon({ status }: { status: PlanStatus }) {
     switch (status) {
         case 'executing':
+        case 'pausing':
+        case 'stopping':
             return <PlayCircle className="w-4 h-4 text-accent animate-pulse" />
         case 'completed':
             return <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -35,6 +37,8 @@ function StatusIcon({ status }: { status: PlanStatus }) {
             return <Pause className="w-4 h-4 text-amber-400" />
         case 'failed':
             return <XCircle className="w-4 h-4 text-red-400" />
+        case 'stopped':
+            return <XCircle className="w-4 h-4 text-text-muted" />
         default:
             return <Clock className="w-4 h-4 text-text-muted" />
     }
@@ -44,11 +48,14 @@ function StatusIcon({ status }: { status: PlanStatus }) {
  * 获取状态文本
  */
 function getStatusText(status: PlanStatus, language: 'en' | 'zh'): string {
-    const texts: Record<PlanStatus, { en: string; zh: string }> = {
+    const texts: Partial<Record<PlanStatus, { en: string; zh: string }>> = {
         draft: { en: 'Draft', zh: '草稿' },
         approved: { en: 'Approved', zh: '已批准' },
         executing: { en: 'Executing', zh: '执行中' },
+        pausing: { en: 'Pausing', zh: '暂停中' },
         paused: { en: 'Paused', zh: '已暂停' },
+        stopping: { en: 'Stopping', zh: '停止中' },
+        stopped: { en: 'Stopped', zh: '已停止' },
         completed: { en: 'Completed', zh: '已完成' },
         failed: { en: 'Failed', zh: '失败' },
     }
@@ -164,11 +171,14 @@ export default memo(function PlanListContent({
 
     // 按状态和时间排序：执行中 > 暂停 > 草稿/就绪 > 完成/失败
     const sortedPlans = useMemo(() => {
-        const priorityMap: Record<PlanStatus, number> = {
+        const priorityMap: Partial<Record<PlanStatus, number>> = {
             executing: 0,
+            pausing: 0,
+            stopping: 0,
             paused: 1,
             draft: 2,
             approved: 2,
+            stopped: 2,
             completed: 3,
             failed: 4,
         }

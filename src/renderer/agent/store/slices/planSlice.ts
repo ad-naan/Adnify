@@ -69,6 +69,27 @@ function withRevision(plan: TaskPlan, updates?: Partial<TaskPlan>): TaskPlan {
     }
 }
 
+function normalizeLoadedPlan(plan: TaskPlan): TaskPlan {
+    const interruptedPlanStatuses: PlanStatus[] = ['executing', 'pausing', 'stopping']
+    const wasInterrupted = interruptedPlanStatuses.includes(plan.status)
+
+    return {
+        ...plan,
+        status: wasInterrupted ? 'paused' : plan.status,
+        tasks: plan.tasks.map(task => (
+            task.status === 'running'
+                ? {
+                    ...task,
+                    status: 'pending',
+                    error: undefined,
+                    startedAt: undefined,
+                    completedAt: undefined,
+                }
+                : task
+        )),
+    }
+}
+
 export const createPlanSlice: StateCreator<
     AgentStore,
     [],
@@ -136,7 +157,7 @@ export const createPlanSlice: StateCreator<
                     if (content) {
                         const plan = JSON.parse(content) as TaskPlan
                         if (plan.id && plan.name && Array.isArray(plan.tasks)) {
-                            plans.push({ ...plan, revision: plan.revision || 1 })
+                            plans.push(normalizeLoadedPlan({ ...plan, revision: plan.revision || 1 }))
                         }
                     }
                 } catch (e) {
