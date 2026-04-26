@@ -1,97 +1,125 @@
-# Adnify
-
-**中文** | [English](README_EN.md)
-
-> **Connect AI to Your Code.**
-> 一个拥有极致视觉体验、深度集成 AI Agent 的下一代代码编辑器。
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/adnaan-worker/Adnify) ![License](https://img.shields.io/badge/license-Custom%20License-blue.svg) ![Electron](https://img.shields.io/badge/Electron-39.0-blueviolet) ![React](https://img.shields.io/badge/React-18-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-
-Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复刻并超越了传统 IDE 的体验，融合了 Cyberpunk 玻璃拟态设计风格，内置强大的 AI Agent，支持从代码生成到文件操作的全流程自动化。
-
-<!-- 主界面演示 -->
 <div align="center">
-  <img src="images/main.gif" alt="Adnify 主界面演示" width="800" />
+  <picture>
+  <source media="(prefers-color-scheme: light)" srcset="public/brand/logos/app-light.png" />
+  <img src="public/brand/logos/app.png" alt="Adnify Logo" width="156" />
+</picture>
+
+  <h1>Adnify</h1>
+
+  <p><a href="README_CN.md">中文</a> | <strong>English</strong></p>
+
+  <p><strong>Connect AI to Your Code.</strong></p>
+  <p>A next-generation code editor with stunning visual experience and deeply integrated AI Agent.</p>
+
+  <p>
+    <a href="https://deepwiki.com/adnaan-worker/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
+    <img src="https://img.shields.io/badge/license-Custom%20License-blue.svg" alt="License" />
+    <img src="https://img.shields.io/badge/Electron-39.0-blueviolet" alt="Electron 39.0" />
+    <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
+    <img src="https://img.shields.io/badge/TypeScript-5.0-blue" alt="TypeScript 5.0" />
+  </p>
+</div>
+
+Adnify is more than just an editor—it's your **intelligent programming companion**. It replicates and surpasses traditional IDE experiences, blending Cyberpunk glassmorphism design with a powerful built-in AI Agent that supports full-process automation from code generation to file operations.
+
+<!-- Main Interface Demo -->
+<div align="center">
+  <img src="images/main.gif" alt="Adnify Main Interface Demo" width="820" />
 </div>
 
 ---
 
-## 联系与交流
 
-欢迎加入交流群，一起讨论 Adnify 的使用和开发！
+### 🏆 Hall of Fame: Supporters Wall
 
-| 微信群 | QQ 群 | 作者微信 |
+> "Behind every line of code in Adnify, there's a spark of energy from our community!" ⚡️
+
+A huge thank you to our generous supporters. Your coffee, milk tea, and energy drinks are what keep Adnify evolving!
+
+| Supporter | Method | Honorary Title | Date | Message |
+| :--- | :--- | :--- | :--- | :--- |
+| okay. | 🧋 Milk Tea | **Joy Source Injector** | 2026-03-07 | A cup of joy for bug-free code! ✨ |
+| Mr. Tang | ☕ Coffee | **Focus Fuel Sponsor** | 2026-04-17 | A fresh cup for the next build. |
+
+---
+
+## Contact & Community
+
+Join our community to discuss Adnify usage and development!
+
+| WeChat Group | QQ Group | Author WeChat |
 |:---:|:---:|:---:|
-| <img src="images/wechat-group.png" width="200" height="200" alt="微信群二维码" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ群二维码" /> | <img src="images/wechat-author.png" width="200" height="200" alt="作者微信" /> |
-| 扫码加入微信群 | QQ群号: `1076926858` | 微信号: `adnaan_worker` |
+| <img src="images/wechat-group.png" width="200" height="200" alt="WeChat Group QR" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ Group QR" /> | <img src="images/wechat-author.png" width="200" height="200" alt="Author WeChat" /> |
+| Scan to join WeChat group | QQ Group: `1076926858` | WeChat ID: `adnaan_worker` |
 
-> 💡 如有问题或建议，也可以直接在 [Gitee Issues](https://gitee.com/adnaan/adnify/issues) 或[Github Issues](https://github.com/adnaan-worker/adnify/issues)  提交
-
----
-
-📋 **[查看完整更新日志 →](CHANGELOG.md)**
+> 💡 For issues or suggestions, submit them on [Gitee Issues](https://gitee.com/adnaan/adnify/issues) or [Github Issues](https://github.com/adnaan-worker/adnify/issues)
 
 ---
 
-## 目录
-
-- [架构设计](#-架构设计)
-- [核心特性](#-核心特性)
-- [独特优势](#-独特优势对比-cursorwindsurfclaude-code)
-- [快速开始](#-快速开始)
-- [功能详解](#-功能详解)
-- [快捷键](#-快捷键)
-- [项目结构](#-项目结构)
-- [贡献与反馈](#-贡献与反馈)
+📋 **[View Full Changelog →](CHANGELOG.md)**
 
 ---
 
-## 🏗 架构设计
+## Table of Contents
 
-Adnify 采用 Electron 多进程架构，结合 Web Worker 和 Node.js Worker Threads 实现高性能并发处理。
+- [Architecture Design](#-architecture-design)
+- [Core Features](#-core-features)
+- [Unique Advantages](#-unique-advantages-vs-cursorwindsurfclaude-code)
+- [Quick Start](#-quick-start)
+- [Brand Assets](#-brand-assets)
+- [Feature Details](#-feature-details)
+- [Keyboard Shortcuts](#-keyboard-shortcuts)
+- [Project Structure](#-project-structure)
+- [Contributing](#-contributing--feedback)
+
+---
+
+## 🏗 Architecture Design
+
+Adnify adopts Electron multi-process architecture combined with Web Workers and Node.js Worker Threads for high-performance concurrent processing.
 
 <div align="center">
 
-<!-- 架构图 - 使用 Mermaid.ink 在线渲染 -->
-[![Adnify 架构图](https://mermaid.ink/img/pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ?type=png)](https://mermaid.live/edit#pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ)
+<!-- Architecture Diagram - Rendered by Mermaid.ink -->
+[![Adnify Architecture Diagram](https://mermaid.ink/img/pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ?type=png)](https://mermaid.live/edit#pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ?type=png)
 
-<p><em>多进程 + 多线程架构，充分利用多核 CPU，确保 UI 流畅响应</em></p>
-<p>💡 <strong>点击图片在 Mermaid Live 编辑器中查看和编辑完整架构图</strong></p>
+<p><em>Multi-process + multi-thread architecture, fully utilizing multi-core CPUs for smooth UI responsiveness</em></p>
+<p>💡 <strong>Click image to view and edit complete architecture diagram in Mermaid Live Editor</strong></p>
 
 <details>
-<summary>📊 点击查看 Mermaid 源码（可在 <a href="https://mermaid.live/">Mermaid Live</a> 编辑）</summary>
+<summary>📊 Click to view Mermaid source code (editable at <a href="https://mermaid.live/">Mermaid Live</a>)</summary>
 
 ```mermaid
 graph TB
-    subgraph "用户界面层 UI Layer"
+    subgraph "User Interface Layer"
         UI[React Components]
         Monaco[Monaco Editor]
         XTerm[XTerm Terminal]
         ChatUI[Chat Panel]
     end
 
-    subgraph "渲染进程 Renderer Process"
-        subgraph "AI Agent 核心"
+    subgraph "Renderer Process"
+        subgraph "AI Agent Core"
             AgentCore[Agent Core]
             EventBus[Event Bus]
             ToolRegistry[Tool Registry]
             ToolExecutors[Tool Executors]
         end
         
-        subgraph "状态管理"
+        subgraph "State Management"
             AgentStore[Agent Store]
             EditorStore[Editor Store]
             UIStore[UI Store]
         end
         
-        subgraph "前端服务"
+        subgraph "Frontend Services"
             TermMgr[Terminal Manager]
             LSPClient[LSP Client]
             WorkspaceMgr[Workspace Manager]
             CompletionSvc[Completion Service]
         end
         
-        subgraph "Agent 子系统"
+        subgraph "Agent Subsystems"
             Context[Context Manager]
             Compression[Compression Manager]
             Memory[Memory Service]
@@ -99,7 +127,7 @@ graph TB
             Emotion[Emotion System]
         end
         
-        subgraph "Web Workers 线程池"
+        subgraph "Web Workers Thread Pool"
             ComputeWorker[Compute Worker Pool]
             MonacoWorkers[Monaco Language Workers]
             TSWorker[TypeScript Worker]
@@ -109,25 +137,25 @@ graph TB
         end
     end
 
-    subgraph "IPC 通信层 IPC Bridge"
+    subgraph "IPC Communication Layer"
         IPC[Type-Safe IPC Handlers]
     end
 
-    subgraph "主进程 Main Process"
-        subgraph "安全层"
+    subgraph "Main Process"
+        subgraph "Security Layer"
             Security[Security Module]
             FileWatcher[File Watcher]
             AuditLog[Audit Logger]
         end
         
-        subgraph "核心服务"
+        subgraph "Core Services"
             LSPMgr[LSP Manager]
             IndexSvc[Indexing Service]
             MCPMgr[MCP Manager]
             LLMProxy[LLM Proxy]
         end
         
-        subgraph "索引系统"
+        subgraph "Indexing System"
             Chunker[Code Chunker]
             Embedder[Embedder]
             VectorDB[(LanceDB)]
@@ -137,21 +165,21 @@ graph TB
             IndexWorker[Indexer Worker]
         end
         
-        subgraph "LSP 生态"
+        subgraph "LSP Ecosystem"
             TSServer[TypeScript]
             Pyright[Python]
             Gopls[Go]
             OtherLSP[10+ Languages]
         end
         
-        subgraph "MCP 生态"
+        subgraph "MCP Ecosystem"
             MCPClient[MCP Client]
             MCPAuth[OAuth Provider]
             MCPServers[External MCP Servers]
         end
     end
 
-    subgraph "外部服务 External Services"
+    subgraph "External Services"
         OpenAI[OpenAI]
         Claude[Anthropic]
         Gemini[Google]
@@ -217,7 +245,7 @@ graph TB
     LLMProxy --> DeepSeek
     LLMProxy --> Ollama
     
-    Emotion -.情绪感知.-> AgentCore
+    Emotion -.emotion awareness.-> AgentCore
 
     style AgentCore fill:#667eea
     style Security fill:#764ba2
@@ -236,441 +264,483 @@ graph TB
 
 </div>
 
-### 核心模块说明
+### Core Module Overview
 
-**渲染进程 (Frontend)**
-- **Agent Core**: AI 代理核心，协调消息流、工具执行、上下文管理
-- **Tool Registry**: 工具注册表，管理 23+ 内置工具的定义、验证和执行
-- **Context Manager**: 上下文管理器，支持 4 级压缩、Handoff 文档生成
-- **Event Bus**: 事件总线，解耦模块间通信
-- **Emotion System**: 情绪系统，实时感知用户状态并提供智能建议
-- **Agent Store**: Zustand 状态管理，持久化对话历史、分支、检查点
-- **Frontend Services**: 终端管理、LSP 客户端、工作区管理、代码补全
+**Renderer Process (Frontend)**
+- **Agent Core**: AI agent core, coordinates message flow, tool execution, and context management
+- **Tool Registry**: Tool registry, manages 23+ built-in tools' definitions, validation, and execution
+- **Context Manager**: Context manager, supports 4-level compression and Handoff document generation
+- **Event Bus**: Event bus, decouples inter-module communication
+- **Emotion System**: Emotion system, real-time user state awareness with intelligent suggestions
+- **Agent Store**: Zustand state management, persists conversation history, branches, and checkpoints
+- **Frontend Services**: Terminal management, LSP client, workspace management, code completion
 
-**Web Workers (渲染进程线程池)**
-- **Compute Worker Pool**: 处理 Diff 计算、文本搜索等 CPU 密集型任务
-- **Monaco Language Workers**: Monaco 编辑器的语言服务 Workers
-  - TypeScript/JavaScript Worker: 语法高亮、代码补全
-  - JSON Worker: JSON 格式化、验证
-  - CSS Worker: CSS 语法分析
-  - HTML Worker: HTML 语法分析
+**Web Workers (Renderer Process Thread Pool)**
+- **Compute Worker Pool**: Handles CPU-intensive tasks like Diff computation and text search
+- **Monaco Language Workers**: Monaco editor's language service workers
+  - TypeScript/JavaScript Worker: Syntax highlighting, code completion
+  - JSON Worker: JSON formatting, validation
+  - CSS Worker: CSS syntax analysis
+  - HTML Worker: HTML syntax analysis
 
-**主进程 (Backend)**
-- **Security Module**: 安全模块，工作区隔离、路径验证、命令白名单、审计日志
-- **LSP Manager**: 语言服务器管理，智能检测项目根目录，支持 10+ 语言
-- **Indexing Service**: 代码库索引，Tree-sitter 解析、语义分块、向量存储
-- **MCP Manager**: MCP 协议管理，支持外部工具、OAuth 认证、配置热重载
-- **LLM Proxy**: LLM 代理层，统一多家 AI 服务商接口，流式响应处理
+**Main Process (Backend)**
+- **Security Module**: Security module with workspace isolation, path validation, command whitelist, and audit logging
+- **LSP Manager**: Language server management, intelligent project root detection, supports 10+ languages
+- **Indexing Service**: Codebase indexing with Tree-sitter parsing, semantic chunking, and vector storage
+- **MCP Manager**: MCP protocol management, supports external tools, OAuth authentication, and config hot-reload
+- **LLM Proxy**: LLM proxy layer, unified interface for multiple AI service providers with streaming response handling
 
-**Node.js Worker Threads (主进程线程池)**
-- **Indexer Worker**: 独立线程处理代码索引，避免阻塞主进程
-  - 代码分块 (Chunking)
-  - Embedding 生成
-  - 向量存储更新
+**Node.js Worker Threads (Main Process Thread Pool)**
+- **Indexer Worker**: Dedicated thread for code indexing, prevents blocking main process
+  - Code chunking
+  - Embedding generation
+  - Vector store updates
 
-**通信层**
-- **IPC Bridge**: 类型安全的进程间通信，所有主进程功能通过 IPC 暴露
+**Communication Layer**
+- **IPC Bridge**: Type-safe inter-process communication, all main process features exposed via IPC
 
-**外部集成**
-- **多 LLM 支持**: OpenAI、Claude、Gemini、DeepSeek、Ollama 及自定义 API
-- **MCP 生态**: 可扩展的外部工具和服务，支持社区插件
+**External Integration**
+- **Multi-LLM Support**: OpenAI, Claude, Gemini, DeepSeek, Ollama, and custom APIs
+- **MCP Ecosystem**: Extensible external tools and services, supports community plugins
 
-### 并发处理优势
+### Concurrency Advantages
 
-**多进程隔离**
-- 渲染进程崩溃不影响主进程
-- 主进程负责文件系统、LSP、索引等重任务
-- 进程间通过 IPC 安全通信
+**Multi-Process Isolation**
+- Renderer process crashes don't affect main process
+- Main process handles heavy tasks: file system, LSP, indexing
+- Secure inter-process communication via IPC
 
-**多线程并行**
-- Web Workers 处理前端计算密集任务（Diff、搜索）
-- Monaco Workers 独立处理语言服务，不阻塞 UI
-- Node.js Worker Threads 处理代码索引，支持大型项目
+**Multi-Thread Parallelism**
+- Web Workers handle frontend compute-intensive tasks (Diff, search)
+- Monaco Workers independently handle language services without blocking UI
+- Node.js Worker Threads handle code indexing, supporting large projects
 
-**性能优化**
-- UI 线程始终保持响应
-- 充分利用多核 CPU
-- 大文件操作不卡顿
+**Performance Optimization**
+- UI thread always remains responsive
+- Fully utilizes multi-core CPUs
+- Large file operations without freezing
 
 ---
 
-## ✨ 核心特性
+## ✨ Core Features
 
-### 🎨 极致视觉体验
+### 🎨 Stunning Visual Experience
 
-- **多主题支持**: 内置 4 套精心设计的主题
-  - `Adnify Dark` - 默认深色主题，柔和护眼
-  - `Midnight` - 深邃午夜蓝，专注编码
-  - `Cyberpunk` - 霓虹赛博朋克风格
-  - `Dawn` - 明亮日间主题
+- **Multi-Theme Support**: 4 carefully designed built-in themes
+  - `Adnify Dark` - Default dark theme, soft and eye-friendly
+  - `Midnight` - Deep midnight blue, focused coding
+  - `Cyberpunk` - Neon cyberpunk style
+  - `Dawn` - Bright daytime theme
 
-- **玻璃拟态设计**: 全局采用毛玻璃风格，配合微妙的流光边框和动态阴影
-- **沉浸式布局**: 无框窗口、Chrome 风格标签页、面包屑导航
+- **Glassmorphism Design**: Global frosted glass style with subtle glowing borders and dynamic shadows
+- **Immersive Layout**: Frameless window, Chrome-style tabs, breadcrumb navigation
 
 ![alt text](images/theme1.png)
 ![alt text](images/theme2.png)
 ![alt text](images/theme3.png)
 ![alt text](images/theme4.png)
 
-### 🤖 AI Agent 深度集成
+### 🤖 Deep AI Agent Integration
 
-- **三种核心工作模式**:
-  - **Chat Mode** 💬: 纯对话模式，快速问答，直接响应，无主动工具调用，适合快速咨询和代码讨论
-  - **Agent Mode** 🤖: 智能代理模式，单线程任务聚焦，拥有完整的文件系统读写和终端执行权限，适合单一明确的开发任务
-  - **Plan Mode** 🧠: **[NEW]** 任务编排模式，支持多轮交互式需求收集，自动创建深度分步执行计划，将复杂任务分解为多个子任务并行/串行执行，支持任务依赖管理和进度追踪
+- **Three Core Working Modes**:
+  - **Chat Mode** 💬: Pure conversation mode for quick Q&A and code discussions, direct responses without active tool calls
+  - **Agent Mode** 🤖: Intelligent agent mode with single-thread task focus, full file system read/write and terminal execution permissions, ideal for clear development tasks
+  - **Plan Mode** 🧠: **[NEW]** Task orchestration mode supporting multi-turn interactive requirement gathering, automatically creates deep step-by-step execution plans, decomposes complex tasks into multiple sub-tasks with parallel/serial execution, supports task dependency management and progress tracking
 
-- **24+ 个内置原生核心工具**: 构建出让 AI 可以完全接管项目的泛用型底座能力
-  - 📂 **文件系统管理**: `read_file` (支持单文件/多文件批量读取), `list_directory` (支持递归遍历)
-  - ✍️ **智能代码编辑**: `edit_file` (9 策略智能匹配), `write_file`, `create_file_or_folder`, `delete_file_or_folder`
-  - 🔎 **全量检索引擎**: `search_files` (超高速正则扫描，支持 | 组合多模式), `codebase_search` (基于 LanceDB 向量的语义洞察)
-  - 🧠 **语言服务层 (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors` (支持强制刷新)
-  - 💻 **底层沙盒终端控制**: `run_command` (支持后台运行), `read_terminal_output`, `send_terminal_input` (支持 Ctrl 组合键), `stop_terminal`
-  - 🌐 **知识外延网络**: `web_search` (多策略融汇), `read_url` (Jina 深度解析)
-  - 🤝 **拟人态多维交互**: `ask_user` (支持人工审批和确认)
-  - ✨ **任务规划系统**: `create_task_plan`, `update_task_plan`, `start_task_execution` (支持任务依赖和并行执行)
-  - 🎨 **UI/UX 设计检索**: `uiux_search` (整合全球设计美学知识库与行业最佳实践)
-  - 💾 **项目记忆管理**: `read_memory`, `write_memory` (支持人工审批机制)
+- **24+ Built-in Native Core Tools**: Building a universal foundation allowing AI to fully take over projects
+  - 📂 **File System Management**: `read_file` (supports single/batch file reading), `list_directory` (supports recursive traversal)
+  - ✍️ **Smart Code Editing**: `edit_file` (9-strategy intelligent matching), `write_file`, `create_file_or_folder`, `delete_file_or_folder`
+  - 🔎 **Full-scale Search Engine**: `search_files` (ultra-fast regex scan, supports | pattern combination), `codebase_search` (LanceDB vector semantic insight)
+  - 🧠 **Language Service (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors` (supports force refresh)
+  - 💻 **Sandbox Terminal Control**: `run_command` (supports background execution), `read_terminal_output`, `send_terminal_input` (supports Ctrl key combinations), `stop_terminal`
+  - 🌐 **Knowledge Networking**: `web_search` (multi-strategy fusion), `read_url` (Jina deep parsing)
+  - 🤝 **Human-like Interaction**: `ask_user` (supports manual approval and confirmation)
+  - ✨ **Task Planning System**: `create_task_plan`, `update_task_plan`, `start_task_execution` (supports task dependencies and parallel execution)
+  - 🎨 **UI/UX Design Search**: `uiux_search` (global design aesthetics knowledge base and industry best practices)
+  - 💾 **Project Memory Management**: `read_memory`, `write_memory` (supports manual approval mechanism)
 
-- **智能上下文引用**:
-  - `@文件名` - 引用文件上下文，支持模糊匹配
-  - `@codebase` - 语义搜索代码库，基于 AI Embedding
-  - `@git` - 引用 Git 变更，自动获取 diff 信息
-  - `@terminal` - 引用终端输出，快速分析错误
-  - `@symbols` - 引用当前文件符号，快速定位函数/类
-  - `@web` - 网络搜索，获取最新技术文档
-  - 拖拽文件/文件夹到对话框，批量添加上下文
+- **Smart Context References**:
+  - `@filename` - Reference file context with fuzzy matching support
+  - `@codebase` - Semantic codebase search based on AI Embedding
+  - `@git` - Reference Git changes, auto-fetch diff info
+  - `@terminal` - Reference terminal output for quick error analysis
+  - `@symbols` - Reference current file symbols, quick navigation to functions/classes
+  - `@web` - Web search for latest technical documentation
+  - Drag & drop files/folders to chat for batch context addition
 
-- **多 LLM 无缝切换**: 
-  - 支持 OpenAI (GPT-4, GPT-4o, o1 系列)
+- **Seamless Multi-LLM Switching**: 
+  - Supports OpenAI (GPT-4, GPT-4o, o1 series)
   - Anthropic Claude (Claude 3.5 Sonnet, Claude 3.7)
   - Google Gemini (Gemini 2.0, Gemini 1.5 Pro)
-  - DeepSeek (DeepSeek-V3, DeepSeek-R1，支持思考过程展示)
-  - Ollama (本地模型)
-  - 自定义 API (兼容 OpenAI 格式)
+  - DeepSeek (DeepSeek-V3, DeepSeek-R1 with thinking process visualization)
+  - Ollama (local models)
+  - Custom API (OpenAI-compatible format)
   
-- **快速模型切换**: 聊天面板底部下拉选择器，按厂商分组，一键切换模型，支持自定义模型参数
+- **Quick Model Switching**: Dropdown selector at bottom of chat panel, grouped by provider, one-click model switching with custom model parameters
 
-- **⚡ Skills 系统**: 
-  - 基于 agentskills.io 标准的插件化系统
-  - 支持从 skills.sh 市场搜索和安装社区技能包
-  - 支持从 GitHub 直接克隆安装
-  - 支持项目级和全局级技能，项目级覆盖全局级
-  - 支持 Auto 模式（AI 自动判断加载）和 Manual 模式（需 @skill-name 引用）
-  - 技能包支持 YAML frontmatter 元数据配置
+- **⚡ Skills System**: 
+  - Plugin-based system based on agentskills.io standard
+  - Search and install community skill packages from skills.sh marketplace
+  - Direct installation from GitHub repositories
+  - Supports project-level and global-level skills, project-level overrides global
+  - Supports Auto mode (AI auto-determines loading) and Manual mode (requires @skill-name reference)
+  - Skill packages support YAML frontmatter metadata configuration
 
-- **🔌 MCP 协议深度集成**: 
-  - 完整实现 Model Context Protocol 标准
-  - 支持外部工具、资源、提示词扩展
-  - 内置 OAuth 2.0 认证流程，支持第三方服务授权
-  - 配置热重载，无需重启即可更新 MCP 服务器
-  - 支持多工作区配置合并，优先级管理
-  - 内置 MCP Registry 搜索，一键安装官方插件
+- **🔌 Deep MCP Protocol Integration**: 
+  - Full implementation of Model Context Protocol standard
+  - Supports external tools, resources, and prompt extensions
+  - Built-in OAuth 2.0 authentication flow for third-party service authorization
+  - Config hot-reload without restart for MCP server updates
+  - Supports multi-workspace config merging with priority management
+  - Built-in MCP Registry search for one-click official plugin installation
 
-- **💾 AI 记忆与审批**: 
-  - 项目级记忆存储，支持长期记忆和短期记忆
-  - AI 写入记忆时支持人工审批机制，防止错误信息污染
-  - 记忆自动分类和索引，支持语义检索
-  - 支持记忆导出和导入，团队共享项目知识
+- **💾 AI Memory & Approval**: 
+  - Project-level memory storage supporting long-term and short-term memory
+  - Manual approval mechanism for AI-written memories to prevent misinformation
+  - Automatic memory categorization and indexing with semantic search
+  - Supports memory export/import for team knowledge sharing
 
-- **🎨 增强型消息预览**: 
-  - 工具执行结果支持 Markdown、代码高亮、图片、表格等富文本展示
-  - 流式打字机动画，实时显示 AI 生成内容
-  - 支持折叠/展开长内容，优化阅读体验
-  - 思考过程可视化（DeepSeek-R1, Claude 3.7 等推理模型）
+- **🎨 Enhanced Response Preview**: 
+  - Tool execution results support rich rendering: Markdown, code highlighting, images, tables
+  - Fluid typewriter animation with real-time AI content generation
+  - Supports collapse/expand for long content, optimized reading experience
+  - Thinking process visualization (DeepSeek-R1, Claude 3.7 reasoning models)
 
-- **🪵 Eye Style 日志系统**: 
-  - 重新设计的彩色高亮日志系统
-  - 主进程/渲染进程日志分离，调试信息一目了然
-  - 支持日志级别过滤（Debug, Info, Warn, Error）
-  - 实时日志流，无需刷新即可查看最新日志
+- **🪵 Eye Style Log System**: 
+  - Redesigned color-highlighted log system
+  - Separate Main/Renderer process logs for clear debugging
+  - Supports log level filtering (Debug, Info, Warn, Error)
+  - Real-time log streaming without refresh
 
-- **🎭 情绪感知系统**: 
-  - 实时检测用户编码状态（专注、困惑、疲劳等）
-  - 基于键盘/鼠标行为和代码上下文的多维度分析
-  - 智能建议休息时间和任务切换
-  - 个性化基线学习，适应不同开发者习惯
+- **🎭 Emotion Awareness System**: 
+  - Real-time detection of user coding state (focused, confused, fatigued, etc.)
+  - Multi-dimensional analysis based on keyboard/mouse behavior and code context
+  - Intelligent suggestions for break times and task switching
+  - Personalized baseline learning adapting to different developer habits
 
 ![alt text](images/tool.png)
 
-### 🚀 独特优势（对比 Cursor/Windsurf/Claude Code）
+### 🚀 Unique Advantages (vs Cursor/Windsurf/Claude Code)
 
-Adnify 在主流 AI 编辑器的基础上，实现了多项创新功能：
+Adnify builds upon mainstream AI editors with multiple innovative features:
 
-- **🔄 9 策略智能替换**: AI 编辑代码时，通过 9 种容错匹配策略（精确匹配、空白归一化、缩进灵活匹配等），即使代码格式有轻微差异也能成功应用修改，大幅提升编辑成功率
+- **🔄 9-Strategy Smart Replace**: When AI edits code, 9 fault-tolerant matching strategies (exact match, whitespace normalization, flexible indentation, etc.) ensure successful modifications even with slight format differences, dramatically improving edit success rate
 
-- **⚡ 智能并行工具执行**: 依赖感知的并行执行，独立读操作并行、不同文件写操作可并行，多文件操作速度提升 2-5 倍
+- **⚡ Smart Parallel Tool Execution**: Dependency-aware parallel execution - independent reads run in parallel, writes on different files can parallelize, 2-5x speed improvement for multi-file operations
 
-- **🧠 4 级上下文压缩**: 渐进式压缩（移除冗余→压缩旧消息→生成摘要→Handoff 文档），支持真正的超长对话，任务不会因上下文溢出而中断
+- **🧠 4-Level Context Compression**: Progressive compression (remove redundancy → compress old messages → generate summary → Handoff document), supports truly long conversations without context overflow interruption
 
-- **📸 检查点系统**: AI 修改代码前自动创建快照，按消息粒度回滚，比 Git 更细粒度的版本控制
+- **📸 Checkpoint System**: Auto-creates snapshots before AI modifications, rollback by message granularity, more fine-grained version control than Git
 
-- **🌿 对话分支**: 从任意消息创建分支探索不同方案，可视化管理，类似 Git 分支但用于 AI 对话
+- **🌿 Conversation Branching**: Create branches from any message to explore different solutions, visual management, like Git branches but for AI conversations
 
-- **🔁 智能循环检测**: 多维度检测 AI 重复操作，自动中断并给出建议，避免 Token 浪费
+- **🔁 Smart Loop Detection**: Multi-dimensional detection of AI repetitive operations, auto-interrupt with suggestions, avoids token waste
 
-- **🩺 自动错误修复**: Agent 执行后自动调用 LSP 检测代码错误，发现问题立即修复
+- **🩺 Auto Error Fix**: After Agent execution, automatically calls LSP to detect code errors, immediately fixes issues found
 
-- **💾 AI 记忆系统**: 项目级记忆存储，让 AI 记住项目的特殊约定和偏好
+- **💾 AI Memory System**: Project-level memory storage, lets AI remember project-specific conventions and preferences
 
-- **🎬 流式编辑预览**: AI 生成代码时实时显示 Diff，边生成边预览变更
+- **🎬 Streaming Edit Preview**: Real-time Diff display as AI generates code, preview changes as they're generated
 
-- **🎭 角色定制工具**: 不同角色拥有专属工具集，前端和后端开发者可以有不同的工具能力
+- **🎭 Role-based Tools**: Different roles have exclusive toolsets, frontend and backend developers can have different tool capabilities
 
-### 📝 专业代码编辑
+### 📝 Professional Code Editing
 
-- **Monaco Editor**: VS Code 同款编辑器内核，完整的编辑器功能
-- **多语言 LSP 支持**: TypeScript/JavaScript、Python、Go、Rust、C/C++、HTML/CSS/JSON、Vue、Zig、C# 等 10+ 语言
-- **完整 LSP 功能**: 智能补全、跳转定义、查找引用、悬停提示、代码诊断、格式化、重命名等
-- **智能根目录检测**: 自动识别 monorepo 子项目，为每个子项目启动独立 LSP
-- **AI 代码补全**: 基于上下文的智能代码建议（Ghost Text），实时显示 AI 建议
-- **内联编辑 (Ctrl+K)**: 选中代码后直接让 AI 修改，无需切换到聊天面板
-- **Diff 预览**: AI 修改代码前显示差异对比，支持接受/拒绝每个修改
-- **🎼 Composer 模式 (Ctrl+Shift+I)**: 
-  - 类似 Cursor Composer 的多文件编辑模式
-  - 支持同时编辑多个文件，统一预览所有变更
-  - 按目录分组显示变更，一键接受/拒绝所有修改
-  - 与 Agent 深度集成，AI 生成的多文件变更自动进入 Composer
-- **🐛 内置调试器**: 
-  - 类似 VSCode 的调试体验，支持 Node.js 和浏览器调试
-  - 断点管理、变量查看、调用栈、控制台输出
-  - 支持 DAP (Debug Adapter Protocol) 协议
-  - 可视化调试界面，无需离开编辑器
+- **Monaco Editor**: Same editor core as VS Code with complete editing features
+- **Multi-Language LSP Support**: TypeScript/JavaScript, Python, Go, Rust, C/C++, HTML/CSS/JSON, Vue, Zig, C#, and 10+ languages
+- **Complete LSP Features**: Intelligent completion, go to definition, find references, hover info, code diagnostics, formatting, rename, etc.
+- **Smart Root Detection**: Auto-detect monorepo sub-projects, start independent LSP for each
+- **AI Code Completion**: Context-based intelligent code suggestions (Ghost Text) with real-time AI suggestions
+- **Inline Edit (Ctrl+K)**: Let AI modify selected code directly without switching to chat panel
+- **Diff Preview**: Show diff comparison before AI modifies code, support accept/reject for each change
+- **🎼 Composer Mode (Ctrl+Shift+I)**: 
+  - Multi-file editing mode similar to Cursor Composer
+  - Edit multiple files simultaneously with unified preview of all changes
+  - Changes grouped by directory, one-click accept/reject all modifications
+  - Deep integration with Agent, AI-generated multi-file changes automatically enter Composer
+- **🐛 Built-in Debugger**: 
+  - VSCode-like debugging experience supporting Node.js and browser debugging
+  - Breakpoint management, variable inspection, call stack, console output
+  - Supports DAP (Debug Adapter Protocol)
+  - Visual debugging interface without leaving the editor
 
 ![text](images/editor.png)
 
-### 🔍 强大的搜索与工具
+### 🔍 Powerful Search & Tools
 
-- **快速打开 (Ctrl+P)**: 模糊搜索快速定位文件，支持路径匹配
-- **全局搜索 (Ctrl+Shift+F)**: 支持正则、大小写敏感、全字匹配，实时显示结果
-- **语义搜索**: 基于 AI Embedding 的代码库语义搜索，理解代码含义
-- **混合搜索**: 结合语义搜索和关键词搜索，使用 RRF 算法融合结果
-- **集成终端**: 
-  - 基于 xterm.js + node-pty，支持多 Shell（PowerShell, CMD, Bash, Zsh）
-  - 支持分屏、多标签、终端复用
-  - AI 错误分析和修复建议
-  - 🌐 **远程 SSH 终端**: 内置原生 SSH 客户端，直接连接远程服务器，支持密钥认证
-  - 终端输出智能识别（错误高亮、链接点击）
-- **Git 版本控制**: 
-  - 完整的 Git 操作界面，变更管理、提交历史、Diff 视图
-  - 可视化分支管理、冲突解决
-  - 支持 Git 子命令白名单，安全可控
-- **文件管理**: 
-  - 虚拟化渲染支持万级文件，大型项目流畅浏览
-  - Markdown 实时预览、图片预览
-  - 文件树拖拽、右键菜单
-- **代码大纲**: 显示文件符号结构（函数、类、变量），快速导航
-- **问题面板**: 实时诊断显示错误和警告，支持一键跳转
+- **Quick Open (Ctrl+P)**: Fuzzy search to quickly locate files with path matching support
+- **Global Search (Ctrl+Shift+F)**: Support regex, case-sensitive, whole word match with real-time results
+- **Semantic Search**: AI Embedding-based codebase semantic search understanding code meaning
+- **Hybrid Search**: Combines semantic and keyword search, uses RRF algorithm to merge results
+- **Integrated Terminal**: 
+  - Based on xterm.js + node-pty, supports multiple shells (PowerShell, CMD, Bash, Zsh)
+  - Supports split view, multiple tabs, terminal reuse
+  - AI error analysis and fix suggestions
+  - 🌐 **Remote SSH Terminal**: Built-in native SSH client for direct remote server connection with key authentication support
+  - Smart terminal output recognition (error highlighting, clickable links)
+- **Git Version Control**: 
+  - Complete Git operation interface with change management, commit history, diff view
+  - Visual branch management and conflict resolution
+  - Supports Git subcommand whitelist for secure control
+- **File Management**: 
+  - Virtualized rendering supports 10k+ files for smooth large project browsing
+  - Real-time Markdown preview, image preview
+  - File tree drag & drop, context menu
+- **Code Outline**: Show file symbol structure (functions, classes, variables) for quick navigation
+- **Problems Panel**: Real-time diagnostics showing errors and warnings with one-click jump
 
 ![text](images/terminal.png)
 
-### 🔐 安全与其他特性
+### 🔐 Security & Other Features
 
-**安全特性**
-- 工作区隔离、敏感路径保护（.ssh, .aws, .gnupg 等）
-- 命令白名单、Shell 注入检测
-- Git 子命令白名单、权限确认
-- 可自定义安全策略、审计日志
+**Security Features**
+- Workspace isolation, sensitive path protection (.ssh, .aws, .gnupg, etc.)
+- Command whitelist, Shell injection detection
+- Git subcommand whitelist, permission confirmation
+- Customizable security policies, audit logging
 
-**多窗口与工作区**
-- 支持多窗口同时打开不同项目
-- 多工作区管理，快速切换工作区
-- 工作区状态自动保存和恢复
-- 支持 monorepo 多根工作区
+**Multi-Window & Workspace**
+- Supports multiple windows for different projects simultaneously
+- Multi-workspace management with quick workspace switching
+- Automatic workspace state save and restore
+- Supports monorepo multi-root workspaces
 
-**其他特性**
-- 命令面板 (Ctrl+Shift+P)，快速访问所有功能
-- 会话管理，对话历史持久化
-- Token 统计，实时显示消耗
-- 完整中英文支持，自动检测系统语言
-- 自定义快捷键，支持 VSCode 风格快捷键
-- 引导向导，新手友好
-- Tree-sitter 解析 20+ 语言，精确代码分析
-- 自动更新，静默下载新版本
+**Other Features**
+- Command Palette (Ctrl+Shift+P) for quick access to all features
+- Session management with persistent conversation history
+- Token statistics with real-time consumption display
+- Complete Chinese and English support with automatic system language detection
+- Custom shortcuts supporting VSCode-style keybindings
+- Onboarding wizard for beginner-friendly experience
+- Tree-sitter parsing for 20+ languages with precise code analysis
+- Auto-update with silent download of new versions
 
 ---
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 环境要求
+### Requirements
 
 - Node.js >= 18
 - Git
-- Python (可选，用于某些 npm 包的编译)
+- Python (optional, for compiling certain npm packages)
 
-### 开发环境运行
+### Development Environment
 
 ```bash
-# 1. 克隆项目
+# 1. Clone project
 git clone https://gitee.com/adnaan/adnify.git
 cd adnify
 
-# 2. 安装依赖
+# 2. Install dependencies
 npm install
 
-# 3. 启动开发服务器
+# 3. Start dev server
 npm run dev
 ```
 
-### 打包发布
+### Build & Package
 
 ```bash
-# 1. 替换品牌资源
-# 统一放在 public/brand/：
-# icons/ 应用图标，logos/ 应用内 Logo，ip/ IP 形象，welcome/ 欢迎/启动页素材
+# 1. Replace brand assets
+# Put them under public/brand/:
+# icons/ app icons, logos/ in-app logos, ip/ character assets, welcome/ splash/welcome assets
 
-# 2. 构建安装包
+# 2. Build installer
 npm run dist
 
-# 生成的文件位于 release/ 目录
+# Generated files in release/ directory
 ```
 
 ---
 
-## 📖 功能详解
+## 🎭 Brand Assets
 
-### 配置 AI 模型
+Adnify keeps its brand resources in `public/brand/`. The README hero, welcome screens, app icons, and assistant IP assets all reference this folder, so future brand replacements stay in one predictable place.
 
-1. 点击左下角设置图标或按 `Ctrl+,`
-2. 在 Provider 选项卡选择 AI 服务商并输入 API Key
-3. 选择模型并保存
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="33%">
+        <img src="public/brand/logos/app.png" alt="Adnify dark logo" width="120" />
+        <br />
+        <strong>Dark Logo</strong>
+      </td>
+      <td align="center" width="33%">
+        <img src="public/brand/logos/app-light.png" alt="Adnify light logo" width="120" />
+        <br />
+        <strong>Light Logo</strong>
+      </td>
+      <td align="center" width="33%">
+        <img src="public/brand/icons/sizes/app/128.png" alt="Adnify app icon" width="96" />
+        <br />
+        <strong>App Icon</strong>
+      </td>
+    </tr>
+  </table>
+</div>
 
-支持 OpenAI、Anthropic、Google、DeepSeek、Ollama 及自定义 API
+<div align="center">
+  <img src="public/brand/ip/1.png" alt="Adnify IP asset 1" width="120" />
+  <img src="public/brand/ip/2.png" alt="Adnify IP asset 2" width="120" />
+  <img src="public/brand/ip/3.png" alt="Adnify IP asset 3" width="120" />
+  <img src="public/brand/ip/4.png" alt="Adnify IP asset 4" width="120" />
+  <img src="public/brand/ip/5.png" alt="Adnify IP asset 5" width="120" />
+  <img src="public/brand/ip/6.png" alt="Adnify IP asset 6" width="120" />
+</div>
 
-### 与 AI 协作
+| Folder | Purpose | Notes |
+|:---|:---|:---|
+| `public/brand/logos/` | In-app logos | `app.png` for dark surfaces, `app-light.png` for light surfaces |
+| `public/brand/icons/` | System and platform icons | Windows `.ico`, macOS `.icns`, Linux `.png`, and generated multi-size PNG outputs |
+| `public/brand/ip/` | AI assistant and IP assets | Static IP images plus `ai-avatar.gif` for README, welcome screens, and assistant identity |
+| `public/brand/welcome/` | Welcome visuals | `dark.webp` and `light.webp` for dark/light theme presentation |
 
-**上下文引用**: 输入 `@` 选择文件，或使用 `@codebase`、`@git`、`@terminal`、`@symbols`、`@web` 等特殊引用
+Icons are generated from `public/brand/logos/*.png`. After replacing the logo source files, run:
 
-**斜杠命令**: `/file`、`/clear`、`/chat`、`/agent` 等快捷命令
+```bash
+npm run assets:icons
+```
 
-**代码修改**: 切换到 Agent Mode，输入指令，AI 生成 Diff 预览后接受或拒绝
+See [public/brand/README.md](public/brand/README.md) for more details.
 
-**内联编辑**: 选中代码按 `Ctrl+K`，输入修改指令
+---
 
-### 代码库索引
+## 📖 Feature Details
 
-打开设置 → Index 选项卡，选择 Embedding 提供商（推荐 Jina AI），配置 API Key 后开始索引。索引完成后 AI 可使用语义搜索。
+### Configure AI Model
 
-### 使用 Plan Mode
+1. Click settings icon in bottom-left or press `Ctrl+,`
+2. Select AI provider in Provider tab and enter API Key
+3. Select model and save
 
-切换到 Plan Mode，在多轮对话中与 AI 共同明确需求，AI 将自动创建深度分步执行计划，将复杂任务分解为多个子任务并管理依赖关系和执行顺序。
+Supports OpenAI, Anthropic, Google, DeepSeek, Ollama, and custom APIs
+
+### Collaborate with AI
+
+**Context References**: Type `@` to select files, or use `@codebase`, `@git`, `@terminal`, `@symbols`, `@web` for special references
+
+**Slash Commands**: `/file`, `/clear`, `/chat`, `/agent` and other quick commands
+
+**Code Modification**: Switch to Agent Mode, enter instruction, AI generates Diff preview then accept or reject
+
+**Inline Edit**: Select code and press `Ctrl+K`, enter modification instruction
+
+### Codebase Indexing
+
+Open Settings → Index tab, select Embedding provider (recommend Jina AI), configure API Key and start indexing. After completion, AI can use semantic search.
+
+### Using Plan Mode
+
+Switch to Plan Mode and engage in multi-turn conversations with the AI to clarify requirements. The AI will automatically create an in-depth step-by-step execution plan, decomposing complex tasks into multiple sub-tasks and managing dependencies and execution order.
 
 ![Plan Mode](images/orchestrator.png)
 
-### ⚡ Skills 系统使用
+### ⚡ Skills System Usage
 
-Skills 是让 AI 获得特定领域（如特定框架优化、复杂测试编写等）专业能力的指令包。
+Skills are instruction packages that give AI specialized capabilities (e.g., optimization for specific frameworks, complex test writing).
 
-1. **浏览与安装**:
-   - 打开设置 → **Skills** 选项卡。
-   - **搜索市场**: 点击"搜索市场"，在 `skills.sh` 寻找社区贡献的技能。
-   - **GitHub 安装**: 输入包含 `SKILL.md` 的 GitHub 仓库地址直接克隆。
-   - **手动创建**: 为当前项目创建专属技能，编辑生成的 `SKILL.md` 即可。
-2. **生效方式**:
-   - 启用的技能会自动注入 AI 提示词（System Prompt）。
-   - 当任务触及技能相关领域时，AI 将自动遵循技能包中的专家指令。
-3. **管理**:
-   - 你可以随时在设置中启用/禁用特定技能，或点击"文件夹"图标直接编辑技能源码。
+1. **Browse & Install**:
+   - Open Settings → **Skills** tab.
+   - **Search Market**: Click "Search Market" to find community-contributed skills on `skills.sh`.
+   - **GitHub Install**: Enter a GitHub repo URL containing a `SKILL.md` file to clone it directly.
+   - **Create Manually**: Create an exclusive skill for the current project and edit the generated `SKILL.md` template.
+2. **How it Works**:
+   - Enabled skills are automatically injected into the AI's System Prompt.
+   - When a task touches on the skill's domain, the AI will automatically follow the expert instructions in the skill package.
+3. **Management**:
+   - You can enable/disable specific skills in settings at any time, or click the "Folder" icon to edit the skill's source code directly.
 
 ---
 
-## ⌨️ 快捷键
+## ⌨️ Keyboard Shortcuts
 
-| 类别 | 快捷键 | 功能 |
+| Category | Shortcut | Function |
 |:---|:---|:---|
-| **通用** | `Ctrl + P` | 快速打开文件 |
-| | `Ctrl + Shift + P` | 命令面板 |
-| | `Ctrl + ,` | 打开设置 |
-| | `Ctrl + B` | 切换侧边栏 |
-| **编辑器** | `Ctrl + S` | 保存文件 |
-| | `Ctrl + K` | 内联 AI 编辑 |
-| | `Ctrl + Shift + I` | 打开 Composer 多文件编辑 |
-| | `F12` | 跳转到定义 |
-| | `Shift + F12` | 查找引用 |
-| **搜索** | `Ctrl + F` | 文件内搜索 |
-| | `Ctrl + Shift + F` | 全局搜索 |
-| **AI 对话** | `Enter` | 发送消息 |
-| | `Shift + Enter` | 换行 |
-| | `@` | 引用上下文 |
-| | `/` | 斜杠命令 |
-| **其他** | `Escape` | 关闭面板/对话框 |
-| | `F5` | 启动调试 |
+| **General** | `Ctrl + P` | Quick open file |
+| | `Ctrl + Shift + P` | Command palette |
+| | `Ctrl + ,` | Open settings |
+| | `Ctrl + B` | Toggle sidebar |
+| **Editor** | `Ctrl + S` | Save file |
+| | `Ctrl + K` | Inline AI edit |
+| | `Ctrl + Shift + I` | Open Composer multi-file edit |
+| | `F12` | Go to definition |
+| | `Shift + F12` | Find references |
+| **Search** | `Ctrl + F` | In-file search |
+| | `Ctrl + Shift + F` | Global search |
+| **AI Chat** | `Enter` | Send message |
+| | `Shift + Enter` | New line |
+| | `@` | Reference context |
+| | `/` | Slash commands |
+| **Other** | `Escape` | Close panel/dialog |
+| | `F5` | Start debugging |
 
-**工作模式**: Chat 💬 (纯对话) / Agent 🤖 (单次任务代理) / Plan 🧠 (任务编排规划)
+**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (single task agent) / Plan 🧠 (task orchestration)
 
 ---
 
-## 📂 项目结构
+## 📂 Project Structure
 
 ```
 adnify/
-├── resources/           # 图标资源
-├── scripts/             # 构建脚本
+├── resources/           # Icon resources
+├── scripts/             # Build scripts
 ├── src/
-│   ├── main/            # Electron 主进程
-│   │   ├── ipc/         # IPC 通信统一安全拦截层
-│   │   ├── lsp/         # LSP 服务网关及生命周期治理
-│   │   ├── memory/      # AI 记忆池及长期/短期上下文缓存引擎
-│   │   ├── security/    # 沙盒越权拦截验证、多模态命令执行防御网
-│   │   ├── indexing/    # 全局代码库解析生成链 (Chunker、Embedding、LanceDB)
-│   │   └── services/    # 核心总栈子系统
-│   │       ├── agent/   # 辅控层：Agent 日志分析与拦截纠错处理
-│   │       ├── debugger/# Node、VSCode 协议层深度调试模块
-│   │       ├── llm/     # LLM 动态桥接分发网关 (请求构造、配置解析及跨模型流式代理)
-│   │       ├── mcp/     # Model Context Protocol 后端服务挂载注册及鉴权授权模块
-│   │       └── updater/ # 高可控自动静默静默更新探测与热切换模块
-│   ├── renderer/        # 前端渲染进程
-│   │   ├── agent/       # 客户端 AI 大脑核心驱动 (涵盖引擎队列、Tools执行及指令流)
-│   │   ├── components/  # 完全解耦聚合化复用UI组件块
-│   │   │   ├── editor/  # 编辑器组件
-│   │   │   ├── sidebar/ # 侧边栏组件
-│   │   │   ├── panels/  # 底部面板
-│   │   │   ├── dialogs/ # 对话框
-│   │   │   └── settings/# 设置组件
-│   │   ├── modes/       # 多模式运转的状态机 (Chat, Agent, Plan)
-│   │   ├── services/    # 前端服务
-│   │   │   └── TerminalManager.ts # 终端管理
-│   │   ├── store/       # Zustand 状态管理
-│   │   └── i18n/        # 国际化
-│   └── shared/          # 共享代码
-│       ├── config/      # 配置定义
-│       │   ├── providers.ts # LLM 提供商配置
-│       │   └── tools.ts     # 工具统一配置
-│       ├── constants/   # 常量
-│       └── types/       # 类型定义
+│   ├── main/            # Electron main process
+│   │   ├── ipc/         # IPC unified security intercept layer
+│   │   ├── lsp/         # LSP service gateway and lifecycle governance
+│   │   ├── memory/      # AI memory pool and multi-level caching engine
+│   │   ├── security/    # Sandbox isolation and terminal whitelist defense net
+│   │   ├── indexing/    # Global codebase parsing chain (Chunker, Embedding, LanceDB)
+│   │   └── services/    # Core main stack subsystems
+│   │       ├── agent/   # Agent log analysis and auto-correction
+│   │       ├── debugger/# Node/VSCode protocol deep debugging core
+│   │       ├── llm/     # LLM dynamic distribution gateway (routing, proxies)
+│   │       ├── mcp/     # Model Context Protocol backend registry and auth
+│   │       └── updater/ # Highly controllable silent updater module
+│   ├── renderer/        # Frontend render process
+│   │   ├── agent/       # Client AI brain core (engine queue, tools, instruction flow)
+│   │   ├── components/  # Fully decoupled, modular UI component blocks
+│   │   │   ├── editor/  # Editor components
+│   │   │   ├── sidebar/ # Sidebar components
+│   │   │   ├── panels/  # Bottom panels
+│   │   │   ├── dialogs/ # Dialogs
+│   │   │   └── settings/# Settings components
+│   │   ├── modes/       # Multi-mode state machines (Chat, Agent, Plan)
+│   │   ├── services/    # Frontend services
+│   │   │   └── TerminalManager.ts # Terminal manager
+│   │   ├── store/       # Zustand state management
+│   │   └── i18n/        # Internationalization
+│   └── shared/          # Shared code
+│       ├── config/      # Configuration definitions
+│       │   ├── providers.ts # LLM provider configs
+│       │   └── tools.ts     # Unified tool configs
+│       ├── constants/   # Constants
+│       └── types/       # Type definitions
 └── package.json
 ```
 
 ---
 
-## 🛠 技术栈
+## 🛠 Tech Stack
 
-- **框架**: Electron 39 + React 18 + TypeScript 5
-- **构建**: Vite 6 + electron-builder
-- **编辑器**: Monaco Editor
-- **终端**: xterm.js + node-pty + WebGL Addon
-- **状态管理**: Zustand
-- **样式**: Tailwind CSS
+- **Framework**: Electron 39 + React 18 + TypeScript 5
+- **Build**: Vite 6 + electron-builder
+- **Editor**: Monaco Editor
+- **Terminal**: xterm.js + node-pty + WebGL Addon
+- **State Management**: Zustand
+- **Styling**: Tailwind CSS
 - **LSP**: typescript-language-server
 - **Git**: dugite
-- **向量存储**: LanceDB (高性能向量数据库)
-- **代码解析**: tree-sitter
-- **验证**: Zod
+- **Vector Storage**: LanceDB (high-performance vector database)
+- **Code Parsing**: tree-sitter
+- **Validation**: Zod
 
 ---
 
-## Star History
+## 👥 Contributors
 
-<a href="https://www.star-history.com/#adnaan-worker/adnify&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&legend=top-left" />
- </picture>
-</a>
-
-## 👥 贡献者 | Contributors
-
-感谢所有为 Adnify 做出贡献的开发者！你们是最棒的 🎉
+Many thanks to all the developers who have contributed to Adnify! You guys are the best 🎉
 
 <a href="https://github.com/adnaan-worker"><img src="https://github.com/adnaan-worker.png" width="50" height="50" style="border-radius:50%" alt="adnaan"/></a>
 <a href="https://github.com/kerwin2046"><img src="https://github.com/kerwin2046.png" width="50" height="50" style="border-radius:50%" alt="kerwin"/></a>
@@ -681,116 +751,104 @@ adnify/
 
 ---
 
-## 🤝 贡献与反馈
+## 🤝 Contributing & Feedback
 
-欢迎提交 Issue 或 Pull Request！
+Issues and Pull Requests are welcome!
 
-如果你喜欢这个项目，请给一个 ⭐️ Star！
+If you like this project, please give it a ⭐️ Star!
 
 ---
 
-## 💖 支持项目
+## 💖 Support the Project
 
-如果 Adnify 对你有帮助，欢迎请作者喝杯咖啡 ☕️
+If Adnify helps you, feel free to buy the author a coffee ☕️
 
 <div align="center">
-  <img src="images/donate-wechat.png" alt="微信赞赏码" width="300" />
-  <p><em>扫码支持，感谢你的鼓励！</em></p>
+  <img src="images/donate-wechat.png" alt="WeChat Donation QR Code" width="300" />
+  <p><em>Scan to support, thank you for your encouragement!</em></p>
 </div>
 
-你的支持是我持续开发的动力 ❤️
-
-### 🏆 荣誉奖杯：鸣谢墙
-
-> "Adnify 的每一行代码，都有大家投喂的能量注入！" ⚡️
-
-感谢以下慷慨的支持者，你们提供的咖啡、奶茶和能量饮料是 Adnify 进化最强劲的动力！
-
-| 支持者 | 投喂方式 | 荣誉称号 | 日期 | 留言 |
-| :--- | :--- | :--- | :--- | :--- |
-| okay. | 🧋 奶茶 | **快乐源泉注入者** | 2026-03-07 | 一杯快乐水，代码没 Bug！✨ |
-
----
+Your support is my motivation to keep developing ❤️
 
 ---
 
 ## 📄 License
 
-本项目采用自定义许可协议，主要条款：
+This project uses a custom license with main terms:
 
-**✅ 允许的使用方式**
-- 个人学习、研究、非商业使用
-- 个人开发项目中使用（不对外销售）
+**✅ Permitted Use**
+- Personal learning, research, non-commercial use
+- Personal development projects (not for external sale)
 
-**⚠️ 需要书面授权的使用方式**
-- 团队内部分发使用（超过 5 人的团队）
-- 商业使用（包括但不限于：对外销售、提供付费服务、集成到商业产品）
-- 企业内部使用（公司、组织等法人实体）
+**⚠️ Requires Written Authorization**
+- Team distribution and use (teams with more than 5 members)
+- Commercial use (including but not limited to: external sales, paid services, integration into commercial products)
+- Enterprise internal use (companies, organizations, legal entities)
 
-**❌ 严格禁止的行为**
-- 未经授权修改后分发或销售
-- 捆绑到其他产品中销售
-- 删除或修改软件名称、作者版权、仓库地址等信息
-- 声称为自己的作品或隐瞒原作者信息
+**❌ Strictly Prohibited**
+- Unauthorized modification and distribution or sale
+- Bundling into other products for sale
+- Removing or modifying software name, author copyright, repository address, etc.
+- Claiming as your own work or concealing original author information
 
-**📧 授权申请**
-- 商业授权请联系：adnaan.worker@gmail.com
-- 团队使用授权请联系：adnaan.worker@gmail.com
-- 请说明使用场景、团队规模、商业模式等信息
+**📧 Authorization Request**
+- Commercial licensing contact: adnaan.worker@gmail.com
+- Team usage authorization contact: adnaan.worker@gmail.com
+- Please specify use case, team size, business model, etc.
 
-详见 [LICENSE](LICENSE) 文件
+See [LICENSE](LICENSE) file for details
 
 ---
 
-## 🙋 Q&A：关于开源协议
+## 🙋 Q&A: About the License
 
-**Q: 为什么你的协议这么多要求？看起来比 MIT 复杂多了啊？**
+**Q: Why so many requirements in your license? Looks more complex than MIT?**
 
-A: 因为我被伤害过 😭
+A: Because I've been hurt before 😭
 
-说真的，我见过太多这样的操作了：
-- 把开源项目 fork 一份，改个名字换个皮肤，就说是"自主研发"
-- 把作者信息、仓库地址删得干干净净，好像这代码是从石头里蹦出来的
-- 拿去卖钱、接外包，一分钱不给原作者，连个 star 都舍不得点
-- 更离谱的是，有人拿去培训班当教材卖，学员还以为是老师写的
-- 还有公司直接捆绑到自己产品里销售，完全不提原作者
+Seriously, I've seen too many of these operations:
+- Fork an open-source project, change the name and skin, claim it's "independently developed"
+- Delete author info and repo address completely, as if the code appeared from nowhere
+- Sell it for money, take outsourcing projects, don't give the original author a penny, won't even give a star
+- Even worse, some use it as training materials, students think the teacher wrote it
+- Companies directly bundle it into their products for sale without mentioning the original author
 
-我不反对商业化，真的。你想商用？来，发邮件聊聊，说不定我们还能合作。但你偷偷摸摸把我名字抹了拿去赚钱，这就过分了吧？
+I'm not against commercialization, really. Want to use it commercially? Come on, send an email, maybe we can even collaborate. But sneakily erasing my name to make money? That's too much, right?
 
-**Q: 那我个人学习用，会不会不小心违规？**
+**Q: Will I accidentally violate the rules if I use it for personal learning?**
 
-A: 不会！个人学习、研究、写毕业设计、做 side project，随便用！只要你：
-1. 别删我名字和仓库地址
-2. 别拿去卖钱或提供付费服务
-3. 别捆绑到其他产品里销售
+A: No! Personal learning, research, graduation projects, side projects—use it freely! As long as you:
+1. Don't delete my name and repo address
+2. Don't sell it or provide paid services
+3. Don't bundle it into other products for sale
 
-就这么简单，我又不是要为难你 😊
+That simple, I'm not trying to make things difficult 😊
 
-**Q: 我想给公司/团队内部用，算商业使用吗？**
-
-A: 
-- **小团队（≤5人）内部使用**：如果是创业团队、小工作室内部工具，不对外销售，一般可以使用，但建议发邮件告知一声
-- **公司/大团队使用**：需要获得书面授权，即使是内部工具也需要授权
-- **对外提供服务**：无论团队大小，只要对外提供付费服务或销售产品，都需要商业授权
-
-如果拿不准，发邮件问我一声，我很好说话的（真的）。授权流程简单，费用合理。
-
-**Q: 我可以修改代码吗？可以分发吗？**
+**Q: If I want to use it internally at my company/team, does that count as commercial use?**
 
 A: 
-- **个人修改**：可以，但仅限个人使用
-- **分发修改版**：不可以，除非获得书面授权
-- **贡献代码**：欢迎提交 PR 到官方仓库，这是鼓励的！
+- **Small teams (≤5 people) internal use**: If it's a startup team or small studio internal tool, not sold externally, generally okay, but recommend sending an email to notify
+- **Company/large team use**: Requires written authorization, even for internal tools
+- **External services**: Regardless of team size, if providing paid services or selling products externally, commercial authorization is required
 
-**Q: 为什么不直接用 GPL 或 MIT？**
+If unsure, send me an email, I'm easy to talk to (really). Authorization process is simple, fees are reasonable.
+
+**Q: Can I modify the code? Can I distribute it?**
 
 A: 
-- **MIT 太宽松**：允许任何人随意商用，无法保护作者权益
-- **GPL 太严格**：要求衍生作品也必须开源，限制了合理的商业合作
-- **自定义协议**：在保护作者权益的同时，允许合理的商业合作，这是一个平衡
+- **Personal modification**: Yes, but for personal use only
+- **Distribute modified version**: No, unless you get written authorization
+- **Contribute code**: Welcome to submit PRs to the official repository, this is encouraged!
 
-我的协议核心就一条：**你可以用、可以学习，但商业使用和团队分发需要授权，别装作这是你写的**。
+**Q: Why not just use GPL or MIT?**
 
-说白了，开源不是"免费任你糟蹋"，是"我愿意分享，但请尊重我的劳动"。
+A: 
+- **MIT is too permissive**: Allows anyone to use commercially freely, can't protect author's rights
+- **GPL is too strict**: Requires derivative works to also be open source, limits reasonable commercial cooperation
+- **Custom license**: Protects author's rights while allowing reasonable commercial cooperation, it's a balance
 
-如果你认同这个理念，欢迎 star ⭐️，这比什么都重要。
+My license core is one thing: **You can use it, you can learn from it, but commercial use and team distribution require authorization, don't pretend you wrote it**.
+
+Simply put, open source isn't "free for you to abuse," it's "I'm willing to share, but please respect my work."
+
+If you agree with this philosophy, welcome to star ⭐️, that's more important than anything.
