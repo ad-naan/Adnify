@@ -27,13 +27,13 @@ export type PlanState =
 // ============================================
 
 /** 任务状态 */
-export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'cancelled'
 
 /** 执行模式 */
 export type ExecutionMode = 'sequential' | 'parallel'
 
 /** 计划状态 */
-export type PlanStatus = 'draft' | 'approved' | 'executing' | 'completed' | 'failed' | 'paused'
+export type PlanStatus = 'draft' | 'approved' | 'executing' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'failed'
 
 export type TaskExecutionClass = 'analysis-read-heavy' | 'write-heavy' | 'approval-heavy' | 'general'
 
@@ -162,7 +162,7 @@ export interface ExecutionSessionTaskBinding {
     planId: string
     taskId: string
     threadId: string
-    assistantId: string
+    assistantId?: string
     requestId: string
 }
 
@@ -172,7 +172,7 @@ export interface ExecutionSession {
     workspacePath: string
     startedAt: number
     scheduler: import('./PlanScheduler').ExecutionScheduler
-    status: 'running' | 'paused' | 'stopped' | 'completed' | 'failed'
+    status: 'running' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'failed'
     bindings: Map<string, ExecutionSessionTaskBinding>
     abortControllers: Map<string, AbortController>
 }

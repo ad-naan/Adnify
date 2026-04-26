@@ -28,6 +28,7 @@ import {
     type PlanTask,
     type ExecutionStats,
     type ExecutionSession,
+    type ExecutionSessionTaskBinding,
     type DependencySummary,
 } from './types'
 
@@ -66,6 +67,41 @@ function clearSession(session: ExecutionSession): void {
     }
 }
 
+function bindTaskRun(
+    session: ExecutionSession,
+    taskId: string,
+    binding: ExecutionSessionTaskBinding,
+): void {
+    session.bindings.set(taskId, binding)
+    useAgentStore.getState().updateTask(session.planId, taskId, {
+        threadId: binding.threadId,
+        assistantId: binding.assistantId,
+        requestId: binding.requestId,
+    })
+}
+
+function abortSessionRuns(session: ExecutionSession): void {
+    for (const binding of session.bindings.values()) {
+        Agent.abort(binding.threadId)
+    }
+}
+
+function isCancellationReason(reason?: string): boolean {
+    return reason === 'aborted' || reason === 'user_rejected' || reason === 'Aborted'
+}
+
+async function validatePlanTaskModels(plan: TaskPlan): Promise<string | null> {
+    for (const task of plan.tasks) {
+        if (task.status !== 'pending') continue
+        const config = await getLLMConfigForTask(task.provider, task.model)
+        if (!config) {
+            return `Task "${task.title}" has invalid LLM config: ${task.provider}/${task.model}`
+        }
+    }
+
+    return null
+}
+
 function createTaskThreadBinding(_task: PlanTask) {
     const store = useAgentStore.getState()
     const threadId = store.createThread({ activate: false })
@@ -87,9 +123,9 @@ function getTaskOutput(threadId: string, assistantId: string): string {
 }
 
 function waitForAgentCompletion(
-    identity: { threadId: string; assistantId: string; requestId: string; taskId: string },
+    identity: { threadId: string; assistantId?: string; requestId: string; taskId: string },
     timeoutMs = DEFAULT_PLAN_CONFIG.taskTimeout,
-): Promise<{ success: boolean; output: string; error?: string }> {
+): Promise<{ success: boolean; output: string; error?: string; assistantId?: string }> {
     return new Promise((resolve) => {
         let settled = false
         let timer: ReturnType<typeof setTimeout> | null = null
@@ -102,7 +138,7 @@ function waitForAgentCompletion(
             unsubscribe()
         }
 
-        const settle = (result: { success: boolean; output: string; error?: string }) => {
+        const settle = (result: { success: boolean; output: string; error?: string; assistantId?: string }) => {
             if (settled) return
             settled = true
             cleanup()
@@ -111,17 +147,20 @@ function waitForAgentCompletion(
 
         const unsubscribe = EventBus.on('loop:end', (event) => {
             if (event.threadId !== identity.threadId) return
-            if (event.assistantId !== identity.assistantId) return
+            if (identity.assistantId && event.assistantId !== identity.assistantId) return
             if (event.requestId !== identity.requestId) return
             if (event.planTaskId && event.planTaskId !== identity.taskId) return
 
-            const output = getTaskOutput(identity.threadId, identity.assistantId) || 'Task execution completed'
+            const assistantId = event.assistantId || identity.assistantId
+            const output = assistantId
+                ? getTaskOutput(identity.threadId, assistantId) || 'Task execution completed'
+                : 'Task execution completed'
             if (event.reason === 'error' || event.reason === 'aborted' || event.reason === 'loop_detected' || event.reason === 'max_iterations') {
-                settle({ success: false, output: '', error: `Execution ended with reason: ${event.reason}` })
+                settle({ success: false, output: '', error: event.reason, assistantId })
                 return
             }
 
-            settle({ success: true, output })
+            settle({ success: true, output, assistantId })
         })
 
         timer = setTimeout(() => {
@@ -153,7 +192,7 @@ export async function startPlanExecution(
 
     const hasPendingTasks = plan.tasks.some(task => task.status === 'pending')
     const hasRetryableTasks = plan.tasks.some(task =>
-        task.status === 'failed' || task.status === 'skipped' || task.status === 'running'
+        task.status === 'failed' || task.status === 'skipped' || task.status === 'running' || task.status === 'cancelled'
     )
 
     if (!hasPendingTasks && hasRetryableTasks) {
@@ -168,6 +207,11 @@ export async function startPlanExecution(
     const workspacePath = gitService.getWorkspace()
     if (!workspacePath) {
         return { success: false, message: 'No workspace open' }
+    }
+
+    const validationError = await validatePlanTaskModels(plan)
+    if (validationError) {
+        return { success: false, message: validationError }
     }
 
     try {
@@ -203,39 +247,41 @@ export function stopPlanExecution(planId?: string): void {
     const session = getSessionByPlanId(plan.id)
     if (!session) return
 
-    session.status = 'stopped'
-    for (const binding of session.bindings.values()) {
-        Agent.abort(binding.threadId)
+    session.status = 'stopping'
+    session.scheduler.stop()
+    abortSessionRuns(session)
+    store.stopExecution(plan.id, 'stopped')
+    if (session.bindings.size === 0) {
+        clearSession(session)
     }
-
-    // 手动停止后回到可再次执行的稳定态，避免 TaskBoard 仍显示 executing。
-    store.stopExecution(plan.id, 'approved')
-    clearSession(session)
     logger.agent.info('[PlanExecutor] Execution stopped')
 }
 
-export function pausePlanExecution(): void {
+export function pausePlanExecution(planId?: string): void {
     const store = useAgentStore.getState()
-    const plan = store.getActivePlan()
+    const plan = planId ? store.getPlan(planId) : store.getActivePlan()
     if (!plan) return
 
     const session = getSessionByPlanId(plan.id)
     if (!session) return
 
-    session.status = 'paused'
+    session.status = 'pausing'
     session.scheduler.pause()
-    for (const binding of session.bindings.values()) {
-        Agent.abort(binding.threadId)
-    }
+    abortSessionRuns(session)
 
-    store.pauseExecution(plan.id)
+    store.updatePlan(plan.id, { status: 'pausing' })
+    if (session.bindings.size === 0) {
+        session.status = 'paused'
+        store.pauseExecution(plan.id)
+        clearSession(session)
+    }
     EventBus.emit({ type: 'plan:paused', planId: plan.id, sessionId: session.id })
     logger.agent.info('[PlanExecutor] Execution paused')
 }
 
-export async function resumePlanExecution(): Promise<void> {
+export async function resumePlanExecution(planId?: string): Promise<void> {
     const store = useAgentStore.getState()
-    const plan = store.getActivePlan()
+    const plan = planId ? store.getPlan(planId) : store.getActivePlan()
     const workspacePath = gitService.getWorkspace()
 
     if (!plan || !workspacePath) return
@@ -277,7 +323,9 @@ export function getExecutionStatus(): {
 export function getCurrentPhase(): 'planning' | 'executing' {
     const state = useAgentStore.getState()
     const activePlan = state.getActivePlan()
-    return activePlan?.status === 'executing' ? 'executing' : 'planning'
+    return activePlan?.status === 'executing' || activePlan?.status === 'pausing' || activePlan?.status === 'stopping'
+        ? 'executing'
+        : 'planning'
 }
 
 async function runExecutionLoop(session: ExecutionSession): Promise<void> {
@@ -319,6 +367,12 @@ async function executeTask(
     const store = useAgentStore.getState()
     const existingTask = store.getPlan(plan.id)?.tasks.find(candidate => candidate.id === task.id) || task
     const { threadId, requestId } = createTaskThreadBinding(existingTask)
+    bindTaskRun(session, existingTask.id, {
+        planId: plan.id,
+        taskId: existingTask.id,
+        threadId,
+        requestId,
+    })
 
     session.scheduler.markTaskRunning(existingTask)
     store.setCurrentTask(existingTask.id)
@@ -332,10 +386,43 @@ async function executeTask(
         executionClass: existingTask.executionClass,
     })
 
+    EventBus.emit({
+        type: 'task:start',
+        taskId: existingTask.id,
+        planId: plan.id,
+        threadId,
+        requestId,
+    })
+
     logger.agent.info(`[PlanExecutor] Executing task: ${existingTask.title}`)
 
     try {
         const result = await runTaskWithAgent(session, existingTask, store.getPlan(plan.id) || plan, threadId, requestId)
+
+        if (!result.success && isCancellationReason(result.error)) {
+            session.scheduler.markTaskPending(existingTask)
+            store.updateTask(plan.id, existingTask.id, {
+                status: 'pending',
+                error: undefined,
+                startedAt: undefined,
+                completedAt: undefined,
+            })
+
+            if (session.status === 'pausing') {
+                session.status = 'paused'
+                store.pauseExecution(plan.id)
+                EventBus.emit({ type: 'plan:paused', planId: plan.id, sessionId: session.id })
+                clearSession(session)
+                return
+            }
+
+            if (session.status === 'stopping') {
+                session.status = 'stopped'
+                store.stopExecution(plan.id, 'stopped')
+                clearSession(session)
+                return
+            }
+        }
 
         if (result.success) {
             session.scheduler.markTaskCompleted(existingTask, result.output)
@@ -440,7 +527,17 @@ async function runTaskWithAgent(
             const templateId = mapRoleToTemplateId(currentRole)
             logger.agent.info(`[PlanExecutor] Emitting subtask. Loop: ${currentLoop}, Role: ${currentRole} (Template: ${templateId})`)
 
-            const execution = await Agent.send(
+            if (session.status !== 'running') {
+                return { success: false, output: '', error: 'aborted', threadId, requestId: activeRequestId }
+            }
+
+            const completionPromise = waitForAgentCompletion({
+                threadId,
+                requestId: activeRequestId,
+                taskId: task.id,
+            })
+
+            const sendPromise = Agent.send(
                 feedbackMessage,
                 llmConfig,
                 session.workspacePath,
@@ -454,38 +551,41 @@ async function runTaskWithAgent(
                     requestId: activeRequestId,
                     planTaskId: task.id,
                 }
+            ).then(
+                execution => ({ execution }),
+                error => ({ error })
             )
 
-            lastAssistantId = execution.assistantId
+            const firstOutcome = await Promise.race([
+                completionPromise.then(result => ({ result })),
+                sendPromise,
+            ])
+
+            if ('error' in firstOutcome) {
+                const errorMsg = firstOutcome.error instanceof Error ? firstOutcome.error.message : String(firstOutcome.error)
+                return { success: false, output: '', error: errorMsg, threadId, requestId: activeRequestId }
+            }
+
+            const sendOutcome = 'execution' in firstOutcome ? firstOutcome : await sendPromise
+            if ('error' in sendOutcome) {
+                const errorMsg = sendOutcome.error instanceof Error ? sendOutcome.error.message : String(sendOutcome.error)
+                return { success: false, output: '', error: errorMsg, threadId, requestId: activeRequestId }
+            }
+
+            const execution = sendOutcome.execution
+            const result = 'result' in firstOutcome ? firstOutcome.result : await completionPromise
+            lastAssistantId = result.assistantId || execution.assistantId
             activeRequestId = execution.requestId
-            session.bindings.set(task.id, {
+            bindTaskRun(session, task.id, {
                 planId: plan.id,
                 taskId: task.id,
                 threadId: execution.threadId,
-                assistantId: execution.assistantId,
+                assistantId: lastAssistantId,
                 requestId: execution.requestId,
-            })
-
-            storeTaskBinding(session, task.id, execution.threadId, execution.assistantId, execution.requestId)
-
-            EventBus.emit({
-                type: 'task:start',
-                taskId: task.id,
-                planId: plan.id,
-                threadId: execution.threadId,
-                assistantId: execution.assistantId,
-                requestId: execution.requestId,
-            })
-
-            const result = await waitForAgentCompletion({
-                threadId: execution.threadId,
-                assistantId: execution.assistantId,
-                requestId: execution.requestId,
-                taskId: task.id,
             })
 
             if (!result.success) {
-                return { ...result, threadId: execution.threadId, assistantId: execution.assistantId, requestId: execution.requestId }
+                return { ...result, threadId: execution.threadId, assistantId: lastAssistantId, requestId: execution.requestId }
             }
 
             finalOutput = result.output
@@ -512,18 +612,6 @@ async function runTaskWithAgent(
         const errorMsg = error instanceof Error ? error.message : String(error)
         return { success: false, output: '', error: errorMsg, threadId, requestId }
     }
-}
-
-function storeTaskBinding(session: ExecutionSession, taskId: string, threadId: string, assistantId: string, requestId: string): void {
-    const store = useAgentStore.getState()
-    session.bindings.set(taskId, {
-        planId: session.planId,
-        taskId,
-        threadId,
-        assistantId,
-        requestId,
-    })
-    store.updateTask(session.planId, taskId, { threadId, assistantId, requestId })
 }
 
 function buildTaskMessage(task: PlanTask, plan: TaskPlan): string {
