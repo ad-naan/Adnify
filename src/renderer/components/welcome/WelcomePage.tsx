@@ -8,6 +8,7 @@ import { logger } from '@utils/Logger'
 import { toast } from '@components/common/ToastProvider'
 import { getFileName } from '@shared/utils/pathUtils'
 import { t, type Language } from '@renderer/i18n'
+import { publicAsset } from '@utils/publicAsset'
 
 interface RecentWorkspace {
   path: string
@@ -19,7 +20,7 @@ export default function WelcomePage() {
   const setShowSettings = useStore(s => s.setShowSettings)
   const language = useStore(s => s.language)
   const currentTheme = useStore(s => s.currentTheme)
-  const welcomeArtwork = currentTheme === 'dawn' ? '/brand/welcome/light.webp' : '/brand/welcome/dark.webp'
+  const welcomeArtwork = publicAsset(currentTheme === 'dawn' ? 'brand/welcome/light.webp' : 'brand/welcome/dark.webp')
 
   useEffect(() => {
     loadRecentWorkspaces()
@@ -97,7 +98,7 @@ export default function WelcomePage() {
                     onClick={handleOpenFolder}
                     icon={<FolderOpen className="h-4 w-4" />}
                     label={t('welcome.openFolder', language)}
-                    ipSrc="/brand/ip/4.png"
+                    ipSrc={publicAsset('brand/ip/4.png')}
                   />
                   <InteractiveIPButton 
                     className="adnify-welcome-outline-button" 
@@ -129,14 +130,14 @@ export default function WelcomePage() {
                   className="adnify-welcome-secondary-button"
                   icon={<Plus className="h-4 w-4" />} 
                   label={t('welcome.newWindow', language)} 
-                  ipSrc="/brand/ip/5.png" 
+                  ipSrc={publicAsset('brand/ip/5.png')}
                 />
                 <InteractiveIPButton 
                   onClick={() => setShowSettings(true)} 
                   className="adnify-welcome-secondary-button"
                   icon={<Settings className="h-4 w-4" />} 
                   label={t('settings', language)} 
-                  ipSrc="/brand/ip/6.png" 
+                  ipSrc={publicAsset('brand/ip/6.png')}
                 />
               </div>
             </div>
@@ -214,19 +215,19 @@ function FeatureGrid({ language }: { language: Language }) {
         icon={<Workflow className="h-5 w-5" />}
         title={t('welcome.feature.visual.title', language)}
         subtitle={t('welcome.feature.visual.subtitle', language)}
-        imageSrc="/brand/ip/1.png"
+        imageSrc={publicAsset('brand/ip/1.png')}
       />
       <FeatureCard
         icon={<Network className="h-5 w-5" />}
         title={t('welcome.feature.connect.title', language)}
         subtitle={t('welcome.feature.connect.subtitle', language)}
-        imageSrc="/brand/ip/2.png"
+        imageSrc={publicAsset('brand/ip/2.png')}
       />
       <FeatureCard
         icon={<Boxes className="h-5 w-5" />}
         title={t('welcome.feature.modular.title', language)}
         subtitle={t('welcome.feature.modular.subtitle', language)}
-        imageSrc="/brand/ip/3.png"
+        imageSrc={publicAsset('brand/ip/3.png')}
       />
     </div>
   )

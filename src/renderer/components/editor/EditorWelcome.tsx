@@ -2,12 +2,13 @@ import type { ReactNode } from 'react'
 import { Boxes, Command, FolderOpen, Network, Search, Settings, TerminalSquare, Workflow } from 'lucide-react'
 import { useStore } from '@store'
 import { t, type Language } from '@renderer/i18n'
+import { publicAsset } from '@utils/publicAsset'
 
 export function EditorWelcome() {
   const language = useStore((state) => state.language)
   const currentTheme = useStore((state) => state.currentTheme)
   const setShowSettings = useStore((state) => state.setShowSettings)
-  const artwork = currentTheme === 'dawn' ? '/brand/welcome/light.webp' : '/brand/welcome/dark.webp'
+  const artwork = publicAsset(currentTheme === 'dawn' ? 'brand/welcome/light.webp' : 'brand/welcome/dark.webp')
 
   const openQuickOpen = () => useStore.getState().setShowQuickOpen(true)
   const openCommandPalette = () => useStore.getState().setShowCommandPalette(true)
@@ -32,14 +33,14 @@ export function EditorWelcome() {
             className="adnify-welcome-secondary-button"
             icon={<FolderOpen className="h-4 w-4" />}
             label={t('editorWelcome.openRecentFile', language)}
-            ipSrc="/brand/ip/5.png"
+            ipSrc={publicAsset('brand/ip/5.png')}
           />
           <InteractiveIPButton
             onClick={() => setShowSettings(true)}
             className="adnify-welcome-secondary-button"
             icon={<Settings className="h-4 w-4" />}
             label={t('settings', language)}
-            ipSrc="/brand/ip/6.png"
+            ipSrc={publicAsset('brand/ip/6.png')}
           />
         </>
       }
@@ -123,7 +124,7 @@ function WelcomeWorkbench({
                     onClick={onPrimary}
                     icon={primaryIcon}
                     label={primaryLabel}
-                    ipSrc="/brand/ip/4.png"
+                    ipSrc={publicAsset('brand/ip/4.png')}
                   />
                   <InteractiveIPButton
                     className="adnify-welcome-outline-button"
@@ -177,19 +178,19 @@ function FeatureGrid({ language }: { language: Language }) {
         icon={<Workflow className="h-5 w-5" />}
         title={t('welcome.feature.visual.title', language)}
         subtitle={t('welcome.feature.visual.subtitle', language)}
-        imageSrc="/brand/ip/1.png"
+        imageSrc={publicAsset('brand/ip/1.png')}
       />
       <FeatureCard
         icon={<Network className="h-5 w-5" />}
         title={t('welcome.feature.connect.title', language)}
         subtitle={t('welcome.feature.connect.subtitle', language)}
-        imageSrc="/brand/ip/2.png"
+        imageSrc={publicAsset('brand/ip/2.png')}
       />
       <FeatureCard
         icon={<Boxes className="h-5 w-5" />}
         title={t('welcome.feature.modular.title', language)}
         subtitle={t('welcome.feature.modular.subtitle', language)}
-        imageSrc="/brand/ip/3.png"
+        imageSrc={publicAsset('brand/ip/3.png')}
       />
     </div>
   )
@@ -668,4 +669,3 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
     `}</style>
   )
 }
-
