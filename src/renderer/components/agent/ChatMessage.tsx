@@ -711,7 +711,12 @@ const RenderPart = React.memo(({
   }
 
   if (isContextSnapshotPart(part)) {
-    return <CompressionDigestCard part={part} />
+    return (
+      <CompressionDigestCard
+        part={part}
+        variant={part.presentation === 'source_marker' ? 'timeline' : 'card'}
+      />
+    )
   }
 
   // Tool calls: 统一由 renderToolCallCard 处理

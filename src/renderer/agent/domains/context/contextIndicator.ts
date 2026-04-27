@@ -23,14 +23,22 @@ function hasReadyHandoff(thread: ChatThread): boolean {
 function hasHandoffSnapshotMessage(thread: ChatThread): boolean {
   return thread.messages.some(message =>
     isAssistantMessage(message) &&
-    message.parts.some(part => isContextSnapshotPart(part) && part.snapshotKind === 'handoff'),
+    message.parts.some(part =>
+      isContextSnapshotPart(part) &&
+      part.snapshotKind === 'handoff' &&
+      part.presentation !== 'source_marker'
+    ),
   )
 }
 
 function isHandoffSnapshotAssistantMessage(thread: ChatThread['messages'][number]): boolean {
   return (
     isAssistantMessage(thread) &&
-    thread.parts.some(part => isContextSnapshotPart(part) && part.snapshotKind === 'handoff')
+    thread.parts.some(part =>
+      isContextSnapshotPart(part) &&
+      part.snapshotKind === 'handoff' &&
+      part.presentation !== 'source_marker'
+    )
   )
 }
 

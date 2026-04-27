@@ -6,7 +6,7 @@ import { generateSummary } from '../domains/context'
 import { LEVEL_NAMES, updateStats, type CompressionStats } from '../domains/context/CompressionManager'
 import { executeAutoHandoff } from '../services/autoHandoffService'
 import { prepareHandoffForThread, type PreparedHandoffResult } from '../services/handoffSessionService'
-import { getMessageText, type AssistantMessage, type ChatMessage, type ContextSnapshotPart, type ChatThread, type UserMessage } from '../types'
+import { getMessageText, type ChatMessage, type ChatThread, type UserMessage } from '../types'
 import { pickLocalizedText } from '../utils/agentText'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { StructuredSummary } from '../domains/context/types'
@@ -69,61 +69,6 @@ async function executeAutoHandoffIfNeeded(
   return executeAutoHandoff(threadId, handoffResult.handoff.createdAt)
 }
 
-function createSummarySnapshotPart(summary: StructuredSummary, lastUserRequest?: string): ContextSnapshotPart {
-  return {
-    id: `context-summary-${summary.generatedAt}`,
-    type: 'context_snapshot',
-    snapshotKind: 'summary',
-    level: 3,
-    summary,
-    generatedAt: summary.generatedAt,
-    note: 'Older history has been compacted into a structured runtime snapshot.',
-    lastUserRequest,
-  }
-}
-
-function createHandoffSnapshotPart(handoffResult: PreparedHandoffResult): ContextSnapshotPart {
-  const { handoff, error, source } = handoffResult
-
-  return {
-    id: `context-handoff-${handoff.createdAt}`,
-    type: 'context_snapshot',
-    snapshotKind: 'handoff',
-    level: 4,
-    summary: handoff.summary,
-    generatedAt: handoff.createdAt,
-    note: error
-      ? 'Context reached the handoff threshold. A fallback resume packet was created because the primary handoff summary failed.'
-      : source === 'rule_based'
-        ? 'Context reached the handoff threshold. A rule-based resume packet was created because structured handoff summary is unavailable.'
-      : 'Context reached the handoff threshold. A new thread should resume from this packet.',
-    lastUserRequest: handoff.lastUserRequest,
-  }
-}
-
-function publishContextSnapshotMessage(threadStore: ThreadBoundStore, part: ContextSnapshotPart) {
-  const existingMessage = threadStore.getMessages().find((message): message is AssistantMessage =>
-    message.role === 'assistant' &&
-    message.parts.some(existing =>
-      existing.type === 'context_snapshot' &&
-      existing.snapshotKind === part.snapshotKind &&
-      existing.generatedAt === part.generatedAt
-    )
-  )
-
-  if (existingMessage) {
-    threadStore.updateMessage(existingMessage.id, {
-      content: '',
-      isStreaming: false,
-      parts: [part],
-      toolCalls: [],
-    })
-    return
-  }
-
-  threadStore.addAssistantPartsMessage([part], { timestamp: part.generatedAt })
-}
-
 function emitCompressionWarning(
   usage: { input: number; output: number },
   contextLimit: number,
@@ -155,21 +100,13 @@ async function ensureSummarySnapshot(threadId: string, threadStore: ThreadBoundS
   if (!thread) return
 
   const userTurns = thread.messages.filter(message => message.role === 'user').length
-  const recentUserRequests = getRecentUserRequests(thread.messages)
-  let structuredSummary = thread.contextSummary
 
   if (shouldRefreshSummary(thread.contextSummary, userTurns)) {
+    const recentUserRequests = getRecentUserRequests(thread.messages)
     const summaryResult = await generateSummary(thread.messages, { type: 'detailed', todos: thread.todos })
-    structuredSummary = buildStructuredSummary(summaryResult, userTurns, recentUserRequests)
+    const structuredSummary = buildStructuredSummary(summaryResult, userTurns, recentUserRequests)
     threadStore.setContextSummary(structuredSummary)
     EventBus.emit({ type: 'context:summary', summary: summaryResult.summary })
-  }
-
-  if (structuredSummary) {
-    publishContextSnapshotMessage(
-      threadStore,
-      createSummarySnapshotPart(structuredSummary, recentUserRequests[recentUserRequests.length - 1])
-    )
   }
 }
 
@@ -190,7 +127,6 @@ async function ensureHandoffSnapshot(
   const didAutoHandoff = await executeAutoHandoffIfNeeded(thread.id, handoffResult, autoHandoff)
 
   if (handoffResult) {
-    publishContextSnapshotMessage(threadStore, createHandoffSnapshotPart(handoffResult))
     EventBus.emit({ type: 'context:handoff', document: handoffResult.handoff })
   }
 
