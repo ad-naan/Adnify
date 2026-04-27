@@ -2,7 +2,7 @@
  * LLM 服务类型定义
  */
 
-import type { LanguageModelUsage } from 'ai'
+import type { LanguageModelUsage, ProviderMetadata } from 'ai'
 import { mapAISDKError, ErrorCode } from '@shared/utils/errorHandler'
 import type { LLMStreamSource } from '@shared/types/llm'
 
@@ -190,30 +190,46 @@ export interface TestCase {
 // 工具函数
 // ============================================
 
-export function convertUsage(usage: LanguageModelUsage): TokenUsage {
+export function convertUsage(
+  usage: LanguageModelUsage,
+  providerMetadata?: ProviderMetadata,
+  extra?: Partial<Pick<TokenUsage, 'cacheWriteTokens'>>
+): TokenUsage {
   const usageAny = usage as any
   const rawUsage = usageAny.raw as Record<string, unknown> | undefined
+  const metadata = providerMetadata as Record<string, unknown> | undefined
+  const anthropicMetadata = getNestedValue(metadata, ['anthropic']) as Record<string, unknown> | undefined
+  const anthropicUsage = anthropicMetadata?.usage as Record<string, unknown> | undefined
+  const googleUsageMetadata = getNestedValue(metadata, ['google', 'usageMetadata'])
+  const openaiMetadata = getNestedValue(metadata, ['openai']) as Record<string, unknown> | undefined
+  const cachedInputTokens = readNumber(
+    usageAny.inputTokenDetails?.cacheReadTokens,
+    usageAny.inputTokens?.cacheRead,
+    usageAny.cachedInputTokens,
+    rawUsage?.cache_read_input_tokens,
+    anthropicUsage?.cache_read_input_tokens,
+    getNestedValue(rawUsage, ['prompt_tokens_details', 'cached_tokens']),
+    getNestedValue(rawUsage, ['input_tokens_details', 'cached_tokens']),
+    getNestedValue(googleUsageMetadata, ['cachedContentTokenCount']),
+    rawUsage?.cachedContentTokenCount,
+    openaiMetadata?.cachedPromptTokens,
+  ) ?? 0
+  const cacheWriteTokens = (
+    readNumber(
+      usageAny.inputTokenDetails?.cacheWriteTokens,
+      usageAny.inputTokens?.cacheWrite,
+      rawUsage?.cache_creation_input_tokens,
+      anthropicUsage?.cache_creation_input_tokens,
+      anthropicMetadata?.cacheCreationInputTokens,
+    ) ?? 0
+  ) + (extra?.cacheWriteTokens ?? 0)
 
   return {
     inputTokens: usage.inputTokens || 0,
     outputTokens: usage.outputTokens || 0,
     totalTokens: usage.totalTokens || ((usage.inputTokens || 0) + (usage.outputTokens || 0)),
-    cachedInputTokens:
-      readNumber(
-        usageAny.inputTokenDetails?.cacheReadTokens,
-        usageAny.inputTokens?.cacheRead,
-        usageAny.cachedInputTokens,
-        rawUsage?.cache_read_input_tokens,
-        getNestedValue(rawUsage, ['prompt_tokens_details', 'cached_tokens']),
-        getNestedValue(rawUsage, ['input_tokens_details', 'cached_tokens']),
-        rawUsage?.cachedContentTokenCount,
-      ) ?? 0,
-    cacheWriteTokens:
-      readNumber(
-        usageAny.inputTokenDetails?.cacheWriteTokens,
-        usageAny.inputTokens?.cacheWrite,
-        rawUsage?.cache_creation_input_tokens,
-      ) ?? 0,
+    cachedInputTokens,
+    cacheWriteTokens,
     reasoningTokens: usageAny.outputTokenDetails?.reasoningTokens ?? usageAny.reasoningTokens,
   }
 }

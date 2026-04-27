@@ -16,11 +16,20 @@ import {
 interface RequestCacheResult {
   messages: ModelMessage[]
   providerOptions?: RequestProviderOptions
+  cacheWriteTokens?: number
 }
 
 interface GoogleCacheEntry {
   name: string
   expiresAt: number
+  estimatedTokens: number
+}
+
+interface GoogleCacheResolution {
+  name: string
+  created: boolean
+  estimatedTokens: number
+  prefixIndexes: number[]
 }
 
 const DEFAULT_GOOGLE_CACHE_TTL_SECONDS = 3600
@@ -34,7 +43,7 @@ class GoogleExplicitCacheManager {
   async ensureCache(
     config: LLMConfig,
     messages: ModelMessage[]
-  ): Promise<string | null> {
+  ): Promise<GoogleCacheResolution | null> {
     const prepared = this.prepareCacheablePrefix(messages)
     if (!prepared) return null
 
@@ -43,7 +52,12 @@ class GoogleExplicitCacheManager {
 
     const existing = this.cache.get(fingerprint)
     if (existing && existing.expiresAt > now + 30_000) {
-      return existing.name
+      return {
+        name: existing.name,
+        created: false,
+        estimatedTokens: existing.estimatedTokens,
+        prefixIndexes: prepared.prefixIndexes,
+      }
     }
 
     const unsupportedUntil = this.unsupportedModels.get(config.model)
@@ -62,6 +76,7 @@ class GoogleExplicitCacheManager {
       this.cache.set(fingerprint, {
         name: response.name,
         expiresAt: Number.isFinite(expiresAt) ? expiresAt : now + DEFAULT_GOOGLE_CACHE_TTL_SECONDS * 1000,
+        estimatedTokens: prepared.estimatedTokens,
       })
 
       logger.llm.info('[RequestCache] Google explicit cache created', {
@@ -69,7 +84,12 @@ class GoogleExplicitCacheManager {
         cacheName: response.name,
       })
 
-      return response.name
+      return {
+        name: response.name,
+        created: true,
+        estimatedTokens: prepared.estimatedTokens,
+        prefixIndexes: prepared.prefixIndexes,
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
 
@@ -90,14 +110,15 @@ class GoogleExplicitCacheManager {
     systemInstruction?: string
     contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }>
     estimatedTokens: number
+    prefixIndexes: number[]
   } | null {
-    const prefix = extractStablePrefix(messages)
-    if (prefix.length === 0) return null
+    const prefixEntries = extractStablePrefixEntries(messages)
+    if (prefixEntries.length === 0) return null
 
     let systemInstruction = ''
     const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = []
 
-    for (const message of prefix) {
+    for (const { message } of prefixEntries) {
       if (message.role === 'system') {
         const text = getSimpleMessageText(message)
         if (!text) return null
@@ -135,6 +156,7 @@ class GoogleExplicitCacheManager {
       ...(systemInstruction ? { systemInstruction } : {}),
       contents,
       estimatedTokens,
+      prefixIndexes: prefixEntries.map(entry => entry.index),
     }
   }
 
@@ -222,13 +244,21 @@ export async function prepareRequestCache(
   }
 
   if (protocol === 'google' && !isCacheFeatureUnsupported(config, 'google-explicit-cached-content')) {
-    const cachedContent = await googleExplicitCacheManager.ensureCache(config, messages)
-    if (cachedContent) {
+    const cacheResolution = await googleExplicitCacheManager.ensureCache(config, messages)
+    if (cacheResolution) {
       providerOptions = mergeProviderOptions(providerOptions, {
         google: {
-          cachedContent,
+          cachedContent: cacheResolution.name,
         },
       })
+      preparedMessages = stripGoogleCachedPrefix(messages, cacheResolution.prefixIndexes)
+      if (cacheResolution.created) {
+        return {
+          messages: preparedMessages,
+          providerOptions,
+          cacheWriteTokens: cacheResolution.estimatedTokens,
+        }
+      }
     }
   }
 
@@ -236,6 +266,16 @@ export async function prepareRequestCache(
     messages: preparedMessages,
     ...(providerOptions ? { providerOptions } : {}),
   }
+}
+
+function stripGoogleCachedPrefix(messages: ModelMessage[], prefixIndexes: number[]): ModelMessage[] {
+  if (prefixIndexes.length === 0 || prefixIndexes.length >= messages.length) {
+    return messages
+  }
+
+  const cachedIndexes = new Set(prefixIndexes)
+  const remaining = messages.filter((_, index) => !cachedIndexes.has(index))
+  return remaining.length > 0 ? remaining : messages
 }
 
 function buildOpenAICacheOptions(
@@ -263,22 +303,41 @@ function buildOpenAICacheOptions(
       .digest('hex'),
   }
 
-  if (/gpt-5\.1/i.test(config.model)) {
+  if (/gpt-5(?:\.1|\.2)?/i.test(config.model) || /gpt-4\.1/i.test(config.model)) {
     cacheOptions.promptCacheRetention = '24h'
+  }
+
+  const protocol = resolveCacheProtocol(config.protocol, config.provider)
+  if (protocol === 'openai' && config.provider !== 'openai') {
+    return {
+      openaiCompatible: cacheOptions,
+      'custom-openai': {
+        prompt_cache_key: cacheOptions.promptCacheKey,
+        ...(cacheOptions.promptCacheRetention
+          ? { prompt_cache_retention: cacheOptions.promptCacheRetention }
+          : {}),
+      },
+    } as RequestProviderOptions
   }
 
   return mergeProviderOptions(undefined, buildOpenAIStyleProviderOptions(config, cacheOptions))
 }
 
 function extractStablePrefix(messages: ModelMessage[]): ModelMessage[] {
-  const prefix = messages.filter((_, index) => index < messages.length - 2 || messages[index].role === 'system')
+  return extractStablePrefixEntries(messages).map(entry => entry.message)
+}
+
+function extractStablePrefixEntries(messages: ModelMessage[]): Array<{ message: ModelMessage; index: number }> {
+  const prefix = messages
+    .map((message, index) => ({ message, index }))
+    .filter(({ message, index }) => index < messages.length - 2 || message.role === 'system')
 
   if (prefix.length > 0) {
     return prefix
   }
 
   const fallback = messages.findIndex(message => message.role === 'system' || message.role === 'user')
-  return fallback === -1 ? [] : [messages[fallback]]
+  return fallback === -1 ? [] : [{ message: messages[fallback], index: fallback }]
 }
 
 function getSimpleMessageText(message: ModelMessage): string | null {
