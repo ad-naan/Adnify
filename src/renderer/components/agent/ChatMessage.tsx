@@ -242,8 +242,13 @@ interface MessageMetaGroupProps {
 
 const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
   // Hooks 必须在所有条件返回之前调用（React 规则）
-  const [isExpanded, setIsExpanded] = useState(true)
-  const { openFile, setActiveFile, workspacePath } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, workspacePath: s.workspacePath })))
+  const { openFile, setActiveFile, workspacePath, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
+    openFile: s.openFile,
+    setActiveFile: s.setActiveFile,
+    workspacePath: s.workspacePath,
+    expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
+  })))
+  const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
 
   const hasAutoSkills = autoSkills && autoSkills.length > 0
   const hasManualSkills = manualSkills && manualSkills.length > 0
@@ -355,7 +360,8 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
 MessageMetaGroup.displayName = 'MessageMetaGroup'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+  const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
   const [elapsed, setElapsed] = useState<number>(0)
   const lastElapsed = React.useRef<number>(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -727,7 +733,7 @@ const RenderPart = React.memo(({
   if (isToolCallPart(part)) {
     const tc = part.toolCall
     return (
-      <div className={`my-3 ${isStreaming ? 'animate-fade-in' : ''}`}>
+      <div className="my-3">
         {renderToolCallCard(tc, {
           pendingToolId,
           onApproveTool,

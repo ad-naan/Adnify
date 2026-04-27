@@ -314,6 +314,27 @@ textarea,
   animation: text-shimmer 1.5s ease-in-out infinite;
 }
 
+.tool-text-shimmer {
+  background: linear-gradient(90deg,
+      rgb(var(--text-muted)) 0%,
+      rgb(var(--text-secondary)) 38%,
+      rgb(var(--accent) / 0.85) 48%,
+      rgb(var(--text-primary)) 52%,
+      rgb(var(--text-secondary)) 62%,
+      rgb(var(--text-muted)) 100%);
+  background-size: 280% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 3.2s ease-in-out infinite;
+}
+
+.tool-card-sweep {
+  animation: shimmer 14s linear infinite;
+  background-size: 240% 100%;
+  opacity: 0.55;
+}
+
 /* Button Sweep Effect */
 @keyframes btn-sweep {
   0% {
