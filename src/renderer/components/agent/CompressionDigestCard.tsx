@@ -6,6 +6,7 @@ import type { ContextSnapshotPart } from '@/renderer/agent/types'
 
 interface CompressionDigestCardProps {
   part: ContextSnapshotPart
+  variant?: 'card' | 'timeline'
 }
 
 const levelTone: Record<number, { badge: string; dot: string; glow: string }> = {
@@ -38,8 +39,8 @@ function getCopy(language: string, part: ContextSnapshotPart, activeTaskCount: n
   }
 }
 
-export const CompressionDigestCard = memo(({ part }: CompressionDigestCardProps) => {
-  const [expanded, setExpanded] = useState(true)
+export const CompressionDigestCard = memo(({ part, variant = 'card' }: CompressionDigestCardProps) => {
+  const [expanded, setExpanded] = useState(variant === 'card')
   const language = useStore(state => state.language || 'zh')
   const todos = part.summary.todos || []
   const activeTodos = todos.filter(todo => todo.status !== 'completed')
@@ -49,6 +50,64 @@ export const CompressionDigestCard = memo(({ part }: CompressionDigestCardProps)
   const visiblePending = useMemo(() => part.summary.pendingSteps.slice(0, 5), [part.summary.pendingSteps])
   const visibleTodos = useMemo(() => activeTodos.slice(0, 5), [activeTodos])
   const note = part.note || copy.subtitle
+
+  if (variant === 'timeline') {
+    const isZh = language === 'zh'
+    const title = isZh ? '上下文已压缩，已切换到新会话继续' : 'Context compressed and continued in a new thread'
+    const detailLabel = expanded
+      ? (isZh ? '收起详情' : 'Hide details')
+      : (isZh ? '查看快照详情' : 'View snapshot details')
+
+    return (
+      <div className="my-4 w-full">
+        <button
+          onClick={() => setExpanded(value => !value)}
+          className="group flex w-full items-center gap-3 text-left text-text-muted transition-colors hover:text-text-secondary"
+        >
+          <div className="h-px flex-1 bg-border/50 transition-colors group-hover:bg-border" />
+          <div className="flex min-w-0 items-center gap-2 rounded-full border border-border/50 bg-surface/35 px-3 py-1.5 text-[11px] shadow-sm backdrop-blur-sm">
+            <div className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+            <span className="truncate font-medium text-text-secondary">{title}</span>
+            <span className="shrink-0 text-text-muted/70">· {detailLabel}</span>
+            <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+          </div>
+          <div className="h-px flex-1 bg-border/50 transition-colors group-hover:bg-border" />
+        </button>
+
+        <AnimatePresence initial={false}>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden"
+            >
+              <div className="mx-8 mt-3 space-y-2 rounded-xl border border-border/40 bg-surface/25 px-3 py-3 text-[11px] text-text-secondary">
+                <div>
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted/70">{copy.objective}</div>
+                  <div className="leading-relaxed">{part.summary.objective || copy.noObjective}</div>
+                </div>
+
+                {part.lastUserRequest && (
+                  <div>
+                    <div className="mb-1 text-[10px] uppercase tracking-wide text-text-muted/70">{copy.lastRequest}</div>
+                    <div className="leading-relaxed">{part.lastUserRequest}</div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 text-[10px] text-text-muted/80">
+                  <span className="rounded-full bg-text-primary/[0.04] px-2 py-0.5">{copy.completedStat}</span>
+                  <span className="rounded-full bg-text-primary/[0.04] px-2 py-0.5">{copy.pendingStat}</span>
+                  <span className="rounded-full bg-text-primary/[0.04] px-2 py-0.5">{copy.taskStat}</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
 
   return (
     <div className={`my-3 overflow-hidden rounded-2xl border border-border/50 bg-surface/40 backdrop-blur-md shadow-[0_10px_30px_-18px_rgba(0,0,0,0.45)] transition-all ${tone.glow}`}>
