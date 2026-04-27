@@ -40,8 +40,9 @@ function getCopy(language: string, part: ContextSnapshotPart, activeTaskCount: n
 }
 
 export const CompressionDigestCard = memo(({ part, variant = 'card' }: CompressionDigestCardProps) => {
-  const [expanded, setExpanded] = useState(variant === 'card')
   const language = useStore(state => state.language || 'zh')
+  const expandAgentBlocksByDefault = useStore(state => state.agentConfig.expandAgentBlocksByDefault ?? false)
+  const [expanded, setExpanded] = useState(expandAgentBlocksByDefault && variant === 'card')
   const todos = part.summary.todos || []
   const activeTodos = todos.filter(todo => todo.status !== 'completed')
   const tone = levelTone[part.level] || levelTone[3]

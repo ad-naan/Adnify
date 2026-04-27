@@ -8,12 +8,14 @@ import { Check, ChevronDown, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { LintCheckPart } from '@/renderer/agent/types'
 import { getFileName } from '@shared/utils/pathUtils'
+import { useStore } from '@store'
 interface LintCheckCardProps {
     part: LintCheckPart
 }
 
 export const LintCheckCard = memo(({ part }: LintCheckCardProps) => {
-    const [isExpanded, setIsExpanded] = useState(false)
+    const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+    const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
 
     const totalErrors = part.files.reduce((sum, f) => sum + f.errors.filter(e => e.severity === 'error').length, 0)
     const totalWarnings = part.files.reduce((sum, f) => sum + f.errors.filter(e => e.severity === 'warning').length, 0)

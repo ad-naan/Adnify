@@ -25,6 +25,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
 import type { PendingChange } from '@/renderer/agent/types'
+import { useStore } from '@store'
 
 interface AgentStatusBarProps {
   pendingChanges: PendingChange[]
@@ -57,7 +58,8 @@ function AgentStatusBar({
   onRejectTool,
   headerPrefix,
 }: AgentStatusBarProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+  const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
 
   // 计算统计信息
@@ -141,7 +143,7 @@ function AgentStatusBar({
               {isStreaming ? (
                 <>
                   <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                  <span className="text-[11px] font-medium text-shimmer">
+                  <span className="text-[11px] font-medium tool-text-shimmer">
                     Processing...
                   </span>
                 </>

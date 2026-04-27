@@ -160,6 +160,7 @@ export const AGENT_DEFAULTS = {
   // 工具执行
   toolTimeoutMs: 60000,
   enableAutoFix: true,
+  expandAgentBlocksByDefault: false,
 
   // 上下文压缩
   keepRecentTurns: 5,
