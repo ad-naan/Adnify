@@ -125,6 +125,15 @@ export interface AiCompletionConfig {
   completionTriggerChars: string[]
 }
 
+export interface AppearanceConfig {
+  settingsPerformanceMode: boolean
+  disableSettingsBlur: boolean
+  disableSettingsAnimations: boolean
+  disableSettingsShadows: boolean
+  disableSettingsGlow: boolean
+  enableSettingsContentVisibility: boolean
+}
+
 export interface EditorConfig {
   fontSize: number
   chatFontSize: number
@@ -145,6 +154,7 @@ export interface EditorConfig {
   lsp: LspConfig
   performance: PerformanceConfig
   ai: AiCompletionConfig
+  appearance: AppearanceConfig
 }
 
 export interface SecuritySettings {

@@ -63,6 +63,13 @@ export interface GitBranch {
     lastCommit?: string
 }
 
+export interface GitRepository {
+    root: string
+    name: string
+    relativePath: string
+    isWorkspaceRoot: boolean
+}
+
 interface GitExecResult {
     stdout: string
     stderr: string
@@ -71,6 +78,19 @@ interface GitExecResult {
 
 class GitService {
     private primaryWorkspacePath: string | null = null
+    private readonly repositoryDiscoveryCache = new Map<string, GitRepository[]>()
+    private readonly DISCOVERY_IGNORED_DIRS = new Set([
+        '.git',
+        'node_modules',
+        'dist',
+        'build',
+        '.next',
+        '.adnify',
+        'coverage',
+        '__pycache__',
+        '.venv',
+        'venv',
+    ])
 
     setWorkspace(path: string | null) {
         this.primaryWorkspacePath = path
@@ -150,6 +170,100 @@ class GitService {
         } catch {
             return false
         }
+    }
+
+    async discoverRepositories(workspacePath: string, maxDepth: number = 1, forceRefresh: boolean = false): Promise<GitRepository[]> {
+        const normalizedWorkspace = normalizePath(workspacePath).replace(/\/+$/, '')
+        const cacheKey = `${normalizedWorkspace}::${maxDepth}`
+
+        if (!forceRefresh) {
+            const cachedRepositories = this.repositoryDiscoveryCache.get(cacheKey)
+            if (cachedRepositories) {
+                return cachedRepositories
+            }
+        }
+
+        const visited = new Set<string>()
+        const repositories = new Map<string, GitRepository>()
+
+        const registerRepository = async (candidatePath: string) => {
+            const revParseResult = await this.exec(['rev-parse', '--show-toplevel'], candidatePath)
+            const resolvedRoot = normalizePath(
+                revParseResult.exitCode === 0 && revParseResult.stdout.trim()
+                    ? revParseResult.stdout.trim()
+                    : candidatePath,
+            ).replace(/\/+$/, '')
+
+            if (!resolvedRoot.startsWith(normalizedWorkspace)) {
+                return
+            }
+
+            if (repositories.has(resolvedRoot)) {
+                return
+            }
+
+            const relativePath = resolvedRoot === normalizedWorkspace
+                ? '.'
+                : resolvedRoot.slice(normalizedWorkspace.length + 1)
+
+            repositories.set(resolvedRoot, {
+                root: resolvedRoot,
+                name: resolvedRoot.split('/').filter(Boolean).pop() || resolvedRoot,
+                relativePath,
+                isWorkspaceRoot: resolvedRoot === normalizedWorkspace,
+            })
+        }
+
+        const walk = async (dirPath: string, depth: number): Promise<void> => {
+            const normalizedDir = normalizePath(dirPath).replace(/\/+$/, '')
+            if (visited.has(normalizedDir) || depth > maxDepth) {
+                return
+            }
+            visited.add(normalizedDir)
+
+            let entries
+            try {
+                entries = await api.file.readDir(normalizedDir)
+            } catch {
+                return
+            }
+
+            if (!entries) {
+                return
+            }
+
+            const hasGitMarker = entries.some(entry => entry.name === '.git')
+            if (hasGitMarker) {
+                await registerRepository(normalizedDir)
+            }
+
+            if (depth === maxDepth) {
+                return
+            }
+
+            for (const entry of entries) {
+                if (!entry.isDirectory) {
+                    continue
+                }
+                if (this.DISCOVERY_IGNORED_DIRS.has(entry.name)) {
+                    continue
+                }
+                await walk(entry.path, depth + 1)
+            }
+        }
+
+        await walk(normalizedWorkspace, 0)
+
+        const discoveredRepositories = Array.from(repositories.values()).sort((left, right) => {
+            if (left.isWorkspaceRoot !== right.isWorkspaceRoot) {
+                return left.isWorkspaceRoot ? -1 : 1
+            }
+            return left.relativePath.localeCompare(right.relativePath)
+        })
+
+        this.repositoryDiscoveryCache.set(cacheKey, discoveredRepositories)
+
+        return discoveredRepositories
     }
 
     /**
