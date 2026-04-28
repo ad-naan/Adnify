@@ -209,7 +209,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-[400px] max-w-[min(400px,calc(100vw-32px))] max-h-[360px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in overflow-hidden">
+        <div className="absolute bottom-full left-0 mb-2 w-[calc(100%-30px)] max-h-[360px] flex flex-col bg-surface border border-border rounded-xl shadow-2xl z-50 animate-scale-in overflow-hidden">
           {/* 搜索框 */}
           <div className="p-2 border-b border-border/50 sticky top-0 bg-surface/95 backdrop-blur-sm z-10 rounded-t-xl shrink-0">
             <div className="relative">
