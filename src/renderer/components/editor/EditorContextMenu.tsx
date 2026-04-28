@@ -13,6 +13,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import { formatShortcut } from '@services/keybindingService'
 import type { editor } from 'monaco-editor'
 import { logger } from '@shared/utils/Logger'
+import { navigateToDefinition } from './hooks/useEditorActions'
 
 // 支持 Call Hierarchy 的语言（只有支持函数/方法调用的语言才有意义）
 const CALL_HIERARCHY_SUPPORTED_LANGUAGES = [
@@ -152,6 +153,30 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     onClose()
   }
 
+  const handleGotoDefinition = async () => {
+    const model = editor.getModel()
+    const position = editor.getPosition()
+    if (!model || !position) {
+      onClose()
+      return
+    }
+
+    const filePath = lspUriToPath(model.uri.toString())
+    editor.focus()
+    onClose()
+
+    try {
+      await navigateToDefinition(
+        editor,
+        filePath,
+        position.lineNumber - 1,
+        position.column - 1,
+      )
+    } catch {
+      // 与 F12 保持一致：对不可访问定义静默忽略
+    }
+  }
+
   // 剪贴板操作 - 使用原生 API
   const handleCut = async () => {
     const selection = editor.getSelection()
@@ -285,7 +310,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
 
   const menuItems: MenuItem[] = [
     // 导航
-    { id: 'goto-def', labelKey: 'ctxGotoDefinition', shortcut: 'F12', action: () => runAction('editor.action.revealDefinition') },
+    { id: 'goto-def', labelKey: 'ctxGotoDefinition', shortcut: 'F12', action: handleGotoDefinition },
     { id: 'find-refs', labelKey: 'ctxFindReferences', shortcut: 'Shift+F12', action: () => runAction('editor.action.goToReferences') },
     { id: 'goto-symbol', labelKey: 'ctxGotoSymbol', shortcut: formatShortcut('Ctrl+Shift+O'), action: () => runAction('editor.action.quickOutline') },
     { id: 'find-callers', labelKey: 'ctxFindCallers', action: handleFindCallers, disabled: !supportsCallHierarchy },

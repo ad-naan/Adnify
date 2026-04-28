@@ -407,6 +407,7 @@ export function GitView() {
     const [repoRoots, setRepoRoots] = useState<GitRepository[]>([])
     const [selectedRepoRoot, setSelectedRepoRoot] = useState<string | null>(null)
     const [isDiscoveringRepos, setIsDiscoveringRepos] = useState(false)
+    const [hasResolvedRepositories, setHasResolvedRepositories] = useState(false)
     const [repoDisplayMode, setRepoDisplayMode] = useState<'select' | 'list'>('list')
     const [repoSnapshots, setRepoSnapshots] = useState<Record<string, RepoChangesSnapshot>>({})
     const [repoCommitMessages, setRepoCommitMessages] = useState<Record<string, string>>({})
@@ -476,6 +477,7 @@ export function GitView() {
         if (!workspacePath) {
             setRepoRoots([])
             setSelectedRepoRoot(null)
+            setHasResolvedRepositories(true)
             return { repositories: [], preferredRoot: null }
         }
 
@@ -494,12 +496,14 @@ export function GitView() {
 
             setRepoRoots(repositories)
             setSelectedRepoRoot(preferredRoot)
+            setHasResolvedRepositories(true)
             return { repositories, preferredRoot }
         } catch (e) {
             logger.ui.error('Failed to discover Git repositories:', e)
             if (runId === discoveryRunRef.current) {
                 setRepoRoots([])
                 setSelectedRepoRoot(null)
+                setHasResolvedRepositories(true)
             }
             return { repositories: [], preferredRoot: null }
         } finally {
@@ -665,6 +669,8 @@ export function GitView() {
     }, [selectedRepoRoot, workspacePath, tt])
 
     useEffect(() => {
+        setHasResolvedRepositories(false)
+        setIsGitRepository(null)
         void discoverRepositories()
     }, [workspacePath, discoverRepositories])
 
@@ -676,17 +682,17 @@ export function GitView() {
     // 初始化时刷新一次
     const repoRootsSignature = useMemo(() => repoRoots.map(repo => repo.root).join('|'), [repoRoots])
     useEffect(() => {
-        if (!workspacePath || isDiscoveringRepos) return
+        if (!workspacePath || isDiscoveringRepos || !hasResolvedRepositories) return
         if (isRepoListMode) return
         const targetRepoRoot = selectedRepoRoot || repoRoots[0]?.root || null
         if (!targetRepoRoot && repoRoots.length > 0) return
         void refreshStatus(targetRepoRoot)
-    }, [isDiscoveringRepos, isRepoListMode, refreshStatus, repoRoots.length, repoRootsSignature, selectedRepoRoot, workspacePath])
+    }, [hasResolvedRepositories, isDiscoveringRepos, isRepoListMode, refreshStatus, repoRoots.length, repoRootsSignature, selectedRepoRoot, workspacePath])
 
     useEffect(() => {
-        if (!workspacePath || isDiscoveringRepos || !isRepoListMode) return
+        if (!workspacePath || isDiscoveringRepos || !hasResolvedRepositories || !isRepoListMode) return
         void refreshRepoSnapshots(repoRoots)
-    }, [workspacePath, isDiscoveringRepos, isRepoListMode, refreshRepoSnapshots, repoRoots, repoRootsSignature])
+    }, [workspacePath, hasResolvedRepositories, isDiscoveringRepos, isRepoListMode, refreshRepoSnapshots, repoRoots, repoRootsSignature])
 
     // 监听 .git 目录变化，自动刷新（如果启用）
     useEffect(() => {
@@ -720,6 +726,7 @@ export function GitView() {
         const { repositories, preferredRoot } = await discoverRepositories(true)
         if (repoDisplayMode === 'list' && activeTab === 'changes') {
             await refreshRepoSnapshots(repositories)
+            return
         }
         await refreshStatus(preferredRoot)
     }, [activeTab, discoverRepositories, refreshRepoSnapshots, refreshStatus, repoDisplayMode])
@@ -1543,7 +1550,7 @@ Commit message:`
     }
 
     // 非 Git 仓库
-    if (isGitRepository === false && !isRefreshing) {
+    if (hasResolvedRepositories && repoRoots.length === 0 && isGitRepository === false && !isRefreshing && !isDiscoveringRepos) {
         return (
             <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
@@ -1600,7 +1607,7 @@ Commit message:`
         )
     }
 
-    if (!status && (isRefreshing || isGitRepository === null || error)) {
+    if (!isRepoListMode && !status && (isRefreshing || isGitRepository === null || error)) {
         return (
             <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
@@ -2136,7 +2143,7 @@ Commit message:`
                                             toast.success(tt('git.hashCopied'))
                                         }}
                                         onClick={async () => {
-                                            const diff = await gitService.getCommitDiff(commit.hash, workspacePath || undefined)
+                                            const diff = await gitService.getCommitDiff(commit.hash, currentRepoRoot || undefined)
                                             if (diff) {
                                                 openFile(`git-diff://commit/${commit.shortHash}`, diff, '')
                                                 setActiveFile(`git-diff://commit/${commit.shortHash}`)
