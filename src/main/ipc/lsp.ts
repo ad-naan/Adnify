@@ -15,6 +15,7 @@ import {
   getDefaultLspBinDir,
   setCustomLspBinDir,
 } from '../lsp/installer'
+import { lspUriToPath } from '@shared/utils/uriUtils'
 
 function getLanguageId(filePath: string): LanguageId | null {
   const ext = filePath.split('.').pop()?.toLowerCase() || ''
@@ -24,19 +25,12 @@ function getLanguageId(filePath: string): LanguageId | null {
 }
 
 function getLanguageIdFromUri(uri: string): string {
-  let filePath = uri
-  if (uri.startsWith('file:///')) filePath = uri.slice(8)
-  else if (uri.startsWith('file://')) filePath = uri.slice(7)
-  try { filePath = decodeURIComponent(filePath) } catch { }
+  const filePath = lspUriToPath(uri)
   return getLanguageId(filePath) || 'plaintext'
 }
 
 async function getServerForUri(uri: string, workspacePath: string): Promise<string | null> {
-  let filePath = uri
-  if (uri.startsWith('file:///')) filePath = uri.slice(8)
-  else if (uri.startsWith('file://')) filePath = uri.slice(7)
-
-  try { filePath = decodeURIComponent(filePath) } catch { }
+  const filePath = lspUriToPath(uri)
 
   const languageId = getLanguageId(filePath)
   if (!languageId) return null
@@ -140,10 +134,22 @@ export function registerLspHandlers(preferencesStore?: any): void {
       if (!serverName) return null
 
       try {
-        return await lspManager.sendRequest(serverName, method, {
+        const result = await lspManager.sendRequest(serverName, method, {
           textDocument: { uri: params.uri },
           position: { line: params.line, character: params.character },
         })
+        if (method === 'textDocument/definition') {
+          logger.lsp.info('[LSP IPC] Definition result:', {
+            serverName,
+            uri: params.uri,
+            line: params.line,
+            character: params.character,
+            isArray: Array.isArray(result),
+            count: Array.isArray(result) ? result.length : (result ? 1 : 0),
+            sampleKeys: result && !Array.isArray(result) ? Object.keys(result) : (Array.isArray(result) && result[0] ? Object.keys(result[0]) : []),
+          })
+        }
+        return result
       } catch {
         return null
       }

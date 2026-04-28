@@ -20,7 +20,7 @@ import { REASONING_EFFORT_VALUES } from '@/shared/config/llmPersistence'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
-import { Button, Input, Select, ScrollShadow, Switch } from '@components/ui'
+import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 
@@ -37,6 +37,7 @@ const PROTOCOL_OPTIONS = [
 ]
 
 type EditableHeader = { key: string; value: string; isCustom?: boolean }
+type ProviderDetailPanel = 'provider' | 'model' | 'generation' | 'auth'
 
 const PREDEFINED_HEADER_OPTIONS = [
   { value: '', label: 'Select header' },
@@ -727,6 +728,7 @@ export function ProviderSettings({
 }: ProviderSettingsProps) {
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
+  const [activePanel, setActivePanel] = useState<ProviderDetailPanel>('provider')
   const [logitBiasString, setLogitBiasString] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [editingProviderName, setEditingProviderName] = useState('')
@@ -1091,10 +1093,40 @@ export function ProviderSettings({
   }
 
   const builtinProviders = providers.filter((p) => BUILTIN_PROVIDER_IDS.includes(p.id))
+  const detailPanels: Array<{ id: ProviderDetailPanel; label: string; icon: typeof Box }> = [
+    { id: 'provider', label: language === 'zh' ? '提供商' : 'Provider', icon: Box },
+    { id: 'model', label: language === 'zh' ? '模型' : 'Model', icon: Box },
+    { id: 'generation', label: language === 'zh' ? '生成参数' : 'Generation', icon: Sliders },
+    { id: 'auth', label: language === 'zh' ? '认证与网络' : 'Auth & Network', icon: Server },
+  ]
 
   return (
     <div className="space-y-8 animate-fade-in pb-10">
+      <section className="p-2 bg-surface/20 rounded-2xl border border-border/60">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {detailPanels.map((panel) => {
+            const Icon = panel.icon
+            const active = activePanel === panel.id
+            return (
+              <button
+                key={panel.id}
+                onClick={() => setActivePanel(panel.id)}
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  active
+                    ? 'bg-accent text-white shadow-md shadow-accent/20'
+                    : 'bg-transparent text-text-secondary hover:bg-surface/50 hover:text-text-primary'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{panel.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
       {/* Provider 选择器 */}
+      {activePanel === 'provider' && (
       <section>
         <div className="flex items-center gap-2 mb-4">
           <Box className="w-4 h-4 text-accent" />
@@ -1239,13 +1271,12 @@ export function ProviderSettings({
           </div>
         )}
       </section>
+      )}
 
       {/* 配置区域（非添加模式时显示） */}
       {!isAddingCustom && (
         <div className="space-y-6">
-          {/* 上方两列：模型配置 + 生成参数 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 左列：模型配置 */}
+          {activePanel === 'model' && (
             <section className="p-5 bg-surface/30 rounded-xl border border-border">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -1282,82 +1313,77 @@ export function ProviderSettings({
                 />
               </div>
 
-              <ScrollShadow maxHeight="500px" className="pr-2">
-                <div className="space-y-4 pr-2">
-                  <div className="space-y-1.5">
-                    <label className="sr-only text-xs font-medium text-text-secondary">
-                      {language === 'zh' ? '选择模型' : 'Select Model'}
-                    </label>
-                    <label className="text-xs font-medium text-text-secondary">
-                      {language === 'zh' ? '选择模型' : 'Select Model'}
-                    </label>
-                    <Select
-                      value={localConfig.model}
-                      onChange={(value) => setLocalConfig({ ...localConfig, model: value })}
-                      options={(() => {
-                        const modelsSet = new Set<string>()
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="sr-only text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? '选择模型' : 'Select Model'}
+                  </label>
+                  <label className="text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? '选择模型' : 'Select Model'}
+                  </label>
+                  <Select
+                    value={localConfig.model}
+                    onChange={(value) => setLocalConfig({ ...localConfig, model: value })}
+                    options={(() => {
+                      const modelsSet = new Set<string>()
 
-                        // 1. 获取当前 provider 的内置模型或自定义配置的基础模型
-                        if (isCustomSelected && selectedCustomConfig) {
-                          (selectedCustomConfig.customModels || []).forEach((m) => modelsSet.add(m))
-                        } else if (selectedProvider) {
-                          selectedProvider.models.forEach((m) => modelsSet.add(m))
-                        }
+                      if (isCustomSelected && selectedCustomConfig) {
+                        (selectedCustomConfig.customModels || []).forEach((m) => modelsSet.add(m))
+                      } else if (selectedProvider) {
+                        selectedProvider.models.forEach((m) => modelsSet.add(m))
+                      }
 
-                        // 2. 获取本地存储的额外自定义模型
-                        const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
-                        localCustomModels.forEach((m) => modelsSet.add(m))
+                      const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
+                      localCustomModels.forEach((m) => modelsSet.add(m))
 
-                        // 3. 确保当前选中的模型也在列表中
-                        if (localConfig.model) {
-                          modelsSet.add(localConfig.model)
-                        }
+                      if (localConfig.model) {
+                        modelsSet.add(localConfig.model)
+                      }
 
-                        return Array.from(modelsSet).map((m) => ({ value: m, label: m }))
-                      })()}
-                      className="w-full bg-background/50 border-border"
-                    />
-                  </div>
-
-                  {/* 添加自定义模型 */}
-                  <div className="pt-2">
-                    <div className="flex gap-2">
-                      <Input
-                        value={newModelName}
-                        onChange={(e) => setNewModelName(e.target.value)}
-                        placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
-                        className="flex-1 h-9 text-xs bg-background/50 border-border"
-                      />
-                      <Button variant="secondary" size="sm" onClick={() => handleAddModel()} disabled={!newModelName.trim()} className="h-9 px-3">
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    {(localProviderConfigs[localConfig.provider]?.customModels?.length ?? 0) > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {localProviderConfigs[localConfig.provider]?.customModels?.map((model: string) => (
-                          <div
-                            key={model}
-                            className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-border"
-                          >
-                            <span>{model}</span>
-                            <button
-                              onClick={() => handleRemoveModel(model)}
-                              className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Trash className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                      return Array.from(modelsSet).map((m) => ({ value: m, label: m }))
+                    })()}
+                    className="w-full bg-background/50 border-border"
+                  />
                 </div>
-              </ScrollShadow>
-            </section>
 
-            {/* 右列：生成参数 */}
+                <div className="pt-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newModelName}
+                      onChange={(e) => setNewModelName(e.target.value)}
+                      placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
+                      className="flex-1 h-9 text-xs bg-background/50 border-border"
+                    />
+                    <Button variant="secondary" size="sm" onClick={() => handleAddModel()} disabled={!newModelName.trim()} className="h-9 px-3">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {(localProviderConfigs[localConfig.provider]?.customModels?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {localProviderConfigs[localConfig.provider]?.customModels?.map((model: string) => (
+                        <div
+                          key={model}
+                          className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-border"
+                        >
+                          <span>{model}</span>
+                          <button
+                            onClick={() => handleRemoveModel(model)}
+                            className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activePanel === 'generation' && (
             <section className="p-5 bg-surface/30 rounded-xl border border-border">
               <div className="flex items-center gap-2 mb-4">
                 <Sliders className="w-4 h-4 text-accent" />
@@ -1366,8 +1392,7 @@ export function ProviderSettings({
                 </h5>
               </div>
 
-              <ScrollShadow maxHeight="500px" className="pr-2">
-                <div className="space-y-5 pr-2">
+              <div className="space-y-5">
 
                   {/* Max Tokens */}
                   <div className="space-y-3">
@@ -1962,12 +1987,12 @@ export function ProviderSettings({
                     )}
                   </div>
                 </div>
-              </ScrollShadow>
             </section>
-          </div>
+          )}
 
           {/* 下方全宽：认证 & 网络配置 */}
-          <section className="p-6 bg-surface/30 rounded-2xl border border-border shadow-sm">
+          {activePanel === 'auth' && (
+            <section className="p-6 bg-surface/30 rounded-2xl border border-border shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-accent/10 rounded-lg text-accent">
@@ -2109,7 +2134,8 @@ export function ProviderSettings({
                 </div>
               </div>
             </div>
-          </section>
+            </section>
+          )}
         </div>
       )}
     </div>
