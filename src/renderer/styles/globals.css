@@ -215,6 +215,12 @@ textarea,
   font-family: 'JetBrains Mono', 'JetBrainsMono', 'Fira Code', 'FiraCode-Retina', 'Consolas', 'Monaco', 'Hannotate SC', monospace, -apple-system !important;
 }
 
+.monaco-editor .adnify-definition-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Keep Monaco find widget controls above hover overlays without changing its layout. */
 .monaco-editor .find-widget {
   z-index: 2600 !important;

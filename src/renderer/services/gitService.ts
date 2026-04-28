@@ -183,85 +183,100 @@ class GitService {
             }
         }
 
-        const visited = new Set<string>()
-        const repositories = new Map<string, GitRepository>()
+        const performDiscovery = async (): Promise<GitRepository[]> => {
+            const visited = new Set<string>()
+            const repositories = new Map<string, GitRepository>()
 
-        const registerRepository = async (candidatePath: string) => {
-            const revParseResult = await this.exec(['rev-parse', '--show-toplevel'], candidatePath)
-            const resolvedRoot = normalizePath(
-                revParseResult.exitCode === 0 && revParseResult.stdout.trim()
-                    ? revParseResult.stdout.trim()
-                    : candidatePath,
-            ).replace(/\/+$/, '')
+            const registerRepository = async (candidatePath: string) => {
+                const revParseResult = await this.exec(['rev-parse', '--show-toplevel'], candidatePath)
+                const resolvedRoot = normalizePath(
+                    revParseResult.exitCode === 0 && revParseResult.stdout.trim()
+                        ? revParseResult.stdout.trim()
+                        : candidatePath,
+                ).replace(/\/+$/, '')
 
-            if (!resolvedRoot.startsWith(normalizedWorkspace)) {
-                return
+                if (!resolvedRoot.startsWith(normalizedWorkspace)) {
+                    return
+                }
+
+                if (repositories.has(resolvedRoot)) {
+                    return
+                }
+
+                const relativePath = resolvedRoot === normalizedWorkspace
+                    ? '.'
+                    : resolvedRoot.slice(normalizedWorkspace.length + 1)
+
+                repositories.set(resolvedRoot, {
+                    root: resolvedRoot,
+                    name: resolvedRoot.split('/').filter(Boolean).pop() || resolvedRoot,
+                    relativePath,
+                    isWorkspaceRoot: resolvedRoot === normalizedWorkspace,
+                })
             }
 
-            if (repositories.has(resolvedRoot)) {
-                return
+            const walk = async (dirPath: string, depth: number): Promise<void> => {
+                const normalizedDir = normalizePath(dirPath).replace(/\/+$/, '')
+                if (visited.has(normalizedDir) || depth > maxDepth) {
+                    return
+                }
+                visited.add(normalizedDir)
+
+                let entries
+                try {
+                    entries = await api.file.readDir(normalizedDir)
+                } catch {
+                    return
+                }
+
+                if (!entries) {
+                    return
+                }
+
+                const hasGitMarker = entries.some(entry => entry.name === '.git')
+                if (hasGitMarker) {
+                    await registerRepository(normalizedDir)
+                }
+
+                if (depth === maxDepth) {
+                    return
+                }
+
+                for (const entry of entries) {
+                    if (!entry.isDirectory) {
+                        continue
+                    }
+                    if (this.DISCOVERY_IGNORED_DIRS.has(entry.name)) {
+                        continue
+                    }
+                    await walk(entry.path, depth + 1)
+                }
             }
 
-            const relativePath = resolvedRoot === normalizedWorkspace
-                ? '.'
-                : resolvedRoot.slice(normalizedWorkspace.length + 1)
+            await walk(normalizedWorkspace, 0)
 
-            repositories.set(resolvedRoot, {
-                root: resolvedRoot,
-                name: resolvedRoot.split('/').filter(Boolean).pop() || resolvedRoot,
-                relativePath,
-                isWorkspaceRoot: resolvedRoot === normalizedWorkspace,
+            return Array.from(repositories.values()).sort((left, right) => {
+                if (left.isWorkspaceRoot !== right.isWorkspaceRoot) {
+                    return left.isWorkspaceRoot ? -1 : 1
+                }
+                return left.relativePath.localeCompare(right.relativePath)
             })
         }
 
-        const walk = async (dirPath: string, depth: number): Promise<void> => {
-            const normalizedDir = normalizePath(dirPath).replace(/\/+$/, '')
-            if (visited.has(normalizedDir) || depth > maxDepth) {
-                return
-            }
-            visited.add(normalizedDir)
+        let discoveredRepositories = await performDiscovery()
 
-            let entries
-            try {
-                entries = await api.file.readDir(normalizedDir)
-            } catch {
-                return
-            }
-
-            if (!entries) {
-                return
-            }
-
-            const hasGitMarker = entries.some(entry => entry.name === '.git')
-            if (hasGitMarker) {
-                await registerRepository(normalizedDir)
-            }
-
-            if (depth === maxDepth) {
-                return
-            }
-
-            for (const entry of entries) {
-                if (!entry.isDirectory) {
-                    continue
-                }
-                if (this.DISCOVERY_IGNORED_DIRS.has(entry.name)) {
-                    continue
-                }
-                await walk(entry.path, depth + 1)
-            }
+        // 工作区刚切换时，首次 readDir / git 探测偶尔会过早返回空结果。
+        // 这里自动补一次短延迟重试，避免必须手动点“重试”。
+        if (!forceRefresh && discoveredRepositories.length === 0) {
+            await new Promise(resolve => setTimeout(resolve, 250))
+            discoveredRepositories = await performDiscovery()
         }
 
-        await walk(normalizedWorkspace, 0)
-
-        const discoveredRepositories = Array.from(repositories.values()).sort((left, right) => {
-            if (left.isWorkspaceRoot !== right.isWorkspaceRoot) {
-                return left.isWorkspaceRoot ? -1 : 1
-            }
-            return left.relativePath.localeCompare(right.relativePath)
-        })
-
-        this.repositoryDiscoveryCache.set(cacheKey, discoveredRepositories)
+        if (discoveredRepositories.length > 0) {
+            this.repositoryDiscoveryCache.set(cacheKey, discoveredRepositories)
+        } else {
+            this.repositoryDiscoveryCache.delete(cacheKey)
+        }
 
         return discoveredRepositories
     }
