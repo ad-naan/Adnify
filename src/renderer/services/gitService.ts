@@ -195,7 +195,11 @@ class GitService {
                         : candidatePath,
                 ).replace(/\/+$/, '')
 
-                if (!resolvedRoot.startsWith(normalizedWorkspace)) {
+                const workspaceInsideRepo = normalizedWorkspace === resolvedRoot
+                    || normalizedWorkspace.startsWith(`${resolvedRoot}/`)
+                const repoInsideWorkspace = resolvedRoot.startsWith(`${normalizedWorkspace}/`)
+
+                if (!workspaceInsideRepo && !repoInsideWorkspace) {
                     return
                 }
 
@@ -203,7 +207,7 @@ class GitService {
                     return
                 }
 
-                const relativePath = resolvedRoot === normalizedWorkspace
+                const relativePath = resolvedRoot === normalizedWorkspace || workspaceInsideRepo
                     ? '.'
                     : resolvedRoot.slice(normalizedWorkspace.length + 1)
 
@@ -211,7 +215,7 @@ class GitService {
                     root: resolvedRoot,
                     name: resolvedRoot.split('/').filter(Boolean).pop() || resolvedRoot,
                     relativePath,
-                    isWorkspaceRoot: resolvedRoot === normalizedWorkspace,
+                    isWorkspaceRoot: workspaceInsideRepo,
                 })
             }
 

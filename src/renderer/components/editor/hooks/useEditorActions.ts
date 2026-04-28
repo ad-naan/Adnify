@@ -2,7 +2,7 @@
  * 编辑器快捷键和动作 Hook
  */
 import { useCallback } from 'react'
-import type { editor } from 'monaco-editor'
+import type { editor, IPosition, IRange } from 'monaco-editor'
 import { goToDefinition } from '@services/lspService'
 import { lspUriToPath } from '@shared/utils/uriUtils'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
@@ -26,9 +26,9 @@ export async function navigateToDefinition(
   filePath: string,
   line: number,   // LSP 0-indexed
   col: number     // LSP 0-indexed
-) {
-  const locations = await goToDefinition(filePath, line, col)
-  if (!locations || locations.length === 0) return
+  ) {
+    const locations = await goToDefinition(filePath, line, col)
+    if (!locations || locations.length === 0) return
 
   const loc = locations[0]
   const targetPath = lspUriToPath(loc.uri)
@@ -61,11 +61,16 @@ export function useEditorActions(
     const teardownFns: Array<() => void> = []
     let definitionDecorationIds: string[] = []
     let modifierPressed = false
-    let lastHoverPosition: editor.IPosition | null = null
+    let lastHoverPosition: IPosition | null = null
     let hoverProbeSeq = 0
+    let hoverProbeTimer: ReturnType<typeof setTimeout> | null = null
     const definitionAvailabilityCache = new Map<string, boolean>()
 
     const clearDefinitionDecoration = () => {
+      if (hoverProbeTimer) {
+        clearTimeout(hoverProbeTimer)
+        hoverProbeTimer = null
+      }
       if (definitionDecorationIds.length > 0) {
         definitionDecorationIds = editorInstance.deltaDecorations(definitionDecorationIds, [])
       }
@@ -75,7 +80,7 @@ export function useEditorActions(
       }
     }
 
-    const applyDefinitionDecoration = (range: editor.IRange) => {
+    const applyDefinitionDecoration = (range: IRange) => {
       definitionDecorationIds = editorInstance.deltaDecorations(definitionDecorationIds, [{
         range,
         options: {
@@ -88,7 +93,7 @@ export function useEditorActions(
       }
     }
 
-    const updateDefinitionHoverDecoration = async (position: editor.IPosition | null) => {
+    const updateDefinitionHoverDecoration = async (position: IPosition | null) => {
       lastHoverPosition = position
 
       if (!modifierPressed || !position) {
@@ -108,7 +113,7 @@ export function useEditorActions(
         return
       }
 
-      const probeKey = `${model.uri.toString()}:${position.lineNumber}:${position.column}`
+      const probeKey = `${model.uri.toString()}:${position.lineNumber}:${word.startColumn}-${word.endColumn}`
       const wordRange = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
 
       const cachedAvailability = definitionAvailabilityCache.get(probeKey)
@@ -121,28 +126,35 @@ export function useEditorActions(
         return
       }
 
-      const seq = ++hoverProbeSeq
-      const filePath = lspUriToPath(model.uri.toString())
-
-      try {
-        const locations = await goToDefinition(filePath, position.lineNumber - 1, position.column - 1)
-        const hasDefinition = !!locations && locations.length > 0
-        definitionAvailabilityCache.set(probeKey, hasDefinition)
-
-        if (seq !== hoverProbeSeq) return
-        if (!modifierPressed || !lastHoverPosition) return
-        if (lastHoverPosition.lineNumber !== position.lineNumber || lastHoverPosition.column !== position.column) return
-
-        if (hasDefinition) {
-          applyDefinitionDecoration(wordRange)
-        } else {
-          clearDefinitionDecoration()
-        }
-      } catch {
-        if (seq === hoverProbeSeq) {
-          clearDefinitionDecoration()
-        }
+      if (hoverProbeTimer) {
+        clearTimeout(hoverProbeTimer)
       }
+
+      hoverProbeTimer = setTimeout(async () => {
+        hoverProbeTimer = null
+        const seq = ++hoverProbeSeq
+        const filePath = lspUriToPath(model.uri.toString())
+
+        try {
+          const locations = await goToDefinition(filePath, position.lineNumber - 1, position.column - 1)
+          const hasDefinition = !!locations && locations.length > 0
+          definitionAvailabilityCache.set(probeKey, hasDefinition)
+
+          if (seq !== hoverProbeSeq) return
+          if (!modifierPressed || !lastHoverPosition) return
+          if (lastHoverPosition.lineNumber !== position.lineNumber || lastHoverPosition.column !== position.column) return
+
+          if (hasDefinition) {
+            applyDefinitionDecoration(wordRange)
+          } else {
+            clearDefinitionDecoration()
+          }
+        } catch {
+          if (seq === hoverProbeSeq) {
+            clearDefinitionDecoration()
+          }
+        }
+      }, 120)
     }
 
     // Ctrl+D: 选择下一个匹配

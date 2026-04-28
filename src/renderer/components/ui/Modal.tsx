@@ -57,7 +57,7 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
                 className={`
                     relative w-full ${sizeClass} 
-                    ${disableGlassEffect ? 'bg-background/95' : 'bg-background/80 backdrop-blur-2xl'} 
+                    ${disableGlassEffect ? 'bg-background/95' : 'bg-background/80 backdrop-blur-2xl'}
                     border border-border/50 
                     rounded-3xl shadow-2xl shadow-black/20 
                     overflow-hidden 

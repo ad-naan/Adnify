@@ -293,51 +293,6 @@ textarea,
   animation: fade-in 0.2s ease-out forwards;
 }
 
-/* Settings modal performance mode:
-   reduce expensive blur/compositing work inside long scrollable panels. */
-.settings-performance-mode {
-  isolation: isolate;
-}
-
-.settings-performance-mode .settings-scroll-region {
-  scroll-behavior: auto !important;
-  contain: layout paint style;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  will-change: scroll-position;
-}
-
-.settings-performance-mode .settings-tab-panel {
-  contain: layout paint style;
-}
-
-.settings-performance-mode.settings-disable-blur [class*='backdrop-blur'] {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
-
-.settings-performance-mode.settings-enable-content-visibility .settings-scroll-region section,
-.settings-performance-mode.settings-enable-content-visibility .settings-scroll-region .settings-card {
-  content-visibility: auto;
-  contain: layout paint style;
-  contain-intrinsic-size: 320px;
-}
-
-.settings-performance-mode.settings-disable-shadows .settings-scroll-region [class*='shadow'] {
-  box-shadow: none !important;
-}
-
-.settings-performance-mode.settings-disable-animations .settings-scroll-region [class*='transition-'],
-.settings-performance-mode.settings-disable-animations .settings-scroll-region [class*='animate-'] {
-  transition: none !important;
-  animation: none !important;
-}
-
-.settings-performance-mode.settings-disable-glow .settings-glow,
-.settings-performance-mode.settings-disable-glow .modal-orb-glow {
-  display: none !important;
-}
-
 /* Text Shimmer/Sweep Effect for running tool cards */
 @keyframes text-shimmer {
   0% {
