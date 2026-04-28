@@ -44,6 +44,10 @@ function normalizeBaseUrl(baseUrl: string | undefined, protocol: string): string
         return url
     }
 
+    if (protocol === 'openai-responses') {
+        return /\/v\d+(?:beta)?$/i.test(url) ? url : `${url}/v1`
+    }
+
     if (protocol === 'anthropic') {
         return /\/v1$/i.test(url) ? url : `${url}/v1`
     }

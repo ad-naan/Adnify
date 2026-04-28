@@ -24,6 +24,85 @@ export interface ModelTestResult {
   error?: string
 }
 
+function normalizeResponsesBaseUrl(baseUrl?: string): string | undefined {
+  if (!baseUrl) return undefined
+  const trimmed = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+  return /\/v\d+(?:beta)?$/i.test(trimmed) ? trimmed : `${trimmed}/v1`
+}
+
+function extractResponsesOutputText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return ''
+
+  const maybePayload = payload as {
+    output_text?: unknown
+    output?: Array<{
+      type?: string
+      content?: Array<{
+        type?: string
+        text?: string
+      }>
+    }>
+  }
+
+  if (typeof maybePayload.output_text === 'string' && maybePayload.output_text.trim()) {
+    return maybePayload.output_text.trim()
+  }
+
+  const parts: string[] = []
+  for (const item of maybePayload.output || []) {
+    if (item?.type !== 'message' || !Array.isArray(item.content)) continue
+    for (const content of item.content) {
+      if (content?.type === 'output_text' && typeof content.text === 'string' && content.text.trim()) {
+        parts.push(content.text.trim())
+      }
+    }
+  }
+
+  return parts.join('\n').trim()
+}
+
+async function testOpenAIResponsesModel(config: any): Promise<string> {
+  const baseUrl = normalizeResponsesBaseUrl(config.baseUrl)
+  if (!baseUrl) {
+    throw new Error('OpenAI Responses provider requires baseUrl')
+  }
+
+  const response = await fetch(`${baseUrl}/responses`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey || ''}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      input: 'hi,Please tell me directly what model you are?',
+      max_output_tokens: 10,
+      text: {
+        format: { type: 'text' },
+      },
+    }),
+  })
+
+  const responseText = await response.text()
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${responseText}`)
+  }
+
+  let payload: unknown
+  try {
+    payload = JSON.parse(responseText)
+  } catch {
+    throw new Error(`Invalid JSON response: ${responseText}`)
+  }
+
+  const outputText = extractResponsesOutputText(payload)
+  if (!outputText) {
+    throw new Error('Model returned no text output')
+  }
+
+  return outputText
+}
+
 /**
  * 注册健康检查 IPC handlers
  */
@@ -123,12 +202,18 @@ export function registerHealthCheckHandlers() {
         hasApiKey: !!config.apiKey
       })
 
-      const model = createModel(config)
-      const { text } = await generateText({
-        model,
-        messages: [{ role: 'user', content: 'hi,Please tell me directly what model you are?' }],
-        maxOutputTokens: 10,
-      })
+      let text: string
+      if (config.protocol === 'openai-responses') {
+        text = await testOpenAIResponsesModel(config)
+      } else {
+        const model = createModel(config)
+        const result = await generateText({
+          model,
+          messages: [{ role: 'user', content: 'hi,Please tell me directly what model you are?' }],
+          maxOutputTokens: 10,
+        })
+        text = result.text
+      }
 
       const latency = Date.now() - startTime
       logger.ipc.info(`[ModelTest] Success: ${text.slice(0, 20)}... (${latency}ms)`)

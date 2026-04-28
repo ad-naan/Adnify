@@ -143,6 +143,14 @@ const defaultEditorConfig: EditorConfig = {
     completionTemperature: AI_COMPLETION_DEFAULTS.temperature,
     completionTriggerChars: [...AI_COMPLETION_DEFAULTS.triggerChars],
   },
+  appearance: {
+    settingsPerformanceMode: true,
+    disableSettingsBlur: true,
+    disableSettingsAnimations: true,
+    disableSettingsShadows: true,
+    disableSettingsGlow: true,
+    enableSettingsContentVisibility: true,
+  },
   enableInlineDiff: false
 }
 
