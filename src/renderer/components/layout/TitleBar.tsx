@@ -31,8 +31,16 @@ export default function TitleBar() {
           <div className="relative w-7 h-7 flex items-center justify-center bg-text-primary/[0.03] rounded-lg border border-text-primary/[0.05] group-hover:border-accent/20 group-hover:bg-accent/5 transition-all shadow-sm">
             <Logo className="w-full transition-all duration-500 group-hover:drop-shadow-[0_0_8px_rgba(var(--accent)/0.6)]" glow />
           </div>
-          <span className="text-[11px] font-black text-text-primary tracking-[0.2em] font-sans uppercase leading-tight hidden xl:block opacity-60 group-hover:opacity-100 transition-all">
-            ADNIFY
+          <span
+            className="
+      text-[11px] font-black text-text-primary tracking-[0.2em] font-sans leading-tight
+      opacity-60 group-hover:opacity-100
+      overflow-hidden whitespace-nowrap
+      max-w-0 group-hover:max-w-[100px]
+      transition-all duration-300 ease-out
+    "
+          >
+            Adnify
           </span>
         </div>
 
@@ -74,7 +82,7 @@ export default function TitleBar() {
           >
             <HelpCircle className="w-4 h-4" />
           </button>
-          
+
           <div className="w-[1px] h-4 bg-border/50 mx-1"></div>
 
           {/* Mascot IP */}
