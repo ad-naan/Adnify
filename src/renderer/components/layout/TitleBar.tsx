@@ -14,14 +14,14 @@ const isMac = typeof navigator !== 'undefined' && (
 )
 
 export default function TitleBar() {
-  const { setShowQuickOpen, setShowAbout } = useStore(useShallow(s => ({ setShowQuickOpen: s.setShowQuickOpen, setShowAbout: s.setShowAbout })))
+  const { setShowQuickOpen, setShowAbout, language } = useStore(useShallow(s => ({ setShowQuickOpen: s.setShowQuickOpen, setShowAbout: s.setShowAbout, language: s.language })))
   return (
     <div className="h-12 flex items-center justify-between px-0 drag-region select-none bg-background/40 backdrop-blur-md z-50 border-b border-border/30 shadow-[0_1px_15px_rgba(0,0,0,0.03)]">
 
       {/* Left - Branding & Workspace */}
       <div className={`
         flex items-center gap-4 h-full transition-all duration-300
-        ${isMac ? 'pl-[76px] pr-4' : 'pl-4 pr-4'}
+        ${isMac ? 'pl-[76px]' : 'pl-4'}
       `}>
         {/* Logo - Clickable to show about */}
         <div
@@ -58,7 +58,7 @@ export default function TitleBar() {
         >
           <Search className="w-3.5 h-3.5 text-text-muted opacity-80 group-hover:text-accent transition-colors" />
           <span className="text-xs text-text-muted opacity-80 group-hover:text-text-primary transition-colors truncate">
-            Search files, commands...
+            {language === 'zh' ? '搜索文件,命令...' : 'Search files, commands...'}
           </span>
           <div className="flex items-center gap-1 ml-auto shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
             <kbd className="hidden sm:inline-flex items-center justify-center min-w-[20px] h-5 bg-text-inverted/[0.1] border border-text-primary/5 rounded px-1.5 text-[10px] text-text-muted font-mono font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">

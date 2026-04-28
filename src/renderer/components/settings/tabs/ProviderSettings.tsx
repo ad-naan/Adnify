@@ -37,7 +37,6 @@ const PROTOCOL_OPTIONS = [
 ]
 
 type EditableHeader = { key: string; value: string; isCustom?: boolean }
-type ProviderDetailPanel = 'provider' | 'model' | 'generation' | 'auth'
 
 const PREDEFINED_HEADER_OPTIONS = [
   { value: '', label: 'Select header' },
@@ -727,7 +726,7 @@ export function ProviderSettings({
 }: ProviderSettingsProps) {
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
-  const [activePanel, setActivePanel] = useState<ProviderDetailPanel>('provider')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [logitBiasString, setLogitBiasString] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [editingProviderName, setEditingProviderName] = useState('')
@@ -1095,12 +1094,6 @@ export function ProviderSettings({
     () => providers.filter((p) => BUILTIN_PROVIDER_IDS.includes(p.id)),
     [providers],
   )
-  const detailPanels = useMemo<Array<{ id: ProviderDetailPanel; label: string; icon: typeof Box }>>(() => [
-    { id: 'provider', label: language === 'zh' ? '提供商' : 'Provider', icon: Box },
-    { id: 'model', label: language === 'zh' ? '模型' : 'Model', icon: Box },
-    { id: 'generation', label: language === 'zh' ? '生成参数' : 'Generation', icon: Sliders },
-    { id: 'auth', label: language === 'zh' ? '认证与网络' : 'Auth & Network', icon: Server },
-  ], [language])
   const availableModels = useMemo(() => {
     const modelsSet = new Set<string>()
 
@@ -1126,37 +1119,18 @@ export function ProviderSettings({
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
-      <section className="rounded-xl border border-border/50 bg-surface/25 p-1.5">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-          {detailPanels.map((panel) => {
-            const Icon = panel.icon
-            const active = activePanel === panel.id
-            return (
-              <button
-                key={panel.id}
-                onClick={() => setActivePanel(panel.id)}
-                className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? 'border border-accent/20 bg-background/70 text-text-primary'
-                    : 'border border-transparent bg-transparent text-text-secondary hover:bg-surface/40 hover:text-text-primary'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span>{panel.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
       {/* Provider 选择器 */}
-      {activePanel === 'provider' && (
       <section className="space-y-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Box className="w-4 h-4 text-accent" />
-          <h4 className="text-sm font-semibold text-text-primary">
-            {language === 'zh' ? '选择提供商' : 'Select Provider'}
-          </h4>
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Box className="w-4 h-4 text-accent" />
+            <h4 className="text-sm font-semibold text-text-primary">
+              {language === 'zh' ? '选择提供商' : 'Select Provider'}
+            </h4>
+          </div>
+          <p className="text-[11px] text-text-muted">
+            {language === 'zh' ? '选择您要使用的模型服务提供商' : 'Select the model service provider you want to use'}
+          </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -1193,42 +1167,31 @@ export function ProviderSettings({
                   }`}
               >
                 {isEditing ? (
-                  <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
-                    <Input
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-surface-active rounded-lg border border-accent/60 shadow-sm" onClick={(e) => e.stopPropagation()}>
+                    <input
                       value={editingProviderName}
                       onChange={(e) => setEditingProviderName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          saveEditingCustomProvider()
-                        }
-                        if (e.key === 'Escape') {
-                          e.preventDefault()
-                          cancelEditingCustomProvider()
-                        }
+                        if (e.key === 'Enter') { e.preventDefault(); saveEditingCustomProvider() }
+                        if (e.key === 'Escape') { e.preventDefault(); cancelEditingCustomProvider() }
                       }}
                       autoFocus
-                      className="h-8 bg-background/80 border-accent/40 text-xs text-center"
+                      className="w-full flex-1 bg-transparent text-sm font-semibold text-center outline-none px-2 text-text-primary placeholder:text-text-muted/50"
+                      placeholder="Provider Name"
                     />
-                    <div className="flex items-center justify-center gap-1.5">
+                    <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-background/80 backdrop-blur-md rounded border border-border/50 p-0.5 shadow-sm">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          saveEditingCustomProvider()
-                        }}
+                        onClick={(e) => { e.stopPropagation(); saveEditingCustomProvider(); }}
                         disabled={!editingProviderName.trim()}
-                        className="h-6 px-2 rounded-md bg-accent text-white text-[10px] font-bold disabled:opacity-40"
+                        className="p-0.5 rounded hover:bg-accent/10 text-accent disabled:opacity-40 transition-colors"
                       >
-                        {language === 'zh' ? '保存' : 'Save'}
+                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
                       </button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          cancelEditingCustomProvider()
-                        }}
-                        className="h-6 px-2 rounded-md bg-surface-hover text-text-secondary text-[10px] font-bold"
+                        onClick={(e) => { e.stopPropagation(); cancelEditingCustomProvider(); }}
+                        className="p-0.5 rounded hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors"
                       >
-                        {language === 'zh' ? '取消' : 'Cancel'}
+                        <X className="w-3.5 h-3.5" strokeWidth={3} />
                       </button>
                     </div>
                   </div>
@@ -1295,13 +1258,13 @@ export function ProviderSettings({
           </div>
         )}
       </section>
-      )}
 
       {/* 配置区域（非添加模式时显示） */}
       {!isAddingCustom && (
         <div className="space-y-6">
-          {activePanel === 'model' && (
-            <section className="p-5 bg-surface/30 rounded-xl border border-border">
+          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Box className="w-4 h-4 text-accent" />
@@ -1377,11 +1340,39 @@ export function ProviderSettings({
                   )}
                 </div>
               </div>
-            </section>
-          )}
+            </div>
+          </section>
 
-          {activePanel === 'generation' && (
-            <section className="p-5 bg-surface/30 rounded-xl border border-border">
+          <section className="rounded-2xl border border-border/50 bg-surface/20 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            
+            <button 
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between p-6 cursor-pointer focus:outline-none relative z-10"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-accent/10 rounded-lg text-accent">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <h5 className="text-sm font-semibold text-text-primary">
+                    {language === 'zh' ? '生成参数' : 'Generation Parameters'}
+                  </h5>
+                  <p className="text-[10px] text-text-muted mt-0.5">
+                    {language === 'zh' ? '调整温度、Top P、最大 Token 等高级配置' : 'Adjust temperature, top P, max tokens, and other advanced settings'}
+                  </p>
+                </div>
+              </div>
+              <div className={`p-1.5 rounded-full bg-surface-hover transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+            </button>
+
+            <div className={`grid transition-all duration-300 ease-in-out ${showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+              <div className="overflow-hidden">
+                <div className="p-6 pt-0 space-y-6 relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <Sliders className="w-4 h-4 text-accent" />
                 <h5 className="text-sm font-medium text-text-primary">
@@ -1984,12 +1975,15 @@ export function ProviderSettings({
                     )}
                   </div>
                 </div>
-            </section>
-          )}
+              </div>
+            </div>
+          </div>
+          </section>
 
-          {/* 下方全宽：认证 & 网络配置 */}
-          {activePanel === 'auth' && (
-            <section className="rounded-xl border border-border bg-surface/25 p-6">
+          {/* 认证 & 网络配置 */}
+          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-accent/10 rounded-lg text-accent">
@@ -2131,8 +2125,8 @@ export function ProviderSettings({
                 </div>
               </div>
             </div>
-            </section>
-          )}
+            </div>
+          </section>
         </div>
       )}
     </div>
