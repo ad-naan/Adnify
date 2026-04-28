@@ -6,7 +6,8 @@
 import { ipcMain } from 'electron'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
-import { createModel } from '../services/llm/modelFactory'
+import { BUILTIN_PROVIDERS, isBuiltinProvider } from '@shared/config/providers'
+import { createModel, resolveHeaderPlaceholders } from '../services/llm/modelFactory'
 import { generateText } from 'ai'
 
 export interface HealthCheckResult {
@@ -62,45 +63,66 @@ function extractResponsesOutputText(payload: unknown): string {
 }
 
 async function testOpenAIResponsesModel(config: any): Promise<string> {
-  const baseUrl = normalizeResponsesBaseUrl(config.baseUrl)
+  const builtinProvider = isBuiltinProvider(config.provider)
+    ? BUILTIN_PROVIDERS[config.provider]
+    : undefined
+  const baseUrl = normalizeResponsesBaseUrl(config.baseUrl || builtinProvider?.baseUrl)
   if (!baseUrl) {
     throw new Error('OpenAI Responses provider requires baseUrl')
   }
 
-  const response = await fetch(`${baseUrl}/responses`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey || ''}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      input: 'hi,Please tell me directly what model you are?',
-      max_output_tokens: 10,
-      text: {
-        format: { type: 'text' },
-      },
-    }),
-  })
+  const timeoutMs = typeof config.timeout === 'number' && config.timeout > 0
+    ? config.timeout
+    : 30000
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  const responseText = await response.text()
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${responseText}`)
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(resolveHeaderPlaceholders(config.headers, config.apiKey) || {}),
   }
 
-  let payload: unknown
+  const hasAuthorizationHeader = Object.keys(headers).some(key => key.toLowerCase() === 'authorization')
+  if (!hasAuthorizationHeader) {
+    headers['Authorization'] = `Bearer ${config.apiKey || ''}`
+  }
+
   try {
-    payload = JSON.parse(responseText)
-  } catch {
-    throw new Error(`Invalid JSON response: ${responseText}`)
-  }
+    const response = await fetch(`${baseUrl}/responses`, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: config.model,
+        input: 'hi,Please tell me directly what model you are?',
+        max_output_tokens: 10,
+        text: {
+          format: { type: 'text' },
+        },
+      }),
+    })
 
-  const outputText = extractResponsesOutputText(payload)
-  if (!outputText) {
-    throw new Error('Model returned no text output')
-  }
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${responseText}`)
+    }
 
-  return outputText
+    let payload: unknown
+    try {
+      payload = JSON.parse(responseText)
+    } catch {
+      throw new Error(`Invalid JSON response: ${responseText}`)
+    }
+
+    const outputText = extractResponsesOutputText(payload)
+    if (!outputText) {
+      throw new Error('Model returned no text output')
+    }
+
+    return outputText
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 /**
