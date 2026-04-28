@@ -15,13 +15,13 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@renderer/i18n'
-import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry } from '@renderer/services/gitService'
+import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry, type GitRepository } from '@renderer/services/gitService'
 import { workspaceManager } from '@renderer/services/WorkspaceManager'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { keybindingService } from '@services/keybindingService'
-import { Input, Button, Modal } from '@components/ui'
+import { Input, Button, Modal, Select } from '@components/ui'
 import { getFileName, joinPath, normalizePath, toFullPath } from '@shared/utils/pathUtils'
 import { ConflictResolver } from '@components/git/ConflictResolver'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
@@ -29,6 +29,14 @@ import { useClickOutside } from '@renderer/hooks/usePerformance'
 // ==================== 类型定义 ====================
 type GitTab = 'changes' | 'branches' | 'stash' | 'history'
 type OperationState = 'normal' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'
+type RepoChangesSections = { staged: boolean; changes: boolean }
+
+interface RepoChangesSnapshot {
+    status: GitStatus | null
+    operationState: OperationState
+    isRefreshing: boolean
+    error: string | null
+}
 
 const GIT_TABS: GitTab[] = [
     'changes',
@@ -36,6 +44,11 @@ const GIT_TABS: GitTab[] = [
     'stash',
     'history',
 ]
+
+const DEFAULT_REPO_CHANGES_SECTIONS: RepoChangesSections = {
+    staged: true,
+    changes: true,
+}
 
 // ==================== 子组件 ====================
 
@@ -379,6 +392,9 @@ function getCloneFolderName(url: string): string {
 // ==================== 主组件 ====================
 export function GitView() {
     const { workspacePath, language, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, language: s.language, openFile: s.openFile, setActiveFile: s.setActiveFile })))
+    const discoveryRunRef = useRef(0)
+    const refreshRunRef = useRef(0)
+    const selectedRepoRootRef = useRef<string | null>(null)
 
     // 状态
     const [activeTab, setActiveTab] = useState<GitTab>('changes')
@@ -388,6 +404,15 @@ export function GitView() {
     const [stashList, setStashList] = useState<GitStashEntry[]>([])
     const [operationState, setOperationState] = useState<OperationState>('normal')
     const [isGitRepository, setIsGitRepository] = useState<boolean | null>(null)
+    const [repoRoots, setRepoRoots] = useState<GitRepository[]>([])
+    const [selectedRepoRoot, setSelectedRepoRoot] = useState<string | null>(null)
+    const [isDiscoveringRepos, setIsDiscoveringRepos] = useState(false)
+    const [repoDisplayMode, setRepoDisplayMode] = useState<'select' | 'list'>('list')
+    const [repoSnapshots, setRepoSnapshots] = useState<Record<string, RepoChangesSnapshot>>({})
+    const [repoCommitMessages, setRepoCommitMessages] = useState<Record<string, string>>({})
+    const [repoIsCommitting, setRepoIsCommitting] = useState<Record<string, boolean>>({})
+    const [repoIsGeneratingMessages, setRepoIsGeneratingMessages] = useState<Record<string, boolean>>({})
+    const [repoExpandedSections, setRepoExpandedSections] = useState<Record<string, RepoChangesSections>>({})
 
     // UI 状态
     const [commitMessage, setCommitMessage] = useState('')
@@ -423,9 +448,158 @@ export function GitView() {
 
     // 国际化辅助函数
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
+    const isMultiRepo = repoRoots.length > 1
+    const isRepoListMode = isMultiRepo && activeTab === 'changes' && repoDisplayMode === 'list'
+
+    const updateRepoCommitMessage = useCallback((root: string, value: string) => {
+        setRepoCommitMessages(prev => ({ ...prev, [root]: value }))
+    }, [])
+
+    const getRepoExpandedSections = useCallback((root: string): RepoChangesSections => {
+        return repoExpandedSections[root] || DEFAULT_REPO_CHANGES_SECTIONS
+    }, [repoExpandedSections])
+
+    const toggleRepoSection = useCallback((root: string, section: keyof RepoChangesSections) => {
+        setRepoExpandedSections(prev => {
+            const current = prev[root] || DEFAULT_REPO_CHANGES_SECTIONS
+            return {
+                ...prev,
+                [root]: {
+                    ...current,
+                    [section]: !current[section],
+                },
+            }
+        })
+    }, [])
+
+    const discoverRepositories = useCallback(async (forceRefresh: boolean = false): Promise<{ repositories: GitRepository[]; preferredRoot: string | null }> => {
+        if (!workspacePath) {
+            setRepoRoots([])
+            setSelectedRepoRoot(null)
+            return { repositories: [], preferredRoot: null }
+        }
+
+        const runId = ++discoveryRunRef.current
+        setIsDiscoveringRepos(true)
+        try {
+            const repositories = await gitService.discoverRepositories(workspacePath, 1, forceRefresh)
+            const currentSelectedRoot = selectedRepoRootRef.current
+            const preferredRoot = currentSelectedRoot && repositories.some(repo => repo.root === currentSelectedRoot)
+                ? currentSelectedRoot
+                : repositories.find(repo => repo.isWorkspaceRoot)?.root || repositories[0]?.root || null
+
+            if (runId !== discoveryRunRef.current) {
+                return { repositories, preferredRoot }
+            }
+
+            setRepoRoots(repositories)
+            setSelectedRepoRoot(preferredRoot)
+            return { repositories, preferredRoot }
+        } catch (e) {
+            logger.ui.error('Failed to discover Git repositories:', e)
+            if (runId === discoveryRunRef.current) {
+                setRepoRoots([])
+                setSelectedRepoRoot(null)
+            }
+            return { repositories: [], preferredRoot: null }
+        } finally {
+            if (runId === discoveryRunRef.current) {
+                setIsDiscoveringRepos(false)
+            }
+        }
+    }, [workspacePath])
+
+    const refreshRepoSnapshot = useCallback(async (root: string) => {
+        setRepoSnapshots(prev => ({
+            ...prev,
+            [root]: {
+                status: prev[root]?.status || null,
+                operationState: prev[root]?.operationState || 'normal',
+                isRefreshing: true,
+                error: null,
+            },
+        }))
+
+        try {
+            const [isRepo, repoStatus, repoOperationState] = await Promise.all([
+                gitService.isGitRepo(root),
+                gitService.getStatus(root),
+                gitService.getOperationState(root),
+            ])
+
+            setRepoSnapshots(prev => ({
+                ...prev,
+                [root]: {
+                    status: isRepo ? repoStatus : null,
+                    operationState: isRepo ? repoOperationState : 'normal',
+                    isRefreshing: false,
+                    error: isRepo ? null : tt('git.noRepo'),
+                },
+            }))
+        } catch (e) {
+            logger.ui.error('Failed to refresh repository snapshot:', { root, error: e })
+            setRepoSnapshots(prev => ({
+                ...prev,
+                [root]: {
+                    status: prev[root]?.status || null,
+                    operationState: prev[root]?.operationState || 'normal',
+                    isRefreshing: false,
+                    error: tt('error.unknown'),
+                },
+            }))
+        }
+    }, [tt])
+
+    const refreshRepoSnapshots = useCallback(async (repositories: GitRepository[]) => {
+        if (repositories.length === 0) {
+            setRepoSnapshots({})
+            return
+        }
+
+        const roots = repositories.map(repo => repo.root)
+        setRepoSnapshots(prev => {
+            const next: Record<string, RepoChangesSnapshot> = {}
+            for (const root of roots) {
+                next[root] = prev[root] || {
+                    status: null,
+                    operationState: 'normal',
+                    isRefreshing: true,
+                    error: null,
+                }
+            }
+            return next
+        })
+
+        const snapshotEntries = await Promise.all(roots.map(async (root) => {
+            try {
+                const [isRepo, repoStatus, repoOperationState] = await Promise.all([
+                    gitService.isGitRepo(root),
+                    gitService.getStatus(root),
+                    gitService.getOperationState(root),
+                ])
+
+                return [root, {
+                    status: isRepo ? repoStatus : null,
+                    operationState: isRepo ? repoOperationState : 'normal',
+                    isRefreshing: false,
+                    error: isRepo ? null : tt('git.noRepo'),
+                } satisfies RepoChangesSnapshot] as const
+            } catch (e) {
+                logger.ui.error('Failed to refresh repository snapshot:', { root, error: e })
+                return [root, {
+                    status: null,
+                    operationState: 'normal',
+                    isRefreshing: false,
+                    error: tt('error.unknown'),
+                } satisfies RepoChangesSnapshot] as const
+            }
+        }))
+
+        setRepoSnapshots(Object.fromEntries(snapshotEntries))
+    }, [tt])
 
     // 刷新数据
-    const refreshStatus = useCallback(async () => {
+    const refreshStatus = useCallback(async (repoRoot?: string | null) => {
         if (!workspacePath) {
             setStatus(null)
             setCommits([])
@@ -435,12 +609,20 @@ export function GitView() {
             setIsGitRepository(null)
             return
         }
+
+        const runId = ++refreshRunRef.current
         setIsRefreshing(true)
         setError(null)
 
         try {
-            gitService.setWorkspace(workspacePath)
-            const isRepo = await gitService.isGitRepo()
+            const targetRepoRoot = repoRoot || selectedRepoRoot || workspacePath
+            gitService.setWorkspace(targetRepoRoot)
+            const isRepo = await gitService.isGitRepo(targetRepoRoot)
+
+            if (runId !== refreshRunRef.current) {
+                return
+            }
+
             setIsGitRepository(isRepo)
 
             if (!isRepo) {
@@ -453,12 +635,16 @@ export function GitView() {
             }
 
             const [s, c, b, st, op] = await Promise.all([
-                gitService.getStatus(),
-                gitService.getRecentCommits(30),
-                gitService.getBranches(),
-                gitService.getStashList(),
-                gitService.getOperationState(),
+                gitService.getStatus(targetRepoRoot),
+                gitService.getRecentCommits(30, targetRepoRoot),
+                gitService.getBranches(targetRepoRoot),
+                gitService.getStashList(targetRepoRoot),
+                gitService.getOperationState(targetRepoRoot),
             ])
+
+            if (runId !== refreshRunRef.current) {
+                return
+            }
 
             setStatus(s)
             setCommits(c)
@@ -467,17 +653,40 @@ export function GitView() {
             setOperationState(op)
         } catch (e: unknown) {
             logger.ui.error('Git status error:', e)
-            setError(tt('error.unknown'))
-            setIsGitRepository(null)
+            if (runId === refreshRunRef.current) {
+                setError(tt('error.unknown'))
+                setIsGitRepository(null)
+            }
         } finally {
-            setIsRefreshing(false)
+            if (runId === refreshRunRef.current) {
+                setIsRefreshing(false)
+            }
         }
-    }, [workspacePath, tt])
+    }, [selectedRepoRoot, workspacePath, tt])
+
+    useEffect(() => {
+        void discoverRepositories()
+    }, [workspacePath, discoverRepositories])
+
+    useEffect(() => {
+        selectedRepoRootRef.current = selectedRepoRoot
+        gitService.setWorkspace(selectedRepoRoot || workspacePath || null)
+    }, [selectedRepoRoot, workspacePath])
 
     // 初始化时刷新一次
+    const repoRootsSignature = useMemo(() => repoRoots.map(repo => repo.root).join('|'), [repoRoots])
     useEffect(() => {
-        refreshStatus()
-    }, [refreshStatus])
+        if (!workspacePath || isDiscoveringRepos) return
+        if (isRepoListMode) return
+        const targetRepoRoot = selectedRepoRoot || repoRoots[0]?.root || null
+        if (!targetRepoRoot && repoRoots.length > 0) return
+        void refreshStatus(targetRepoRoot)
+    }, [isDiscoveringRepos, isRepoListMode, refreshStatus, repoRoots.length, repoRootsSignature, selectedRepoRoot, workspacePath])
+
+    useEffect(() => {
+        if (!workspacePath || isDiscoveringRepos || !isRepoListMode) return
+        void refreshRepoSnapshots(repoRoots)
+    }, [workspacePath, isDiscoveringRepos, isRepoListMode, refreshRepoSnapshots, repoRoots, repoRootsSignature])
 
     // 监听 .git 目录变化，自动刷新（如果启用）
     useEffect(() => {
@@ -491,7 +700,13 @@ export function GitView() {
         const unsubscribe = api.file.onChanged((event: { event: string; path: string }) => {
             if (event.path.includes('.git')) {
                 if (debounceTimer) clearTimeout(debounceTimer)
-                debounceTimer = setTimeout(refreshStatus, 500)
+                debounceTimer = setTimeout(() => {
+                    if (isRepoListMode) {
+                        void refreshRepoSnapshots(repoRoots)
+                        return
+                    }
+                    void refreshStatus(selectedRepoRootRef.current || workspacePath)
+                }, 500)
             }
         })
 
@@ -499,7 +714,28 @@ export function GitView() {
             unsubscribe()
             if (debounceTimer) clearTimeout(debounceTimer)
         }
-    }, [workspacePath, refreshStatus])
+    }, [discoverRepositories, isRepoListMode, refreshRepoSnapshots, refreshStatus, repoRoots, repoRootsSignature, workspacePath])
+
+    const handleRefreshAll = useCallback(async () => {
+        const { repositories, preferredRoot } = await discoverRepositories(true)
+        if (repoDisplayMode === 'list' && activeTab === 'changes') {
+            await refreshRepoSnapshots(repositories)
+        }
+        await refreshStatus(preferredRoot)
+    }, [activeTab, discoverRepositories, refreshRepoSnapshots, refreshStatus, repoDisplayMode])
+
+    const refreshAfterRepoMutation = useCallback(async (rootPath?: string) => {
+        const targetRoot = rootPath || selectedRepoRoot || workspacePath || undefined
+        if (!targetRoot) return
+
+        if (isRepoListMode) {
+            await refreshRepoSnapshot(targetRoot)
+        }
+
+        if (!isRepoListMode || targetRoot === selectedRepoRoot || targetRoot === repoRoots[0]?.root) {
+            await refreshStatus(targetRoot)
+        }
+    }, [isRepoListMode, repoRoots, refreshRepoSnapshot, refreshStatus, selectedRepoRoot, workspacePath])
 
     // 切换展开状态
     const toggleSection = (section: keyof typeof expandedSections) => {
@@ -507,8 +743,10 @@ export function GitView() {
     }
 
     // AI 生成提交信息
-    const handleGenerateCommitMessage = useCallback(async () => {
-        if (!status || (status.staged.length === 0 && status.unstaged.length === 0)) {
+    const handleGenerateCommitMessage = useCallback(async (rootPath?: string, repoStatus?: GitStatus | null) => {
+        const targetRoot = rootPath || selectedRepoRoot || workspacePath || undefined
+        const targetStatus = repoStatus || status
+        if (!targetRoot || !targetStatus || (targetStatus.staged.length === 0 && targetStatus.unstaged.length === 0)) {
             toast.warning(tt('git.noChanges'))
             return
         }
@@ -519,14 +757,18 @@ export function GitView() {
             return
         }
 
-        setIsGeneratingMessage(true)
+        if (rootPath) {
+            setRepoIsGeneratingMessages(prev => ({ ...prev, [rootPath]: true }))
+        } else {
+            setIsGeneratingMessage(true)
+        }
         try {
             // 获取所有变更文件的 diff
-            const allChanges = [...status.staged, ...status.unstaged]
+            const allChanges = [...targetStatus.staged, ...targetStatus.unstaged]
             const diffs: string[] = []
 
             for (const file of allChanges.slice(0, 10)) { // 限制最多10个文件
-                const diff = await gitService.getFileDiff(file.path, status.staged.includes(file))
+                const diff = await gitService.getFileDiff(file.path, targetStatus.staged.includes(file), targetRoot)
                 if (diff) {
                     diffs.push(`File: ${file.path}\nStatus: ${file.status}\n${diff.slice(0, 1000)}`) // 限制每个diff长度
                 }
@@ -534,7 +776,6 @@ export function GitView() {
 
             if (diffs.length === 0) {
                 toast.warning(tt('git.noChanges'))
-                setIsGeneratingMessage(false)
                 return
             }
 
@@ -559,7 +800,11 @@ Commit message:`
                 message = message.replace(/^["']|["']$/g, '')
                 // 移除可能的 "Commit message:" 前缀
                 message = message.replace(/^commit message:\s*/i, '')
-                setCommitMessage(message)
+                if (rootPath) {
+                    updateRepoCommitMessage(rootPath, message)
+                } else {
+                    setCommitMessage(message)
+                }
             } else {
                 toast.error(tt('git.generateFailed'), response?.error)
             }
@@ -567,9 +812,13 @@ Commit message:`
             logger.ui.error('Failed to generate commit message:', e)
             toast.error(tt('git.generateFailed'))
         } finally {
-            setIsGeneratingMessage(false)
+            if (rootPath) {
+                setRepoIsGeneratingMessages(prev => ({ ...prev, [rootPath]: false }))
+            } else {
+                setIsGeneratingMessage(false)
+            }
         }
-    }, [status, tt])
+    }, [selectedRepoRoot, status, tt, updateRepoCommitMessage, workspacePath])
 
     // ==================== 操作处理 ====================
 
@@ -632,31 +881,31 @@ Commit message:`
         }
     }
 
-    const handleStage = async (path: string) => {
-        const success = await gitService.stageFile(path)
+    const handleStage = async (path: string, rootPath?: string) => {
+        const success = await gitService.stageFile(path, rootPath)
         if (!success) toast.error("Failed to stage file")
-        await refreshStatus()
+        await refreshAfterRepoMutation(rootPath)
     }
 
-    const handleStageAll = async () => {
-        const success = await gitService.stageAll()
+    const handleStageAll = async (rootPath?: string) => {
+        const success = await gitService.stageAll(rootPath)
         if (!success) toast.error("Failed to stage all files")
-        await refreshStatus()
+        await refreshAfterRepoMutation(rootPath)
     }
 
-    const handleUnstage = async (path: string) => {
-        const success = await gitService.unstageFile(path)
+    const handleUnstage = async (path: string, rootPath?: string) => {
+        const success = await gitService.unstageFile(path, rootPath)
         if (!success) toast.error("Failed to unstage file")
-        await refreshStatus()
+        await refreshAfterRepoMutation(rootPath)
     }
 
-    const handleUnstageAll = async () => {
-        const success = await gitService.unstageAll()
+    const handleUnstageAll = async (rootPath?: string) => {
+        const success = await gitService.unstageAll(rootPath)
         if (!success) toast.error("Failed to unstage all files")
-        await refreshStatus()
+        await refreshAfterRepoMutation(rootPath)
     }
 
-    const handleDiscard = async (path: string) => {
+    const handleDiscard = async (path: string, rootPath?: string) => {
         const confirmed = await globalConfirm({
             title: tt('git.discard'),
             message: t('git.discardConfirm', language, { name: getFileName(path) }),
@@ -664,54 +913,71 @@ Commit message:`
             variant: 'danger',
         })
         if (confirmed) {
-            await gitService.discardChanges(path)
-            refreshStatus()
+            await gitService.discardChanges(path, rootPath)
+            await refreshAfterRepoMutation(rootPath)
             toast.success(tt('git.discarded'))
         }
     }
 
-    const handleCommit = async () => {
-        if (!commitMessage.trim()) return
-        setIsCommitting(true)
-        const result = await gitService.commit(commitMessage)
-        setIsCommitting(false)
+    const handleCommit = async (rootPath?: string) => {
+        const message = (rootPath ? repoCommitMessages[rootPath] : commitMessage)?.trim()
+        if (!message) return
+
+        if (rootPath) {
+            setRepoIsCommitting(prev => ({ ...prev, [rootPath]: true }))
+        } else {
+            setIsCommitting(true)
+        }
+
+        const result = await gitService.commit(message, rootPath)
+
+        if (rootPath) {
+            setRepoIsCommitting(prev => ({ ...prev, [rootPath]: false }))
+        } else {
+            setIsCommitting(false)
+        }
+
         if (result.success) {
-            setCommitMessage('')
-            refreshStatus()
+            if (rootPath) {
+                updateRepoCommitMessage(rootPath, '')
+            } else {
+                setCommitMessage('')
+            }
+            await refreshAfterRepoMutation(rootPath)
             toast.success(tt('git.commitSuccess'))
         } else {
             toast.error(tt('git.commitFailed'), result.error)
         }
     }
 
-    const handlePush = async () => {
+    const handlePush = async (rootPath?: string) => {
         setIsPushing(true)
-        const result = await gitService.push()
+        const result = await gitService.push(rootPath)
         setIsPushing(false)
         if (result.success) {
-            refreshStatus()
+            await refreshAfterRepoMutation(rootPath)
             toast.success(tt('git.pushSuccess'))
         } else {
             toast.error(tt('git.pushFailed'), result.error)
         }
     }
 
-    const handlePull = async () => {
+    const handlePull = async (rootPath?: string) => {
         setIsPulling(true)
-        const result = await gitService.pull()
+        const result = await gitService.pull(rootPath)
         setIsPulling(false)
         if (result.success) {
-            refreshStatus()
+            await refreshAfterRepoMutation(rootPath)
             toast.success(tt('git.pullSuccess'))
         } else {
             toast.error(tt('git.pullFailed'), result.error)
         }
     }
 
-    const handleFetch = async () => {
-        const result = await gitService.fetch()
+    const handleFetch = async (rootPath?: string) => {
+        const result = await gitService.fetch(rootPath)
         if (result.success) {
-            refreshStatus()
+            await refreshAfterRepoMutation(rootPath)
             toast.success(tt('git.fetchSuccess'))
         } else {
             toast.error(tt('git.fetchFailed'), result.error)
@@ -941,10 +1207,11 @@ Commit message:`
     }
 
     // 文件点击处理 - 打开 diff
-    const handleFileClick = async (path: string, fileStatus: string, _staged: boolean) => {
+    const handleFileClick = async (path: string, fileStatus: string, _staged: boolean, rootPath?: string) => {
         logger.ui.info(`[Git] handleFileClick: ${path}, status: ${fileStatus}, staged: ${_staged}`)
         try {
-            const fullPath = toFullPath(path, workspacePath)
+            const targetRoot = rootPath || selectedRepoRoot || workspacePath
+            const fullPath = toFullPath(path, targetRoot)
             const content = await api.file.read(fullPath)
 
             // 如果读取失败，只有在文件被删除的情况下才允许继续（因为删除了就读不到内容了）
@@ -956,8 +1223,8 @@ Commit message:`
             // 根据文件状态决定是否显示 diff
             if (fileStatus === 'modified' || fileStatus === 'renamed') {
                 if (_staged) {
-                    const original = await gitService.getHeadFileContent(fullPath)
-                    const modified = await gitService.getIndexFileContent(fullPath)
+                    const original = await gitService.getHeadFileContent(fullPath, targetRoot)
+                    const modified = await gitService.getIndexFileContent(fullPath, targetRoot)
                     if (original !== null && modified !== null) {
                         logger.ui.info(`[Git] Opening staged modified file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, modified, original)
@@ -965,7 +1232,7 @@ Commit message:`
                         return
                     }
                 } else {
-                    const original = await gitService.getIndexFileContent(fullPath)
+                    const original = await gitService.getIndexFileContent(fullPath, targetRoot)
                     if (original !== null) {
                         logger.ui.info(`[Git] Opening unstaged modified file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, content || '', original)
@@ -975,7 +1242,7 @@ Commit message:`
                 }
             } else if (fileStatus === 'added' || fileStatus === 'untracked') {
                 if (_staged) {
-                    const modified = await gitService.getIndexFileContent(fullPath)
+                    const modified = await gitService.getIndexFileContent(fullPath, targetRoot)
                     logger.ui.info(`[Git] Opening staged added file: ${fullPath}`)
                     openFile(`git-diff://${fullPath}`, modified || '', '')
                     setActiveFile(`git-diff://${fullPath}`)
@@ -987,7 +1254,7 @@ Commit message:`
                 return
             } else if (fileStatus === 'deleted') {
                 if (_staged) {
-                    const original = await gitService.getHeadFileContent(fullPath)
+                    const original = await gitService.getHeadFileContent(fullPath, targetRoot)
                     if (original !== null) {
                         logger.ui.info(`[Git] Opening staged deleted file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, '', original)
@@ -995,7 +1262,7 @@ Commit message:`
                         return
                     }
                 } else {
-                    const original = await gitService.getIndexFileContent(fullPath)
+                    const original = await gitService.getIndexFileContent(fullPath, targetRoot)
                     if (original !== null) {
                         logger.ui.info(`[Git] Opening unstaged deleted file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, '', original)
@@ -1034,6 +1301,228 @@ Commit message:`
         stash: tt('git.stash'),
         history: tt('git.history'),
     }), [tt])
+    const repoSelectOptions = useMemo(() => repoRoots.map(repo => ({
+        value: repo.root,
+        label: repo.isWorkspaceRoot
+            ? `${repo.name} (${language === 'zh' ? '工作区根' : 'Workspace Root'})`
+            : repo.relativePath,
+    })), [language, repoRoots])
+    const currentRepoRoot = selectedRepoRoot || workspacePath || ''
+    const showRepoSelector = !isRepoListMode && (repoRoots.length > 1 || (!!selectedRepoRoot && normalizePath(selectedRepoRoot) !== normalizePath(workspacePath)))
+    const showRepoModeSwitch = repoRoots.length > 1
+    const repoCards = useMemo(() => repoRoots.map(repo => ({
+        repo,
+        snapshot: repoSnapshots[repo.root] || {
+            status: null,
+            operationState: 'normal' as OperationState,
+            isRefreshing: true,
+            error: null,
+        },
+    })), [repoRoots, repoSnapshots])
+
+    const renderRepoChangesCard = useCallback((repo: GitRepository, snapshot: RepoChangesSnapshot) => {
+        const repoStatus = snapshot.status
+        const repoStats = repoStatus ? {
+            staged: repoStatus.staged.length,
+            unstaged: repoStatus.unstaged.length,
+            untracked: repoStatus.untracked.length,
+            total: repoStatus.staged.length + repoStatus.unstaged.length + repoStatus.untracked.length,
+        } : { staged: 0, unstaged: 0, untracked: 0, total: 0 }
+        const expanded = getRepoExpandedSections(repo.root)
+        const commitValue = repoCommitMessages[repo.root] || ''
+        const isRepoGenerating = !!repoIsGeneratingMessages[repo.root]
+        const isRepoCommitting = !!repoIsCommitting[repo.root]
+        const isSelectedRepo = selectedRepoRoot === repo.root
+
+        return (
+            <div
+                key={repo.root}
+                className={`mx-2 my-2 overflow-hidden rounded-xl border ${isSelectedRepo ? 'border-accent/40 bg-accent/5' : 'border-border-subtle bg-surface/20'}`}
+            >
+                <div className="flex items-center gap-2 border-b border-border-subtle px-3 py-2">
+                    <button
+                        onClick={() => setSelectedRepoRoot(repo.root)}
+                        className="min-w-0 flex-1 text-left"
+                    >
+                        <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-text-primary">{repo.name}</span>
+                            {!repo.isWorkspaceRoot && (
+                                <span className="truncate text-[10px] text-text-muted">{repo.relativePath}</span>
+                            )}
+                            {repoStatus?.branch && (
+                                <span className="truncate text-[10px] text-text-muted">{repoStatus.branch}</span>
+                            )}
+                        </div>
+                    </button>
+                    {repoStats.total > 0 && (
+                        <span className="rounded-full bg-surface-active px-1.5 py-0.5 text-[10px] text-text-secondary">
+                            {repoStats.total}
+                        </span>
+                    )}
+                    <div className="flex items-center gap-0.5">
+                        <Button variant="icon" size="icon" onClick={() => handleFetch(repo.root)} title={tt('git.fetch')} className="h-6 w-6 rounded-md">
+                            <ArrowDown className="w-3 h-3" />
+                        </Button>
+                        <Button variant="icon" size="icon" onClick={() => handlePull(repo.root)} title={tt('git.pull')} className="h-6 w-6 rounded-md">
+                            <ArrowDown className="w-3 h-3" />
+                        </Button>
+                        <Button variant="icon" size="icon" onClick={() => handlePush(repo.root)} title={tt('git.push')} className="h-6 w-6 rounded-md">
+                            <ArrowUp className="w-3 h-3" />
+                        </Button>
+                        <Button variant="icon" size="icon" onClick={() => refreshRepoSnapshot(repo.root)} title={tt('refresh')} className="h-6 w-6 rounded-md">
+                            <RefreshCw className={`w-3 h-3 ${snapshot.isRefreshing ? 'animate-spin' : ''}`} />
+                        </Button>
+                    </div>
+                </div>
+
+                {snapshot.error && !repoStatus ? (
+                    <div className="px-3 py-3 text-xs text-status-error">{snapshot.error}</div>
+                ) : (
+                    <>
+                        <div className="border-b border-border-subtle px-3 py-3">
+                            <div className="relative">
+                                <textarea
+                                    value={commitValue}
+                                    onChange={(e) => updateRepoCommitMessage(repo.root, e.target.value)}
+                                    placeholder={tt('git.commitMessage')}
+                                    className="w-full bg-surface border border-border-subtle rounded-xl p-3 pr-10 text-xs text-text-primary focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none resize-none min-h-[72px] placeholder:text-text-muted/50 transition-all"
+                                />
+                                <button
+                                    onClick={() => handleGenerateCommitMessage(repo.root, repoStatus)}
+                                    disabled={isRepoGenerating || repoStats.total === 0}
+                                    className="absolute right-2 top-2 p-1.5 rounded-md hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title={tt('git.generateMessage')}
+                                >
+                                    {isRepoGenerating ? (
+                                        <Loader2 className="w-4 h-4 text-accent animate-spin" />
+                                    ) : (
+                                        <Sparkles className="w-4 h-4 text-accent" />
+                                    )}
+                                </button>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                                <Button
+                                    onClick={() => handleCommit(repo.root)}
+                                    disabled={isRepoCommitting || repoStats.staged === 0}
+                                    className="flex-1"
+                                >
+                                    {isRepoCommitting ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
+                                    ) : (
+                                        <Check className="w-3.5 h-3.5 mr-2" />
+                                    )}
+                                    {isRepoCommitting ? tt('git.committing') : tt('git.commit')}
+                                </Button>
+                            </div>
+                        </div>
+
+                        {repoStatus?.hasConflicts && repoStatus.conflictFiles.length > 0 && (
+                            <div className="border-b border-border-subtle">
+                                <div className="px-3 py-1.5 text-[10px] text-orange-400 font-semibold bg-orange-500/10 flex items-center gap-2">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    {tt('git.conflicts')} ({repoStatus.conflictFiles.length})
+                                </div>
+                                {repoStatus.conflictFiles.map(path => (
+                                    <FileItem
+                                        key={`${repo.root}:${path}`}
+                                        path={path}
+                                        status="unmerged"
+                                        staged={false}
+                                        onStage={() => handleStage(path, repo.root)}
+                                        onDiscard={() => handleDiscard(path, repo.root)}
+                                        onClick={() => setConflictFile(normalizePath(`${repo.root}/${path}`))}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {repoStats.staged > 0 && (
+                            <div>
+                                <div
+                                    className="px-3 py-1.5 text-[10px] text-text-muted font-semibold bg-surface-active/30 border-y border-border-subtle flex items-center gap-2 cursor-pointer hover:bg-surface-hover"
+                                    onClick={() => toggleRepoSection(repo.root, 'staged')}
+                                >
+                                    {expanded.staged ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    <span className="flex-1">{tt('git.stagedChanges')}</span>
+                                    <span className="bg-green-500/20 text-green-400 px-1.5 rounded-full text-[10px]">{repoStats.staged}</span>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); void handleUnstageAll(repo.root) }}
+                                        className="p-0.5 hover:bg-surface-active rounded"
+                                        title={tt('git.unstageAll')}
+                                    >
+                                        <Minus className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                {expanded.staged && repoStatus?.staged.map(file => (
+                                    <FileItem
+                                        key={`${repo.root}:staged:${file.path}`}
+                                        path={file.path}
+                                        status={file.status}
+                                        staged={true}
+                                        onUnstage={() => handleUnstage(file.path, repo.root)}
+                                        onClick={() => handleFileClick(file.path, file.status, true, repo.root)}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {(repoStats.unstaged > 0 || repoStats.untracked > 0) && (
+                            <div>
+                                <div
+                                    className="px-3 py-1.5 text-[10px] text-text-muted font-semibold bg-surface-active/30 border-y border-border-subtle flex items-center gap-2 cursor-pointer hover:bg-surface-hover"
+                                    onClick={() => toggleRepoSection(repo.root, 'changes')}
+                                >
+                                    {expanded.changes ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    <span className="flex-1">{tt('git.unstaged')}</span>
+                                    <span className="bg-yellow-500/20 text-yellow-400 px-1.5 rounded-full text-[10px]">{repoStats.unstaged + repoStats.untracked}</span>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); void handleStageAll(repo.root) }}
+                                        className="p-0.5 hover:bg-surface-active rounded"
+                                        title={tt('git.stageAll')}
+                                    >
+                                        <Plus className="w-3 h-3" />
+                                    </button>
+                                </div>
+                                {expanded.changes && (
+                                    <>
+                                        {repoStatus?.unstaged.map(file => (
+                                            <FileItem
+                                                key={`${repo.root}:unstaged:${file.path}`}
+                                                path={file.path}
+                                                status={file.status}
+                                                staged={false}
+                                                onStage={() => handleStage(file.path, repo.root)}
+                                                onDiscard={() => handleDiscard(file.path, repo.root)}
+                                                onClick={() => handleFileClick(file.path, file.status, false, repo.root)}
+                                            />
+                                        ))}
+                                        {repoStatus?.untracked.map(path => (
+                                            <FileItem
+                                                key={`${repo.root}:untracked:${path}`}
+                                                path={path}
+                                                status="untracked"
+                                                staged={false}
+                                                onStage={() => handleStage(path, repo.root)}
+                                                onDiscard={() => handleDiscard(path, repo.root)}
+                                                onClick={() => handleFileClick(path, 'added', false, repo.root)}
+                                            />
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {repoStats.total === 0 && !repoStatus?.hasConflicts && (
+                            <div className="p-4 text-center">
+                                <Check className="w-6 h-6 text-green-400 mx-auto mb-2 opacity-50" />
+                                <p className="text-xs text-text-muted">{tt('git.noChanges')}</p>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        )
+    }, [getRepoExpandedSections, handleCommit, handleDiscard, handleFetch, handleFileClick, handleGenerateCommitMessage, handlePull, handlePush, handleStage, handleStageAll, handleUnstage, handleUnstageAll, refreshRepoSnapshot, repoCommitMessages, repoIsCommitting, repoIsGeneratingMessages, selectedRepoRoot, tt, toggleRepoSection, updateRepoCommitMessage])
 
     // ==================== 渲染 ====================
 
@@ -1100,7 +1589,7 @@ Commit message:`
                             <FolderOpen className="w-3.5 h-3.5" />
                             {tt('openFolder')}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={refreshStatus}>
+                        <Button variant="ghost" size="sm" onClick={handleRefreshAll}>
                             <RefreshCw className="w-3.5 h-3.5" />
                             {tt('git.retry')}
                         </Button>
@@ -1127,7 +1616,7 @@ Commit message:`
                 <p className="mb-4 max-w-[260px] break-words text-xs leading-5 text-text-muted">
                     {error || tt('git.statusUnavailableDesc')}
                 </p>
-                <Button variant="outline" size="sm" onClick={refreshStatus} disabled={isRefreshing}>
+                <Button variant="outline" size="sm" onClick={handleRefreshAll} disabled={isRefreshing || isDiscoveringRepos}>
                     <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                     {tt('git.retry')}
                 </Button>
@@ -1143,20 +1632,60 @@ Commit message:`
                     {tt('git.title')}
                 </span>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
-                    <Button variant="icon" size="icon" onClick={handleFetch} title={tt('git.fetch')} className="w-7 h-7 rounded-lg">
-                        <ArrowDown className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="icon" size="icon" onClick={handlePull} disabled={isPulling} title={tt('git.pull')} className="w-7 h-7 rounded-lg">
-                        <ArrowDown className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
-                    </Button>
-                    <Button variant="icon" size="icon" onClick={handlePush} disabled={isPushing} title={tt('git.push')} className="w-7 h-7 rounded-lg">
-                        <ArrowUp className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
-                    </Button>
-                    <Button variant="icon" size="icon" onClick={refreshStatus} title={tt('refresh')} className="w-7 h-7 rounded-lg">
+                    {!isRepoListMode && (
+                        <>
+                            <Button variant="icon" size="icon" onClick={() => handleFetch()} title={tt('git.fetch')} className="w-7 h-7 rounded-lg">
+                                <ArrowDown className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="icon" size="icon" onClick={() => handlePull()} disabled={isPulling} title={tt('git.pull')} className="w-7 h-7 rounded-lg">
+                                <ArrowDown className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
+                            </Button>
+                            <Button variant="icon" size="icon" onClick={() => handlePush()} disabled={isPushing} title={tt('git.push')} className="w-7 h-7 rounded-lg">
+                                <ArrowUp className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
+                            </Button>
+                        </>
+                    )}
+                    <Button variant="icon" size="icon" onClick={handleRefreshAll} title={tt('refresh')} className="w-7 h-7 rounded-lg">
                         <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
                     </Button>
                 </div>
             </div>
+
+            {showRepoModeSwitch && (
+                <div className="px-3 py-2 border-b border-border-subtle bg-surface/10">
+                    <div className="inline-flex rounded-lg border border-border-subtle bg-surface/40 p-0.5">
+                        <button
+                            onClick={() => setRepoDisplayMode('list')}
+                            className={`px-2.5 py-1 text-[10px] rounded-md transition-colors ${repoDisplayMode === 'list' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary'}`}
+                        >
+                            {language === 'zh' ? '列表模式' : 'List'}
+                        </button>
+                        <button
+                            onClick={() => setRepoDisplayMode('select')}
+                            className={`px-2.5 py-1 text-[10px] rounded-md transition-colors ${repoDisplayMode === 'select' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary'}`}
+                        >
+                            {language === 'zh' ? '单仓库模式' : 'Single'}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {showRepoSelector && (
+                <div className="px-3 py-2 border-b border-border-subtle bg-surface/20">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                            {language === 'zh' ? '当前仓库' : 'Current Repository'}
+                        </span>
+                        {isDiscoveringRepos && <Loader2 className="w-3 h-3 animate-spin text-text-muted" />}
+                    </div>
+                    <Select
+                        value={currentRepoRoot}
+                        onChange={setSelectedRepoRoot}
+                        options={repoSelectOptions}
+                        className="w-full"
+                    />
+                </div>
+            )}
 
             {/* Operation State Banner */}
             {operationState !== 'normal' && (
@@ -1234,7 +1763,13 @@ Commit message:`
             {/* Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* Changes Tab */}
-                {activeTab === 'changes' && status && (
+                {activeTab === 'changes' && isRepoListMode && (
+                    <div className="py-2">
+                        {repoCards.map(({ repo, snapshot }) => renderRepoChangesCard(repo, snapshot))}
+                    </div>
+                )}
+
+                {activeTab === 'changes' && !isRepoListMode && status && (
                     <div className="flex flex-col">
                         {/* Branch Info */}
                         <div className="px-3 py-2 border-b border-border-subtle bg-surface/30 flex items-center gap-2">
