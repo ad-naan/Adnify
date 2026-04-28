@@ -1,9 +1,10 @@
 import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check, Sparkles } from 'lucide-react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
-import { defaultEditorConfig, getEditorConfig } from '@renderer/settings'
+import stableStringify from 'fast-json-stable-stringify'
+import { getEditorConfig } from '@renderer/settings'
 import { t, type Language } from '@renderer/i18n'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
@@ -15,9 +16,6 @@ const ProviderSettings = lazy(() =>
 )
 const EditorSettings = lazy(() =>
     import('./tabs/EditorSettings').then(module => ({ default: module.EditorSettings })),
-)
-const AppearanceSettings = lazy(() =>
-    import('./tabs/AppearanceSettings').then(module => ({ default: module.AppearanceSettings })),
 )
 const SnippetSettings = lazy(() =>
     import('./tabs/SnippetSettings').then(module => ({ default: module.SnippetSettings })),
@@ -50,25 +48,8 @@ const SystemSettings = lazy(() =>
     import('./tabs/SystemSettings').then(module => ({ default: module.SystemSettings })),
 )
 
-function normalizeForCompare(value: unknown): unknown {
-    if (Array.isArray(value)) {
-        return value.map(normalizeForCompare)
-    }
-
-    if (value && typeof value === 'object') {
-        return Object.keys(value as Record<string, unknown>)
-            .sort()
-            .reduce<Record<string, unknown>>((acc, key) => {
-                acc[key] = normalizeForCompare((value as Record<string, unknown>)[key])
-                return acc
-            }, {})
-    }
-
-    return value
-}
-
-function areEqual(left: unknown, right: unknown): boolean {
-    return JSON.stringify(normalizeForCompare(left)) === JSON.stringify(normalizeForCompare(right))
+function serializeComparable(value: unknown): string {
+    return stableStringify(value) ?? ''
 }
 
 function toEditorSettingsState(config: ReturnType<typeof getEditorConfig>): EditorSettingsState {
@@ -245,45 +226,40 @@ export default function SettingsModal() {
         },
     }), [advancedEditorConfig, editorSettings])
 
+    const sourceSnapshots = useMemo(() => ({
+        llmConfig: serializeComparable(llmConfig),
+        agentConfig: serializeComparable(agentConfig),
+        webSearchConfig: serializeComparable(webSearchConfig),
+        mcpConfig: serializeComparable(mcpConfig),
+        providerConfigs: serializeComparable(providerConfigs),
+        securitySettings: serializeComparable(securitySettings),
+        editorConfig: serializeComparable(editorConfig),
+    }), [agentConfig, editorConfig, llmConfig, mcpConfig, providerConfigs, securitySettings, webSearchConfig])
+
+    const localSnapshots = useMemo(() => ({
+        llmConfig: serializeComparable(localConfig),
+        agentConfig: serializeComparable(localAgentConfig),
+        webSearchConfig: serializeComparable(localWebSearchConfig),
+        mcpConfig: serializeComparable(localMcpConfig),
+        providerConfigs: serializeComparable(localProviderConfigs),
+        securitySettings: serializeComparable(localSecuritySettings),
+        editorConfig: serializeComparable(finalEditorConfig),
+    }), [finalEditorConfig, localAgentConfig, localConfig, localMcpConfig, localProviderConfigs, localSecuritySettings, localWebSearchConfig])
+
     const isDirty = useMemo(() => {
-        return !areEqual(localConfig, llmConfig) ||
+        return localSnapshots.llmConfig !== sourceSnapshots.llmConfig ||
             localLanguage !== language ||
             localAutoApprove !== autoApprove ||
             localPromptTemplateId !== promptTemplateId ||
-            !areEqual(localAgentConfig, agentConfig) ||
+            localSnapshots.agentConfig !== sourceSnapshots.agentConfig ||
             localAiInstructions !== aiInstructions ||
-            !areEqual(localWebSearchConfig, webSearchConfig) ||
-            !areEqual(localMcpConfig, mcpConfig) ||
+            localSnapshots.webSearchConfig !== sourceSnapshots.webSearchConfig ||
+            localSnapshots.mcpConfig !== sourceSnapshots.mcpConfig ||
             localEnableFileLogging !== enableFileLogging ||
-            !areEqual(localProviderConfigs, providerConfigs) ||
-            !areEqual(localSecuritySettings, securitySettings) ||
-            !areEqual(finalEditorConfig, editorConfig)
-    }, [
-        agentConfig,
-        aiInstructions,
-        autoApprove,
-        editorConfig,
-        enableFileLogging,
-        finalEditorConfig,
-        language,
-        llmConfig,
-        localAgentConfig,
-        localAiInstructions,
-        localAutoApprove,
-        localConfig,
-        localEnableFileLogging,
-        localLanguage,
-        localMcpConfig,
-        localPromptTemplateId,
-        localProviderConfigs,
-        localSecuritySettings,
-        localWebSearchConfig,
-        mcpConfig,
-        promptTemplateId,
-        providerConfigs,
-        securitySettings,
-        webSearchConfig,
-    ])
+            localSnapshots.providerConfigs !== sourceSnapshots.providerConfigs ||
+            localSnapshots.securitySettings !== sourceSnapshots.securitySettings ||
+            localSnapshots.editorConfig !== sourceSnapshots.editorConfig
+    }, [aiInstructions, autoApprove, enableFileLogging, language, localAiInstructions, localAutoApprove, localEnableFileLogging, localLanguage, localPromptTemplateId, localSnapshots, promptTemplateId, sourceSnapshots])
 
     const handleSave = useCallback(async () => {
         if (!isDirty) {
@@ -406,7 +382,6 @@ export default function SettingsModal() {
     const tabs = useMemo(() => [
         { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
         { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
-        { id: 'appearance', label: language === 'zh' ? '外观' : 'Appearance', icon: <Sparkles className="w-4 h-4" /> },
         { id: 'snippets', label: language === 'zh' ? '代码片段' : 'Snippets', icon: <FileCode className="w-4 h-4" /> },
         { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
         { id: 'rules', label: language === 'zh' ? '规则与记忆' : 'Rules & Memory', icon: <Brain className="w-4 h-4" /> },
@@ -441,14 +416,6 @@ export default function SettingsModal() {
                     <EditorSettings
                         settings={editorSettings}
                         setSettings={setEditorSettings}
-                        advancedConfig={advancedEditorConfig}
-                        setAdvancedConfig={setAdvancedEditorConfig}
-                        language={language}
-                    />
-                )
-            case 'appearance':
-                return (
-                    <AppearanceSettings
                         advancedConfig={advancedEditorConfig}
                         setAdvancedConfig={setAdvancedEditorConfig}
                         language={language}
@@ -505,46 +472,12 @@ export default function SettingsModal() {
         }
     }
 
-    const settingsAppearanceClassName = useMemo(() => {
-        const appearance = advancedEditorConfig.appearance ?? defaultEditorConfig.appearance
-        const classNames = [
-            'overflow-hidden',
-            'bg-background/95',
-            'border',
-            'border-border/70',
-            'shadow-xl',
-            'rounded-3xl',
-        ]
-
-        if (appearance.settingsPerformanceMode) {
-            classNames.push('settings-performance-mode')
-
-            if (appearance.disableSettingsBlur) {
-                classNames.push('settings-disable-blur')
-            }
-            if (appearance.disableSettingsAnimations) {
-                classNames.push('settings-disable-animations')
-            }
-            if (appearance.disableSettingsShadows) {
-                classNames.push('settings-disable-shadows')
-            }
-            if (appearance.disableSettingsGlow) {
-                classNames.push('settings-disable-glow')
-            }
-            if (appearance.enableSettingsContentVisibility) {
-                classNames.push('settings-enable-content-visibility')
-            }
-        }
-
-        return classNames.join(' ')
-    }, [advancedEditorConfig.appearance])
-
     return (
-        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding disableGlassEffect className={settingsAppearanceClassName}>
+        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
             <div className="flex h-[75vh] max-h-[800px]">
-                <div className="w-64 bg-surface/85 border-r border-border/60 flex flex-col pt-8 pb-6">
+                <div className="w-64 bg-surface/30 backdrop-blur-xl border-r border-border/50 flex flex-col pt-8 pb-6">
                     <div className="px-6 mb-6">
-                        <h2 className="text-xl font-bold text-text-primary tracking-tight flex items-center gap-2.5">
+                        <h2 className="text-lg font-semibold text-text-primary tracking-tight flex items-center gap-2.5">
                             <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">
                                 <Settings2 className="w-5 h-5 text-accent" />
                             </div>
@@ -557,9 +490,9 @@ export default function SettingsModal() {
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 group ${activeTab === tab.id ? 'bg-accent text-white shadow-md shadow-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}`}
+                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${activeTab === tab.id ? 'bg-accent/10 text-text-primary border border-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'}`}
                             >
-                                <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-white' : 'text-text-muted group-hover:text-text-primary'}`}>
+                                <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
                                     {tab.icon}
                                 </span>
                                 <span>{tab.label}</span>
@@ -582,17 +515,17 @@ export default function SettingsModal() {
                 </div>
 
                 <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
-                    <div className="settings-scroll-region flex-1 overflow-y-auto px-10 py-10 custom-scrollbar pb-28">
-                        <div className="mb-8 pb-6 border-b border-border/40">
-                            <h3 className="text-3xl font-bold text-text-primary tracking-tight">
+                    <div className="settings-scroll-region flex-1 overflow-y-auto px-8 py-8 custom-scrollbar pb-28">
+                        <div className="mb-6 pb-5 border-b border-border/40">
+                            <h3 className="text-2xl font-semibold text-text-primary tracking-tight">
                                 {tabs.find(tab => tab.id === activeTab)?.label}
                             </h3>
-                            <p className="text-sm text-text-muted mt-2 opacity-80 font-medium">
+                            <p className="text-sm text-text-muted mt-1.5 opacity-80">
                                 {t('settings.managePreferences', language as Language)}
                             </p>
                         </div>
 
-                        <div className="settings-tab-panel space-y-8">
+                        <div className="settings-tab-panel space-y-6">
                             <Suspense fallback={<SettingsTabFallback language={language as Language} />}>
                                 {renderActiveTab()}
                             </Suspense>
@@ -600,7 +533,7 @@ export default function SettingsModal() {
                     </div>
 
                     {(isDirty || saved) && (
-                        <div className="absolute bottom-6 right-8 left-8 p-4 rounded-2xl bg-surface/95 border border-border/60 shadow-lg flex items-center justify-between z-10 transition-all duration-300">
+                        <div className="absolute bottom-6 right-8 left-8 p-4 rounded-xl bg-surface/95 border border-border/60 shadow-lg flex items-center justify-between z-10 transition-all duration-300">
                             <span className="text-xs text-text-muted ml-2 font-medium">
                                 {saved && !isDirty
                                     ? t('settings.allChangesSaved', language as Language)

@@ -1230,8 +1230,8 @@ Commit message:`
             // 根据文件状态决定是否显示 diff
             if (fileStatus === 'modified' || fileStatus === 'renamed') {
                 if (_staged) {
-                    const original = await gitService.getHeadFileContent(fullPath, targetRoot)
-                    const modified = await gitService.getIndexFileContent(fullPath, targetRoot)
+                    const original = await gitService.getHeadFileContent(fullPath, targetRoot ?? undefined)
+                    const modified = await gitService.getIndexFileContent(fullPath, targetRoot ?? undefined)
                     if (original !== null && modified !== null) {
                         logger.ui.info(`[Git] Opening staged modified file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, modified, original)
@@ -1239,7 +1239,7 @@ Commit message:`
                         return
                     }
                 } else {
-                    const original = await gitService.getIndexFileContent(fullPath, targetRoot)
+                    const original = await gitService.getIndexFileContent(fullPath, targetRoot ?? undefined)
                     if (original !== null) {
                         logger.ui.info(`[Git] Opening unstaged modified file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, content || '', original)
@@ -1249,7 +1249,7 @@ Commit message:`
                 }
             } else if (fileStatus === 'added' || fileStatus === 'untracked') {
                 if (_staged) {
-                    const modified = await gitService.getIndexFileContent(fullPath, targetRoot)
+                    const modified = await gitService.getIndexFileContent(fullPath, targetRoot ?? undefined)
                     logger.ui.info(`[Git] Opening staged added file: ${fullPath}`)
                     openFile(`git-diff://${fullPath}`, modified || '', '')
                     setActiveFile(`git-diff://${fullPath}`)
@@ -1261,7 +1261,7 @@ Commit message:`
                 return
             } else if (fileStatus === 'deleted') {
                 if (_staged) {
-                    const original = await gitService.getHeadFileContent(fullPath, targetRoot)
+                    const original = await gitService.getHeadFileContent(fullPath, targetRoot ?? undefined)
                     if (original !== null) {
                         logger.ui.info(`[Git] Opening staged deleted file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, '', original)
@@ -1269,7 +1269,7 @@ Commit message:`
                         return
                     }
                 } else {
-                    const original = await gitService.getIndexFileContent(fullPath, targetRoot)
+                    const original = await gitService.getIndexFileContent(fullPath, targetRoot ?? undefined)
                     if (original !== null) {
                         logger.ui.info(`[Git] Opening unstaged deleted file diff: ${fullPath}`)
                         openFile(`git-diff://${fullPath}`, '', original)
@@ -1311,8 +1311,10 @@ Commit message:`
     const repoSelectOptions = useMemo(() => repoRoots.map(repo => ({
         value: repo.root,
         label: repo.isWorkspaceRoot
-            ? `${repo.name} (${language === 'zh' ? '工作区根' : 'Workspace Root'})`
-            : repo.relativePath,
+            ? `${repo.name} (${language === 'zh' ? '当前仓库' : 'Current Repository'})`
+            : repo.relativePath === '.'
+                ? repo.name
+                : repo.relativePath,
     })), [language, repoRoots])
     const currentRepoRoot = selectedRepoRoot || workspacePath || ''
     const showRepoSelector = !isRepoListMode && (repoRoots.length > 1 || (!!selectedRepoRoot && normalizePath(selectedRepoRoot) !== normalizePath(workspacePath)))
@@ -1811,7 +1813,9 @@ Commit message:`
                                     }}
                                 />
                                 <button
-                                    onClick={handleGenerateCommitMessage}
+                                    onClick={() => {
+                                        void handleGenerateCommitMessage()
+                                    }}
                                     disabled={isGeneratingMessage || stats.total === 0}
                                     className="absolute right-2 top-2 p-1.5 rounded-md hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     title={tt('git.generateMessage')}
@@ -1825,7 +1829,9 @@ Commit message:`
                             </div>
                             <div className="flex items-center gap-2 mt-2">
                                 <Button
-                                    onClick={handleCommit}
+                                    onClick={() => {
+                                        void handleCommit()
+                                    }}
                                     disabled={isCommitting || stats.staged === 0}
                                     className="flex-1"
                                 >

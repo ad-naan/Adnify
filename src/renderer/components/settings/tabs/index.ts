@@ -4,7 +4,6 @@
 
 export { ProviderSettings } from './ProviderSettings'
 export { EditorSettings } from './EditorSettings'
-export { AppearanceSettings } from './AppearanceSettings'
 export { AgentSettings } from './AgentSettings'
 export { RulesMemorySettings } from './RulesMemorySettings'
 export { PromptPreviewModal } from './PromptPreviewModal'

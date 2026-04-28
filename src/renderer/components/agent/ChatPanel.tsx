@@ -134,7 +134,11 @@ export default function ChatPanel() {
     regenerateFromMessage,
   } = useAgentActions()
 
-  const [input, setInput] = useState('')
+  const [inputState, setInputState] = useState('')
+  const input = inputState ?? ''
+  const setInput = useCallback((value: string | null | undefined) => {
+    setInputState(value ?? '')
+  }, [])
   const [images, setImages] = useState<PendingImage[]>([])
   const imagesRef = useRef(images)
   imagesRef.current = images
@@ -552,9 +556,10 @@ export default function ChatPanel() {
   // 上下文选择
   const handleSelectMention = useCallback((candidate: MentionCandidate) => {
     if (!mentionRange) return
+    const currentInput = input ?? ''
 
-    const textBeforeMention = input.slice(0, mentionRange.start)
-    const textAfterMention = input.slice(mentionRange.end)
+    const textBeforeMention = currentInput.slice(0, mentionRange.start)
+    const textAfterMention = currentInput.slice(mentionRange.end)
 
     let replacement = ''
     let contextItem: ContextItem | null = null
