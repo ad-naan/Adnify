@@ -10,7 +10,7 @@ import {
     ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Trash2,
     ArrowUp, ArrowDown, Check, X, MoreHorizontal, FolderGit2,
     FolderOpen, Download, Undo2, RotateCcw, Copy, Archive, AlertTriangle,
-    Play, SkipForward, Loader2, Sparkles
+    Play, SkipForward, Loader2, Sparkles, List, Maximize
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -364,6 +364,63 @@ const StashItem = memo(function StashItem({
                     )}
                 </div>
             </div>
+        </div>
+    )
+})
+
+// Repo 操作菜单组件
+const RepoMenu = memo(function RepoMenu({
+    repoRoot,
+    onFetch,
+    onPull,
+    onPush,
+    tt,
+}: {
+    repoRoot: string
+    onFetch: (root: string) => void
+    onPull: (root: string) => void
+    onPush: (root: string) => void
+    tt: (key: TranslationKey) => string
+}) {
+    const [showMenu, setShowMenu] = useState(false)
+    const menuRef = useRef<HTMLDivElement>(null)
+    const buttonRef = useRef<HTMLButtonElement>(null)
+
+    useClickOutside(() => setShowMenu(false), showMenu, [menuRef, buttonRef])
+
+    return (
+        <div className="relative flex" ref={menuRef}>
+            <Button
+                ref={buttonRef as any}
+                variant="icon"
+                size="icon"
+                onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+                className="h-6 w-6 rounded-md"
+            >
+                <MoreHorizontal className="w-3.5 h-3.5" />
+            </Button>
+            {showMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onFetch(repoRoot); setShowMenu(false) }}
+                        className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                    >
+                        <ArrowDown className="w-3 h-3" /> {tt('git.fetch')}
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onPull(repoRoot); setShowMenu(false) }}
+                        className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                    >
+                        <ArrowDown className="w-3 h-3" /> {tt('git.pull')}
+                    </button>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onPush(repoRoot); setShowMenu(false) }}
+                        className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                    >
+                        <ArrowUp className="w-3 h-3" /> {tt('git.push')}
+                    </button>
+                </div>
+            )}
         </div>
     )
 })
@@ -1353,13 +1410,13 @@ Commit message:`
                         onClick={() => setSelectedRepoRoot(repo.root)}
                         className="min-w-0 flex-1 text-left"
                     >
-                        <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-text-primary">{repo.name}</span>
+                        <div className="flex items-center gap-2 overflow-hidden w-full pr-1">
+                            <span className="text-sm font-semibold text-text-primary flex-shrink min-w-[40px] truncate max-w-[180px]">{repo.name}</span>
                             {!repo.isWorkspaceRoot && (
-                                <span className="truncate text-[10px] text-text-muted">{repo.relativePath}</span>
+                                <span className="truncate text-[10px] text-text-muted flex-shrink hidden sm:inline-block min-w-[20px]">{repo.relativePath}</span>
                             )}
                             {repoStatus?.branch && (
-                                <span className="truncate text-[10px] text-text-muted">{repoStatus.branch}</span>
+                                <span className="text-[10px] font-mono text-accent flex-shrink px-1.5 py-0.5 bg-accent/10 rounded-md min-w-[30px] truncate border border-accent/20">{repoStatus.branch}</span>
                             )}
                         </div>
                     </button>
@@ -1368,19 +1425,17 @@ Commit message:`
                             {repoStats.total}
                         </span>
                     )}
-                    <div className="flex items-center gap-0.5">
-                        <Button variant="icon" size="icon" onClick={() => handleFetch(repo.root)} title={tt('git.fetch')} className="h-6 w-6 rounded-md">
-                            <ArrowDown className="w-3 h-3" />
-                        </Button>
-                        <Button variant="icon" size="icon" onClick={() => handlePull(repo.root)} title={tt('git.pull')} className="h-6 w-6 rounded-md">
-                            <ArrowDown className="w-3 h-3" />
-                        </Button>
-                        <Button variant="icon" size="icon" onClick={() => handlePush(repo.root)} title={tt('git.push')} className="h-6 w-6 rounded-md">
-                            <ArrowUp className="w-3 h-3" />
-                        </Button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
                         <Button variant="icon" size="icon" onClick={() => refreshRepoSnapshot(repo.root)} title={tt('refresh')} className="h-6 w-6 rounded-md">
                             <RefreshCw className={`w-3 h-3 ${snapshot.isRefreshing ? 'animate-spin' : ''}`} />
                         </Button>
+                        <RepoMenu
+                            repoRoot={repo.root}
+                            onFetch={handleFetch}
+                            onPull={handlePull}
+                            onPush={handlePush}
+                            tt={tt}
+                        />
                     </div>
                 </div>
 
@@ -1388,40 +1443,40 @@ Commit message:`
                     <div className="px-3 py-3 text-xs text-status-error">{snapshot.error}</div>
                 ) : (
                     <>
-                        <div className="border-b border-border-subtle px-3 py-3">
-                            <div className="relative">
+                        <div className="px-3 py-3 bg-surface/30 border-b border-border-subtle">
+                            <div className="bg-surface border border-border-subtle rounded-xl flex flex-col focus-within:border-accent/40 focus-within:shadow-[0_0_0_2px_rgba(var(--color-accent),0.1)] transition-all">
                                 <textarea
                                     value={commitValue}
                                     onChange={(e) => updateRepoCommitMessage(repo.root, e.target.value)}
                                     placeholder={tt('git.commitMessage')}
-                                    className="w-full bg-surface border border-border-subtle rounded-xl p-3 pr-10 text-xs text-text-primary focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none resize-none min-h-[72px] placeholder:text-text-muted/50 transition-all"
+                                    className="w-full bg-transparent border-none p-2.5 text-xs text-text-primary outline-none resize-none min-h-[56px] placeholder:text-text-muted/50"
                                 />
-                                <button
-                                    onClick={() => handleGenerateCommitMessage(repo.root, repoStatus)}
-                                    disabled={isRepoGenerating || repoStats.total === 0}
-                                    className="absolute right-2 top-2 p-1.5 rounded-md hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title={tt('git.generateMessage')}
-                                >
-                                    {isRepoGenerating ? (
-                                        <Loader2 className="w-4 h-4 text-accent animate-spin" />
-                                    ) : (
-                                        <Sparkles className="w-4 h-4 text-accent" />
-                                    )}
-                                </button>
-                            </div>
-                            <div className="mt-2 flex items-center gap-2">
-                                <Button
-                                    onClick={() => handleCommit(repo.root)}
-                                    disabled={isRepoCommitting || repoStats.staged === 0}
-                                    className="flex-1"
-                                >
-                                    {isRepoCommitting ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
-                                    ) : (
-                                        <Check className="w-3.5 h-3.5 mr-2" />
-                                    )}
-                                    {isRepoCommitting ? tt('git.committing') : tt('git.commit')}
-                                </Button>
+                                <div className="flex items-center justify-between px-2 pb-2">
+                                    <button
+                                        onClick={() => handleGenerateCommitMessage(repo.root, repoStatus)}
+                                        disabled={isRepoGenerating || repoStats.total === 0}
+                                        className="p-1 text-text-muted hover:text-accent rounded-md hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title={tt('git.generateMessage')}
+                                    >
+                                        {isRepoGenerating ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                                        ) : (
+                                            <Sparkles className="w-3.5 h-3.5" />
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => handleCommit(repo.root)}
+                                        disabled={isRepoCommitting || repoStats.staged === 0}
+                                        className="h-6 px-3 bg-accent text-white text-[10px] font-medium rounded-md hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:bg-surface-hover disabled:text-text-muted flex items-center shadow-sm disabled:shadow-none"
+                                    >
+                                        {isRepoCommitting ? (
+                                            <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                                        ) : (
+                                            <Check className="w-3 h-3 mr-1.5" />
+                                        )}
+                                        {isRepoCommitting ? tt('git.committing') : tt('git.commit')}
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -1635,121 +1690,117 @@ Commit message:`
 
     return (
         <div className="flex flex-col h-full bg-transparent text-sm">
-            {/* Header */}
-            <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-transparent sticky top-0 z-10">
-                <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
-                    {tt('git.title')}
-                </span>
-                <div className="flex items-center gap-0.5 flex-shrink-0">
-                    {!isRepoListMode && (
-                        <>
-                            <Button variant="icon" size="icon" onClick={() => handleFetch()} title={tt('git.fetch')} className="w-7 h-7 rounded-lg">
-                                <ArrowDown className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button variant="icon" size="icon" onClick={() => handlePull()} disabled={isPulling} title={tt('git.pull')} className="w-7 h-7 rounded-lg">
-                                <ArrowDown className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
-                            </Button>
-                            <Button variant="icon" size="icon" onClick={() => handlePush()} disabled={isPushing} title={tt('git.push')} className="w-7 h-7 rounded-lg">
-                                <ArrowUp className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
-                            </Button>
-                        </>
-                    )}
-                    <Button variant="icon" size="icon" onClick={handleRefreshAll} title={tt('refresh')} className="w-7 h-7 rounded-lg">
-                        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    </Button>
-                </div>
-            </div>
-
-            {showRepoModeSwitch && (
-                <div className="px-3 py-2 border-b border-border-subtle bg-surface/10">
-                    <div className="inline-flex rounded-lg border border-border-subtle bg-surface/40 p-0.5">
-                        <button
-                            onClick={() => setRepoDisplayMode('list')}
-                            className={`px-2.5 py-1 text-[10px] rounded-md transition-colors ${repoDisplayMode === 'list' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary'}`}
-                        >
-                            {language === 'zh' ? '列表模式' : 'List'}
-                        </button>
-                        <button
-                            onClick={() => setRepoDisplayMode('select')}
-                            className={`px-2.5 py-1 text-[10px] rounded-md transition-colors ${repoDisplayMode === 'select' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary'}`}
-                        >
-                            {language === 'zh' ? '单仓库模式' : 'Single'}
-                        </button>
+            {/* Unified Sticky Header */}
+            <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border-subtle flex flex-col shadow-sm">
+                {/* Title & Actions */}
+                <div className="h-11 px-3 flex items-center justify-between">
+                    <span className="text-xs font-bold text-text-primary uppercase tracking-widest opacity-90 pl-1">
+                        {tt('git.title')}
+                    </span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        {showRepoModeSwitch && (
+                            <div className="flex items-center bg-surface-hover/80 rounded-md p-0.5 mr-1 ring-1 ring-border-subtle/50">
+                                <button
+                                    onClick={() => setRepoDisplayMode('list')}
+                                    title={language === 'zh' ? '列表模式' : 'List Mode'}
+                                    className={`p-1 rounded-[4px] transition-all ${repoDisplayMode === 'list' ? 'bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                                >
+                                    <List className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                    onClick={() => setRepoDisplayMode('select')}
+                                    title={language === 'zh' ? '单仓库模式' : 'Single Repo Mode'}
+                                    className={`p-1 rounded-[4px] transition-all ${repoDisplayMode === 'select' ? 'bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
+                                >
+                                    <Maximize className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        )}
+                        {!isRepoListMode && (
+                            <>
+                                <Button variant="icon" size="icon" onClick={() => handleFetch()} title={tt('git.fetch')} className="w-7 h-7 rounded-lg">
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button variant="icon" size="icon" onClick={() => handlePull()} disabled={isPulling} title={tt('git.pull')} className="w-7 h-7 rounded-lg">
+                                    <ArrowDown className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
+                                </Button>
+                                <Button variant="icon" size="icon" onClick={() => handlePush()} disabled={isPushing} title={tt('git.push')} className="w-7 h-7 rounded-lg">
+                                    <ArrowUp className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
+                                </Button>
+                            </>
+                        )}
+                        <Button variant="icon" size="icon" onClick={handleRefreshAll} title={tt('refresh')} className="w-7 h-7 rounded-lg text-text-muted hover:text-text-primary">
+                            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        </Button>
                     </div>
                 </div>
-            )}
 
-            {showRepoSelector && (
-                <div className="px-3 py-2 border-b border-border-subtle bg-surface/20">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
-                            {language === 'zh' ? '当前仓库' : 'Current Repository'}
-                        </span>
-                        {isDiscoveringRepos && <Loader2 className="w-3 h-3 animate-spin text-text-muted" />}
+                {/* Repo Selector (Single Mode) */}
+                {showRepoSelector && (
+                    <div className="px-3 pb-2 pt-1 flex items-center gap-2">
+                        {isDiscoveringRepos && <Loader2 className="w-3 h-3 animate-spin text-text-muted flex-shrink-0" />}
+                        <Select
+                            value={currentRepoRoot}
+                            onChange={setSelectedRepoRoot}
+                            options={repoSelectOptions}
+                            className="w-full flex-1"
+                        />
                     </div>
-                    <Select
-                        value={currentRepoRoot}
-                        onChange={setSelectedRepoRoot}
-                        options={repoSelectOptions}
-                        className="w-full"
-                    />
-                </div>
-            )}
+                )}
 
-            {/* Operation State Banner */}
-            {operationState !== 'normal' && (
-                <div className="flex flex-col border-b border-border-subtle bg-surface-active/30">
-                    <div className="px-3 py-2.5 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-                            </span>
-                            <span className="text-xs font-medium text-text-primary">
-                                {t('git.operationInProgress', language, { operation: operationState })}
-                            </span>
+                {/* Operation State Banner */}
+                {operationState !== 'normal' && (
+                    <div className="mx-2 mb-2 flex flex-col rounded-lg border border-orange-500/20 bg-orange-500/5">
+                        <div className="px-2.5 py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500"></span>
+                                </span>
+                                <span className="text-[10px] font-medium text-text-primary">
+                                    {t('git.operationInProgress', language, { operation: operationState })}
+                                </span>
+                            </div>
+                            {status?.branch && (
+                                <span className="text-[9px] text-text-muted font-mono px-1 py-0.5 rounded bg-surface">
+                                    {status.branch}
+                                </span>
+                            )}
                         </div>
-                        {status?.branch && (
-                            <span className="text-[10px] text-text-muted font-mono px-1 py-0.5">
-                                {status.branch}
-                            </span>
-                        )}
-                    </div>
-                    <div className="px-2 pb-2.5 flex items-center gap-1">
-                        <button
-                            onClick={handleContinueOperation}
-                            className="flex-1 px-2 py-1.5 text-[10px] font-medium rounded text-text-secondary hover:text-orange-400 hover:bg-orange-500/10 transition-colors border border-transparent hover:border-orange-500/20 flex items-center justify-center gap-1.5"
-                        >
-                            <Play className="w-3 h-3" /> {tt('git.continue')}
-                        </button>
-                        {operationState === 'rebase' && (
+                        <div className="px-1.5 pb-1.5 flex items-center gap-1">
                             <button
-                                onClick={handleSkipOperation}
-                                className="flex-1 px-2 py-1.5 text-[10px] font-medium rounded text-text-secondary hover:text-text-primary hover:bg-surface transition-colors border border-transparent hover:border-border-subtle flex items-center justify-center gap-1.5"
+                                onClick={handleContinueOperation}
+                                className="flex-1 px-1.5 py-1 text-[9px] font-medium rounded text-text-secondary hover:text-orange-400 hover:bg-orange-500/10 transition-colors flex items-center justify-center gap-1"
                             >
-                                <SkipForward className="w-3 h-3" /> {tt('git.skip')}
+                                <Play className="w-2.5 h-2.5" /> {tt('git.continue')}
                             </button>
-                        )}
-                        <button
-                            onClick={handleAbortOperation}
-                            className="flex-1 px-2 py-1.5 text-[10px] font-medium rounded text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors border border-transparent hover:border-red-500/20 flex items-center justify-center gap-1.5"
-                        >
-                            <X className="w-3 h-3" /> {tt('git.abort')}
-                        </button>
+                            {operationState === 'rebase' && (
+                                <button
+                                    onClick={handleSkipOperation}
+                                    className="flex-1 px-1.5 py-1 text-[9px] font-medium rounded text-text-secondary hover:text-text-primary hover:bg-surface transition-colors flex items-center justify-center gap-1"
+                                >
+                                    <SkipForward className="w-2.5 h-2.5" /> {tt('git.skip')}
+                                </button>
+                            )}
+                            <button
+                                onClick={handleAbortOperation}
+                                className="flex-1 px-1.5 py-1 text-[9px] font-medium rounded text-text-secondary hover:text-red-400 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-1"
+                            >
+                                <X className="w-2.5 h-2.5" /> {tt('git.abort')}
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Tabs */}
-            <div className="px-3 py-2 border-b border-border-subtle flex gap-1">
-                <div className="grid w-full grid-cols-4 gap-1">
+                {/* Tabs */}
+                <div className="px-4 pt-1 flex gap-5 overflow-x-auto no-scrollbar">
                     {GIT_TABS.map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`min-w-0 px-2 py-1.5 text-[10px] rounded transition-colors truncate ${activeTab === tab
-                                ? 'bg-accent/20 text-accent'
-                                : 'text-text-muted hover:bg-surface-hover'
+                            className={`text-[11px] font-medium pb-2 border-b-2 transition-colors flex-shrink-0 whitespace-nowrap tracking-wide ${activeTab === tab
+                                ? 'border-accent text-accent'
+                                : 'border-transparent text-text-muted hover:text-text-primary hover:border-border-subtle'
                                 }`}
                             title={
                                 tab === 'changes' ? `${tabLabels.changes}${stats.total > 0 ? ` (${stats.total})` : ''}` :
@@ -1758,12 +1809,10 @@ Commit message:`
                                             tabLabels.history
                             }
                         >
-                            <span className="block truncate">
-                                {tab === 'changes' && `${tabLabels.changes}${stats.total > 0 ? ` (${stats.total})` : ''}`}
-                                {tab === 'branches' && tabLabels.branches}
-                                {tab === 'stash' && `${tabLabels.stash}${stashList.length > 0 ? ` (${stashList.length})` : ''}`}
-                                {tab === 'history' && tabLabels.history}
-                            </span>
+                            {tab === 'changes' && `${tabLabels.changes}${stats.total > 0 ? ` (${stats.total})` : ''}`}
+                            {tab === 'branches' && tabLabels.branches}
+                            {tab === 'stash' && `${tabLabels.stash}${stashList.length > 0 ? ` (${stashList.length})` : ''}`}
+                            {tab === 'history' && tabLabels.history}
                         </button>
                     ))}
                 </div>
@@ -1801,55 +1850,56 @@ Commit message:`
                         </div>
 
                         {/* Commit Input */}
-                        <div className="p-3 border-b border-border-subtle">
-                            <div className="relative">
+                        <div className="px-3 py-3 bg-surface/30 border-b border-border-subtle">
+                            <div className="bg-surface border border-border-subtle rounded-xl flex flex-col focus-within:border-accent/40 focus-within:shadow-[0_0_0_2px_rgba(var(--color-accent),0.1)] transition-all">
                                 <textarea
                                     value={commitMessage}
                                     onChange={(e) => setCommitMessage(e.target.value)}
                                     placeholder={tt('git.commitMessage')}
-                                    className="w-full bg-surface border border-border-subtle rounded-xl p-3 pr-10 text-xs text-text-primary focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none resize-none min-h-[80px] placeholder:text-text-muted/50 transition-all"
+                                    className="w-full bg-transparent border-none p-2.5 text-xs text-text-primary outline-none resize-none min-h-[56px] placeholder:text-text-muted/50"
                                     onKeyDown={(e) => {
                                         if (keybindingService.matches(e, 'git.commit')) handleCommit()
                                     }}
                                 />
-                                <button
-                                    onClick={() => {
-                                        void handleGenerateCommitMessage()
-                                    }}
-                                    disabled={isGeneratingMessage || stats.total === 0}
-                                    className="absolute right-2 top-2 p-1.5 rounded-md hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title={tt('git.generateMessage')}
-                                >
-                                    {isGeneratingMessage ? (
-                                        <Loader2 className="w-4 h-4 text-accent animate-spin" />
-                                    ) : (
-                                        <Sparkles className="w-4 h-4 text-accent" />
-                                    )}
-                                </button>
-                            </div>
-                            <div className="flex items-center gap-2 mt-2">
-                                <Button
-                                    onClick={() => {
-                                        void handleCommit()
-                                    }}
-                                    disabled={isCommitting || stats.staged === 0}
-                                    className="flex-1"
-                                >
-                                    {isCommitting ? (
-                                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
-                                    ) : (
-                                        <Check className="w-3.5 h-3.5 mr-2" />
-                                    )}
-                                    {isCommitting ? tt('git.committing') : tt('git.commit')}
-                                </Button>
-                                <Button
-                                    variant="secondary"
-                                    onClick={() => setShowStashInput(!showStashInput)}
-                                    title={tt('git.stashChanges')}
-                                    className="px-3"
-                                >
-                                    <Archive className="w-3.5 h-3.5" />
-                                </Button>
+                                <div className="flex items-center justify-between px-2 pb-2">
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => {
+                                                void handleGenerateCommitMessage()
+                                            }}
+                                            disabled={isGeneratingMessage || stats.total === 0}
+                                            className="p-1 text-text-muted hover:text-accent rounded-md hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title={tt('git.generateMessage')}
+                                        >
+                                            {isGeneratingMessage ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-accent" />
+                                            ) : (
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => setShowStashInput(!showStashInput)}
+                                            title={tt('git.stashChanges')}
+                                            className="p-1 text-text-muted hover:text-text-primary rounded-md hover:bg-surface-hover transition-colors"
+                                        >
+                                            <Archive className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            void handleCommit()
+                                        }}
+                                        disabled={isCommitting || stats.staged === 0}
+                                        className="h-6 px-3 bg-accent text-white text-[10px] font-medium rounded-md hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:bg-surface-hover disabled:text-text-muted flex items-center shadow-sm disabled:shadow-none"
+                                    >
+                                        {isCommitting ? (
+                                            <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
+                                        ) : (
+                                            <Check className="w-3 h-3 mr-1.5" />
+                                        )}
+                                        {isCommitting ? tt('git.committing') : tt('git.commit')}
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Stash Input */}
