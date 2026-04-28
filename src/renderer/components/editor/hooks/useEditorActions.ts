@@ -21,7 +21,7 @@ function normPath(p: string) {
 }
 
 /** 执行 Go-to-Definition 导航（同文件 / 跨文件均处理） */
-async function navigateToDefinition(
+export async function navigateToDefinition(
   editorInstance: editor.IStandaloneCodeEditor,
   filePath: string,
   line: number,   // LSP 0-indexed
@@ -58,6 +58,93 @@ export function useEditorActions(
     editorInstance: editor.IStandaloneCodeEditor,
     monaco: typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api')
   ) => {
+    const teardownFns: Array<() => void> = []
+    let definitionDecorationIds: string[] = []
+    let modifierPressed = false
+    let lastHoverPosition: editor.IPosition | null = null
+    let hoverProbeSeq = 0
+    const definitionAvailabilityCache = new Map<string, boolean>()
+
+    const clearDefinitionDecoration = () => {
+      if (definitionDecorationIds.length > 0) {
+        definitionDecorationIds = editorInstance.deltaDecorations(definitionDecorationIds, [])
+      }
+      const domNode = editorInstance.getDomNode()
+      if (domNode) {
+        domNode.style.cursor = ''
+      }
+    }
+
+    const applyDefinitionDecoration = (range: editor.IRange) => {
+      definitionDecorationIds = editorInstance.deltaDecorations(definitionDecorationIds, [{
+        range,
+        options: {
+          inlineClassName: 'adnify-definition-link',
+        },
+      }])
+      const domNode = editorInstance.getDomNode()
+      if (domNode) {
+        domNode.style.cursor = 'pointer'
+      }
+    }
+
+    const updateDefinitionHoverDecoration = async (position: editor.IPosition | null) => {
+      lastHoverPosition = position
+
+      if (!modifierPressed || !position) {
+        clearDefinitionDecoration()
+        return
+      }
+
+      const model = editorInstance.getModel()
+      if (!model) {
+        clearDefinitionDecoration()
+        return
+      }
+
+      const word = model.getWordAtPosition(position)
+      if (!word) {
+        clearDefinitionDecoration()
+        return
+      }
+
+      const probeKey = `${model.uri.toString()}:${position.lineNumber}:${position.column}`
+      const wordRange = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn)
+
+      const cachedAvailability = definitionAvailabilityCache.get(probeKey)
+      if (cachedAvailability !== undefined) {
+        if (cachedAvailability) {
+          applyDefinitionDecoration(wordRange)
+        } else {
+          clearDefinitionDecoration()
+        }
+        return
+      }
+
+      const seq = ++hoverProbeSeq
+      const filePath = lspUriToPath(model.uri.toString())
+
+      try {
+        const locations = await goToDefinition(filePath, position.lineNumber - 1, position.column - 1)
+        const hasDefinition = !!locations && locations.length > 0
+        definitionAvailabilityCache.set(probeKey, hasDefinition)
+
+        if (seq !== hoverProbeSeq) return
+        if (!modifierPressed || !lastHoverPosition) return
+        if (lastHoverPosition.lineNumber !== position.lineNumber || lastHoverPosition.column !== position.column) return
+
+        if (hasDefinition) {
+          applyDefinitionDecoration(wordRange)
+        } else {
+          clearDefinitionDecoration()
+        }
+      } catch {
+        if (seq === hoverProbeSeq) {
+          clearDefinitionDecoration()
+        }
+      }
+    }
+
     // Ctrl+D: 选择下一个匹配
     editorInstance.addAction({
       id: 'select-next-occurrence',
@@ -160,6 +247,48 @@ export function useEditorActions(
           e.target.position.lineNumber - 1, e.target.position.column - 1
         )
       } catch { /* 静默忽略 */ }
+    })
+
+    editorInstance.onMouseMove((e) => {
+      const position = e.target.position || null
+      modifierPressed = !!(e.event.ctrlKey || e.event.metaKey)
+      void updateDefinitionHoverDecoration(position)
+    })
+
+    editorInstance.onMouseLeave(() => {
+      lastHoverPosition = null
+      clearDefinitionDecoration()
+    })
+
+    const syncModifierState = (event: KeyboardEvent) => {
+      const nextModifierPressed = !!(event.metaKey || event.ctrlKey)
+      if (nextModifierPressed === modifierPressed) return
+      modifierPressed = nextModifierPressed
+      void updateDefinitionHoverDecoration(lastHoverPosition)
+    }
+
+    const handleWindowBlur = () => {
+      modifierPressed = false
+      lastHoverPosition = null
+      clearDefinitionDecoration()
+    }
+
+    window.addEventListener('keydown', syncModifierState, true)
+    window.addEventListener('keyup', syncModifierState, true)
+    window.addEventListener('blur', handleWindowBlur)
+    teardownFns.push(() => window.removeEventListener('keydown', syncModifierState, true))
+    teardownFns.push(() => window.removeEventListener('keyup', syncModifierState, true))
+    teardownFns.push(() => window.removeEventListener('blur', handleWindowBlur))
+
+    editorInstance.onDidChangeModel(() => {
+      definitionAvailabilityCache.clear()
+      clearDefinitionDecoration()
+      lastHoverPosition = null
+    })
+
+    editorInstance.onDidDispose(() => {
+      clearDefinitionDecoration()
+      teardownFns.forEach(fn => fn())
     })
   }, [setInlineEditState])
 
