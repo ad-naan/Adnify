@@ -68,6 +68,14 @@ export interface EditorConfigSchema {
     completionTemperature?: number
     completionTriggerChars?: string[]
   }
+  appearance?: {
+    settingsPerformanceMode?: boolean
+    disableSettingsBlur?: boolean
+    disableSettingsAnimations?: boolean
+    disableSettingsShadows?: boolean
+    disableSettingsGlow?: boolean
+    enableSettingsContentVisibility?: boolean
+  }
 }
 
 export function cleanEditorConfig(config: Record<string, unknown>): EditorConfigSchema {
@@ -150,6 +158,25 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
     if (typeof a.completionTemperature === 'number') cleaned.ai.completionTemperature = a.completionTemperature
     if (Array.isArray(a.completionTriggerChars)) {
       cleaned.ai.completionTriggerChars = a.completionTriggerChars.filter(c => typeof c === 'string')
+    }
+  }
+
+  // appearance 子对象
+  if (config.appearance && typeof config.appearance === 'object') {
+    const appearance = config.appearance as Record<string, unknown>
+    cleaned.appearance = {}
+    const boolFields = [
+      'settingsPerformanceMode',
+      'disableSettingsBlur',
+      'disableSettingsAnimations',
+      'disableSettingsShadows',
+      'disableSettingsGlow',
+      'enableSettingsContentVisibility',
+    ] as const
+    for (const field of boolFields) {
+      if (typeof appearance[field] === 'boolean') {
+        (cleaned.appearance as Record<string, boolean>)[field] = appearance[field] as boolean
+      }
     }
   }
 

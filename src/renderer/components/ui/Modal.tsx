@@ -14,6 +14,7 @@ interface ModalProps {
     noPadding?: boolean
     className?: string
     showCloseButton?: boolean
+    disableGlassEffect?: boolean
 }
 
 const sizes = {
@@ -29,7 +30,7 @@ const sizes = {
 }
 
 export const Modal: React.FC<ModalProps> = memo(function Modal({
-    isOpen, onClose, title, children, size = 'md', noPadding = false, className = '', showCloseButton = true
+    isOpen, onClose, title, children, size = 'md', noPadding = false, className = '', showCloseButton = true, disableGlassEffect = false
 }) {
     useEscapeKey(onClose, isOpen)
     useElevatedToastLayer(isOpen)
@@ -45,7 +46,7 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3 }}
-                className="absolute inset-0 bg-text-inverted/40 backdrop-blur-sm"
+                className={`absolute inset-0 ${disableGlassEffect ? 'bg-text-inverted/60' : 'bg-text-inverted/40 backdrop-blur-sm'}`}
                 onClick={onClose}
             />
 
@@ -56,17 +57,19 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
                 className={`
                     relative w-full ${sizeClass} 
-                    bg-background/80 backdrop-blur-2xl 
+                    ${disableGlassEffect ? 'bg-background/95' : 'bg-background/80 backdrop-blur-2xl'} 
                     border border-border/50 
                     rounded-3xl shadow-2xl shadow-black/20 
                     overflow-hidden 
                     flex flex-col ${className}
                 `}
             >
-                <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
-                    <div className="absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-accent/5 rounded-full blur-[100px]" />
-                    <div className="absolute bottom-[-20%] left-[-10%] w-[40%] h-[40%] bg-accent/3 rounded-full blur-[80px]" />
-                </div>
+                {!disableGlassEffect && (
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+                        <div className="modal-orb-glow absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-accent/5 rounded-full blur-[100px]" />
+                        <div className="modal-orb-glow absolute bottom-[-20%] left-[-10%] w-[40%] h-[40%] bg-accent/3 rounded-full blur-[80px]" />
+                    </div>
+                )}
 
                 {title && (
                     <div className="relative flex items-center justify-between px-6 py-5 border-b border-border/50 bg-text-primary/[0.02] z-10 shrink-0">

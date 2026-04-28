@@ -230,6 +230,9 @@ export default function Editor() {
     const contextMenuDisposable = editor.onContextMenu((e) => {
       e.event.preventDefault()
       e.event.stopPropagation()
+      if (e.target.position) {
+        editor.setPosition(e.target.position)
+      }
       setContextMenu({ x: e.event.posx, y: e.event.posy })
     })
     disposables.push(contextMenuDisposable)

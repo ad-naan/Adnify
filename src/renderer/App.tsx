@@ -111,9 +111,11 @@ function AppContent() {
 
               {activeSidePanel && !isShellStudioActive && (
                 <div ref={sidebarRef} style={{ width: sidebarWidth, minWidth: sidebarWidth }} className="flex-shrink-0 relative min-w-[220px]">
-                  <Suspense fallback={<PanelSkeleton />}>
-                    <Sidebar />
-                  </Suspense>
+                  <ErrorBoundary>
+                    <Suspense fallback={<PanelSkeleton />}>
+                      <Sidebar />
+                    </Suspense>
+                  </ErrorBoundary>
                   <div
                     className="absolute top-0 right-0 w-1 h-full cursor-col-resize active:bg-accent transition-colors z-50 translate-x-[2px]"
                     onMouseDown={startSidebarResize}

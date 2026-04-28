@@ -214,12 +214,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
         className={`rounded-xl border transition-all duration-300 relative group overflow-hidden ${
           server.config.disabled
             ? 'bg-surface/5 border-border/50 opacity-60 grayscale'
-            : 'bg-surface/10 backdrop-blur-md border-border hover:border-accent/30 hover:bg-surface/20 hover:shadow-lg hover:shadow-accent/5'
+            : 'bg-surface/70 border-border hover:border-accent/30 hover:bg-surface/80 hover:shadow-md hover:shadow-accent/5'
         }`}
       >
         {/* Active Pulse Glow */}
         {!server.config.disabled && server.status === 'connected' && (
-          <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-[60px] pointer-events-none -translate-y-1/2 translate-x-1/2" />
+          <div className="settings-glow absolute top-0 right-0 w-32 h-32 bg-accent/5 rounded-full blur-[60px] pointer-events-none -translate-y-1/2 translate-x-1/2" />
         )}
 
         {/* Header */}

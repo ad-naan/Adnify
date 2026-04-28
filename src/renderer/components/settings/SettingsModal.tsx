@@ -1,28 +1,54 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
+import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check, Sparkles } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
-import { getEditorConfig } from '@renderer/settings'
+import { defaultEditorConfig, getEditorConfig } from '@renderer/settings'
 import { t, type Language } from '@renderer/i18n'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
-import KeybindingPanel from '@components/panels/KeybindingPanel'
 import { Button, Modal, Select } from '@components/ui'
 import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
-import {
-    ProviderSettings,
-    EditorSettings,
-    AgentSettings,
-    RulesMemorySettings,
-    SecuritySettings,
-    IndexSettings,
-    SystemSettings,
-    McpSettings,
-    LspSettings,
-    SnippetSettings,
-    SkillSettings
-} from './tabs'
+
+const ProviderSettings = lazy(() =>
+    import('./tabs/ProviderSettings').then(module => ({ default: module.ProviderSettings })),
+)
+const EditorSettings = lazy(() =>
+    import('./tabs/EditorSettings').then(module => ({ default: module.EditorSettings })),
+)
+const AppearanceSettings = lazy(() =>
+    import('./tabs/AppearanceSettings').then(module => ({ default: module.AppearanceSettings })),
+)
+const SnippetSettings = lazy(() =>
+    import('./tabs/SnippetSettings').then(module => ({ default: module.SnippetSettings })),
+)
+const AgentSettings = lazy(() =>
+    import('./tabs/AgentSettings').then(module => ({ default: module.AgentSettings })),
+)
+const RulesMemorySettings = lazy(() =>
+    import('./tabs/RulesMemorySettings').then(module => ({ default: module.RulesMemorySettings })),
+)
+const SkillSettings = lazy(() =>
+    import('./tabs/SkillSettings').then(module => ({ default: module.SkillSettings })),
+)
+const McpSettings = lazy(() =>
+    import('./tabs/McpSettings'),
+)
+const LspSettings = lazy(() =>
+    import('./tabs/LspSettings').then(module => ({ default: module.LspSettings })),
+)
+const KeybindingPanel = lazy(() =>
+    import('@components/panels/KeybindingPanel'),
+)
+const IndexSettings = lazy(() =>
+    import('./tabs/IndexSettings').then(module => ({ default: module.IndexSettings })),
+)
+const SecuritySettings = lazy(() =>
+    import('./tabs/SecuritySettings').then(module => ({ default: module.SecuritySettings })),
+)
+const SystemSettings = lazy(() =>
+    import('./tabs/SystemSettings').then(module => ({ default: module.SystemSettings })),
+)
 
 function normalizeForCompare(value: unknown): unknown {
     if (Array.isArray(value)) {
@@ -77,6 +103,17 @@ function toEditorSettingsState(config: ReturnType<typeof getEditorConfig>): Edit
         saveDebounceMs: config.performance.saveDebounceMs,
         flushIntervalMs: config.performance.flushIntervalMs,
     }
+}
+
+function SettingsTabFallback({ language }: { language: Language }) {
+    return (
+        <div className="min-h-[320px] flex items-center justify-center rounded-2xl border border-border/40 bg-surface/70">
+            <div className="flex items-center gap-3 text-sm text-text-muted">
+                <div className="w-4 h-4 border-2 border-accent/60 border-t-transparent rounded-full animate-spin" />
+                <span>{language === 'zh' ? '正在加载设置项...' : 'Loading settings...'}</span>
+            </div>
+        </div>
+    )
 }
 
 export default function SettingsModal() {
@@ -369,6 +406,7 @@ export default function SettingsModal() {
     const tabs = useMemo(() => [
         { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
         { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
+        { id: 'appearance', label: language === 'zh' ? '外观' : 'Appearance', icon: <Sparkles className="w-4 h-4" /> },
         { id: 'snippets', label: language === 'zh' ? '代码片段' : 'Snippets', icon: <FileCode className="w-4 h-4" /> },
         { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
         { id: 'rules', label: language === 'zh' ? '规则与记忆' : 'Rules & Memory', icon: <Brain className="w-4 h-4" /> },
@@ -381,10 +419,130 @@ export default function SettingsModal() {
         { id: 'system', label: language === 'zh' ? '系统' : 'System', icon: <Monitor className="w-4 h-4" /> },
     ] as const, [language])
 
+    const renderActiveTab = () => {
+        switch (activeTab) {
+            case 'provider':
+                return (
+                    <ProviderSettings
+                        localConfig={localConfig}
+                        setLocalConfig={setLocalConfig}
+                        localProviderConfigs={localProviderConfigs}
+                        setLocalProviderConfigs={setLocalProviderConfigs}
+                        showApiKey={showApiKey}
+                        setShowApiKey={setShowApiKey}
+                        selectedProvider={selectedProvider}
+                        providers={providers}
+                        language={language}
+                        setProvider={setProvider}
+                    />
+                )
+            case 'editor':
+                return (
+                    <EditorSettings
+                        settings={editorSettings}
+                        setSettings={setEditorSettings}
+                        advancedConfig={advancedEditorConfig}
+                        setAdvancedConfig={setAdvancedEditorConfig}
+                        language={language}
+                    />
+                )
+            case 'appearance':
+                return (
+                    <AppearanceSettings
+                        advancedConfig={advancedEditorConfig}
+                        setAdvancedConfig={setAdvancedEditorConfig}
+                        language={language}
+                    />
+                )
+            case 'snippets':
+                return <SnippetSettings language={language} />
+            case 'agent':
+                return (
+                    <AgentSettings
+                        autoApprove={localAutoApprove}
+                        setAutoApprove={setLocalAutoApprove}
+                        aiInstructions={localAiInstructions}
+                        setAiInstructions={setLocalAiInstructions}
+                        promptTemplateId={localPromptTemplateId}
+                        setPromptTemplateId={setLocalPromptTemplateId}
+                        agentConfig={localAgentConfig}
+                        setAgentConfig={setLocalAgentConfig}
+                        webSearchConfig={localWebSearchConfig}
+                        setWebSearchConfig={setLocalWebSearchConfig}
+                        language={language}
+                    />
+                )
+            case 'rules':
+                return <RulesMemorySettings language={language} />
+            case 'skills':
+                return <SkillSettings language={language} />
+            case 'mcp':
+                return <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} />
+            case 'lsp':
+                return <LspSettings language={language} />
+            case 'keybindings':
+                return <KeybindingPanel />
+            case 'indexing':
+                return <IndexSettings language={language} />
+            case 'security':
+                return (
+                    <SecuritySettings
+                        language={language}
+                        securitySettings={localSecuritySettings}
+                        setSecuritySettings={setLocalSecuritySettings}
+                    />
+                )
+            case 'system':
+                return (
+                    <SystemSettings
+                        language={language}
+                        enableFileLogging={localEnableFileLogging}
+                        setEnableFileLogging={setLocalEnableFileLogging}
+                    />
+                )
+            default:
+                return null
+        }
+    }
+
+    const settingsAppearanceClassName = useMemo(() => {
+        const appearance = advancedEditorConfig.appearance ?? defaultEditorConfig.appearance
+        const classNames = [
+            'overflow-hidden',
+            'bg-background/95',
+            'border',
+            'border-border/70',
+            'shadow-xl',
+            'rounded-3xl',
+        ]
+
+        if (appearance.settingsPerformanceMode) {
+            classNames.push('settings-performance-mode')
+
+            if (appearance.disableSettingsBlur) {
+                classNames.push('settings-disable-blur')
+            }
+            if (appearance.disableSettingsAnimations) {
+                classNames.push('settings-disable-animations')
+            }
+            if (appearance.disableSettingsShadows) {
+                classNames.push('settings-disable-shadows')
+            }
+            if (appearance.disableSettingsGlow) {
+                classNames.push('settings-disable-glow')
+            }
+            if (appearance.enableSettingsContentVisibility) {
+                classNames.push('settings-enable-content-visibility')
+            }
+        }
+
+        return classNames.join(' ')
+    }, [advancedEditorConfig.appearance])
+
     return (
-        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
+        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding disableGlassEffect className={settingsAppearanceClassName}>
             <div className="flex h-[75vh] max-h-[800px]">
-                <div className="w-64 bg-surface/30 backdrop-blur-xl border-r border-border/50 flex flex-col pt-8 pb-6">
+                <div className="w-64 bg-surface/85 border-r border-border/60 flex flex-col pt-8 pb-6">
                     <div className="px-6 mb-6">
                         <h2 className="text-xl font-bold text-text-primary tracking-tight flex items-center gap-2.5">
                             <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">
@@ -424,7 +582,7 @@ export default function SettingsModal() {
                 </div>
 
                 <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
-                    <div className="flex-1 overflow-y-auto px-10 py-10 custom-scrollbar scroll-smooth pb-28">
+                    <div className="settings-scroll-region flex-1 overflow-y-auto px-10 py-10 custom-scrollbar pb-28">
                         <div className="mb-8 pb-6 border-b border-border/40">
                             <h3 className="text-3xl font-bold text-text-primary tracking-tight">
                                 {tabs.find(tab => tab.id === activeTab)?.label}
@@ -434,71 +592,15 @@ export default function SettingsModal() {
                             </p>
                         </div>
 
-                        <div className="animate-fade-in space-y-8">
-                            {activeTab === 'provider' && (
-                                <ProviderSettings
-                                    localConfig={localConfig}
-                                    setLocalConfig={setLocalConfig}
-                                    localProviderConfigs={localProviderConfigs}
-                                    setLocalProviderConfigs={setLocalProviderConfigs}
-                                    showApiKey={showApiKey}
-                                    setShowApiKey={setShowApiKey}
-                                    selectedProvider={selectedProvider}
-                                    providers={providers}
-                                    language={language}
-                                    setProvider={setProvider}
-                                />
-                            )}
-                            {activeTab === 'editor' && (
-                                <EditorSettings
-                                    settings={editorSettings}
-                                    setSettings={setEditorSettings}
-                                    advancedConfig={advancedEditorConfig}
-                                    setAdvancedConfig={setAdvancedEditorConfig}
-                                    language={language}
-                                />
-                            )}
-                            {activeTab === 'snippets' && <SnippetSettings language={language} />}
-                            {activeTab === 'agent' && (
-                                <AgentSettings
-                                    autoApprove={localAutoApprove}
-                                    setAutoApprove={setLocalAutoApprove}
-                                    aiInstructions={localAiInstructions}
-                                    setAiInstructions={setLocalAiInstructions}
-                                    promptTemplateId={localPromptTemplateId}
-                                    setPromptTemplateId={setLocalPromptTemplateId}
-                                    agentConfig={localAgentConfig}
-                                    setAgentConfig={setLocalAgentConfig}
-                                    webSearchConfig={localWebSearchConfig}
-                                    setWebSearchConfig={setLocalWebSearchConfig}
-                                    language={language}
-                                />
-                            )}
-                            {activeTab === 'rules' && <RulesMemorySettings language={language} />}
-                            {activeTab === 'skills' && <SkillSettings language={language} />}
-                            {activeTab === 'keybindings' && <KeybindingPanel />}
-                            {activeTab === 'mcp' && <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} />}
-                            {activeTab === 'lsp' && <LspSettings language={language} />}
-                            {activeTab === 'indexing' && <IndexSettings language={language} />}
-                            {activeTab === 'security' && (
-                                <SecuritySettings
-                                    language={language}
-                                    securitySettings={localSecuritySettings}
-                                    setSecuritySettings={setLocalSecuritySettings}
-                                />
-                            )}
-                            {activeTab === 'system' && (
-                                <SystemSettings
-                                    language={language}
-                                    enableFileLogging={localEnableFileLogging}
-                                    setEnableFileLogging={setLocalEnableFileLogging}
-                                />
-                            )}
+                        <div className="settings-tab-panel space-y-8">
+                            <Suspense fallback={<SettingsTabFallback language={language as Language} />}>
+                                {renderActiveTab()}
+                            </Suspense>
                         </div>
                     </div>
 
                     {(isDirty || saved) && (
-                        <div className="absolute bottom-6 right-8 left-8 p-4 rounded-2xl bg-surface/80 backdrop-blur-xl border border-border/50 shadow-2xl flex items-center justify-between z-10 transition-all duration-300">
+                        <div className="absolute bottom-6 right-8 left-8 p-4 rounded-2xl bg-surface/95 border border-border/60 shadow-lg flex items-center justify-between z-10 transition-all duration-300">
                             <span className="text-xs text-text-muted ml-2 font-medium">
                                 {saved && !isDirty
                                     ? t('settings.allChangesSaved', language as Language)
