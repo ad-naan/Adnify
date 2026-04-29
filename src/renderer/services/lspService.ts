@@ -178,11 +178,7 @@ export function resetLspState(): void {
   logger.lsp.info('[LSP] State reset')
 }
 
-/**
- * 通知服务器文档已打开
- * 使用智能根目录检测来启动正确的 LSP 服务器
- */
-export async function didOpenDocument(filePath: string, content: string): Promise<boolean> {
+async function openDocumentIfNeeded(filePath: string, content: string): Promise<boolean> {
   const uri = pathToLspUri(filePath)
   const languageId = getLanguageId(filePath)
   if (!isLanguageSupported(languageId)) {
@@ -190,15 +186,11 @@ export async function didOpenDocument(filePath: string, content: string): Promis
   }
 
   if (openedDocuments.has(uri)) {
-    await didChangeDocument(filePath, content)
     return true
   }
 
   const version = 1
   const workspacePath = getFileWorkspaceRoot(filePath)
-
-  // 使用智能根目录检测启动服务器
-  // 这会根据语言类型找到最佳的项目根目录
   const params: LspDocumentParams & { languageId: string; version: number } = {
     uri,
     languageId,
@@ -220,11 +212,30 @@ export async function didOpenDocument(filePath: string, content: string): Promis
   documentVersions.set(uri, version)
   openedDocuments.add(uri)
 
-  // 为 Pyright 发送一个 didChange 来触发诊断
+  // Pyright needs an initial didChange after open to trigger diagnostics.
   if (languageId === 'python') {
     setTimeout(() => {
       didChangeDocument(filePath, content)
     }, 100)
+  }
+
+  return true
+}
+
+/**
+ * 通知服务器文档已打开
+ * 使用智能根目录检测来启动正确的 LSP 服务器
+ */
+export async function didOpenDocument(filePath: string, content: string): Promise<boolean> {
+  const uri = pathToLspUri(filePath)
+  const wasAlreadyOpen = openedDocuments.has(uri)
+  const opened = await openDocumentIfNeeded(filePath, content)
+  if (!opened) {
+    return false
+  }
+
+  if (wasAlreadyOpen) {
+    await didChangeDocument(filePath, content)
   }
 
   return true
@@ -300,7 +311,7 @@ export async function goToDefinition(
     filePath, line, character,
     async (params) => {
       if (typeof documentText === 'string') {
-        await didOpenDocument(filePath, documentText)
+        await openDocumentIfNeeded(filePath, documentText)
       }
       logger.lsp.info('[LSP] Go to definition request:', {
         filePath,
