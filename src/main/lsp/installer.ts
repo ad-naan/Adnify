@@ -71,6 +71,10 @@ function getCandidateLspBinDirs(): string[] {
   return [configuredDir, DEFAULT_LSP_BIN_DIR]
 }
 
+function getActiveLspBinDirs(): string[] {
+  return [getLspBinDir()]
+}
+
 /**
  * 获取默认 LSP 服务器安装目录
  */
@@ -578,12 +582,12 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
 /**
  * 获取已安装的 LSP 服务器路径（统一入口）
  */
-export function getInstalledServerPath(serverType: string): string | null {
+function getInstalledServerPathFromDirs(serverType: string, binDirs: string[]): string | null {
   const config = SERVER_PATHS[serverType]
   if (!config) return null
 
   // 1. 检查用户安装目录
-  for (const binDir of getCandidateLspBinDirs()) {
+  for (const binDir of binDirs) {
     for (const p of config.userPaths) {
       // 处理通配符路径（如 clangd_*/bin/clangd）
       if (p.includes('*')) {
@@ -605,7 +609,19 @@ export function getInstalledServerPath(serverType: string): string | null {
     }
   }
 
+  return null
+}
+
+export function getInstalledServerPath(serverType: string): string | null {
+  const userOrBuiltinPath = getInstalledServerPathFromDirs(serverType, getCandidateLspBinDirs())
+  if (userOrBuiltinPath) {
+    return userOrBuiltinPath
+  }
+
   // 2. 检查内置 node_modules
+  const config = SERVER_PATHS[serverType]
+  if (!config) return null
+
   for (const base of getBuiltinBases()) {
     for (const subPath of config.builtinPaths) {
       const fullPath = path.join(base, subPath)
@@ -614,6 +630,33 @@ export function getInstalledServerPath(serverType: string): string | null {
   }
 
   // 3. 检查系统 PATH
+  if (config.systemCommand && commandExists(config.systemCommand)) {
+    return config.systemCommand
+  }
+
+  return null
+}
+
+function getInstalledServerPathInActiveDir(serverType: string): string | null {
+  return getInstalledServerPathFromDirs(serverType, getActiveLspBinDirs())
+}
+
+function getInstallCheckServerPath(serverType: string): string | null {
+  const activeDirPath = getInstalledServerPathInActiveDir(serverType)
+  if (activeDirPath) {
+    return activeDirPath
+  }
+
+  const config = SERVER_PATHS[serverType]
+  if (!config) return null
+
+  for (const base of getBuiltinBases()) {
+    for (const subPath of config.builtinPaths) {
+      const fullPath = path.join(base, subPath)
+      if (fs.existsSync(fullPath)) return fullPath
+    }
+  }
+
   if (config.systemCommand && commandExists(config.systemCommand)) {
     return config.systemCommand
   }
@@ -638,7 +681,7 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting TypeScript Language Server installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('typescript')
+  const existing = getInstallCheckServerPath('typescript')
   if (existing) {
     logger.lsp.info(`[LSP Installer] TypeScript server already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -675,7 +718,7 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
   logger.lsp.info('[LSP Installer] Starting VSCode Language Servers installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('html')
+  const existing = getInstallCheckServerPath('html')
   if (existing) {
     logger.lsp.info(`[LSP Installer] VSCode servers already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -712,7 +755,7 @@ export async function installPyright(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting Pyright installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('python')
+  const existing = getInstallCheckServerPath('python')
   if (existing) {
     logger.lsp.info(`[LSP Installer] Pyright already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -749,7 +792,7 @@ export async function installVueServer(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting Vue Language Server installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('vue')
+  const existing = getInstallCheckServerPath('vue')
   if (existing) {
     logger.lsp.info(`[LSP Installer] Vue server already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -786,7 +829,7 @@ export async function installGopls(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting gopls installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('go')
+  const existing = getInstallCheckServerPath('go')
   if (existing) {
     logger.lsp.info(`[LSP Installer] gopls already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -869,7 +912,7 @@ export async function installClangd(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting clangd installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('clangd')
+  const existing = getInstallCheckServerPath('clangd')
   if (existing) {
     logger.lsp.info(`[LSP Installer] clangd already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -989,7 +1032,7 @@ export async function installZls(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting zls installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('zig')
+  const existing = getInstallCheckServerPath('zig')
   if (existing) {
     logger.lsp.info(`[LSP Installer] zls already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -1114,7 +1157,7 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting csharp-ls installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('csharp')
+  const existing = getInstallCheckServerPath('csharp')
   if (existing) {
     logger.lsp.info(`[LSP Installer] csharp-ls already installed at: ${existing}`)
     return { success: true, path: existing }
@@ -1162,7 +1205,7 @@ export async function installCsharpLs(): Promise<LspInstallResult> {
       } else if (code === 0) {
         // 可能已安装，检查系统 PATH
         logger.lsp.debug('[LSP Installer] Binary not in tool-path, checking system PATH...')
-        const existing = getInstalledServerPath('csharp')
+        const existing = getInstallCheckServerPath('csharp')
         if (existing) {
           logger.lsp.info(`[LSP Installer] csharp-ls found in system PATH: ${existing}`)
           resolve({ success: true, path: existing })
@@ -1200,7 +1243,7 @@ export async function installIntelephense(): Promise<LspInstallResult> {
   logger.lsp.info('[LSP Installer] Starting Intelephense installation')
   logEnvironmentInfo()
 
-  const existing = getInstalledServerPath('php')
+  const existing = getInstallCheckServerPath('php')
   if (existing) {
     logger.lsp.info(`[LSP Installer] Intelephense already installed at: ${existing}`)
     return { success: true, path: existing }
