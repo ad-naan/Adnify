@@ -505,7 +505,7 @@ export interface ElectronAPI {
   // LSP
   lspStart: (workspacePath: string) => Promise<{ success: boolean }>
   lspStop: () => Promise<{ success: boolean }>
-  lspDidOpen: (params: { uri: string; languageId: string; version: number; text: string; workspacePath?: string | null }) => Promise<void>
+  lspDidOpen: (params: { uri: string; languageId: string; version: number; text: string; workspacePath?: string | null }) => Promise<{ success: boolean; serverName: string | null }>
   lspDidChange: (params: { uri: string; version: number; text: string; workspacePath?: string | null }) => Promise<void>
   lspDidClose: (params: { uri: string; workspacePath?: string | null }) => Promise<void>
   lspDidSave: (params: { uri: string; text?: string; workspacePath?: string | null }) => Promise<void>

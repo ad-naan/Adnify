@@ -14,6 +14,13 @@ import { pathToLspUri } from '@shared/utils/uriUtils'
 const documentVersions = new Map<string, number>()
 const openedDocuments = new Set<string>()
 
+function getFileDirectory(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastSlash <= 0) return normalized || '/'
+  return normalized.slice(0, lastSlash)
+}
+
 // ===== 内部辅助函数 =====
 
 /**
@@ -100,7 +107,7 @@ async function executeLspPositionRequest<T>(
  */
 export function getFileWorkspaceRoot(filePath: string): string | null {
   const { workspace } = useStore.getState()
-  if (!workspace || workspace.roots.length === 0) return null
+  if (!workspace || workspace.roots.length === 0) return getFileDirectory(filePath)
 
   // 找到最长匹配的根目录（处理嵌套情况）
   const normalizedPath = filePath.replace(/\\/g, '/')
@@ -115,7 +122,7 @@ export function getFileWorkspaceRoot(filePath: string): string | null {
     }
   }
 
-  return bestMatch || workspace.roots[0]
+  return bestMatch || workspace.roots[0] || getFileDirectory(filePath)
 }
 
 /**
@@ -171,30 +178,19 @@ export function resetLspState(): void {
   logger.lsp.info('[LSP] State reset')
 }
 
-/**
- * 通知服务器文档已打开
- * 使用智能根目录检测来启动正确的 LSP 服务器
- */
-export async function didOpenDocument(filePath: string, content: string): Promise<void> {
+async function openDocumentIfNeeded(filePath: string, content: string): Promise<boolean> {
   const uri = pathToLspUri(filePath)
   const languageId = getLanguageId(filePath)
   if (!isLanguageSupported(languageId)) {
-    return
+    return false
   }
 
   if (openedDocuments.has(uri)) {
-    await didChangeDocument(filePath, content)
-    return
+    return true
   }
 
   const version = 1
-  documentVersions.set(uri, version)
-  openedDocuments.add(uri)
-
   const workspacePath = getFileWorkspaceRoot(filePath)
-
-  // 使用智能根目录检测启动服务器
-  // 这会根据语言类型找到最佳的项目根目录
   const params: LspDocumentParams & { languageId: string; version: number } = {
     uri,
     languageId,
@@ -202,14 +198,47 @@ export async function didOpenDocument(filePath: string, content: string): Promis
     text: content,
     workspacePath,
   }
-  await api.lsp.didOpen(params)
+  const result = await api.lsp.didOpen(params)
+  if (!result?.success) {
+    logger.lsp.warn('[LSP] didOpen failed or server unavailable', {
+      filePath,
+      uri,
+      languageId,
+      workspacePath,
+    })
+    return false
+  }
 
-  // 为 Pyright 发送一个 didChange 来触发诊断
+  documentVersions.set(uri, version)
+  openedDocuments.add(uri)
+
+  // Pyright needs an initial didChange after open to trigger diagnostics.
   if (languageId === 'python') {
     setTimeout(() => {
       didChangeDocument(filePath, content)
     }, 100)
   }
+
+  return true
+}
+
+/**
+ * 通知服务器文档已打开
+ * 使用智能根目录检测来启动正确的 LSP 服务器
+ */
+export async function didOpenDocument(filePath: string, content: string): Promise<boolean> {
+  const uri = pathToLspUri(filePath)
+  const wasAlreadyOpen = openedDocuments.has(uri)
+  const opened = await openDocumentIfNeeded(filePath, content)
+  if (!opened) {
+    return false
+  }
+
+  if (wasAlreadyOpen) {
+    await didChangeDocument(filePath, content)
+  }
+
+  return true
 }
 
 /**
@@ -275,11 +304,15 @@ export async function didSaveDocument(filePath: string, content?: string): Promi
 export async function goToDefinition(
   filePath: string,
   line: number,
-  character: number
+  character: number,
+  documentText?: string
 ): Promise<{ uri: string; range: any }[] | null> {
   return executeLspPositionRequest(
     filePath, line, character,
     async (params) => {
+      if (typeof documentText === 'string') {
+        await openDocumentIfNeeded(filePath, documentText)
+      }
       logger.lsp.info('[LSP] Go to definition request:', {
         filePath,
         uri: params.uri,
