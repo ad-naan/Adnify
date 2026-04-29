@@ -63,6 +63,14 @@ export function getLspBinDir(): string {
   return dir
 }
 
+function getCandidateLspBinDirs(): string[] {
+  const configuredDir = getLspBinDir()
+  if (configuredDir === DEFAULT_LSP_BIN_DIR) {
+    return [configuredDir]
+  }
+  return [configuredDir, DEFAULT_LSP_BIN_DIR]
+}
+
 /**
  * 获取默认 LSP 服务器安装目录
  */
@@ -90,19 +98,67 @@ function logEnvironmentInfo(): void {
   })
 }
 
+function getCommonBinaryDirs(): string[] {
+  if (process.platform === 'win32') {
+    return [
+      'C:\\Program Files\\nodejs',
+      'C:\\Program Files (x86)\\nodejs',
+    ]
+  }
+
+  return [
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    '/opt/local/bin',
+    '/usr/bin',
+    '/bin',
+  ]
+}
+
+function getAugmentedPathEnv(): string {
+  const existing = (process.env.PATH || '').split(path.delimiter).filter(Boolean)
+  const merged = [...existing, ...getCommonBinaryDirs()]
+  return Array.from(new Set(merged)).join(path.delimiter)
+}
+
+function resolveCommandPath(cmd: string): string | null {
+  if (!cmd) return null
+
+  if (path.isAbsolute(cmd) && fs.existsSync(cmd)) {
+    return cmd
+  }
+
+  const searchDirs = getAugmentedPathEnv().split(path.delimiter).filter(Boolean)
+  const executableCandidates = process.platform === 'win32'
+    ? Array.from(new Set([cmd, `${cmd}.cmd`, `${cmd}.exe`, `${cmd}.bat`]))
+    : [cmd]
+
+  for (const dir of searchDirs) {
+    for (const candidate of executableCandidates) {
+      const fullPath = path.join(dir, candidate)
+      if (fs.existsSync(fullPath)) {
+        return fullPath
+      }
+    }
+  }
+
+  return null
+}
+
 /**
  * 检查命令是否存在于 PATH 中
  */
 export function commandExists(cmd: string): boolean {
   try {
+    const env = { ...process.env, PATH: getAugmentedPathEnv() }
     if (process.platform === 'win32') {
-      execSync(`where ${cmd}`, { stdio: 'ignore' })
+      execSync(`where ${cmd}`, { stdio: 'ignore', env })
     } else {
-      execSync(`which ${cmd}`, { stdio: 'ignore' })
+      execSync(`which ${cmd}`, { stdio: 'ignore', env })
     }
     return true
   } catch {
-    return false
+    return resolveCommandPath(cmd) !== null
   }
 }
 
@@ -112,15 +168,21 @@ export function commandExists(cmd: string): boolean {
 async function npmInstall(packageNames: string | string[], targetDir: string): Promise<boolean> {
   return new Promise((resolve) => {
     const npmCmd = getNpmCommand()
+    const resolvedNpmCmd = resolveCommandPath(npmCmd) || resolveCommandPath('npm')
     const packages = Array.isArray(packageNames) ? packageNames : [packageNames]
-    const installArgs = ['install', ...packages, '--prefix', targetDir]
+    const installArgs = ['install', ...packages, '--no-save', '--no-package-lock']
+    const env = {
+      ...process.env,
+      PATH: getAugmentedPathEnv(),
+    }
 
     logger.lsp.info(`[LSP Installer] Running: npm install ${packages.join(' ')} in ${targetDir}`)
-    logger.lsp.debug(`[LSP Installer] npm command: ${npmCmd}`)
+    logger.lsp.debug(`[LSP Installer] npm command: ${resolvedNpmCmd || npmCmd}`)
     logger.lsp.debug('[LSP Installer] npm args:', installArgs)
+    logger.lsp.debug(`[LSP Installer] npm cwd: ${targetDir}`)
 
     // 检查 npm 是否可用
-    if (!commandExists('npm')) {
+    if (!resolvedNpmCmd) {
       logger.lsp.error('[LSP Installer] npm not found in PATH')
       resolve(false)
       return
@@ -138,9 +200,10 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
       }
     }
 
-    const proc = spawn(npmCmd, installArgs, {
+    const proc = spawn(resolvedNpmCmd, installArgs, {
       cwd: targetDir,
       stdio: 'pipe',
+      env,
     })
 
     let stdout = ''
@@ -180,7 +243,7 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
         error: err.message,
         packageNames: packages,
         targetDir,
-        npmCmd,
+        npmCmd: resolvedNpmCmd,
       })
       resolve(false)
     })
@@ -519,26 +582,26 @@ export function getInstalledServerPath(serverType: string): string | null {
   const config = SERVER_PATHS[serverType]
   if (!config) return null
 
-  const binDir = getLspBinDir()
-
   // 1. 检查用户安装目录
-  for (const p of config.userPaths) {
-    // 处理通配符路径（如 clangd_*/bin/clangd）
-    if (p.includes('*')) {
-      const [prefix] = p.split('*')
-      const parentDir = path.join(binDir, path.dirname(prefix))
-      if (fs.existsSync(parentDir)) {
-        const entries = fs.readdirSync(parentDir)
-        for (const entry of entries) {
-          if (entry.startsWith(path.basename(prefix))) {
-            const fullPath = path.join(parentDir, entry, p.split('*/')[1] || '')
-            if (fs.existsSync(fullPath)) return fullPath
+  for (const binDir of getCandidateLspBinDirs()) {
+    for (const p of config.userPaths) {
+      // 处理通配符路径（如 clangd_*/bin/clangd）
+      if (p.includes('*')) {
+        const [prefix] = p.split('*')
+        const parentDir = path.join(binDir, path.dirname(prefix))
+        if (fs.existsSync(parentDir)) {
+          const entries = fs.readdirSync(parentDir)
+          for (const entry of entries) {
+            if (entry.startsWith(path.basename(prefix))) {
+              const fullPath = path.join(parentDir, entry, p.split('*/')[1] || '')
+              if (fs.existsSync(fullPath)) return fullPath
+            }
           }
         }
+      } else {
+        const fullPath = path.join(binDir, p)
+        if (fs.existsSync(fullPath)) return fullPath
       }
-    } else {
-      const fullPath = path.join(binDir, p)
-      if (fs.existsSync(fullPath)) return fullPath
     }
   }
 
