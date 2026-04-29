@@ -188,10 +188,12 @@ export function useLspIntegration() {
 
   // 通知 LSP 文件已打开
   const notifyFileOpened = useCallback((filePath: string, content: string) => {
-    if (isLspReady) {
-      didOpenDocument(filePath, content)
-    }
-  }, [isLspReady])
+    void didOpenDocument(filePath, content).then((success) => {
+      if (success && !useStore.getState().isLspReady) {
+        setIsLspReady(true)
+      }
+    })
+  }, [setIsLspReady])
 
   return {
     isLspReady,
