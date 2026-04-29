@@ -8,7 +8,7 @@ import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalL
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
-import { getDirPath, joinPath, pathStartsWith } from '@shared/utils/pathUtils'
+import { getDirPath, joinPath, pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 import { gitService } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '../../common/ToastProvider'
@@ -117,6 +117,7 @@ export function ExplorerView() {
     const shouldRefreshRoot = shouldResetTree
       || options?.refreshRoot === true
       || affectedPaths.some(path => path === workspacePath)
+      || deletedPaths.some(path => pathEquals(getDirPath(path), workspacePath))
 
     if (shouldResetTree) {
       directoryCacheService.clear()
@@ -340,7 +341,7 @@ export function ExplorerView() {
       onClick: handlePasteToWorkspaceRoot,
     },
     { id: 'sepPaste', label: '', separator: true },
-    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ resetTree: true, refreshRoot: true }) },
+    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ refreshRoot: true }) },
     {
       id: 'reveal',
       label: '在资源管理器中显示',
@@ -372,7 +373,7 @@ export function ExplorerView() {
             </button>
           </Tooltip>
           <Tooltip content={t('refresh', language)}>
-            <button onClick={() => refreshFiles({ resetTree: true, refreshRoot: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
+            <button onClick={() => refreshFiles({ refreshRoot: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
