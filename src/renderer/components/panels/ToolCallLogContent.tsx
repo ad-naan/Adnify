@@ -20,6 +20,7 @@ import {
 import { Button } from '../ui'
 import { JsonHighlight } from '@/renderer/utils/jsonHighlight'
 import { useStore } from '@/renderer/store'
+import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useShallow } from 'zustand/react/shallow'
 
 interface ToolCallLogContentProps {
@@ -30,13 +31,18 @@ type ViewMode = 'logs' | 'stats'
 
 export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogContentProps) {
   const { toolCallLogs: logs, clearToolCallLogs, getToolStats, getPerformanceInsights } = useStore(useShallow(s => ({ toolCallLogs: s.toolCallLogs, clearToolCallLogs: s.clearToolCallLogs, getToolStats: s.getToolStats, getPerformanceInsights: s.getPerformanceInsights })))
+  const currentThreadId = useAgentStore(state => state.currentThreadId)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<'all' | 'request' | 'response'>('all')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('logs')
 
-  const stats = useMemo(() => getToolStats(), [logs])
-  const insights = useMemo(() => getPerformanceInsights(), [logs])
+  const threadLogs = useMemo(
+    () => currentThreadId ? logs.filter(log => log.threadId === currentThreadId) : [],
+    [currentThreadId, logs]
+  )
+  const stats = useMemo(() => getToolStats(currentThreadId || undefined), [currentThreadId, getToolStats, logs])
+  const insights = useMemo(() => getPerformanceInsights(currentThreadId || undefined), [currentThreadId, getPerformanceInsights, logs])
 
   const toggleExpand = (id: string) => {
     const newExpanded = new Set(expandedIds)
@@ -55,7 +61,7 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
   }
 
   const handleExport = () => {
-    const exportData = { logs, stats, insights, exportedAt: new Date().toISOString() }
+    const exportData = { threadId: currentThreadId, logs: threadLogs, stats, insights, exportedAt: new Date().toISOString() }
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -65,7 +71,7 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
     URL.revokeObjectURL(url)
   }
 
-  const filteredLogs = filter === 'all' ? logs : logs.filter((log) => log.type === filter)
+  const filteredLogs = filter === 'all' ? threadLogs : threadLogs.filter((log) => log.type === filter)
   const t = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
 
@@ -113,7 +119,7 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
           className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-text-primary" title={t('导出', 'Export')}>
           <Download className="w-3 h-3" />
         </Button>
-        <Button variant="ghost" size="sm" onClick={clearToolCallLogs}
+        <Button variant="ghost" size="sm" onClick={() => clearToolCallLogs(currentThreadId || undefined)}
           className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-red-400 hover:bg-red-500/10" title={t('清除', 'Clear')}>
           <Trash2 className="w-3 h-3" />
         </Button>
