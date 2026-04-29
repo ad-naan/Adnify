@@ -671,10 +671,9 @@ class AdnifyDirService {
 
     for (const [threadId, data] of Object.entries(threads)) {
       const threadData = toPersistedChatThread(data)
-      const messages = threadData.messages
-      // 非当前线程且 messages 为空时，说明是懒加载占位符（还未从磁盘读取）
-      // 只更新内存缓存，不标记 dirty，避免调度 flush 用空数组覆盖磁盘上的真实 JSONL 消息
-      if (threadId !== currentThreadId && messages.length === 0) {
+      // Messages still loading from disk should not be marked dirty yet.
+      // Otherwise shutdown can flush the placeholder thread and wipe the real JSONL payload.
+      if (data.messagesHydrated === false) {
         this.cache.threads.set(threadId, threadData)
         continue
       }

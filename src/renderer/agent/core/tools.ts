@@ -301,6 +301,7 @@ async function executeSingle(
 
   // 记录请求日志
   mainStore.addToolCallLog({
+    threadId: context.threadId ?? undefined,
     type: 'request',
     toolName: toolCall.name,
     data: toolCall.arguments,
@@ -337,6 +338,7 @@ async function executeSingle(
 
     // 记录响应日志
     mainStore.addToolCallLog({
+      threadId: context.threadId ?? undefined,
       type: 'response',
       toolName: toolCall.name,
       data: content,
@@ -401,6 +403,7 @@ async function executeSingle(
 
     // 记录错误日志
     mainStore.addToolCallLog({
+      threadId: context.threadId ?? undefined,
       type: 'response',
       toolName: toolCall.name,
       data: errorMsg,
