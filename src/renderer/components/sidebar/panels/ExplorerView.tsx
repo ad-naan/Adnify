@@ -4,6 +4,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
+import type { MouseEvent } from 'react'
 import { FolderOpen, Plus, RefreshCw, FolderPlus, GitBranch, FilePlus, ExternalLink, Crosshair, Terminal, Clipboard } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -23,6 +24,7 @@ import { formatShortcut } from '@/renderer/services/keybindingService'
 
 export interface TreeRefreshOptions {
   resetTree?: boolean
+  refreshAll?: boolean
   affectedPaths?: string[]
   deletedPaths?: string[]
   refreshRoot?: boolean
@@ -114,11 +116,16 @@ export function ExplorerView() {
     const affectedPaths = Array.from(new Set(options?.affectedPaths?.filter(Boolean) ?? []))
     const deletedPaths = Array.from(new Set(options?.deletedPaths?.filter(Boolean) ?? []))
     const shouldResetTree = options?.resetTree === true
+    const shouldRefreshAll = options?.refreshAll === true
     const shouldRefreshRoot = shouldResetTree
+      || shouldRefreshAll
       || options?.refreshRoot === true
       || affectedPaths.some(path => path === workspacePath)
 
     if (shouldResetTree) {
+      directoryCacheService.clear()
+    } else if (shouldRefreshAll) {
+      // refreshAll: 清除缓存但不重置树版本，保留展开状态
       directoryCacheService.clear()
     } else {
       affectedPaths.forEach(path => directoryCacheService.invalidate(path))
@@ -132,6 +139,16 @@ export function ExplorerView() {
 
     if (shouldResetTree) {
       setTreeVersion((version) => version + 1)
+    } else if (shouldRefreshAll) {
+      // 手动刷新时同时刷新根目录和所有已展开目录，但不要把根目录放进 affectedPaths，
+      // 否则 VirtualFileTree 会清掉根目录缓存后因为根目录始终处于 expanded 状态而重复请求。
+      const { expandedFolders } = useStore.getState() as { expandedFolders: Set<string> }
+      const expandedPaths = Array.from(expandedFolders).filter(path => path !== workspacePath) as string[]
+      setTreeRefreshSignal(prev => ({
+        tick: prev.tick + 1,
+        affectedPaths: expandedPaths,
+        deletedPaths: [],
+      }))
     } else if (affectedPaths.length > 0 || deletedPaths.length > 0) {
       setTreeRefreshSignal(prev => ({
         tick: prev.tick + 1,
@@ -294,9 +311,8 @@ export function ExplorerView() {
     },
     [workspacePath]
   )
-
   const handleRootContextMenu = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.preventDefault()
       if (workspacePath) {
         setRootContextMenu({ x: e.clientX, y: e.clientY })
@@ -340,7 +356,7 @@ export function ExplorerView() {
       onClick: handlePasteToWorkspaceRoot,
     },
     { id: 'sepPaste', label: '', separator: true },
-    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ resetTree: true, refreshRoot: true }) },
+    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ refreshAll: true }) },
     {
       id: 'reveal',
       label: '在资源管理器中显示',
@@ -372,7 +388,7 @@ export function ExplorerView() {
             </button>
           </Tooltip>
           <Tooltip content={t('refresh', language)}>
-            <button onClick={() => refreshFiles({ resetTree: true, refreshRoot: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
+            <button onClick={() => refreshFiles({ refreshAll: true })} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </Tooltip>

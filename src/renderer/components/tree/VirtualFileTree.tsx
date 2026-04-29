@@ -197,21 +197,36 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       let changed = false
       const next = new Map(prev)
 
-      refreshSignal.affectedPaths.forEach((path) => {
-        if (!expandedFolders.has(path)) {
-          if (next.has(path)) {
-            next.delete(path)
-            changed = true
-          }
-        }
-      })
-
+      // 对于 deletedPaths，从父目录的缓存子项中立即移除已删除的条目
+      // 这样删除的文件/文件夹会立刻从树中消失，无需等待异步刷新
       refreshSignal.deletedPaths.forEach((deletedPath) => {
+        // 清除已删除路径自身及其子目录的缓存
         for (const key of next.keys()) {
           if (pathEquals(key, deletedPath) || key.startsWith(`${deletedPath}/`) || key.startsWith(`${deletedPath}\\`)) {
             next.delete(key)
             changed = true
           }
+        }
+        // 从父目录的缓存子项数组中移除已删除的条目
+        const parentPath = getDirPath(deletedPath)
+        if (parentPath && next.has(parentPath)) {
+          const parentChildren = next.get(parentPath)!
+          const filtered = parentChildren.filter(
+            (child) => !pathEquals(child.path, deletedPath)
+          )
+          if (filtered.length !== parentChildren.length) {
+            next.set(parentPath, filtered)
+            changed = true
+          }
+        }
+      })
+
+      // 对于 affectedPaths，无论是否展开都先清除旧缓存
+      // 展开的目录会在下面异步重新加载
+      refreshSignal.affectedPaths.forEach((path) => {
+        if (next.has(path)) {
+          next.delete(path)
+          changed = true
         }
       })
 
