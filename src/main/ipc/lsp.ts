@@ -17,6 +17,13 @@ import {
 } from '../lsp/installer'
 import { lspUriToPath } from '@shared/utils/uriUtils'
 
+function getFallbackRoot(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  const lastSlash = normalized.lastIndexOf('/')
+  if (lastSlash <= 0) return normalized || '/'
+  return normalized.slice(0, lastSlash)
+}
+
 function getLanguageId(filePath: string): LanguageId | null {
   const ext = filePath.split('.').pop()?.toLowerCase() || ''
   const lang = EXTENSION_TO_LANGUAGE[ext]
@@ -31,12 +38,13 @@ function getLanguageIdFromUri(uri: string): string {
 
 async function getServerForUri(uri: string, workspacePath: string): Promise<string | null> {
   const filePath = lspUriToPath(uri)
+  const effectiveWorkspacePath = workspacePath || getFallbackRoot(filePath)
 
   const languageId = getLanguageId(filePath)
   if (!languageId) return null
 
   // 使用智能根目录检测启动服务器
-  return lspManager.ensureServerForFile(filePath, languageId, workspacePath)
+  return lspManager.ensureServerForFile(filePath, languageId, effectiveWorkspacePath)
 }
 
 // preferencesStore 引用，用于保存 LSP 配置
@@ -70,7 +78,14 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
   ipcMain.handle('lsp:didOpen', async (_, params: { uri: string; languageId: string; version: number; text: string; workspacePath?: string }) => {
     const serverName = await getServerForUri(params.uri, params.workspacePath || '')
-    if (!serverName) return
+    if (!serverName) {
+      logger.lsp.warn('[LSP IPC] didOpen skipped: no server available', {
+        uri: params.uri,
+        languageId: params.languageId,
+        workspacePath: params.workspacePath || '',
+      })
+      return { success: false, serverName: null }
+    }
 
     // 跟踪文档打开状态
     lspManager.trackDocumentOpen(serverName, params.uri, params.languageId, params.version, params.text)
@@ -78,6 +93,7 @@ export function registerLspHandlers(preferencesStore?: any): void {
     lspManager.sendNotification(serverName, 'textDocument/didOpen', {
       textDocument: { uri: params.uri, languageId: params.languageId, version: params.version, text: params.text },
     })
+    return { success: true, serverName }
   })
 
   ipcMain.handle('lsp:didChange', async (_, params: { uri: string; version: number; text: string; workspacePath?: string }) => {
