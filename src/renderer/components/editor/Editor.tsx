@@ -87,6 +87,8 @@ export default function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api') | null>(null)
   const cursorDebounceRef = useRef<NodeJS.Timeout | null>(null)
+  const isRestoringScrollRef = useRef(false)
+  const setFileScrollPosition = useStore((state) => state.setFileScrollPosition)
 
   // Hooks
   const { registerProviders, setupDiagnostics, setupLinkNavigation, notifyFileOpened } = useLspIntegration()
@@ -134,6 +136,7 @@ export default function Editor() {
       }
     }
   }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened, isPreviewDocument])
+
   // 清理不再打开的文件的 Monaco Models，防止内存泄漏
   useEffect(() => {
     if (!monacoRef.current) return
@@ -190,6 +193,7 @@ export default function Editor() {
     editorRef.current = editor
     monacoRef.current = monacoInstance
     const disposables: { dispose: () => void }[] = []
+    const currentFilePath = activeFilePath
 
     setupCursorTracking(editor, cursorDebounceRef)
     registerProviders(monacoInstance)
@@ -200,28 +204,50 @@ export default function Editor() {
 
     monacoInstance.editor.setTheme('adnify-dynamic')
 
+    // 恢复文件视图状态
+    if (currentFilePath) {
+      const { openFiles } = useStore.getState()
+      const file = openFiles.find(f => f.path === currentFilePath)
+      if (file?.scrollPosition && typeof editor.restoreViewState === 'function') {
+        try {
+          editor.restoreViewState(file.scrollPosition as any)
+        } catch (e) {
+          // ignore restore errors
+        }
+      }
+    }
+
+    // 监听滚动变化并保存视图状态
+    const scrollDisposable = editor.onDidScrollChange(() => {
+      if (currentFilePath && typeof editor.saveViewState === 'function') {
+        const state = editor.saveViewState()
+        setFileScrollPosition(currentFilePath, state as any)
+      }
+    })
+    disposables.push(scrollDisposable)
+
     // 监听内容变化，基于版本号更新 dirty 状态
     const model = editor.getModel()
-    if (model && activeFilePath) {
+    if (model && currentFilePath) {
       // 初始化时记录版本号
       const { openFiles } = useStore.getState()
-      const file = openFiles.find(f => f.path === activeFilePath)
+      const file = openFiles.find(f => f.path === currentFilePath)
       if (file && !file.savedVersionId) {
         // 首次打开，记录初始版本号
         const { markFileSaved } = useStore.getState()
-        markFileSaved(activeFilePath, model.getAlternativeVersionId())
+        markFileSaved(currentFilePath, model.getAlternativeVersionId())
       }
 
       const contentDisposable = editor.onDidChangeModelContent(() => {
         const currentVersionId = model.getAlternativeVersionId()
         const editorContent = editor.getValue()
         const { openFiles: currentFiles } = useStore.getState()
-        const currentFile = currentFiles.find(f => f.path === activeFilePath)
+        const currentFile = currentFiles.find(f => f.path === currentFilePath)
 
         if (currentFile && editorContent === currentFile.content) {
-          markFileSaved(activeFilePath, currentVersionId)
+          markFileSaved(currentFilePath, currentVersionId)
         } else {
-          updateFileDirtyState(activeFilePath, currentVersionId)
+          updateFileDirtyState(currentFilePath, currentVersionId)
         }
       })
       disposables.push(contentDisposable)

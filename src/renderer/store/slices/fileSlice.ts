@@ -41,11 +41,13 @@ export interface OpenFile {
   /** 文件是否已被外部删除 */
   isDeleted?: boolean
   /** 远程文件绑定信息（SFTP 编辑） */
-  remote?: { server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }; remotePath: string }
+  remote?: { server: { host: string; port?: number; username: string; password?: string; privateKeyPath?: string; remotePath?: string }; remotePath: string }
   /** 最后访问时间（LRU 淘汰用） */
   lastAccessed?: number
   /** Preview 文档元数据 */
   preview?: OpenPreviewMetadata
+  /** 编辑器视图状态 (Monaco saveViewState) */
+  scrollPosition?: unknown
 }
 
 export interface FileSlice {
@@ -98,6 +100,8 @@ export interface FileSlice {
   /** 标记文件已恢复（不再是删除状态） */
   markFileRestored: (path: string) => void
   updatePreviewMetadata: (path: string, preview: Partial<OpenPreviewMetadata>) => void
+  /** 设置文件滚动位置 */
+  setFileScrollPosition: (path: string, scrollPosition: { scrollTop: number; scrollLeft: number }) => void
 }
 
 function upsertOpenFiles(
@@ -326,6 +330,13 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         file.path === path && file.kind === 'preview' && file.preview
           ? { ...file, preview: { ...file.preview, ...preview }, lastAccessed: Date.now() }
           : file,
+      ),
+    })),
+
+  setFileScrollPosition: (path, scrollPosition) =>
+    set((state) => ({
+      openFiles: state.openFiles.map((f) =>
+        f.path === path ? { ...f, scrollPosition } : f
       ),
     })),
 })
