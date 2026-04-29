@@ -6,6 +6,7 @@ import { StateCreator } from 'zustand'
 export interface ToolCallLogEntry {
   id: string
   timestamp: Date
+  threadId?: string
   type: 'request' | 'response'
   toolName: string
   data: unknown
@@ -44,10 +45,10 @@ export interface PerformanceInsight {
 export interface LogSlice {
   toolCallLogs: ToolCallLogEntry[]
   addToolCallLog: (entry: Omit<ToolCallLogEntry, 'id' | 'timestamp'>) => void
-  clearToolCallLogs: () => void
+  clearToolCallLogs: (threadId?: string) => void
   // 统计方法
-  getToolStats: () => ToolStats[]
-  getPerformanceInsights: () => PerformanceInsight[]
+  getToolStats: (threadId?: string) => ToolStats[]
+  getPerformanceInsights: (threadId?: string) => PerformanceInsight[]
 }
 
 const MAX_LOGS = 200
@@ -66,10 +67,16 @@ export const createLogSlice: StateCreator<LogSlice> = (set, get) => ({
       return { toolCallLogs: newLogs }
     }),
 
-  clearToolCallLogs: () => set({ toolCallLogs: [] }),
+  clearToolCallLogs: (threadId) => set(state => ({
+    toolCallLogs: threadId
+      ? state.toolCallLogs.filter(log => log.threadId !== threadId)
+      : [],
+  })),
 
-  getToolStats: () => {
-    const logs = get().toolCallLogs
+  getToolStats: (threadId) => {
+    const logs = threadId
+      ? get().toolCallLogs.filter(log => log.threadId === threadId)
+      : get().toolCallLogs
     // 只统计 response 类型（包含执行结果）
     const responseLogs = logs.filter((l) => l.type === 'response')
 
@@ -101,8 +108,8 @@ export const createLogSlice: StateCreator<LogSlice> = (set, get) => ({
     return stats.sort((a, b) => b.totalCalls - a.totalCalls)
   },
 
-  getPerformanceInsights: () => {
-    const stats = get().getToolStats()
+  getPerformanceInsights: (threadId) => {
+    const stats = get().getToolStats(threadId)
     const insights: PerformanceInsight[] = []
 
     for (const stat of stats) {

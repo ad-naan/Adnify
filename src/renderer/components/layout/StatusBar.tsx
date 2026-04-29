@@ -32,6 +32,7 @@ import { useHasElevatedToastLayer } from '../common/toastLayerStore'
 import {
   useAgentStore,
   selectMessageCount,
+  selectMessageListState,
   selectCompressionStats,
   selectContextIndicatorKind,
 } from '@renderer/agent/store/AgentStore'
@@ -87,6 +88,8 @@ export default function StatusBar() {
   const currentFileStats = useMemo(() => getFileStats(diagnostics, activeFilePath), [activeFilePath, version, diagnostics])
 
   const messageCount = useAgentStore(selectMessageCount)
+  const currentThreadId = useAgentStore(state => state.currentThreadId)
+  const messageListVersion = useAgentStore(state => selectMessageListState(state).version)
   const compressionStats = useAgentStore(selectCompressionStats)
   const contextIndicatorKind = useAgentStore(selectContextIndicatorKind)
 
@@ -107,7 +110,7 @@ export default function StatusBar() {
     }
 
     return { totalUsage, lastUsage }
-  }, [messageCount])
+  }, [currentThreadId, messageCount, messageListVersion])
 
   useEffect(() => {
     indexWorkerService.initialize()
@@ -136,6 +139,10 @@ export default function StatusBar() {
   const handleIndexClick = () => setShowSettings(true)
   const handleDiagnosticsClick = () => setActiveSidePanel('problems')
   const toolCallLogs = useStore(state => state.toolCallLogs)
+  const currentThreadToolCallCount = useMemo(
+    () => currentThreadId ? toolCallLogs.filter(log => log.threadId === currentThreadId).length : 0,
+    [currentThreadId, toolCallLogs]
+  )
   const plans = useAgentStore(state => state.plans)
   const activePlanId = useAgentStore(state => state.activePlanId)
   const loadPlansFromDisk = useAgentStore(state => state.loadPlansFromDisk)
@@ -375,8 +382,8 @@ export default function StatusBar() {
             icon={
               <div className="group flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/5 transition-colors">
                 <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
-                  <ScrollText className={`w-3 h-3 transition-colors ${toolCallLogs.length > 0 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.6)]' : 'text-text-muted group-hover:text-text-primary'}`} />
-                  {toolCallLogs.length > 0 && (
+                  <ScrollText className={`w-3 h-3 transition-colors ${currentThreadToolCallCount > 0 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.6)]' : 'text-text-muted group-hover:text-text-primary'}`} />
+                  {currentThreadToolCallCount > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-400 shadow-[0_0_8px_currentColor] rounded-full" />
                   )}
                 </div>
