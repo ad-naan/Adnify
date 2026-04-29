@@ -218,6 +218,10 @@ function isLocalDevServerUrl(url: string): boolean {
   return /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{2,5})?(?:[/?#]|$)/i.test(url)
 }
 
+function isDevelopmentRuntime(): boolean {
+  return !app.isPackaged && !!process.env.VITE_DEV_SERVER_URL
+}
+
 
 function registerWindowDiagnostics(win: BrowserWindow): void {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -777,6 +781,13 @@ app.on('window-all-closed', () => {
  */
 let isCleanupDone = false
 app.on('before-quit', async (e) => {
+  if (isDevelopmentRuntime() && !isCleanupDone) {
+    appQuitInProgress = true
+    isCleanupDone = true
+    logger.system.info('[Main] Skipping shutdown cleanup during development hot restart')
+    return
+  }
+
   if (!isCleanupDone) {
     e.preventDefault()
     logger.system.info('[Main] Intercepting before-quit for cleanup')

@@ -17,8 +17,9 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     isAwaitingApproval,
     isSuccess,
 }) => {
-    const [isExpanded, setIsExpanded] = useState(!isSuccess)
     const language = useStore(s => s.language)
+    const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+    const [isExpanded, setIsExpanded] = useState(!isSuccess && expandAgentBlocksByDefault)
 
     useEffect(() => {
         if (isSuccess) {
@@ -67,7 +68,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
 
                 {/* Status Text */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
-                    <span className={`text-[12px] truncate ${isRunning ? 'text-text-primary text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+                    <span className={`text-[12px] truncate ${isRunning ? 'text-text-primary tool-text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
                         {statusText}
                     </span>
                     {!isExpanded && (

@@ -30,16 +30,17 @@ function FileChangeCard({
     onReject,
     onOpenInEditor,
 }: FileChangeCardProps) {
-    const { openFile, setActiveFile, workspacePath, language } = useStore(useShallow(s => ({
+    const { openFile, setActiveFile, workspacePath, language, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
         openFile: s.openFile,
         setActiveFile: s.setActiveFile,
         workspacePath: s.workspacePath,
-        language: s.language
+        language: s.language,
+        expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
     })))
     const { args, isSuccess, isError, isRunning, isStreaming } = useToolDisplayState(toolCall)
     const isActive = isRunning || isStreaming
     const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
-        defaultExpanded: true,
+        defaultExpanded: expandAgentBlocksByDefault,
         isActive,
     })
 
@@ -202,7 +203,7 @@ function FileChangeCard({
             {/* ToolCall Card Background Sweeping Effect */}
             {(isStreaming || isRunning) && (
                 <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent animate-shimmer" />
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent tool-card-sweep" />
                 </div>
             )}
             {/* Header - Flat Outline Style */}
@@ -249,7 +250,7 @@ function FileChangeCard({
                                     {isNewFile ? 'Create ' : 'Update '}
                                 </span>
                                 <span
-                                    className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'text-shimmer text-[12px] font-medium' : 'font-medium text-[12px]'} hover:underline hover:text-accent cursor-pointer transition-colors break-all`}
+                                    className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'tool-text-shimmer text-[12px] font-medium' : 'font-medium text-[12px]'} hover:underline hover:text-accent cursor-pointer transition-colors break-all`}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         if (isLargeWrite) {
@@ -282,7 +283,7 @@ function FileChangeCard({
                                 </span>
                             </div>
                         ) : (isStreaming || isRunning) ? (
-                            <span className="font-medium text-[11px] italic text-shimmer">editing...</span>
+                            <span className="font-medium text-[11px] italic tool-text-shimmer">editing...</span>
                         ) : (
                             <span className="font-medium text-[11px] text-text-primary opacity-50">&lt;empty path&gt;</span>
                         )}
@@ -323,7 +324,7 @@ function FileChangeCard({
             </div>
 
             {/* Expanded Content */}
-            {isExpanded && newContent && (
+            {isExpanded && (newContent || isActive || isLargeWrite) && (
                 animateContent ? (
                     <AnimatePresence initial={false}>
                         <motion.div

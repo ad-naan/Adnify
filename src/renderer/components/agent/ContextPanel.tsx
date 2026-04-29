@@ -17,6 +17,7 @@ import {
     FileContext,
 } from '@/renderer/agent/types'
 import { getFileName } from '@shared/utils/pathUtils'
+import { useStore } from '@store'
 
 interface ContextPanelProps {
     contextItems: ContextItem[]
@@ -33,7 +34,8 @@ export default function ContextPanel({
     onClear,
     onAddCurrentFile
 }: ContextPanelProps) {
-    const [isExpanded, setIsExpanded] = useState(true)
+    const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+    const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
 
     // 简单的 Token 估算 (字符数 / 4)
     const estimatedTokens = useMemo(() => {

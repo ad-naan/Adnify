@@ -175,6 +175,7 @@ export interface AgentConfigSchema {
   maxRetries?: number
   retryDelayMs?: number
   toolTimeoutMs?: number
+  expandAgentBlocksByDefault?: boolean
   keepRecentTurns?: number
   deepCompressionTurns?: number
   maxImportantOldTurns?: number
@@ -204,7 +205,7 @@ export function cleanAgentConfig(config: Record<string, unknown>): AgentConfigSc
     }
   }
 
-  const boolFields = ['enableAutoFix', 'enableLLMSummary', 'autoHandoff', 'enableAutoContext'] as const
+  const boolFields = ['enableAutoFix', 'expandAgentBlocksByDefault', 'enableLLMSummary', 'autoHandoff', 'enableAutoContext'] as const
   for (const field of boolFields) {
     if (typeof config[field] === 'boolean') {
       (cleaned as Record<string, boolean>)[field] = config[field] as boolean

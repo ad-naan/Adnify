@@ -239,6 +239,26 @@ describe('AgentStore', () => {
       expect(newThread.pendingSteps).toEqual(['显示压缩卡片', '恢复任务列表'])
       expect(newThread.todos).toEqual(handoff.summary.todos)
       expect(newThread.handoffContext).toContain('## Session Resume Context')
+      const sourceThread = useAgentStore.getState().threads[newThread.handoffResume!.sourceThreadId]
+      const sourceMarker = sourceThread.messages.at(-1)
+      expect(sourceMarker?.role).toBe('assistant')
+      if (sourceMarker?.role === 'assistant') {
+        expect(sourceMarker.parts[0]).toMatchObject({
+          type: 'context_snapshot',
+          snapshotKind: 'handoff',
+          presentation: 'source_marker',
+        })
+      }
+
+      const resumeCard = newThread.messages[0]
+      expect(resumeCard?.role).toBe('assistant')
+      if (resumeCard?.role === 'assistant') {
+        expect(resumeCard.parts[0]).toMatchObject({
+          type: 'context_snapshot',
+          snapshotKind: 'handoff',
+          presentation: 'resume_card',
+        })
+      }
       expect(newThread.handoffContext).toContain('继续把压缩内容显示在消息流里')
     })
     it('should clear thread handoff state when deleting later messages', () => {
