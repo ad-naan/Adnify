@@ -171,6 +171,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
         filePath,
         position.lineNumber - 1,
         position.column - 1,
+        model.getValue(),
       )
     } catch {
       // 与 F12 保持一致：对不可访问定义静默忽略

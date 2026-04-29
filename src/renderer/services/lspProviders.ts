@@ -138,7 +138,8 @@ export function registerLspProviders(monaco: typeof Monaco) {
       const result = await goToDefinition(
         filePath,
         position.lineNumber - 1,
-        position.column - 1
+        position.column - 1,
+        model.getValue()
       )
       if (!result || result.length === 0) return null
       return result.map((loc: any) => ({

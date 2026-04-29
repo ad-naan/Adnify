@@ -25,10 +25,11 @@ export async function navigateToDefinition(
   editorInstance: editor.IStandaloneCodeEditor,
   filePath: string,
   line: number,   // LSP 0-indexed
-  col: number     // LSP 0-indexed
-  ) {
-    const locations = await goToDefinition(filePath, line, col)
-    if (!locations || locations.length === 0) return
+  col: number,    // LSP 0-indexed
+  documentText?: string
+) {
+  const locations = await goToDefinition(filePath, line, col, documentText)
+  if (!locations || locations.length === 0) return
 
   const loc = locations[0]
   const targetPath = lspUriToPath(loc.uri)
@@ -136,7 +137,12 @@ export function useEditorActions(
         const filePath = lspUriToPath(model.uri.toString())
 
         try {
-          const locations = await goToDefinition(filePath, position.lineNumber - 1, position.column - 1)
+          const locations = await goToDefinition(
+            filePath,
+            position.lineNumber - 1,
+            position.column - 1,
+            model.getValue()
+          )
           const hasDefinition = !!locations && locations.length > 0
           definitionAvailabilityCache.set(probeKey, hasDefinition)
 
@@ -235,7 +241,8 @@ export function useEditorActions(
       try {
         await navigateToDefinition(
           editorInstance, filePath,
-          position.lineNumber - 1, position.column - 1
+          position.lineNumber - 1, position.column - 1,
+          model.getValue()
         )
       } catch { /* 静默忽略，如 stdlib 等不可访问路径 */ }
     })
@@ -256,7 +263,8 @@ export function useEditorActions(
       try {
         await navigateToDefinition(
           editorInstance, filePath,
-          e.target.position.lineNumber - 1, e.target.position.column - 1
+          e.target.position.lineNumber - 1, e.target.position.column - 1,
+          model.getValue()
         )
       } catch { /* 静默忽略 */ }
     })
