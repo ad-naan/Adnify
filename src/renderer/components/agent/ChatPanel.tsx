@@ -47,12 +47,20 @@ import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
 import { BranchSelector } from './BranchControls'
 import { composerService } from '@/renderer/agent/services/composerService'
+import {
+  buildChatTimelineProjection,
+  type ChatTimelineItem,
+  type TimelineArchiveItem,
+} from './chatTimelineProjection'
 
 interface RenderableMessageItem {
   message: ChatMessageType
   hasCheckpoint: boolean
   renderKey: string
 }
+
+const HISTORY_REVEAL_BATCH_SIZE = 50
+const HISTORY_VISIBLE_TAIL_COUNT = 100
 
 function buildRenderableMessageItems(
   messages: ChatMessageType[],
@@ -160,16 +168,53 @@ export default function ChatPanel() {
   )
 
   // 骨架屏转场状态：避免大量消息的突现造成卡顿
-  const filteredRenderableMessages = useMemo<RenderableMessageItem[]>(
-    () => buildRenderableMessageItems(filteredMessages, checkpointMessageIds),
-    [filteredMessages, checkpointMessageIds, messageListVersion]
+  const [threadHistoryRevealCount, setThreadHistoryRevealCount] = useState<Record<string, number>>({})
+  const currentThreadHistoryRevealCount = currentThreadId
+    ? (threadHistoryRevealCount[currentThreadId] ?? 0)
+    : 0
+  const timelineProjection = useMemo(
+    () => buildChatTimelineProjection(filteredMessages, {
+      expandedHistoryCount: currentThreadHistoryRevealCount,
+      visibleTailCount: HISTORY_VISIBLE_TAIL_COUNT,
+      revealBatchSize: HISTORY_REVEAL_BATCH_SIZE,
+    }),
+    [currentThreadHistoryRevealCount, filteredMessages]
   )
+  const visibleRenderableMessages = useMemo<RenderableMessageItem[]>(
+    () => buildRenderableMessageItems(timelineProjection.visibleMessages, checkpointMessageIds),
+    [checkpointMessageIds, timelineProjection.visibleMessages]
+  )
+  const timelineItems = useMemo<ChatTimelineItem<RenderableMessageItem>[]>(() => {
+    const items: ChatTimelineItem<RenderableMessageItem>[] = []
+
+    if (timelineProjection.hiddenCount > 0) {
+      items.push({
+        kind: 'archive',
+        key: `archive:${timelineProjection.hiddenCount}`,
+        hiddenCount: timelineProjection.hiddenCount,
+        revealCount: timelineProjection.revealCount,
+        remainingCount: Math.max(0, timelineProjection.hiddenCount - timelineProjection.revealCount),
+      })
+    }
+
+    for (const item of visibleRenderableMessages) {
+      items.push({
+        kind: 'message',
+        key: item.renderKey,
+        item,
+      })
+    }
+
+    return items
+  }, [timelineProjection.hiddenCount, timelineProjection.revealCount, visibleRenderableMessages])
   const [isSwitchingThread, setIsSwitchingThread] = useState(false)
   const prevThreadIdRef = useRef(currentThreadId)
+  const pendingRevealAnchorKeyRef = useRef<string | null>(null)
+  const visibleRangeRef = useRef<{ startIndex: number; endIndex: number } | null>(null)
   // Virtuoso 初始滚动位置：只在线程切换时重新指向底部，普通追加消息不重算
   // 避免每次消息列表变化都重新传入新的 initialTopMostItemIndex
   // 导致 Virtuoso 强制跳回该位置（即滚动条回顶的根因）
-  const initialIndexRef = useRef(Math.max(0, filteredRenderableMessages.length - 1))
+  const initialIndexRef = useRef(Math.max(0, timelineItems.length - 1))
 
   // Effect 1：只监听 currentThreadId 变化，控制骨架屏的显示/隐藏
   // 与 filteredMessages 解耦，防止懒加载消息在 350ms 内到达时
@@ -181,7 +226,7 @@ export default function ChatPanel() {
     if (!threadChanged) return
 
     // 线程切换时同步更新初始位置索引，指向新线程的底部
-    initialIndexRef.current = Math.max(0, filteredRenderableMessages.length - 1)
+    initialIndexRef.current = Math.max(0, timelineItems.length - 1)
 
     // 线程切换：已加载线程只保留一帧过渡，未加载线程继续由 hydration 骨架接管
     setIsSwitchingThread(true)
@@ -191,7 +236,7 @@ export default function ChatPanel() {
       })
     }, 16)
     return () => window.clearTimeout(timer)
-  }, [currentThreadId])
+  }, [currentThreadId, timelineItems.length])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -275,9 +320,50 @@ export default function ChatPanel() {
     isHydratingActiveThread,
     isStreaming,
     isSwitchingThread,
-    messageCount: filteredRenderableMessages.length,
+    messageCount: timelineItems.length,
     threadId: currentThreadId,
   })
+
+  const revealArchivedMessages = useCallback(() => {
+    if (!currentThreadId || timelineProjection.revealCount <= 0) {
+      return
+    }
+
+    const anchorIndex = visibleRangeRef.current?.startIndex ?? 0
+    const anchorItem = timelineItems[anchorIndex]
+    if (anchorItem?.kind === 'message') {
+      pendingRevealAnchorKeyRef.current = anchorItem.key
+    } else {
+      const firstVisibleMessage = timelineItems.find(item => item.kind === 'message')
+      pendingRevealAnchorKeyRef.current = firstVisibleMessage?.key ?? null
+    }
+
+    setThreadHistoryRevealCount(state => ({
+      ...state,
+      [currentThreadId]: (state[currentThreadId] ?? 0) + timelineProjection.revealCount,
+    }))
+  }, [currentThreadId, timelineItems, timelineProjection.revealCount])
+
+  useEffect(() => {
+    const anchorKey = pendingRevealAnchorKeyRef.current
+    if (!anchorKey) {
+      return
+    }
+
+    const anchorIndex = timelineItems.findIndex(item => item.key === anchorKey)
+    if (anchorIndex < 0) {
+      return
+    }
+
+    pendingRevealAnchorKeyRef.current = null
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index: anchorIndex,
+        align: 'start',
+        behavior: 'auto',
+      })
+    })
+  }, [timelineItems, virtuosoRef])
 
   // 一次性同步 inputPrompt 到本地 input
   useEffect(() => {
@@ -880,8 +966,55 @@ export default function ChatPanel() {
   }, [acceptAllChanges, toast])
 
   // 渲染消息
-  const renderMessage = useCallback((item: RenderableMessageItem) => {
-    const msg = item.message
+  const renderArchiveItem = useCallback((item: TimelineArchiveItem) => {
+    const label = language === 'zh' ? '显示更多历史消息' : 'Show more history'
+    const hiddenLabel = language === 'zh'
+      ? `已归档 ${item.hiddenCount} 条历史消息`
+      : `${item.hiddenCount} older messages archived`
+    const revealLabel = language === 'zh'
+      ? `展开前 ${item.revealCount} 条`
+      : `Reveal ${item.revealCount} more`
+    const remainingLabel = item.remainingCount > 0
+      ? (language === 'zh' ? `剩余 ${item.remainingCount} 条` : `${item.remainingCount} remaining`)
+      : undefined
+
+    return (
+      <div className="px-4 pb-3 pt-2">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-border/60 bg-background/70 px-4 py-3 shadow-sm backdrop-blur-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+                {label}
+              </div>
+              <div className="mt-1 text-sm text-text-secondary">
+                {hiddenLabel}
+              </div>
+              {remainingLabel && (
+                <div className="mt-1 text-xs text-text-muted">
+                  {remainingLabel}
+                </div>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={revealArchivedMessages}
+              className="shrink-0 rounded-xl border border-border/60 bg-surface/60 px-3 text-xs text-text-primary hover:bg-surface-hover"
+            >
+              {revealLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }, [language, revealArchivedMessages])
+
+  const renderTimelineItem = useCallback((item: ChatTimelineItem<RenderableMessageItem>) => {
+    if (item.kind === 'archive') {
+      return renderArchiveItem(item)
+    }
+
+    const msg = item.item.message
     if (!isUserMessage(msg) && !isAssistantMessage(msg)) return null
 
     return (
@@ -895,10 +1028,15 @@ export default function ChatPanel() {
         onRejectTool={rejectCurrentTool}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
-        hasCheckpoint={item.hasCheckpoint}
+        hasCheckpoint={item.item.hasCheckpoint}
       />
     )
-  }, [handleEditMessage, handleRegenerate, handleRestore, approveCurrentTool, rejectCurrentTool, handleShowDiff, pendingToolCall?.id])
+  }, [approveCurrentTool, handleEditMessage, handleRegenerate, handleRestore, handleShowDiff, pendingToolCall?.id, rejectCurrentTool, renderArchiveItem])
+
+  const handleTimelineRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
+    visibleRangeRef.current = range
+    handleVisibleRangeChanged(range)
+  }, [handleVisibleRangeChanged])
 
   const virtuosoComponents = useMemo(() => ({
     Scroller: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>((props, ref) => (
@@ -1093,16 +1231,16 @@ export default function ChatPanel() {
             <Virtuoso
               key={currentThreadId ?? 'no-thread'}
               ref={virtuosoRef}
-              data={filteredRenderableMessages}
-              computeItemKey={(_, item) => item.renderKey}
+              data={timelineItems}
+              computeItemKey={(_, item) => item.key}
               atBottomStateChange={handleBottomStateChange}
-              rangeChanged={handleVisibleRangeChanged}
+              rangeChanged={handleTimelineRangeChanged}
               initialTopMostItemIndex={initialIndexRef.current}
               followOutput={followOutput}
-              itemContent={(_, item) => renderMessage(item)}
+              itemContent={(_, item) => renderTimelineItem(item)}
               className="flex-1 custom-scrollbar w-full h-full"
               style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
-              overscan={24}
+              overscan={12}
               atBottomThreshold={100}
               totalListHeightChanged={handleTotalListHeightChanged}
               skipAnimationFrameInResizeObserver
