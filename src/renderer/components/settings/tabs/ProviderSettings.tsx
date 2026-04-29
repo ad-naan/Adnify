@@ -5,7 +5,7 @@
  * 使用内联表单添加自定义厂商，使用 AI SDK 原生配置
  */
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { memo, useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw, Pencil } from 'lucide-react'
 import {
@@ -20,7 +20,7 @@ import { REASONING_EFFORT_VALUES } from '@/shared/config/llmPersistence'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
-import { Button, Input, Select, ScrollShadow, Switch } from '@components/ui'
+import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 
@@ -207,7 +207,7 @@ function reconcileCustomHeaderDrafts(
     : syncedHeaders
 }
 
-function TestConnectionButton({ localConfig, language }: { localConfig: any; language: 'en' | 'zh' }) {
+const TestConnectionButton = memo(function TestConnectionButton({ localConfig, language }: { localConfig: any; language: 'en' | 'zh' }) {
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
@@ -238,10 +238,9 @@ function TestConnectionButton({ localConfig, language }: { localConfig: any; lan
       setTesting(false)
     }
   }
-
   return (
     <div className="flex items-center gap-3">
-      <Button variant="secondary" size="sm" onClick={handleTest} disabled={testing} className="h-9 px-4 text-xs font-medium">
+      <Button variant="secondary" size="sm" onClick={handleTest} disabled={testing} className="h-9 px-3 text-xs font-medium">
         {testing ? (
           <span className="flex items-center gap-2">
             <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -252,22 +251,22 @@ function TestConnectionButton({ localConfig, language }: { localConfig: any; lan
         )}
       </Button>
       {status === 'success' && (
-        <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
+        <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
           <Check className="w-3 h-3" />
           {language === 'zh' ? '连接成功' : 'Connected'}
         </span>
       )}
       {status === 'error' && (
-        <span className="flex items-center gap-1.5 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded-full border border-red-400/20" title={errorMsg}>
+        <span className="flex items-center gap-1.5 rounded-md border border-red-400/20 bg-red-400/10 px-2 py-1 text-xs font-medium text-red-400" title={errorMsg}>
           <AlertTriangle className="w-3 h-3" />
           {errorMsg.length > 30 ? errorMsg.slice(0, 30) + '...' : errorMsg}
         </span>
       )}
     </div>
   )
-}
+})
 
-function TestModelButton({ localConfig, language }: { localConfig: any; language: 'en' | 'zh' }) {
+const TestModelButton = memo(function TestModelButton({ localConfig, language }: { localConfig: any; language: 'en' | 'zh' }) {
   const [testing, setTesting] = useState(false)
 
   const handleTest = async () => {
@@ -302,7 +301,7 @@ function TestModelButton({ localConfig, language }: { localConfig: any; language
   }
 
   return (
-    <Button variant="secondary" size="sm" onClick={handleTest} disabled={testing} className="h-9 px-4 text-xs font-medium">
+    <Button variant="secondary" size="sm" onClick={handleTest} disabled={testing} className="h-9 px-3 text-xs font-medium">
       {testing ? (
         <span className="flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -313,9 +312,9 @@ function TestModelButton({ localConfig, language }: { localConfig: any; language
       )}
     </Button>
   )
-}
+})
 
-function FetchModelsButton({
+const FetchModelsButton = memo(function FetchModelsButton({
   provider,
   apiKey,
   baseUrl,
@@ -550,7 +549,7 @@ function FetchModelsButton({
       {dropdownMenu}
     </div>
   )
-}
+})
 
 // 内联的添加自定义 Provider 表单
 function InlineCustomProviderForm({
@@ -727,6 +726,7 @@ export function ProviderSettings({
 }: ProviderSettingsProps) {
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [logitBiasString, setLogitBiasString] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [editingProviderName, setEditingProviderName] = useState('')
@@ -846,13 +846,13 @@ export function ProviderSettings({
     cancelEditingCustomProvider()
   }
 
-  const syncCustomHeaders = (nextHeaders: EditableHeader[]) => {
+  const syncCustomHeaders = useCallback((nextHeaders: EditableHeader[]) => {
     setCustomHeaders(nextHeaders)
     setLocalConfig(prev => ({
       ...prev,
       headers: mergeHeaders(defaultHeaders, nextHeaders),
     }))
-  }
+  }, [defaultHeaders, setLocalConfig])
 
   // Sync logitBiasString with localConfig
   useEffect(() => {
@@ -889,7 +889,7 @@ export function ProviderSettings({
   }
 
   // 批量添加模型
-  const handleBatchAddModels = (models: string[]) => {
+  const handleBatchAddModels = useCallback((models: string[]) => {
     if (models.length === 0) return
 
     const currentConfig = localProviderConfigs[localConfig.provider] || {}
@@ -911,7 +911,7 @@ export function ProviderSettings({
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
 
     toast.success(language === 'zh' ? `已添加 ${newModels.length} 个模型` : `Added ${newModels.length} models`)
-  }
+  }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
 
   // 删除模型从本地配置
   const handleRemoveModel = (model: string) => {
@@ -919,7 +919,7 @@ export function ProviderSettings({
   }
 
   // 批量删除模型
-  const handleBatchRemoveModels = (models: string[]) => {
+  const handleBatchRemoveModels = useCallback((models: string[]) => {
     const currentConfig = localProviderConfigs[localConfig.provider]
     if (!currentConfig) return
 
@@ -939,7 +939,7 @@ export function ProviderSettings({
     } else {
       toast.success(language === 'zh' ? `已清空 ${models.length} 个模型` : `Cleared ${models.length} models`)
     }
-  }
+  }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
 
   // 选择内置 Provider
   const handleSelectBuiltinProvider = (providerId: string, skipSaveCurrent = false) => {
@@ -1090,17 +1090,47 @@ export function ProviderSettings({
     }
   }
 
-  const builtinProviders = providers.filter((p) => BUILTIN_PROVIDER_IDS.includes(p.id))
+  const builtinProviders = useMemo(
+    () => providers.filter((p) => BUILTIN_PROVIDER_IDS.includes(p.id)),
+    [providers],
+  )
+  const availableModels = useMemo(() => {
+    const modelsSet = new Set<string>()
+
+    if (isCustomSelected && selectedCustomConfig) {
+      ;(selectedCustomConfig.customModels || []).forEach((model: string) => modelsSet.add(model))
+    } else if (selectedProvider) {
+      selectedProvider.models.forEach((model: string) => modelsSet.add(model))
+    }
+
+    const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
+    localCustomModels.forEach((model: string) => modelsSet.add(model))
+
+    if (localConfig.model) {
+      modelsSet.add(localConfig.model)
+    }
+
+    return Array.from(modelsSet)
+  }, [isCustomSelected, localConfig.model, localConfig.provider, localProviderConfigs, selectedCustomConfig, selectedProvider])
+  const availableModelOptions = useMemo(
+    () => availableModels.map((model) => ({ value: model, label: model })),
+    [availableModels],
+  )
 
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in pb-10">
       {/* Provider 选择器 */}
-      <section>
-        <div className="flex items-center gap-2 mb-4">
-          <Box className="w-4 h-4 text-accent" />
-          <h4 className="text-sm font-semibold text-text-primary uppercase tracking-wide">
-            {language === 'zh' ? '选择提供商' : 'Select Provider'}
-          </h4>
+      <section className="space-y-4">
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Box className="w-4 h-4 text-accent" />
+            <h4 className="text-sm font-semibold text-text-primary">
+              {language === 'zh' ? '选择提供商' : 'Select Provider'}
+            </h4>
+          </div>
+          <p className="text-[11px] text-text-muted">
+            {language === 'zh' ? '选择您要使用的模型服务提供商' : 'Select the model service provider you want to use'}
+          </p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -1109,14 +1139,14 @@ export function ProviderSettings({
             <button
               key={p.id}
               onClick={() => handleSelectBuiltinProvider(p.id)}
-              className={`group relative flex flex-col items-center justify-center p-5 rounded-2xl border transition-all duration-300 ${localConfig.provider === p.id
-                ? 'border-accent bg-accent/5 text-accent shadow-xl shadow-accent/5 ring-1 ring-accent/20'
-                : 'border-border bg-surface/30 text-text-secondary hover:bg-surface/50 hover:border-accent/30 hover:text-text-primary'
+              className={`group relative flex min-h-[72px] flex-col items-center justify-center rounded-lg border px-4 py-3 transition-colors ${localConfig.provider === p.id
+                ? 'border-accent/25 bg-background/80 text-accent'
+                : 'border-border/70 bg-background/35 text-text-secondary hover:bg-surface/35 hover:border-border-active hover:text-text-primary'
                 }`}
             >
-              <span className={`font-bold text-sm ${localConfig.provider === p.id ? 'text-text-primary' : ''}`}>{p.name}</span>
+              <span className={`text-sm font-semibold ${localConfig.provider === p.id ? 'text-text-primary' : ''}`}>{p.name}</span>
               {localConfig.provider === p.id && (
-                <div className="absolute top-3 right-3 bg-accent rounded-full p-0.5 shadow-lg shadow-accent/20">
+                <div className="absolute top-2.5 right-2.5 rounded-full bg-accent p-0.5">
                   <Check className="w-3 h-3 text-white" strokeWidth={3} />
                 </div>
               )}
@@ -1131,56 +1161,45 @@ export function ProviderSettings({
               <div
                 key={id}
                 onClick={() => handleSelectCustomProvider(id)}
-                className={`group relative flex flex-col items-center justify-center p-5 rounded-2xl border transition-all duration-300 cursor-pointer ${localConfig.provider === id
-                  ? 'border-accent bg-accent/5 text-accent shadow-xl shadow-accent/5 ring-1 ring-accent/20'
-                  : 'border-border bg-surface/30 text-text-secondary hover:bg-surface/50 hover:border-accent/30 hover:text-text-primary'
+                className={`group relative flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded-lg border px-4 py-3 transition-colors ${localConfig.provider === id
+                  ? 'border-accent/25 bg-background/80 text-accent'
+                  : 'border-border/70 bg-background/35 text-text-secondary hover:bg-surface/35 hover:border-border-active hover:text-text-primary'
                   }`}
               >
                 {isEditing ? (
-                  <div className="w-full space-y-2" onClick={(e) => e.stopPropagation()}>
-                    <Input
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-surface-active rounded-lg border border-accent/60 shadow-sm" onClick={(e) => e.stopPropagation()}>
+                    <input
                       value={editingProviderName}
                       onChange={(e) => setEditingProviderName(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          saveEditingCustomProvider()
-                        }
-                        if (e.key === 'Escape') {
-                          e.preventDefault()
-                          cancelEditingCustomProvider()
-                        }
+                        if (e.key === 'Enter') { e.preventDefault(); saveEditingCustomProvider() }
+                        if (e.key === 'Escape') { e.preventDefault(); cancelEditingCustomProvider() }
                       }}
                       autoFocus
-                      className="h-8 bg-background/80 border-accent/40 text-xs text-center"
+                      className="w-full flex-1 bg-transparent text-sm font-semibold text-center outline-none px-2 text-text-primary placeholder:text-text-muted/50"
+                      placeholder="Provider Name"
                     />
-                    <div className="flex items-center justify-center gap-1.5">
+                    <div className="absolute bottom-1 right-1 flex items-center gap-0.5 bg-background/80 backdrop-blur-md rounded border border-border/50 p-0.5 shadow-sm">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          saveEditingCustomProvider()
-                        }}
+                        onClick={(e) => { e.stopPropagation(); saveEditingCustomProvider(); }}
                         disabled={!editingProviderName.trim()}
-                        className="h-6 px-2 rounded-md bg-accent text-white text-[10px] font-bold disabled:opacity-40"
+                        className="p-0.5 rounded hover:bg-accent/10 text-accent disabled:opacity-40 transition-colors"
                       >
-                        {language === 'zh' ? '保存' : 'Save'}
+                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
                       </button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          cancelEditingCustomProvider()
-                        }}
-                        className="h-6 px-2 rounded-md bg-surface-hover text-text-secondary text-[10px] font-bold"
+                        onClick={(e) => { e.stopPropagation(); cancelEditingCustomProvider(); }}
+                        className="p-0.5 rounded hover:bg-red-500/10 text-text-muted hover:text-red-500 transition-colors"
                       >
-                        {language === 'zh' ? '取消' : 'Cancel'}
+                        <X className="w-3.5 h-3.5" strokeWidth={3} />
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <span className={`font-bold text-sm truncate w-full text-center ${localConfig.provider === id ? 'text-text-primary' : ''}`}>{displayName}</span>
+                  <span className={`w-full truncate text-center text-sm font-semibold ${localConfig.provider === id ? 'text-text-primary' : ''}`}>{displayName}</span>
                 )}
                 {localConfig.provider === id && (
-                  <div className="absolute top-3 right-3 bg-accent rounded-full p-0.5 shadow-lg shadow-accent/20">
+                  <div className="absolute top-2.5 right-2.5 rounded-full bg-accent p-0.5">
                     <Check className="w-3 h-3 text-white" strokeWidth={3} />
                   </div>
                 )}
@@ -1190,18 +1209,18 @@ export function ProviderSettings({
                       e.stopPropagation()
                       startEditingCustomProvider(id, displayName)
                     }}
-                    className="absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center rounded-full bg-background border border-border text-text-muted shadow-xl opacity-0 group-hover:opacity-100 hover:text-accent hover:border-accent/30 transition-all scale-90 hover:scale-100 z-10"
+                    className="absolute -top-2 -left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-accent/30 hover:text-accent"
                     title={language === 'zh' ? '重命名' : 'Rename'}
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
                 )}
-                <button
-                  onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
-                  className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center rounded-full bg-background border border-border text-text-muted shadow-xl opacity-0 group-hover:opacity-100 hover:text-red-500 hover:border-red-500/30 transition-all scale-90 hover:scale-100 z-10"
-                  title={language === 'zh' ? '删除' : 'Delete'}
-                >
-                  <X className="w-3.5 h-3.5" />
+                  <button
+                    onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
+                    className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-red-500/30 hover:text-red-500"
+                    title={language === 'zh' ? '删除' : 'Delete'}
+                  >
+                    <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )
@@ -1210,19 +1229,19 @@ export function ProviderSettings({
           {/* 添加按钮 */}
           <button
             onClick={() => setIsAddingCustom(true)}
-            className={`flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-dashed transition-all duration-300 ${isAddingCustom
-              ? 'border-accent bg-accent/5 text-accent shadow-inner'
-              : 'border-border bg-white/5 text-text-muted hover:border-accent/50 hover:text-accent hover:bg-accent/5'
+            className={`flex min-h-[72px] flex-col items-center justify-center rounded-lg border border-dashed px-4 py-3 transition-colors ${isAddingCustom
+              ? 'border-accent/30 bg-background/80 text-accent'
+              : 'border-border/70 bg-background/20 text-text-muted hover:border-border-active hover:text-text-primary hover:bg-surface/30'
               }`}
           >
-            <Plus className="w-6 h-6 mb-1" />
-            <span className="text-xs font-bold uppercase tracking-tighter">{language === 'zh' ? '添加自定义' : 'Add Custom'}</span>
+            <Plus className="mb-1 w-5 h-5" />
+            <span className="text-xs font-medium">{language === 'zh' ? '添加自定义' : 'Add Custom'}</span>
           </button>
         </div>
 
         {/* 添加新 Provider 表单 */}
         {isAddingCustom && (
-          <div className="mt-6 p-6 rounded-2xl bg-surface/30 border border-border animate-slide-down">
+          <div className="mt-6 rounded-xl border border-border bg-surface/25 p-6 animate-slide-down">
             <div className="flex justify-between items-center mb-4">
               <h5 className="text-sm font-medium text-text-primary">
                 {language === 'zh' ? '添加新提供商' : 'Add New Provider'}
@@ -1243,10 +1262,9 @@ export function ProviderSettings({
       {/* 配置区域（非添加模式时显示） */}
       {!isAddingCustom && (
         <div className="space-y-6">
-          {/* 上方两列：模型配置 + 生成参数 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 左列：模型配置 */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border">
+          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Box className="w-4 h-4 text-accent" />
@@ -1263,17 +1281,7 @@ export function ProviderSettings({
                   baseUrl={localConfig.baseUrl}
                   protocol={isCustomSelected ? selectedCustomConfig?.protocol : localConfig.protocol}
                   language={language}
-                  existingModels={(() => {
-                    const models = new Set<string>()
-                    if (isCustomSelected && selectedCustomConfig) {
-                      (selectedCustomConfig.customModels || []).forEach(m => models.add(m))
-                    } else if (selectedProvider) {
-                      selectedProvider.models.forEach(m => models.add(m))
-                    }
-                    const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
-                    localCustomModels.forEach(m => models.add(m))
-                    return Array.from(models)
-                  })()}
+                  existingModels={availableModels}
                   onModelsFetched={(models) => {
                     handleBatchAddModels(models)
                   }}
@@ -1282,83 +1290,89 @@ export function ProviderSettings({
                 />
               </div>
 
-              <ScrollShadow maxHeight="500px" className="pr-2">
-                <div className="space-y-4 pr-2">
-                  <div className="space-y-1.5">
-                    <label className="sr-only text-xs font-medium text-text-secondary">
-                      {language === 'zh' ? '选择模型' : 'Select Model'}
-                    </label>
-                    <label className="text-xs font-medium text-text-secondary">
-                      {language === 'zh' ? '选择模型' : 'Select Model'}
-                    </label>
-                    <Select
-                      value={localConfig.model}
-                      onChange={(value) => setLocalConfig({ ...localConfig, model: value })}
-                      options={(() => {
-                        const modelsSet = new Set<string>()
-
-                        // 1. 获取当前 provider 的内置模型或自定义配置的基础模型
-                        if (isCustomSelected && selectedCustomConfig) {
-                          (selectedCustomConfig.customModels || []).forEach((m) => modelsSet.add(m))
-                        } else if (selectedProvider) {
-                          selectedProvider.models.forEach((m) => modelsSet.add(m))
-                        }
-
-                        // 2. 获取本地存储的额外自定义模型
-                        const localCustomModels = localProviderConfigs[localConfig.provider]?.customModels || []
-                        localCustomModels.forEach((m) => modelsSet.add(m))
-
-                        // 3. 确保当前选中的模型也在列表中
-                        if (localConfig.model) {
-                          modelsSet.add(localConfig.model)
-                        }
-
-                        return Array.from(modelsSet).map((m) => ({ value: m, label: m }))
-                      })()}
-                      className="w-full bg-background/50 border-border"
-                    />
-                  </div>
-
-                  {/* 添加自定义模型 */}
-                  <div className="pt-2">
-                    <div className="flex gap-2">
-                      <Input
-                        value={newModelName}
-                        onChange={(e) => setNewModelName(e.target.value)}
-                        placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
-                        className="flex-1 h-9 text-xs bg-background/50 border-border"
-                      />
-                      <Button variant="secondary" size="sm" onClick={() => handleAddModel()} disabled={!newModelName.trim()} className="h-9 px-3">
-                        <Plus className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    {(localProviderConfigs[localConfig.provider]?.customModels?.length ?? 0) > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {localProviderConfigs[localConfig.provider]?.customModels?.map((model: string) => (
-                          <div
-                            key={model}
-                            className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-border"
-                          >
-                            <span>{model}</span>
-                            <button
-                              onClick={() => handleRemoveModel(model)}
-                              className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Trash className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="sr-only text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? '选择模型' : 'Select Model'}
+                  </label>
+                  <label className="text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? '选择模型' : 'Select Model'}
+                  </label>
+                  <Select
+                    value={localConfig.model}
+                    onChange={(value) => setLocalConfig({ ...localConfig, model: value })}
+                    options={availableModelOptions}
+                    className="w-full bg-background/50 border-border"
+                  />
                 </div>
-              </ScrollShadow>
-            </section>
 
-            {/* 右列：生成参数 */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border">
+                <div className="pt-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={newModelName}
+                      onChange={(e) => setNewModelName(e.target.value)}
+                      placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
+                      className="flex-1 h-9 text-xs bg-background/50 border-border"
+                    />
+                    <Button variant="secondary" size="sm" onClick={() => handleAddModel()} disabled={!newModelName.trim()} className="h-9 px-3">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  {(localProviderConfigs[localConfig.provider]?.customModels?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {localProviderConfigs[localConfig.provider]?.customModels?.map((model: string) => (
+                        <div
+                          key={model}
+                          className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-border"
+                        >
+                          <span>{model}</span>
+                          <button
+                            onClick={() => handleRemoveModel(model)}
+                            className="text-text-muted hover:text-red-400 opacity-50 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border/50 bg-surface/20 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            
+            <button 
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between p-6 cursor-pointer focus:outline-none relative z-10"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-accent/10 rounded-lg text-accent">
+                  <Sliders className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <h5 className="text-sm font-semibold text-text-primary">
+                    {language === 'zh' ? '生成参数' : 'Generation Parameters'}
+                  </h5>
+                  <p className="text-[10px] text-text-muted mt-0.5">
+                    {language === 'zh' ? '调整温度、Top P、最大 Token 等高级配置' : 'Adjust temperature, top P, max tokens, and other advanced settings'}
+                  </p>
+                </div>
+              </div>
+              <div className={`p-1.5 rounded-full bg-surface-hover transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+            </button>
+
+            <div className={`grid transition-all duration-300 ease-in-out ${showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
+              <div className="overflow-hidden">
+                <div className="p-6 pt-0 space-y-6 relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <Sliders className="w-4 h-4 text-accent" />
                 <h5 className="text-sm font-medium text-text-primary">
@@ -1366,8 +1380,7 @@ export function ProviderSettings({
                 </h5>
               </div>
 
-              <ScrollShadow maxHeight="500px" className="pr-2">
-                <div className="space-y-5 pr-2">
+              <div className="space-y-5">
 
                   {/* Max Tokens */}
                   <div className="space-y-3">
@@ -1962,12 +1975,15 @@ export function ProviderSettings({
                     )}
                   </div>
                 </div>
-              </ScrollShadow>
-            </section>
+              </div>
+            </div>
           </div>
+          </section>
 
-          {/* 下方全宽：认证 & 网络配置 */}
-          <section className="p-6 bg-surface/30 rounded-2xl border border-border shadow-sm">
+          {/* 认证 & 网络配置 */}
+          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-accent/10 rounded-lg text-accent">
@@ -2002,7 +2018,7 @@ export function ProviderSettings({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <TestConnectionButton localConfig={localConfig} language={language} />
                 <TestModelButton localConfig={localConfig} language={language} />
               </div>
@@ -2108,6 +2124,7 @@ export function ProviderSettings({
                   )}
                 </div>
               </div>
+            </div>
             </div>
           </section>
         </div>

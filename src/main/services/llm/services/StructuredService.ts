@@ -100,6 +100,7 @@ const TestCaseSchema = z.object({
 
 interface GenerationResponseLike {
   usage?: Parameters<typeof convertUsage>[0]
+  providerMetadata?: Parameters<typeof convertUsage>[1]
   response: {
     id: string
     modelId: string
@@ -112,7 +113,7 @@ export class StructuredService {
   private buildResponse<T>(result: GenerationResponseLike, data: T): LLMResponse<T> {
     return {
       data,
-      usage: result.usage ? convertUsage(result.usage) : undefined,
+      usage: result.usage ? convertUsage(result.usage, result.providerMetadata) : undefined,
       metadata: {
         id: result.response.id,
         modelId: result.response.modelId,

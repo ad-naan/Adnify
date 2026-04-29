@@ -20,6 +20,7 @@ export interface PreparedRequest {
   settings: GenerationSettings
   callOptions: RequestExecutionOptions
   providerOptions?: ProviderOptions
+  cacheWriteTokens?: number
 }
 
 interface ExecutePreparedRequestOptions<T> {
@@ -66,6 +67,7 @@ export async function executePreparedRequest<T>(
         settings: prepared.settings,
         callOptions: prepared.callOptions,
         providerOptions: prepared.providerOptions,
+        cacheWriteTokens: prepared.cacheWriteTokens,
       }, attempt)
     },
   })
@@ -108,5 +110,6 @@ export async function prepareExecutionRequest(
     settings,
     callOptions,
     providerOptions,
+    cacheWriteTokens: prepared.cacheWriteTokens,
   }
 }

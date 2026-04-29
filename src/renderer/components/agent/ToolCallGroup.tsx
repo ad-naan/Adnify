@@ -80,7 +80,6 @@ export function renderToolCallCard(
       isAwaitingApproval={isPending}
       onApprove={isPending ? opts.onApproveTool : undefined}
       onReject={isPending ? opts.onRejectTool : undefined}
-      defaultExpanded
     />
   )
 }
@@ -105,7 +104,7 @@ function ToolCallGroup({
   const opts = { pendingToolId, onApproveTool, onRejectTool, onOpenDiff, messageId }
 
   return (
-    <div className="my-2 animate-slide-in-right space-y-2">
+    <div className="my-2 space-y-2">
       {toolCalls.map(tc => (
         <div key={tc.id}>
           {renderToolCallCard(tc, opts)}

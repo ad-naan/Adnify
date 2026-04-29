@@ -109,6 +109,7 @@ const defaultAgentConfig: AgentConfig = {
   retryDelayMs: AGENT_DEFAULTS.retryDelayMs,
   toolTimeoutMs: AGENT_DEFAULTS.toolTimeoutMs,
   enableAutoFix: AGENT_DEFAULTS.enableAutoFix,
+  expandAgentBlocksByDefault: AGENT_DEFAULTS.expandAgentBlocksByDefault,
   keepRecentTurns: AGENT_DEFAULTS.keepRecentTurns,
   deepCompressionTurns: AGENT_DEFAULTS.deepCompressionTurns,
   maxImportantOldTurns: AGENT_DEFAULTS.maxImportantOldTurns,

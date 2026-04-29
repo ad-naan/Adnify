@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VirtuosoHandle } from 'react-virtuoso'
 
-const CHAT_BOTTOM_THRESHOLD = 96
+const CHAT_BOTTOM_THRESHOLD = 220
 
 interface VisibleRange {
   startIndex: number
@@ -28,6 +28,8 @@ export function useChatScrollController({
   const isAutoScrollingRef = useRef(false)
   const atBottomRef = useRef(true)
   const pendingBottomSnapRef = useRef(true)
+  const lastScrollTopRef = useRef(0)
+  const stickyFrameRef = useRef<number | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
   const getBottomMetrics = useCallback(() => {
@@ -72,9 +74,35 @@ export function useChatScrollController({
     })
   }, [messageCount, syncBottomStateFromScroller])
 
+  const stickToBottom = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller || messageCount <= 0) return
+
+    isAutoScrollingRef.current = true
+    atBottomRef.current = true
+    setShowScrollButton(false)
+
+    scroller.scrollTop = scroller.scrollHeight
+    virtuosoRef.current?.autoscrollToBottom()
+
+    requestAnimationFrame(() => {
+      scroller.scrollTop = scroller.scrollHeight
+      lastScrollTopRef.current = scroller.scrollTop
+      isAutoScrollingRef.current = false
+    })
+  }, [messageCount])
+
+  const scheduleStickToBottom = useCallback(() => {
+    if (stickyFrameRef.current !== null) return
+    stickyFrameRef.current = requestAnimationFrame(() => {
+      stickyFrameRef.current = null
+      stickToBottom()
+    })
+  }, [stickToBottom])
+
   const followOutput = useCallback((isListAtBottom: boolean) => {
-    if (isStreaming) return isListAtBottom ? 'auto' : false
-    return isListAtBottom ? 'auto' : false
+    if (isStreaming) return (isListAtBottom || atBottomRef.current) ? 'auto' : false
+    return (isListAtBottom || atBottomRef.current) ? 'auto' : false
   }, [isStreaming])
 
   const handleTotalListHeightChanged = useCallback(() => {
@@ -83,22 +111,27 @@ export function useChatScrollController({
       return
     }
 
-    if (!atBottomRef.current) {
+    const { bottom } = getBottomMetrics()
+    if (!atBottomRef.current && !bottom) {
       requestAnimationFrame(syncBottomStateFromScroller)
       return
     }
 
+    atBottomRef.current = true
     isAutoScrollingRef.current = true
     setShowScrollButton(false)
 
     requestAnimationFrame(() => {
-      virtuosoRef.current?.autoscrollToBottom()
+      stickToBottom()
       requestAnimationFrame(() => {
-        isAutoScrollingRef.current = false
-        syncBottomStateFromScroller()
+        stickToBottom()
+        requestAnimationFrame(() => {
+          isAutoScrollingRef.current = false
+          syncBottomStateFromScroller()
+        })
       })
     })
-  }, [isStreaming, syncBottomStateFromScroller])
+  }, [getBottomMetrics, isStreaming, stickToBottom, syncBottomStateFromScroller])
 
   const handleBottomStateChange = useCallback((bottom: boolean) => {
     if (isAutoScrollingRef.current) return
@@ -147,13 +180,38 @@ export function useChatScrollController({
 
     const handleScroll = () => {
       if (isAutoScrollingRef.current) return
+      const previousTop = lastScrollTopRef.current
+      const currentTop = scroller.scrollTop
+      lastScrollTopRef.current = currentTop
+
+      if (isStreaming && currentTop < previousTop - 2) {
+        const { hasOverflow } = getBottomMetrics()
+        syncBottomState(false, hasOverflow)
+        return
+      }
+
+      if (isStreaming && currentTop >= previousTop) {
+        const { bottom, hasOverflow } = getBottomMetrics()
+        if (bottom || atBottomRef.current) {
+          syncBottomState(true, hasOverflow)
+          scheduleStickToBottom()
+          return
+        }
+      }
+
       syncBottomStateFromScroller()
     }
 
+    lastScrollTopRef.current = scroller.scrollTop
     handleScroll()
     scroller.addEventListener('scroll', handleScroll, { passive: true })
 
     const resizeObserver = new ResizeObserver(() => {
+      if (isStreaming && atBottomRef.current) {
+        setShowScrollButton(false)
+        scheduleStickToBottom()
+        return
+      }
       syncBottomStateFromScroller()
     })
     resizeObserver.observe(scroller)
@@ -162,7 +220,27 @@ export function useChatScrollController({
       scroller.removeEventListener('scroll', handleScroll)
       resizeObserver.disconnect()
     }
-  }, [syncBottomStateFromScroller])
+  }, [getBottomMetrics, isStreaming, scheduleStickToBottom, syncBottomState, syncBottomStateFromScroller])
+
+  useEffect(() => {
+    if (!isStreaming) return
+
+    const timer = window.setInterval(() => {
+      if (atBottomRef.current) {
+        stickToBottom()
+      }
+    }, 120)
+
+    return () => window.clearInterval(timer)
+  }, [isStreaming, stickToBottom])
+
+  useEffect(() => {
+    return () => {
+      if (stickyFrameRef.current !== null) {
+        cancelAnimationFrame(stickyFrameRef.current)
+      }
+    }
+  }, [])
 
   return {
     attachScrollerNode,

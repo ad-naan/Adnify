@@ -33,6 +33,31 @@ interface LspDocumentParams extends LspRequestParams {
   text: string
 }
 
+interface NormalizedLspLocation {
+  uri: string
+  range: any
+}
+
+function normalizeLspLocation(location: any): NormalizedLspLocation | null {
+  if (!location || typeof location !== 'object') return null
+
+  if (typeof location.uri === 'string' && location.range) {
+    return {
+      uri: location.uri,
+      range: location.range,
+    }
+  }
+
+  if (typeof location.targetUri === 'string' && (location.targetSelectionRange || location.targetRange)) {
+    return {
+      uri: location.targetUri,
+      range: location.targetSelectionRange || location.targetRange,
+    }
+  }
+
+  return null
+}
+
 /**
  * 执行 LSP 请求的通用包装器
  * 处理 URI 转换、工作区路径获取、错误处理
@@ -255,9 +280,25 @@ export async function goToDefinition(
   return executeLspPositionRequest(
     filePath, line, character,
     async (params) => {
+      logger.lsp.info('[LSP] Go to definition request:', {
+        filePath,
+        uri: params.uri,
+        workspacePath: params.workspacePath,
+        line,
+        character,
+      })
       const result = await api.lsp.definition(params)
       if (!result) return null
-      return Array.isArray(result) ? result : [result]
+      const normalized = (Array.isArray(result) ? result : [result])
+        .map(normalizeLspLocation)
+        .filter((location): location is NormalizedLspLocation => location !== null)
+      logger.lsp.info('[LSP] Go to definition normalized result:', {
+        filePath,
+        rawCount: Array.isArray(result) ? result.length : 1,
+        normalizedCount: normalized.length,
+        first: normalized[0] || null,
+      })
+      return normalized.length > 0 ? normalized : null
     },
     null
   )

@@ -7,6 +7,7 @@ import { useState, memo } from 'react'
 import { Check, Circle, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { TodoItem } from '@/renderer/agent/types'
+import { useStore } from '@store'
 
 interface TodoListPanelProps {
   todos: TodoItem[]
@@ -50,7 +51,8 @@ const TodoRow = memo(({ todo }: { todo: TodoItem }) => {
 TodoRow.displayName = 'TodoRow'
 
 export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) => {
-  const [isExpanded, setIsExpanded] = useState(true)
+  const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+  const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
 
   if (todos.length === 0) return null
 

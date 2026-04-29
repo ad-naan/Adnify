@@ -69,7 +69,7 @@ export class SyncService {
 
       return {
         data: result.text,
-        usage: result.usage ? convertUsage(result.usage) : undefined,
+        usage: result.usage ? convertUsage(result.usage, result.providerMetadata) : undefined,
         metadata: {
           id: result.response.id,
           modelId: result.response.modelId,

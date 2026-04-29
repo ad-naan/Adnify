@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Search, Terminal, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
@@ -231,16 +231,67 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
     return isRunning ? 'Processing...' : ''
 }
 
-export function ExpandablePreviewContainer({ children, maxHeight = 'max-h-[200px]', expandedHeight = 'max-h-[350px]', language = 'en' }: { children: React.ReactNode, maxHeight?: string, expandedHeight?: string, language?: string }) {
+const getHeightPx = (heightClass: string): number => {
+    const bracketMatch = heightClass.match(/\[(\d+)px\]/)
+    if (bracketMatch) return Number(bracketMatch[1])
+
+    const remMatch = heightClass.match(/max-h-(\d+)/)
+    if (remMatch) return Number(remMatch[1]) * 4
+
+    return 200
+}
+
+function PendingPreviewSkeleton() {
+    return (
+        <div className="p-2 space-y-1.5 opacity-70" aria-hidden="true">
+            <div className="h-2 rounded-full bg-text-primary/[0.06] animate-pulse w-[72%]" />
+            <div className="h-2 rounded-full bg-text-primary/[0.06] animate-pulse w-[48%]" />
+        </div>
+    )
+}
+
+export function ExpandablePreviewContainer({
+    children,
+    maxHeight = 'max-h-[200px]',
+    expandedHeight = 'max-h-[350px]',
+    language = 'en',
+}: {
+    children: React.ReactNode
+    maxHeight?: string
+    expandedHeight?: string
+    language?: string
+}) {
     const [expanded, setExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
+    const innerRef = useRef<HTMLDivElement>(null);
     const [isOverflowing, setIsOverflowing] = useState(false);
+    const [measuredHeight, setMeasuredHeight] = useState(0);
 
-    useEffect(() => {
-        if (contentRef.current) {
-            setIsOverflowing(contentRef.current.scrollHeight > contentRef.current.clientHeight + 10);
+    const collapsedMaxHeight = useMemo(() => getHeightPx(maxHeight), [maxHeight])
+    const expandedMaxHeight = useMemo(() => getHeightPx(expandedHeight), [expandedHeight])
+    const activeMaxHeight = expanded ? expandedMaxHeight : collapsedMaxHeight
+
+    useLayoutEffect(() => {
+        const content = contentRef.current
+        const inner = innerRef.current
+        if (!content || !inner) return
+
+        const measure = () => {
+            const contentHeight = inner.scrollHeight
+            const totalHeight = contentHeight
+            const nextHeight = Math.max(1, Math.min(totalHeight, activeMaxHeight))
+            const nextOverflowing = totalHeight > activeMaxHeight + 10
+
+            setIsOverflowing(nextOverflowing)
+            setMeasuredHeight(nextHeight)
         }
-    }, [children]);
+
+        measure()
+        const resizeObserver = new ResizeObserver(measure)
+        resizeObserver.observe(content)
+        resizeObserver.observe(inner)
+        return () => resizeObserver.disconnect()
+    }, [children, expanded, activeMaxHeight]);
 
     const heightValue = useMemo(() => {
         const match = expandedHeight.match(/\[(.*?)\]/);
@@ -251,9 +302,12 @@ export function ExpandablePreviewContainer({ children, maxHeight = 'max-h-[200px
         <div className="mt-1 relative overflow-hidden">
             <div
                 ref={contentRef}
-                className={`overflow-y-auto custom-scrollbar ${expanded ? expandedHeight : maxHeight} transition-all duration-300 relative`}
+                className="overflow-y-auto custom-scrollbar transition-[height,background-color] duration-300 ease-out relative"
+                style={{ height: measuredHeight || undefined, maxHeight: activeMaxHeight }}
             >
-                {children}
+                <div ref={innerRef}>
+                    {children}
+                </div>
             </div>
             {isOverflowing && !expanded && (
                 <div
@@ -303,6 +357,14 @@ function ToolPreview({
     setTerminalVisible: (visible: boolean) => void
 }) {
     const stringResult = typeof toolCall.result === 'string' ? toolCall.result : ''
+    const pendingPreview = (label = 'Waiting for output...') => (
+        <ExpandablePreviewContainer language={language}>
+            <div className="p-2 text-[11px] text-text-muted italic">
+                {label}
+            </div>
+            <PendingPreviewSkeleton />
+        </ExpandablePreviewContainer>
+    )
 
     if (effectiveName === 'run_command') {
         const cmd = asString(args.command)
@@ -358,13 +420,15 @@ function ToolPreview({
                         </span>
                     </button>
                 </div>
-                {stringResult && (
+                {stringResult ? (
                     <ExpandablePreviewContainer language={language}>
                         <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2 font-mono text-[11px]">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 inline-block ml-1">... (truncated)</span>}
                         </div>
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Waiting for terminal output...')
                 )}
             </div>
         )
@@ -407,12 +471,14 @@ function ToolPreview({
                     <span>Read terminal logs</span>
                     <span className="opacity-50 text-[10px]">{asString(args.terminal_id)}</span>
                 </div>
-                {stringResult.length > 0 && (
+                {stringResult.length > 0 ? (
                     <ExpandablePreviewContainer language={language}>
                         <div className="text-text-muted/80 whitespace-pre-wrap break-all p-2 bg-surface/50">
                             {stringResult}
                         </div>
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Waiting for terminal output...')
                 )}
             </div>
         )
@@ -429,10 +495,12 @@ function ToolPreview({
                     <span>{searchType}:</span>
                     <span className="text-text-primary font-medium truncate">"{query}"</span>
                 </div>
-                {toolCall.result && (
+                {toolCall.result ? (
                     <ExpandablePreviewContainer language={language}>
                         <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Searching...')
                 )}
             </div>
         )
@@ -449,13 +517,15 @@ function ToolPreview({
                     <FileCode className="w-3 h-3" />
                     <span className="text-text-primary font-medium" title={path || undefined}>{displayName}</span>
                 </div>
-                {stringResult && (
+                {stringResult ? (
                     <ExpandablePreviewContainer language={language}>
                         <div className="p-2 font-mono text-text-secondary whitespace-pre">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Reading directory...')
                 )}
             </div>
         )
@@ -481,7 +551,7 @@ function ToolPreview({
                                 <TextWithFileLinks text={getFileName(filePath)} />
                             </span>
                         ) : (isStreaming || isRunning) ? (
-                            <span className="font-medium text-shimmer italic">editing...</span>
+                            <span className="font-medium tool-text-shimmer italic">editing...</span>
                         ) : (
                             <span className="font-medium text-text-primary opacity-50">&lt;empty path&gt;</span>
                         )}
@@ -551,7 +621,7 @@ function ToolPreview({
         const paths = getToolPathList(args)
         const filePath = paths[0] || ''
         const hasResolvedReadTarget = paths.length > 0
-        if (!hasResolvedReadTarget && !toolCall.result && !toolCall.richContent?.length) {
+        if (!hasResolvedReadTarget && !toolCall.result && !toolCall.richContent?.length && !isRunning && !isStreaming) {
             return null
         }
         const displayName = paths.length > 1 ? getPathSummary(paths) : (filePath ? getPathDisplayName(filePath) : '<no path>')
@@ -566,7 +636,7 @@ function ToolPreview({
                         <TextWithFileLinks text={displayName} />
                     </span>
                 </div>
-                {stringResult && (
+                {stringResult ? (
                     <ExpandablePreviewContainer language={language}>
                         <SyntaxHighlighter
                             style={syntaxStyle}
@@ -580,6 +650,8 @@ function ToolPreview({
                             {stringResult.slice(0, 5000)}
                         </SyntaxHighlighter>
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Reading file...')
                 )}
             </div>
         )
@@ -604,13 +676,15 @@ function ToolPreview({
                         {hostname}
                     </a>
                 </div>
-                {stringResult && (
+                {stringResult ? (
                     <ExpandablePreviewContainer language={language}>
                         <div className="p-2 text-[11px] text-text-secondary whitespace-pre-wrap break-all">
                             {stringResult.slice(0, 5000)}
                             {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
                         </div>
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Reading URL...')
                 )}
             </div>
         )
@@ -629,10 +703,12 @@ function ToolPreview({
                     </span>
                     {line && <span className="text-text-muted/60">:{line}</span>}
                 </div>
-                {toolCall.result && (
+                {toolCall.result ? (
                     <ExpandablePreviewContainer language={language}>
                         <JsonHighlight data={toolCall.result} className="p-2 bg-transparent m-0" maxHeight="max-h-full" maxLength={3000} />
                     </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Analyzing...')
                 )}
             </div>
         )
@@ -684,6 +760,7 @@ function ToolPreview({
                     </ExpandablePreviewContainer>
                 </>
             )}
+            {!toolCall.result && (!toolCall.richContent || toolCall.richContent.length === 0) && (isRunning || isStreaming) && pendingPreview()}
         </div>
     )
 }
@@ -693,17 +770,18 @@ const ToolCallCard = memo(function ToolCallCard({
     isAwaitingApproval,
     onApprove,
     onReject,
-    defaultExpanded = true,
+    defaultExpanded,
 }: ToolCallCardProps) {
-    const { language, setTerminalVisible, currentTheme } = useStore(useShallow(state => ({
+    const { language, setTerminalVisible, currentTheme, expandAgentBlocksByDefault } = useStore(useShallow(state => ({
         language: state.language,
         setTerminalVisible: state.setTerminalVisible,
         currentTheme: state.currentTheme,
+        expandAgentBlocksByDefault: state.agentConfig.expandAgentBlocksByDefault ?? false,
     })))
     const { args, effectiveName, isSuccess, isError, isRejected, isRunning, isStreaming } = useToolDisplayState(toolCall)
     const isActive = isRunning || isStreaming
     const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
-        defaultExpanded,
+        defaultExpanded: defaultExpanded ?? expandAgentBlocksByDefault,
         isActive,
     })
 
@@ -756,7 +834,7 @@ const ToolCallCard = memo(function ToolCallCard({
         <div className={`group my-0.5 relative ${cardStyle}`}>
             {(isStreaming || isRunning) && (
                 <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden">
-                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent animate-shimmer" />
+                    <div className="absolute inset-0 w-[200%] h-full bg-gradient-to-r from-transparent via-accent/10 to-transparent tool-card-sweep" />
                 </div>
             )}
 
@@ -788,7 +866,7 @@ const ToolCallCard = memo(function ToolCallCard({
                 </div>
 
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
-                    <span className={`text-[12px] truncate ${isStreaming || isRunning ? 'text-text-primary text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+                    <span className={`text-[12px] truncate ${isStreaming || isRunning ? 'text-text-primary tool-text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
                         {statusText || (
                             <span className="opacity-50 inline-flex items-center gap-1.5">
                                 <span>{TOOL_LABELS[effectiveName] || effectiveName}</span>

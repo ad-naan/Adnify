@@ -454,7 +454,8 @@ export class StreamingService {
         strategy,
         requestId,
         resolveStreamIdleTimeoutMs(preparedRequest.callOptions.timeout),
-        (tools?.length ?? 0) > 0
+        (tools?.length ?? 0) > 0,
+        preparedRequest.cacheWriteTokens,
       )
     } catch (error) {
       if (abortSignal?.aborted) {
@@ -482,7 +483,8 @@ export class StreamingService {
     strategy: ThinkingStrategy,
     requestId: string,
     streamIdleTimeoutMs: number,
-    enablePseudoToolAdapter: boolean
+    enablePseudoToolAdapter: boolean,
+    cacheWriteTokens?: number,
   ): Promise<StreamingResult> {
     let reasoning = ''
     let streamedText = ''
@@ -686,6 +688,7 @@ export class StreamingService {
     // 获取最终结果
     const text = await result.text
     const usage = await result.usage
+    const providerMetadata = await result.providerMetadata
     const response = await result.response
 
     // 使用策略提取最终 thinking
@@ -734,7 +737,7 @@ export class StreamingService {
     const streamingResult: StreamingResult = {
       content: finalText,
       reasoning: finalReasoning || undefined,
-      usage: usage ? convertUsage(usage) : undefined,
+      usage: usage ? convertUsage(usage, providerMetadata, { cacheWriteTokens }) : undefined,
       metadata: {
         id: streamedResponseMetadata?.id ?? response.id,
         modelId: streamedResponseMetadata?.modelId ?? response.modelId,

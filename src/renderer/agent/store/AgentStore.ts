@@ -183,6 +183,7 @@ function createHandoffDigestMessage(handoff: HandoffDocument): AssistantMessage 
             id: `context-handoff-${createdAt}`,
             type: 'context_snapshot',
             snapshotKind: 'handoff',
+            presentation: 'resume_card',
             level: 4,
             summary: handoff.summary,
             generatedAt: createdAt,
@@ -191,6 +192,42 @@ function createHandoffDigestMessage(handoff: HandoffDocument): AssistantMessage 
         }],
         toolCalls: [],
     }
+}
+
+function createHandoffSourceMarkerMessage(handoff: HandoffDocument): AssistantMessage {
+    const createdAt = handoff.createdAt
+
+    return {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: '',
+        timestamp: createdAt,
+        isStreaming: false,
+        parts: [{
+            id: `context-handoff-${createdAt}`,
+            type: 'context_snapshot',
+            snapshotKind: 'handoff',
+            presentation: 'source_marker',
+            level: 4,
+            summary: handoff.summary,
+            generatedAt: createdAt,
+            note: 'Context was compressed and continued in a new thread.',
+            lastUserRequest: handoff.lastUserRequest,
+        }],
+        toolCalls: [],
+    }
+}
+
+function hasHandoffSourceMarker(messages: ChatMessage[], createdAt: number): boolean {
+    return messages.some(message =>
+        message.role === 'assistant' &&
+        message.parts.some(part =>
+            part.type === 'context_snapshot' &&
+            part.snapshotKind === 'handoff' &&
+            part.presentation === 'source_marker' &&
+            part.generatedAt === createdAt
+        )
+    )
 }
 
 // ===== Store 实现 =====
@@ -272,12 +309,18 @@ export const useAgentStore = create<AgentStore>()(
                     set(s => {
                         const thread = s.threads[newThreadId]
                         if (!thread) return s
+                        const sourceThread = s.threads[sourceThreadId]
+                        const sourceMessages = hasHandoffSourceMarker(sourceThread.messages, handoff.createdAt)
+                            ? sourceThread.messages
+                            : [...sourceThread.messages, createHandoffSourceMarkerMessage(handoff)]
                         return {
                             threads: {
                                 ...s.threads,
                                 [sourceThreadId]: {
-                                    ...s.threads[sourceThreadId],
+                                    ...sourceThread,
                                     handoff: createIdleHandoffState(),
+                                    messages: sourceMessages,
+                                    lastModified: Date.now(),
                                 },
                                 [newThreadId]: {
                                     ...thread,
@@ -302,6 +345,7 @@ export const useAgentStore = create<AgentStore>()(
                             },
                             threadMessageVersions: {
                                 ...s.threadMessageVersions,
+                                [sourceThreadId]: (s.threadMessageVersions[sourceThreadId] || 0) + 1,
                                 [newThreadId]: 1,
                             },
                         }
