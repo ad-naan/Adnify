@@ -6,7 +6,7 @@ interface UseToolCardExpansionOptions {
 }
 
 export function useToolCardExpansion({
-  defaultExpanded = true,
+  defaultExpanded = false,
   isActive,
 }: UseToolCardExpansionOptions) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
@@ -14,13 +14,13 @@ export function useToolCardExpansion({
   const wasActiveRef = useRef(isActive)
 
   useEffect(() => {
-    if (isActive && !wasActiveRef.current) {
+    if (defaultExpanded && isActive && !wasActiveRef.current) {
       setAnimateContent(false)
       setIsExpanded(true)
     }
 
     wasActiveRef.current = isActive
-  }, [isActive])
+  }, [defaultExpanded, isActive])
 
   const handleToggleExpanded = useCallback(() => {
     setAnimateContent(true)

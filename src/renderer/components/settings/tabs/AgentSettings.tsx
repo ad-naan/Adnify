@@ -73,6 +73,11 @@ export function AgentSettings({
                                 checked={agentConfig.enableAutoFix}
                                 onChange={(e) => setAgentConfig({ ...agentConfig, enableAutoFix: e.target.checked })}
                             />
+                            <Switch
+                                label={t('默认展开 Think / 工具 / 上下文块', 'Expand Think / Tool / Context blocks by default')}
+                                checked={agentConfig.expandAgentBlocksByDefault ?? false}
+                                onChange={(e) => setAgentConfig({ ...agentConfig, expandAgentBlocksByDefault: e.target.checked })}
+                            />
                         </div>
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs">
                             <AlertOctagon className="w-4 h-4 shrink-0 mt-0.5" />

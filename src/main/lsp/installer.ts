@@ -109,11 +109,15 @@ export function commandExists(cmd: string): boolean {
 /**
  * 运行 npm 安装包到指定目录
  */
-async function npmInstall(packageName: string, targetDir: string): Promise<boolean> {
+async function npmInstall(packageNames: string | string[], targetDir: string): Promise<boolean> {
   return new Promise((resolve) => {
     const npmCmd = getNpmCommand()
-    logger.lsp.info(`[LSP Installer] Running: npm install ${packageName} in ${targetDir}`)
+    const packages = Array.isArray(packageNames) ? packageNames : [packageNames]
+    const installArgs = ['install', ...packages, '--prefix', targetDir]
+
+    logger.lsp.info(`[LSP Installer] Running: npm install ${packages.join(' ')} in ${targetDir}`)
     logger.lsp.debug(`[LSP Installer] npm command: ${npmCmd}`)
+    logger.lsp.debug('[LSP Installer] npm args:', installArgs)
 
     // 检查 npm 是否可用
     if (!commandExists('npm')) {
@@ -134,10 +138,9 @@ async function npmInstall(packageName: string, targetDir: string): Promise<boole
       }
     }
 
-    const proc = spawn(npmCmd, ['install', packageName, '--prefix', targetDir], {
+    const proc = spawn(npmCmd, installArgs, {
       cwd: targetDir,
       stdio: 'pipe',
-      shell: true,
     })
 
     let stdout = ''
@@ -159,11 +162,11 @@ async function npmInstall(packageName: string, targetDir: string): Promise<boole
 
     proc.on('close', (code) => {
       if (code === 0) {
-        logger.lsp.info(`[LSP Installer] npm install succeeded for ${packageName}`)
+        logger.lsp.info(`[LSP Installer] npm install succeeded for ${packages.join(' ')}`)
         resolve(true)
       } else {
         logger.lsp.error(`[LSP Installer] npm install failed with code ${code}`, {
-          packageName,
+          packageNames: packages,
           targetDir,
           stdout: stdout.slice(-500), // 最后 500 字符
           stderr: stderr.slice(-500),
@@ -175,7 +178,7 @@ async function npmInstall(packageName: string, targetDir: string): Promise<boole
     proc.on('error', (err) => {
       logger.lsp.error(`[LSP Installer] npm process error:`, {
         error: err.message,
-        packageName,
+        packageNames: packages,
         targetDir,
         npmCmd,
       })
@@ -581,7 +584,7 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const success = await npmInstall('typescript-language-server typescript', binDir)
+  const success = await npmInstall(['typescript-language-server', 'typescript'], binDir)
 
   if (success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')

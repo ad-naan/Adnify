@@ -18,8 +18,14 @@ export function pathToLspUri(filePath: string): string {
  */
 export function lspUriToPath(uri: string): string {
   let path = uri
-  if (path.startsWith('file:///')) path = path.slice(8)
-  else if (path.startsWith('file://')) path = path.slice(7)
+  if (path.startsWith('file:///')) {
+    path = path.slice(8)
+    if (!/^[a-zA-Z]:/.test(path)) {
+      path = `/${path}`
+    }
+  } else if (path.startsWith('file://')) {
+    path = path.slice(7)
+  }
   try { path = decodeURIComponent(path) } catch { }
   if (/^[a-zA-Z]:/.test(path)) path = path.replace(/\//g, '\\')
   return path
@@ -45,6 +51,8 @@ export function normalizeLspUri(uri: string): string {
       // Windows 盘符统一为大写
       if (/^[a-z]:/.test(pathPart)) {
         normalized = `file:///${pathPart.charAt(0).toUpperCase()}${pathPart.slice(1)}`
+      } else {
+        normalized = `file:///${pathPart}`
       }
     } else if (normalized.startsWith('file://')) {
       // 补全第三个斜杠

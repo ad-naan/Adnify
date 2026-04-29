@@ -55,6 +55,7 @@ export interface ContextSnapshotPart {
   id: string
   type: 'context_snapshot'
   snapshotKind: 'summary' | 'handoff'
+  presentation?: 'resume_card' | 'source_marker'
   level: CompressionLevel
   summary: StructuredSummary
   generatedAt: number

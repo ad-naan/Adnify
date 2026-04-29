@@ -66,9 +66,13 @@ class MemoryService {
    */
   async addMemory(content: string): Promise<MemoryItem> {
     const store = await this.loadStore()
+    const normalizedContent = content.trim()
+    if (!normalizedContent) {
+      throw new Error('Memory content cannot be empty')
+    }
     
     const existing = store.items.find(item => 
-      item.content.trim() === content.trim()
+      item.content.trim() === normalizedContent
     )
     if (existing) {
       return existing
@@ -76,7 +80,7 @@ class MemoryService {
 
     const newItem: MemoryItem = {
       id: crypto.randomUUID(),
-      content: content.trim(),
+      content: normalizedContent,
       createdAt: Date.now(),
       enabled: true,
     }
@@ -128,7 +132,7 @@ class MemoryService {
    * 构建记忆提示词（全量注入）
    */
   buildMemoryPrompt(memories: MemoryItem[]): string {
-    const enabledMemories = memories.filter(m => m.enabled)
+    const enabledMemories = memories.filter(m => m.enabled && m.content.trim())
     if (enabledMemories.length === 0) return ''
 
     const lines = enabledMemories.map(m => `- ${m.content}`).join('\n')
@@ -175,7 +179,7 @@ ${lines}
     }
 
     try {
-      const store = JSON.parse(content) as MemoryStore
+      const store = this.normalizeStore(JSON.parse(content))
       this.cache = store
       return store
     } catch {
@@ -188,11 +192,14 @@ ${lines}
     const { workspacePath } = useStore.getState()
     if (!workspacePath) return
 
-    this.cache = store
+    const normalizedStore = this.normalizeStore(store)
+    this.cache = normalizedStore
 
+    const memoryDir = joinPath(workspacePath, '.adnify')
     const filePath = joinPath(workspacePath, this.MEMORY_FILE)
-    const content = JSON.stringify(store, null, 2)
+    const content = JSON.stringify(normalizedStore, null, 2)
     
+    await api.file.ensureDir(memoryDir)
     await api.file.write(filePath, content)
   }
 
@@ -200,6 +207,48 @@ ${lines}
     return {
       version: this.CURRENT_VERSION,
       items: [],
+    }
+  }
+
+  private normalizeStore(raw: unknown): MemoryStore {
+    if (!raw || typeof raw !== 'object') {
+      return this.createEmptyStore()
+    }
+
+    const candidate = raw as Partial<MemoryStore> & { items?: unknown }
+    const items = Array.isArray(candidate.items)
+      ? candidate.items
+          .map(item => this.normalizeMemoryItem(item))
+          .filter((item): item is MemoryItem => item !== null)
+          .slice(0, this.MAX_ITEMS)
+      : []
+
+    return {
+      version: typeof candidate.version === 'number' ? candidate.version : this.CURRENT_VERSION,
+      items,
+    }
+  }
+
+  private normalizeMemoryItem(raw: unknown): MemoryItem | null {
+    if (!raw || typeof raw !== 'object') {
+      return null
+    }
+
+    const candidate = raw as Partial<MemoryItem>
+    if (typeof candidate.content !== 'string') {
+      return null
+    }
+
+    const content = candidate.content.trim()
+    if (!content) {
+      return null
+    }
+
+    return {
+      id: typeof candidate.id === 'string' && candidate.id ? candidate.id : crypto.randomUUID(),
+      content,
+      createdAt: typeof candidate.createdAt === 'number' ? candidate.createdAt : Date.now(),
+      enabled: candidate.enabled !== false,
     }
   }
 }

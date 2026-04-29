@@ -1,6 +1,6 @@
 {
   "name": "adnify",
-  "version": "1.7.40",
+  "version": "1.7.41",
   "description": "Adnify - A lightweight yet powerful AI-powered code editor",
   "productName": "Adnify",
   "author": "adnaan <adnaan.worker@gmail.com>",
@@ -128,6 +128,7 @@
       "node_modules/dugite/**",
       "node_modules/@lancedb/**",
       "node_modules/@parcel/watcher/**",
+      "node_modules/@parcel/watcher-*/**",
       "node_modules/sharp/**",
       "node_modules/ssh2/**",
       "node_modules/cpu-features/**"
