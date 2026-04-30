@@ -23,6 +23,8 @@ describe('convertUsage', () => {
       cachedInputTokens: 60,
       cacheWriteTokens: 40,
       reasoningTokens: 5,
+      cacheReadSource: 'provider-reported',
+      cacheWriteSource: 'provider-reported',
     })
   })
 
@@ -48,6 +50,8 @@ describe('convertUsage', () => {
       cachedInputTokens: 70,
       cacheWriteTokens: 30,
       reasoningTokens: undefined,
+      cacheReadSource: 'provider-reported',
+      cacheWriteSource: 'provider-reported',
     })
   })
 

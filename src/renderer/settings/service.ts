@@ -100,6 +100,7 @@ function cleanProviderConfig(
 
   if (config.customModels?.length) cleaned.customModels = config.customModels
   if (config.headers && Object.keys(config.headers).length > 0) cleaned.headers = config.headers
+  if (config.capabilities && Object.keys(config.capabilities).length > 0) cleaned.capabilities = config.capabilities
   if (config.protocol && config.protocol !== builtinDef?.protocol) cleaned.protocol = config.protocol
   if (
     config.openAICompatibilityProfile &&

@@ -3,14 +3,17 @@
  * 使用 AI SDK 6.0 的标准类型，不使用 any
  */
 
+import type { JSONValue } from '@ai-sdk/provider'
 import type { ModelMessage, UserModelMessage, AssistantModelMessage, ToolModelMessage } from '@ai-sdk/provider-utils'
 import type { LLMMessage, MessageContentPart } from '@shared/types'
+import type { LLMConfig } from '@shared/types/llm'
+import { getOpenAIProviderOptionKeys, usesOpenAIProtocol } from './ProviderCompatibility'
 
 export class MessageConverter {
   /**
    * 转换消息列表
    */
-  convert(messages: LLMMessage[], systemPrompt?: string): ModelMessage[] {
+  convert(messages: LLMMessage[], systemPrompt?: string, config?: LLMConfig): ModelMessage[] {
     const result: ModelMessage[] = []
 
     // 添加 system prompt
@@ -23,7 +26,7 @@ export class MessageConverter {
 
     // 转换消息
     for (const msg of messages) {
-      const converted = this.convertMessage(msg)
+      const converted = this.convertMessage(msg, config)
       if (converted) {
         result.push(converted)
       }
@@ -35,14 +38,14 @@ export class MessageConverter {
   /**
    * 转换单条消息
    */
-  private convertMessage(msg: LLMMessage): ModelMessage | null {
+  private convertMessage(msg: LLMMessage, config?: LLMConfig): ModelMessage | null {
     switch (msg.role) {
       case 'system':
         return this.convertSystemMessage(msg)
       case 'user':
         return this.convertUserMessage(msg)
       case 'assistant':
-        return this.convertAssistantMessage(msg)
+        return this.convertAssistantMessage(msg, config)
       case 'tool':
         return this.convertToolMessage(msg)
       default:
@@ -142,9 +145,9 @@ export class MessageConverter {
   /**
    * 转换 assistant 消息
    */
-  private convertAssistantMessage(msg: LLMMessage): AssistantModelMessage | null {
+  private convertAssistantMessage(msg: LLMMessage, config?: LLMConfig): AssistantModelMessage | null {
     if (msg.tool_calls && msg.tool_calls.length > 0) {
-      return this.convertAssistantWithToolCalls(msg)
+      return this.convertAssistantWithToolCalls(msg, config)
     }
 
     const content = typeof msg.content === 'string' ? msg.content : ''
@@ -152,9 +155,7 @@ export class MessageConverter {
 
     const result: AssistantModelMessage = { role: 'assistant', content }
     if (msg.reasoning_content) {
-      result.providerOptions = {
-        openaiCompatible: { reasoning_content: msg.reasoning_content },
-      }
+      result.providerOptions = this.buildReasoningProviderOptions(msg.reasoning_content, config)
     }
     return result
   }
@@ -162,7 +163,7 @@ export class MessageConverter {
   /**
    * 转换带工具调用的 assistant 消息
    */
-  private convertAssistantWithToolCalls(msg: LLMMessage): AssistantModelMessage {
+  private convertAssistantWithToolCalls(msg: LLMMessage, config?: LLMConfig): AssistantModelMessage {
     const content: Array<
       { type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
     > = []
@@ -186,9 +187,7 @@ export class MessageConverter {
 
     const result: AssistantModelMessage = { role: 'assistant', content }
     if (msg.reasoning_content) {
-      result.providerOptions = {
-        openaiCompatible: { reasoning_content: msg.reasoning_content },
-      }
+      result.providerOptions = this.buildReasoningProviderOptions(msg.reasoning_content, config)
     }
     return result
   }
@@ -217,5 +216,18 @@ export class MessageConverter {
         },
       ],
     }
+  }
+
+  private buildReasoningProviderOptions(
+    reasoningContent: string,
+    config?: LLMConfig,
+  ): Record<string, Record<string, JSONValue>> | undefined {
+    if (!reasoningContent || !config || !usesOpenAIProtocol(config)) {
+      return undefined
+    }
+
+    return Object.fromEntries(
+      getOpenAIProviderOptionKeys(config).map(key => [key, { reasoning_content: reasoningContent }]),
+    )
   }
 }

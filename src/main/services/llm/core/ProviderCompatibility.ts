@@ -15,6 +15,7 @@ export interface ThinkingCompatibilityDecision {
 }
 
 const OPENAI_MANAGED_OPTION_KEYS = new Set([
+  'instructions',
   'logitBias',
   'parallelToolCalls',
   'reasoningEffort',
@@ -36,6 +37,26 @@ export function usesAnthropicProtocol(config: LLMConfig): boolean {
 
 export function usesOpenAIProtocol(config: LLMConfig): boolean {
   return isOpenAIStyleProtocol(resolveCacheProtocol(config.protocol, config.provider))
+}
+
+export function getOpenAIProviderOptionKeys(
+  config: LLMConfig,
+): readonly string[] {
+  const protocol = resolveCacheProtocol(config.protocol, config.provider)
+
+  if (protocol === 'openai-responses') {
+    return ['openai']
+  }
+
+  if (protocol === 'openai' && isBuiltinProvider(config.provider) && config.provider === 'openai') {
+    return ['openai']
+  }
+
+  if (protocol === 'openai') {
+    return ['openaiCompatible', 'custom-openai']
+  }
+
+  return ['openaiCompatible']
 }
 
 function usesOpenAIResponsesProtocol(config: LLMConfig): boolean {
@@ -62,7 +83,7 @@ export function buildOpenAIStyleProviderOptions(
   options: Record<string, unknown>,
 ): RequestProviderOptions {
   return Object.fromEntries(
-    resolveOpenAIStyleProviderOptionKeys(config).map(key => [key, options]),
+    getOpenAIProviderOptionKeys(config).map(key => [key, options]),
   ) as RequestProviderOptions
 }
 
@@ -70,11 +91,11 @@ export function buildThinkingProviderOptions(config: LLMConfig): RequestProvider
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
 
   if (config.provider === 'gemini' || protocol === 'google') {
-    const isGemini3 = /gemini-3/i.test(config.model)
     const thinkingLevel = resolveGoogleThinkingLevel(config.reasoningEffort)
+    const thinkingMode = config.capabilities?.googleThinkingMode ?? 'budget'
     return {
       google: {
-        thinkingConfig: isGemini3
+        thinkingConfig: thinkingMode === 'level'
           ? {
               ...(thinkingLevel ? { thinkingLevel } : {}),
               includeThoughts: true,
@@ -124,6 +145,15 @@ export function buildThinkingProviderOptions(config: LLMConfig): RequestProvider
 
 export function buildProtocolProviderOptions(config: LLMConfig): RequestProviderOptions | undefined {
   let providerOptions = buildConfiguredProviderOptions(config)
+
+  if (usesOpenAIProtocol(config) && typeof config.providerOptions?.openai?.instructions === 'string') {
+    providerOptions = mergeProviderOptions(
+      providerOptions,
+      buildOpenAIStyleProviderOptions(config, {
+        instructions: config.providerOptions.openai.instructions,
+      }),
+    )
+  }
 
   if (usesOpenAIProtocol(config) && supportsFullOpenAIProfile(config) && config.parallelToolCalls !== undefined) {
     providerOptions = mergeProviderOptions(
@@ -186,26 +216,6 @@ function buildConfiguredProviderOptions(config: LLMConfig): RequestProviderOptio
   }
 
   return providerOptions
-}
-
-function resolveOpenAIStyleProviderOptionKeys(
-  config: LLMConfig,
-): readonly string[] {
-  const protocol = resolveCacheProtocol(config.protocol, config.provider)
-
-  if (protocol === 'openai-responses') {
-    return ['openai']
-  }
-
-  if (protocol === 'openai' && isBuiltinProvider(config.provider) && config.provider === 'openai') {
-    return ['openai']
-  }
-
-  if (protocol === 'openai') {
-    return ['openaiCompatible', 'custom-openai']
-  }
-
-  return ['openaiCompatible']
 }
 
 function resolveFullOpenAIReasoningEffort(

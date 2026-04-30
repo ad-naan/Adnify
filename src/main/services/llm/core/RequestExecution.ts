@@ -14,6 +14,7 @@ import {
   mergeProviderOptions,
   resolveThinkingCompatibility,
 } from './ProviderCompatibility'
+import { resolveCacheProtocol } from './cacheProtocol'
 
 export interface PreparedRequest {
   messages: ModelMessage[]
@@ -28,6 +29,7 @@ interface ExecutePreparedRequestOptions<T> {
   operation: string
   originalMessages?: LLMMessage[]
   baseMessages: ModelMessage[]
+  systemPrompt?: string
   abortSignal?: AbortSignal
   maxCacheRetries?: number
   maxTransientRetries?: number
@@ -42,6 +44,7 @@ export async function executePreparedRequest<T>(
     operation,
     originalMessages,
     baseMessages,
+    systemPrompt,
     abortSignal,
     maxCacheRetries,
     maxTransientRetries,
@@ -59,6 +62,7 @@ export async function executePreparedRequest<T>(
         config,
         baseMessages,
         originalMessages,
+        systemPrompt,
         useCache,
       })
 
@@ -77,13 +81,14 @@ interface PrepareExecutionRequestOptions {
   config: LLMConfig
   baseMessages: ModelMessage[]
   originalMessages?: LLMMessage[]
+  systemPrompt?: string
   useCache: boolean
 }
 
 export async function prepareExecutionRequest(
   options: PrepareExecutionRequestOptions,
 ): Promise<PreparedRequest> {
-  const { config, baseMessages, originalMessages, useCache } = options
+  const { config, baseMessages, originalMessages, systemPrompt, useCache } = options
   const settings = buildGenerationSettings(config)
   const callOptions = buildRequestExecutionOptions(config)
 
@@ -93,7 +98,7 @@ export async function prepareExecutionRequest(
 
   let providerOptions = mergeProviderOptions(
     prepared.providerOptions,
-    buildProtocolProviderOptions(config),
+    buildProtocolProviderOptions(withSystemPromptInstructions(config, systemPrompt)),
   )
 
   const thinkingDecision = resolveThinkingCompatibility(config, originalMessages ?? [])
@@ -111,5 +116,25 @@ export async function prepareExecutionRequest(
     callOptions,
     providerOptions,
     cacheWriteTokens: prepared.cacheWriteTokens,
+  }
+}
+
+function withSystemPromptInstructions(
+  config: LLMConfig,
+  systemPrompt?: string,
+): LLMConfig {
+  if (!systemPrompt || resolveCacheProtocol(config.protocol, config.provider) !== 'openai-responses') {
+    return config
+  }
+
+  return {
+    ...config,
+    providerOptions: {
+      ...config.providerOptions,
+      openai: {
+        ...(config.providerOptions?.openai ?? {}),
+        instructions: systemPrompt,
+      },
+    },
   }
 }

@@ -197,6 +197,7 @@ export class AgentClass {
         workspacePath,
         chatMode,
         planPhase: promptOptions?.planPhase,
+        systemPrompt,
         abortSignal: abortController.signal,
         threadId,
         requestId,
