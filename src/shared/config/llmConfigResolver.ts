@@ -11,6 +11,7 @@ interface ResolvedProviderTransportConfig {
   baseUrl?: string
   timeout?: number
   headers?: Record<string, string>
+  capabilities?: LLMConfig['capabilities']
   protocol: ApiProtocol
   openAICompatibilityProfile?: LLMConfig['openAICompatibilityProfile']
   model?: string
@@ -33,6 +34,7 @@ function resolveProviderTransportConfig(
     baseUrl: providerConfig?.baseUrl ?? builtinProvider?.baseUrl ?? (fallbackMatchesProvider ? fallbackConfig?.baseUrl : undefined) ?? defaults.baseUrl,
     timeout: providerConfig?.timeout ?? builtinProvider?.defaults.timeout ?? (fallbackMatchesProvider ? fallbackConfig?.timeout : undefined) ?? defaults.timeout,
     headers: providerConfig?.headers ?? (fallbackMatchesProvider ? fallbackConfig?.headers : undefined) ?? defaults.headers,
+    capabilities: providerConfig?.capabilities ?? (fallbackMatchesProvider ? fallbackConfig?.capabilities : undefined) ?? defaults.capabilities,
     protocol: providerConfig?.protocol ?? builtinProvider?.protocol ?? (fallbackMatchesProvider ? fallbackConfig?.protocol : undefined) ?? 'openai',
     openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
       providerId,
@@ -61,6 +63,7 @@ export function resolveRuntimeLLMConfig(
     timeout: transport.timeout,
     ...behavior,
     headers: transport.headers,
+    capabilities: transport.capabilities,
     protocol: transport.protocol,
     openAICompatibilityProfile: transport.openAICompatibilityProfile,
   }
@@ -88,6 +91,7 @@ export function resolveTaskLLMConfig(
     baseUrl: transport.baseUrl,
     timeout: transport.timeout,
     headers: transport.headers,
+    capabilities: transport.capabilities,
     protocol: transport.protocol,
     openAICompatibilityProfile: transport.openAICompatibilityProfile,
   }

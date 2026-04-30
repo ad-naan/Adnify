@@ -110,6 +110,23 @@ interface GenerationResponseLike {
 }
 
 export class StructuredService {
+  private stripSystemMessages(messages: ModelMessage[]): ModelMessage[] {
+    return messages.filter(message => message.role !== 'system')
+  }
+
+  private extractSystemPrompt(messages: ModelMessage[]): string | undefined {
+    const systemMessages = messages.filter(
+      (message): message is ModelMessage & { role: 'system'; content: string } =>
+        message.role === 'system' && typeof message.content === 'string' && message.content.trim().length > 0,
+    )
+
+    if (systemMessages.length === 0) {
+      return undefined
+    }
+
+    return systemMessages.map(message => message.content).join('\n\n')
+  }
+
   private buildResponse<T>(result: GenerationResponseLike, data: T): LLMResponse<T> {
     return {
       data,
@@ -133,16 +150,19 @@ export class StructuredService {
   }): Promise<LLMResponse<T>> {
     const { config, operation, originalMessages, messages, schema, onData } = options
     const model = createModel(config)
+    const systemPrompt = this.extractSystemPrompt(messages)
 
     const result = await executePreparedRequest({
       config,
       operation,
       originalMessages,
       baseMessages: messages,
+      systemPrompt,
       execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
         await generateObject({
           model,
-          messages: preparedMessages,
+          system: systemPrompt,
+          messages: this.stripSystemMessages(preparedMessages),
           schema: schema as any,
           ...settings,
           ...callOptions,
@@ -173,17 +193,20 @@ export class StructuredService {
   }): Promise<LLMResponse<T>> {
     const { config, operation, originalMessages, messages, schema } = options
     const model = createModel(config)
+    const systemPrompt = this.extractSystemPrompt(messages)
 
     const result = await executePreparedRequest({
       config,
       operation,
       originalMessages,
       baseMessages: messages,
+      systemPrompt,
       execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
         await generateObject({
           model,
           schema: schema as any,
-          messages: preparedMessages as any,
+          system: systemPrompt,
+          messages: this.stripSystemMessages(preparedMessages) as any,
           ...settings,
           ...callOptions,
           providerOptions,

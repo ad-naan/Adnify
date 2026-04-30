@@ -57,6 +57,8 @@ interface LLMResult {
     cachedInputTokens?: number
     cacheWriteTokens?: number
     reasoningTokens?: number
+    cacheReadSource?: 'provider-reported' | 'derived'
+    cacheWriteSource?: 'provider-reported' | 'estimated'
   }
 }
 
@@ -93,6 +95,14 @@ interface LLMConfig {
   apiKey: string
   baseUrl?: string
   protocol?: string
+  capabilities?: {
+    openAIReasoningModel?: boolean
+    openAIReasoningSupportsSampling?: boolean
+    openAIPromptCacheRetention?: boolean
+    openAIResponsesSupportsMaxOutputTokens?: boolean
+    googleThinkingMode?: 'budget' | 'level'
+    thinkingTagFormat?: 'native' | 'xml-think'
+  }
 }
 
 interface LLMSendMessageParams {

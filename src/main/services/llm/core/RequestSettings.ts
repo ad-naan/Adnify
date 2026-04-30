@@ -49,36 +49,47 @@ function normalizeHeaders(headers: Record<string, string> | undefined): Record<s
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
-function isOpenAIReasoningModel(model: string): boolean {
-  return /^(gpt-5|o1|o3|o4|computer-use-preview)/i.test(model)
-}
-
-function supportsOpenAINonReasoningParameters(model: string): boolean {
-  return /^gpt-5\.(1|2)/i.test(model)
-}
-
 function supportsOpenAIReasoningSampling(config: LLMConfig): boolean {
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
+  const isReasoningRoute = isOpenAIReasoningRoute(config)
 
-  if ((protocol === 'openai' || protocol === 'openai-responses') && isOpenAIReasoningModel(config.model)) {
-    return config.reasoningEffort === 'none' && supportsOpenAINonReasoningParameters(config.model)
+  if ((protocol === 'openai' || protocol === 'openai-responses') && isReasoningRoute) {
+    return config.reasoningEffort === 'none' && Boolean(config.capabilities?.openAIReasoningSupportsSampling)
   }
 
   return true
 }
 
+function isOpenAIReasoningRoute(config: LLMConfig): boolean {
+  const protocol = resolveCacheProtocol(config.protocol, config.provider)
+  if (protocol !== 'openai' && protocol !== 'openai-responses') {
+    return false
+  }
+
+  return Boolean(config.capabilities?.openAIReasoningModel)
+}
+
+function supportsOpenAIResponsesMaxOutputTokens(config: LLMConfig): boolean {
+  const protocol = resolveCacheProtocol(config.protocol, config.provider)
+  if (protocol !== 'openai-responses') {
+    return true
+  }
+
+  return config.capabilities?.openAIResponsesSupportsMaxOutputTokens !== false
+}
+
 export function buildGenerationSettings(config: LLMConfig): GenerationSettings {
   const supportsOpenAIReasoningExtras = supportsOpenAIReasoningSampling(config)
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
-  const isOpenAIReasoningRoute =
-    (protocol === 'openai' || protocol === 'openai-responses') &&
-    isOpenAIReasoningModel(config.model)
+  const isReasoningRoute = isOpenAIReasoningRoute(config)
   const supportsFrequencyPenalties =
     protocol !== 'openai-responses' &&
-    !isOpenAIReasoningRoute
+    !isReasoningRoute
 
   return {
-    maxOutputTokens: normalizePositiveInteger(config.maxTokens),
+    maxOutputTokens: supportsOpenAIResponsesMaxOutputTokens(config)
+      ? normalizePositiveInteger(config.maxTokens)
+      : undefined,
     temperature: supportsOpenAIReasoningExtras ? config.temperature : undefined,
     topP: supportsOpenAIReasoningExtras ? config.topP : undefined,
     topK: normalizeTopK(config.topK),
