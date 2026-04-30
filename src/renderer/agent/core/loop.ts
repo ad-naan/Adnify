@@ -150,6 +150,7 @@ function executeModePostProcessHook(
 async function callLLM(
   config: LLMConfig,
   messages: LLMMessage[],
+  systemPrompt: string | undefined,
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   requestId: string,
@@ -160,11 +161,13 @@ async function callLLM(
   const processor = createStreamProcessor(assistantId, threadStore, requestId, options)
 
   try {
+    const requestMessages = prepareLLMRequestMessages(messages, systemPrompt)
+
     await api.llm.send({
       config: config as import('@shared/types/llm').LLMConfig,
-      messages: messages as LLMMessage[],
+      messages: requestMessages as LLMMessage[],
       tools,
-      systemPrompt: '',
+      systemPrompt,
       requestId,
     })
 
@@ -197,6 +200,7 @@ async function callLLM(
 async function callLLMWithRetry(
   config: LLMConfig,
   messages: LLMMessage[],
+  systemPrompt: string | undefined,
   assistantId: string | null,
   threadStore: import('../store/AgentStore').ThreadBoundStore,
   abortSignal?: AbortSignal,
@@ -225,7 +229,7 @@ async function callLLMWithRetry(
         }
 
         try {
-          const result = await callLLM(config, messages, assistantId, threadStore, reqId, tools, options)
+          const result = await callLLM(config, messages, systemPrompt, assistantId, threadStore, reqId, tools, options)
           if (result.error) {
             const errorMsg = result.error.toLowerCase()
             const isToolParseError = errorMsg.includes('tool call parse')
@@ -264,6 +268,17 @@ async function callLLMWithRetry(
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+export function prepareLLMRequestMessages(
+  messages: LLMMessage[],
+  systemPrompt?: string,
+): LLMMessage[] {
+  if (!systemPrompt) {
+    return messages
+  }
+
+  return messages.filter(message => message.role !== 'system')
 }
 
 interface AutoFixResult {
@@ -381,6 +396,7 @@ export async function runLoop(
     const finalResult = await callLLMWithRetry(
       config,
       llmMessages,
+      context.systemPrompt,
       assistantId,
       threadStore,
       context.abortSignal,
@@ -451,6 +467,7 @@ export async function runLoop(
     const result = await callLLMWithRetry(
       config,
       llmMessages,
+      context.systemPrompt,
       assistantId,
       threadStore,
       context.abortSignal,

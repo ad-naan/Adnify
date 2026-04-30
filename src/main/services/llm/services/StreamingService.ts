@@ -16,6 +16,7 @@ import { executeWithGenerationRecovery } from '../core/GenerationRecovery'
 import { LLMError, convertUsage } from '../types'
 import type { StreamEvent, TokenUsage, ResponseMetadata } from '../types'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
+import type { ModelMessage } from '@ai-sdk/provider-utils'
 import { ThinkingStrategyFactory, type ThinkingStrategy } from '../strategies/ThinkingStrategy'
 
 export interface StreamingParams {
@@ -320,6 +321,10 @@ function resolveStreamIdleTimeoutMs(timeoutMs?: number): number {
   return DEFAULT_STREAM_IDLE_TIMEOUT_MS
 }
 
+function stripSystemMessages(messages: ModelMessage[]): ModelMessage[] {
+  return messages.filter(message => message.role !== 'system')
+}
+
 export class StreamingService {
   private window: BrowserWindow
   private messageConverter: MessageConverter
@@ -360,7 +365,7 @@ export class StreamingService {
     const { config, messages, tools, systemPrompt, abortSignal, activeTools, requestId } = params
 
     // 创建 thinking 策略（只为需要特殊处理的模型）
-    const strategy = ThinkingStrategyFactory.create(config.model)
+    const strategy = ThinkingStrategyFactory.create(config.capabilities?.thinkingTagFormat ?? 'native')
     strategy.reset?.()
 
     logger.system.info('[StreamingService] Starting generation', {
@@ -378,12 +383,13 @@ export class StreamingService {
       const model = createModel(config)
 
       // 转换消息
-      let coreMessages = this.messageConverter.convert(messages, systemPrompt)
+      let coreMessages = this.messageConverter.convert(messages, systemPrompt, config)
 
       const preparedRequest = await prepareExecutionRequest({
         config,
         baseMessages: coreMessages,
         originalMessages: messages,
+        systemPrompt,
         useCache,
       })
       coreMessages = preparedRequest.messages
@@ -394,7 +400,8 @@ export class StreamingService {
       // 构建 streamText 参数
       const streamParams: Parameters<typeof streamText>[0] = {
         model,
-        messages: coreMessages,
+        system: systemPrompt,
+        messages: stripSystemMessages(coreMessages),
         tools: coreTools,
         activeTools,  // 动态限制可用工具
         ...preparedRequest.settings,
@@ -888,6 +895,8 @@ export class StreamingService {
               cachedInputTokens: event.usage.cachedInputTokens,
               cacheWriteTokens: event.usage.cacheWriteTokens,
               reasoningTokens: event.usage.reasoningTokens,
+              cacheReadSource: event.usage.cacheReadSource,
+              cacheWriteSource: event.usage.cacheWriteSource,
             } : undefined,
             metadata: event.metadata,
           })

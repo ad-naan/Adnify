@@ -17,6 +17,8 @@ export interface TokenUsage {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   reasoningTokens?: number
+  cacheReadSource?: 'provider-reported' | 'derived'
+  cacheWriteSource?: 'provider-reported' | 'estimated'
 }
 
 export interface ResponseMetadata {
@@ -214,15 +216,21 @@ export function convertUsage(
     rawUsage?.cachedContentTokenCount,
     openaiMetadata?.cachedPromptTokens,
   ) ?? 0
-  const cacheWriteTokens = (
-    readNumber(
-      usageAny.inputTokenDetails?.cacheWriteTokens,
-      usageAny.inputTokens?.cacheWrite,
-      rawUsage?.cache_creation_input_tokens,
-      anthropicUsage?.cache_creation_input_tokens,
-      anthropicMetadata?.cacheCreationInputTokens,
-    ) ?? 0
-  ) + (extra?.cacheWriteTokens ?? 0)
+  const providerReportedCacheWriteTokens = readNumber(
+    usageAny.inputTokenDetails?.cacheWriteTokens,
+    usageAny.inputTokens?.cacheWrite,
+    rawUsage?.cache_creation_input_tokens,
+    anthropicUsage?.cache_creation_input_tokens,
+    anthropicMetadata?.cacheCreationInputTokens,
+  ) ?? 0
+  const estimatedCacheWriteTokens = extra?.cacheWriteTokens ?? 0
+  const cacheWriteTokens = providerReportedCacheWriteTokens + estimatedCacheWriteTokens
+  const cacheReadSource = cachedInputTokens > 0 ? 'provider-reported' : undefined
+  const cacheWriteSource = providerReportedCacheWriteTokens > 0
+    ? 'provider-reported'
+    : estimatedCacheWriteTokens > 0
+      ? 'estimated'
+      : undefined
 
   return {
     inputTokens: usage.inputTokens || 0,
@@ -231,6 +239,8 @@ export function convertUsage(
     cachedInputTokens,
     cacheWriteTokens,
     reasoningTokens: usageAny.outputTokenDetails?.reasoningTokens ?? usageAny.reasoningTokens,
+    cacheReadSource,
+    cacheWriteSource,
   }
 }
 

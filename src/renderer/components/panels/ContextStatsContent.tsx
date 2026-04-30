@@ -67,6 +67,16 @@ export default function ContextStatsContent({
     return n.toLocaleString()
   }
 
+  const cacheReadHint = totalUsage?.cacheReadSource === 'provider-reported'
+    ? (language === 'zh' ? '提供商返回' : 'Provider reported')
+    : undefined
+
+  const cacheWriteHint = totalUsage?.cacheWriteSource === 'provider-reported'
+    ? (language === 'zh' ? '提供商返回' : 'Provider reported')
+    : totalUsage?.cacheWriteSource === 'estimated'
+      ? (language === 'zh' ? '本地估算' : 'Locally estimated')
+      : undefined
+
   const progressColor = useMemo(() => {
     if (ratio >= 0.95) return 'bg-red-500'
     if (ratio >= 0.85) return 'bg-orange-500'
@@ -80,7 +90,7 @@ export default function ContextStatsContent({
     if (currentThread.messages.length === 0) {
       toast.error(
         language === 'zh' ? '无法压缩' : 'Cannot compress',
-        language === 'zh' ? '当前对话还没有可压缩的内容' : 'There is no conversation content to compress yet.',
+        language === 'zh' ? '当前对话还没有可压缩的内容。' : 'There is no conversation content to compress yet.',
       )
       return
     }
@@ -91,13 +101,13 @@ export default function ContextStatsContent({
       await createManualHandoffSession(currentThread.id)
       toast.success(
         language === 'zh' ? '已切换到新线程' : 'Switched to new thread',
-        language === 'zh' ? '已基于最新上下文快照创建续接线程' : 'Created a new thread from the latest context snapshot.',
+        language === 'zh' ? '已基于最新上下文快照创建续接线程。' : 'Created a new thread from the latest context snapshot.',
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       toast.error(
         language === 'zh' ? '压缩失败' : 'Compression failed',
-        message || (language === 'zh' ? '未能生成上下文续接快照' : 'Could not generate a handoff snapshot.'),
+        message || (language === 'zh' ? '未能生成上下文续接快照。' : 'Could not generate a handoff snapshot.'),
       )
     } finally {
       setIsCreatingHandoff(false)
@@ -191,11 +201,13 @@ export default function ContextStatsContent({
             label={language === 'zh' ? '缓存命中' : 'Cache Read'}
             value={formatNumber(totalUsage?.cachedInputTokens ?? 0)}
             valueClassName="text-emerald-300"
+            hint={cacheReadHint}
           />
           <StatRow
             label={language === 'zh' ? '缓存写入' : 'Cache Write'}
             value={formatNumber(totalUsage?.cacheWriteTokens ?? 0)}
             valueClassName="text-sky-300"
+            hint={cacheWriteHint}
           />
         </div>
 
@@ -216,6 +228,22 @@ export default function ContextStatsContent({
                 {formatK(lastUsage.cachedInputTokens ?? 0)} <ChevronRight className="w-3 h-3 inline" /> {formatK(lastUsage.cacheWriteTokens ?? 0)}
               </span>
             </div>
+            {(lastUsage.cacheReadSource || lastUsage.cacheWriteSource) && (
+              <div className="mt-1 flex items-center justify-between text-[9px] text-text-muted/70">
+                <span>{language === 'zh' ? '来源' : 'Source'}</span>
+                <span>
+                  {lastUsage.cacheReadSource === 'provider-reported'
+                    ? (language === 'zh' ? '读: 提供商' : 'Read: provider')
+                    : (language === 'zh' ? '读: -' : 'Read: -')}
+                  {' / '}
+                  {lastUsage.cacheWriteSource === 'provider-reported'
+                    ? (language === 'zh' ? '写: 提供商' : 'Write: provider')
+                    : lastUsage.cacheWriteSource === 'estimated'
+                      ? (language === 'zh' ? '写: 估算' : 'Write: estimated')
+                      : (language === 'zh' ? '写: -' : 'Write: -')}
+                </span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -229,7 +257,7 @@ export default function ContextStatsContent({
                 {language === 'zh' ? '上下文已满' : 'Context Full'}
               </h4>
               <p className="text-[10px] text-red-400/70">
-                {language === 'zh' ? '建议压缩后切换到新线程继续' : 'Compress and continue in a new thread.'}
+                {language === 'zh' ? '建议压缩后切换到新线程继续。' : 'Compress and continue in a new thread.'}
               </p>
             </div>
           </div>
@@ -319,15 +347,24 @@ function StatRow({
   label,
   value,
   valueClassName = 'text-text-primary',
+  hint,
 }: {
   label: string
   value: string
   valueClassName?: string
+  hint?: string
 }) {
   return (
-    <div className="flex items-center justify-between p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
-      <span className="text-[10px] text-text-muted">{label}</span>
-      <span className={`text-xs font-mono ${valueClassName}`}>{value}</span>
+    <div className="p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-text-muted">{label}</span>
+        <span className={`text-xs font-mono ${valueClassName}`}>{value}</span>
+      </div>
+      {hint && (
+        <div className="mt-1 text-[9px] text-text-muted/70">
+          {hint}
+        </div>
+      )}
     </div>
   )
 }

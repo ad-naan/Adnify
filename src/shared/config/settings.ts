@@ -92,6 +92,9 @@ const defaultLLMConfig: LLMConfig = {
   enableThinking: false,
   thinkingBudget: 10000,
   reasoningEffort: 'medium' as const,
+  capabilities: {
+    thinkingTagFormat: 'native',
+  },
 }
 
 const defaultAgentConfig: AgentConfig = {
@@ -172,6 +175,9 @@ function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
       customModels: [],
       model: provider.defaultModel || '',
       baseUrl: provider.baseUrl,
+      capabilities: {
+        thinkingTagFormat: 'native',
+      },
       openAICompatibilityProfile: getDefaultOpenAICompatibilityProfile(id, provider.protocol),
     }
   }
