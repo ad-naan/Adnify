@@ -101,6 +101,8 @@ export interface TokenUsage {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   reasoningTokens?: number
+  cacheReadSource?: 'provider-reported' | 'derived'
+  cacheWriteSource?: 'provider-reported' | 'estimated'
 }
 
 // ============================================

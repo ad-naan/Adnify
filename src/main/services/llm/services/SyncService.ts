@@ -7,6 +7,7 @@ import { executePreparedRequest } from '../core/RequestExecution'
 import { LLMError, convertUsage } from '../types'
 import type { LLMResponse } from '../types'
 import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
+import type { ModelMessage } from '@ai-sdk/provider-utils'
 
 export interface SyncParams {
   config: LLMConfig
@@ -26,6 +27,10 @@ export class SyncService {
     this.toolConverter = new ToolConverter()
   }
 
+  private stripSystemMessages(messages: ModelMessage[]): ModelMessage[] {
+    return messages.filter(message => message.role !== 'system')
+  }
+
   async generate(params: SyncParams): Promise<LLMResponse<string>> {
     const { config, messages, tools, systemPrompt, abortSignal, timeout } = params
 
@@ -37,7 +42,7 @@ export class SyncService {
 
     try {
       const model = createModel(config)
-      const baseMessages = this.messageConverter.convert(messages, systemPrompt)
+      const baseMessages = this.messageConverter.convert(messages, systemPrompt, config)
       const coreTools = tools ? this.toolConverter.convert(tools) : undefined
 
       const result = await executePreparedRequest({
@@ -45,11 +50,13 @@ export class SyncService {
         operation: 'sync',
         originalMessages: messages,
         baseMessages,
+        systemPrompt,
         abortSignal,
         execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
           await generateText({
             model,
-            messages: preparedMessages,
+            system: systemPrompt,
+            messages: this.stripSystemMessages(preparedMessages),
             tools: coreTools,
             ...settings,
             ...callOptions,

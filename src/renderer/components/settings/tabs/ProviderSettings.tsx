@@ -36,6 +36,16 @@ const PROTOCOL_OPTIONS = [
   { value: 'custom', label: 'Custom' },
 ]
 
+const THINKING_TAG_FORMAT_OPTIONS = [
+  { value: 'native', label: 'Native reasoning events' },
+  { value: 'xml-think', label: '<think> XML tags' },
+]
+
+const GOOGLE_THINKING_MODE_OPTIONS = [
+  { value: 'budget', label: 'Budget-based thinking' },
+  { value: 'level', label: 'Level-based thinking' },
+]
+
 type EditableHeader = { key: string; value: string; isCustom?: boolean }
 
 const PREDEFINED_HEADER_OPTIONS = [
@@ -814,6 +824,8 @@ export function ProviderSettings({
       ? currentValue
       : preferredFallback ?? 'medium'
   }, [localConfig.reasoningEffort, reasoningEffortOptions])
+
+  const capabilityConfig = localConfig.capabilities ?? {}
 
   const headerSelectOptions = useMemo(
     () => getHeaderSelectOptions(language),
@@ -2122,6 +2134,171 @@ export function ProviderSettings({
                       </p>
                     </div>
                   )}
+                </div>
+
+                <div className="mt-5 rounded-xl border border-border/50 bg-background/20 p-4 space-y-4">
+                  <div className="space-y-1">
+                    <div className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
+                      {language === 'zh' ? '路由能力' : 'Route Capabilities'}
+                    </div>
+                    <p className="text-[10px] text-text-muted leading-relaxed max-w-2xl">
+                      {language === 'zh'
+                        ? '这些选项用于声明上游代理路由真实支持的能力，避免根据模型名猜测。仅在你的网关做了模型映射、协议转换或自定义封装时才需要调整。'
+                        : 'Use these flags to declare what the upstream route actually supports, instead of guessing from the model name. You only need to change them when your gateway remaps models or transforms protocols.'}
+                    </p>
+                  </div>
+
+                  {isOpenAIStyleProtocol(currentProtocol) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                        <div className="pr-4">
+                          <div className="text-xs text-text-secondary">
+                            {language === 'zh' ? 'OpenAI 推理路由' : 'OpenAI Reasoning Route'}
+                          </div>
+                          <p className="text-[10px] text-text-muted mt-0.5">
+                            {language === 'zh'
+                              ? '声明该路由会按 reasoning 模型规则限制常规采样参数。'
+                              : 'Treat this route as a reasoning-style OpenAI route with restricted sampling params.'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={capabilityConfig.openAIReasoningModel ?? false}
+                          onChange={(e) => setLocalConfig({
+                            ...localConfig,
+                            capabilities: {
+                              ...capabilityConfig,
+                              openAIReasoningModel: e.target.checked,
+                            },
+                          })}
+                          className="flex-shrink-0"
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                        <div className="pr-4">
+                          <div className="text-xs text-text-secondary">
+                            {language === 'zh' ? '允许关闭推理后采样' : 'Sampling When Reasoning Off'}
+                          </div>
+                          <p className="text-[10px] text-text-muted mt-0.5">
+                            {language === 'zh'
+                              ? '如果该 reasoning 路由在关闭推理后允许 temperature / topP，再开启此项。'
+                              : 'Enable this if the reasoning route allows temperature/topP once reasoning is disabled.'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={capabilityConfig.openAIReasoningSupportsSampling ?? false}
+                          onChange={(e) => setLocalConfig({
+                            ...localConfig,
+                            capabilities: {
+                              ...capabilityConfig,
+                              openAIReasoningSupportsSampling: e.target.checked,
+                            },
+                          })}
+                          className="flex-shrink-0"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {(currentProtocol === 'openai' || currentProtocol === 'openai-responses') && (
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                      <div className="pr-4">
+                        <div className="text-xs text-text-secondary">
+                          {language === 'zh' ? '支持 Prompt Cache Retention' : 'Supports Prompt Cache Retention'}
+                        </div>
+                        <p className="text-[10px] text-text-muted mt-0.5">
+                          {language === 'zh'
+                            ? '仅当上游明确支持 OpenAI 的 prompt cache retention 提示时开启。'
+                            : 'Enable only when the upstream route explicitly supports OpenAI prompt cache retention hints.'}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={capabilityConfig.openAIPromptCacheRetention ?? false}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          capabilities: {
+                            ...capabilityConfig,
+                            openAIPromptCacheRetention: e.target.checked,
+                          },
+                        })}
+                        className="flex-shrink-0"
+                      />
+                    </div>
+                  )}
+
+                  {currentProtocol === 'openai-responses' && (
+                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                      <div className="pr-4">
+                        <div className="text-xs text-text-secondary">
+                          {language === 'zh' ? '支持 `max_output_tokens`' : 'Supports `max_output_tokens`'}
+                        </div>
+                        <p className="text-[10px] text-text-muted mt-0.5">
+                          {language === 'zh'
+                            ? '仅当上游 Responses 路由明确接受官方 `max_output_tokens` 字段时开启。某些代理需要省略这个参数。'
+                            : 'Enable only when the upstream Responses route explicitly accepts the official `max_output_tokens` field. Some gateways require this parameter to be omitted.'}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={capabilityConfig.openAIResponsesSupportsMaxOutputTokens ?? true}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          capabilities: {
+                            ...capabilityConfig,
+                            openAIResponsesSupportsMaxOutputTokens: e.target.checked,
+                          },
+                        })}
+                        className="flex-shrink-0"
+                      />
+                    </div>
+                  )}
+
+                  {currentProtocol === 'google' && (
+                    <div className="space-y-2">
+                      <label className="text-xs text-text-secondary">
+                        {language === 'zh' ? 'Google Thinking 配置模式' : 'Google Thinking Config Mode'}
+                      </label>
+                      <Select
+                        value={capabilityConfig.googleThinkingMode ?? 'budget'}
+                        onChange={(value) => setLocalConfig({
+                          ...localConfig,
+                          capabilities: {
+                            ...capabilityConfig,
+                            googleThinkingMode: value as 'budget' | 'level',
+                          },
+                        })}
+                        options={GOOGLE_THINKING_MODE_OPTIONS}
+                        className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
+                      />
+                      <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
+                        {language === 'zh'
+                          ? '如果你的代理要求 `thinkingLevel`，选 Level；如果要求 `thinkingBudget`，选 Budget。'
+                          : 'Choose Level if your route expects `thinkingLevel`, or Budget if it expects `thinkingBudget`.'}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-xs text-text-secondary">
+                      {language === 'zh' ? 'Thinking 文本包装格式' : 'Thinking Text Wrapper'}
+                    </label>
+                    <Select
+                      value={capabilityConfig.thinkingTagFormat ?? 'native'}
+                      onChange={(value) => setLocalConfig({
+                        ...localConfig,
+                        capabilities: {
+                          ...capabilityConfig,
+                          thinkingTagFormat: value as 'native' | 'xml-think',
+                        },
+                      })}
+                      options={THINKING_TAG_FORMAT_OPTIONS}
+                      className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
+                    />
+                    <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
+                      {language === 'zh'
+                        ? '默认使用 AI SDK 原生 reasoning 事件；只有当上游把思考内容包在 `<think>...</think>` 文本里时才改成 XML。'
+                        : 'Use native reasoning events by default. Switch to XML only if the upstream wraps thoughts inside `<think>...</think>` text.'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
