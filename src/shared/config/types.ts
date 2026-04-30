@@ -16,6 +16,7 @@ export interface ProviderConfig {
   timeout?: number
   customModels?: string[]
   headers?: Record<string, string>
+  capabilities?: LLMConfig['capabilities']
   openAICompatibilityProfile?: OpenAICompatibilityProfile
   displayName?: string
   protocol?: ApiProtocol
@@ -170,6 +171,7 @@ export interface PersistedLLMConfig {
   enableThinking?: boolean
   thinkingBudget?: number
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+  capabilities?: LLMConfig['capabilities']
   temperature?: number
   maxTokens?: number
   topP?: number

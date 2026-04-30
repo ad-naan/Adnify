@@ -4,7 +4,7 @@
 
 import type { WorkMode } from '@/renderer/modes/types'
 import type { ToolCall, TokenUsage } from '../types'
-import type { LLMConfig as SharedLLMConfig } from '@/shared/types/llm'
+import type { LLMConfig as SharedLLMConfig, LLMResponseMetadata } from '@/shared/types/llm'
 import type { LLMStreamSource } from '@/shared/types/llm'
 
 // ===== LLM 配置（扩展 shared 定义，添加 contextLimit） =====
@@ -20,6 +20,7 @@ export interface ExecutionContext {
   workspacePath: string | null
   chatMode: WorkMode
   planPhase?: 'planning' | 'executing'
+  systemPrompt?: string
   abortSignal?: AbortSignal
   /** 绑定的线程 ID（用于后台任务隔离） */
   threadId?: string | null
@@ -40,6 +41,7 @@ export interface LLMCallResult {
   toolCalls?: ToolCall[]
   sources?: LLMStreamSource[]
   usage?: TokenUsage
+  metadata?: LLMResponseMetadata
   error?: string
 }
 

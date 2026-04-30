@@ -54,6 +54,40 @@ export function sanitizeProviderOptions(value: unknown): LLMProviderOptions | un
   return Object.keys(cleaned).length > 0 ? cleaned : undefined
 }
 
+function sanitizeCapabilities(value: unknown): LLMConfig['capabilities'] | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const cleaned: NonNullable<LLMConfig['capabilities']> = {}
+
+  if (typeof value.openAIReasoningModel === 'boolean') {
+    cleaned.openAIReasoningModel = value.openAIReasoningModel
+  }
+
+  if (typeof value.openAIReasoningSupportsSampling === 'boolean') {
+    cleaned.openAIReasoningSupportsSampling = value.openAIReasoningSupportsSampling
+  }
+
+  if (typeof value.openAIPromptCacheRetention === 'boolean') {
+    cleaned.openAIPromptCacheRetention = value.openAIPromptCacheRetention
+  }
+
+  if (typeof value.openAIResponsesSupportsMaxOutputTokens === 'boolean') {
+    cleaned.openAIResponsesSupportsMaxOutputTokens = value.openAIResponsesSupportsMaxOutputTokens
+  }
+
+  if (value.googleThinkingMode === 'budget' || value.googleThinkingMode === 'level') {
+    cleaned.googleThinkingMode = value.googleThinkingMode
+  }
+
+  if (value.thinkingTagFormat === 'native' || value.thinkingTagFormat === 'xml-think') {
+    cleaned.thinkingTagFormat = value.thinkingTagFormat
+  }
+
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined
+}
+
 export function sanitizeToolChoice(value: unknown): PersistedLLMConfig['toolChoice'] | undefined {
   if (value === 'auto' || value === 'none' || value === 'required') {
     return value
@@ -113,6 +147,9 @@ export function sanitizePersistedLLMConfig(value: unknown): Partial<PersistedLLM
   const providerOptions = sanitizeProviderOptions(value.providerOptions)
   if (providerOptions) cleaned.providerOptions = providerOptions
 
+  const capabilities = sanitizeCapabilities(value.capabilities)
+  if (capabilities) cleaned.capabilities = capabilities
+
   return Object.keys(cleaned).length > 0 ? cleaned : undefined
 }
 
@@ -123,6 +160,7 @@ export function serializePersistedLLMConfig(config: LLMConfig): PersistedLLMConf
     enableThinking: config.enableThinking,
     thinkingBudget: config.thinkingBudget,
     reasoningEffort: config.reasoningEffort,
+    capabilities: config.capabilities,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     topP: config.topP,
@@ -147,6 +185,7 @@ export function resolvePersistedLLMBehavior(
   | 'enableThinking'
   | 'thinkingBudget'
   | 'reasoningEffort'
+  | 'capabilities'
   | 'temperature'
   | 'maxTokens'
   | 'topP'
@@ -165,6 +204,7 @@ export function resolvePersistedLLMBehavior(
     enableThinking: saved?.enableThinking ?? defaults.enableThinking,
     thinkingBudget: saved?.thinkingBudget ?? defaults.thinkingBudget,
     reasoningEffort: saved?.reasoningEffort ?? defaults.reasoningEffort,
+    capabilities: saved?.capabilities ?? defaults.capabilities,
     temperature: saved?.temperature ?? defaults.temperature,
     maxTokens: saved?.maxTokens ?? defaults.maxTokens,
     topP: saved?.topP ?? defaults.topP,

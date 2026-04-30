@@ -105,6 +105,17 @@ export default function StatusBar() {
         totalUsage.totalTokens += msg.usage.totalTokens
         totalUsage.cachedInputTokens = (totalUsage.cachedInputTokens || 0) + (msg.usage.cachedInputTokens || 0)
         totalUsage.cacheWriteTokens = (totalUsage.cacheWriteTokens || 0) + (msg.usage.cacheWriteTokens || 0)
+        totalUsage.reasoningTokens = (totalUsage.reasoningTokens || 0) + (msg.usage.reasoningTokens || 0)
+        if (msg.usage.cacheReadSource === 'provider-reported') {
+          totalUsage.cacheReadSource = 'provider-reported'
+        } else if (!totalUsage.cacheReadSource && msg.usage.cacheReadSource) {
+          totalUsage.cacheReadSource = msg.usage.cacheReadSource
+        }
+        if (msg.usage.cacheWriteSource === 'provider-reported') {
+          totalUsage.cacheWriteSource = 'provider-reported'
+        } else if (!totalUsage.cacheWriteSource && msg.usage.cacheWriteSource) {
+          totalUsage.cacheWriteSource = msg.usage.cacheWriteSource
+        }
         lastUsage = msg.usage
       }
     }
