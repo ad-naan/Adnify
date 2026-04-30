@@ -79,6 +79,37 @@ export interface LLMProviderOptions {
     google?: Record<string, unknown>
 }
 
+export interface LLMCapabilities {
+    /**
+     * Whether the route should be treated as an OpenAI-style reasoning route
+     * that restricts standard sampling params unless explicitly disabled.
+     */
+    openAIReasoningModel?: boolean
+    /**
+     * Whether OpenAI-style reasoning routes allow temperature/topP when
+     * reasoning is explicitly disabled.
+     */
+    openAIReasoningSupportsSampling?: boolean
+    /**
+     * Whether this route supports OpenAI prompt cache retention hints.
+     */
+    openAIPromptCacheRetention?: boolean
+    /**
+     * Whether an OpenAI Responses-compatible upstream accepts the official
+     * `max_output_tokens` request field.
+     */
+    openAIResponsesSupportsMaxOutputTokens?: boolean
+    /**
+     * Google thinking config mode expected by the upstream route.
+     */
+    googleThinkingMode?: 'budget' | 'level'
+    /**
+     * Extra thinking tag parsing mode for providers that stream reasoning
+     * inside textual wrappers instead of native reasoning events.
+     */
+    thinkingTagFormat?: 'native' | 'xml-think'
+}
+
 export interface LLMConfig {
     provider: string
     model: string
@@ -113,6 +144,8 @@ export interface LLMConfig {
     thinkingBudget?: number
     /** Reasoning effort level for providers that support it. */
     reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    /** Explicit route capability overrides; preferred over model-name heuristics. */
+    capabilities?: LLMCapabilities
     /**
      * Advanced protocol-specific AI SDK provider options.
      * Uses canonical protocol keys instead of transport-specific aliases.
@@ -151,6 +184,13 @@ export interface LLMStreamSource {
     filename?: string
 }
 
+export interface LLMResponseMetadata {
+    id: string
+    modelId: string
+    timestamp: Date
+    finishReason?: string
+}
+
 export interface LLMStreamChunk {
     type:
         | 'text'
@@ -182,7 +222,13 @@ export interface LLMResult {
         promptTokens: number
         completionTokens: number
         totalTokens: number
+        cachedInputTokens?: number
+        cacheWriteTokens?: number
+        reasoningTokens?: number
+        cacheReadSource?: 'provider-reported' | 'derived'
+        cacheWriteSource?: 'provider-reported' | 'estimated'
     }
+    metadata?: LLMResponseMetadata
 }
 
 // ============================================

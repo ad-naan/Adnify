@@ -30,6 +30,8 @@ function convertTokenUsage(usage: LLMTokenUsage | undefined): {
   cachedInputTokens?: number
   cacheWriteTokens?: number
   reasoningTokens?: number
+  cacheReadSource?: 'provider-reported' | 'derived'
+  cacheWriteSource?: 'provider-reported' | 'estimated'
 } | undefined {
   if (!usage) return undefined
   
@@ -40,6 +42,8 @@ function convertTokenUsage(usage: LLMTokenUsage | undefined): {
     cachedInputTokens: usage.cachedInputTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
     reasoningTokens: usage.reasoningTokens,
+    cacheReadSource: usage.cacheReadSource,
+    cacheWriteSource: usage.cacheWriteSource,
   }
 }
 

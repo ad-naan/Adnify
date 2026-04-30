@@ -13,7 +13,7 @@ import type { LLMCallResult } from './types'
 import { filterToolCallLeakChunk } from '../utils/toolCallLeakFilter'
 import { t } from '@/renderer/i18n'
 import { StreamingEditPreviewCoordinator } from '../services/streamingEditPreview'
-import type { LLMStreamSource } from '@/shared/types/llm'
+import type { LLMResponseMetadata, LLMStreamSource } from '@/shared/types/llm'
 import {
   arePartialArgsEqual,
   parseFinalJsonArgs,
@@ -51,6 +51,7 @@ export function createStreamProcessor(
   let toolCalls: ToolCall[] = []
   let sources: LLMStreamSource[] = []
   let usage: TokenUsage | undefined
+  let metadata: LLMResponseMetadata | undefined
   let error: string | undefined
   let isCleanedUp = false
   let filteredToolMarkupBuffer = ''
@@ -429,9 +430,12 @@ export function createStreamProcessor(
     doResolve({ content, toolCalls, sources, usage, error: errorMsg })
   }
 
-  const handleDone = (result: { reasoning?: string; usage?: unknown }) => {
+  const handleDone = (result: { reasoning?: string; usage?: unknown; metadata?: LLMResponseMetadata }) => {
     if (result?.usage) {
       usage = result.usage as TokenUsage
+    }
+    if (result?.metadata) {
+      metadata = result.metadata
     }
     if (typeof result?.reasoning === 'string' && result.reasoning.length >= reasoning.length) {
       const missingReasoning = result.reasoning.slice(reasoning.length)
@@ -453,7 +457,7 @@ export function createStreamProcessor(
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
       finalizeReasoning()
-      doResolve({ content, reasoning, toolCalls, sources, usage, error })
+      doResolve({ content, reasoning, toolCalls, sources, usage, metadata, error })
     }, 0)
   }
 

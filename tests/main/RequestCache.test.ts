@@ -1,63 +1,96 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ModelMessage } from '@ai-sdk/provider-utils'
 import type { LLMConfig } from '@shared/types'
 import { prepareRequestCache } from '@main/services/llm/core/RequestCache'
-import {
-  clearCacheCompatibilityState,
-  isCacheFeatureUnsupported,
-  markCacheFeatureUnsupported,
-} from '@main/services/llm/core/CacheCompatibility'
 
-const longPrompt = 'cacheable prefix '.repeat(2000)
+function createConfig(overrides: Partial<LLMConfig>): LLMConfig {
+  return {
+    provider: 'openai',
+    model: 'upstream-mapped-model',
+    apiKey: 'test-key',
+    ...overrides,
+  }
+}
 
-describe('RequestCache', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-    clearCacheCompatibilityState()
-  })
+function longText(label: string, repeat = 500): string {
+  return `${label} `.repeat(repeat).trim()
+}
 
-  it('applies OpenAI-compatible cache options for custom protocol providers', async () => {
-    const config: LLMConfig = {
-      provider: 'custom-provider',
-      protocol: 'custom',
-      model: 'gpt-4.1',
-      apiKey: 'test-key',
-      baseUrl: 'https://example.com/v1',
-    }
-
-    const result = await prepareRequestCache(config, [
-      { role: 'user', content: longPrompt },
-      { role: 'assistant', content: 'Previous reply' },
-      { role: 'user', content: 'Newest turn' },
-    ])
-
-    expect(result.providerOptions?.openai?.promptCacheKey).toBeTypeOf('string')
-    expect(result.providerOptions?.custom?.promptCacheKey).toBeTypeOf('string')
-  })
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
-describe('CacheCompatibility', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-    clearCacheCompatibilityState()
+describe('prepareRequestCache', () => {
+  it('uses a stable OpenAI prompt cache key for large stable prefixes', async () => {
+    const messages: ModelMessage[] = [
+      { role: 'system', content: longText('system') },
+      { role: 'user', content: longText('context') },
+      { role: 'assistant', content: 'Working notes' },
+      { role: 'user', content: 'What changed in this file?' },
+    ]
+
+    const result = await prepareRequestCache(
+      createConfig({ provider: 'openai', protocol: 'openai', model: 'tenant-routing-alias' }),
+      messages,
+    )
+
+    expect(result.messages).toEqual(messages)
+    expect((result.providerOptions?.openai as Record<string, unknown>)?.promptCacheKey).toMatch(
+      /^openai:openai:tenant-routing-alias:/,
+    )
   })
 
-  it('only disables unsupported cache features for a cooldown window', () => {
-    vi.useFakeTimers()
+  it('adds a single Anthropic cache breakpoint near the end of the stable prefix', async () => {
+    const messages: ModelMessage[] = [
+      { role: 'system', content: 'You are a coding assistant.' },
+      { role: 'user', content: longText('repository context', 300) },
+      { role: 'assistant', content: 'Acknowledged.' },
+      { role: 'user', content: 'Please summarize the latest edits.' },
+    ]
 
-    const config: LLMConfig = {
-      provider: 'openai',
-      protocol: 'openai',
-      model: 'gpt-4.1',
-      apiKey: 'test-key',
-      baseUrl: 'https://api.openai.com/v1',
-    }
+    const result = await prepareRequestCache(
+      createConfig({ provider: 'anthropic', protocol: 'anthropic', model: 'corp-claude-route' }),
+      messages,
+    )
 
-    markCacheFeatureUnsupported(config, 'openai-prompt-cache-key', 'unsupported parameter')
+    const cachedMessage = result.messages[2]
+    expect(cachedMessage.providerOptions).toMatchObject({
+      anthropic: {
+        cacheControl: { type: 'ephemeral' },
+      },
+    })
+    expect(result.messages[0].providerOptions).toBeUndefined()
+    expect(result.messages[1].providerOptions).toBeUndefined()
+  })
 
-    expect(isCacheFeatureUnsupported(config, 'openai-prompt-cache-key')).toBe(true)
+  it('strips cached Gemini prefixes when explicit cached content is reused', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        name: 'cachedContents/test-cache',
+        expireTime: new Date(Date.now() + 3600_000).toISOString(),
+      }),
+    }))
 
-    vi.advanceTimersByTime(10 * 60 * 1000 + 1)
+    const messages: ModelMessage[] = [
+      { role: 'system', content: longText('system', 200) },
+      { role: 'user', content: longText('codebase', 400) },
+      { role: 'assistant', content: 'Indexed.' },
+      { role: 'user', content: 'Answer the current question.' },
+    ]
 
-    expect(isCacheFeatureUnsupported(config, 'openai-prompt-cache-key')).toBe(false)
+    const result = await prepareRequestCache(
+      createConfig({ provider: 'gemini', protocol: 'google', model: 'proxy-google-route' }),
+      messages,
+    )
+
+    expect(result.messages.length).toBeLessThan(messages.length)
+    expect(result.providerOptions?.google).toMatchObject({
+      cacheConfig: {
+        enabled: true,
+      },
+      cachedContent: 'cachedContents/test-cache',
+    })
+    expect(result.cacheWriteTokens).toBeGreaterThan(0)
   })
 })
