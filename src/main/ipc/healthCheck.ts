@@ -95,7 +95,9 @@ async function testOpenAIResponsesModel(config: any): Promise<string> {
       body: JSON.stringify({
         model: config.model,
         input: 'hi,Please tell me directly what model you are?',
-        max_output_tokens: 10,
+        ...(config.capabilities?.openAIResponsesSupportsMaxOutputTokens !== false
+          ? { max_output_tokens: 10 }
+          : {}),
         text: {
           format: { type: 'text' },
         },
