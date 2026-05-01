@@ -320,6 +320,7 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>
   respondToShutdownRequest: (requestId: string, success: boolean) => Promise<boolean>
   onShutdownRequested: (callback: (event: { requestId: string; reason: 'window-close' | 'app-quit' }) => void) => () => void
+  onOpenFiles: (callback: (event: { items: Array<{ path: string; kind: 'file' | 'folder' | 'workspace'; roots?: string[] }>; source: 'startup' | 'second-instance' | 'open-file' }) => void) => () => void
 
   // Window
   minimize: () => void

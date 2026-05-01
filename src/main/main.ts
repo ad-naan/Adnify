@@ -19,6 +19,7 @@ import { setCustomLspBinDir } from './lsp/installer'
 import { lspManager as mainLspManager } from './lsp/lspManager'
 import { isLocalDevServerUrl, openExternalSafely } from './security/externalUrl'
 import { cleanupFileWatcher } from './security/fileWatcher'
+import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from './services/fileAssociation'
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
 import {
   shutdownWindowController,
@@ -70,6 +71,8 @@ let lastActiveWindow: BrowserWindow | null = null
 const pendingShutdownRequests = new Map<string, (success: boolean) => void>()
 const authorizedCloseWindows = new Set<number>()
 let appQuitInProgress = false
+const launchFiles = collectLaunchFiles(process.argv)
+queueLaunchFiles(launchFiles, 'startup')
 
 
 // 延迟加载的模块
@@ -384,6 +387,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   win.webContents.once('dom-ready', () => {
     // 等待一帧（16ms）让 CSS 动画启动
     setTimeout(() => win.show(), 16)
+    void flushLaunchFilesToWindow(win, 'startup')
   })
 
   // Mac 上确保 traffic lights 始终显示
@@ -767,11 +771,13 @@ app.whenReady().then(async () => {
   loadWindowContent(firstWin, false)
 })
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  queueLaunchFiles(collectLaunchFiles(argv), 'second-instance')
   const win = getMainWindow()
   if (win) {
     if (win.isMinimized()) win.restore()
     win.focus()
+    void flushLaunchFilesToWindow(win, 'second-instance')
   } else {
     createWindow(false)
   }
@@ -838,3 +844,16 @@ app.on('before-quit', async (e) => {
 })
 
 app.on('activate', () => { if (windows.size === 0) createWindow() })
+
+app.on('open-file', (event, filePath) => {
+  event.preventDefault()
+  queueLaunchFiles(collectLaunchFiles([filePath]), 'open-file')
+  const win = getMainWindow()
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+    void flushLaunchFilesToWindow(win, 'open-file')
+  } else {
+    createWindow(false)
+  }
+})

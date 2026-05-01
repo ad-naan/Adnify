@@ -641,7 +641,7 @@ export const zh = {
   'welcome.openFolder': '打开文件夹',
   'welcome.openFolderDesc': '打开本地项目文件夹',
   'welcome.openWorkspace': '打开工作区',
-  'welcome.openWorkspaceDesc': '打开工作区文件 (.adnify)',
+  'welcome.openWorkspaceDesc': '打开项目目录并恢复工作区',
   'welcome.newWindow': '新建窗口',
   'welcome.settings': '设置',
   'welcome.noRecentItems': '没有最近的项目',
