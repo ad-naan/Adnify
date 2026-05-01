@@ -640,7 +640,7 @@ export const en = {
   'welcome.openFolder': 'Open Folder',
   'welcome.openFolderDesc': 'Open a local project folder',
   'welcome.openWorkspace': 'Open Workspace',
-  'welcome.openWorkspaceDesc': 'Open workspace file (.adnify)',
+  'welcome.openWorkspaceDesc': 'Open a project directory and restore workspace',
   'welcome.newWindow': 'New Window',
   'welcome.settings': 'Settings',
   'welcome.noRecentItems': 'No recent items',

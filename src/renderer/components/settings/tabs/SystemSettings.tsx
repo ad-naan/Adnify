@@ -14,6 +14,7 @@ import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { Agent } from '@/renderer/agent/core'
 import { memoryService } from '@/renderer/agent/services/memoryService'
+import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 
 interface SystemSettingsProps {
@@ -147,11 +148,8 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
     const handleClearCache = async () => {
         setIsClearing(true)
         try {
-            // 1. 清除 localStorage 缓存
-            const keysToRemove = ['adnify-editor-config', 'adnify-workspace', 'adnify-sessions', 'adnify-threads']
-            keysToRemove.forEach(key => localStorage.removeItem(key))
+            await runCacheCleanupPhase('manual')
 
-            // 2. 清除代码库索引
             const wsPath = getStore().workspacePath
             if (wsPath) {
                 try {
@@ -159,19 +157,27 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                 } catch { }
             }
 
-            // 3. 清除持久化编辑器配置
             await api.settings.set('editorConfig', undefined)
-
-            // 4. 清除 Agent 文件读取缓存
             Agent.clearSession()
-
-            // 5. 清除 Memory 服务缓存
             memoryService.clearCache()
 
             toast.success(language === 'zh' ? '缓存已清除' : 'Cache cleared')
         } catch (error) {
             logger.settings.error('Failed to clear cache:', error)
             toast.error(language === 'zh' ? '清除缓存失败' : 'Failed to clear cache')
+        } finally {
+            setIsClearing(false)
+        }
+    }
+
+    const handleDeepClearCache = async () => {
+        setIsClearing(true)
+        try {
+            await api.settings.deepCleanCache()
+            toast.success(language === 'zh' ? '深度缓存已清除' : 'Deep cache cleared')
+        } catch (error) {
+            logger.settings.error('Failed to deep clear cache:', error)
+            toast.error(language === 'zh' ? '深度清理失败' : 'Deep clear failed')
         } finally {
             setIsClearing(false)
         }
@@ -280,11 +286,16 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     <div className="flex items-center justify-between p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
                         <div>
                             <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '清除缓存' : 'Clear Cache'}</div>
-                            <div className="text-xs text-text-muted mt-1 opacity-70">{language === 'zh' ? '清除编辑器缓存、索引数据和临时文件' : 'Clear editor cache, index data, and temporary files'}</div>
+                            <div className="text-xs text-text-muted mt-1 opacity-70">{language === 'zh' ? '清除业务缓存、索引数据和临时文件' : 'Clear app caches, index data, and temporary files'}</div>
                         </div>
-                        <Button variant="secondary" size="sm" onClick={handleClearCache} disabled={isClearing} className="rounded-xl px-6">
-                            {isClearing ? (language === 'zh' ? '清除中...' : 'Clearing...') : (language === 'zh' ? '清除' : 'Clear')}
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="secondary" size="sm" onClick={handleClearCache} disabled={isClearing} className="rounded-xl px-6">
+                                {isClearing ? (language === 'zh' ? '清除中...' : 'Clearing...') : (language === 'zh' ? '清除' : 'Clear')}
+                            </Button>
+                            <Button variant="danger" size="sm" onClick={handleDeepClearCache} disabled={isClearing} className="rounded-xl px-6">
+                                {language === 'zh' ? '深度清理' : 'Deep Clean'}
+                            </Button>
+                        </div>
                     </div>
 
                     <div className="flex items-center justify-between p-6 bg-red-500/10 rounded-2xl border border-red-500/20 shadow-sm">

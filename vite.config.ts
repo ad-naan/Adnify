@@ -115,46 +115,60 @@ export default defineConfig({
       },
       output: {
         manualChunks(id) {
-          // Monaco Editor
+          // Monaco is large but internally coupled. Keep it as one chunk.
           if (id.includes('monaco-editor') || id.includes('@monaco-editor/react')) {
             return 'monaco-editor'
           }
-          // React 核心
+
+          // Stable third-party foundations.
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
             return 'react-vendor'
           }
-          // 状态管理 + 图标
           if (id.includes('node_modules/zustand') || id.includes('node_modules/lucide-react')) {
             return 'ui-core'
           }
-          // 终端
           if (id.includes('@xterm/')) {
             return 'terminal'
           }
-          // Markdown
-          if (id.includes('react-markdown')) {
+
+          // Keep the whole markdown pipeline together to avoid split-order issues.
+          if (
+            id.includes('react-markdown') ||
+            id.includes('remark-gfm') ||
+            id.includes('remark-math') ||
+            id.includes('rehype-katex') ||
+            id.includes('katex')
+          ) {
             return 'markdown-core'
           }
-          // Syntax Highlighter（单独分包，按需加载）
+
+          // Optional feature bundles.
           if (id.includes('react-syntax-highlighter')) {
             return 'syntax-highlighter'
           }
-          // 动画
           if (id.includes('framer-motion')) {
             return 'animation'
           }
-          // Agent 模块
-          if (id.includes('/renderer/agent/')) {
+
+          // Agent internals are tightly coupled and mix static/dynamic imports.
+          // Keep them in one chunk for packaged startup stability.
+          if (
+            id.includes('/renderer/agent/') ||
+            id.includes('/renderer/components/agent/') ||
+            id.includes('/renderer/components/plan/')
+          ) {
             return 'agent'
           }
-          // Sidebar 模块
+
           if (id.includes('/renderer/components/sidebar/')) {
             return 'sidebar'
           }
         },
       },
     },
-    chunkSizeWarningLimit: 1500,
+    // Electron desktop bundles intentionally keep some large cohesive chunks
+    // to avoid production-only startup failures from over-splitting.
+    chunkSizeWarningLimit: 7000,
     minify: 'esbuild',
     target: 'esnext',
     cssCodeSplit: true,

@@ -16,6 +16,7 @@ export { resetWorkspaceRuntimeState } from './workspaceRuntimeResetService'
 export { adnifyDir } from './adnifyDirService'
 export { saveWorkspaceState, restoreWorkspaceState, scheduleStateSave, initWorkspaceStateSync } from './workspaceStateService'
 export { directoryCacheService } from './directoryCacheService'
+export { initCacheLifecycleService, runCacheCleanupPhase } from './cacheLifecycleService'
 export { ignoreService } from './ignoreService'
 
 // ===== 编辑器相关 =====
