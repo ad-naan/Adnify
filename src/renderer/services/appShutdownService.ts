@@ -6,6 +6,7 @@ import { flushWorkspaceStatePersistence } from './workspaceStateService'
 import { adnifyDir } from './adnifyDirService'
 import { api } from './electronAPI'
 import { shellRegistryService } from '@renderer/shell/services/shellRegistryService'
+import { workspaceAnalyticsService } from './workspaceAnalyticsService'
 
 async function persistWorkspaceBinding(): Promise<void> {
   const workspace = useStore.getState().workspace
@@ -24,6 +25,7 @@ export async function persistAllRuntimeState(): Promise<void> {
   flushStreamingBuffer()
   flushAgentSessionPersistence()
 
+  await workspaceAnalyticsService.flush()
   await flushWorkspaceStatePersistence()
   await Promise.all([
     agentSessionRepository.flush(),

@@ -121,8 +121,21 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
   const openInEditor = useCallback(async (filePath: string) => {
     try {
       const content = await api.remoteShell.readText(server, filePath)
+      if (!server.username) {
+        throw new Error(language === 'zh' ? '缺少远程用户名' : 'Missing remote username')
+      }
       openEditorFile(buildRemoteEditorPath(server, filePath), content || '', undefined, {
-        remote: { server, remotePath: filePath },
+        remote: {
+          server: {
+            host: server.host,
+            port: server.port,
+            username: server.username,
+            password: server.password,
+            privateKeyPath: server.privateKeyPath,
+            remotePath: server.remotePath,
+          },
+          remotePath: filePath,
+        },
       })
     } catch (readError) {
       toast.error(language === 'zh' ? '远程文件打开失败' : 'Failed to open remote file', readError instanceof Error ? readError.message : String(readError))

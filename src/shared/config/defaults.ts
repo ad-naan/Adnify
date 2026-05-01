@@ -198,7 +198,7 @@ export const AGENT_DEFAULTS = {
 
   // 目录排除列表
   ignoredDirectories: [
-    'node_modules', '.git', 'dist', 'build', '.next',
+    'node_modules', '.git', '.adnify', 'dist', 'build', '.next',
     '__pycache__', '.venv', 'venv', '.cache', 'coverage',
     '.nyc_output', 'tmp', 'temp', '.idea', '.vscode',
   ],

@@ -10,6 +10,7 @@ import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import { emotionFeedback } from '@/renderer/agent/emotion/emotionFeedback'
+import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META, EMOTION_STATUS_MESSAGE_KEYS } from '@/renderer/agent/emotion'
@@ -112,11 +113,9 @@ export const EmotionStatusIndicator: React.FC = () => {
       dismissFeedback()
       return
     }
-    import('@/renderer/agent/emotion/emotionActions').then(({ getRecommendedActions }) => {
-      const action = getRecommendedActions(detection).find(item => item.type === actionType)
-      action?.execute()
-      dismissFeedback()
-    }).catch(() => dismissFeedback())
+    const action = getRecommendedActions(detection).find(item => item.type === actionType)
+    action?.execute()
+    dismissFeedback()
   }
 
   const detailText = useMemo(() => {

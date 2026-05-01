@@ -12,7 +12,7 @@ import { getDirPath, joinPath, pathStartsWith, pathEquals } from '@shared/utils/
 import { gitService } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
 import { toast } from '../../common/ToastProvider'
-import { workspaceManager } from '@services/WorkspaceManager'
+import { openFolderFromDialog } from '@services/workspaceOpenService'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { Button, Tooltip, ContextMenu, ContextMenuItem } from '../../ui'
 import { TreeSkeleton } from '../../ui/Loading'
@@ -248,10 +248,7 @@ export function ExplorerView() {
   }, [workspacePath, refreshFiles, updateGitStatus])
 
   const handleOpenFolder = async () => {
-    const path = await api.file.openFolder()
-    if (path && typeof path === 'string') {
-      await workspaceManager.openFolder(path)
-    }
+    await openFolderFromDialog(language)
   }
 
   const handleStartCreate = useCallback((path: string, type: 'file' | 'folder') => {

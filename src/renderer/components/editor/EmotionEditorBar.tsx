@@ -12,6 +12,7 @@ import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META } from '@/renderer/agent/emotion'
+import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 
 export const EmotionEditorBar: React.FC = () => {
@@ -55,11 +56,9 @@ export const EmotionEditorBar: React.FC = () => {
       setFeedback(null)
       return
     }
-    import('@/renderer/agent/emotion/emotionActions').then(({ getRecommendedActions }) => {
-      const action = getRecommendedActions(emotion).find(item => item.type === actionType)
-      action?.execute()
-      setFeedback(null)
-    }).catch(() => setFeedback(null))
+    const action = getRecommendedActions(emotion).find(item => item.type === actionType)
+    action?.execute()
+    setFeedback(null)
   }
 
   return (
