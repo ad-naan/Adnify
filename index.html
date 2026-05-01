@@ -54,10 +54,10 @@
 
       document.documentElement.style.background = bg;
       document.documentElement.style.setProperty('--loader-bg', loaderBg);
-      document.documentElement.style.setProperty('--loader-logo-url', 'url("' + publicBase + 'brand/logos/app.png")');
+      document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app.png') + ')');
 
       if (isLight) {
-        document.documentElement.style.setProperty('--loader-logo-url', 'url("' + publicBase + 'brand/logos/app-light.png")');
+        document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app-light.png') + ')');
         document.documentElement.style.setProperty('--loader-text', '#333333');
         document.documentElement.style.setProperty('--loader-text-dim', '#738087');
         document.documentElement.style.setProperty('--loader-surface', '#f1f3f5');
@@ -79,7 +79,7 @@
       --loader-text: #fafafa;
       --loader-text-dim: #71717a;
       --loader-surface: #18181b;
-      --loader-logo-url: url('%BASE_URL%brand/logos/app.png');
+      --loader-logo-url: url("/brand/logos/app.png");
     }
 
     * {
