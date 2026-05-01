@@ -10,7 +10,7 @@
   <!-- 立即设置背景色和主题，在任何渲染之前 -->
   <script>
     (function () {
-      var bg = '#121215'; // Default adnify-dark background (updated from #09090b)
+      var bg = '#121215';
       var loaderBg = '#121215';
       var isLight = false;
       try {
@@ -26,7 +26,6 @@
           }
           loaderBg = bg;
         } else {
-          // Fallback parsing for first launch or missing configs
           var themes = {
             'adnify-dark': { bg: '#121215', twBg: '18 18 21' },
             'midnight': { bg: '#161B22', twBg: '22 27 34' },
@@ -54,14 +53,34 @@
 
       document.documentElement.style.background = bg;
       document.documentElement.style.setProperty('--loader-bg', loaderBg);
+
+      // Default Dark Mode
       document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app.png') + ')');
+      document.documentElement.style.setProperty('--loader-glass-bg', 'rgba(255, 255, 255, 0.03)');
+      document.documentElement.style.setProperty('--loader-glass-border', 'rgba(255, 255, 255, 0.08)');
+      document.documentElement.style.setProperty('--loader-glass-shadow', 'rgba(0, 0, 0, 0.3)');
+      document.documentElement.style.setProperty('--loader-orbit-color', 'rgba(255, 255, 255, 0.04)');
+      document.documentElement.style.setProperty('--loader-inner-glow', 'rgba(139, 92, 246, 0.15)');
+      document.documentElement.style.setProperty('--loader-aura-1', '#8b5cf6');
+      document.documentElement.style.setProperty('--loader-aura-2', '#3b82f6');
+      document.documentElement.style.setProperty('--loader-aura-opacity', '0.08');
 
       if (isLight) {
         document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app-light.png') + ')');
-        document.documentElement.style.setProperty('--loader-text', '#333333');
-        document.documentElement.style.setProperty('--loader-text-dim', '#738087');
-        document.documentElement.style.setProperty('--loader-surface', '#f1f3f5');
-        // Define root variables preemptively for Tailwind before globals.css
+        document.documentElement.style.setProperty('--loader-text', '#0f172a');
+        document.documentElement.style.setProperty('--loader-text-dim', '#64748b');
+        document.documentElement.style.setProperty('--loader-surface', '#f8fafc');
+
+        // Light Mode Glass
+        document.documentElement.style.setProperty('--loader-glass-bg', 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.3) 100%)');
+        document.documentElement.style.setProperty('--loader-glass-border', 'rgba(255, 255, 255, 0.9)');
+        document.documentElement.style.setProperty('--loader-glass-shadow', 'rgba(139, 92, 246, 0.06)');
+        document.documentElement.style.setProperty('--loader-orbit-color', 'rgba(139, 92, 246, 0.1)');
+        document.documentElement.style.setProperty('--loader-inner-glow', 'rgba(99, 102, 241, 0.25)');
+        document.documentElement.style.setProperty('--loader-aura-1', '#c084fc');
+        document.documentElement.style.setProperty('--loader-aura-2', '#818cf8');
+        document.documentElement.style.setProperty('--loader-aura-opacity', '0.25');
+
         if (!document.documentElement.style.getPropertyValue('--background')) {
           document.documentElement.style.setProperty('--background', '255 255 255');
         }
@@ -107,7 +126,7 @@
     #root.ready {
       opacity: 1;
       pointer-events: auto;
-      transition: opacity 0.15s ease-out;
+      transition: opacity 0.3s ease-out;
     }
 
     #initial-loader {
@@ -118,112 +137,292 @@
       align-items: center;
       justify-content: center;
       z-index: 9999;
+      background-image: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
     }
 
     #initial-loader.fade-out {
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s;
+      transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+      transform: scale(1.02);
     }
 
     .loader-content {
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
-      animation: reveal 0.5s ease-out;
+      animation: reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 10;
     }
 
+    /* Background Glow via Blur to prevent banding */
+    .loader-bg-glow {
+      position: absolute;
+      filter: blur(140px);
+      pointer-events: none;
+      z-index: 0;
+      border-radius: 50%;
+      opacity: var(--loader-aura-opacity);
+    }
+
+    .loader-bg-glow-1 {
+      top: -20vh;
+      left: 10vw;
+      width: 60vw;
+      height: 70vh;
+      background: var(--loader-aura-1);
+    }
+
+    .loader-bg-glow-2 {
+      top: 10vh;
+      right: -10vw;
+      width: 50vw;
+      height: 60vh;
+      background: var(--loader-aura-2);
+    }
+
+    .loader-content {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      animation: reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 10;
+    }
+
+    /* Logo & Orbits Container */
+    .loader-logo-section {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 32px;
+      width: 240px;
+      height: 240px;
+    }
+
+    .loader-orbits-wrapper {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 800px;
+      height: 400px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .orbit {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      border: 1px solid var(--loader-orbit-color);
+      border-radius: 50%;
+    }
+
+    .orbit-1 {
+      width: 600px;
+      height: 180px;
+      transform: translate(-50%, -50%) rotate(-12deg);
+    }
+
+    .orbit-2 {
+      width: 500px;
+      height: 260px;
+      transform: translate(-50%, -50%) rotate(18deg);
+    }
+
+    .orbit-dot {
+      position: absolute;
+      background: var(--loader-accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px 2px var(--loader-accent);
+    }
+
+    .dot-1 {
+      width: 8px;
+      height: 8px;
+      top: 18%;
+      left: 15%;
+      animation: pulse 2s infinite alternate;
+    }
+
+    .dot-2 {
+      width: 5px;
+      height: 5px;
+      bottom: 22%;
+      right: 20%;
+      opacity: 0.6;
+      animation: pulse 3s infinite alternate;
+    }
+
+    .orbit-star {
+      position: absolute;
+      top: 8%;
+      right: 30%;
+      color: var(--loader-accent);
+      font-size: 20px;
+      animation: pulse 2.5s infinite alternate;
+    }
+
+    /* Logo Glassmorphism */
     .loader-logo-container {
       position: relative;
-      width: 80px;
-      height: 80px;
-      margin-bottom: 32px;
+      width: 160px;
+      height: 160px;
+      z-index: 10;
     }
 
     .loader-logo-bg {
       position: absolute;
       inset: 0;
-      background: linear-gradient(145deg, var(--loader-surface), var(--loader-bg));
-      border-radius: 22px;
+      background: var(--loader-glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 48px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-      z-index: 2;
+      box-shadow:
+        inset 0 0 0 1px var(--loader-glass-border),
+        0 24px 48px var(--loader-glass-shadow);
+      overflow: hidden;
+    }
+
+    .loader-inner-glow {
+      position: absolute;
+      inset: 20px;
+      background: var(--loader-inner-glow);
+      filter: blur(25px);
+      border-radius: 50%;
+      animation: pulse 3s infinite alternate;
+      z-index: 1;
     }
 
     .loader-logo-icon {
-      width: 44px;
-      height: 44px;
+      position: relative;
+      width: 120px;
+      height: 120px;
       background-image: var(--loader-logo-url);
       background-position: center;
       background-repeat: no-repeat;
       background-size: contain;
-      filter: drop-shadow(0 0 12px var(--loader-accent));
+      filter: drop-shadow(0 8px 16px rgba(139, 92, 246, 0.2));
+      z-index: 2;
     }
 
-    .loader-glow {
-      position: absolute;
-      inset: -20px;
-      background: radial-gradient(circle, var(--loader-accent) 0%, transparent 70%);
-      opacity: 0.15;
-      filter: blur(20px);
-      animation: pulse 3s ease-in-out infinite;
-    }
-
-    .loader-ring {
-      position: absolute;
-      inset: -4px;
-      border-radius: 26px;
-      padding: 2px;
-      background: conic-gradient(from 0deg, transparent, var(--loader-accent), transparent);
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      animation: spin 2s linear infinite;
-    }
-
+    /* Typography */
     .loader-title {
-      font-size: 24px;
-      font-weight: 700;
+      font-size: 48px;
+      font-weight: 800;
       color: var(--loader-text);
-      margin-bottom: 4px;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+      z-index: 10;
     }
 
     .loader-subtitle {
-      font-size: 13px;
+      font-size: 14px;
       color: var(--loader-text-dim);
-      margin-bottom: 40px;
-      letter-spacing: 1px;
+      margin-bottom: 48px;
+      letter-spacing: 4px;
       text-transform: uppercase;
+      font-weight: 600;
+      z-index: 10;
     }
 
-    .loader-progress {
-      width: 160px;
-      height: 2px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 1px;
+    /* Progress Bar */
+    .loader-progress-container {
+      position: relative;
+      width: 480px;
+      height: 36px;
+      background: var(--loader-glass-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--loader-glass-border);
+      border-radius: 18px;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 12px 32px var(--loader-glass-shadow);
+      margin-bottom: 32px;
+      z-index: 10;
       overflow: hidden;
     }
 
-    .loader-bar {
+    .loader-progress-bar {
       height: 100%;
-      width: 30%;
-      background: var(--loader-accent);
-      box-shadow: 0 0 10px var(--loader-accent);
-      animation: move 1.5s ease-in-out infinite;
+      width: 0%;
+      background: linear-gradient(90deg, #a5b4fc, #c084fc);
+      border-radius: 14px;
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .loader-progress-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 60px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7));
+      border-radius: 14px;
+    }
+
+    .loader-progress-text {
+      position: absolute;
+      right: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #6366f1;
+      z-index: 2;
+    }
+
+    /* Status Text */
+    .loader-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--loader-text);
+      font-weight: 500;
+      margin-bottom: 12px;
+      z-index: 10;
+    }
+
+    .loader-status-sub {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--loader-text-dim);
+      z-index: 10;
+    }
+
+    .loader-icon-spin {
+      animation: spin 1.5s linear infinite;
+      width: 14px;
+      height: 14px;
+      stroke: var(--loader-accent);
+    }
+
+    .loader-icon-diamond {
+      width: 10px;
+      height: 10px;
+      fill: currentColor;
     }
 
     @keyframes reveal {
       from {
         opacity: 0;
-        transform: scale(0.96);
+        transform: translateY(10px) scale(0.98);
       }
 
       to {
         opacity: 1;
-        transform: scale(1);
+        transform: translateY(0) scale(1);
       }
     }
 
@@ -231,11 +430,13 @@
 
       0%,
       100% {
-        opacity: 0.1;
+        opacity: 0.4;
+        transform: scale(0.95);
       }
 
       50% {
-        opacity: 0.2;
+        opacity: 1;
+        transform: scale(1.05);
       }
     }
 
@@ -244,41 +445,96 @@
         transform: rotate(360deg);
       }
     }
-
-    @keyframes move {
-      0% {
-        margin-left: -30%;
-      }
-
-      50% {
-        margin-left: 50%;
-      }
-
-      100% {
-        margin-left: 100%;
-      }
-    }
   </style>
 </head>
 
 <body>
   <div id="initial-loader">
+    <div class="loader-bg-glow loader-bg-glow-1"></div>
+    <div class="loader-bg-glow loader-bg-glow-2"></div>
     <div class="loader-content">
-      <div class="loader-logo-container">
-        <div class="loader-glow"></div>
-        <div class="loader-ring"></div>
-        <div class="loader-logo-bg">
-          <div class="loader-logo-icon" role="img" aria-label="Adnify"></div>
+      <div class="loader-logo-section">
+        <div class="loader-orbits-wrapper">
+          <div class="orbit orbit-1"></div>
+          <div class="orbit orbit-2"></div>
+          <div class="orbit-dot dot-1"></div>
+          <div class="orbit-dot dot-2"></div>
+          <div class="orbit-star">✦</div>
+        </div>
+
+        <div class="loader-logo-container">
+          <div class="loader-logo-bg">
+            <div class="loader-inner-glow"></div>
+            <div class="loader-logo-icon" role="img" aria-label="Adnify"></div>
+          </div>
         </div>
       </div>
+
       <div class="loader-title">Adnify</div>
       <div class="loader-subtitle">Next-Gen AI Editor</div>
-      <div class="loader-progress">
-        <div class="loader-bar"></div>
+
+      <div class="loader-progress-container">
+        <div class="loader-progress-bar" id="loader-bar"></div>
+        <div class="loader-progress-text" id="loader-text">0%</div>
+      </div>
+
+      <div class="loader-status">
+        <svg class="loader-icon-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+        </svg>
+        <span>正在初始化 AI 引擎...</span>
+      </div>
+      <div class="loader-status-sub">
+        <svg class="loader-icon-diamond" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L22 12L12 22L2 12L12 2Z"></path>
+        </svg>
+        <span>正在准备项目上下文、模型能力与最近会话</span>
       </div>
     </div>
   </div>
+
   <div id="root"></div>
+
+  <script>
+    // 模拟真实的进度条加载动效
+    (function () {
+      var progress = 0;
+      var bar = document.getElementById('loader-bar');
+      var text = document.getElementById('loader-text');
+      var loader = document.getElementById('initial-loader');
+
+      var interval = setInterval(function () {
+        // 进度算法：越来越慢，卡在 99%
+        var remaining = 99 - progress;
+        var increment = Math.max(1, Math.floor(remaining * 0.15));
+        progress += increment;
+
+        if (bar && text) {
+          bar.style.width = progress + '%';
+          text.innerText = progress + '%';
+        }
+
+        if (progress >= 99) {
+          clearInterval(interval);
+        }
+      }, 150);
+
+      // 暴露给外部应用：当应用加载完成后调用
+      window.completeLoading = function () {
+        clearInterval(interval);
+        if (bar && text) {
+          bar.style.width = '100%';
+          text.innerText = '100%';
+        }
+        setTimeout(function () {
+          if (loader) loader.classList.add('fade-out');
+          var root = document.getElementById('root');
+          if (root) root.classList.add('ready');
+        }, 300); // 留一点时间看完 100%
+      };
+    })();
+  </script>
   <script type="module" src="/src/renderer/main.tsx"></script>
 </body>
 
