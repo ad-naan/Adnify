@@ -3,6 +3,7 @@
  */
 
 import { logger } from '@shared/utils/Logger'
+import { session } from 'electron'
 import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import Store from 'electron-store'
@@ -62,7 +63,7 @@ export function registerSettingsHandlers(
   resolveStore: (key: string) => Store,
   preferencesStore: Store,
   _bootstrapStore: Store,
-  securityModule?: SecurityModuleRef
+  securityModule?: SecurityModuleRef,
 ) {
   if (securityModule) {
     securityRef = securityModule
@@ -191,6 +192,21 @@ export function registerSettingsHandlers(
     } catch (err) {
       logger.ipc.error('[Settings] Failed to read logs:', err)
       return ''
+    }
+  })
+
+  ipcMain.handle('cache:deepClean', async () => {
+    try {
+      await Promise.all([
+        session.defaultSession.clearCache(),
+        session.defaultSession.clearStorageData({
+          storages: ['localstorage', 'shadercache', 'serviceworkers', 'cachestorage', 'indexdb', 'websql'],
+        }),
+      ])
+      return { success: true }
+    } catch (error) {
+      logger.ipc.error('[Settings] Failed to deep clean cache:', error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
   })
 }

@@ -18,6 +18,7 @@ import { mcpService } from './mcpService'
 import { snippetService } from './snippetService'
 import { workerService } from './workerService'
 import { workspaceStorageRuntime } from './workspaceStorageRuntime'
+import { initCacheLifecycleService } from './cacheLifecycleService'
 import { runWithAgentStorageWritesSuspended } from '@renderer/agent/store/agentStorage'
 import {
   bindWorkspaceRoot,
@@ -54,6 +55,7 @@ function schedulePostPaintTask(task: () => void, delay = 0): void {
 async function initCoreModules(): Promise<void> {
   startupMetrics.start('init-core')
 
+  initCacheLifecycleService()
   registerCoreCommands()
 
   await Promise.all([
