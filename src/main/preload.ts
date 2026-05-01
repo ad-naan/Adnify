@@ -541,6 +541,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resetWhitelist: () => ipcRenderer.invoke('settings:resetWhitelist'),
   getUserDataPath: () => ipcRenderer.invoke('settings:getUserDataPath'),
   getRecentLogs: () => ipcRenderer.invoke('settings:getRecentLogs'),
+  deepCleanCache: () => ipcRenderer.invoke('cache:deepClean'),
 
   sendMessage: (params: LLMSendMessageParams) => ipcRenderer.invoke('llm:sendMessage', params),
   compactContext: (params: LLMSendMessageParams) => ipcRenderer.invoke('llm:compactContext', params),
