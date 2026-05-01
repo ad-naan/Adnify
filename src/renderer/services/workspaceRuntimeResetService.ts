@@ -11,6 +11,7 @@ import {
   resumeAgentStorageWrites,
   markAgentStorageSnapshotAsCurrent,
 } from '@renderer/agent/store/agentStorage'
+import { workspaceAnalyticsService } from './workspaceAnalyticsService'
 
 export function resetWorkspaceRuntimeState(): void {
   useStore.setState({
@@ -22,7 +23,7 @@ export function resetWorkspaceRuntimeState(): void {
 
   suspendAgentStorageWrites()
   try {
-    useAgentStore.setState({
+  useAgentStore.setState({
       threads: {},
       currentThreadId: null,
       threadMessageVersions: {},
@@ -31,6 +32,9 @@ export function resetWorkspaceRuntimeState(): void {
       activeBranchId: {},
       inputPrompt: '',
       currentSessionId: null,
+      plans: [],
+      activePlanId: null,
+      currentTaskId: null,
     })
     markAgentStorageSnapshotAsCurrent(null)
   } finally {
@@ -44,5 +48,6 @@ export function resetWorkspaceRuntimeState(): void {
   lintService.clearCache()
   streamingEditService.clearAll()
   clearHealthCache()
+  workspaceAnalyticsService.reset()
   workspaceStorageRuntime.reset()
 }

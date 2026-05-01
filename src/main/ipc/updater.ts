@@ -2,8 +2,9 @@
  * Updater IPC handlers.
  */
 
-import { ipcMain, shell } from 'electron'
+import { ipcMain } from 'electron'
 import { updateService } from '../services/updater'
+import { openExternalSafely } from '../security/externalUrl'
 
 export function registerUpdaterHandlers(): void {
   ipcMain.handle('updater:check', async () => {
@@ -26,6 +27,6 @@ export function registerUpdaterHandlers(): void {
   ipcMain.handle('updater:openDownloadPage', (_, url?: string) => {
     const status = updateService.getStatus()
     const targetUrl = url || status.downloadUrl || 'https://github.com/adnaan-worker/adnify/releases/latest'
-    void shell.openExternal(targetUrl)
+    return openExternalSafely(targetUrl)
   })
 }

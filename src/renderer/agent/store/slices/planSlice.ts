@@ -135,6 +135,7 @@ export const createPlanSlice: StateCreator<
     loadPlansFromDisk: async (workspacePath) => {
         try {
             const planDir = `${workspacePath}/.adnify/plan`
+            set({ plans: [], activePlanId: null })
             const exists = await api.file.exists(planDir)
             if (!exists) return
 
@@ -171,6 +172,7 @@ export const createPlanSlice: StateCreator<
             }
         } catch (e) {
             console.warn('[PlanSlice] Failed to load plans from disk:', e)
+            set({ plans: [], activePlanId: null })
         }
     },
 

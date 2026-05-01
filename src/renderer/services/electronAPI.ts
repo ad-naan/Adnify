@@ -97,6 +97,7 @@ function createGroupedAPI() {
       resetWhitelist: () => raw.resetWhitelist(),
       getUserDataPath: () => raw.getUserDataPath(),
       getRecentLogs: () => raw.getRecentLogs(),
+      deepCleanCache: () => raw.deepCleanCache(),
       onChanged: (callback: Parameters<typeof raw.onSettingsChanged>[0]) => raw.onSettingsChanged(callback),
     },
 
@@ -345,6 +346,7 @@ function createGroupedAPI() {
       onError: (callback: Parameters<typeof raw.onAppError>[0]) => raw.onAppError(callback),
       respondToShutdownRequest: (requestId: string, success: boolean) => raw.respondToShutdownRequest(requestId, success),
       onShutdownRequested: (callback: Parameters<typeof raw.onShutdownRequested>[0]) => raw.onShutdownRequested(callback),
+      onOpenFiles: (callback: Parameters<typeof raw.onOpenFiles>[0]) => raw.onOpenFiles(callback),
     },
 
     // 命令执行

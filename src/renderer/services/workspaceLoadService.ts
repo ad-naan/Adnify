@@ -13,6 +13,7 @@ import { mcpService } from './mcpService'
 import { gitService } from './gitService'
 import { toAppError } from '@shared/utils/errorHandler'
 import { workspaceStorageRuntime } from './workspaceStorageRuntime'
+import { workspaceAnalyticsService } from './workspaceAnalyticsService'
 import type { FileItem } from '@shared/types'
 import type { WorkspaceConfig } from '@store'
 import type { ChatThread } from '@renderer/agent/types'
@@ -214,6 +215,7 @@ export async function loadWorkspace(
 ): Promise<void> {
   const shellState = await prepareWorkspaceShell(workspace)
   await bindWorkspaceRoot(shellState)
+  await workspaceAnalyticsService.bindWorkspace(workspace)
   await initializeWorkspaceServices(workspace, options)
   commitWorkspaceShell(shellState)
 }

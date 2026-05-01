@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
-import { Boxes, Command, FolderOpen, Network, Search, Settings, TerminalSquare, Workflow } from 'lucide-react'
+import { Command, FolderOpen, Search, Settings, TerminalSquare } from 'lucide-react'
 import { useStore } from '@store'
 import { t, type Language } from '@renderer/i18n'
 import { publicAsset } from '@utils/publicAsset'
+import UsageDashboard from '../welcome/UsageDashboard'
 
 export function EditorWelcome() {
   const language = useStore((state) => state.language)
@@ -138,7 +139,7 @@ function WelcomeWorkbench({
               <WelcomeArtwork src={artwork} />
             </div>
 
-            <FeatureGrid language={language} />
+            <UsageDashboard language={language} />
 
             <div className="adnify-welcome-bottom-row">
               <div className="adnify-welcome-footer-actions">{footer}</div>
@@ -171,49 +172,6 @@ function WelcomeArtwork({ src }: { src: string }) {
   )
 }
 
-function FeatureGrid({ language }: { language: Language }) {
-  return (
-    <div className="adnify-welcome-feature-grid">
-      <FeatureCard
-        icon={<Workflow className="h-5 w-5" />}
-        title={t('welcome.feature.visual.title', language)}
-        subtitle={t('welcome.feature.visual.subtitle', language)}
-        imageSrc={publicAsset('brand/ip/1.png')}
-      />
-      <FeatureCard
-        icon={<Network className="h-5 w-5" />}
-        title={t('welcome.feature.connect.title', language)}
-        subtitle={t('welcome.feature.connect.subtitle', language)}
-        imageSrc={publicAsset('brand/ip/2.png')}
-      />
-      <FeatureCard
-        icon={<Boxes className="h-5 w-5" />}
-        title={t('welcome.feature.modular.title', language)}
-        subtitle={t('welcome.feature.modular.subtitle', language)}
-        imageSrc={publicAsset('brand/ip/3.png')}
-      />
-    </div>
-  )
-}
-
-function FeatureCard({ icon, title, subtitle, imageSrc }: { icon: ReactNode; title: string; subtitle: string; imageSrc?: string }) {
-  return (
-    <div className="adnify-welcome-feature-card group">
-      {imageSrc && (
-        <div className="adnify-welcome-feature-illustration">
-          <img src={imageSrc} alt="" draggable={false} />
-        </div>
-      )}
-      <div className="relative z-10 flex flex-col gap-3 h-full">
-        <div className="adnify-welcome-feature-icon">{icon}</div>
-        <div className="adnify-welcome-feature-text mt-auto">
-          <h4 className="adnify-welcome-feature-title">{title}</h4>
-          <p className="adnify-welcome-feature-desc">{subtitle}</p>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function ShortcutHint({ keys, label }: { keys: string[]; label: string }) {
   return (
@@ -239,7 +197,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         width: 100%;
         max-width: 1200px;
         margin: 0 auto;
-        padding: clamp(16px, 3cqw, 32px) clamp(24px, 5cqw, 48px);
+        padding: clamp(20px, 3vh, 40px) clamp(24px, 5cqw, 48px);
         display: flex;
         flex-direction: column;
         min-height: 100%;
@@ -256,8 +214,8 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 32px;
-        min-height: clamp(380px, 40cqw, 520px);
+        gap: 24px;
+        min-height: clamp(220px, 28vh, 360px);
       }
 
       .${rootClass} .adnify-welcome-copy {
@@ -278,7 +236,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       }
 
       .${rootClass} .adnify-welcome-title {
-        font-size: clamp(36px, 5cqw, 52px);
+        font-size: clamp(28px, 4.5cqw, 42px);
         font-weight: 800;
         line-height: 1.15;
         color: rgb(var(--text-primary));
@@ -286,9 +244,9 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       }
 
       .${rootClass} .adnify-welcome-subtitle {
-        margin-top: 18px;
-        font-size: 16px;
-        line-height: 1.6;
+        margin-top: 12px;
+        font-size: 15px;
+        line-height: 1.5;
         color: rgb(var(--text-secondary));
         max-width: 480px;
       }
@@ -297,7 +255,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         display: flex;
         flex-wrap: wrap;
         gap: 16px;
-        margin-top: 36px;
+        margin-top: 32px;
       }
 
       .${rootClass} .adnify-welcome-primary-button,
@@ -438,7 +396,8 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         position: relative;
         z-index: 1;
         width: 115%;
-        max-width: 700px;
+        max-width: 650px;
+        max-height: 280px;
         height: auto;
         object-fit: contain;
         /* Magic mask to blend the solid background image into the app background */
@@ -458,156 +417,16 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         display: none;
       }
 
-      .${rootClass} .adnify-welcome-feature-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 20px;
-        margin-top: 40px;
-        position: relative;
-        z-index: 1;
-      }
-
-      .${rootClass} .adnify-welcome-feature-grid::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 100%;
-        height: 140%;
-        background: radial-gradient(ellipse at center, rgb(var(--accent) / 0.35) 0%, transparent 70%);
-        filter: blur(50px);
-        transform: translate(-50%, -50%);
-        z-index: -1;
-        pointer-events: none;
-      }
-
-      .${rootClass} .adnify-welcome-feature-card {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 20px;
-        border-radius: 16px;
-        background: linear-gradient(135deg, rgb(var(--text-primary) / 0.08) 0%, rgb(var(--text-primary) / 0.02) 100%);
-        backdrop-filter: blur(32px) saturate(180%);
-        -webkit-backdrop-filter: blur(32px) saturate(180%);
-        border: 1px solid rgb(var(--text-primary) / 0.08);
-        box-shadow: 0 16px 40px rgba(0,0,0,0.15), inset 0 1px 1px rgb(var(--text-primary) / 0.12);
-        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        position: relative;
-        overflow: hidden;
-        min-height: 150px;
-      }
-
-      .${rootClass} .adnify-welcome-feature-card::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(var(--accent), 0.5), transparent);
-        opacity: 0;
-        transition: opacity 0.3s ease;
-      }
-
-      .${rootClass} .adnify-welcome-feature-card:hover {
-        transform: translateY(-4px);
-        background: linear-gradient(135deg, rgb(var(--text-primary) / 0.12) 0%, rgb(var(--text-primary) / 0.04) 100%);
-        border-color: rgb(var(--accent) / 0.5);
-        box-shadow: 0 20px 48px rgba(0,0,0,0.2), inset 0 1px 1px rgb(var(--text-primary) / 0.2), 0 0 0 1px rgb(var(--accent) / 0.15);
-      }
-
-      .${rootClass} .adnify-welcome-feature-card:hover::before {
-        opacity: 1;
-      }
-
-      .${rootClass} .adnify-welcome-feature-icon {
-        display: flex;
-        width: 42px;
-        height: 42px;
-        flex-shrink: 0;
-        align-items: center;
-        justify-content: center;
-        border-radius: 12px;
-        color: rgb(var(--accent));
-        background: linear-gradient(135deg, rgb(var(--accent) / 0.15) 0%, rgb(var(--accent) / 0.05) 100%);
-        border: 1px solid rgb(var(--accent) / 0.2);
-        transition: transform 0.3s ease, background 0.3s ease;
-      }
-
-      .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-icon {
-        transform: scale(1.05);
-        background: linear-gradient(135deg, rgb(var(--accent) / 0.25) 0%, rgb(var(--accent) / 0.1) 100%);
-      }
-
-      .${rootClass} .adnify-welcome-feature-illustration {
-        position: absolute;
-        bottom: -30px;
-        right: -30px;
-        width: 160px;
-        height: 160px;
-        z-index: 0;
-        opacity: 0.25;
-        transform: scale(0.9) rotate(-5deg);
-        transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        pointer-events: none;
-        /* Feather the entire container to guarantee no hard edges */
-        -webkit-mask-image: radial-gradient(circle at 60% 60%, black 20%, transparent 70%);
-        mask-image: radial-gradient(circle at 60% 60%, black 20%, transparent 70%);
-      }
-
-      .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-illustration {
-        opacity: 0.8;
-        transform: scale(1.05) rotate(0deg) translate(-10px, -10px);
-        filter: saturate(1.2) brightness(1.1);
-        -webkit-mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 80%);
-        mask-image: radial-gradient(circle at 50% 50%, black 40%, transparent 80%);
-      }
-
-      .${rootClass} .adnify-welcome-feature-illustration img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      .${rootClass} .adnify-welcome-feature-text {
-        min-width: 0;
-        flex: 1;
-      }
-
-      .${rootClass} .adnify-welcome-feature-title {
-        font-size: 15px;
-        font-weight: 600;
-        color: rgb(var(--text-primary));
-        margin: 0 0 6px 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        transition: color 0.3s ease;
-      }
-
-      .${rootClass} .adnify-welcome-feature-card:hover .adnify-welcome-feature-title {
-        color: rgb(var(--accent));
-      }
-
-      .${rootClass} .adnify-welcome-feature-desc {
-        font-size: 13px;
-        color: rgb(var(--text-muted));
-        line-height: 1.6;
-        margin: 0;
-        white-space: normal;
-      }
 
       .${rootClass} .adnify-welcome-bottom-row {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 24px;
+        gap: 16px;
         margin-top: auto;
-        padding-top: 24px;
-        padding-bottom: 12px;
+        padding-top: 16px;
+        padding-bottom: 8px;
         border-top: 1px solid rgb(var(--border) / 0.3);
       }
 
