@@ -8,8 +8,8 @@ import { useState, useRef, useEffect } from 'react'
 import { ChevronDown, Plus, FolderOpen, History, Folder, Monitor, LayoutGrid } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
-import { workspaceManager, WorkspaceOpenError } from '@services/WorkspaceManager'
-import { toast } from '@components/common/ToastProvider'
+import { workspaceManager } from '@services/WorkspaceManager'
+import { openFolderFromDialog, openWorkspaceFromDialog, openRecentWorkspace } from '@services/workspaceOpenService'
 import { getFileName, getDirname, getBasename } from '@shared/utils/pathUtils'
 import { t } from '@renderer/i18n'
 
@@ -69,18 +69,7 @@ export default function WorkspaceDropdown() {
 
     const handleOpenRecent = async (path: string) => {
         setIsOpen(false)
-        try {
-            await workspaceManager.openFolder(path)
-        } catch (e) {
-            if (e instanceof WorkspaceOpenError && e.code === 'missing-workspace') {
-                toast.error(t('workspace.folderNotExist', language), getFileName(path))
-                loadRecent()
-                return
-            }
-
-            logger.ui.error('[WorkspaceDropdown] Failed to open recent workspace:', e)
-            toast.error(t('workspace.openFolderFailed', language), getFileName(path))
-        }
+        await openRecentWorkspace(path, language)
     }
 
     return (
@@ -131,18 +120,12 @@ export default function WorkspaceDropdown() {
                             <MenuItem
                                 icon={FolderOpen}
                                 label={t('workspace.openFolder', language)}
-                                onClick={() => handleAction(async () => {
-                                    const result = await api.file.openFolder()
-                                    if (result && typeof result === 'string') await workspaceManager.openFolder(result)
-                                })}
+                                onClick={() => handleAction(() => openFolderFromDialog(language))}
                             />
                             <MenuItem
                                 icon={LayoutGrid}
                                 label={t('workspace.openWorkspace', language)}
-                                onClick={() => handleAction(async () => {
-                                    const result = await api.workspace.open()
-                                    if (result && !('redirected' in result)) await workspaceManager.switchTo(result)
-                                })}
+                                onClick={() => handleAction(() => openWorkspaceFromDialog(language))}
                             />
                             <MenuItem
                                 icon={Plus}

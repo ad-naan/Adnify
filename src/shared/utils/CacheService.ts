@@ -22,6 +22,16 @@ import { logger } from './Logger'
 /** 淘汰策略 */
 export type EvictionPolicy = 'lru' | 'lfu' | 'fifo'
 
+export type CacheCleanupPhase = 'manual' | 'workspace-switch' | 'shutdown' | 'deep'
+
+export type CacheScope = 'session' | 'workspace' | 'app'
+
+export interface CachePolicy {
+  scope: CacheScope
+  clearOn: CacheCleanupPhase[]
+  persistent?: boolean
+}
+
 /** 缓存条目 */
 interface CacheEntry<T> {
   value: T
@@ -52,6 +62,7 @@ export interface CacheConfig {
   onEvict?: (key: string, value: unknown, reason: EvictReason) => void
   /** 是否启用统计 */
   enableStats: boolean
+  policy?: CachePolicy
 }
 
 /** 淘汰原因 */
@@ -119,6 +130,8 @@ export class CacheService<T = unknown> {
     if (this.config.cleanupInterval > 0) {
       this.startCleanup()
     }
+
+    cacheManager.register(this, this.config.policy)
   }
 
   // ============================================
@@ -418,6 +431,7 @@ export class CacheService<T = unknown> {
     this.stopCleanup()
     this.clear()
     this.eventHandlers.clear()
+    cacheManager.unregister(this.name)
   }
 
   // ============================================
@@ -562,6 +576,8 @@ export class CacheService<T = unknown> {
 
 class CacheManager {
   private caches = new Map<string, CacheService<unknown>>()
+  private policies = new Map<string, CachePolicy>()
+  private cleanupHooks = new Map<string, { phases: CacheCleanupPhase[]; handler: () => void | Promise<void> }>()
   private static instance: CacheManager
 
   static getInstance(): CacheManager {
@@ -572,14 +588,17 @@ class CacheManager {
   }
 
   /** 注册缓存实例 */
-  register<T>(cache: CacheService<T>): void {
+  register<T>(cache: CacheService<T>, policy?: CachePolicy): void {
     const stats = cache.getStats()
     this.caches.set(stats.name, cache as CacheService<unknown>)
+    this.policies.set(stats.name, policy || inferCachePolicy(stats.name))
   }
 
   /** 注销缓存实例 */
   unregister(name: string): void {
     this.caches.delete(name)
+    this.policies.delete(name)
+    this.cleanupHooks.delete(name)
   }
 
   /** 获取缓存实例 */
@@ -623,6 +642,30 @@ class CacheManager {
     }
   }
 
+  registerCleanupHook(name: string, phases: CacheCleanupPhase[], handler: () => void | Promise<void>): void {
+    this.cleanupHooks.set(name, { phases, handler })
+  }
+
+  unregisterCleanupHook(name: string): void {
+    this.cleanupHooks.delete(name)
+  }
+
+  async runPhase(phase: CacheCleanupPhase): Promise<void> {
+    for (const [name, cache] of this.caches) {
+      const policy = this.policies.get(name)
+      if (!policy) continue
+      if (phase === 'deep' || policy.clearOn.includes(phase)) {
+        cache.clear()
+      }
+    }
+
+    for (const { phases, handler } of this.cleanupHooks.values()) {
+      if (phase === 'deep' || phases.includes(phase)) {
+        await handler()
+      }
+    }
+  }
+
   /** 销毁所有缓存 */
   destroyAll(): void {
     for (const cache of this.caches.values()) {
@@ -649,9 +692,7 @@ export const cacheManager = CacheManager.getInstance()
 
 /** 创建缓存实例并自动注册到管理器 */
 export function createCache<T>(name: string, config?: Partial<CacheConfig>): CacheService<T> {
-  const cache = new CacheService<T>(name, config)
-  cacheManager.register(cache)
-  return cache
+  return new CacheService<T>(name, config)
 }
 
 // ============================================
@@ -667,12 +708,43 @@ export function createTypedCache<T>(
 ): CacheService<T> {
   const config = getCacheConfig(type)
   const name = nameOverride || type.charAt(0).toUpperCase() + type.slice(1) + 'Cache'
+  const policy = inferCachePolicy(name, type)
   
   return createCache<T>(name, {
     maxSize: config.maxSize,
     defaultTTL: config.ttlMs,
     maxMemory: config.maxMemory || 50 * 1024 * 1024,
+    policy,
   })
+}
+
+function inferCachePolicy(name: string, type?: keyof CacheConfigs): CachePolicy {
+  const key = `${name} ${type || ''}`.toLowerCase()
+  const base: CacheCleanupPhase[] = ['manual', 'workspace-switch', 'shutdown']
+
+  if (key.includes('llmprovider')) {
+    return { scope: 'app', clearOn: ['shutdown', 'deep'], persistent: true }
+  }
+
+  if (key.includes('lspdiagnostics')) {
+    return { scope: 'workspace', clearOn: ['workspace-switch', 'shutdown', 'deep'] }
+  }
+
+  if (
+    key.includes('directory') ||
+    key.includes('completion') ||
+    key.includes('lint') ||
+    key.includes('healthcheck') ||
+    key.includes('filecontent') ||
+    key.includes('searchresult') ||
+    key.includes('agentfilecache') ||
+    key.includes('contextfilecache') ||
+    key.includes('contextsearchcache')
+  ) {
+    return { scope: 'workspace', clearOn: base }
+  }
+
+  return { scope: 'session', clearOn: base }
 }
 
 // ============================================
