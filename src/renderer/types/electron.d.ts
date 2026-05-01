@@ -375,6 +375,7 @@ export interface ElectronAPI {
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   getUserDataPath: () => Promise<string>
   getRecentLogs: () => Promise<string>
+  deepCleanCache: () => Promise<{ success: boolean; error?: string }>
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>
   compactContext: (params: LLMSendMessageParams) => Promise<{
