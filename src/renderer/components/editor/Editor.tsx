@@ -87,7 +87,6 @@ export default function Editor() {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | typeof import('monaco-editor/esm/vs/editor/editor.api') | null>(null)
   const cursorDebounceRef = useRef<NodeJS.Timeout | null>(null)
-  const isRestoringScrollRef = useRef(false)
   const setFileScrollPosition = useStore((state) => state.setFileScrollPosition)
 
   // Hooks

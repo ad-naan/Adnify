@@ -6,7 +6,7 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain } from 'electron'
 // 补充 Language 类型（与渲染端对齐）
 export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
@@ -17,7 +17,9 @@ import type Store from 'electron-store'
 import { destroyIndexService } from './indexing/indexService'
 import { setCustomLspBinDir } from './lsp/installer'
 import { lspManager as mainLspManager } from './lsp/lspManager'
+import { isLocalDevServerUrl, openExternalSafely } from './security/externalUrl'
 import { cleanupFileWatcher } from './security/fileWatcher'
+import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from './services/fileAssociation'
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
 import {
   shutdownWindowController,
@@ -69,6 +71,8 @@ let lastActiveWindow: BrowserWindow | null = null
 const pendingShutdownRequests = new Map<string, (success: boolean) => void>()
 const authorizedCloseWindows = new Set<number>()
 let appQuitInProgress = false
+const launchFiles = collectLaunchFiles(process.argv)
+queueLaunchFiles(launchFiles, 'startup')
 
 
 // 延迟加载的模块
@@ -214,10 +218,6 @@ function normalizeRgbColor(value: unknown, fallback: string): string {
   return fallback
 }
 
-function isLocalDevServerUrl(url: string): boolean {
-  return /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{2,5})?(?:[/?#]|$)/i.test(url)
-}
-
 function isDevelopmentRuntime(): boolean {
   return !app.isPackaged && !!process.env.VITE_DEV_SERVER_URL
 }
@@ -346,6 +346,21 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     },
   })
 
+  win.webContents.session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    const detailRecord = details as Partial<{
+      requestingOrigin: string
+      isMainFrame: boolean
+      mediaTypes: string[]
+    }>
+    logger.security.warn('[Main] Permission request denied', {
+      permission,
+      requestingOrigin: detailRecord.requestingOrigin,
+      isMainFrame: detailRecord.isMainFrame,
+      mediaTypes: detailRecord.mediaTypes,
+    })
+    callback(false)
+  })
+
   // 添加 CSP 头以提升安全性
   if (app.isPackaged) {
     win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
@@ -372,6 +387,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   win.webContents.once('dom-ready', () => {
     // 等待一帧（16ms）让 CSS 动画启动
     setTimeout(() => win.show(), 16)
+    void flushLaunchFilesToWindow(win, 'startup')
   })
 
   // Mac 上确保 traffic lights 始终显示
@@ -465,14 +481,14 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     if (url.startsWith('devtools://') || isLocalDevServerUrl(url)) {
       return { action: 'allow' }
     }
-    shell.openExternal(url)
+    void openExternalSafely(url)
     return { action: 'deny' }
   })
 
   win.webContents.on('will-navigate', (event, url) => {
     if (!isLocalDevServerUrl(url) && !url.startsWith('file://')) {
       event.preventDefault()
-      shell.openExternal(url)
+      void openExternalSafely(url)
     }
   })
 
@@ -755,11 +771,13 @@ app.whenReady().then(async () => {
   loadWindowContent(firstWin, false)
 })
 
-app.on('second-instance', () => {
+app.on('second-instance', (_event, argv) => {
+  queueLaunchFiles(collectLaunchFiles(argv), 'second-instance')
   const win = getMainWindow()
   if (win) {
     if (win.isMinimized()) win.restore()
     win.focus()
+    void flushLaunchFilesToWindow(win, 'second-instance')
   } else {
     createWindow(false)
   }
@@ -826,3 +844,16 @@ app.on('before-quit', async (e) => {
 })
 
 app.on('activate', () => { if (windows.size === 0) createWindow() })
+
+app.on('open-file', (event, filePath) => {
+  event.preventDefault()
+  queueLaunchFiles(collectLaunchFiles([filePath]), 'open-file')
+  const win = getMainWindow()
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+    void flushLaunchFilesToWindow(win, 'open-file')
+  } else {
+    createWindow(false)
+  }
+})

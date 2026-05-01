@@ -57,6 +57,9 @@ export {
   type CacheConfig,
   type CacheStats,
   type EvictionPolicy,
+  type CacheCleanupPhase,
+  type CacheScope,
+  type CachePolicy,
   type SetOptions,
   type CacheEvent,
 } from './CacheService'

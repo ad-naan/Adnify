@@ -23,6 +23,7 @@ import {
   registerWorkspaceHandlers,
   WindowManagerContext,
 } from './workspaceHandlers'
+import { openExternalSafely } from './externalUrl'
 
 /**
  * 向渲染进程发送错误通知
@@ -551,8 +552,7 @@ export function registerSecureFileHandlers(
       await fsPromises.access(filePath)
       // 转换为 file:// URL
       const fileUrl = pathToFileURL(filePath).href
-      await shell.openExternal(fileUrl)
-      return true
+      return await openExternalSafely(fileUrl)
     } catch {
       return false
     }

@@ -76,7 +76,6 @@ export { getAgentConfig } from './utils/AgentConfig'
 export { isRetryableError } from '@shared/utils'
 
 // Prompts
-export { buildAgentSystemPrompt } from './prompts/PromptBuilder'
 
 // 分支类型
 export type { Branch } from './store/slices/branchSlice'

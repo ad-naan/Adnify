@@ -4,6 +4,7 @@
 
 import { ipcMain, BrowserWindow, app, nativeTheme } from 'electron'
 import { logger } from '@shared/utils/Logger'
+import { ensureTrustedIpcSender } from './safeHandle'
 
 // 标记是否已注册基础窗口控制
 let basicHandlersRegistered = false
@@ -14,11 +15,13 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
     basicHandlersRegistered = true
 
     ipcMain.on('window:minimize', (event) => {
+      ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.minimize()
     })
 
     ipcMain.on('window:maximize', (event) => {
+      ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win?.isMaximized()) {
         win.unmaximize()
@@ -28,11 +31,13 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
     })
 
     ipcMain.on('window:close', (event) => {
+      ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.close()
     })
 
     ipcMain.on('window:toggleDevTools', (event) => {
+      ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.webContents.toggleDevTools()
     })
@@ -43,6 +48,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
 
     // 同步系统主题
     ipcMain.handle('window:setTheme', (event, theme: 'light' | 'dark' | 'system', bgColor?: string) => {
+      ensureTrustedIpcSender(event)
       nativeTheme.themeSource = theme
       if (bgColor) {
         const win = BrowserWindow.fromWebContents(event.sender)
@@ -53,6 +59,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
 
     // 渲染端准备完毕通知
     ipcMain.on('app:ready', (event) => {
+      ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win && !win.isDestroyed()) {
         // 窗口已经显示，这里只是日志记录
@@ -62,11 +69,13 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
 
     // 获取当前窗口的唯一标识
     ipcMain.handle('window:getId', (event) => {
+      ensureTrustedIpcSender(event)
       return BrowserWindow.fromWebContents(event.sender)?.id
     })
 
     // 调整窗口大小
     ipcMain.handle('window:resize', (event, width: number, height: number, minWidth?: number, minHeight?: number) => {
+      ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win && !win.isDestroyed()) {
         // 先设置最小尺寸

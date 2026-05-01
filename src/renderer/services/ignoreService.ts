@@ -11,6 +11,7 @@ import picomatch from 'picomatch'
 const DEFAULT_IGNORE_PATTERNS = [
     'node_modules/**',
     '.git/**',
+    '.adnify/**',
     'dist/**',
     'build/**',
     'out/**',

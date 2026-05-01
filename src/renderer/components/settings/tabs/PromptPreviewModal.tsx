@@ -11,7 +11,8 @@ import { PromptPreviewModalProps } from '../types'
 
 export function PromptPreviewModal({ templateId, language, onClose }: PromptPreviewModalProps) {
     const template = getPromptTemplateById(templateId)
-    const previewContent = template ? getPromptTemplatePreview(templateId) : ''
+    const [previewContent, setPreviewContent] = useState('')
+    const [isLoadingPreview, setIsLoadingPreview] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [activeSection, setActiveSection] = useState<string | null>(null)
     const [copied, setCopied] = useState(false)
@@ -28,6 +29,39 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
         })
         return result
     }, [previewContent])
+
+    useEffect(() => {
+        let cancelled = false
+
+        if (!template) {
+            setPreviewContent('')
+            setIsLoadingPreview(false)
+            return
+        }
+
+        setIsLoadingPreview(true)
+        void getPromptTemplatePreview(templateId)
+            .then((content) => {
+                if (!cancelled) {
+                    setPreviewContent(content)
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setPreviewContent('')
+                    toast.error(language === 'zh' ? '加载 Prompt 预览失败' : 'Failed to load prompt preview')
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setIsLoadingPreview(false)
+                }
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [language, template, templateId])
 
     useEffect(() => {
         if (sections.length > 0 && !activeSection) {
@@ -135,32 +169,38 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-gradient-to-b from-transparent to-surface/5">
-                        <div className="max-w-3xl mx-auto space-y-8">
-                            {previewContent.split('\n\n').map((block, blockIdx) => {
-                                const isHeader = block.startsWith('## ')
-                                if (isHeader) {
-                                    const title = block.replace('## ', '').trim()
-                                    const id = title.toLowerCase().replace(/\s+/g, '-')
+                        {isLoadingPreview ? (
+                            <div className="max-w-3xl mx-auto h-full min-h-[320px] flex items-center justify-center text-sm text-text-muted">
+                                {language === 'zh' ? '正在生成 Prompt 预览...' : 'Generating prompt preview...'}
+                            </div>
+                        ) : (
+                            <div className="max-w-3xl mx-auto space-y-8">
+                                {previewContent.split('\n\n').map((block, blockIdx) => {
+                                    const isHeader = block.startsWith('## ')
+                                    if (isHeader) {
+                                        const title = block.replace('## ', '').trim()
+                                        const id = title.toLowerCase().replace(/\s+/g, '-')
+                                        return (
+                                            <div key={blockIdx} id={`section-${id}`} className="pt-4 first:pt-0">
+                                                <h2 className="text-xl font-bold text-text-primary flex items-center gap-3 group">
+                                                    <span className="w-1.5 h-6 bg-accent rounded-full" />
+                                                    {title}
+                                                    <div className="flex-1 h-px bg-border-subtle group-hover:bg-border transition-colors" />
+                                                </h2>
+                                            </div>
+                                        )
+                                    }
                                     return (
-                                        <div key={blockIdx} id={`section-${id}`} className="pt-4 first:pt-0">
-                                            <h2 className="text-xl font-bold text-text-primary flex items-center gap-3 group">
-                                                <span className="w-1.5 h-6 bg-accent rounded-full" />
-                                                {title}
-                                                <div className="flex-1 h-px bg-border-subtle group-hover:bg-border transition-colors" />
-                                            </h2>
+                                        <div key={blockIdx} className="relative group">
+                                            <div className="absolute -left-4 top-0 bottom-0 w-0.5 bg-accent/0 group-hover:bg-accent/20 transition-all rounded-full" />
+                                            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap font-mono">
+                                                {highlightText(block, searchQuery)}
+                                            </div>
                                         </div>
                                     )
-                                }
-                                return (
-                                    <div key={blockIdx} className="relative group">
-                                        <div className="absolute -left-4 top-0 bottom-0 w-0.5 bg-accent/0 group-hover:bg-accent/20 transition-all rounded-full" />
-                                        <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap font-mono">
-                                            {highlightText(block, searchQuery)}
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
+                                })}
+                            </div>
+                        )}
                     </div>
                     <div className="px-8 py-4 border-t border-border-subtle bg-surface/30 flex items-center justify-between">
                         <p className="text-xs text-text-muted italic">

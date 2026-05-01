@@ -5,7 +5,7 @@
 export { Agent } from './Agent'
 export { EventBus, type AgentEvent, type EventType } from './EventBus'
 export { createStreamProcessor, type StreamProcessor } from './stream'
-export { executeTools, approvalService } from './tools'
+export { approvalService } from './approvalService'
 
 export type {
   LLMConfig,
