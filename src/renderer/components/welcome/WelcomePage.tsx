@@ -611,7 +611,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .adnify-welcome-recent {
         margin-top: auto;
         padding-top: 48px;
-        max-width: 800px;
+        max-width: 100%;
       }
 
       .${rootClass} .adnify-welcome-recent-header {

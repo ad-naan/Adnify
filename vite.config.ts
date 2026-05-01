@@ -115,89 +115,60 @@ export default defineConfig({
       },
       output: {
         manualChunks(id) {
-          // Monaco Editor
-          if (id.includes('@monaco-editor/react')) {
-            return 'monaco-react'
+          // Monaco is large but internally coupled. Keep it as one chunk.
+          if (id.includes('monaco-editor') || id.includes('@monaco-editor/react')) {
+            return 'monaco-editor'
           }
-          if (id.includes('monaco-editor/esm/vs/language/typescript')) {
-            return 'monaco-ts'
-          }
-          if (id.includes('monaco-editor/esm/vs/language/html')) {
-            return 'monaco-html'
-          }
-          if (id.includes('monaco-editor/esm/vs/language/css')) {
-            return 'monaco-css'
-          }
-          if (id.includes('monaco-editor/esm/vs/language/json')) {
-            return 'monaco-json'
-          }
-          if (id.includes('monaco-editor')) {
-            return 'monaco-core'
-          }
-          // React 核心
+
+          // Stable third-party foundations.
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
             return 'react-vendor'
           }
-          // 状态管理 + 图标
           if (id.includes('node_modules/zustand') || id.includes('node_modules/lucide-react')) {
             return 'ui-core'
           }
-          // 终端
           if (id.includes('@xterm/')) {
             return 'terminal'
           }
-          // Markdown
+
+          // Keep the whole markdown pipeline together to avoid split-order issues.
           if (
             id.includes('react-markdown') ||
             id.includes('remark-gfm') ||
-            id.includes('remark-math')
+            id.includes('remark-math') ||
+            id.includes('rehype-katex') ||
+            id.includes('katex')
           ) {
             return 'markdown-core'
           }
-          if (id.includes('rehype-katex') || id.includes('katex')) {
-            return 'markdown-math'
-          }
-          // Syntax Highlighter（单独分包，按需加载）
+
+          // Optional feature bundles.
           if (id.includes('react-syntax-highlighter')) {
             return 'syntax-highlighter'
           }
-          // 动画
           if (id.includes('framer-motion')) {
             return 'animation'
           }
-          // Agent 模块
-          if (id.includes('/renderer/agent/core/') || id.includes('/renderer/agent/llm/')) {
-            return 'agent-core'
-          }
+
+          // Agent internals are tightly coupled and mix static/dynamic imports.
+          // Keep them in one chunk for packaged startup stability.
           if (
-            id.includes('/renderer/agent/domains/') ||
-            id.includes('/renderer/agent/store/') ||
-            id.includes('/renderer/agent/context/') ||
-            id.includes('/renderer/agent/plan/')
-          ) {
-            return 'agent-state'
-          }
-          if (
-            id.includes('/renderer/agent/tools/') ||
-            id.includes('/renderer/agent/services/') ||
-            id.includes('/renderer/agent/prompts/')
-          ) {
-            return 'agent-runtime'
-          }
-          if (
+            id.includes('/renderer/agent/') ||
             id.includes('/renderer/components/agent/') ||
-            id.includes('/renderer/agent/emotion/')
+            id.includes('/renderer/components/plan/')
           ) {
-            return 'agent-ui'
+            return 'agent'
           }
-          // Sidebar 模块
+
           if (id.includes('/renderer/components/sidebar/')) {
             return 'sidebar'
           }
         },
       },
     },
-    chunkSizeWarningLimit: 8000,
+    // Electron desktop bundles intentionally keep some large cohesive chunks
+    // to avoid production-only startup failures from over-splitting.
+    chunkSizeWarningLimit: 7000,
     minify: 'esbuild',
     target: 'esnext',
     cssCodeSplit: true,
