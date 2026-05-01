@@ -30,7 +30,7 @@ import {
   suspendAgentStorageWrites,
 } from '../store/agentStorage'
 import { fileCacheService } from '../services/fileCacheService'
-import { approvalService } from './tools'
+import { approvalService } from './approvalService'
 import { EventBus } from './EventBus'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { MessageContent, TextContent, ImageContent } from '../types'
