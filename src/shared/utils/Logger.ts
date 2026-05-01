@@ -163,6 +163,26 @@ interface PerformanceTimer {
   metadata?: Record<string, unknown>
 }
 
+type NodeFsModule = typeof import('fs')
+type NodePathModule = typeof import('path')
+
+let cachedFsModule: NodeFsModule | null = null
+let cachedPathModule: NodePathModule | null = null
+
+function getNodeFs(): NodeFsModule {
+  if (cachedFsModule) return cachedFsModule
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  cachedFsModule = require('fs') as NodeFsModule
+  return cachedFsModule
+}
+
+function getNodePath(): NodePathModule {
+  if (cachedPathModule) return cachedPathModule
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  cachedPathModule = require('path') as NodePathModule
+  return cachedPathModule
+}
+
 // ANSI 颜色代码 (更加丰富的调色盘)
 const ANSI_COLORS = {
   reset: '\x1b[0m',
@@ -439,8 +459,8 @@ class LoggerClass {
     this.isWriting = true
 
     try {
-      const fs = await import('fs')
-      const path = await import('path')
+      const fs = getNodeFs()
+      const path = getNodePath()
 
       const logPath = this.config.logFilePath
       const logDir = path.dirname(logPath)
@@ -471,8 +491,8 @@ class LoggerClass {
 
   private async rotateLogFiles(logPath: string): Promise<void> {
     if (!this.isMain) return
-    const fs = await import('fs')
-    const path = await import('path')
+    const fs = getNodeFs()
+    const path = getNodePath()
 
     const dir = path.dirname(logPath)
     const ext = path.extname(logPath)

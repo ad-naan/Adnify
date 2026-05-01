@@ -691,7 +691,7 @@ initializeTemplateToolConfigs()
 // 预览功能（用于设置界面）
 // ============================================
 
-import { buildSystemPrompt, type PromptContext } from './PromptBuilder'
+import type { PromptContext } from './PromptBuilder'
 
 /**
  * 获取模板的完整预览
@@ -701,7 +701,7 @@ import { buildSystemPrompt, type PromptContext } from './PromptBuilder'
  * @param templateId 模板 ID
  * @param language 语言，'zh' 为中文，其他为英文
  */
-export function getPromptTemplatePreview(templateId: string): string {
+export async function getPromptTemplatePreview(templateId: string): Promise<string> {
   const template = getPromptTemplateById(templateId)
   if (!template) return 'Template not found'
 
@@ -722,5 +722,6 @@ export function getPromptTemplatePreview(templateId: string): string {
     templateId: template.id,
   }
 
+  const { buildSystemPrompt } = await import('./PromptBuilder')
   return buildSystemPrompt(previewContext)
 }

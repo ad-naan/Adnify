@@ -6,7 +6,9 @@ import { resetWorkspaceRuntimeState } from './workspaceRuntimeResetService'
 import { loadWorkspace } from './workspaceLoadService'
 import { flushAgentSessionPersistence } from '@renderer/agent/store/AgentStore'
 import { workspaceStorageRuntime } from './workspaceStorageRuntime'
+import { runCacheCleanupPhase } from './cacheLifecycleService'
 import type { WorkspaceConfig } from '@store'
+import { workspaceAnalyticsService } from './workspaceAnalyticsService'
 
 export class WorkspaceOpenError extends Error {
   constructor(
@@ -84,6 +86,7 @@ class WorkspaceManager {
       }
 
       await this.saveCurrentWorkspace()
+      await runCacheCleanupPhase('workspace-switch')
       this.resetRuntimeState()
       await this.loadWorkspace(newWorkspace)
 
@@ -133,12 +136,14 @@ class WorkspaceManager {
 
   async closeWorkspace(): Promise<void> {
     await this.saveCurrentWorkspace()
+    await runCacheCleanupPhase('workspace-switch')
     this.resetRuntimeState()
 
     const { setWorkspace, setFiles } = useStore.getState()
     setWorkspace(null)
     setFiles([])
 
+    await workspaceAnalyticsService.bindWorkspace(null)
     workspaceStorageRuntime.reset()
   }
 

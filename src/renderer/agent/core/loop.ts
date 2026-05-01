@@ -3,16 +3,13 @@ import { logger } from '@utils/Logger'
 import { performanceMonitor, withRetry, isRetryableError } from '@shared/utils'
 import { useAgentStore } from '../store/AgentStore'
 import { useStore } from '@store'
-import { toolManager, initializeToolProviders, setToolLoadingContext, initializeTools } from '../tools'
 import { getAgentConfig, READ_TOOLS } from '../utils/AgentConfig'
 import { LoopDetector } from '../utils/LoopDetector'
 import { getReadOnlyTools, isFileEditTool } from '@/shared/config/tools'
 import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { createStreamProcessor } from './stream'
-import { executeTools } from './tools'
 import { EventBus } from './EventBus'
 import { estimateMessagesTokens } from '../domains/context/CompressionManager'
-import { lintService } from '../services/lintService'
 import { getRelativeChangePath, isFileWriteToolResult } from '../utils/fileChangeUtils'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { LintCheckFile, ChatMessage, AssistantMessage, InteractiveContent } from '../types'
@@ -21,6 +18,10 @@ import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext, LoopCheckResult } from './types'
 import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
+
+const importToolRuntime = () => import('../tools')
+const importExecuteTools = () => import('./tools').then(m => m.executeTools)
+const importLintService = () => import('../services/lintService').then(m => m.lintService)
 
 function getLocalizedText(language: string, zh: string, en: string): string {
   return pickLocalizedText(zh, en, language as 'en' | 'zh')
@@ -158,6 +159,7 @@ async function callLLM(
   options?: { allowToolCalls?: boolean }
 ): Promise<LLMCallResult> {
   performanceMonitor.start(`llm:${config.model}`, 'llm', { provider: config.provider, messageCount: messages.length })
+  const startedAt = Date.now()
   const processor = createStreamProcessor(assistantId, threadStore, requestId, options)
 
   try {
@@ -177,6 +179,13 @@ async function callLLM(
     if (assistantId && result.usage) {
       useAgentStore.getState().updateMessage(assistantId, {
         usage: result.usage,
+        responseMeta: {
+          provider: config.provider,
+          modelId: result.metadata?.modelId || config.model,
+          requestId,
+          durationMs: Date.now() - startedAt,
+          timestamp: Date.now(),
+        },
       } as Partial<AssistantMessage>)
     } else if (assistantId && !result.usage) {
       logger.agent.warn('[Loop] No usage data in LLM result')
@@ -301,6 +310,7 @@ async function autoFix(toolCalls: any[], workspacePath: string): Promise<AutoFix
   if (editedFiles.length === 0) return null
 
   const uniqueEditedFiles = Array.from(new Set(editedFiles))
+  const lintService = await importLintService()
   const lintResults = await lintService.getLintErrorsForFiles(uniqueEditedFiles, true)
   const allFiles: LintCheckFile[] = []
 
@@ -364,15 +374,17 @@ export async function runLoop(
   })
   threadStore.setStreamState({ requestId, assistantId })
 
-  initializeToolProviders()
-  await initializeTools()
-  setToolLoadingContext({
+  const toolRuntime = await importToolRuntime()
+  await toolRuntime.initializeTools()
+  toolRuntime.initializeToolProviders()
+  toolRuntime.setToolLoadingContext({
     mode: context.chatMode,
     templateId: useStore.getState().promptTemplateId,
     planPhase: context.chatMode === 'plan' ? context.planPhase : undefined,
   })
 
-  const agentTools = context.chatMode === 'chat' ? [] : toolManager.getAllToolDefinitions()
+  const agentTools = context.chatMode === 'chat' ? [] : toolRuntime.toolManager.getAllToolDefinitions()
+  const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
   let iteration = 0
   let shouldContinue = true
