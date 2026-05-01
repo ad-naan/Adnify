@@ -168,6 +168,11 @@ interface RemoteShellServer {
   remotePath?: string
 }
 
+interface OpenFilesPayload {
+  paths: string[]
+  source: 'startup' | 'second-instance' | 'open-file'
+}
+
 export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
@@ -194,7 +199,7 @@ export interface ElectronAPI {
     workspaceId?: string
   } | null>
   addFolderToWorkspace: () => Promise<string | null>
-  saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
+  saveWorkspace: (configPath: string | null, roots: string[]) => Promise<boolean>
   restoreWorkspace: () => Promise<{
     configPath: string | null
     roots: string[]
@@ -466,6 +471,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('app:shutdown-requested', handler)
     return () => ipcRenderer.removeListener('app:shutdown-requested', handler)
   },
+  onOpenFiles: (callback: (event: OpenFilesPayload) => void) => {
+    const handler = (_: IpcRendererEvent, event: OpenFilesPayload) => callback(event)
+    ipcRenderer.on('app:open-files', handler)
+    return () => ipcRenderer.removeListener('app:open-files', handler)
+  },
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
@@ -481,7 +491,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
   openWorkspace: () => ipcRenderer.invoke('workspace:open'),
   addFolderToWorkspace: () => ipcRenderer.invoke('workspace:addFolder'),
-  saveWorkspace: (configPath: string, roots: string[]) => ipcRenderer.invoke('workspace:save', configPath, roots),
+  saveWorkspace: (configPath: string | null, roots: string[]) => ipcRenderer.invoke('workspace:save', configPath, roots),
   restoreWorkspace: () => ipcRenderer.invoke('workspace:restore'),
   setActiveWorkspace: (roots: string[]) => ipcRenderer.invoke('workspace:setActive', roots),
   getRecentWorkspaces: () => ipcRenderer.invoke('workspace:getRecent'),

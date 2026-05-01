@@ -148,7 +148,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
         setIsClearing(true)
         try {
             // 1. 清除 localStorage 缓存
-            const keysToRemove = ['adnify-editor-config', 'adnify-workspace', 'adnify-sessions', 'adnify-threads']
+            const keysToRemove = ['adnify-editor-config', 'adnify-sessions', 'adnify-threads']
             keysToRemove.forEach(key => localStorage.removeItem(key))
 
             // 2. 清除代码库索引

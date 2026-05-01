@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from './store'
-import { useWindowTitle, useAppInit, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState, usePreviewDiscoveryToasts } from './hooks'
+import { useWindowTitle, useAppInit, useOpenFilesFromSystem, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState, usePreviewDiscoveryToasts } from './hooks'
 import TitleBar from './components/layout/TitleBar'
 import ActivityBar from './components/layout/ActivityBar'
 import StatusBar from './components/layout/StatusBar'
@@ -78,6 +78,7 @@ function AppContent() {
 
   useWindowTitle()
   useFileWatcher()
+  useOpenFilesFromSystem()
   useGlobalShortcuts()
   usePreviewDiscoveryToasts(hasWorkspace && isInitialized)
 
