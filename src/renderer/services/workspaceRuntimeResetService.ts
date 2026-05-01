@@ -22,7 +22,7 @@ export function resetWorkspaceRuntimeState(): void {
 
   suspendAgentStorageWrites()
   try {
-    useAgentStore.setState({
+  useAgentStore.setState({
       threads: {},
       currentThreadId: null,
       threadMessageVersions: {},
@@ -31,6 +31,9 @@ export function resetWorkspaceRuntimeState(): void {
       activeBranchId: {},
       inputPrompt: '',
       currentSessionId: null,
+      plans: [],
+      activePlanId: null,
+      currentTaskId: null,
     })
     markAgentStorageSnapshotAsCurrent(null)
   } finally {
