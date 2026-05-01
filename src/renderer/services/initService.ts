@@ -26,6 +26,7 @@ import {
   prepareWorkspaceShell,
   restoreWorkspaceAgentStore,
 } from './workspaceLoadService'
+import { workspaceAnalyticsService } from './workspaceAnalyticsService'
 
 export interface InitResult {
   success: boolean
@@ -120,6 +121,7 @@ async function restoreWorkspace(): Promise<boolean> {
     })
 
   commitWorkspaceShell(shellState)
+  await workspaceAnalyticsService.bindWorkspace(workspaceConfig)
 
   schedulePostPaintTask(() => {
     try {
