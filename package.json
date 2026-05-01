@@ -147,6 +147,38 @@
       "!bootstrap.json",
       "!.adnify/**"
     ],
+    "fileAssociations": [
+      {
+        "ext": "ts",
+        "name": "TypeScript Source",
+        "role": "Editor"
+      },
+      {
+        "ext": "tsx",
+        "name": "TypeScript React Source",
+        "role": "Editor"
+      },
+      {
+        "ext": "js",
+        "name": "JavaScript Source",
+        "role": "Editor"
+      },
+      {
+        "ext": "jsx",
+        "name": "JavaScript React Source",
+        "role": "Editor"
+      },
+      {
+        "ext": "md",
+        "name": "Markdown Document",
+        "role": "Editor"
+      },
+      {
+        "ext": "json",
+        "name": "JSON Document",
+        "role": "Editor"
+      }
+    ],
     "win": {
       "icon": "public/brand/icons/app.ico",
       "target": [

@@ -2,10 +2,9 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { Boxes, Folder, FolderOpen, History, Network, Plus, Settings, Workflow } from 'lucide-react'
 import { api } from '@/renderer/services/electronAPI'
-import { workspaceManager, WorkspaceOpenError } from '@/renderer/services/WorkspaceManager'
+import { openFolderFromDialog, openWorkspaceFromDialog, openRecentWorkspace } from '@/renderer/services/workspaceOpenService'
 import { useStore } from '@/renderer/store'
 import { logger } from '@utils/Logger'
-import { toast } from '@components/common/ToastProvider'
 import { getFileName } from '@shared/utils/pathUtils'
 import { t, type Language } from '@renderer/i18n'
 import { publicAsset } from '@utils/publicAsset'
@@ -41,42 +40,15 @@ export default function WelcomePage() {
   }
 
   const handleOpenFolder = async () => {
-    try {
-      const result = await api.file.openFolder()
-      if (result && typeof result === 'string') {
-        await workspaceManager.openFolder(result)
-      }
-    } catch (e) {
-      logger.ui.error('[WelcomePage] Failed to open folder:', e)
-      toast.error(t('workspace.openFolderFailed', language))
-    }
+    await openFolderFromDialog(language)
   }
 
   const handleOpenWorkspace = async () => {
-    try {
-      const result = await api.workspace.open()
-      if (result && !('redirected' in result)) {
-        await workspaceManager.switchTo(result)
-      }
-    } catch (e) {
-      logger.ui.error('[WelcomePage] Failed to open workspace:', e)
-      toast.error(t('workspace.openWorkspaceFailed', language))
-    }
+    await openWorkspaceFromDialog(language)
   }
 
   const handleOpenRecent = async (path: string) => {
-    try {
-      await workspaceManager.openFolder(path)
-    } catch (e) {
-      if (e instanceof WorkspaceOpenError && e.code === 'missing-workspace') {
-        toast.error(t('workspace.folderNotExist', language), getFileName(path))
-        loadRecentWorkspaces()
-        return
-      }
-
-      logger.ui.error('[WelcomePage] Failed to open recent workspace:', e)
-      toast.error(t('workspace.openFolderFailed', language), getFileName(path))
-    }
+    await openRecentWorkspace(path, language)
   }
 
   return (
