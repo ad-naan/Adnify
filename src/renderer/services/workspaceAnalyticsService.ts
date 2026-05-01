@@ -55,6 +55,23 @@ export interface WorkspaceDashboardData {
   models: DashboardModelRow[]
 }
 
+const EMPTY_WORKSPACE_DASHBOARD_DATA: WorkspaceDashboardData = {
+  overview: {
+    fileChanges: { value: '0', rawValue: 0, trend: '+0.0%' },
+    commits: { value: '0', rawValue: 0, trend: '+0.0%' },
+    sessions: { value: '0', rawValue: 0, trend: '+0.0%' },
+    activeHours: { value: '0.0', rawValue: 0, trend: '+0.0%' },
+  },
+  chartPoints: [0, 0, 0, 0, 0, 0],
+  workspace: {
+    activityPercent: 0,
+    activeProjects: 0,
+    pendingTasks: 0,
+    updatesToday: 0,
+  },
+  models: [],
+}
+
 const STATS_FILE = 'stats/events.jsonl'
 const ACTIVITY_IDLE_MS = 60_000
 const ACTIVITY_MIN_SEGMENT_MS = 15_000
@@ -62,6 +79,11 @@ const ACTIVITY_TICK_MS = 15_000
 const REFRESH_COMMITS_PER_REPO = 240
 
 class WorkspaceAnalyticsService {
+  private dashboardCache = new Map<string, {
+    timestamp: number
+    data: WorkspaceDashboardData
+    promise?: Promise<WorkspaceDashboardData>
+  }>()
   private workspaceRoot: string | null = null
   private currentWorkspaceKey: string | null = null
   private eventQueue: AnalyticsEvent[] = []
@@ -176,6 +198,51 @@ class WorkspaceAnalyticsService {
   ): Promise<WorkspaceDashboardData> {
     const workspace = useStore.getState().workspace
     const workspaceRoots = workspace?.roots || []
+    const workspaceKey = workspaceRoots.join('|')
+    const cacheKey = `${workspaceKey}::${range}::${selectedDate}`
+    const now = Date.now()
+    const cached = this.dashboardCache.get(cacheKey)
+
+    if (cached?.data && now - cached.timestamp < 15_000) {
+      return cached.data
+    }
+
+    if (cached?.promise) {
+      return cached.promise
+    }
+
+    const loadPromise = this.computeDashboardData(range, selectedDate, workspaceRoots)
+      .then(data => {
+        this.dashboardCache.set(cacheKey, {
+          timestamp: Date.now(),
+          data,
+        })
+        return data
+      })
+      .finally(() => {
+        const latest = this.dashboardCache.get(cacheKey)
+        if (latest?.promise) {
+          this.dashboardCache.set(cacheKey, {
+            timestamp: latest.timestamp,
+            data: latest.data,
+          })
+        }
+      })
+
+    this.dashboardCache.set(cacheKey, {
+      timestamp: cached?.timestamp || 0,
+      data: cached?.data || EMPTY_WORKSPACE_DASHBOARD_DATA,
+      promise: loadPromise,
+    })
+
+    return loadPromise
+  }
+
+  private async computeDashboardData(
+    range: DashboardRange,
+    selectedDate: string,
+    workspaceRoots: string[],
+  ): Promise<WorkspaceDashboardData> {
     const period = this.getPeriod(range, selectedDate)
     const previousPeriod = this.getPreviousPeriod(period)
 
