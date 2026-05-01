@@ -159,6 +159,7 @@ async function callLLM(
   options?: { allowToolCalls?: boolean }
 ): Promise<LLMCallResult> {
   performanceMonitor.start(`llm:${config.model}`, 'llm', { provider: config.provider, messageCount: messages.length })
+  const startedAt = Date.now()
   const processor = createStreamProcessor(assistantId, threadStore, requestId, options)
 
   try {
@@ -178,6 +179,13 @@ async function callLLM(
     if (assistantId && result.usage) {
       useAgentStore.getState().updateMessage(assistantId, {
         usage: result.usage,
+        responseMeta: {
+          provider: config.provider,
+          modelId: result.metadata?.modelId || config.model,
+          requestId,
+          durationMs: Date.now() - startedAt,
+          timestamp: Date.now(),
+        },
       } as Partial<AssistantMessage>)
     } else if (assistantId && !result.usage) {
       logger.agent.warn('[Loop] No usage data in LLM result')

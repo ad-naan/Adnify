@@ -57,36 +57,26 @@ export function ScrollShadow({
     }
   }, [children])
 
-  return (
-    <div className={`relative ${className}`}>
-      {/* 顶部阴影 */}
-      <div
-        className={`absolute top-0 left-0 right-0 h-12 pointer-events-none z-10 transition-opacity duration-200 ${
-          showTopShadow ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{
-          background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.1) 50%, transparent 100%)'
-        }}
-      />
+  const topMask = showTopShadow ? 'transparent 0%, black 24px' : 'black 0%, black 24px'
+  const bottomMask = showBottomShadow ? 'black calc(100% - 24px), transparent 100%' : 'black calc(100% - 24px), black 100%'
+  const maskImage = `linear-gradient(to bottom, ${topMask}, ${bottomMask})`
 
+  return (
+    <div 
+      className={`relative ${className}`}
+      style={{
+        WebkitMaskImage: maskImage,
+        maskImage: maskImage,
+      }}
+    >
       {/* 滚动容器 */}
       <div
         ref={scrollRef}
-        className={`overflow-y-auto ${showScrollbar ? '' : 'scrollbar-none'}`}
+        className={`overflow-y-auto ${showScrollbar ? '' : 'scrollbar-none'} h-full w-full`}
         style={{ maxHeight }}
       >
         {children}
       </div>
-
-      {/* 底部阴影 */}
-      <div
-        className={`absolute bottom-0 left-0 right-0 h-12 pointer-events-none z-10 transition-opacity duration-200 ${
-          showBottomShadow ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{
-          background: 'linear-gradient(to top, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.1) 50%, transparent 100%)'
-        }}
-      />
     </div>
   )
 }

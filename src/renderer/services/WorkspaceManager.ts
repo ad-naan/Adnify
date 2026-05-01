@@ -8,6 +8,7 @@ import { flushAgentSessionPersistence } from '@renderer/agent/store/AgentStore'
 import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import { runCacheCleanupPhase } from './cacheLifecycleService'
 import type { WorkspaceConfig } from '@store'
+import { workspaceAnalyticsService } from './workspaceAnalyticsService'
 
 export class WorkspaceOpenError extends Error {
   constructor(
@@ -142,6 +143,7 @@ class WorkspaceManager {
     setWorkspace(null)
     setFiles([])
 
+    await workspaceAnalyticsService.bindWorkspace(null)
     workspaceStorageRuntime.reset()
   }
 
