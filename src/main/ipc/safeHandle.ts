@@ -3,15 +3,37 @@
  * 确保 IPC 处理函数在发生严重错误、返回不可序列化对象时，能够被正确捕获并返回给渲染进程
  */
 
-import { app, ipcMain, IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@shared/utils/Logger'
+import { isLocalDevServerUrl } from '../security/externalUrl'
 
 export interface SafeIpcResponse<T = unknown> {
     success: boolean
     data?: T
     error?: string
     code?: string
+}
+
+function isTrustedSenderUrl(url: string): boolean {
+    return url.startsWith('file://') || isLocalDevServerUrl(url)
+}
+
+function getSenderUrl(sender: WebContents): string {
+    return sender.getURL() || ''
+}
+
+export function ensureTrustedIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
+    const senderUrl = getSenderUrl(event.sender)
+    if (isTrustedSenderUrl(senderUrl)) {
+        return
+    }
+
+    logger.security.warn('[IPC] Blocked message from untrusted sender', {
+        senderId: event.sender.id,
+        senderUrl,
+    })
+    throw new Error(`Blocked IPC request from untrusted sender: ${senderUrl || 'unknown'}`)
 }
 
 /**
@@ -29,6 +51,7 @@ export function safeIpcHandle<T = unknown>(
 
     ipcMain.handle(channel, async (event, ...args) => {
         try {
+            ensureTrustedIpcSender(event)
             const result = await handler(event, ...args)
 
             // 仅开发环境验证可序列化性（避免生产环境双重序列化开销）
