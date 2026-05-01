@@ -48,7 +48,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                 {/* Subtle outer glow */}
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-accent/20 blur-[50px] rounded-full w-40 h-40 pointer-events-none" />
 
-                <div className="relative w-14 h-14 rounded-2xl flex items-center justify-center mb-6 overflow-hidden">
+                <div className="relative w-28 h-28 rounded-2xl flex items-center justify-center mb-6 overflow-hidden">
                     <img src={publicAsset('brand/ip/ai-avatar.gif')} alt="AI" className="w-full h-full object-cover" draggable={false} />
                 </div>
 
