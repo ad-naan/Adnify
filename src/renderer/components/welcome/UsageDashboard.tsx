@@ -1,47 +1,143 @@
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Zap, ChevronRight, ChevronDown } from 'lucide-react'
-import { useAgentStore, selectMessageCount } from '@renderer/agent/store/AgentStore'
 import { type Language } from '@renderer/i18n'
 import { publicAsset } from '@utils/publicAsset'
 import { DatePicker } from '../ui/DatePicker'
+import { useWorkspaceAnalytics } from '@renderer/hooks/useWorkspaceAnalytics'
+
+const MODEL_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#9ca3af']
 
 export default function UsageDashboard({ language }: { language: Language }) {
   const [timeRange, setTimeRange] = useState<'daily' | 'weekly' | 'monthly'>('daily')
-  const [selectedDate, setSelectedDate] = useState('2024-05-20')
+  const [selectedDate, setSelectedDate] = useState(() => formatDateInput(new Date()))
+  const [selectedModel, setSelectedModel] = useState<string>('__all__')
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
+  const { data } = useWorkspaceAnalytics(timeRange, selectedDate)
+  const modelMenuRef = useRef<HTMLDivElement | null>(null)
 
-  const messageCount = useAgentStore(selectMessageCount)
-  const sessionCount = messageCount > 0 ? messageCount : 32
+  const overviewCopy = useMemo(() => {
+    const hasAnyData = data.overview.fileChanges.rawValue > 0
+      || data.overview.commits.rawValue > 0
+      || data.overview.sessions.rawValue > 0
+      || data.overview.activeHours.rawValue > 0
 
-  // Mock data based on time range
-  const mockData = useMemo(() => {
-    switch (timeRange) {
-      case 'weekly':
-        return {
-          fileChanges: '845', fcTrend: '+5.2%',
-          commits: '156', cTrend: '+2.1%',
-          sessions: (sessionCount * 5).toString(), sTrend: '+12.4%',
-          activeTime: '32.5', atTrend: '+8.9%',
-          chartPoints: [40, 80, 60, 100, 120, 90, 150]
+    if (!hasAnyData) {
+      return language === 'zh'
+        ? {
+          title: '还没有可展示的统计数据',
+          body: '当你开始编辑文件、提交代码或发起会话后，这里会自动显示真实统计结果。',
         }
-      case 'monthly':
-        return {
-          fileChanges: '3,240', fcTrend: '+15.2%',
-          commits: '642', cTrend: '+8.1%',
-          sessions: (sessionCount * 20).toString(), sTrend: '+22.4%',
-          activeTime: '142.5', atTrend: '+18.9%',
-          chartPoints: [60, 120, 80, 160, 140, 200, 180]
-        }
-      case 'daily':
-      default:
-        return {
-          fileChanges: '128', fcTrend: '+10.6%',
-          commits: '42', cTrend: '+12.3%',
-          sessions: sessionCount.toString(), sTrend: '+8.2%',
-          activeTime: '6.4', atTrend: '+15.7%',
-          chartPoints: [50, 100, 80, 120, 80, 110, 140]
+        : {
+          title: 'No activity recorded yet',
+          body: 'Once you start editing files, committing code, or chatting, real workspace stats will appear here automatically.',
         }
     }
-  }, [timeRange, sessionCount])
+
+    const momentumUp = data.overview.fileChanges.rawValue >= data.overview.commits.rawValue
+    if (language === 'zh') {
+      return momentumUp
+        ? {
+          title: '今天节奏不错！',
+          body: '现在这里展示的是工作区真实统计数据，可以直接用来观察当前产出变化。',
+        }
+        : {
+          title: '今天状态很稳！',
+          body: '统计面板已经接入真实数据，趋势会随着你的实际工作区活动持续更新。',
+        }
+    }
+
+    return momentumUp
+      ? {
+        title: 'Nice momentum today!',
+        body: 'This dashboard now reads from real workspace analytics, so the trend reflects actual activity.',
+      }
+      : {
+        title: 'A steady day so far!',
+        body: 'The dashboard is now backed by real data and will keep tracking real workspace changes over time.',
+      }
+  }, [data, language])
+
+  const workspaceRows = useMemo(() => [
+    {
+      label: language === 'zh' ? '活跃项目' : 'Active Projects',
+      value: data.workspace.activeProjects.toString(),
+      color: '#3b82f6',
+      percent: normalizePercent(data.workspace.activeProjects, 10),
+    },
+    {
+      label: language === 'zh' ? '文件变更' : 'File Changes',
+      value: data.overview.fileChanges.value,
+      color: '#8b5cf6',
+      percent: normalizePercent(data.overview.fileChanges.rawValue, 1),
+    },
+    {
+      label: language === 'zh' ? '会话次数' : 'Sessions',
+      value: data.overview.sessions.value,
+      color: '#10b981',
+      percent: normalizePercent(data.overview.sessions.rawValue, 4),
+    },
+    {
+      label: language === 'zh' ? '待办任务' : 'Pending Tasks',
+      value: data.workspace.pendingTasks.toString(),
+      color: '#f59e0b',
+      percent: normalizePercent(data.workspace.pendingTasks, 10),
+    },
+  ], [data, language])
+
+  const modelOptions = useMemo(() => {
+    const allLabel = language === 'zh' ? '全部模型' : 'All Models'
+    return [
+      { value: '__all__', label: allLabel },
+      ...data.models.map(model => ({ value: model.name, label: model.name })),
+    ]
+  }, [data.models, language])
+
+  const displayedModels = useMemo(() => {
+    if (selectedModel === '__all__') {
+      return data.models
+    }
+    return data.models.filter(model => model.name === selectedModel)
+  }, [data.models, selectedModel])
+
+  const maxDisplayedModelRequests = useMemo(() => {
+    return displayedModels.reduce((max, model) => Math.max(max, model.requests), 0)
+  }, [displayedModels])
+
+  const selectedModelLabel = useMemo(() => {
+    return modelOptions.find(option => option.value === selectedModel)?.label
+      || (language === 'zh' ? '全部模型' : 'All Models')
+  }, [language, modelOptions, selectedModel])
+
+  useEffect(() => {
+    if (selectedModel !== '__all__' && !data.models.some(model => model.name === selectedModel)) {
+      setSelectedModel('__all__')
+    }
+  }, [data.models, selectedModel])
+
+  useEffect(() => {
+    if (!isModelMenuOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
+        setIsModelMenuOpen(false)
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsModelMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isModelMenuOpen])
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.value) {
@@ -52,15 +148,20 @@ export default function UsageDashboard({ language }: { language: Language }) {
   return (
     <div className="adnify-dashboard-grid">
       <DashboardStyles />
-      {/* Left Panel */}
       <div className="dashboard-panel panel-main">
         <div className="panel-header">
           <h3 className="panel-title">{language === 'zh' ? '数据概览' : 'Data Overview'}</h3>
           <div className="panel-actions" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
             <div className="time-tabs">
-              <button className={timeRange === 'daily' ? 'active' : ''} onClick={() => setTimeRange('daily')}>{language === 'zh' ? '日统计' : 'Daily'}</button>
-              <button className={timeRange === 'weekly' ? 'active' : ''} onClick={() => setTimeRange('weekly')}>{language === 'zh' ? '周统计' : 'Weekly'}</button>
-              <button className={timeRange === 'monthly' ? 'active' : ''} onClick={() => setTimeRange('monthly')}>{language === 'zh' ? '月统计' : 'Monthly'}</button>
+              <button className={timeRange === 'daily' ? 'active' : ''} onClick={() => setTimeRange('daily')}>
+                {language === 'zh' ? '日统计' : 'Daily'}
+              </button>
+              <button className={timeRange === 'weekly' ? 'active' : ''} onClick={() => setTimeRange('weekly')}>
+                {language === 'zh' ? '周统计' : 'Weekly'}
+              </button>
+              <button className={timeRange === 'monthly' ? 'active' : ''} onClick={() => setTimeRange('monthly')}>
+                {language === 'zh' ? '月统计' : 'Monthly'}
+              </button>
             </div>
             <DatePicker
               value={selectedDate}
@@ -72,21 +173,21 @@ export default function UsageDashboard({ language }: { language: Language }) {
         </div>
 
         <div className="stat-cards-row">
-          <StatItem title={language === 'zh' ? '文件变更' : 'File Changes'} value={mockData.fileChanges} trend={mockData.fcTrend} trendLabel={language === 'zh' ? '较昨日' : 'vs yday'} />
-          <StatItem title={language === 'zh' ? '代码提交' : 'Commits'} value={mockData.commits} trend={mockData.cTrend} trendLabel={language === 'zh' ? '较昨日' : 'vs yday'} />
-          <StatItem title={language === 'zh' ? '会话次数' : 'Sessions'} value={mockData.sessions} trend={mockData.sTrend} trendLabel={language === 'zh' ? '较昨日' : 'vs yday'} />
-          <StatItem title={language === 'zh' ? '活跃时长' : 'Active Time'} value={mockData.activeTime} unit="h" trend={mockData.atTrend} trendLabel={language === 'zh' ? '较昨日' : 'vs yday'} />
+          <StatItem title={language === 'zh' ? '文件变更' : 'File Changes'} value={data.overview.fileChanges.value} trend={data.overview.fileChanges.trend} trendLabel={language === 'zh' ? '较上期' : 'vs prev'} />
+          <StatItem title={language === 'zh' ? '代码提交' : 'Commits'} value={data.overview.commits.value} trend={data.overview.commits.trend} trendLabel={language === 'zh' ? '较上期' : 'vs prev'} />
+          <StatItem title={language === 'zh' ? '会话次数' : 'Sessions'} value={data.overview.sessions.value} trend={data.overview.sessions.trend} trendLabel={language === 'zh' ? '较上期' : 'vs prev'} />
+          <StatItem title={language === 'zh' ? '活跃时长' : 'Active Time'} value={data.overview.activeHours.value} unit="h" trend={data.overview.activeHours.trend} trendLabel={language === 'zh' ? '较上期' : 'vs prev'} />
         </div>
 
         <div className="main-chart-area pl-8 pb-4">
-          <InteractiveAreaChart points={mockData.chartPoints} language={language} timeRange={timeRange} />
+          <InteractiveAreaChart points={data.chartPoints} language={language} timeRange={timeRange} />
         </div>
 
         <div className="insight-banner">
           <img src={publicAsset('brand/ip/1.png')} alt="" />
           <div className="insight-text">
-            <strong>{language === 'zh' ? '今天比昨天更高效！' : 'More efficient than yesterday!'}</strong>
-            <p>{language === 'zh' ? '文件变更和提交量均有显著提升，继续保持🚀' : 'File changes and commits have significantly increased. Keep it up🚀'}</p>
+            <strong>{overviewCopy.title}</strong>
+            <p>{overviewCopy.body}</p>
           </div>
           <button className="view-report hover:underline">
             {language === 'zh' ? '查看详细报告' : 'View Detailed Report'} <ChevronRight className="w-3 h-3 ml-1" />
@@ -95,35 +196,57 @@ export default function UsageDashboard({ language }: { language: Language }) {
       </div>
 
       <div className="dashboard-sidebar">
-        {/* Top Right Panel */}
         <div className="dashboard-panel panel-workspace">
           <h3 className="panel-title mb-5">{language === 'zh' ? '工作区统计' : 'Workspace Stats'}</h3>
           <div className="workspace-content">
             <div className="ring-chart">
-              <span>72%</span>
+              <span>{data.workspace.activityPercent}%</span>
               <small>{language === 'zh' ? '活跃度' : 'Activity'}</small>
             </div>
             <div className="workspace-stats-list">
-              <WStatRow label={language === 'zh' ? '活跃项目' : 'Active Projects'} value="9" color="#3b82f6" percent={80} />
-              <WStatRow label={language === 'zh' ? '文件变更' : 'File Changes'} value={mockData.fileChanges} color="#8b5cf6" percent={60} />
-              <WStatRow label={language === 'zh' ? '会话次数' : 'Sessions'} value={mockData.sessions} color="#10b981" percent={40} />
-              <WStatRow label={language === 'zh' ? '待办任务' : 'Pending Tasks'} value="5" color="#f59e0b" percent={20} />
+              {workspaceRows.map(row => (
+                <WStatRow key={row.label} label={row.label} value={row.value} color={row.color} percent={row.percent} />
+              ))}
             </div>
           </div>
           <div className="workspace-footer">
             <Zap className="w-4 h-4 text-purple-500" />
-            <span>{language === 'zh' ? '3 个项目今天有重要更新' : '3 projects have important updates today'}</span>
+            <span>
+              {language === 'zh'
+                ? `${data.workspace.updatesToday} 个项目今天有重要更新`
+                : `${data.workspace.updatesToday} projects have important updates today`}
+            </span>
             <img src={publicAsset('brand/ip/2.png')} className="mascot-overlap" alt="" />
           </div>
         </div>
 
-        {/* Bottom Right Panel */}
         <div className="dashboard-panel panel-models">
           <div className="panel-header" style={{ marginBottom: '16px' }}>
             <h3 className="panel-title">{language === 'zh' ? '模型统计' : 'Model Stats'}</h3>
-            <button className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary">
-              {language === 'zh' ? '全部模型' : 'All Models'} <ChevronDown className="w-3 h-3" />
-            </button>
+            <div className="model-filter" ref={modelMenuRef}>
+              <button
+                className={`model-filter-button ${isModelMenuOpen ? 'open' : ''}`}
+                onClick={() => setIsModelMenuOpen(open => !open)}
+              >
+                {selectedModelLabel} <ChevronDown className="w-3 h-3" />
+              </button>
+              {isModelMenuOpen && (
+                <div className="model-filter-menu">
+                  {modelOptions.map(option => (
+                    <button
+                      key={option.value}
+                      className={`model-filter-option ${selectedModel === option.value ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedModel(option.value)
+                        setIsModelMenuOpen(false)
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <table className="models-table">
             <thead>
@@ -135,11 +258,28 @@ export default function UsageDashboard({ language }: { language: Language }) {
               </tr>
             </thead>
             <tbody>
-              <MTableRow name="GPT-4o" color="#8b5cf6" percent={80} req="1,234" tok="2.45M" resp="1.32s" />
-              <MTableRow name="Claude 3.5 Sonnet" color="#3b82f6" percent={60} req="856" tok="1.89M" resp="1.85s" />
-              <MTableRow name="GPT-4 Turbo" color="#10b981" percent={45} req="642" tok="1.12M" resp="1.18s" />
-              <MTableRow name="Gemini 1.5 Pro" color="#f59e0b" percent={30} req="321" tok="654K" resp="1.67s" />
-              <MTableRow name="其他模型" color="#9ca3af" percent={15} req="128" tok="210K" resp="2.03s" />
+              {displayedModels.length > 0 ? (
+                displayedModels.map((model, index) => (
+                  <MTableRow
+                    key={model.name}
+                    name={model.name}
+                    color={MODEL_COLORS[index] || '#9ca3af'}
+                    percent={Math.max(12, Math.round((model.requests / Math.max(1, maxDisplayedModelRequests)) * 100))}
+                    req={model.requests.toLocaleString()}
+                    tok={formatTokens(model.tokens)}
+                    resp={model.avgResponseMs > 0 ? `${(model.avgResponseMs / 1000).toFixed(2)}s` : '--'}
+                  />
+                ))
+              ) : (
+                <MTableRow
+                  name={language === 'zh' ? '暂无统计' : 'No Data'}
+                  color="#9ca3af"
+                  percent={15}
+                  req="0"
+                  tok="0"
+                  resp="--"
+                />
+              )}
             </tbody>
           </table>
         </div>
@@ -148,8 +288,25 @@ export default function UsageDashboard({ language }: { language: Language }) {
   )
 }
 
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function normalizePercent(value: number, multiplier: number): number {
+  return Math.max(12, Math.min(100, Math.round(value * multiplier)))
+}
+
+function formatTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`
+  return `${value}`
+}
+
 function StatItem({ title, value, unit, trend, trendLabel }: any) {
-  const isUp = trend.startsWith('+');
+  const isUp = trend.startsWith('+')
   return (
     <div className="stat-card-item">
       <span className="stat-card-title">{title}</span>
@@ -197,24 +354,30 @@ function MTableRow({ name, color, percent, req, tok, resp }: any) {
 
 function InteractiveAreaChart({ points, language, timeRange }: { points: number[], language: Language, timeRange: string }) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
+  const safePoints = useMemo(() => {
+    if (points.length > 0) {
+      return points
+    }
 
-  // Use percentage coordinates 0-100
-  const maxVal = Math.max(...points, 150)
-  const getX = (idx: number) => (idx / (points.length - 1)) * 100
+    return timeRange === 'daily'
+      ? [0, 0, 0, 0, 0, 0]
+      : [0, 0, 0, 0, 0, 0, 0]
+  }, [points, timeRange])
+  const maxVal = Math.max(...safePoints, 10)
+  const getX = (idx: number) => (idx / (safePoints.length - 1)) * 100
   const getY = (val: number) => 100 - (val / maxVal) * 100
 
-  // Generate path using 0-100 coordinates
-  let pathD = `M0,100 `
-  let strokeD = `M0,${getY(points[0])} `
+  let pathD = 'M0,100 '
+  let strokeD = `M0,${getY(safePoints[0])} `
 
-  for (let i = 0; i < points.length; i++) {
+  for (let i = 0; i < safePoints.length; i++) {
     const x = getX(i)
-    const y = getY(points[i])
+    const y = getY(safePoints[i])
     if (i === 0) {
       pathD += `L${x},${y} `
     } else {
       const prevX = getX(i - 1)
-      const prevY = getY(points[i - 1])
+      const prevY = getY(safePoints[i - 1])
       const cpX1 = prevX + (x - prevX) / 2
       const cpY1 = prevY
       const cpX2 = prevX + (x - prevX) / 2
@@ -223,17 +386,26 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
       strokeD += `C${cpX1},${cpY1} ${cpX2},${cpY2} ${x},${y} `
     }
   }
-  pathD += `L100,100 Z`
+  pathD += 'L100,100 Z'
 
-  const labels = timeRange === 'daily'
-    ? ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00']
-    : timeRange === 'weekly'
-      ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-      : ['1st', '5th', '10th', '15th', '20th', '25th', '30th'];
+  const labels = useMemo(() => {
+    if (timeRange === 'daily') {
+      return safePoints.length === 6
+        ? ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00']
+        : ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00']
+    }
+
+    if (timeRange === 'weekly') {
+      return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    }
+
+    return safePoints.length === 6
+      ? ['1st', '6th', '11th', '16th', '21st', '26th']
+      : ['1st', '5th', '10th', '15th', '20th', '25th', '30th']
+  }, [safePoints.length, timeRange])
 
   return (
     <div className="relative w-full h-full min-h-[140px]" onMouseLeave={() => setHoverIdx(null)}>
-      {/* Background Grid Lines using absolute divs */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[25%] w-full border-t border-dashed border-border/40" />
         <div className="absolute top-[50%] w-full border-t border-dashed border-border/40" />
@@ -242,7 +414,6 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
         <div className="absolute bottom-0 w-full border-t border-dashed border-border/40" />
       </div>
 
-      {/* Y Axis Labels */}
       <div className="absolute -left-8 top-0 bottom-0 w-6 flex flex-col justify-between items-end text-[10px] text-text-muted/80 py-1">
         <span>{Math.round(maxVal)}</span>
         <span>{Math.round(maxVal * 0.75)}</span>
@@ -251,7 +422,6 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
         <span>0</span>
       </div>
 
-      {/* The SVG Path */}
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
         <defs>
           <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
@@ -262,11 +432,10 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
         <path d={pathD} fill="url(#area-gradient)" vectorEffect="non-scaling-stroke" />
         <path d={strokeD} fill="none" stroke="#8b5cf6" strokeWidth="2" vectorEffect="non-scaling-stroke" />
 
-        {/* Dotted vertical line when hovered */}
         {hoverIdx !== null && (
           <line
             x1={getX(hoverIdx)}
-            y1={getY(points[hoverIdx])}
+            y1={getY(safePoints[hoverIdx])}
             x2={getX(hoverIdx)}
             y2="100"
             stroke="#8b5cf6"
@@ -278,15 +447,14 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
         )}
       </svg>
 
-      {/* HTML Overlays for Circles and Interactions */}
       <div className="absolute inset-0">
-        {points.map((p, i) => {
-          const x = getX(i)
-          const y = getY(p)
-          const isHovered = hoverIdx === i
+        {safePoints.map((point, index) => {
+          const x = getX(index)
+          const y = getY(point)
+          const isHovered = hoverIdx === index
 
           return (
-            <div key={i}>
+            <div key={index}>
               <div
                 className={`absolute w-[9px] h-[9px] rounded-full bg-white border-[2px] border-[#8b5cf6] transform -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-200 pointer-events-none ${isHovered ? 'scale-[1.6] ring-4 ring-purple-500/20' : 'scale-100'}`}
                 style={{ left: `${x}%`, top: `${y}%` }}
@@ -295,36 +463,34 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
                 className="absolute -bottom-6 transform -translate-x-1/2 text-[10px] text-text-muted/80 pointer-events-none"
                 style={{ left: `${x}%` }}
               >
-                {labels[i]}
+                {labels[index]}
               </div>
-              {/* Hover Trigger Zone */}
               <div
                 className="absolute top-0 bottom-0 cursor-pointer"
                 style={{
-                  left: i === 0 ? '0' : `${getX(i) - (100 / (points.length - 1)) / 2}%`,
-                  width: i === 0 || i === points.length - 1 ? `${(100 / (points.length - 1)) / 2}%` : `${100 / (points.length - 1)}%`
+                  left: index === 0 ? '0' : `${getX(index) - (100 / (safePoints.length - 1)) / 2}%`,
+                  width: index === 0 || index === safePoints.length - 1 ? `${(100 / (safePoints.length - 1)) / 2}%` : `${100 / (safePoints.length - 1)}%`
                 }}
-                onMouseEnter={() => setHoverIdx(i)}
+                onMouseEnter={() => setHoverIdx(index)}
               />
             </div>
           )
         })}
       </div>
 
-      {/* Tooltip Overlay */}
       {hoverIdx !== null && (
         <div
           className="absolute z-20 bg-surface/95 backdrop-blur border border-border/80 rounded-lg shadow-xl px-3 py-2 flex flex-col items-center transform -translate-y-[calc(100%+12px)] -translate-x-1/2 pointer-events-none transition-all duration-100"
           style={{
             left: `${getX(hoverIdx)}%`,
-            top: `${getY(points[hoverIdx])}%`
+            top: `${getY(safePoints[hoverIdx])}%`
           }}
         >
           <span className="text-[10px] text-text-muted/80 mb-1">{labels[hoverIdx]}</span>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]"></span>
             <span className="text-[12px] font-bold text-text-primary whitespace-nowrap">
-              {language === 'zh' ? '文件变更' : 'Changes'} {points[hoverIdx]}
+              {language === 'zh' ? '文件变更' : 'File Changes'} {safePoints[hoverIdx]}
             </span>
           </div>
         </div>
@@ -368,7 +534,6 @@ function DashboardStyles() {
         color: rgb(var(--text-primary));
       }
 
-      /* Tabs */
       .time-tabs {
         display: flex;
         background: rgb(var(--surface-hover) / 0.5);
@@ -390,7 +555,6 @@ function DashboardStyles() {
         color: white;
       }
 
-      /* Main Stat Cards */
       .stat-cards-row {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -434,7 +598,6 @@ function DashboardStyles() {
         color: #ef4444;
       }
 
-      /* SVG Chart Area */
       .main-chart-area {
         width: 100%;
         position: relative;
@@ -446,7 +609,6 @@ function DashboardStyles() {
         padding-right: 16px;
       }
 
-      /* Insight Banner */
       .insight-banner {
         display: flex;
         align-items: center;
@@ -480,14 +642,12 @@ function DashboardStyles() {
         align-items: center;
       }
 
-      /* Sidebar */
       .dashboard-sidebar {
         display: flex;
         flex-direction: column;
         gap: 12px;
       }
 
-      /* Workspace Stats */
       .workspace-content {
         display: flex;
         gap: 12px;
@@ -527,7 +687,7 @@ function DashboardStyles() {
       .w-stat-name { flex: 1; color: rgb(var(--text-secondary)); }
       .w-stat-line { width: 40px; height: 4px; border-radius: 2px; margin-right: 12px; background: rgb(var(--border) / 0.5); }
       .w-stat-line-fill { height: 100%; border-radius: 2px; }
-      .w-stat-val { font-weight: 600; color: rgb(var(--text-primary)); width: 24px; text-align: right; }
+      .w-stat-val { font-weight: 600; color: rgb(var(--text-primary)); width: 32px; text-align: right; }
 
       .workspace-footer {
         display: flex;
@@ -547,7 +707,56 @@ function DashboardStyles() {
         width: 60px;
       }
 
-      /* Models Table */
+      .model-filter {
+        position: relative;
+      }
+      .model-filter-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: rgb(var(--text-muted));
+        transition: color 0.2s ease;
+      }
+      .model-filter-button:hover,
+      .model-filter-button.open {
+        color: rgb(var(--text-primary));
+      }
+      .model-filter-button svg {
+        transition: transform 0.2s ease;
+      }
+      .model-filter-button.open svg {
+        transform: rotate(180deg);
+      }
+      .model-filter-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 140px;
+        padding: 6px;
+        border-radius: 10px;
+        border: 1px solid rgb(var(--border) / 0.5);
+        background: rgb(var(--surface) / 0.96);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        z-index: 30;
+      }
+      .model-filter-option {
+        width: 100%;
+        display: block;
+        text-align: left;
+        padding: 6px 8px;
+        font-size: 12px;
+        color: rgb(var(--text-secondary));
+        border-radius: 8px;
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+      .model-filter-option:hover,
+      .model-filter-option.selected {
+        background: rgb(var(--surface-hover) / 0.7);
+        color: rgb(var(--text-primary));
+      }
+
       .models-table {
         width: 100%;
         border-collapse: collapse;

@@ -105,6 +105,14 @@ export interface TokenUsage {
   cacheWriteSource?: 'provider-reported' | 'estimated'
 }
 
+export interface AssistantResponseMeta {
+  provider: string
+  modelId: string
+  requestId?: string
+  durationMs?: number
+  timestamp?: number
+}
+
 // ============================================
 // 消息类型
 // ============================================
@@ -132,6 +140,7 @@ export interface AssistantMessage {
   reasoning?: string
   reasoningStartTime?: number
   usage?: TokenUsage
+  responseMeta?: AssistantResponseMeta
   interactive?: InteractiveContent
   contextItems?: ContextItem[]
   /** 内部标记：文本是否已结束（用于工具调用显示时机） */
