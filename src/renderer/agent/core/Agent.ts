@@ -43,7 +43,7 @@ import { translateAgentText } from '../utils/agentText'
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
 
-import { buildAgentSystemPrompt } from '../prompts/PromptBuilder'
+const importBuildAgentSystemPrompt = () => import('../prompts/PromptBuilder').then(m => m.buildAgentSystemPrompt)
 
 export class AgentClass {
   /** 运行中的任务（按线程追踪） */
@@ -149,6 +149,7 @@ export class AgentClass {
         .map(item => (item as import('../types').SkillContext).skillId)
 
       // 4. 构建系统提示词（异步执行）
+      const buildAgentSystemPrompt = await importBuildAgentSystemPrompt()
       const { prompt: systemPrompt, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
         ...promptOptions,
         mentionedSkills: mentionedSkills.length > 0 ? mentionedSkills : undefined,
