@@ -11,7 +11,7 @@ export interface WindowManagerContext {
   setWindowWorkspace?: (windowId: number, roots: string[]) => void
 }
 
-const WORKSPACE_MARKER_RELATIVE_PATH = path.join('.adnify', 'workspace.json')
+const WORKSPACE_MARKER_RELATIVE_PATH = path.join('.adnify', 'workspace-meta.json')
 const WORKSPACE_DESCRIPTOR_FILENAME = 'workspace.json'
 
 interface StoredWorkspaceSession {
@@ -67,7 +67,14 @@ async function readWorkspaceMarkerId(root: string): Promise<string | null> {
     const parsed = JSON.parse(content) as { id?: string }
     return typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id : null
   } catch {
-    return null
+    try {
+      const legacyMarkerPath = path.join(root, '.adnify', 'workspace.json')
+      const content = await fsPromises.readFile(legacyMarkerPath, 'utf-8')
+      const parsed = JSON.parse(content) as { id?: string }
+      return typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id : null
+    } catch {
+      return null
+    }
   }
 }
 
@@ -113,7 +120,16 @@ async function isWorkspaceSessionRestorable(session: StoredWorkspaceSession): Pr
   }
 
   const currentWorkspaceId = await readWorkspaceMarkerId(session.roots[0])
-  return Boolean(currentWorkspaceId && session.workspaceId && currentWorkspaceId === session.workspaceId)
+  if (!session.workspaceId) {
+    return true
+  }
+
+  if (!currentWorkspaceId) {
+    await ensureWorkspaceMarker(session.roots[0])
+    return true
+  }
+
+  return currentWorkspaceId === session.workspaceId
 }
 
 export function registerWorkspaceHandlers(
