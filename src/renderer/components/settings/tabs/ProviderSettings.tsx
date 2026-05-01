@@ -36,16 +36,6 @@ const PROTOCOL_OPTIONS = [
   { value: 'custom', label: 'Custom' },
 ]
 
-const THINKING_TAG_FORMAT_OPTIONS = [
-  { value: 'native', label: 'Native reasoning events' },
-  { value: 'xml-think', label: '<think> XML tags' },
-]
-
-const GOOGLE_THINKING_MODE_OPTIONS = [
-  { value: 'budget', label: 'Budget-based thinking' },
-  { value: 'level', label: 'Level-based thinking' },
-]
-
 type EditableHeader = { key: string; value: string; isCustom?: boolean }
 
 const PREDEFINED_HEADER_OPTIONS = [
@@ -139,21 +129,6 @@ function getReasoningEffortDescription(
   return language === 'zh'
     ? 'OpenAI 协议使用 reasoning effort；不同模型支持范围可能不同'
     : 'OpenAI-style protocols use reasoning effort; exact support depends on the model'
-}
-
-function getOpenAICompatibilityProfileDescription(
-  protocol: ApiProtocol | undefined,
-  language: 'en' | 'zh',
-): string {
-  if (protocol === 'openai-responses') {
-    return language === 'zh'
-      ? 'Responses 协议下也会按这个档位决定是否发送更完整的 OpenAI 专属参数'
-      : 'This profile also decides whether Responses requests send richer OpenAI-only parameters'
-  }
-
-  return language === 'zh'
-    ? '决定第三方 OpenAI 风格接口使用保守兼容参数，还是完整 OpenAI 参数集'
-    : 'Choose between the safer compatibility subset and the full OpenAI parameter set'
 }
 
 function getHeaderSelectOptions(language: 'en' | 'zh') {
@@ -810,11 +785,6 @@ export function ProviderSettings({
     [language],
   )
 
-  const openAICompatibilityProfileDescription = useMemo(
-    () => getOpenAICompatibilityProfileDescription(currentProtocol, language),
-    [currentProtocol, language],
-  )
-
   const selectedReasoningEffort = useMemo(() => {
     const currentValue = localConfig.reasoningEffort ?? 'medium'
     const preferredFallback = reasoningEffortOptions.find(option => option.value === 'medium')?.value
@@ -824,8 +794,6 @@ export function ProviderSettings({
       ? currentValue
       : preferredFallback ?? 'medium'
   }, [localConfig.reasoningEffort, reasoningEffortOptions])
-
-  const capabilityConfig = localConfig.capabilities ?? {}
 
   const headerSelectOptions = useMemo(
     () => getHeaderSelectOptions(language),
@@ -1110,7 +1078,7 @@ export function ProviderSettings({
     const modelsSet = new Set<string>()
 
     if (isCustomSelected && selectedCustomConfig) {
-      ;(selectedCustomConfig.customModels || []).forEach((model: string) => modelsSet.add(model))
+      ; (selectedCustomConfig.customModels || []).forEach((model: string) => modelsSet.add(model))
     } else if (selectedProvider) {
       selectedProvider.models.forEach((model: string) => modelsSet.add(model))
     }
@@ -1227,12 +1195,12 @@ export function ProviderSettings({
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
                 )}
-                  <button
-                    onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
-                    className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-red-500/30 hover:text-red-500"
-                    title={language === 'zh' ? '删除' : 'Delete'}
-                  >
-                    <X className="w-3.5 h-3.5" />
+                <button
+                  onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
+                  className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-red-500/30 hover:text-red-500"
+                  title={language === 'zh' ? '删除' : 'Delete'}
+                >
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )
@@ -1355,10 +1323,69 @@ export function ProviderSettings({
             </div>
           </section>
 
+          {/* 认证 & 网络配置 */}
+          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-accent/10 rounded-lg text-accent">
+                    <Server className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h5 className="text-sm font-semibold text-text-primary">
+                      {language === 'zh' ? '认证 & 网络配置' : 'Authentication & Network'}
+                    </h5>
+                    <p className="text-[10px] text-text-muted mt-0.5">
+                      {language === 'zh' ? '配置 API 访问密钥和服务器连接参数' : 'Configure API keys and server connection parameters'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <TestConnectionButton localConfig={localConfig} language={language} />
+                  <TestModelButton localConfig={localConfig} language={language} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-5 mb-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                    API Key
+                  </label>
+                  <Input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={localConfig.apiKey}
+                    onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
+                    placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
+                    className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 font-mono text-xs h-10 transition-all"
+                    rightIcon={
+                      <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary p-1.5 hover:bg-surface/50 rounded-md transition-colors">
+                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                    {language === 'zh' ? 'API 端点' : 'API Endpoint'}
+                  </label>
+                  <Input
+                    value={localConfig.baseUrl || ''}
+                    onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
+                    placeholder="https://api.example.com/v1"
+                    className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs font-mono h-10 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-2xl border border-border/50 bg-surface/20 backdrop-blur-xl shadow-sm relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            
-            <button 
+
+            <button
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="w-full flex items-center justify-between p-6 cursor-pointer focus:outline-none relative z-10"
             >
@@ -1377,7 +1404,7 @@ export function ProviderSettings({
               </div>
               <div className={`p-1.5 rounded-full bg-surface-hover transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
             </button>
@@ -1385,925 +1412,722 @@ export function ProviderSettings({
             <div className={`grid transition-all duration-300 ease-in-out ${showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
               <div className="overflow-hidden">
                 <div className="p-6 pt-0 space-y-6 relative z-10">
-              <div className="flex items-center gap-2 mb-4">
-                <Sliders className="w-4 h-4 text-accent" />
-                <h5 className="text-sm font-medium text-text-primary">
-                  {language === 'zh' ? '生成参数' : 'Generation Parameters'}
-                </h5>
-              </div>
-
-              <div className="space-y-5">
-
-                  {/* Max Tokens */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-text-secondary">{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1024}
-                      max={32768}
-                      step={1024}
-                      value={localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        maxTokens: parseInt(e.target.value)
-                      })}
-                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                    />
+                  <div className="flex items-center gap-2 mb-4">
+                    <Sliders className="w-4 h-4 text-accent" />
+                    <h5 className="text-sm font-medium text-text-primary">
+                      {language === 'zh' ? '生成参数' : 'Generation Parameters'}
+                    </h5>
                   </div>
 
-                  {/* Temperature */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-text-secondary">
-                        {language === 'zh' ? '随机性 (Temperature)' : 'Temperature'}
-                      </label>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {(localConfig.temperature ?? LLM_DEFAULTS.temperature).toFixed(1)}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={2}
-                      step={0.1}
-                      value={localConfig.temperature ?? LLM_DEFAULTS.temperature}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        temperature: parseFloat(e.target.value)
-                      })}
-                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                    />
-                    <div className="flex justify-between text-[10px] text-text-muted px-1">
-                      <span>{language === 'zh' ? '精确' : 'Precise'}</span>
-                      <span>{language === 'zh' ? '创意' : 'Creative'}</span>
-                    </div>
-                  </div>
+                  <div className="space-y-5">
 
-                  {/* Top P */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Top P</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '核采样：仅考虑累积概率达到 P 的 Token 集合'
-                            : 'Nucleus sampling: considers tokens with top_p probability mass'}
-                        </p>
+                    {/* Max Tokens */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-text-secondary">{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
+                        </span>
                       </div>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {(localConfig.topP ?? LLM_DEFAULTS.topP).toFixed(2)}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={localConfig.topP ?? LLM_DEFAULTS.topP}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        topP: parseFloat(e.target.value)
-                      })}
-                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                    />
-                  </div>
-
-                  {/* Top K */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Top K</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '仅从概率最高的 K 个 Token 中采样'
-                            : 'Limits selection to the top K tokens'}
-                        </p>
-                      </div>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {localConfig.topK ?? 'Default'}
-                      </span>
-                    </div>
-                    <input
-                      type="number"
-                      min={0}
-                      value={localConfig.topK ?? ''}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        topK: e.target.value ? parseInt(e.target.value) : undefined
-                      })}
-                      placeholder="Default"
-                      className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
-                    />
-                  </div>
-
-                  {/* 深度思考模式 */}
-                  <div className="space-y-3 pt-3 border-t border-border/50">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5 flex-1">
-                        <label className="text-xs font-medium text-text-secondary">
-                          {language === 'zh' ? '深度思考模式' : 'Extended Thinking'}
-                        </label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '启用后，模型会进行更深入的推理（如 Claude thinking, OpenAI o1/o3）'
-                            : 'Enable deeper reasoning (e.g., Claude thinking, OpenAI o1/o3)'}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={localConfig.enableThinking}
-                        onChange={(e) => setLocalConfig({ ...localConfig, enableThinking: e.target.checked })}
-                        className="flex-shrink-0"
+                      <input
+                        type="range"
+                        min={1024}
+                        max={32768}
+                        step={1024}
+                        value={localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          maxTokens: parseInt(e.target.value)
+                        })}
+                        className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
                       />
                     </div>
 
-                    {/* 思考模式详细配置 - 仅在启用时展示 */}
-                    {localConfig.enableThinking && (
-                      <div className="space-y-3 pl-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                        {/* 推理深度 */}
-                        <div className="space-y-2">
-                          <div className="space-y-0.5">
-                            <label className="text-xs text-text-secondary">
-                              {language === 'zh' ? '推理深度' : 'Reasoning Effort'}
-                            </label>
-                            <p className="text-[10px] text-text-muted">
-                              {reasoningEffortDescription}
-                            </p>
-                          </div>
-                          <Select
-                            options={reasoningEffortOptions}
-                            value={selectedReasoningEffort}
-                            onChange={(val) => setLocalConfig({ ...localConfig, reasoningEffort: val as typeof REASONING_EFFORT_VALUES[number] })}
-                          />
-                        </div>
+                    {/* Temperature */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-text-secondary">
+                          {language === 'zh' ? '随机性 (Temperature)' : 'Temperature'}
+                        </label>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {(localConfig.temperature ?? LLM_DEFAULTS.temperature).toFixed(1)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        value={localConfig.temperature ?? LLM_DEFAULTS.temperature}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          temperature: parseFloat(e.target.value)
+                        })}
+                        className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                      />
+                      <div className="flex justify-between text-[10px] text-text-muted px-1">
+                        <span>{language === 'zh' ? '精确' : 'Precise'}</span>
+                        <span>{language === 'zh' ? '创意' : 'Creative'}</span>
+                      </div>
+                    </div>
 
-                        {/* Thinking Budget */}
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between">
+                    {/* Top P */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Top P</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '核采样：仅考虑累积概率达到 P 的 Token 集合'
+                              : 'Nucleus sampling: considers tokens with top_p probability mass'}
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {(localConfig.topP ?? LLM_DEFAULTS.topP).toFixed(2)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={localConfig.topP ?? LLM_DEFAULTS.topP}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          topP: parseFloat(e.target.value)
+                        })}
+                        className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                      />
+                    </div>
+
+                    {/* Top K */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Top K</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '仅从概率最高的 K 个 Token 中采样'
+                              : 'Limits selection to the top K tokens'}
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {localConfig.topK ?? 'Default'}
+                        </span>
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        value={localConfig.topK ?? ''}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          topK: e.target.value ? parseInt(e.target.value) : undefined
+                        })}
+                        placeholder="Default"
+                        className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
+                      />
+                    </div>
+
+                    {/* 深度思考模式 */}
+                    <div className="space-y-3 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5 flex-1">
+                          <label className="text-xs font-medium text-text-secondary">
+                            {language === 'zh' ? '深度思考模式' : 'Extended Thinking'}
+                          </label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '启用后，模型会进行更深入的推理（如 Claude thinking, OpenAI o1/o3）'
+                              : 'Enable deeper reasoning (e.g., Claude thinking, OpenAI o1/o3)'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={localConfig.enableThinking}
+                          onChange={(e) => setLocalConfig({ ...localConfig, enableThinking: e.target.checked })}
+                          className="flex-shrink-0"
+                        />
+                      </div>
+
+                      {/* 思考模式详细配置 - 仅在启用时展示 */}
+                      {localConfig.enableThinking && (
+                        <div className="space-y-3 pl-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                          {/* 推理深度 */}
+                          <div className="space-y-2">
                             <div className="space-y-0.5">
                               <label className="text-xs text-text-secondary">
-                                {language === 'zh' ? '思考 Token 预算' : 'Thinking Budget'}
+                                {language === 'zh' ? '推理深度' : 'Reasoning Effort'}
                               </label>
                               <p className="text-[10px] text-text-muted">
-                                {language === 'zh'
-                                  ? 'Anthropic / Gemini 2.5 使用此参数控制思考 token 上限'
-                                  : 'Max thinking tokens for Anthropic / Gemini 2.5'}
+                                {reasoningEffortDescription}
                               </p>
                             </div>
-                            <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                              {(localConfig.thinkingBudget || 10000).toLocaleString()}
-                            </span>
+                            <Select
+                              options={reasoningEffortOptions}
+                              value={selectedReasoningEffort}
+                              onChange={(val) => setLocalConfig({ ...localConfig, reasoningEffort: val as typeof REASONING_EFFORT_VALUES[number] })}
+                            />
                           </div>
-                          <input
-                            type="range"
-                            min={1024}
-                            max={100000}
-                            step={1024}
-                            value={localConfig.thinkingBudget || 10000}
-                            onChange={(e) => setLocalConfig({
-                              ...localConfig,
-                              thinkingBudget: parseInt(e.target.value)
-                            })}
-                            className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                          />
-                          <div className="flex justify-between text-[10px] text-text-muted px-1">
-                            <span>1K</span>
-                            <span>100K</span>
+
+                          {/* Thinking Budget */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-0.5">
+                                <label className="text-xs text-text-secondary">
+                                  {language === 'zh' ? '思考 Token 预算' : 'Thinking Budget'}
+                                </label>
+                                <p className="text-[10px] text-text-muted">
+                                  {language === 'zh'
+                                    ? 'Anthropic / Gemini 2.5 使用此参数控制思考 token 上限'
+                                    : 'Max thinking tokens for Anthropic / Gemini 2.5'}
+                                </p>
+                              </div>
+                              <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                                {(localConfig.thinkingBudget || 10000).toLocaleString()}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={1024}
+                              max={100000}
+                              step={1024}
+                              value={localConfig.thinkingBudget || 10000}
+                              onChange={(e) => setLocalConfig({
+                                ...localConfig,
+                                thinkingBudget: parseInt(e.target.value)
+                              })}
+                              className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                            />
+                            <div className="flex justify-between text-[10px] text-text-muted px-1">
+                              <span>1K</span>
+                              <span>100K</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-4 pt-3 border-t border-border/50">
-                    <div className="space-y-0.5">
-                      <label className="sr-only text-xs font-medium text-text-secondary">
-                        {language === 'zh' ? '请求行为' : 'Request Behavior'}
-                      </label>
-                      <label className="text-xs font-medium text-text-secondary">
-                        {language === 'zh' ? '请求行为' : 'Request Behavior'}
-                      </label>
-                      <p className="sr-only text-[10px] text-text-muted">
-                        {language === 'zh'
-                          ? '控制重试、工具调用策略和并行工具执行方式'
-                          : 'Controls retries, tool policy, and parallel tool execution'}
-                      </p>
-                      <p className="text-[10px] text-text-muted">
-                        {language === 'zh'
-                          ? '控制重试、工具调用策略和并行工具执行方式'
-                          : 'Controls retries, tool policy, and parallel tool execution'}
-                      </p>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <label className="sr-only text-xs text-text-secondary">
-                          {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                    <div className="space-y-4 pt-3 border-t border-border/50">
+                      <div className="space-y-0.5">
+                        <label className="sr-only text-xs font-medium text-text-secondary">
+                          {language === 'zh' ? '请求行为' : 'Request Behavior'}
                         </label>
-                        <label className="text-xs text-text-secondary">
-                          {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
-                        </label>
-                        <Select
-                          value={typeof localConfig.toolChoice === 'string' ? localConfig.toolChoice : 'required'}
-                          onChange={(value) => setLocalConfig({
-                            ...localConfig,
-                            toolChoice: value as 'auto' | 'none' | 'required',
-                          })}
-                          options={[
-                            { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
-                            { value: 'required', label: language === 'zh' ? '需要工具' : 'Required' },
-                            { value: 'none', label: language === 'zh' ? '禁用工具' : 'None' },
-                          ]}
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="sr-only text-xs text-text-secondary">
-                          {language === 'zh' ? '最大重试次数' : 'Max Retries'}
-                        </label>
-                        <label className="text-xs text-text-secondary">
-                          {language === 'zh' ? '最大重试次数' : 'Max Retries'}
-                        </label>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={10}
-                          value={localConfig.maxRetries ?? LLM_DEFAULTS.maxRetries}
-                          onChange={(e) => setLocalConfig({
-                            ...localConfig,
-                            maxRetries: Math.max(0, parseInt(e.target.value || '0', 10) || 0),
-                          })}
-                          className="bg-surface-active border-border text-xs h-9"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2.5">
-                      <div className="space-y-0.5 pr-4">
-                        <label className="sr-only text-xs text-text-secondary">
-                          {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
-                        </label>
-                        <label className="text-xs text-text-secondary">
-                          {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                        <label className="text-xs font-medium text-text-secondary">
+                          {language === 'zh' ? '请求行为' : 'Request Behavior'}
                         </label>
                         <p className="sr-only text-[10px] text-text-muted">
                           {language === 'zh'
-                            ? '允许模型在一次回复中同时规划多个工具调用'
-                            : 'Allows the model to plan multiple tool calls in one response'}
+                            ? '控制重试、工具调用策略和并行工具执行方式'
+                            : 'Controls retries, tool policy, and parallel tool execution'}
                         </p>
                         <p className="text-[10px] text-text-muted">
                           {language === 'zh'
-                            ? '允许模型在一次回复中同时规划多个工具调用'
-                            : 'Allows the model to plan multiple tool calls in one response'}
+                            ? '控制重试、工具调用策略和并行工具执行方式'
+                            : 'Controls retries, tool policy, and parallel tool execution'}
                         </p>
                       </div>
-                      <Switch
-                        checked={localConfig.parallelToolCalls ?? LLM_DEFAULTS.parallelToolCalls}
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <label className="sr-only text-xs text-text-secondary">
+                            {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                          </label>
+                          <label className="text-xs text-text-secondary">
+                            {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                          </label>
+                          <Select
+                            value={typeof localConfig.toolChoice === 'string' ? localConfig.toolChoice : 'required'}
+                            onChange={(value) => setLocalConfig({
+                              ...localConfig,
+                              toolChoice: value as 'auto' | 'none' | 'required',
+                            })}
+                            options={[
+                              { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
+                              { value: 'required', label: language === 'zh' ? '需要工具' : 'Required' },
+                              { value: 'none', label: language === 'zh' ? '禁用工具' : 'None' },
+                            ]}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="sr-only text-xs text-text-secondary">
+                            {language === 'zh' ? '最大重试次数' : 'Max Retries'}
+                          </label>
+                          <label className="text-xs text-text-secondary">
+                            {language === 'zh' ? '最大重试次数' : 'Max Retries'}
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={10}
+                            value={localConfig.maxRetries ?? LLM_DEFAULTS.maxRetries}
+                            onChange={(e) => setLocalConfig({
+                              ...localConfig,
+                              maxRetries: Math.max(0, parseInt(e.target.value || '0', 10) || 0),
+                            })}
+                            className="bg-surface-active border-border text-xs h-9"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2.5">
+                        <div className="space-y-0.5 pr-4">
+                          <label className="sr-only text-xs text-text-secondary">
+                            {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                          </label>
+                          <label className="text-xs text-text-secondary">
+                            {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                          </label>
+                          <p className="sr-only text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '允许模型在一次回复中同时规划多个工具调用'
+                              : 'Allows the model to plan multiple tool calls in one response'}
+                          </p>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '允许模型在一次回复中同时规划多个工具调用'
+                              : 'Allows the model to plan multiple tool calls in one response'}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={localConfig.parallelToolCalls ?? LLM_DEFAULTS.parallelToolCalls}
+                          onChange={(e) => setLocalConfig({
+                            ...localConfig,
+                            parallelToolCalls: e.target.checked,
+                          })}
+                          className="flex-shrink-0"
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-border/60 bg-background/20 p-4 space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-secondary">
+                            {language === 'zh' ? '协议与传输' : 'Protocol & Transport'}
+                          </label>
+                          <p className="text-[10px] text-text-muted leading-relaxed">
+                            {language === 'zh'
+                              ? '通过官方协议和 AI SDK 原生参数映射来控制请求成形，默认尽量少做手动覆盖。'
+                              : 'Control request shaping through the official protocol and AI SDK native mapping with minimal manual overrides.'}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-text-secondary">
+                              {language === 'zh' ? 'API 协议' : 'API Protocol'}
+                            </label>
+                            <Select
+                              value={currentProtocol || 'openai'}
+                              onChange={(value) => {
+                                const nextProtocol = value as ApiProtocol
+                                setLocalConfig({
+                                  ...localConfig,
+                                  protocol: nextProtocol,
+                                  openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
+                                    localConfig.provider,
+                                    nextProtocol,
+                                    localConfig.openAICompatibilityProfile,
+                                  ),
+                                })
+                              }}
+                              options={PROTOCOL_OPTIONS}
+                              className="bg-background/40 border-border/60 h-9 text-xs"
+                            />
+                            <p className="text-[10px] text-text-muted leading-relaxed">
+                              {language === 'zh'
+                                ? '协议决定请求与响应的官方结构，不再根据模型名做推断。'
+                                : 'The protocol decides the official request and response shape without guessing from the model name.'}
+                            </p>
+                          </div>
+
+                          {isCustomSelected && isOpenAIStyleProtocol(currentProtocol) && currentOpenAICompatibilityProfile && (
+                            <div className="space-y-1.5">
+                              <label className="text-xs text-text-secondary">
+                                {language === 'zh' ? 'OpenAI 兼容档位' : 'OpenAI Compatibility'}
+                              </label>
+                              <Select
+                                value={currentOpenAICompatibilityProfile}
+                                onChange={(value) => setLocalConfig({
+                                  ...localConfig,
+                                  openAICompatibilityProfile: value as OpenAICompatibilityProfile,
+                                })}
+                                options={openAICompatibilityProfileOptions}
+                                className="bg-background/40 border-border/60 h-9 text-xs"
+                              />
+                              <p className="text-[10px] text-text-muted leading-relaxed">
+                                {language === 'zh'
+                                  ? '仅当上游网关会改写 OpenAI 协议字段、或会裁剪参数时，再调整这个兼容档位。'
+                                  : 'Only adjust this when an upstream gateway rewrites OpenAI fields or strips parameters.'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {currentProtocol === 'openai-responses' && currentOpenAICompatibilityProfile === 'compatible' && (
+                          <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                            <div className="pr-4">
+                              <div className="text-xs text-text-secondary">
+                                {language === 'zh' ? '兼容模式：max_output_tokens' : 'Compatible Mode: `max_output_tokens`'}
+                              </div>
+                              <p className="text-[10px] text-text-muted mt-0.5">
+                                {language === 'zh'
+                                  ? '标准 Responses 协议默认会发送 `max_output_tokens`。只有当上游兼容层不完整，并且你明确知道它不接受这个官方字段时，才在兼容模式下关闭。'
+                                  : 'Standard Responses requests send `max_output_tokens` by default. Only turn this off in compatible mode when an incomplete gateway does not accept the official field.'}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={localConfig.capabilities?.openAIResponsesSupportsMaxOutputTokens !== false}
+                              onChange={(e) => setLocalConfig({
+                                ...localConfig,
+                                capabilities: {
+                                  ...localConfig.capabilities,
+                                  openAIResponsesSupportsMaxOutputTokens: e.target.checked,
+                                },
+                              })}
+                              className="flex-shrink-0"
+                            />
+                          </div>
+                        )}
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-text-secondary">
+                            {language === 'zh' ? '请求超时（秒）' : 'Timeout (s)'}
+                          </label>
+                          <Input
+                            type="number"
+                            value={(localConfig.timeout || 120000) / 1000}
+                            onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
+                            min={10}
+                            className="bg-background/40 border-border/60 text-xs h-9"
+                          />
+                          <p className="text-[10px] text-text-muted leading-relaxed">
+                            {language === 'zh'
+                              ? '超时属于传输层高级配置，通常保持默认即可。'
+                              : 'Timeout is an advanced transport setting and usually works best at its default value.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Frequency Penalty */}
+                    <div className="space-y-3 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Frequency Penalty</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '根据 Token 出现频率降低其重复概率'
+                              : 'Penalizes tokens based on their frequency in the text'}
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {(localConfig.frequencyPenalty || 0).toFixed(1)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={-2}
+                        max={2}
+                        step={0.1}
+                        value={localConfig.frequencyPenalty || 0}
                         onChange={(e) => setLocalConfig({
                           ...localConfig,
-                          parallelToolCalls: e.target.checked,
+                          frequencyPenalty: parseFloat(e.target.value)
                         })}
-                        className="flex-shrink-0"
+                        className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
                       />
                     </div>
-                  </div>
 
-                  {/* Frequency Penalty */}
-                  <div className="space-y-3 pt-3 border-t border-border/50">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Frequency Penalty</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '根据 Token 出现频率降低其重复概率'
-                            : 'Penalizes tokens based on their frequency in the text'}
-                        </p>
+                    {/* Presence Penalty */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Presence Penalty</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '根据 Token 是否出现过降低其重复概率'
+                              : 'Penalizes tokens based on their presence in the text'}
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {(localConfig.presencePenalty || 0).toFixed(1)}
+                        </span>
                       </div>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {(localConfig.frequencyPenalty || 0).toFixed(1)}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={-2}
-                      max={2}
-                      step={0.1}
-                      value={localConfig.frequencyPenalty || 0}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        frequencyPenalty: parseFloat(e.target.value)
-                      })}
-                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                    />
-                  </div>
-
-                  {/* Presence Penalty */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Presence Penalty</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '根据 Token 是否出现过降低其重复概率'
-                            : 'Penalizes tokens based on their presence in the text'}
-                        </p>
-                      </div>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {(localConfig.presencePenalty || 0).toFixed(1)}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={-2}
-                      max={2}
-                      step={0.1}
-                      value={localConfig.presencePenalty || 0}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        presencePenalty: parseFloat(e.target.value)
-                      })}
-                      className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
-                    />
-                  </div>
-
-                  {/* Seed */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Seed</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '固定随机种子以获得可重现的结果'
-                            : 'Fixed seed for reproducible outputs'}
-                        </p>
-                      </div>
-                      <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
-                        {localConfig.seed ?? 'Random'}
-                      </span>
-                    </div>
-                    <input
-                      type="number"
-                      value={localConfig.seed ?? ''}
-                      onChange={(e) => setLocalConfig({
-                        ...localConfig,
-                        seed: e.target.value ? parseInt(e.target.value) : undefined
-                      })}
-                      placeholder="Random"
-                      className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
-                    />
-                  </div>
-
-                  {/* Stop Sequences */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Stop Sequences</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '遇到这些字符时停止生成'
-                            : 'Stop generation when these sequences are encountered'}
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
-                        Comma separated
-                      </span>
-                    </div>
-                    <input
-                      type="text"
-                      value={localConfig.stopSequences?.join(', ') || ''}
-                      onChange={(e) => {
-                        const val = e.target.value
-                        setLocalConfig({
+                      <input
+                        type="range"
+                        min={-2}
+                        max={2}
+                        step={0.1}
+                        value={localConfig.presencePenalty || 0}
+                        onChange={(e) => setLocalConfig({
                           ...localConfig,
-                          stopSequences: val ? val.split(',').map(s => s.trim()).filter(Boolean) : undefined
-                        })
-                      }}
-                      placeholder="e.g. \n, User:"
-                      className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
-                    />
-                  </div>
-
-                  {/* Logit Bias */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '调整特定 Token 出现的概率 (-100 到 100)'
-                            : 'Modify likelihood of specific tokens (-100 to 100)'}
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
-                        Token ID: Bias
-                      </span>
+                          presencePenalty: parseFloat(e.target.value)
+                        })}
+                        className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
+                      />
                     </div>
-                    <textarea
-                      value={logitBiasString}
-                      onChange={(e) => setLogitBiasString(e.target.value)}
-                      onBlur={() => {
-                        try {
-                          if (!logitBiasString.trim()) {
-                            setLocalConfig({ ...localConfig, logitBias: undefined })
-                            return
-                          }
-                          const parsed = JSON.parse(logitBiasString)
-                          if (typeof parsed === 'object' && parsed !== null) {
-                            setLocalConfig({ ...localConfig, logitBias: parsed })
-                          }
-                        } catch {
-                          // Invalid JSON
-                        }
-                      }}
-                      placeholder='{"50256": -100}'
-                      className="w-full h-20 bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all font-mono"
-                    />
-                  </div>
 
-                  {/* Custom Headers */}
-                  <div className="space-y-3 pt-3 border-t border-border/50">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <label className="text-xs text-text-secondary">
-                          {language === 'zh' ? '自定义请求头' : 'Custom Headers'}
-                        </label>
-                        <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '添加额外的 HTTP 请求头（如组织 ID、项目 ID 等）'
-                            : 'Add extra HTTP headers (e.g., organization ID, project ID, etc.)'}
-                        </p>
+                    {/* Seed */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Seed</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '固定随机种子以获得可重现的结果'
+                              : 'Fixed seed for reproducible outputs'}
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
+                          {localConfig.seed ?? 'Random'}
+                        </span>
                       </div>
-                      <button
-                        onClick={() => {
-                          setCustomHeaders([...customHeaders, { key: '', value: '' }])
+                      <input
+                        type="number"
+                        value={localConfig.seed ?? ''}
+                        onChange={(e) => setLocalConfig({
+                          ...localConfig,
+                          seed: e.target.value ? parseInt(e.target.value) : undefined
+                        })}
+                        placeholder="Random"
+                        className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
+                      />
+                    </div>
+
+                    {/* Stop Sequences */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Stop Sequences</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '遇到这些字符时停止生成'
+                              : 'Stop generation when these sequences are encountered'}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
+                          Comma separated
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={localConfig.stopSequences?.join(', ') || ''}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setLocalConfig({
+                            ...localConfig,
+                            stopSequences: val ? val.split(',').map(s => s.trim()).filter(Boolean) : undefined
+                          })
                         }}
-                        className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 flex-shrink-0"
-                      >
-                        <Plus className="w-3 h-3" />
-                        {language === 'zh' ? '添加' : 'Add'}
-                      </button>
+                        placeholder="e.g. \n, User:"
+                        className="w-full bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all"
+                      />
                     </div>
 
-                    {/* 默认请求头（可编辑） */}
-                    {(() => {
-                      const defaultKeys = Object.keys(defaultHeaders)
+                    {/* Logit Bias */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '调整特定 Token 出现的概率 (-100 到 100)'
+                              : 'Modify likelihood of specific tokens (-100 to 100)'}
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
+                          Token ID: Bias
+                        </span>
+                      </div>
+                      <textarea
+                        value={logitBiasString}
+                        onChange={(e) => setLogitBiasString(e.target.value)}
+                        onBlur={() => {
+                          try {
+                            if (!logitBiasString.trim()) {
+                              setLocalConfig({ ...localConfig, logitBias: undefined })
+                              return
+                            }
+                            const parsed = JSON.parse(logitBiasString)
+                            if (typeof parsed === 'object' && parsed !== null) {
+                              setLocalConfig({ ...localConfig, logitBias: parsed })
+                            }
+                          } catch {
+                            // Invalid JSON
+                          }
+                        }}
+                        placeholder='{"50256": -100}'
+                        className="w-full h-20 bg-surface-active rounded-lg px-3 py-1.5 text-xs border border-border focus:border-accent focus:ring-1 focus:ring-accent/50 outline-none transition-all font-mono"
+                      />
+                    </div>
 
-                      return defaultKeys.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                            {language === 'zh' ? '默认请求头（可修改）' : 'Default Headers (Editable)'}
-                          </div>
-                          {defaultKeys.map((key) => {
-                            const defaultValue = defaultHeaders[key]
-                            const currentValue = localConfig.headers?.[key] ?? defaultValue
-                            return (
-                              <div key={key} className="p-3 bg-surface/20 rounded-lg border border-accent/20 space-y-2">
-                                <div className="flex items-center justify-between">
+                    {/* Custom Headers */}
+                    <div className="space-y-3 pt-3 border-t border-border/50">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <label className="text-xs text-text-secondary">
+                            {language === 'zh' ? '自定义请求头' : 'Custom Headers'}
+                          </label>
+                          <p className="text-[10px] text-text-muted">
+                            {language === 'zh'
+                              ? '添加额外的 HTTP 请求头（如组织 ID、项目 ID 等）'
+                              : 'Add extra HTTP headers (e.g., organization ID, project ID, etc.)'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setCustomHeaders([...customHeaders, { key: '', value: '' }])
+                          }}
+                          className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 flex-shrink-0"
+                        >
+                          <Plus className="w-3 h-3" />
+                          {language === 'zh' ? '添加' : 'Add'}
+                        </button>
+                      </div>
+
+                      {/* 默认请求头（可编辑） */}
+                      {(() => {
+                        const defaultKeys = Object.keys(defaultHeaders)
+
+                        return defaultKeys.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                              {language === 'zh' ? '默认请求头（可修改）' : 'Default Headers (Editable)'}
+                            </div>
+                            {defaultKeys.map((key) => {
+                              const defaultValue = defaultHeaders[key]
+                              const currentValue = localConfig.headers?.[key] ?? defaultValue
+                              return (
+                                <div key={key} className="p-3 bg-surface/20 rounded-lg border border-accent/20 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Input
+                                      type="text"
+                                      value={key}
+                                      onChange={(e) => {
+                                        const newKey = e.target.value
+                                        if (!newKey) return
+
+                                        // 重命名 key
+                                        const newHeaders = { ...localConfig.headers }
+                                        delete newHeaders[key]
+                                        newHeaders[newKey] = currentValue
+                                        setLocalConfig({
+                                          ...localConfig,
+                                          headers: newHeaders
+                                        })
+                                      }}
+                                      className="flex-1 bg-background/50 border-border text-xs font-mono h-8"
+                                    />
+                                    <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20 flex-shrink-0 ml-2">
+                                      {language === 'zh' ? '默认' : 'Default'}
+                                    </span>
+                                  </div>
                                   <Input
                                     type="text"
-                                    value={key}
+                                    value={currentValue}
                                     onChange={(e) => {
-                                      const newKey = e.target.value
-                                      if (!newKey) return
-
-                                      // 重命名 key
-                                      const newHeaders = { ...localConfig.headers }
-                                      delete newHeaders[key]
-                                      newHeaders[newKey] = currentValue
+                                      const newHeaders = { ...localConfig.headers, [key]: e.target.value }
                                       setLocalConfig({
                                         ...localConfig,
                                         headers: newHeaders
                                       })
                                     }}
-                                    className="flex-1 bg-background/50 border-border text-xs font-mono h-8"
+                                    placeholder={defaultValue}
+                                    className="bg-background/50 border-border text-xs font-mono h-8"
                                   />
-                                  <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20 flex-shrink-0 ml-2">
-                                    {language === 'zh' ? '默认' : 'Default'}
-                                  </span>
+                                  <p className="text-[10px] text-text-muted">
+                                    {language === 'zh'
+                                      ? '使用 {{apiKey}} 作为 API Key 的占位符'
+                                      : 'Use {{apiKey}} as placeholder for API Key'}
+                                  </p>
                                 </div>
-                                <Input
-                                  type="text"
-                                  value={currentValue}
-                                  onChange={(e) => {
-                                    const newHeaders = { ...localConfig.headers, [key]: e.target.value }
-                                    setLocalConfig({
-                                      ...localConfig,
-                                      headers: newHeaders
-                                    })
-                                  }}
-                                  placeholder={defaultValue}
-                                  className="bg-background/50 border-border text-xs font-mono h-8"
-                                />
-                                <p className="text-[10px] text-text-muted">
-                                  {language === 'zh'
-                                    ? '使用 {{apiKey}} 作为 API Key 的占位符'
-                                    : 'Use {{apiKey}} as placeholder for API Key'}
-                                </p>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    })()}
-
-                    {/* 自定义请求头 */}
-                    {customHeaders.length > 0 && (
-                      <div className="space-y-2">
-                        {Object.keys(defaultHeaders).length > 0 && (
-                          <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                            {language === 'zh' ? '额外请求头' : 'Additional Headers'}
+                              )
+                            })}
                           </div>
-                        )}
-                        {customHeaders.map((header, index) => (
-                          <div key={index} className="space-y-1.5 p-2.5 bg-background/30 rounded-lg border border-border/50">
-                            <div className="flex items-start gap-2">
-                              <div className="flex-1 space-y-1.5">
-                                <Select
-                                  value={header.isCustom ? 'X-Custom-Header' : header.key}
-                                  onChange={(value) => {
-                                    const newHeaders = [...customHeaders]
-                                    if (value === 'X-Custom-Header') {
-                                      newHeaders[index].isCustom = true
-                                      newHeaders[index].key = ''
-                                    } else {
-                                      newHeaders[index].isCustom = false
-                                      newHeaders[index].key = value
-                                    }
-                                    syncCustomHeaders(newHeaders)
-                                  }}
-                                  options={headerSelectOptions}
-                                  className="w-full bg-surface-active border-border text-xs h-8"
-                                />
-                                {header.isCustom && (
-                                  <Input
-                                    type="text"
-                                    value={header.key}
-                                    onChange={(e) => {
+                        )
+                      })()}
+
+                      {/* 自定义请求头 */}
+                      {customHeaders.length > 0 && (
+                        <div className="space-y-2">
+                          {Object.keys(defaultHeaders).length > 0 && (
+                            <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
+                              {language === 'zh' ? '额外请求头' : 'Additional Headers'}
+                            </div>
+                          )}
+                          {customHeaders.map((header, index) => (
+                            <div key={index} className="space-y-1.5 p-2.5 bg-background/30 rounded-lg border border-border/50">
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1 space-y-1.5">
+                                  <Select
+                                    value={header.isCustom ? 'X-Custom-Header' : header.key}
+                                    onChange={(value) => {
                                       const newHeaders = [...customHeaders]
-                                      newHeaders[index].key = e.target.value
+                                      if (value === 'X-Custom-Header') {
+                                        newHeaders[index].isCustom = true
+                                        newHeaders[index].key = ''
+                                      } else {
+                                        newHeaders[index].isCustom = false
+                                        newHeaders[index].key = value
+                                      }
                                       syncCustomHeaders(newHeaders)
                                     }}
-                                    placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
+                                    options={headerSelectOptions}
+                                    className="w-full bg-surface-active border-border text-xs h-8"
+                                  />
+                                  {header.isCustom && (
+                                    <Input
+                                      type="text"
+                                      value={header.key}
+                                      onChange={(e) => {
+                                        const newHeaders = [...customHeaders]
+                                        newHeaders[index].key = e.target.value
+                                        syncCustomHeaders(newHeaders)
+                                      }}
+                                      placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
+                                      className="bg-surface-active border-border text-xs font-mono h-8"
+                                    />
+                                  )}
+                                  <Input
+                                    type="text"
+                                    value={header.value}
+                                    onChange={(e) => {
+                                      const newHeaders = [...customHeaders]
+                                      newHeaders[index].value = e.target.value
+                                      syncCustomHeaders(newHeaders)
+                                    }}
+                                    placeholder={language === 'zh' ? '值' : 'Value'}
                                     className="bg-surface-active border-border text-xs font-mono h-8"
                                   />
-                                )}
-                                <Input
-                                  type="text"
-                                  value={header.value}
-                                  onChange={(e) => {
-                                    const newHeaders = [...customHeaders]
-                                    newHeaders[index].value = e.target.value
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    const newHeaders = customHeaders.filter((_, i) => i !== index)
                                     syncCustomHeaders(newHeaders)
                                   }}
-                                  placeholder={language === 'zh' ? '值' : 'Value'}
-                                  className="bg-surface-active border-border text-xs font-mono h-8"
-                                />
+                                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition-colors flex-shrink-0 mt-0.5"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
                               </div>
-                              <button
-                                onClick={() => {
-                                  const newHeaders = customHeaders.filter((_, i) => i !== index)
-                                  syncCustomHeaders(newHeaders)
-                                }}
-                                className="p-1 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition-colors flex-shrink-0 mt-0.5"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      )}
 
-                    {customHeaders.length === 0 && Object.keys(defaultHeaders).length === 0 && (
-                      <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
-                        {language === 'zh'
-                          ? '点击"添加"按钮添加自定义请求头'
-                          : 'Click "Add" to add custom headers'}
-                      </div>
-                    )}
+                      {customHeaders.length === 0 && Object.keys(defaultHeaders).length === 0 && (
+                        <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
+                          {language === 'zh'
+                            ? '点击"添加"按钮添加自定义请求头'
+                            : 'Click "Add" to add custom headers'}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
           </section>
 
-          {/* 认证 & 网络配置 */}
-          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-            <div className="relative">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-accent/10 rounded-lg text-accent">
-                  <Server className="w-4 h-4" />
-                </div>
-                <div>
-                  <h5 className="text-sm font-semibold text-text-primary">
-                    {language === 'zh' ? '认证 & 网络配置' : 'Authentication & Network'}
-                  </h5>
-                  <p className="text-[10px] text-text-muted mt-0.5">
-                    {language === 'zh' ? '配置 API 访问密钥和服务器连接参数' : 'Configure API keys and server connection parameters'}
-                  </p>
-                  {false && currentOpenAICompatibilityProfile && (
-                    <div className="space-y-1.5 pt-1">
-                      <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                        {language === 'zh' ? 'OpenAI 能力档位' : 'OpenAI Capability'}
-                      </label>
-                      <Select
-                        value={currentOpenAICompatibilityProfile ?? 'compatible'}
-                        onChange={(value) => setLocalConfig({
-                          ...localConfig,
-                          openAICompatibilityProfile: value as OpenAICompatibilityProfile,
-                        })}
-                        options={openAICompatibilityProfileOptions}
-                        className="w-56 bg-background/40 border-border/60 h-9 text-xs"
-                      />
-                      <p className="text-[10px] text-text-muted leading-relaxed">
-                        {openAICompatibilityProfileDescription}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <TestConnectionButton localConfig={localConfig} language={language} />
-                <TestModelButton localConfig={localConfig} language={language} />
-              </div>
-            </div>
-
-            {/* 基础配置：三列布局 */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6">
-              {/* API Key */}
-              <div className="md:col-span-5 space-y-2">
-                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                  API Key
-                </label>
-                <Input
-                  type={showApiKey ? 'text' : 'password'}
-                  value={localConfig.apiKey}
-                  onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
-                  placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
-                  className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 font-mono text-xs h-10 transition-all"
-                  rightIcon={
-                    <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary p-1.5 hover:bg-surface/50 rounded-md transition-colors">
-                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  }
-                />
-              </div>
-
-              {/* API 端点 */}
-              <div className="md:col-span-5 space-y-2">
-                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                  {language === 'zh' ? 'API 端点' : 'API Endpoint'}
-                </label>
-                <Input
-                  value={localConfig.baseUrl || ''}
-                  onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
-                  placeholder="https://api.example.com/v1"
-                  className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs font-mono h-10 transition-all"
-                />
-              </div>
-
-              {/* 超时时间 */}
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                  {language === 'zh' ? '超时 (秒)' : 'Timeout (s)'}
-                </label>
-                <Input
-                  type="number"
-                  value={(localConfig.timeout || 120000) / 1000}
-                  onChange={(e) => setLocalConfig({ ...localConfig, timeout: (parseInt(e.target.value) || 120) * 1000 })}
-                  min={10}
-                  className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs h-10 transition-all"
-                />
-              </div>
-            </div>
-
-            {/* 底部功能栏：协议选择 + 提示信息 */}
-            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] items-start gap-4 pt-5 border-t border-border/50">
-              <div className="w-full space-y-3">
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                      {language === 'zh' ? 'API 协议' : 'API Protocol'}
-                    </label>
-                    <Select
-                      value={localConfig.protocol || (isCustomSelected ? selectedCustomConfig?.protocol : (selectedProvider as any)?.protocol) || 'openai'}
-                      onChange={(val) => {
-                        const nextProtocol = val as ApiProtocol
-                        setLocalConfig({
-                          ...localConfig,
-                          protocol: nextProtocol,
-                          openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
-                            localConfig.provider,
-                            nextProtocol,
-                            localConfig.openAICompatibilityProfile,
-                          ),
-                        })
-                      }}
-                      options={PROTOCOL_OPTIONS}
-                      className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
-                    />
-                    <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
-                      {language === 'zh' ? '对于兼容模型，通常建议使用 OpenAI Compatible' : 'For compatible models, OpenAI Compatible is generally recommended'}
-                    </p>
-                  </div>
-                  {isCustomSelected && isOpenAIStyleProtocol(currentProtocol) && currentOpenAICompatibilityProfile && (
-                    <div className="space-y-2 md:pt-0">
-                      <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                        {language === 'zh' ? 'OpenAI 能力档位' : 'OpenAI Capability'}
-                      </label>
-                      <Select
-                        value={currentOpenAICompatibilityProfile}
-                        onChange={(value) => setLocalConfig({
-                          ...localConfig,
-                          openAICompatibilityProfile: value as OpenAICompatibilityProfile,
-                        })}
-                        options={openAICompatibilityProfileOptions}
-                        className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
-                      />
-                      <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
-                        {openAICompatibilityProfileDescription}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5 rounded-xl border border-border/50 bg-background/20 p-4 space-y-4">
-                  <div className="space-y-1">
-                    <div className="text-[11px] font-bold text-text-secondary uppercase tracking-wider">
-                      {language === 'zh' ? '路由能力' : 'Route Capabilities'}
-                    </div>
-                    <p className="text-[10px] text-text-muted leading-relaxed max-w-2xl">
-                      {language === 'zh'
-                        ? '这些选项用于声明上游代理路由真实支持的能力，避免根据模型名猜测。仅在你的网关做了模型映射、协议转换或自定义封装时才需要调整。'
-                        : 'Use these flags to declare what the upstream route actually supports, instead of guessing from the model name. You only need to change them when your gateway remaps models or transforms protocols.'}
-                    </p>
-                  </div>
-
-                  {isOpenAIStyleProtocol(currentProtocol) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
-                        <div className="pr-4">
-                          <div className="text-xs text-text-secondary">
-                            {language === 'zh' ? 'OpenAI 推理路由' : 'OpenAI Reasoning Route'}
-                          </div>
-                          <p className="text-[10px] text-text-muted mt-0.5">
-                            {language === 'zh'
-                              ? '声明该路由会按 reasoning 模型规则限制常规采样参数。'
-                              : 'Treat this route as a reasoning-style OpenAI route with restricted sampling params.'}
-                          </p>
-                        </div>
-                        <Switch
-                          checked={capabilityConfig.openAIReasoningModel ?? false}
-                          onChange={(e) => setLocalConfig({
-                            ...localConfig,
-                            capabilities: {
-                              ...capabilityConfig,
-                              openAIReasoningModel: e.target.checked,
-                            },
-                          })}
-                          className="flex-shrink-0"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
-                        <div className="pr-4">
-                          <div className="text-xs text-text-secondary">
-                            {language === 'zh' ? '允许关闭推理后采样' : 'Sampling When Reasoning Off'}
-                          </div>
-                          <p className="text-[10px] text-text-muted mt-0.5">
-                            {language === 'zh'
-                              ? '如果该 reasoning 路由在关闭推理后允许 temperature / topP，再开启此项。'
-                              : 'Enable this if the reasoning route allows temperature/topP once reasoning is disabled.'}
-                          </p>
-                        </div>
-                        <Switch
-                          checked={capabilityConfig.openAIReasoningSupportsSampling ?? false}
-                          onChange={(e) => setLocalConfig({
-                            ...localConfig,
-                            capabilities: {
-                              ...capabilityConfig,
-                              openAIReasoningSupportsSampling: e.target.checked,
-                            },
-                          })}
-                          className="flex-shrink-0"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {(currentProtocol === 'openai' || currentProtocol === 'openai-responses') && (
-                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
-                      <div className="pr-4">
-                        <div className="text-xs text-text-secondary">
-                          {language === 'zh' ? '支持 Prompt Cache Retention' : 'Supports Prompt Cache Retention'}
-                        </div>
-                        <p className="text-[10px] text-text-muted mt-0.5">
-                          {language === 'zh'
-                            ? '仅当上游明确支持 OpenAI 的 prompt cache retention 提示时开启。'
-                            : 'Enable only when the upstream route explicitly supports OpenAI prompt cache retention hints.'}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={capabilityConfig.openAIPromptCacheRetention ?? false}
-                        onChange={(e) => setLocalConfig({
-                          ...localConfig,
-                          capabilities: {
-                            ...capabilityConfig,
-                            openAIPromptCacheRetention: e.target.checked,
-                          },
-                        })}
-                        className="flex-shrink-0"
-                      />
-                    </div>
-                  )}
-
-                  {currentProtocol === 'openai-responses' && (
-                    <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
-                      <div className="pr-4">
-                        <div className="text-xs text-text-secondary">
-                          {language === 'zh' ? '支持 `max_output_tokens`' : 'Supports `max_output_tokens`'}
-                        </div>
-                        <p className="text-[10px] text-text-muted mt-0.5">
-                          {language === 'zh'
-                            ? '仅当上游 Responses 路由明确接受官方 `max_output_tokens` 字段时开启。某些代理需要省略这个参数。'
-                            : 'Enable only when the upstream Responses route explicitly accepts the official `max_output_tokens` field. Some gateways require this parameter to be omitted.'}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={capabilityConfig.openAIResponsesSupportsMaxOutputTokens ?? true}
-                        onChange={(e) => setLocalConfig({
-                          ...localConfig,
-                          capabilities: {
-                            ...capabilityConfig,
-                            openAIResponsesSupportsMaxOutputTokens: e.target.checked,
-                          },
-                        })}
-                        className="flex-shrink-0"
-                      />
-                    </div>
-                  )}
-
-                  {currentProtocol === 'google' && (
-                    <div className="space-y-2">
-                      <label className="text-xs text-text-secondary">
-                        {language === 'zh' ? 'Google Thinking 配置模式' : 'Google Thinking Config Mode'}
-                      </label>
-                      <Select
-                        value={capabilityConfig.googleThinkingMode ?? 'budget'}
-                        onChange={(value) => setLocalConfig({
-                          ...localConfig,
-                          capabilities: {
-                            ...capabilityConfig,
-                            googleThinkingMode: value as 'budget' | 'level',
-                          },
-                        })}
-                        options={GOOGLE_THINKING_MODE_OPTIONS}
-                        className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
-                      />
-                      <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
-                        {language === 'zh'
-                          ? '如果你的代理要求 `thinkingLevel`，选 Level；如果要求 `thinkingBudget`，选 Budget。'
-                          : 'Choose Level if your route expects `thinkingLevel`, or Budget if it expects `thinkingBudget`.'}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-text-secondary">
-                      {language === 'zh' ? 'Thinking 文本包装格式' : 'Thinking Text Wrapper'}
-                    </label>
-                    <Select
-                      value={capabilityConfig.thinkingTagFormat ?? 'native'}
-                      onChange={(value) => setLocalConfig({
-                        ...localConfig,
-                        capabilities: {
-                          ...capabilityConfig,
-                          thinkingTagFormat: value as 'native' | 'xml-think',
-                        },
-                      })}
-                      options={THINKING_TAG_FORMAT_OPTIONS}
-                      className="w-full max-w-[320px] bg-background/40 border-border/60 h-9 text-xs"
-                    />
-                    <p className="text-[10px] text-text-muted leading-relaxed max-w-md">
-                      {language === 'zh'
-                        ? '默认使用 AI SDK 原生 reasoning 事件；只有当上游把思考内容包在 `<think>...</think>` 文本里时才改成 XML。'
-                        : 'Use native reasoning events by default. Switch to XML only if the upstream wraps thoughts inside `<think>...</think>` text.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            </div>
-          </section>
         </div>
       )}
     </div>
