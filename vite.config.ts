@@ -116,8 +116,23 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           // Monaco Editor
-          if (id.includes('monaco-editor') || id.includes('@monaco-editor/react')) {
-            return 'monaco-editor'
+          if (id.includes('@monaco-editor/react')) {
+            return 'monaco-react'
+          }
+          if (id.includes('monaco-editor/esm/vs/language/typescript')) {
+            return 'monaco-ts'
+          }
+          if (id.includes('monaco-editor/esm/vs/language/html')) {
+            return 'monaco-html'
+          }
+          if (id.includes('monaco-editor/esm/vs/language/css')) {
+            return 'monaco-css'
+          }
+          if (id.includes('monaco-editor/esm/vs/language/json')) {
+            return 'monaco-json'
+          }
+          if (id.includes('monaco-editor')) {
+            return 'monaco-core'
           }
           // React 核心
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
@@ -132,8 +147,15 @@ export default defineConfig({
             return 'terminal'
           }
           // Markdown
-          if (id.includes('react-markdown')) {
+          if (
+            id.includes('react-markdown') ||
+            id.includes('remark-gfm') ||
+            id.includes('remark-math')
+          ) {
             return 'markdown-core'
+          }
+          if (id.includes('rehype-katex') || id.includes('katex')) {
+            return 'markdown-math'
           }
           // Syntax Highlighter（单独分包，按需加载）
           if (id.includes('react-syntax-highlighter')) {
@@ -144,8 +166,29 @@ export default defineConfig({
             return 'animation'
           }
           // Agent 模块
-          if (id.includes('/renderer/agent/')) {
-            return 'agent'
+          if (id.includes('/renderer/agent/core/') || id.includes('/renderer/agent/llm/')) {
+            return 'agent-core'
+          }
+          if (
+            id.includes('/renderer/agent/domains/') ||
+            id.includes('/renderer/agent/store/') ||
+            id.includes('/renderer/agent/context/') ||
+            id.includes('/renderer/agent/plan/')
+          ) {
+            return 'agent-state'
+          }
+          if (
+            id.includes('/renderer/agent/tools/') ||
+            id.includes('/renderer/agent/services/') ||
+            id.includes('/renderer/agent/prompts/')
+          ) {
+            return 'agent-runtime'
+          }
+          if (
+            id.includes('/renderer/components/agent/') ||
+            id.includes('/renderer/agent/emotion/')
+          ) {
+            return 'agent-ui'
           }
           // Sidebar 模块
           if (id.includes('/renderer/components/sidebar/')) {
@@ -154,7 +197,7 @@ export default defineConfig({
         },
       },
     },
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 8000,
     minify: 'esbuild',
     target: 'esnext',
     cssCodeSplit: true,

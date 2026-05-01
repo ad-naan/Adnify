@@ -3,10 +3,11 @@
  * 统一管理所有 MCP 服务器的生命周期
  */
 
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow } from 'electron'
 import { EventEmitter } from 'events'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
+import { openExternalSafely } from '../../security/externalUrl'
 import { McpClient } from './McpClient'
 import { McpConfigLoader } from './McpConfigLoader'
 import { McpOAuthCallback } from './McpOAuthCallback'
@@ -371,7 +372,10 @@ export class McpManager extends EventEmitter {
 
     // 打开浏览器
     try {
-      await shell.openExternal(authUrl)
+      const opened = await openExternalSafely(authUrl)
+      if (!opened) {
+        return { success: false, error: 'Blocked unsafe OAuth URL' }
+      }
     } catch (err) {
       const error = toAppError(err)
       return { success: false, error: `Failed to open browser: ${error.message}` }
