@@ -21,6 +21,7 @@ import { truncateToolResult } from '@/renderer/utils/partialJson'
 import { getAgentConfig } from '../utils/AgentConfig'
 import type { ToolCall } from '@/shared/types'
 import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
+import { approvalService as sharedApprovalService } from './approvalService'
 import { useAgentStore } from '../store/AgentStore'
 import { buildExecutionBatches } from './toolExecutionPlan'
 import { streamingEditService } from '../services/streamingEditService'
@@ -633,7 +634,7 @@ export async function executeTools(
     })
 
     // 等待用户审批
-    const approved = await approvalService.waitForApproval(context.requestId)
+    const approved = await sharedApprovalService.waitForApproval(context.requestId)
 
     if (!approved || abortSignal?.aborted) {
       // 用户拒绝了这个工具
