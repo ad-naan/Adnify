@@ -38,6 +38,8 @@ export interface OpenFile {
   largeFileInfo?: LargeFileInfo
   /** 文件编码 */
   encoding?: string
+  /** 文件换行符 */
+  eol?: 'LF' | 'CRLF'
   /** 文件是否已被外部删除 */
   isDeleted?: boolean
   /** 远程文件绑定信息（SFTP 编辑） */
@@ -70,6 +72,7 @@ export interface FileSlice {
   openFile: (path: string, content: string, originalContent?: string, options?: {
     largeFileInfo?: LargeFileInfo
     encoding?: string
+    eol?: 'LF' | 'CRLF'
     remote?: OpenFile['remote']
     kind?: OpenFile['kind']
     preview?: OpenFile['preview']
@@ -79,12 +82,13 @@ export interface FileSlice {
     path: string
     content: string
     originalContent?: string
-    options?: {
-      largeFileInfo?: LargeFileInfo
-      encoding?: string
-      remote?: OpenFile['remote']
-      kind?: OpenFile['kind']
-      preview?: OpenFile['preview']
+      options?: {
+        largeFileInfo?: LargeFileInfo
+        encoding?: string
+        eol?: 'LF' | 'CRLF'
+        remote?: OpenFile['remote']
+        kind?: OpenFile['kind']
+        preview?: OpenFile['preview']
     }
   }>, activeFilePath?: string | null) => void
   closeFile: (path: string) => void
@@ -102,6 +106,8 @@ export interface FileSlice {
   updatePreviewMetadata: (path: string, preview: Partial<OpenPreviewMetadata>) => void
   /** 设置文件滚动位置 */
   setFileScrollPosition: (path: string, scrollPosition: { scrollTop: number; scrollLeft: number }) => void
+  setFileEncoding: (path: string, encoding: string) => void
+  setFileEol: (path: string, eol: 'LF' | 'CRLF') => void
 }
 
 function upsertOpenFiles(
@@ -191,6 +197,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         savedVersionId: 1,
         largeFileInfo: options?.largeFileInfo,
         encoding: options?.encoding,
+        eol: options?.eol,
         remote: options?.remote,
         preview: options?.preview,
         lastAccessed: Date.now(),
@@ -249,6 +256,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         savedVersionId: 1,
         largeFileInfo: file.options?.largeFileInfo,
         encoding: file.options?.encoding,
+        eol: file.options?.eol,
         remote: file.options?.remote,
         preview: file.options?.preview,
         lastAccessed: Date.now() + index,
@@ -337,6 +345,20 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
     set((state) => ({
       openFiles: state.openFiles.map((f) =>
         f.path === path ? { ...f, scrollPosition } : f
+      ),
+    })),
+
+  setFileEncoding: (path, encoding) =>
+    set((state) => ({
+      openFiles: state.openFiles.map((f) =>
+        f.path === path ? { ...f, encoding } : f
+      ),
+    })),
+
+  setFileEol: (path, eol) =>
+    set((state) => ({
+      openFiles: state.openFiles.map((f) =>
+        f.path === path ? { ...f, eol } : f
       ),
     })),
 })

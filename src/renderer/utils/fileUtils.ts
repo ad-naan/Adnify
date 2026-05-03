@@ -14,6 +14,7 @@ import {
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '../components/common/ConfirmDialog'
 import { getFileName } from '@shared/utils/pathUtils'
+import { detectEolFromContent } from '@services/fileFormatService'
 
 // ============ 配置常量 ============
 
@@ -170,6 +171,7 @@ export async function safeOpenFile(
     openFile(filePath, content, originalContent, {
       largeFileInfo,
       encoding: 'utf-8',
+      eol: detectEolFromContent(content),
     })
     setActiveFile(filePath)
 

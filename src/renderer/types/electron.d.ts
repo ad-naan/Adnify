@@ -349,11 +349,11 @@ export interface ElectronAPI {
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
-  readFile: (path: string) => Promise<string | null>
+  readFile: (path: string, encoding?: string) => Promise<string | null>
   readBinaryFile: (path: string) => Promise<string | null>
-  writeFile: (path: string, content: string) => Promise<boolean>
+  writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
   ensureDir: (path: string) => Promise<boolean>
-  saveFile: (content: string, path?: string) => Promise<string | null>
+  saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<void>
   openInBrowser: (path: string) => Promise<boolean>

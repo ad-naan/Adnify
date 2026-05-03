@@ -13,7 +13,7 @@ import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
 
 // 导入拆分的模块
-import { readFileWithEncoding, readLargeFile } from './fileUtils'
+import { readFileWithEncodingInfo, readLargeFile, safeWriteFile } from './fileUtils'
 import {
   setupFileWatcher,
   cleanupFileWatcher,
@@ -136,7 +136,7 @@ export function registerSecureFileHandlers(
   })
 
   // 读取文件（无弹窗，使用拆分的 fileUtils）
-  ipcMain.handle('file:read', async (event, filePath: string) => {
+  ipcMain.handle('file:read', async (event, filePath: string, encoding?: string) => {
     if (!filePath) return null
 
     // 跳过虚拟协议路径（如 git-diff://、diff:// 等），这些不是真实文件路径
@@ -167,7 +167,7 @@ export function registerSecureFileHandlers(
       const content =
         stats.size > 5 * 1024 * 1024
           ? await readLargeFile(filePath, 0, 10000)
-          : await readFileWithEncoding(filePath)
+          : (await readFileWithEncodingInfo(filePath, encoding)).content
 
       securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
         size: stats.size,
@@ -225,7 +225,7 @@ export function registerSecureFileHandlers(
   })
 
   // 写入文件（无弹窗）
-  ipcMain.handle('file:write', async (event, filePath: string, content: string) => {
+  ipcMain.handle('file:write', async (event, filePath: string, content: string, encoding?: string) => {
     if (!filePath || typeof filePath !== 'string') return false
     if (content === undefined || content === null) return false
 
@@ -257,9 +257,10 @@ export function registerSecureFileHandlers(
     }
 
     try {
-      const dir = path.dirname(filePath)
-      await fsPromises.mkdir(dir, { recursive: true })
-      await fsPromises.writeFile(filePath, content, 'utf-8')
+      const success = await safeWriteFile(filePath, content, (encoding as any) || 'utf-8')
+      if (!success) {
+        return false
+      }
       securityManager.logOperation(OperationType.FILE_WRITE, filePath, true, {
         size: content.length,
         bypass: true,
@@ -286,7 +287,7 @@ export function registerSecureFileHandlers(
   })
 
   // 保存文件（带对话框支持）
-  ipcMain.handle('file:save', async (event, content: string, currentPath?: string) => {
+  ipcMain.handle('file:save', async (event, content: string, currentPath?: string, encoding?: string) => {
     if (currentPath) {
       if (securityManager.isSensitivePath(currentPath)) return null
 
@@ -299,9 +300,8 @@ export function registerSecureFileHandlers(
       }
 
       try {
-        const dir = path.dirname(currentPath)
-        await fsPromises.mkdir(dir, { recursive: true })
-        await fsPromises.writeFile(currentPath, content, 'utf-8')
+        const success = await safeWriteFile(currentPath, content, (encoding as any) || 'utf-8')
+        if (!success) return null
         securityManager.logOperation(OperationType.FILE_WRITE, currentPath, true)
         return currentPath
       } catch {
@@ -330,7 +330,8 @@ export function registerSecureFileHandlers(
       }
 
       try {
-        await fsPromises.writeFile(savePath, content, 'utf-8')
+        const success = await safeWriteFile(savePath, content, (encoding as any) || 'utf-8')
+        if (!success) return null
         securityManager.logOperation(OperationType.FILE_WRITE, savePath, true, {
           isNewFile: true,
           bypass: true,
