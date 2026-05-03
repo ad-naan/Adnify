@@ -6,23 +6,27 @@
 import type { editor } from 'monaco-editor'
 import { getEditorConfig } from '@renderer/settings'
 import { LargeFileInfo, getLargeFileEditorOptions } from '@/renderer/services/largeFileService'
+import type { EditorConfig } from '@shared/config/types'
 
 /**
  * 获取 Monaco 编辑器的完整配置选项
  */
 export function getMonacoEditorOptions(
-  largeFileInfo?: LargeFileInfo | null
+  largeFileInfo?: LargeFileInfo | null,
+  editorConfig?: EditorConfig
 ): editor.IStandaloneEditorConstructionOptions {
-  const config = getEditorConfig()
+  const config = editorConfig ?? getEditorConfig()
 
   const baseOptions: editor.IStandaloneEditorConstructionOptions = {
     // 字体和外观
     fontSize: config.fontSize,
     fontFamily: config.fontFamily,
     fontLigatures: true,
-    lineHeight: 1.6,
+    lineHeight: Math.round(config.fontSize * config.lineHeight),
     tabSize: config.tabSize,
     wordWrap: config.wordWrap,
+    insertSpaces: true,
+    detectIndentation: false,
     
     // 小地图
     minimap: {
@@ -85,15 +89,19 @@ export function getMonacoEditorOptions(
       showStatusBar: true,
       preview: true,
       previewMode: 'subwordSmart',
+      selectionMode: 'whenQuickSuggestion',
     },
+    suggestSelection: 'recentlyUsedByPrefix',
+    snippetSuggestions: 'inline',
     quickSuggestions: {
       other: true,
       comments: false,
       strings: true,
     },
+    quickSuggestionsDelay: 10,
     acceptSuggestionOnCommitCharacter: true,
-    acceptSuggestionOnEnter: 'on',
-    tabCompletion: 'on',
+    acceptSuggestionOnEnter: 'smart',
+    tabCompletion: 'onlySnippets',
     wordBasedSuggestions: 'matchingDocuments',
     
     // 参数提示
@@ -109,6 +117,12 @@ export function getMonacoEditorOptions(
     
     // 括号匹配和高亮
     matchBrackets: 'always',
+    autoIndent: 'full',
+    formatOnPaste: true,
+    formatOnType: true,
+    autoClosingBrackets: 'languageDefined',
+    autoClosingQuotes: 'languageDefined',
+    autoSurround: 'languageDefined',
     bracketPairColorization: {
       enabled: config.bracketPairColorization,
       independentColorPoolPerBracketType: true,
@@ -204,6 +218,7 @@ export function getMonacoDiffEditorOptions(): editor.IDiffEditorConstructionOpti
     fontSize: config.fontSize,
     fontFamily: config.fontFamily,
     fontLigatures: true,
+    lineHeight: Math.round(config.fontSize * config.lineHeight),
     renderSideBySide: true,
     readOnly: true,
     minimap: { enabled: false },
@@ -221,6 +236,7 @@ export function getMonacoPreviewOptions(): editor.IStandaloneEditorConstructionO
     fontSize: config.fontSize,
     fontFamily: config.fontFamily,
     fontLigatures: true,
+    lineHeight: Math.round(config.fontSize * config.lineHeight),
     readOnly: true,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,

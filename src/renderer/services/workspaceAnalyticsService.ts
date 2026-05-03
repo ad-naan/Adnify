@@ -286,7 +286,7 @@ class WorkspaceAnalyticsService {
       workspace: {
         activityPercent: this.computeActivityPercent(range, currentActiveMs),
         activeProjects: this.countActiveProjects(period, repositories, fileChangeEvents, commitsResult.currentHashes),
-        pendingTasks: todos.filter(todo => !todo.completed).length,
+        pendingTasks: todos.filter(todo => todo.status !== 'completed').length,
         updatesToday: this.countProjectsUpdatedToday(repositories, fileChangeEvents),
       },
       models: this.buildModelRows(period, allMessages),
@@ -492,7 +492,7 @@ class WorkspaceAnalyticsService {
       return eventCount
     }
 
-    return messages.filter(message =>
+    return messages.filter((message): message is AssistantMessage =>
       isAssistantMessage(message)
       && message.timestamp >= period.startAt
       && message.timestamp < period.endAt

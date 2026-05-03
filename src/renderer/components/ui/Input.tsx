@@ -18,7 +18,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                 <input
                     ref={ref}
                     className={`
-            flex h-10 w-full rounded-xl border px-3 py-1 text-sm text-text-primary placeholder:text-text-muted/40 
+            flex h-10 w-full rounded-xl border px-3 py-1 text-sm text-text-primary placeholder:text-text-muted/70 
             shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]
             transition-all duration-200 ease-out
             bg-surface/50 backdrop-blur-sm border-border

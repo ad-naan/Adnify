@@ -16,7 +16,7 @@ import { api } from '@renderer/services/electronAPI'
 import { didChangeDocument } from '@services/lspService'
 import { getFileInfo } from '@services/largeFileService'
 import { getMonacoEditorOptions } from '@renderer/config/monacoConfig'
-import { getEditorConfig } from '@renderer/settings'
+import { getEditorConfig, saveEditorConfig } from '@renderer/settings'
 import { keybindingService } from '@services/keybindingService'
 import { monaco } from '@renderer/monacoWorker'
 import { initMonacoTypeService } from '@services/monacoTypeService'
@@ -56,8 +56,17 @@ import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDi
 import { getLanguage } from './utils/languageMap'
 import { defineMonacoTheme } from './utils/monacoTheme'
 import { isPreviewDocumentPath } from '@shared/types/preview'
+import type { EditorConfig as SharedEditorConfig } from '@shared/config/types'
 
 loader.config({ monaco })
+
+const MIN_EDITOR_FONT_SIZE = 8
+const MAX_EDITOR_FONT_SIZE = 72
+const FONT_ZOOM_STEP = 1
+
+function clampEditorFontSize(fontSize: number) {
+  return Math.min(MAX_EDITOR_FONT_SIZE, Math.max(MIN_EDITOR_FONT_SIZE, fontSize))
+}
 
 export default function Editor() {
   const activeFilePath = useStore((state) => state.activeFilePath)
@@ -81,6 +90,7 @@ export default function Editor() {
   const markFileSaved = useStore((state) => state.markFileSaved)
   const language = useStore((state) => state.language)
   const closeFile = useStore((state) => state.closeFile)
+  const editorConfig = useStore((state) => state.editorConfig)
 
   const { pendingChanges, acceptChange, undoChange } = useAgentChangeState()
 
@@ -106,6 +116,8 @@ export default function Editor() {
   const activeFileType = activeFile && !isPreviewDocument ? getFileType(activeFile.path) : 'text'
   const activeFileInfo = (activeFile && activeFile.content != null) ? getFileInfo(activeFile.path, activeFile.content) : null
   const currentTheme = useStore((state) => state.currentTheme) as ThemeName
+  const fontZoomRafRef = useRef<number | null>(null)
+  const fontZoomSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 断点管理
   useEditorBreakpoints(editorRef.current, isPreviewDocument ? null : activeFilePath)
@@ -117,6 +129,76 @@ export default function Editor() {
       monacoRef.current.editor.setTheme('adnify-dynamic')
     }
   }, [currentTheme])
+
+  const applyEditorTypography = useCallback((
+    editorInstance: editor.IStandaloneCodeEditor,
+    config: SharedEditorConfig
+  ) => {
+    editorInstance.updateOptions({
+      fontSize: config.fontSize,
+      lineHeight: Math.round(config.fontSize * config.lineHeight),
+      fontFamily: config.fontFamily,
+    })
+  }, [])
+
+  const updateEditorFontSize = useCallback((nextFontSize: number) => {
+    const normalizedFontSize = clampEditorFontSize(nextFontSize)
+    const currentConfig = useStore.getState().editorConfig
+    if (currentConfig.fontSize === normalizedFontSize) return
+
+    const nextConfig: SharedEditorConfig = {
+      ...currentConfig,
+      fontSize: normalizedFontSize,
+    }
+
+    useStore.getState().set('editorConfig', nextConfig)
+
+    if (editorRef.current) {
+      applyEditorTypography(editorRef.current, nextConfig)
+      if (fontZoomRafRef.current != null) {
+        cancelAnimationFrame(fontZoomRafRef.current)
+      }
+      fontZoomRafRef.current = requestAnimationFrame(() => {
+        editorRef.current?.layout()
+        fontZoomRafRef.current = null
+      })
+    }
+
+    if (fontZoomSaveTimeoutRef.current) {
+      clearTimeout(fontZoomSaveTimeoutRef.current)
+    }
+    fontZoomSaveTimeoutRef.current = setTimeout(() => {
+      saveEditorConfig({ fontSize: normalizedFontSize })
+      fontZoomSaveTimeoutRef.current = null
+    }, 120)
+  }, [applyEditorTypography])
+
+  const handleEditorWheel = useCallback((event: WheelEvent) => {
+    const isZoomModifierPressed = event.ctrlKey || event.metaKey
+    if (!isZoomModifierPressed) return
+
+    event.preventDefault()
+
+    const direction = event.deltaY < 0 ? 1 : -1
+    const currentFontSize = useStore.getState().editorConfig.fontSize
+    updateEditorFontSize(currentFontSize + direction * FONT_ZOOM_STEP)
+  }, [updateEditorFontSize])
+
+  useEffect(() => {
+    if (!editorRef.current) return
+    applyEditorTypography(editorRef.current, editorConfig)
+  }, [applyEditorTypography, editorConfig])
+
+  useEffect(() => {
+    return () => {
+      if (fontZoomRafRef.current != null) {
+        cancelAnimationFrame(fontZoomRafRef.current)
+      }
+      if (fontZoomSaveTimeoutRef.current) {
+        clearTimeout(fontZoomSaveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // 文件切换时清除 lint 错误并通知 LSP
   // 同时检查是否有跨文件 Go-to-Definition 待处理的跳转定位
@@ -200,6 +282,7 @@ export default function Editor() {
     setupLinkNavigation(editor)
     registerActions(editor, monacoInstance)
     registerAIProvider(monacoInstance)
+    applyEditorTypography(editor, useStore.getState().editorConfig)
 
     monacoInstance.editor.setTheme('adnify-dynamic')
 
@@ -261,6 +344,14 @@ export default function Editor() {
       setContextMenu({ x: e.event.posx, y: e.event.posy })
     })
     disposables.push(contextMenuDisposable)
+
+    const wheelTarget = editor.getDomNode()
+    if (wheelTarget) {
+      wheelTarget.addEventListener('wheel', handleEditorWheel, { passive: false })
+      disposables.push({
+        dispose: () => wheelTarget.removeEventListener('wheel', handleEditorWheel)
+      })
+    }
 
     editor.onDidDispose(() => {
       unsubscribeDiagnostics()
@@ -446,7 +537,11 @@ export default function Editor() {
                       }
                     }}
                     loading={<CodeSkeleton lines={12} />}
-                    options={{ fontSize: getEditorConfig().fontSize, fontFamily: getEditorConfig().fontFamily, minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 16 }, contextmenu: false }}
+                    options={{
+                      ...getMonacoEditorOptions(activeFileInfo, editorConfig),
+                      minimap: { enabled: false },
+                      padding: { top: 16 },
+                    }}
                   />
                 </div>
                 <div className="flex-1 relative overflow-hidden">
@@ -466,7 +561,12 @@ export default function Editor() {
                     updateFileContent(activeFile.path, modifiedEditor.getValue())
                   })
                 }}
-                options={{ fontSize: getEditorConfig().fontSize, fontFamily: getEditorConfig().fontFamily, fontLigatures: true, renderSideBySide: true, readOnly: false, minimap: { enabled: false }, scrollBeyondLastLine: false }}
+                options={{
+                  ...getMonacoEditorOptions(activeFileInfo, editorConfig),
+                  renderSideBySide: true,
+                  readOnly: false,
+                  minimap: { enabled: false },
+                }}
               />
             ) : (
               <MonacoEditor
@@ -486,7 +586,7 @@ export default function Editor() {
                   }
                 }}
                 loading={<CodeSkeleton lines={12} />}
-                options={getMonacoEditorOptions(activeFileInfo)}
+                options={getMonacoEditorOptions(activeFileInfo, editorConfig)}
               />
             )}
           </>
