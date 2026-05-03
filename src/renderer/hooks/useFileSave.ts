@@ -29,7 +29,7 @@ export function useFileSave() {
     if (!file) return false
 
     try {
-      const success = await api.file.write(file.path, file.content)
+      const success = await api.file.write(file.path, file.content, file.encoding)
       if (success) {
         // 获取当前版本号并保存
         const versionId = getModelVersionId(file.path)
@@ -118,7 +118,7 @@ export function useFileSave() {
           const { openFiles: currentFiles, markFileSaved: currentMarkSaved } = useStore.getState()
           const file = currentFiles.find(f => f.path === fPath)
           if (file?.isDirty) {
-            const success = await api.file.write(file.path, file.content)
+            const success = await api.file.write(file.path, file.content, file.encoding)
             if (success) {
               const versionId = getModelVersionId(file.path)
               currentMarkSaved(file.path, versionId)
@@ -151,7 +151,7 @@ export function useFileSave() {
     const handleBlur = async () => {
       for (const file of openFiles) {
         if (file.isDirty) {
-          const success = await api.file.write(file.path, file.content)
+          const success = await api.file.write(file.path, file.content, file.encoding)
           if (success) {
             const versionId = getModelVersionId(file.path)
             markFileSaved(file.path, versionId)

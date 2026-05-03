@@ -41,6 +41,7 @@ import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 import LspStatusIndicator from './LspStatusIndicator'
 import { EmotionStatusIndicator } from '../agent/EmotionStatusIndicator'
 import { motion, AnimatePresence } from 'framer-motion'
+import FileFormatControls from './FileFormatControls'
 
 export default function StatusBar() {
   const {
@@ -252,6 +253,7 @@ export default function StatusBar() {
           <div className="flex items-center gap-2 cursor-pointer hover:bg-white/5 hover:text-text-primary px-2 py-1 rounded-md transition-colors text-[9px] hidden md:flex">
             <span>Ln {cursorPosition?.line || 1}, Col {cursorPosition?.column || 1}</span>
           </div>
+          <FileFormatControls />
           <LspStatusIndicator />
         </div>
 
