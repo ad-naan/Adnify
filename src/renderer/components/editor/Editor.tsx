@@ -20,6 +20,7 @@ import { getEditorConfig, saveEditorConfig } from '@renderer/settings'
 import { keybindingService } from '@services/keybindingService'
 import { monaco } from '@renderer/monacoWorker'
 import { initMonacoTypeService } from '@services/monacoTypeService'
+import { detectEolFromContent, syncFileEolFromModel } from '@services/fileFormatService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { composerService } from '@renderer/agent/services/composerService'
 import type { StreamingEditState } from '@renderer/agent/types'
@@ -88,6 +89,7 @@ export default function Editor() {
   const updateFileContent = useStore((state) => state.updateFileContent)
   const updateFileDirtyState = useStore((state) => state.updateFileDirtyState)
   const markFileSaved = useStore((state) => state.markFileSaved)
+  const setFileEol = useStore((state) => state.setFileEol)
   const language = useStore((state) => state.language)
   const closeFile = useStore((state) => state.closeFile)
   const editorConfig = useStore((state) => state.editorConfig)
@@ -319,12 +321,14 @@ export default function Editor() {
         const { markFileSaved } = useStore.getState()
         markFileSaved(currentFilePath, model.getAlternativeVersionId())
       }
+      setFileEol(currentFilePath, detectEolFromContent(model.getValue()))
 
       const contentDisposable = editor.onDidChangeModelContent(() => {
         const currentVersionId = model.getAlternativeVersionId()
         const editorContent = editor.getValue()
         const { openFiles: currentFiles } = useStore.getState()
         const currentFile = currentFiles.find(f => f.path === currentFilePath)
+        syncFileEolFromModel(currentFilePath)
 
         if (currentFile && editorContent === currentFile.content) {
           markFileSaved(currentFilePath, currentVersionId)
@@ -368,7 +372,7 @@ export default function Editor() {
         if (formatAction) await formatAction.run()
       }
       const content = editorRef.current.getValue()
-      const success = await api.file.write(activeFile.path, content)
+      const success = await api.file.write(activeFile.path, content, activeFile.encoding)
       if (success) {
         if (config.formatOnSave && content !== activeFile.content) {
           updateFileContent(activeFile.path, content)

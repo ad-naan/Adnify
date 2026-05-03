@@ -18,12 +18,14 @@ export interface BottomBarPopoverProps {
     children: ReactNode
     /** 面板宽度 */
     width?: number
-    /** 面板高度 */
+    /** 面板高度；不传时自适应内容 */
     height?: number
     /** 角标内容（如数量） */
     badge?: string | number
     /** 语言 */
     language?: 'en' | 'zh'
+    /** 内容区域是否滚动 */
+    scrollable?: boolean
 }
 
 export default memo(function BottomBarPopover({
@@ -32,8 +34,9 @@ export default memo(function BottomBarPopover({
     title,
     children,
     width = 400,
-    height = 300,
+    height,
     badge,
+    scrollable = true,
 }: BottomBarPopoverProps) {
     const [isOpen, setIsOpen] = useState(false)
     const popoverRef = useRef<HTMLDivElement>(null)
@@ -47,10 +50,10 @@ export default memo(function BottomBarPopover({
     // 使用 useEscapeKey 处理 ESC 键关闭
     useEscapeKey(handleClose, isOpen)
 
-    const contentHeight = useMemo(() => 
-        title ? height - 40 : height,
-        [title, height]
-    )
+    const contentHeight = useMemo(() => {
+        if (height === undefined) return undefined
+        return title ? Math.max(0, height - 44) : height
+    }, [title, height])
 
     return (
         <div className="relative">
@@ -81,7 +84,7 @@ export default memo(function BottomBarPopover({
                 <div
                     ref={popoverRef}
                     className="absolute bottom-full right-0 mb-3 bg-surface/80 backdrop-blur-2xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden animate-slide-up z-50 origin-bottom-right"
-                    style={{ width, height }}
+                    style={{ width, ...(height !== undefined ? { height } : {}) }}
                 >
                     {/* 面板头部 */}
                     {title && (
@@ -97,7 +100,10 @@ export default memo(function BottomBarPopover({
                     )}
 
                     {/* 面板内容 */}
-                    <div className="overflow-auto custom-scrollbar" style={{ height: contentHeight }}>
+                    <div
+                        className={scrollable ? 'overflow-auto custom-scrollbar' : 'overflow-hidden'}
+                        style={contentHeight !== undefined ? { height: contentHeight } : undefined}
+                    >
                         {children}
                     </div>
                 </div>

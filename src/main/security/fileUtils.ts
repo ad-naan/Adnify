@@ -1,42 +1,88 @@
-/**
- * 文件操作工具函数
- * 从 secureFile.ts 拆分出来的通用文件操作
- */
-
 import { promises as fsPromises } from 'fs'
+import * as iconv from 'iconv-lite'
 
-/**
- * 读取带编码检测的文件
- * 自动处理 BOM 和二进制文件
- */
-export async function readFileWithEncoding(filePath: string): Promise<string | null> {
-  try {
-    const buffer = await fsPromises.readFile(filePath)
-    
-    // 检测 UTF-8 BOM
-    if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
-      return buffer.toString('utf-8').substring(3)
-    }
-    
-    // 检测二进制文件（包含 null 字节）
-    if (buffer.includes(0)) {
-      return '[binary file]'
-    }
-    
-    return buffer.toString('utf-8')
-  } catch {
-    return null
+export type SupportedEncoding = 'utf-8' | 'utf-8-bom' | 'gbk' | 'gb18030'
+
+export interface ReadFileResult {
+  content: string | null
+  encoding: SupportedEncoding
+}
+
+function normalizeEncoding(encoding?: string): SupportedEncoding {
+  switch ((encoding || '').toLowerCase()) {
+    case 'utf-8-bom':
+    case 'utf8bom':
+      return 'utf-8-bom'
+    case 'gbk':
+      return 'gbk'
+    case 'gb18030':
+      return 'gb18030'
+    default:
+      return 'utf-8'
   }
 }
 
-/**
- * 读取大文件片段
- * 用于预览大文件时只读取部分内容
- */
+function decodeBuffer(buffer: Buffer, encoding: SupportedEncoding): string {
+  if (encoding === 'gbk' || encoding === 'gb18030') {
+    return iconv.decode(buffer, encoding)
+  }
+
+  if (encoding === 'utf-8-bom') {
+    return buffer.toString('utf-8').replace(/^\uFEFF/, '')
+  }
+
+  if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.toString('utf-8').substring(3)
+  }
+
+  return buffer.toString('utf-8')
+}
+
+function encodeContent(content: string, encoding: SupportedEncoding): Buffer {
+  if (encoding === 'gbk' || encoding === 'gb18030') {
+    return iconv.encode(content, encoding)
+  }
+
+  if (encoding === 'utf-8-bom') {
+    return Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(content, 'utf-8')])
+  }
+
+  return Buffer.from(content, 'utf-8')
+}
+
+export async function readFileWithEncoding(filePath: string): Promise<string | null> {
+  const result = await readFileWithEncodingInfo(filePath)
+  return result.content
+}
+
+export async function readFileWithEncodingInfo(
+  filePath: string,
+  encoding?: string,
+): Promise<ReadFileResult> {
+  try {
+    const buffer = await fsPromises.readFile(filePath)
+
+    if (buffer.includes(0)) {
+      return { content: '[binary file]', encoding: 'utf-8' }
+    }
+
+    const resolvedEncoding = normalizeEncoding(
+      encoding || (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf ? 'utf-8-bom' : 'utf-8'),
+    )
+
+    return {
+      content: decodeBuffer(buffer, resolvedEncoding),
+      encoding: resolvedEncoding,
+    }
+  } catch {
+    return { content: null, encoding: normalizeEncoding(encoding) }
+  }
+}
+
 export async function readLargeFile(
   filePath: string,
   start: number,
-  maxLength: number
+  maxLength: number,
 ): Promise<string | null> {
   try {
     const fd = await fsPromises.open(filePath, 'r')
@@ -49,9 +95,6 @@ export async function readLargeFile(
   }
 }
 
-/**
- * 获取文件统计信息
- */
 export async function getFileStats(filePath: string): Promise<{
   size: number
   isDirectory: boolean
@@ -71,9 +114,6 @@ export async function getFileStats(filePath: string): Promise<{
   }
 }
 
-/**
- * 确保目录存在
- */
 export async function ensureDirectory(dirPath: string): Promise<boolean> {
   try {
     await fsPromises.mkdir(dirPath, { recursive: true })
@@ -83,42 +123,29 @@ export async function ensureDirectory(dirPath: string): Promise<boolean> {
   }
 }
 
-/**
- * 安全写入文件（先写入临时文件再重命名）
- */
 export async function safeWriteFile(
   filePath: string,
   content: string,
-  encoding: BufferEncoding = 'utf-8'
+  encoding: SupportedEncoding = 'utf-8',
 ): Promise<boolean> {
   const tempPath = `${filePath}.tmp.${Date.now()}`
-  
+
   try {
-    // 确保目录存在
     const path = await import('path')
     await ensureDirectory(path.dirname(filePath))
-    
-    // 写入临时文件
-    await fsPromises.writeFile(tempPath, content, encoding)
-    
-    // 重命名为目标文件
+    await fsPromises.writeFile(tempPath, encodeContent(content, normalizeEncoding(encoding)))
     await fsPromises.rename(tempPath, filePath)
-    
     return true
-  } catch (error) {
-    // 清理临时文件
+  } catch {
     try {
       await fsPromises.unlink(tempPath)
     } catch {
-      // 忽略清理错误
+      // ignore cleanup failure
     }
     return false
   }
 }
 
-/**
- * 检查文件是否存在
- */
 export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await fsPromises.access(filePath)
@@ -128,28 +155,22 @@ export async function fileExists(filePath: string): Promise<boolean> {
   }
 }
 
-/**
- * 安全删除文件或目录
- */
 export async function safeDelete(filePath: string): Promise<boolean> {
   try {
     const stats = await fsPromises.stat(filePath)
-    
+
     if (stats.isDirectory()) {
       await fsPromises.rm(filePath, { recursive: true, force: true })
     } else {
       await fsPromises.unlink(filePath)
     }
-    
+
     return true
   } catch {
     return false
   }
 }
 
-/**
- * 复制文件
- */
 export async function copyFile(src: string, dest: string): Promise<boolean> {
   try {
     const path = await import('path')
@@ -161,9 +182,6 @@ export async function copyFile(src: string, dest: string): Promise<boolean> {
   }
 }
 
-/**
- * 移动/重命名文件
- */
 export async function moveFile(src: string, dest: string): Promise<boolean> {
   try {
     const path = await import('path')

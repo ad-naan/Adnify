@@ -24,6 +24,8 @@ export { completionService } from './completionService'
 export { pathLinkService } from './pathLinkService'
 export { getFileInfo, getLargeFileEditorOptions, getLargeFileWarning, isLargeFile, isVeryLargeFile } from './largeFileService'
 export type { LargeFileInfo, FileChunk } from './largeFileService'
+export { detectEolFromContent, getModelEol, syncFileEolFromModel, applyFileEol } from './fileFormatService'
+export type { FileEol } from './fileFormatService'
 
 // ===== LSP 服务 =====
 export {
