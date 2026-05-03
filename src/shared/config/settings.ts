@@ -126,6 +126,8 @@ const defaultEditorConfig: EditorConfig = {
   fontSize: EDITOR_DEFAULTS.fontSize,
   chatFontSize: EDITOR_DEFAULTS.fontSize,
   fontFamily: EDITOR_DEFAULTS.fontFamily,
+  uiScale: EDITOR_DEFAULTS.uiScale,
+  layoutDensity: EDITOR_DEFAULTS.layoutDensity,
   tabSize: EDITOR_DEFAULTS.tabSize,
   wordWrap: EDITOR_DEFAULTS.wordWrap,
   lineHeight: EDITOR_DEFAULTS.lineHeight,

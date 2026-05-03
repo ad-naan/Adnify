@@ -73,6 +73,8 @@ export const TERMINAL_DEFAULTS = {
 export const EDITOR_DEFAULTS = {
   fontSize: 13,
   fontFamily: "'JetBrains Mono', 'JetBrainsMono', 'Fira Code', 'FiraCode-Retina', 'Consolas', 'Monaco', 'Hannotate SC', monospace, -apple-system",
+  uiScale: 1,
+  layoutDensity: 'comfortable' as const,
   tabSize: 2,
   wordWrap: 'on' as const,
   lineHeight: 1.5,

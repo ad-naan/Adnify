@@ -90,6 +90,23 @@ async function loadUserSettings(_isEmptyWindow: boolean): Promise<string | null>
     })
   }
 
+  const { editorConfig } = useStore.getState()
+  const persistedZoomFactor = typeof editorConfig?.uiScale === 'number'
+    ? Math.min(3, Math.max(0.5, editorConfig.uiScale))
+    : 1
+
+  try {
+    const appliedZoomFactor = await api.window.setZoomFactor(persistedZoomFactor)
+    if (Math.abs(appliedZoomFactor - persistedZoomFactor) > 0.001) {
+      useStore.getState().set('editorConfig', {
+        ...editorConfig,
+        uiScale: appliedZoomFactor,
+      })
+    }
+  } catch (error) {
+    logger.system.warn('[Init] Failed to restore window zoom factor:', error)
+  }
+
   startupMetrics.end('load-settings')
   return savedTheme as string | null
 }
