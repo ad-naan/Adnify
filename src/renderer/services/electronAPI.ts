@@ -43,6 +43,8 @@ function createGroupedAPI() {
       resize: (width: number, height: number, minWidth?: number, minHeight?: number) =>
         raw.resizeWindow(width, height, minWidth, minHeight),
       setTheme: (theme: 'light' | 'dark' | 'system', bgColor?: string) => raw.setTheme(theme, bgColor),
+      getZoomFactor: () => raw.getZoomFactor(),
+      setZoomFactor: (zoomFactor: number) => raw.setZoomFactor(zoomFactor),
     },
 
     // 文件操作

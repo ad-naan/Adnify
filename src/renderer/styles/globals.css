@@ -77,6 +77,9 @@
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-full: 9999px;
+  --layout-sidebar-width: 60px;
+  --layout-panel-padding: 1rem;
+  --layout-control-height: 2.5rem;
 }
 
 /* --- Global Custom Premium Cursors --- */
@@ -105,6 +108,24 @@ body {
   background-image:
     radial-gradient(circle at 50% 0%, rgb(var(--accent) / 0.05) 0%, transparent 50%);
   cursor: var(--cursor-default);
+}
+
+.layout-density-compact {
+  --layout-sidebar-width: 54px;
+  --layout-panel-padding: 0.75rem;
+  --layout-control-height: 2.25rem;
+}
+
+.layout-density-comfortable {
+  --layout-sidebar-width: 60px;
+  --layout-panel-padding: 1rem;
+  --layout-control-height: 2.5rem;
+}
+
+.layout-density-expanded {
+  --layout-sidebar-width: 66px;
+  --layout-panel-padding: 1.125rem;
+  --layout-control-height: 2.75rem;
 }
 
 /* Apply Custom Cursors Globally & Intercept Tailwind Utilities */

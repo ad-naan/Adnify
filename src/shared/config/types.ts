@@ -130,6 +130,8 @@ export interface EditorConfig {
   fontSize: number
   chatFontSize: number
   fontFamily: string
+  uiScale: number
+  layoutDensity: 'compact' | 'comfortable' | 'expanded'
   tabSize: number
   wordWrap: 'on' | 'off' | 'wordWrapColumn'
   lineHeight: number

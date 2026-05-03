@@ -57,6 +57,21 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
       return true
     })
 
+    ipcMain.handle('window:getZoomFactor', (event) => {
+      ensureTrustedIpcSender(event)
+      const win = BrowserWindow.fromWebContents(event.sender)
+      return win?.webContents.getZoomFactor() ?? 1
+    })
+
+    ipcMain.handle('window:setZoomFactor', (event, zoomFactor: number) => {
+      ensureTrustedIpcSender(event)
+      const win = BrowserWindow.fromWebContents(event.sender)
+      if (!win) return 1
+      const clamped = Math.min(3, Math.max(0.5, zoomFactor))
+      win.webContents.setZoomFactor(clamped)
+      return clamped
+    })
+
     // 渲染端准备完毕通知
     ipcMain.on('app:ready', (event) => {
       ensureTrustedIpcSender(event)

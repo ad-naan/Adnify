@@ -110,7 +110,7 @@ export default function UpdateIndicator() {
             transition={{ type: 'spring', damping: 25, stiffness: 400 }}
             className="absolute right-0 top-full mt-3 w-[320px] rounded-3xl bg-surface/80 backdrop-blur-3xl border border-border/50 shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden origin-top-right"
           >
-            <div className="flex items-center justify-between px-6 py-4 bg-white/5">
+            <div className="flex items-center justify-between px-6 py-4">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">{t.title}</span>
               <button
                 onClick={() => setShowPopover(false)}

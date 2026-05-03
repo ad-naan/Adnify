@@ -14,6 +14,8 @@ export interface EditorConfigSchema {
   fontSize?: number
   chatFontSize?: number
   fontFamily?: string
+  uiScale?: number
+  layoutDensity?: 'compact' | 'comfortable' | 'expanded'
   tabSize?: number
   wordWrap?: 'on' | 'off' | 'wordWrapColumn'
   lineHeight?: number
@@ -77,6 +79,10 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
   if (typeof config.fontSize === 'number') cleaned.fontSize = config.fontSize
   if (typeof config.chatFontSize === 'number') cleaned.chatFontSize = config.chatFontSize
   if (typeof config.fontFamily === 'string') cleaned.fontFamily = config.fontFamily
+  if (typeof config.uiScale === 'number') cleaned.uiScale = config.uiScale
+  if (config.layoutDensity === 'compact' || config.layoutDensity === 'comfortable' || config.layoutDensity === 'expanded') {
+    cleaned.layoutDensity = config.layoutDensity
+  }
   if (typeof config.tabSize === 'number') cleaned.tabSize = config.tabSize
   if (config.wordWrap === 'on' || config.wordWrap === 'off' || config.wordWrap === 'wordWrapColumn') {
     cleaned.wordWrap = config.wordWrap

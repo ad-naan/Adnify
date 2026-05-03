@@ -64,6 +64,7 @@ function AppContent() {
   const terminalVisible = useStore((state) => state.terminalVisible)
   const debugVisible = useStore((state) => state.debugVisible)
   const chatVisible = useStore((state) => state.chatVisible)
+  const editorConfig = useStore((state) => state.editorConfig)
 
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -75,6 +76,11 @@ function AppContent() {
 
   const hasWorkspace = useMemo(() => Boolean(workspace && workspace.roots.length > 0), [workspace])
   const isShellStudioActive = activeSidePanel === 'shell'
+  const layoutDensityClass = editorConfig.layoutDensity === 'compact'
+    ? 'layout-density-compact'
+    : editorConfig.layoutDensity === 'expanded'
+      ? 'layout-density-expanded'
+      : 'layout-density-comfortable'
 
   useWindowTitle()
   useFileWatcher()
@@ -101,7 +107,7 @@ function AppContent() {
   const handleCloseOnboarding = useCallback(() => setShowOnboarding(false), [])
 
   return (
-    <div className="h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative">
+    <div className={`h-screen flex flex-col bg-transparent overflow-hidden text-text-primary selection:bg-accent/30 selection:text-white relative ${layoutDensityClass}`}>
       <div className="relative z-10 flex flex-col h-full">
         <TitleBar />
 
