@@ -19,6 +19,7 @@ import { Logo } from '../common/Logo'
 import { workspaceManager } from '@services/WorkspaceManager'
 import { Button, Input, Select } from '../ui'
 import { motion, AnimatePresence, Variants } from 'framer-motion'
+import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
 
 interface OnboardingWizardProps {
   onComplete: () => void
@@ -485,31 +486,7 @@ function ThemeStep({
               : 'border-border hover:border-accent/30 bg-white/5'
               }`}
           >
-            <div
-              className="h-24 rounded-xl mb-3 border border-border overflow-hidden shadow-sm flex flex-col"
-              style={{ backgroundColor: `rgb(${theme.colors.background})` }}
-            >
-              <div
-                className="h-5 w-full border-b border-border flex items-center px-2 gap-1"
-                style={{ backgroundColor: `rgb(${theme.colors.backgroundSecondary})` }}
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-red-400/50" />
-                <div className="w-1.5 h-1.5 rounded-full bg-yellow-400/50" />
-                <div className="w-1.5 h-1.5 rounded-full bg-green-400/50" />
-              </div>
-              <div className="flex-1 p-2 flex gap-2">
-                <div className="w-1/4 h-full rounded bg-white/5 border border-border" />
-                <div className="flex-1 flex flex-col gap-1.5">
-                  <div className="w-1/2 h-1.5 rounded bg-white/10" />
-                  <div className="w-3/4 h-1.5 rounded bg-white/10" />
-                  <div className="w-full h-1.5 rounded bg-white/5" />
-                  <div className="flex gap-1 mt-auto">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: `rgb(${theme.colors.accent})` }} />
-                    <span className="text-[6px] opacity-50 font-mono">print("Hello")</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ThemeWorkbenchPreview theme={theme} className="mb-3 h-24" />
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-bold text-sm text-text-primary">{theme.name}</div>

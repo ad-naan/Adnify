@@ -485,6 +485,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeWindow: (width: number, height: number, minWidth?: number, minHeight?: number) =>
     ipcRenderer.invoke('window:resize', width, height, minWidth, minHeight),
   setTheme: (theme: 'light' | 'dark' | 'system', bgColor?: string) => ipcRenderer.invoke('window:setTheme', theme, bgColor),
+  getZoomFactor: () => ipcRenderer.invoke('window:getZoomFactor'),
+  setZoomFactor: (zoomFactor: number) => ipcRenderer.invoke('window:setZoomFactor', zoomFactor),
   setLanguage: (lang: Language) => ipcRenderer.send('i18n:changed', lang),
   openFile: () => ipcRenderer.invoke('file:open'),
   openFolder: () => ipcRenderer.invoke('file:openFolder'),

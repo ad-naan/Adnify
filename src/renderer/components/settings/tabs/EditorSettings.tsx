@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { themeManager } from '@/renderer/config/themeConfig'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
+import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
 
 // 预定义的触发字符选项
 const TRIGGER_CHAR_OPTIONS = [
@@ -64,7 +65,6 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                     {allThemes.map(themeId => {
                         const theme = themeManager.getThemeById(themeId)!
-                        const themeVars = theme.colors
                         return (
                             <button
                                 key={themeId}
@@ -74,10 +74,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     : 'border-border/50 bg-surface/30 hover:border-accent/30 hover:bg-surface/50'
                                     }`}
                             >
-                                <div className="flex gap-2.5 mb-4">
-                                    <div className="w-8 h-8 rounded-full shadow-md ring-2 ring-white/10" style={{ backgroundColor: `rgb(${themeVars.background})` }} title="Background" />
-                                    <div className="w-8 h-8 rounded-full shadow-md ring-2 ring-white/10" style={{ backgroundColor: `rgb(${themeVars.accent})` }} title="Accent" />
-                                </div>
+                                <ThemeWorkbenchPreview theme={theme} className="mb-4 h-[108px]" />
                                 <span className={`text-sm font-semibold capitalize block truncate transition-colors ${currentTheme === themeId ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>
                                     {themeId.replace(/-/g, ' ')}
                                 </span>

@@ -20,7 +20,10 @@ export default function ActivityBar() {
   ] as const
 
   return (
-    <div className="w-[60px] bg-background-secondary/80 backdrop-blur-xl border-r border-border/30 shadow-[1px_0_15px_rgba(0,0,0,0.03)] flex flex-col z-30 select-none items-center py-4">
+    <div
+      className="bg-background-secondary/80 backdrop-blur-xl border-r border-border/30 shadow-[1px_0_15px_rgba(0,0,0,0.03)] flex flex-col z-30 select-none items-center py-4"
+      style={{ width: 'var(--layout-sidebar-width)' }}
+    >
       {/* Top Actions */}
       <div className="flex-1 flex flex-col w-full items-center gap-3">
         {items.map((item) => (

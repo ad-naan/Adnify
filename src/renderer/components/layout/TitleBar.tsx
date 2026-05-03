@@ -6,6 +6,7 @@ import { Logo } from '../common/Logo'
 import WorkspaceDropdown from './WorkspaceDropdown'
 import UpdateIndicator from './UpdateIndicator'
 import { MascotIP } from '../mascot/MascotIP'
+import SkinPanel from './SkinPanel'
 
 // 检测是否为 Mac 平台
 const isMac = typeof navigator !== 'undefined' && (
@@ -16,7 +17,10 @@ const isMac = typeof navigator !== 'undefined' && (
 export default function TitleBar() {
   const { setShowQuickOpen, setShowAbout, language } = useStore(useShallow(s => ({ setShowQuickOpen: s.setShowQuickOpen, setShowAbout: s.setShowAbout, language: s.language })))
   return (
-    <div className="h-12 flex items-center justify-between px-0 drag-region select-none bg-background/40 backdrop-blur-md z-50 border-b border-border/30 shadow-[0_1px_15px_rgba(0,0,0,0.03)]">
+    <div
+      className="h-12 flex items-center justify-between px-0 drag-region select-none bg-background/40 backdrop-blur-md z-50 border-b border-border/30 shadow-[0_1px_15px_rgba(0,0,0,0.03)]"
+      style={{ paddingLeft: 'max(0px, calc(var(--layout-panel-padding) - 0.25rem))', paddingRight: 'max(0px, calc(var(--layout-panel-padding) - 0.25rem))' }}
+    >
 
       {/* Left - Branding & Workspace */}
       <div className={`
@@ -71,6 +75,8 @@ export default function TitleBar() {
       {/* Right - Window Controls & Actions */}
       <div className="flex items-center justify-end h-full pr-2 gap-1">
         <div className="no-drag flex items-center gap-1 h-full mr-2">
+          <SkinPanel />
+
           {/* Update Indicator */}
           <UpdateIndicator />
 
