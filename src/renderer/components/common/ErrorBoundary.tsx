@@ -9,6 +9,7 @@ import { AppError, formatErrorMessage } from '@/shared/errors'
 import { logger } from '@shared/utils/Logger'
 import { t } from '@renderer/i18n'
 import { useStore } from '@store'
+import { Button } from '../ui'
 
 interface Props {
   children: ReactNode
@@ -95,20 +96,22 @@ export class ErrorBoundary extends Component<Props, State> {
 
             {/* 操作按钮 */}
             <div className="flex gap-3">
-              <button
+              <Button
                 onClick={this.handleRetry}
-                className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary-hover)] transition-colors"
+                variant="primary"
+                size="md"
+                leftIcon={<RefreshCw className="w-4 h-4" />}
               >
-                <RefreshCw className="w-4 h-4" />
                 {t('errorBoundary.tryAgain', language)}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={this.handleGoHome}
-                className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
+                variant="secondary"
+                size="md"
+                leftIcon={<Home className="w-4 h-4" />}
               >
-                <Home className="w-4 h-4" />
                 {t('errorBoundary.reloadApp', language)}
-              </button>
+              </Button>
             </div>
 
             {/* 详细错误信息（开发模式） */}
