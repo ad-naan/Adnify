@@ -108,6 +108,7 @@ export default function SettingsModal() {
         aiInstructions,
         webSearchConfig,
         mcpConfig,
+        githubToken,
         enableFileLogging,
         editorConfig,
         securitySettings,
@@ -125,6 +126,7 @@ export default function SettingsModal() {
         aiInstructions: s.aiInstructions,
         webSearchConfig: s.webSearchConfig,
         mcpConfig: s.mcpConfig,
+        githubToken: s.githubToken,
         enableFileLogging: s.enableFileLogging,
         editorConfig: s.editorConfig,
         securitySettings: s.securitySettings,
@@ -147,6 +149,7 @@ export default function SettingsModal() {
     const [localAiInstructions, setLocalAiInstructions] = useState(aiInstructions)
     const [localWebSearchConfig, setLocalWebSearchConfig] = useState(webSearchConfig)
     const [localMcpConfig, setLocalMcpConfig] = useState(mcpConfig)
+    const [localGithubToken, setLocalGithubToken] = useState(githubToken)
     const [localEnableFileLogging, setLocalEnableFileLogging] = useState(enableFileLogging)
     const [localSecuritySettings, setLocalSecuritySettings] = useState(securitySettings)
     const [editorSettings, setEditorSettings] = useState<EditorSettingsState>(() => toEditorSettingsState(editorConfig))
@@ -163,6 +166,7 @@ export default function SettingsModal() {
         setLocalAiInstructions(aiInstructions)
         setLocalWebSearchConfig(webSearchConfig)
         setLocalMcpConfig(mcpConfig)
+        setLocalGithubToken(githubToken)
         setLocalEnableFileLogging(enableFileLogging)
         setLocalSecuritySettings(securitySettings)
         setEditorSettings(toEditorSettingsState(editorConfig))
@@ -176,6 +180,7 @@ export default function SettingsModal() {
         language,
         llmConfig,
         mcpConfig,
+        githubToken,
         promptTemplateId,
         providerConfigs,
         securitySettings,
@@ -231,20 +236,22 @@ export default function SettingsModal() {
         agentConfig: serializeComparable(agentConfig),
         webSearchConfig: serializeComparable(webSearchConfig),
         mcpConfig: serializeComparable(mcpConfig),
+        githubToken: serializeComparable(githubToken),
         providerConfigs: serializeComparable(providerConfigs),
         securitySettings: serializeComparable(securitySettings),
         editorConfig: serializeComparable(editorConfig),
-    }), [agentConfig, editorConfig, llmConfig, mcpConfig, providerConfigs, securitySettings, webSearchConfig])
+    }), [agentConfig, editorConfig, githubToken, llmConfig, mcpConfig, providerConfigs, securitySettings, webSearchConfig])
 
     const localSnapshots = useMemo(() => ({
         llmConfig: serializeComparable(localConfig),
         agentConfig: serializeComparable(localAgentConfig),
         webSearchConfig: serializeComparable(localWebSearchConfig),
         mcpConfig: serializeComparable(localMcpConfig),
+        githubToken: serializeComparable(localGithubToken),
         providerConfigs: serializeComparable(localProviderConfigs),
         securitySettings: serializeComparable(localSecuritySettings),
         editorConfig: serializeComparable(finalEditorConfig),
-    }), [finalEditorConfig, localAgentConfig, localConfig, localMcpConfig, localProviderConfigs, localSecuritySettings, localWebSearchConfig])
+    }), [finalEditorConfig, localAgentConfig, localConfig, localGithubToken, localMcpConfig, localProviderConfigs, localSecuritySettings, localWebSearchConfig])
 
     const isDirty = useMemo(() => {
         return localSnapshots.llmConfig !== sourceSnapshots.llmConfig ||
@@ -255,6 +262,7 @@ export default function SettingsModal() {
             localAiInstructions !== aiInstructions ||
             localSnapshots.webSearchConfig !== sourceSnapshots.webSearchConfig ||
             localSnapshots.mcpConfig !== sourceSnapshots.mcpConfig ||
+            localSnapshots.githubToken !== sourceSnapshots.githubToken ||
             localEnableFileLogging !== enableFileLogging ||
             localSnapshots.providerConfigs !== sourceSnapshots.providerConfigs ||
             localSnapshots.securitySettings !== sourceSnapshots.securitySettings ||
@@ -294,6 +302,7 @@ export default function SettingsModal() {
             set('aiInstructions', localAiInstructions)
             set('webSearchConfig', localWebSearchConfig)
             set('mcpConfig', localMcpConfig)
+            set('githubToken', localGithubToken)
             set('enableFileLogging', localEnableFileLogging)
             set('securitySettings', localSecuritySettings)
             set('providerConfigs', finalProviderConfigs)
@@ -328,6 +337,7 @@ export default function SettingsModal() {
         localAutoApprove,
         localConfig,
         localEnableFileLogging,
+        localGithubToken,
         localLanguage,
         localMcpConfig,
         localPromptTemplateId,
@@ -465,6 +475,8 @@ export default function SettingsModal() {
                         language={language}
                         enableFileLogging={localEnableFileLogging}
                         setEnableFileLogging={setLocalEnableFileLogging}
+                        githubToken={localGithubToken}
+                        setGithubToken={setLocalGithubToken}
                     />
                 )
             default:

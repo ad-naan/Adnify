@@ -525,7 +525,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         // 支持单个文件或多个文件
         const resolution = resolveReadFileRequest(args)
         if (!resolution.ok) {
-            return { success: false, result: '', error: `Validation failed: ${resolution.error}` }
+            return {
+                success: false,
+                result: '',
+                error: `Validation failed: ${resolution.error}${args.edits ? ' Example: when using edits[], do not also send top-level content/start_line/end_line/old_string/new_string.' : ''}`
+            }
         }
 
         const paths = resolution.mode === 'multi' ? resolution.args.paths : [resolution.args.path]
@@ -698,7 +702,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         // 判断使用哪种模式：content 单独存在时不触发 line mode（保持与 validate 逻辑一致）
         if (!resolution.ok) {
-            return { success: false, result: '', error: `Validation failed: ${resolution.error}` }
+            return {
+                success: false,
+                result: '',
+                error: `Validation failed: ${resolution.error}${args.edits ? ' Example: when using edits[], do not also send top-level content/start_line/end_line/old_string/new_string.' : ''}`
+            }
         }
 
         const hasBatchMode = resolution.mode === 'batch'

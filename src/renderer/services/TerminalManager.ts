@@ -304,6 +304,22 @@ class TerminalManagerClass {
     return container.clientWidth > 0 && container.clientHeight > 0
   }
 
+  private resizeTerminalIfReady(id: string, instance: XTermInstance | undefined): void {
+    if (!this.canFitTerminal(instance)) {
+      return
+    }
+
+    try {
+      instance.fitAddon.fit()
+      const dims = instance.fitAddon.proposeDimensions?.()
+      if (dims && dims.cols > 0 && dims.rows > 0) {
+        api.terminal.resize(id, dims.cols, dims.rows)
+      }
+    } catch (error) {
+      logger.system.warn(`[TerminalManager] Skipped terminal resize for ${id}`, error)
+    }
+  }
+
   constructor() {
     this.setupIpcListeners();
   }
@@ -638,9 +654,7 @@ class TerminalManagerClass {
               existing.webglAddon = undefined;
             });
           }
-          if (this.canFitTerminal(existing)) {
-            existing.fitAddon.fit();
-          }
+          this.resizeTerminalIfReady(id, existing);
         } catch { }
       }
       return true;
@@ -757,14 +771,7 @@ class TerminalManagerClass {
       }
     }
 
-    try {
-      fitAddon.fit();
-    } catch { }
-
-    const dims = fitAddon.proposeDimensions?.();
-    if (dims && dims.cols > 0 && dims.rows > 0) {
-      api.terminal.resize(id, dims.cols, dims.rows);
-    }
+    this.resizeTerminalIfReady(id, this.xtermInstances.get(id));
 
     return true;
   }
@@ -791,15 +798,7 @@ class TerminalManagerClass {
 
   fitTerminal(id: string) {
     const instance = this.xtermInstances.get(id);
-    if (!this.canFitTerminal(instance)) return;
-
-    try {
-      instance.fitAddon.fit();
-      const dims = instance.fitAddon.proposeDimensions?.();
-      if (dims && dims.cols > 0 && dims.rows > 0) {
-        api.terminal.resize(id, dims.cols, dims.rows);
-      }
-    } catch { }
+    this.resizeTerminalIfReady(id, instance);
   }
 
   closeTerminal(id: string) {

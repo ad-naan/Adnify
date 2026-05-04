@@ -226,6 +226,9 @@ export const SETTINGS = {
     default: defaultMcpConfig,
     syncToMain: 'mcpAutoConnect',
   },
+  githubToken: {
+    default: '' as string,
+  },
   aiInstructions: {
     default: '' as string,
   },
@@ -259,6 +262,7 @@ export type SettingsState = {
   securitySettings: SecuritySettings
   webSearchConfig: WebSearchConfig
   mcpConfig: McpConfig
+  githubToken: string
   aiInstructions: string
   onboardingCompleted: boolean
   enableFileLogging: boolean
@@ -286,6 +290,7 @@ export function getAllDefaults(): SettingsState {
     securitySettings: SETTINGS.securitySettings.default,
     webSearchConfig: SETTINGS.webSearchConfig.default,
     mcpConfig: SETTINGS.mcpConfig.default,
+    githubToken: SETTINGS.githubToken.default,
     aiInstructions: SETTINGS.aiInstructions.default,
     onboardingCompleted: SETTINGS.onboardingCompleted.default,
     enableFileLogging: SETTINGS.enableFileLogging.default,
