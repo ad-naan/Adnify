@@ -21,7 +21,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
 import { t } from '@renderer/i18n'
-import { getDirPath, joinPath, pathEquals, normalizePath } from '@shared/utils/pathUtils'
+import { getDirPath, joinPath, pathEquals, normalizePath, pathStartsWith } from '@shared/utils/pathUtils'
 import { formatShortcut, keybindingService } from '@services/keybindingService'
 import { globalConfirm } from '../common/ConfirmDialog'
 import { toast } from '../common/ToastProvider'
@@ -194,14 +194,31 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   useEffect(() => {
     if (!refreshSignal.tick) return
 
+    // 路径感知的 Set/Map 查找（兼容 / 和 \ 混用）
+    const setHasPath = (set: Set<string>, p: string) => {
+      if (set.has(p)) return true
+      for (const item of set) {
+        if (pathEquals(item, p)) return true
+      }
+      return false
+    }
+    const mapFindKey = (map: Map<string, unknown>, p: string): string | undefined => {
+      if (map.has(p)) return p
+      for (const key of map.keys()) {
+        if (pathEquals(key, p)) return key
+      }
+      return undefined
+    }
+
     setChildrenCache((prev) => {
       let changed = false
       const next = new Map(prev)
 
       refreshSignal.affectedPaths.forEach((path) => {
-        if (!expandedFolders.has(path)) {
-          if (next.has(path)) {
-            next.delete(path)
+        if (!setHasPath(expandedFolders, path)) {
+          const cacheKey = mapFindKey(next, path)
+          if (cacheKey !== undefined) {
+            next.delete(cacheKey)
             changed = true
           }
         }
@@ -209,7 +226,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
       refreshSignal.deletedPaths.forEach((deletedPath) => {
         for (const key of next.keys()) {
-          if (pathEquals(key, deletedPath) || key.startsWith(`${deletedPath}/`) || key.startsWith(`${deletedPath}\\`)) {
+          if (pathEquals(key, deletedPath) || pathStartsWith(key, deletedPath)) {
             next.delete(key)
             changed = true
           }
@@ -219,9 +236,18 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       return changed ? next : prev
     })
 
-    refreshSignal.affectedPaths.forEach((path) => {
-      if (expandedFolders.has(path)) {
-        void loadChildren(path, { forceRefresh: true, showLoading: false })
+    refreshSignal.affectedPaths.forEach((affectedPath) => {
+      // 找到 expandedFolders 中实际存储的路径（可能格式不同），确保 cache key 一致
+      let matchedPath: string | null = null
+      if (expandedFolders.has(affectedPath)) {
+        matchedPath = affectedPath
+      } else {
+        for (const ep of expandedFolders) {
+          if (pathEquals(ep, affectedPath)) { matchedPath = ep; break }
+        }
+      }
+      if (matchedPath) {
+        void loadChildren(matchedPath, { forceRefresh: true, showLoading: false })
       }
     })
   }, [refreshSignal, expandedFolders, loadChildren])
@@ -485,7 +511,11 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       variant: 'danger',
     })
     if (confirmed) {
-      await api.file.delete(node.item.path)
+      const success = await api.file.delete(node.item.path)
+      if (!success) {
+        toast.error(language === 'zh' ? '删除失败' : 'Delete failed')
+        return
+      }
       directoryCacheService.invalidate(getDirPath(node.item.path))
       setChildrenCache((prev) => {
         const next = new Map(prev)
