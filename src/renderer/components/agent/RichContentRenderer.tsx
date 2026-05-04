@@ -14,6 +14,7 @@ import type { ToolRichContent } from '@/shared/types'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { getFileName } from '@shared/utils/pathUtils'
 import { SafeMarkdownHTML, SafeHTML } from '@components/common/SafeHTML'
+import { writeClipboardText } from '@utils/clipboard'
 
 interface RichContentRendererProps {
   content: ToolRichContent[]
@@ -141,7 +142,7 @@ function ImageContent({ item }: { item: ToolRichContent }) {
           <>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(imageSrc);
+                writeClipboardText(imageSrc);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
               }}
@@ -181,7 +182,7 @@ function CodeContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: st
       icon={Code}
       noPadding
       actions={
-        <button onClick={() => { navigator.clipboard.writeText(item.text || ''); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary">
+        <button onClick={() => { writeClipboardText(item.text || ''); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary">
           {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
         </button>
       }

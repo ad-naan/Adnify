@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from '../common/ToastProvider'
 import { keybindingService, formatShortcut } from '@services/keybindingService'
 import { isPreviewDocumentPath } from '@shared/types/preview'
+import { writeClipboardText } from '@utils/clipboard'
 
 interface TabContextMenuProps {
   x: number
@@ -72,7 +73,7 @@ export function TabContextMenu({
     {
       label: isZh ? '复制路径' : 'Copy Path',
       action: () => {
-        navigator.clipboard.writeText(filePath)
+        writeClipboardText(filePath)
         toast.success(isZh ? '已复制路径' : 'Path Copied')
       },
     },
