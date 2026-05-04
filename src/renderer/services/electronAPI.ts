@@ -31,6 +31,10 @@ function createGroupedAPI() {
     // 应用生命周期
     appReady: () => raw.appReady(),
     getAppVersion: () => raw.getAppVersion(),
+    clipboard: {
+      readText: () => raw.clipboardReadText(),
+      writeText: (text: string) => raw.clipboardWriteText(text),
+    },
 
     // 窗口控制
     window: {

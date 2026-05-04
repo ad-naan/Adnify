@@ -36,6 +36,7 @@ import type { AvailableShell, RemoteServerConfig, ShellLink, ShellPreset, ShellS
 import { ShellManagerDialog } from './ShellManagerDialog'
 import { RemoteFileBrowser } from './RemoteFileBrowser'
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 type Selection =
   | { kind: 'root'; root: string }
@@ -380,7 +381,7 @@ export default function ShellStudio() {
 
   const copyTerminalOutput = useCallback(async () => {
     if (!terminalPreview) return
-    await navigator.clipboard.writeText(terminalPreview)
+    await writeClipboardText(terminalPreview)
   }, [terminalPreview])
 
   const sendTerminalOutputToAi = useCallback(() => {
