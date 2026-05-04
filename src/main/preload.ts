@@ -2,7 +2,7 @@
  * 安全的 Preload Script
  */
 
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { clipboard, contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 
 // 本地类型定义（避免从 renderer 导入）
 type Language = 'en' | 'zh'
@@ -457,6 +457,10 @@ export interface ElectronAPI {
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
+
+  // Clipboard
+  clipboardReadText: () => Promise<string>
+  clipboardWriteText: (text: string) => Promise<boolean>
 }
 
 // =================== 暴露 API ===================
@@ -475,6 +479,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_: IpcRendererEvent, event: OpenFilesPayload) => callback(event)
     ipcRenderer.on('app:open-files', handler)
     return () => ipcRenderer.removeListener('app:open-files', handler)
+  },
+  clipboardReadText: async () => clipboard.readText(),
+  clipboardWriteText: async (text: string) => {
+    clipboard.writeText(text)
+    return true
   },
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
