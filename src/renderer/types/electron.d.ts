@@ -665,6 +665,10 @@ export interface ElectronAPI {
 
   // Command
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
+
+  // Clipboard
+  clipboardReadText: () => Promise<string>
+  clipboardWriteText: (text: string) => Promise<boolean>
 }
 
 declare global {
