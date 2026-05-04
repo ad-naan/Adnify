@@ -169,6 +169,7 @@ function buildPersistedSettingsPayload(
     onboardingCompleted: settings.onboardingCompleted,
     webSearchConfig: settings.webSearchConfig,
     mcpConfig: settings.mcpConfig,
+    githubToken: settings.githubToken,
     enableFileLogging: settings.enableFileLogging,
   }
 }
@@ -284,6 +285,9 @@ class SettingsService {
         : defaults.securitySettings,
       webSearchConfig: { ...defaults.webSearchConfig, ...(saved.webSearchConfig as object || {}) },
       mcpConfig: { ...defaults.mcpConfig, ...(saved.mcpConfig as object || {}) },
+      githubToken: typeof saved.githubToken === 'string'
+        ? saved.githubToken
+        : defaults.githubToken,
       aiInstructions: (saved.aiInstructions as string) || defaults.aiInstructions,
       onboardingCompleted: typeof saved.onboardingCompleted === 'boolean'
         ? saved.onboardingCompleted

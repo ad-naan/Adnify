@@ -16,6 +16,7 @@ import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getExecutableName, getNpmCommand } from '@shared/utils/pathUtils'
 import Store from 'electron-store'
+import { fetchLatestRelease } from '../services/githubApiService'
 
 // ============ 配置持久化 ============
 
@@ -925,17 +926,9 @@ export async function installClangd(): Promise<LspInstallResult> {
   try {
     // 获取最新 release 信息
     logger.lsp.debug('[LSP Installer] Fetching latest clangd release info...')
-    const releaseRes = await fetch('https://api.github.com/repos/clangd/clangd/releases/latest')
-
-    if (!releaseRes.ok) {
-      logger.lsp.error(`[LSP Installer] Failed to fetch clangd release info: HTTP ${releaseRes.status}`, {
-        status: releaseRes.status,
-        statusText: releaseRes.statusText,
-      })
-      return { success: false, error: `Failed to fetch release info: HTTP ${releaseRes.status}` }
-    }
-
-    const release = await releaseRes.json() as { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> }
+    const release = await fetchLatestRelease('clangd', 'clangd', {
+      userAgent: 'Adnify-LSP-Installer',
+    }) as { tag_name?: string; assets?: Array<{ name: string; browser_download_url: string }> }
     const tag = release.tag_name
 
     if (!tag) {
@@ -1051,17 +1044,9 @@ export async function installZls(): Promise<LspInstallResult> {
 
   try {
     logger.lsp.debug('[LSP Installer] Fetching latest zls release info...')
-    const releaseRes = await fetch('https://api.github.com/repos/zigtools/zls/releases/latest')
-
-    if (!releaseRes.ok) {
-      logger.lsp.error(`[LSP Installer] Failed to fetch zls release info: HTTP ${releaseRes.status}`, {
-        status: releaseRes.status,
-        statusText: releaseRes.statusText,
-      })
-      return { success: false, error: `Failed to fetch release info: HTTP ${releaseRes.status}` }
-    }
-
-    const release = await releaseRes.json() as { assets?: Array<{ name: string; browser_download_url: string }> }
+    const release = await fetchLatestRelease('zigtools', 'zls', {
+      userAgent: 'Adnify-LSP-Installer',
+    }) as { assets?: Array<{ name: string; browser_download_url: string }> }
 
     // 确定平台和架构
     const archMap: Record<string, string> = { x64: 'x86_64', arm64: 'aarch64', ia32: 'x86' }

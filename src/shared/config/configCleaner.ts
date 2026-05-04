@@ -284,6 +284,7 @@ export interface AppSettingsSchema {
   mcpConfig?: {
     autoConnect?: boolean
   }
+  githubToken?: string
 }
 
 export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSchema {
@@ -334,6 +335,8 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
     cleaned.mcpConfig = {}
     if (typeof mcp.autoConnect === 'boolean') cleaned.mcpConfig.autoConnect = mcp.autoConnect
   }
+
+  if (typeof config.githubToken === 'string') cleaned.githubToken = config.githubToken
 
   return cleaned
 }
