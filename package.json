@@ -26,7 +26,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
     "assets:icons": "node scripts/generate-platform-icons.js",
-    "postinstall": "node scripts/download-wasm.js",
+    "postinstall": "node scripts/download-wasm.js && npx electron-builder install-app-deps",
     "rebuild": "npx electron-rebuild -f -w node-pty",
     "rebuild:all": "npx electron-rebuild -f -w"
   },
