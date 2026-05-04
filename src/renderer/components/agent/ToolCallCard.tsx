@@ -16,6 +16,7 @@ import { getExtension, getFileName } from '@shared/utils/pathUtils'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { themeManager } from '../../config/themeConfig'
+import { writeClipboardText } from '@utils/clipboard'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -812,7 +813,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     currentTheme={currentTheme}
                     onCopyResult={() => {
                         if (toolCall.result) {
-                            navigator.clipboard.writeText(toolCall.result)
+                            writeClipboardText(toolCall.result)
                         }
                     }}
                     setTerminalVisible={setTerminalVisible}

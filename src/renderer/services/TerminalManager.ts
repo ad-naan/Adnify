@@ -18,6 +18,7 @@ import { getEditorConfig } from "@renderer/settings";
 import { logger } from "@utils/Logger";
 import { toAppError } from "@shared/utils/errorHandler";
 import { isMac } from "@services/keybindingService";
+import { writeClipboardText } from "@utils/clipboard";
 import { getInteractiveTerminalBackend } from "@/renderer/agent/tools/commandRuntime";
 
 // ===== 类型定义 =====
@@ -692,7 +693,7 @@ class TerminalManagerClass {
       if (mod(event) && event.key === "c" && event.type === "keydown") {
         const selection = terminal.getSelection();
         if (selection) {
-          navigator.clipboard.writeText(selection);
+          writeClipboardText(selection);
           return false;
         }
         // macOS 上 Cmd+C 没有选中内容时不发送中断信号
@@ -721,7 +722,7 @@ class TerminalManagerClass {
       ) {
         const selection = terminal.getSelection();
         if (selection) {
-          navigator.clipboard.writeText(selection);
+          writeClipboardText(selection);
         }
         return false;
       }
