@@ -16,6 +16,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { Button } from '../ui'
 import { terminalManager, TerminalManagerState } from '@/renderer/services/TerminalManager'
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
+import { readClipboardText, writeClipboardText } from '@/renderer/services/clipboardService'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@renderer/i18n'
 import { formatShortcut } from '@services/keybindingService'
@@ -546,11 +547,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 const term = contextMenu.termId ? terminalManager.getXterm(contextMenu.termId) : null
                                 const sel = term?.getSelection()
                                 if (sel) {
-                                    try {
-                                        await navigator.clipboard.writeText(sel)
-                                    } catch {
-                                        // ignore
-                                    }
+                                    await writeClipboardText(sel)
                                 }
                                 setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
@@ -562,7 +559,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
                             onClick={async () => {
                                 try {
-                                    const text = await navigator.clipboard.readText()
+                                    const text = await readClipboardText()
                                     if (text && contextMenu.termId) {
                                         terminalManager.writeToTerminal(contextMenu.termId, text)
                                     }
