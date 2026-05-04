@@ -20,6 +20,7 @@ import { readClipboardText, writeClipboardText } from '@/renderer/services/clipb
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@renderer/i18n'
 import { formatShortcut } from '@services/keybindingService'
+import { writeClipboardText } from '@utils/clipboard'
 
 const TerminalPanel = memo(function TerminalPanel() {
     const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language })))
@@ -547,6 +548,11 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 const term = contextMenu.termId ? terminalManager.getXterm(contextMenu.termId) : null
                                 const sel = term?.getSelection()
                                 if (sel) {
+                                    try {
+                                        await writeClipboardText(sel)
+                                    } catch {
+                                        // ignore
+                                    }
                                     await writeClipboardText(sel)
                                 }
                                 setContextMenu(prev => ({ ...prev, visible: false }))
