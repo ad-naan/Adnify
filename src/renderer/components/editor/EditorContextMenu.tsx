@@ -13,6 +13,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import { formatShortcut } from '@services/keybindingService'
 import type { editor } from 'monaco-editor'
 import { logger } from '@shared/utils/Logger'
+import { writeClipboardText } from '@utils/clipboard'
 import { navigateToDefinition } from './hooks/useEditorActions'
 
 // 支持 Call Hierarchy 的语言（只有支持函数/方法调用的语言才有意义）
@@ -184,7 +185,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     const model = editor.getModel()
     if (selection && model && !selection.isEmpty()) {
       const text = model.getValueInRange(selection)
-      await navigator.clipboard.writeText(text)
+      await writeClipboardText(text)
       editor.executeEdits('cut', [{
         range: selection,
         text: '',
@@ -199,7 +200,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
     const model = editor.getModel()
     if (selection && model && !selection.isEmpty()) {
       const text = model.getValueInRange(selection)
-      await navigator.clipboard.writeText(text)
+      await writeClipboardText(text)
     }
     onClose()
   }

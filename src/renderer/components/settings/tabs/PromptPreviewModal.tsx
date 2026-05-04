@@ -8,6 +8,7 @@ import { getPromptTemplateById, getPromptTemplatePreview } from '@renderer/agent
 import { toast } from '@components/common/ToastProvider'
 import { Button, Modal } from '@components/ui'
 import { PromptPreviewModalProps } from '../types'
+import { writeClipboardText } from '@utils/clipboard'
 
 export function PromptPreviewModal({ templateId, language, onClose }: PromptPreviewModalProps) {
     const template = getPromptTemplateById(templateId)
@@ -71,7 +72,7 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
 
     const handleCopy = async () => {
         try {
-            await navigator.clipboard.writeText(previewContent)
+            await writeClipboardText(previewContent)
             setCopied(true)
             toast.success(language === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard')
             setTimeout(() => setCopied(false), 2000)

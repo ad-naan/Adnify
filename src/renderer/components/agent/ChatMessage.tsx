@@ -51,6 +51,7 @@ import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import type { ToolStreamingPreview } from '@shared/types'
 import { publicAsset } from '@utils/publicAsset'
+import { writeClipboardText } from '@utils/clipboard'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -110,7 +111,7 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
   }, [children])
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(codeText)
+    writeClipboardText(codeText)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [codeText])
@@ -898,7 +899,7 @@ const ChatMessage = React.memo(({
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(textContent)
+    writeClipboardText(textContent)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
