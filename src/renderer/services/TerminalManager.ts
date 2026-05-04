@@ -20,6 +20,7 @@ import { toAppError } from "@shared/utils/errorHandler";
 import { isMac } from "@services/keybindingService";
 import { writeClipboardText } from "@utils/clipboard";
 import { getInteractiveTerminalBackend } from "@/renderer/agent/tools/commandRuntime";
+import { readClipboardText, writeClipboardText } from "@/renderer/services/clipboardService";
 
 // ===== 类型定义 =====
 
@@ -693,7 +694,7 @@ class TerminalManagerClass {
       if (mod(event) && event.key === "c" && event.type === "keydown") {
         const selection = terminal.getSelection();
         if (selection) {
-          writeClipboardText(selection);
+          void writeClipboardText(selection);
           return false;
         }
         // macOS 上 Cmd+C 没有选中内容时不发送中断信号
@@ -707,9 +708,9 @@ class TerminalManagerClass {
       // Cmd/Ctrl+V for paste
       if (mod(event) && !event.shiftKey && event.key === "v") {
         event.preventDefault();
-        navigator.clipboard.readText().then((text) => {
+        readClipboardText().then((text) => {
           handlePasteText(text);
-        });
+        }).catch(() => { });
         return false;
       }
 
@@ -722,7 +723,7 @@ class TerminalManagerClass {
       ) {
         const selection = terminal.getSelection();
         if (selection) {
-          writeClipboardText(selection);
+          void writeClipboardText(selection);
         }
         return false;
       }
@@ -734,8 +735,7 @@ class TerminalManagerClass {
         event.key === "V" &&
         event.type === "keydown"
       ) {
-        navigator.clipboard
-          .readText()
+        readClipboardText()
           .then((text) => {
             if (text) {
               api.terminal.write(id, text);
