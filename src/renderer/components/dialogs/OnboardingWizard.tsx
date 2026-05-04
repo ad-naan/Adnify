@@ -97,6 +97,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         securitySettings: defaultSecuritySettings,
         webSearchConfig: defaultWebSearchConfig,
         mcpConfig: defaultMcpConfig,
+        githubToken: '',
         promptTemplateId: 'default',
         enableFileLogging: false,
       })

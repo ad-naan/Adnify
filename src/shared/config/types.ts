@@ -200,4 +200,5 @@ export interface AppSettings {
   onboardingCompleted: boolean
   webSearchConfig?: WebSearchConfig
   mcpConfig?: McpConfig
+  githubToken?: string
 }

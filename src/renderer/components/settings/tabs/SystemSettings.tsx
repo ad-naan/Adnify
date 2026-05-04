@@ -21,6 +21,8 @@ interface SystemSettingsProps {
     language: Language
     enableFileLogging: boolean
     setEnableFileLogging: (enabled: boolean) => void
+    githubToken: string
+    setGithubToken: (token: string) => void
 }
 
 function DataPathDisplay() {
@@ -32,7 +34,7 @@ function DataPathDisplay() {
     return <span>{path || '...'}</span>
 }
 
-export function SystemSettings({ language, enableFileLogging, setEnableFileLogging }: SystemSettingsProps) {
+export function SystemSettings({ language, enableFileLogging, setEnableFileLogging, githubToken, setGithubToken }: SystemSettingsProps) {
     const [isClearing, setIsClearing] = useState(false)
     const [includeApiKeys, setIncludeApiKeys] = useState(false)
     const [logPath, setLogPath] = useState('')
@@ -75,6 +77,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             securitySettings: getStore().securitySettings,
             webSearchConfig: getStore().webSearchConfig,
             mcpConfig: getStore().mcpConfig,
+            githubToken: getStore().githubToken,
             aiInstructions: getStore().aiInstructions,
             onboardingCompleted: getStore().onboardingCompleted,
             enableFileLogging: getStore().enableFileLogging,
@@ -234,6 +237,48 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
 
     return (
         <div className="space-y-8 animate-fade-in pb-10">
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <ExternalLink className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? 'GitHub 集成' : 'GitHub Integration'}
+                    </h4>
+                </div>
+                <div className="space-y-4">
+                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                        <div>
+                            <div className="text-sm font-bold text-text-primary">
+                                {language === 'zh' ? 'GitHub Token' : 'GitHub Token'}
+                            </div>
+                            <div className="text-xs text-text-muted mt-1 opacity-70">
+                                {language === 'zh'
+                                    ? '用于 GitHub Releases 请求，减少速率限制，供 LSP 安装和更新检查复用'
+                                    : 'Used for GitHub Releases requests to reduce rate limiting across LSP installs and update checks'}
+                            </div>
+                        </div>
+
+                        <input
+                            type="password"
+                            value={githubToken}
+                            onChange={(e) => setGithubToken(e.target.value)}
+                            placeholder={language === 'zh' ? '输入 GitHub Personal Access Token' : 'Enter GitHub Personal Access Token'}
+                            className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
+                            autoComplete="off"
+                            spellCheck={false}
+                        />
+
+                        <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                            <div>
+                                {language === 'zh'
+                                    ? 'Token 会保存在本地设置中，不会自动导出；只有在手动勾选“包含 API 密钥”时才会进入导出文件。'
+                                    : 'The token is stored locally and is excluded from exports unless you explicitly include API keys.'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section>
                 <div className="flex items-center gap-2 mb-5 ml-1">
                     <HardDrive className="w-4 h-4 text-accent" />

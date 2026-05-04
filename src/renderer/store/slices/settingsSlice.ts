@@ -147,6 +147,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         securitySettings: state.securitySettings,
         webSearchConfig: state.webSearchConfig,
         mcpConfig: state.mcpConfig,
+        githubToken: state.githubToken,
         aiInstructions: state.aiInstructions,
         onboardingCompleted: state.onboardingCompleted,
         enableFileLogging: state.enableFileLogging,

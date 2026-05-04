@@ -26,6 +26,7 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
     securitySettings: settings.securitySettings,
     webSearchConfig: settings.webSearchConfig,
     mcpConfig: settings.mcpConfig,
+    githubToken: includeApiKeys ? settings.githubToken : '',
     enableFileLogging: settings.enableFileLogging,
     onboardingCompleted: settings.onboardingCompleted,
     llmConfig: {

@@ -16,6 +16,7 @@ import { logger } from '@shared/utils/Logger'
 import { ErrorCode, toAppError } from '@shared/utils/errorHandler'
 import * as fs from 'fs'
 import * as path from 'path'
+import { fetchLatestRelease } from '../githubApiService'
 
 export interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -182,9 +183,9 @@ class UpdateService {
             '[Updater] checkForUpdates() resolved, result:',
             result
               ? JSON.stringify({
-                  updateInfo: result.updateInfo ? { version: result.updateInfo.version } : null,
-                  cancellationToken: result.cancellationToken ? 'present' : null,
-                })
+                updateInfo: result.updateInfo ? { version: result.updateInfo.version } : null,
+                cancellationToken: result.cancellationToken ? 'present' : null,
+              })
               : 'null'
           )
 
@@ -251,39 +252,18 @@ class UpdateService {
       const timeoutId = setTimeout(() => controller.abort(), 30 * 1000)
 
       try {
-        const response = await fetch('https://api.github.com/repos/adnaan-worker/adnify/releases/latest', {
-          headers: {
-            Accept: 'application/vnd.github.v3+json',
-            'User-Agent': 'Adnify-Updater',
-          },
+        const latestRelease = await fetchLatestRelease('adnaan-worker', 'adnify', {
+          userAgent: 'Adnify-Updater',
           signal: controller.signal,
-        })
-
-        clearTimeout(timeoutId)
-
-        if (!response.ok) {
-          if (response.status === 403) {
-            const remaining = response.headers.get('X-RateLimit-Remaining')
-            const resetTime = response.headers.get('X-RateLimit-Reset')
-            logger.system.warn(`[Updater] Rate limited. Remaining: ${remaining}, Reset: ${resetTime}`)
-            throw new Error('GitHub API 请求频率超限，请稍后再试')
-          }
-
-          if (response.status === 404) {
-            this.updateStatus({ status: 'not-available' })
-            return this.status
-          }
-
-          throw new Error(`GitHub API error: ${response.status}`)
-        }
-
-        const release = (await response.json()) as {
+        }) as {
           tag_name: string
           body: string
           published_at: string
           assets: Array<{ name: string; browser_download_url: string }>
         }
+        clearTimeout(timeoutId)
 
+        const release = latestRelease
         const latestVersion = release.tag_name.replace(/^v/, '')
         const currentVersion = app.getVersion()
 
