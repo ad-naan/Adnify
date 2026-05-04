@@ -7,7 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
-import { pathEquals, pathStartsWith, getDirname } from '@shared/utils/pathUtils'
+import { pathEquals, pathStartsWith, getDirname, normalizePath } from '@shared/utils/pathUtils'
 import type { FileItem } from '@shared/types'
 
 class DirectoryCacheService {
@@ -27,30 +27,31 @@ class DirectoryCacheService {
      * 获取目录内容（优先从缓存）
      */
     async getDirectory(path: string, forceRefresh = false): Promise<FileItem[]> {
+        const key = normalizePath(path)
         // 检查缓存
         if (!forceRefresh) {
-            const cached = this.cache.get(path)
+            const cached = this.cache.get(key)
             if (cached) {
                 return cached
             }
         }
 
         // 检查是否有正在进行的请求（避免重复请求）
-        const pending = this.pendingRequests.get(path)
+        const pending = this.pendingRequests.get(key)
         if (pending) {
             return pending
         }
 
         // 发起新请求
         const request = this.fetchDirectory(path)
-        this.pendingRequests.set(path, request)
+        this.pendingRequests.set(key, request)
 
         try {
             const items = await request
-            this.cache.set(path, items)
+            this.cache.set(key, items)
             return items
         } finally {
-            this.pendingRequests.delete(path)
+            this.pendingRequests.delete(key)
         }
     }
 
@@ -71,7 +72,7 @@ class DirectoryCacheService {
      * 使指定路径的缓存失效
      */
     invalidate(path: string) {
-        this.cache.delete(path)
+        this.cache.delete(normalizePath(path))
     }
 
     /**
@@ -113,7 +114,7 @@ class DirectoryCacheService {
      * 预加载目录（用于展开文件夹时预加载子目录）
      */
     async preload(paths: string[]) {
-        const uncached = paths.filter(p => !this.cache.has(p))
+        const uncached = paths.filter(p => !this.cache.has(normalizePath(p)))
         
         // 并行加载，但限制并发数
         const batchSize = 5
