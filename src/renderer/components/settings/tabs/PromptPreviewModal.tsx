@@ -1,5 +1,5 @@
 /**
- * Prompt 预览模态框组件
+ * Prompt preview modal component
  */
 
 import { useState, useEffect, useMemo } from 'react'
@@ -8,7 +8,7 @@ import { getPromptTemplateById, getPromptTemplatePreview } from '@renderer/agent
 import { toast } from '@components/common/ToastProvider'
 import { Button, Modal } from '@components/ui'
 import { PromptPreviewModalProps } from '../types'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 export function PromptPreviewModal({ templateId, language, onClose }: PromptPreviewModalProps) {
     const template = getPromptTemplateById(templateId)
@@ -71,14 +71,15 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
     }, [sections, activeSection])
 
     const handleCopy = async () => {
-        try {
-            await writeClipboardText(previewContent)
-            setCopied(true)
-            toast.success(language === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard')
-            setTimeout(() => setCopied(false), 2000)
-        } catch {
+        const success = await writeClipboardText(previewContent)
+        if (!success) {
             toast.error(language === 'zh' ? '复制失败' : 'Copy failed')
+            return
         }
+
+        setCopied(true)
+        toast.success(language === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard')
+        setTimeout(() => setCopied(false), 2000)
     }
 
     const highlightText = (text: string, query: string) => {
@@ -119,7 +120,6 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
     return (
         <Modal isOpen={true} onClose={onClose} title={language === 'zh' ? '完整提示词预览' : 'Full Prompt Preview'} size="5xl" noPadding>
             <div className="flex h-[700px] bg-background">
-                {/* Sidebar Navigation */}
                 <div className="w-64 border-r border-border-subtle bg-surface/30 flex flex-col">
                     <div className="p-4 border-b border-border-subtle">
                         <div className="relative">
@@ -158,7 +158,6 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
                     </div>
                 </div>
 
-                {/* Content Area */}
                 <div className="flex-1 flex flex-col min-w-0">
                     <div className="px-6 py-3 bg-surface/20 border-b border-border-subtle flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -205,7 +204,9 @@ export function PromptPreviewModal({ templateId, language, onClose }: PromptPrev
                     </div>
                     <div className="px-8 py-4 border-t border-border-subtle bg-surface/30 flex items-center justify-between">
                         <p className="text-xs text-text-muted italic">
-                            {language === 'zh' ? '提示词包含：核心身份、沟通风格、代码质量标准、工具定义、工作流规范和环境信息' : 'Prompt includes: Core identity, communication style, code quality standards, tool definitions, workflow guidelines, and environment info'}
+                            {language === 'zh'
+                                ? '提示词包含：核心身份、沟通风格、代码质量标准、工具定义、工作流规范和环境信息'
+                                : 'Prompt includes: Core identity, communication style, code quality standards, tool definitions, workflow guidelines, and environment info'}
                         </p>
                         <Button variant="ghost" size="sm" onClick={onClose} className="text-text-muted hover:text-text-primary">
                             {language === 'zh' ? '关闭' : 'Close'}

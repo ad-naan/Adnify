@@ -13,7 +13,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getLanguage } from './utils/languageMap'
 import { getEditorConfig } from '@renderer/settings'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface DiffViewerProps {
   originalContent: string
@@ -43,8 +43,8 @@ export default function DiffViewer({
   const fileName = getFileName(filePath) || filePath
   const editorConfig = useMemo(() => getEditorConfig(), [])
 
-  const copyToClipboard = useCallback(() => {
-    writeClipboardText(modifiedContent)
+  const copyToClipboard = useCallback(async () => {
+    await writeClipboardText(modifiedContent)
   }, [modifiedContent])
 
   const MonacoWrapper = (

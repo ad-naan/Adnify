@@ -14,7 +14,7 @@ import type { ToolRichContent } from '@/shared/types'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { getFileName } from '@shared/utils/pathUtils'
 import { SafeMarkdownHTML, SafeHTML } from '@components/common/SafeHTML'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface RichContentRendererProps {
   content: ToolRichContent[]
@@ -141,8 +141,9 @@ function ImageContent({ item }: { item: ToolRichContent }) {
         actions={
           <>
             <button
-              onClick={() => {
-                writeClipboardText(imageSrc);
+              onClick={async () => {
+                const success = await writeClipboardText(imageSrc)
+                if (!success) return
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
               }}
@@ -182,7 +183,12 @@ function CodeContent({ item, maxHeight }: { item: ToolRichContent; maxHeight: st
       icon={Code}
       noPadding
       actions={
-        <button onClick={() => { writeClipboardText(item.text || ''); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary">
+        <button onClick={async () => {
+          const success = await writeClipboardText(item.text || '')
+          if (!success) return
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        }} className="p-0.5 hover:bg-surface-elevated rounded text-text-muted hover:text-text-primary">
           {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
         </button>
       }

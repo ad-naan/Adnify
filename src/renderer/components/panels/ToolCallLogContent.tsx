@@ -22,7 +22,7 @@ import { JsonHighlight } from '@/renderer/utils/jsonHighlight'
 import { useStore } from '@/renderer/store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useShallow } from 'zustand/react/shallow'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface ToolCallLogContentProps {
   language?: 'en' | 'zh'
@@ -56,7 +56,8 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
   }
 
   const handleCopy = async (id: string, data: unknown) => {
-    await writeClipboardText(JSON.stringify(data, null, 2))
+    const success = await writeClipboardText(JSON.stringify(data, null, 2))
+    if (!success) return
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
   }
