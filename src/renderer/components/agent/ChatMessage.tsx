@@ -52,6 +52,7 @@ import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import type { ToolStreamingPreview } from '@shared/types'
 import { publicAsset } from '@utils/publicAsset'
+import { writeClipboardText } from '@utils/clipboard'
 
 interface ChatMessageProps {
   message: ChatMessageType

@@ -25,6 +25,7 @@ import { Input, Button, Modal, Select } from '@components/ui'
 import { getFileName, joinPath, normalizePath, toFullPath } from '@shared/utils/pathUtils'
 import { ConflictResolver } from '@components/git/ConflictResolver'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
+import { writeClipboardText } from '@utils/clipboard'
 
 // ==================== 类型定义 ====================
 type GitTab = 'changes' | 'branches' | 'stash' | 'history'
@@ -2195,7 +2196,7 @@ Commit message:`
                                         onCherryPick={() => handleCherryPick(commit.hash)}
                                         onRevert={() => handleRevertCommit(commit.hash)}
                                         onCopyHash={() => {
-                                            navigator.clipboard.writeText(commit.hash)
+                                            writeClipboardText(commit.hash)
                                             toast.success(tt('git.hashCopied'))
                                         }}
                                         onClick={async () => {

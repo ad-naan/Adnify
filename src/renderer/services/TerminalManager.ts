@@ -18,6 +18,7 @@ import { getEditorConfig } from "@renderer/settings";
 import { logger } from "@utils/Logger";
 import { toAppError } from "@shared/utils/errorHandler";
 import { isMac } from "@services/keybindingService";
+import { writeClipboardText } from "@utils/clipboard";
 import { getInteractiveTerminalBackend } from "@/renderer/agent/tools/commandRuntime";
 import { readClipboardText, writeClipboardText } from "@/renderer/services/clipboardService";
 

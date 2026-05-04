@@ -28,6 +28,7 @@ import { toast } from '../common/ToastProvider'
 import { Input, ContextMenu, ContextMenuItem } from '../ui'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { explorerClipboardService, type ExplorerClipboardItem } from '@services/explorerClipboardService'
+import { writeClipboardText } from '@utils/clipboard'
 import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
@@ -648,14 +649,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   }, [clipboardItem, focusedPath, flattenedNodes, handleCopyItem, handlePasteForNode, handlePasteIntoDirectory, renamingPath, workspacePath, handleRenameStart])
 
   const handleCopyPath = useCallback((node: FlattenedNode) => {
-    navigator.clipboard.writeText(node.item.path)
+    writeClipboardText(node.item.path)
     toast.success(t('pathCopied', language) || 'Path copied')
   }, [language])
 
   const handleCopyRelativePath = useCallback((node: FlattenedNode) => {
     if (workspacePath) {
       const relativePath = node.item.path.replace(workspacePath, '').replace(/^[\\/]/, '')
-      navigator.clipboard.writeText(relativePath)
+      writeClipboardText(relativePath)
       toast.success(t('pathCopied', language) || 'Path copied')
     }
   }, [workspacePath, language])
