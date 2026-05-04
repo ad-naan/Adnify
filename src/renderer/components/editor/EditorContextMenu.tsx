@@ -13,7 +13,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import { formatShortcut } from '@services/keybindingService'
 import type { editor } from 'monaco-editor'
 import { logger } from '@shared/utils/Logger'
-import { writeClipboardText } from '@utils/clipboard'
+import { readClipboardText, writeClipboardText } from '@/renderer/services/clipboardService'
 import { navigateToDefinition } from './hooks/useEditorActions'
 
 // 支持 Call Hierarchy 的语言（只有支持函数/方法调用的语言才有意义）
@@ -207,7 +207,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
 
   const handlePaste = async () => {
     try {
-      const text = await navigator.clipboard.readText()
+      const text = await readClipboardText()
       if (text) {
         editor.focus()
         const selection = editor.getSelection()

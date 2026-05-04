@@ -16,7 +16,7 @@ import { getExtension, getFileName } from '@shared/utils/pathUtils'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { themeManager } from '../../config/themeConfig'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
