@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from '../common/ToastProvider'
 import { keybindingService, formatShortcut } from '@services/keybindingService'
 import { isPreviewDocumentPath } from '@shared/types/preview'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface TabContextMenuProps {
   x: number
@@ -55,6 +55,7 @@ export function TabContextMenu({
 
     document.addEventListener('mousedown', handleClickOutside)
     document.addEventListener('keydown', handleEscape)
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
@@ -72,8 +73,9 @@ export function TabContextMenu({
       : []),
     {
       label: isZh ? '复制路径' : 'Copy Path',
-      action: () => {
-        writeClipboardText(filePath)
+      action: async () => {
+        const success = await writeClipboardText(filePath)
+        if (!success) return
         toast.success(isZh ? '已复制路径' : 'Path Copied')
       },
     },
@@ -114,7 +116,7 @@ export function TabContextMenu({
           <button
             key={item.label || `item-${index}`}
             onClick={() => {
-              item.action?.()
+              void item.action?.()
               onClose()
             }}
             disabled={item.disabled}
@@ -128,4 +130,3 @@ export function TabContextMenu({
     </div>
   )
 }
-

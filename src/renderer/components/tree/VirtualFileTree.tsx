@@ -28,7 +28,7 @@ import { toast } from '../common/ToastProvider'
 import { Input, ContextMenu, ContextMenuItem } from '../ui'
 import { directoryCacheService } from '@services/directoryCacheService'
 import { explorerClipboardService, type ExplorerClipboardItem } from '@services/explorerClipboardService'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
@@ -678,15 +678,17 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
   }, [clipboardItem, focusedPath, flattenedNodes, handleCopyItem, handlePasteForNode, handlePasteIntoDirectory, renamingPath, workspacePath, handleRenameStart])
 
-  const handleCopyPath = useCallback((node: FlattenedNode) => {
-    writeClipboardText(node.item.path)
+  const handleCopyPath = useCallback(async (node: FlattenedNode) => {
+    const success = await writeClipboardText(node.item.path)
+    if (!success) return
     toast.success(t('pathCopied', language) || 'Path copied')
   }, [language])
 
-  const handleCopyRelativePath = useCallback((node: FlattenedNode) => {
+  const handleCopyRelativePath = useCallback(async (node: FlattenedNode) => {
     if (workspacePath) {
       const relativePath = node.item.path.replace(workspacePath, '').replace(/^[\\/]/, '')
-      writeClipboardText(relativePath)
+      const success = await writeClipboardText(relativePath)
+      if (!success) return
       toast.success(t('pathCopied', language) || 'Path copied')
     }
   }, [workspacePath, language])

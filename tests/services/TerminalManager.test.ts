@@ -172,7 +172,7 @@ describe('TerminalManager command sessions', () => {
       terminalManager.mountTerminal(termId, container)
       resizeMock.mockClear()
 
-      container.isConnected = false
+      Object.defineProperty(container, 'isConnected', { configurable: true, value: false })
       terminalManager.fitTerminal(termId)
 
       expect(resizeMock).not.toHaveBeenCalled()

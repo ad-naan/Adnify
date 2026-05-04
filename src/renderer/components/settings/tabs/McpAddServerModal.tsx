@@ -43,7 +43,7 @@ import {
   type McpPresetCategory,
   type McpEnvConfig,
 } from '@shared/types/mcp'
-import { writeClipboardText } from '@utils/clipboard'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface McpAddServerModalProps {
   isOpen: boolean
