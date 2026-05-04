@@ -43,6 +43,7 @@ import {
   type McpPresetCategory,
   type McpEnvConfig,
 } from '@shared/types/mcp'
+import { writeClipboardText } from '@utils/clipboard'
 
 interface McpAddServerModalProps {
   isOpen: boolean
@@ -654,7 +655,7 @@ export default function McpAddServerModal({
                 <p className="text-sm text-text-muted">{language === 'zh' ? selectedPreset.setupNoteZh : selectedPreset.setupNote}</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 px-3 py-2 bg-black/30 rounded font-mono text-xs text-text-primary">{selectedPreset.setupCommand}</code>
-                  <Button variant="secondary" size="sm" onClick={() => navigator.clipboard.writeText(selectedPreset.setupCommand!)}>
+                  <Button variant="secondary" size="sm" onClick={() => writeClipboardText(selectedPreset.setupCommand!)}>
                     {language === 'zh' ? '复制' : 'Copy'}
                   </Button>
                 </div>
