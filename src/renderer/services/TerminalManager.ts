@@ -294,6 +294,15 @@ class TerminalManagerClass {
   // IPC 监听器清理函数
   private ipcCleanup: (() => void) | null = null;
 
+  private canFitTerminal(instance: XTermInstance | undefined): instance is XTermInstance {
+    const container = instance?.container
+    if (!instance || !container || !container.isConnected) {
+      return false
+    }
+
+    return container.clientWidth > 0 && container.clientHeight > 0
+  }
+
   constructor() {
     this.setupIpcListeners();
   }
@@ -612,8 +621,11 @@ class TerminalManagerClass {
     if (this.xtermInstances.has(id)) {
       const existing = this.xtermInstances.get(id)!;
       if (existing.container !== container) {
-        existing.terminal.open(container);
         existing.container = container;
+        if (!container.isConnected) {
+          return true;
+        }
+        existing.terminal.open(container);
         try {
           // 如果之前被卸载了 WebGL，则重新挂载
           if (!existing.webglAddon) {
@@ -625,7 +637,9 @@ class TerminalManagerClass {
               existing.webglAddon = undefined;
             });
           }
-          existing.fitAddon.fit();
+          if (this.canFitTerminal(existing)) {
+            existing.fitAddon.fit();
+          }
         } catch { }
       }
       return true;
@@ -777,7 +791,7 @@ class TerminalManagerClass {
 
   fitTerminal(id: string) {
     const instance = this.xtermInstances.get(id);
-    if (!instance) return;
+    if (!this.canFitTerminal(instance)) return;
 
     try {
       instance.fitAddon.fit();
@@ -808,6 +822,7 @@ class TerminalManagerClass {
 
     const xterm = this.xtermInstances.get(id);
     if (xterm) {
+      xterm.container = null;
       xterm.terminal.dispose();
       this.xtermInstances.delete(id);
     }

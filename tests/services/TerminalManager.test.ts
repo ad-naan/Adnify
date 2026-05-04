@@ -156,4 +156,28 @@ describe('TerminalManager command sessions', () => {
       terminalManager.cleanup()
     }
   })
+
+  it('ignores delayed fit calls after the terminal container is detached', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
+      const container = {
+        childElementCount: 0,
+        clientWidth: 800,
+        clientHeight: 600,
+        isConnected: true,
+      } as HTMLDivElement
+
+      terminalManager.mountTerminal(termId, container)
+      resizeMock.mockClear()
+
+      container.isConnected = false
+      terminalManager.fitTerminal(termId)
+
+      expect(resizeMock).not.toHaveBeenCalled()
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
 })
