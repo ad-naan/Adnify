@@ -429,7 +429,7 @@ export function registerSecureFileHandlers(
 
     // 大目录保护
     try {
-      const stat = await fsPromises.stat(filePath)
+      const stat = await fsPromises.lstat(filePath)
       if (stat.isDirectory()) {
         const dirSize = await calculateDirectorySize(filePath)
         if (dirSize > 100 * 1024 * 1024) {
@@ -444,7 +444,7 @@ export function registerSecureFileHandlers(
     }
 
     try {
-      const stat = await fsPromises.stat(filePath)
+      const stat = await fsPromises.lstat(filePath)
       if (stat.isDirectory()) {
         await fsPromises.rm(filePath, { recursive: true, force: true })
       } else {
