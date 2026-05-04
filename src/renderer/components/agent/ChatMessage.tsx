@@ -47,6 +47,7 @@ import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { CompressionDigestCard } from './CompressionDigestCard'
 import { t } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import type { ToolStreamingPreview } from '@shared/types'
@@ -109,8 +110,9 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
     return text.replace(/\n$/, '')
   }, [children])
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(codeText)
+  const handleCopy = useCallback(async () => {
+    const success = await writeClipboardText(codeText)
+    if (!success) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [codeText])
@@ -897,8 +899,9 @@ const ChatMessage = React.memo(({
     setIsEditing(false)
   }
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(textContent)
+  const handleCopy = async () => {
+    const success = await writeClipboardText(textContent)
+    if (!success) return
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
