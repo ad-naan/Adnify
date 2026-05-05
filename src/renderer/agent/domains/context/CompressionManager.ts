@@ -11,6 +11,7 @@ import { logger } from '@utils/Logger'
 import { getAgentConfig } from '../../utils/AgentConfig'
 import { pruneMessages } from 'ai'
 import { countTokens, countContentTokens } from '@shared/utils/tokenCounter'
+import type { WorkingMemoryHealth } from './WorkingMemory'
 import type { ChatMessage, AssistantMessage, ToolResultMessage, UserMessage, ToolCall, MessageContent } from '../../types'
 import { type CompressionLevel } from './compressionShared'
 
@@ -27,6 +28,8 @@ export interface CompressionStats {
   savedPercent: number    // 节省百分比
   messageCount: number    // 消息数量
   needsHandoff: boolean
+  inputUsageRatio: number
+  memoryHealth: WorkingMemoryHealth
   lastUpdatedAt: number
 }
 
@@ -346,7 +349,8 @@ export function updateStats(
   usage: { promptTokens: number; completionTokens: number },
   contextLimit: number,
   previousStats: CompressionStats | null,
-  messageCount: number
+  messageCount: number,
+  memoryHealth: WorkingMemoryHealth
 ): CompressionStats {
   const inputTokens = usage.promptTokens
   const outputTokens = usage.completionTokens
@@ -373,6 +377,8 @@ export function updateStats(
     savedPercent,
     messageCount,
     needsHandoff: level >= 4,
+    inputUsageRatio: ratio,
+    memoryHealth,
     lastUpdatedAt: Date.now(),
   }
 }

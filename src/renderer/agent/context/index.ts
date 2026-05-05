@@ -25,6 +25,11 @@ export {
 
 // Handoff 管理
 export { buildHandoffContext, buildWelcomeMessage } from '../domains/context/HandoffManager'
+export {
+  buildWorkingMemoryContext,
+  calculateWorkingMemoryHealth,
+  type WorkingMemoryHealth,
+} from '../domains/context/WorkingMemory'
 
 // 类型
 export type {
