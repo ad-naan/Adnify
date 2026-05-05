@@ -7,11 +7,14 @@ import type { ChatMessage, MessageContent, TodoItem } from '../../types'
 import type { LLMMessage } from '@/shared/types'
 import type { CompressionLevel } from '../context/compressionShared'
 import { prepareMessages, estimateMessagesTokens } from '../context/CompressionManager'
+import { buildWorkingMemoryContext } from '../context/WorkingMemory'
+import type { StructuredSummary } from '../context/types'
 import { buildLLMApiMessages } from './MessageConverter'
 import { countTokens } from '@shared/utils/tokenCounter'
 
 export interface RuntimeStateContext {
   handoffContext?: string
+  workingMemory?: StructuredSummary | null
   todos?: TodoItem[]
   pendingObjective?: string
   pendingSteps?: string[]
@@ -158,6 +161,10 @@ export class MessageAssembler {
 
     if (runtimeState.handoffContext?.trim()) {
       sections.push(runtimeState.handoffContext.trim())
+    }
+
+    if (runtimeState.workingMemory) {
+      sections.push(buildWorkingMemoryContext(runtimeState.workingMemory))
     }
 
     if (runtimeState.pendingObjective || (runtimeState.pendingSteps && runtimeState.pendingSteps.length > 0)) {

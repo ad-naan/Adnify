@@ -170,11 +170,14 @@ export default function StatusBar() {
   ).length
 
   const layerColorClass =
-    compressionStats?.level === 4 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
-      compressionStats?.level === 3 ? 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]' :
-        compressionStats?.level === 2 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
-          compressionStats?.level === 1 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
-            'text-text-muted group-hover:text-text-primary'
+    compressionStats?.memoryHealth?.risk === 'high' ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
+      compressionStats?.memoryHealth?.risk === 'medium' ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
+        compressionStats?.memoryHealth?.risk === 'low' ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.4)]' :
+          compressionStats?.level === 4 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
+            compressionStats?.level === 3 ? 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]' :
+              compressionStats?.level === 2 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
+                compressionStats?.level === 1 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
+                  'text-text-muted group-hover:text-text-primary'
 
   const contextIndicatorCopy = useMemo(() => ({
     compressing: language === 'zh' ? '压缩中' : 'Compressing',
@@ -341,7 +344,7 @@ export default function StatusBar() {
                         <Maximize2 className={`w-3 h-3 transition-colors ${layerColorClass}`} />
                       </div>
                       <span className="text-[9px] font-bold font-mono text-text-muted group-hover:text-text-primary transition-colors">
-                        {compressionStats ? `${(compressionStats.ratio * 100).toFixed(1)}%` : '0%'}
+                        {compressionStats?.memoryHealth ? `${Math.round(compressionStats.memoryHealth.score)}%` : '0%'}
                       </span>
                     </div>
                   </motion.div>

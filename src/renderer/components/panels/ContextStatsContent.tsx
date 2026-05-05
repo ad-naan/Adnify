@@ -1,4 +1,4 @@
-import { Layers, Coins, Zap, AlertTriangle, ChevronRight, ArrowRightCircle, Loader2 } from 'lucide-react'
+import { Coins, Zap, AlertTriangle, ChevronRight, ArrowRightCircle, Loader2, BrainCircuit } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import {
   useAgentStore,
@@ -46,6 +46,8 @@ export default function ContextStatsContent({
   const currentLevel = (compressionStats?.level ?? 0) as CompressionLevel
   const needsHandoff = compressionStats?.needsHandoff ?? currentLevel >= 4
   const ratio = compressionStats?.ratio ?? 0
+  const memoryHealth = compressionStats?.memoryHealth
+  const memoryScore = memoryHealth?.score ?? 0
   const contextLimit = compressionStats?.contextLimit ?? 128000
   const inputTokens = compressionStats?.inputTokens ?? 0
 
@@ -78,11 +80,24 @@ export default function ContextStatsContent({
       : undefined
 
   const progressColor = useMemo(() => {
+    if (memoryScore >= 80) return 'bg-emerald-500'
+    if (memoryScore >= 55) return 'bg-yellow-500'
+    if (memoryScore > 0) return 'bg-red-500'
+    return 'bg-emerald-500'
+  }, [memoryScore])
+
+  const inputProgressColor = useMemo(() => {
     if (ratio >= 0.95) return 'bg-red-500'
     if (ratio >= 0.85) return 'bg-orange-500'
     if (ratio >= 0.7) return 'bg-yellow-500'
-    return 'bg-emerald-500'
+    return 'bg-blue-500'
   }, [ratio])
+
+  const memoryRiskLabel = memoryHealth?.risk === 'low'
+    ? (language === 'zh' ? '低风险' : 'Low Risk')
+    : memoryHealth?.risk === 'medium'
+      ? (language === 'zh' ? '中风险' : 'Medium Risk')
+      : (language === 'zh' ? '高风险' : 'High Risk')
 
   const handleManualCompress = async () => {
     if (!currentThread || isCreatingHandoff) return
@@ -120,14 +135,14 @@ export default function ContextStatsContent({
         <div className="mb-3">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-text-muted" />
+              <BrainCircuit className="w-4 h-4 text-text-muted" />
               <span className="text-xs font-medium text-text-secondary">
-                {language === 'zh' ? '上下文使用' : 'Context Usage'}
+                {language === 'zh' ? '记忆连续性' : 'Memory Continuity'}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <span className={`text-xs font-bold font-mono ${LEVEL_COLORS[currentLevel]}`}>
-                {Math.round(ratio * 100)}%
+                {Math.round(memoryScore)}%
               </span>
               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${LEVEL_BG[currentLevel]}/20 ${LEVEL_COLORS[currentLevel]}`}>
                 L{currentLevel}
@@ -138,14 +153,14 @@ export default function ContextStatsContent({
           <div className="h-2 bg-text-primary/[0.05] rounded-full overflow-hidden">
             <div
               className={`h-full ${progressColor} transition-all duration-500 rounded-full`}
-              style={{ width: `${Math.min(ratio * 100, 100)}%` }}
+              style={{ width: `${Math.min(memoryScore, 100)}%` }}
             />
           </div>
 
           <div className="flex justify-between mt-1 text-[9px] text-text-muted/50 font-mono">
             <span>0</span>
-            <span className="text-yellow-500/50">50%</span>
-            <span className="text-red-500/50">100%</span>
+            <span className="text-yellow-500/50">{memoryRiskLabel}</span>
+            <span>100</span>
           </div>
         </div>
 
@@ -160,10 +175,10 @@ export default function ContextStatsContent({
           </div>
           <div className="p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
             <div className="text-[9px] text-text-muted uppercase">
-              {language === 'zh' ? '上下文限制' : 'Limit'}
+              {language === 'zh' ? '输入占用' : 'Input Use'}
             </div>
             <div className="text-sm font-mono font-bold text-text-secondary">
-              {formatK(contextLimit)}
+              {Math.round(ratio * 100)}%
             </div>
           </div>
           <div className="p-2 rounded-lg bg-surface/50 border border-text-primary/[0.05]">
@@ -173,6 +188,19 @@ export default function ContextStatsContent({
             <div className={`text-sm font-mono font-bold ${LEVEL_COLORS[currentLevel]}`}>
               {levelNames[currentLevel]}
             </div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-[9px] text-text-muted mb-1">
+            <span>{language === 'zh' ? '本轮输入窗口占用' : 'Per-request input window usage'}</span>
+            <span className="font-mono">{formatK(inputTokens)} / {formatK(contextLimit)}</span>
+          </div>
+          <div className="h-1.5 bg-text-primary/[0.05] rounded-full overflow-hidden">
+            <div
+              className={`h-full ${inputProgressColor} transition-all duration-500 rounded-full`}
+              style={{ width: `${Math.min(ratio * 100, 100)}%` }}
+            />
           </div>
         </div>
       </div>

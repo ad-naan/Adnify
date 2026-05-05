@@ -5,3 +5,4 @@
 export * from './ContextAssembler'
 export * from './CompressionManager'
 export * from './summaryService'
+export * from './WorkingMemory'

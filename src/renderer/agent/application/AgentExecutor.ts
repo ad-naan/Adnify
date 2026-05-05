@@ -155,11 +155,12 @@ export class AgentExecutor {
       if (thread) {
         runtimeState = {
           handoffContext: thread.handoffContext,
+          workingMemory: thread.contextSummary,
           todos: thread.todos,
           pendingObjective: thread.pendingObjective,
           pendingSteps: thread.pendingSteps,
         }
-        if (thread.handoffContext || (thread.todos && thread.todos.length > 0) || thread.pendingObjective || (thread.pendingSteps && thread.pendingSteps.length > 0)) {
+        if (thread.handoffContext || thread.contextSummary || (thread.todos && thread.todos.length > 0) || thread.pendingObjective || (thread.pendingSteps && thread.pendingSteps.length > 0)) {
           logger.agent.info('[AgentExecutor] Injected runtime state context')
         }
       }

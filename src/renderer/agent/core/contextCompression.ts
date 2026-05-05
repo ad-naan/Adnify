@@ -3,6 +3,7 @@ import { useStore } from '@store'
 import { useAgentStore, type ThreadBoundStore } from '../store/AgentStore'
 import { EventBus } from './EventBus'
 import { generateSummary } from '../domains/context'
+import { calculateWorkingMemoryHealth } from '../domains/context/WorkingMemory'
 import { LEVEL_NAMES, updateStats, type CompressionStats } from '../domains/context/CompressionManager'
 import { executeAutoHandoff } from '../services/autoHandoffService'
 import { prepareHandoffForThread, type PreparedHandoffResult } from '../services/handoffSessionService'
@@ -198,12 +199,15 @@ export async function checkAndHandleCompression(
 ): Promise<CompressionCheckResult> {
   const thread = getLiveThread(threadId)
   const messageCount = thread?.messages.length || 0
+  const userTurns = thread?.messages.filter(message => message.role === 'user').length || 0
+  const memoryHealth = calculateWorkingMemoryHealth(thread?.contextSummary, userTurns)
   const previousStats = thread?.compressionStats || null
   const newStats = updateStats(
     { promptTokens: usage.input, completionTokens: usage.output },
     contextLimit,
     previousStats,
-    messageCount
+    messageCount,
+    memoryHealth
   )
   const reconciliation = budgetController?.reconcile(
     usage.input,
