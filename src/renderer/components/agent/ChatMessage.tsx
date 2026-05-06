@@ -40,7 +40,6 @@ import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Tooltip } from '../ui/Tooltip'
-import { Modal } from '../ui/Modal'
 import { LazyImage } from '../common/LazyImage'
 import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
@@ -52,6 +51,7 @@ import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import type { ToolStreamingPreview } from '@shared/types'
 import { publicAsset } from '@utils/publicAsset'
+import { ImageLightbox } from './ImageLightbox'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -875,7 +875,7 @@ const ChatMessage = React.memo(({
   const [isEditing, setIsEditing] = useState(false)
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
-  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
   const { editorConfig, language } = useStore(useShallow(s => ({ editorConfig: s.editorConfig, language: s.language })))
   const fontSize = editorConfig.chatFontSize ?? editorConfig.fontSize
 
@@ -1094,7 +1094,7 @@ const ChatMessage = React.memo(({
                         return (
                           <div
                             key={`img-${img.source.media_type}-${i}`}
-                            onClick={() => setPreviewImage(imgSrc)}
+                            onClick={() => setPreviewImageIndex(i)}
                             className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
                           >
                             <LazyImage
@@ -1108,20 +1108,16 @@ const ChatMessage = React.memo(({
                     </div>
                   )}
 
-                  <Modal isOpen={!!previewImage} onClose={() => setPreviewImage(null)} size="full" noPadding showCloseButton={false}>
-                    <div
-                      className="w-full h-full flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-zoom-out"
-                      onClick={() => setPreviewImage(null)}
-                    >
-                      {previewImage && (
-                        <img
-                          src={previewImage}
-                          alt="Preview"
-                          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                        />
-                      )}
-                    </div>
-                  </Modal>
+                  <ImageLightbox
+                    isOpen={previewImageIndex !== null}
+                    images={images.map((img) => ({
+                      src: `data:${img.source.media_type};base64,${img.source.data}`,
+                      alt: 'Preview',
+                    }))}
+                    initialIndex={previewImageIndex ?? 0}
+                    alt="Preview"
+                    onClose={() => setPreviewImageIndex(null)}
+                  />
 
                   <div className="text-[14px] leading-relaxed">
                     <MarkdownContent content={textContent} fontSize={fontSize} />
