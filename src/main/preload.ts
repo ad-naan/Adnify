@@ -237,7 +237,7 @@ export interface ElectronAPI {
   // LLM
   sendMessage: (params: LLMSendMessageParams) => Promise<void>
   compactContext: (params: LLMSendMessageParams) => Promise<{ content?: string; usage?: any; metadata?: any; error?: string; code?: string }>
-  abortMessage: () => void
+  abortMessage: (requestId?: string) => void
   // Structured Output
   analyzeCode: (params: any) => Promise<any>
   analyzeCodeStream: (params: any) => Promise<any>
@@ -556,7 +556,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   sendMessage: (params: LLMSendMessageParams) => ipcRenderer.invoke('llm:sendMessage', params),
   compactContext: (params: LLMSendMessageParams) => ipcRenderer.invoke('llm:compactContext', params),
-  abortMessage: () => ipcRenderer.send('llm:abort'),
+  abortMessage: (requestId?: string) => ipcRenderer.send('llm:abort', requestId),
   // Structured Output
   analyzeCode: (params: any) => ipcRenderer.invoke('llm:analyzeCode', params),
   analyzeCodeStream: (params: any) => ipcRenderer.invoke('llm:analyzeCodeStream', params),

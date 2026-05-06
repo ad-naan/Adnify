@@ -267,12 +267,18 @@ export class AgentClass {
       this.runningTasks.delete(targetThreadId)
     }
 
-    api.llm.abort()
+    const thread = targetThreadId ? store.threads[targetThreadId] : store.getCurrentThread()
+    const effectiveRequestId = targetThreadId
+      ? this.runningTasks.get(targetThreadId)?.requestId
+        || thread?.streamState?.requestId
+        || thread?.executionMeta?.requestId
+      : undefined
+
+    api.llm.abort(effectiveRequestId)
     if (targetThreadId) {
-      approvalService.reject(useAgentStore.getState().threads[targetThreadId]?.executionMeta?.requestId)
+      approvalService.reject(thread?.executionMeta?.requestId)
     }
 
-    const thread = targetThreadId ? store.threads[targetThreadId] : store.getCurrentThread()
     if (thread) {
       for (const msg of thread.messages) {
         if (msg.role === 'assistant') {

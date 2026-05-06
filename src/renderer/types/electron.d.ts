@@ -387,7 +387,7 @@ export interface ElectronAPI {
     error?: string
     code?: string
   }>
-  abortMessage: () => void
+  abortMessage: (requestId?: string) => void
   onLLMStream: (requestId: string, callback: (chunk: LLMStreamChunk) => void) => () => void
   onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => () => void
   onLLMError: (requestId: string, callback: (error: LLMError) => void) => () => void

@@ -168,7 +168,7 @@ export default function InlineEdit({
 
 	const handleCancelStream = useCallback(() => {
 		if (activeRequestId) {
-			api.llm.abort()
+			api.llm.abort(activeRequestId)
 			updateFileContent(filePath, originalContent)
 			composerService.rejectChange(filePath)
 			setState('idle')
