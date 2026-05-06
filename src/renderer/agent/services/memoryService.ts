@@ -35,6 +35,49 @@ export interface MemoryStore {
   items: MemoryItem[]
 }
 
+export function normalizeMemoryContentInput(raw: unknown): string {
+  if (typeof raw === 'string') {
+    return raw.trim()
+  }
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map(item => normalizeMemoryContentInput(item))
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+  }
+
+  if (raw && typeof raw === 'object') {
+    const candidate = raw as {
+      type?: unknown
+      text?: unknown
+      content?: unknown
+    }
+
+    if (candidate.type === 'text' && typeof candidate.text === 'string') {
+      return candidate.text.trim()
+    }
+
+    const nestedContent = normalizeMemoryContentInput(candidate.content)
+    if (nestedContent) {
+      return nestedContent
+    }
+
+    if (typeof candidate.text === 'string') {
+      return candidate.text.trim()
+    }
+
+    try {
+      return JSON.stringify(raw).trim()
+    } catch {
+      return ''
+    }
+  }
+
+  return ''
+}
+
 // ============================================
 // 记忆服务
 // ============================================
@@ -66,7 +109,7 @@ class MemoryService {
    */
   async addMemory(content: string): Promise<MemoryItem> {
     const store = await this.loadStore()
-    const normalizedContent = content.trim()
+    const normalizedContent = normalizeMemoryContentInput(content)
     if (!normalizedContent) {
       throw new Error('Memory content cannot be empty')
     }
@@ -105,7 +148,8 @@ class MemoryService {
     if (!item) return false
 
     if (updates.content !== undefined) {
-      item.content = updates.content.trim()
+      item.content = normalizeMemoryContentInput(updates.content)
+      if (!item.content) return false
     }
     if (updates.enabled !== undefined) {
       item.enabled = updates.enabled
@@ -235,11 +279,7 @@ ${lines}
     }
 
     const candidate = raw as Partial<MemoryItem>
-    if (typeof candidate.content !== 'string') {
-      return null
-    }
-
-    const content = candidate.content.trim()
+    const content = normalizeMemoryContentInput(candidate.content)
     if (!content) {
       return null
     }

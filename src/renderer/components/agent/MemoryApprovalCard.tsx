@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { Brain, Edit2, Check, Sparkles, MessageSquare } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 
 interface MemoryApprovalCardProps {
-    content: string
+    content: unknown
     isAwaitingApproval: boolean
     isSuccess?: boolean
     onUpdateContent?: (newContent: string) => void
@@ -15,15 +16,16 @@ export const MemoryApprovalCard: React.FC<MemoryApprovalCardProps> = ({
     isSuccess,
     onUpdateContent
 }) => {
+    const safeContent = normalizeMemoryContentInput(content)
     const [isEditing, setIsEditing] = useState(false)
-    const [editedContent, setEditedContent] = useState(content)
+    const [editedContent, setEditedContent] = useState(safeContent)
 
     // 同步外部 content 变化（如果是流式输出虽然 remember 不太可能流式，但为了鲁棒性）
     useEffect(() => {
         if (!isEditing) {
-            setEditedContent(content)
+            setEditedContent(safeContent)
         }
-    }, [content, isEditing])
+    }, [safeContent, isEditing])
 
     const handleSave = () => {
         if (onUpdateContent) {
@@ -33,7 +35,7 @@ export const MemoryApprovalCard: React.FC<MemoryApprovalCardProps> = ({
     }
 
     const handleCancel = () => {
-        setEditedContent(content)
+        setEditedContent(safeContent)
         setIsEditing(false)
     }
 
@@ -116,7 +118,7 @@ export const MemoryApprovalCard: React.FC<MemoryApprovalCardProps> = ({
                             </div>
                             <div className="flex-1 group/text">
                                 <p className="text-xs text-text-secondary leading-relaxed font-sans italic">
-                                    "{content}"
+                                    "{safeContent}"
                                 </p>
                                 {isAwaitingApproval && (
                                     <button
