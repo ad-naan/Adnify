@@ -21,6 +21,7 @@ export interface CompressionStats {
   level: CompressionLevel
   levelName: string
   ratio: number           // 当前使用率 (0-1)
+  peakRatio: number
   inputTokens: number     // 输入 token
   outputTokens: number    // 输出 token
   contextLimit: number    // 上下文限制
@@ -356,6 +357,7 @@ export function updateStats(
   const outputTokens = usage.completionTokens
   // 只用 inputTokens 计算比例，输出 token 不占用上下文窗口
   const ratio = inputTokens / contextLimit
+  const peakRatio = Math.max(previousStats?.peakRatio ?? 0, ratio)
   const level = calculateLevel(ratio)
 
   // 计算节省的 token（与上一次比较）
@@ -370,6 +372,7 @@ export function updateStats(
     level,
     levelName: LEVEL_NAMES[level],
     ratio,
+    peakRatio,
     inputTokens,
     outputTokens,
     contextLimit,

@@ -185,6 +185,7 @@ export default function StatusBar() {
     switching: language === 'zh' ? '切换中' : 'Switching',
     switched: language === 'zh' ? '已切换' : 'Switched',
   }), [language])
+  const peakContextUsage = compressionStats?.peakRatio ?? null
 
   return (
     <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-border/30 shadow-[0_-1px_15px_rgba(0,0,0,0.03)]">
@@ -344,7 +345,7 @@ export default function StatusBar() {
                         <Maximize2 className={`w-3 h-3 transition-colors ${layerColorClass}`} />
                       </div>
                       <span className="text-[9px] font-bold font-mono text-text-muted group-hover:text-text-primary transition-colors">
-                        {compressionStats?.memoryHealth ? `${Math.round(compressionStats.memoryHealth.score)}%` : '0%'}
+                        {peakContextUsage !== null ? `${Math.round(peakContextUsage * 100)}%` : '--'}
                       </span>
                     </div>
                   </motion.div>
