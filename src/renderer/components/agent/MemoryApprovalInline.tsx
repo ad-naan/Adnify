@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react'
 import { CheckCircle2, ChevronDown, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
+import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 
 interface MemoryApprovalInlineProps {
-    content: string
+    content: unknown
     isAwaitingApproval: boolean
     isSuccess?: boolean
     messageId: string
@@ -19,6 +20,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
 }) => {
     const language = useStore(s => s.language)
     const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+    const safeContent = normalizeMemoryContentInput(content)
     const [isExpanded, setIsExpanded] = useState(!isSuccess && expandAgentBlocksByDefault)
 
     useEffect(() => {
@@ -35,12 +37,10 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
 
     return (
         <div className="group my-0.5 relative hover:bg-text-primary/[0.02] transition-colors rounded-lg overflow-hidden">
-            {/* Header - 与 ToolCallCard 完全一致的扁平化结构 */}
             <div
                 className="flex items-center gap-2 py-1.5 cursor-pointer select-none"
                 onClick={() => setIsExpanded(!isExpanded)}
             >
-                {/* Expand Toggle */}
                 <motion.div
                     animate={{ rotate: isExpanded ? 90 : 0 }}
                     transition={{ duration: 0.15 }}
@@ -49,7 +49,6 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                     <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
                 </motion.div>
 
-                {/* Status Icon */}
                 <div className="shrink-0 relative z-10 w-4 h-4 flex items-center justify-center">
                     {isRunning ? (
                         <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
@@ -66,20 +65,18 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                     )}
                 </div>
 
-                {/* Status Text */}
                 <div className="flex-1 min-w-0 flex items-center gap-2 overflow-hidden relative z-10">
                     <span className={`text-[12px] truncate ${isRunning ? 'text-text-primary tool-text-shimmer' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
                         {statusText}
                     </span>
-                    {!isExpanded && (
+                    {!isExpanded && safeContent && (
                         <span className="text-[11px] text-text-muted/40 truncate">
-                            — {content.slice(0, 50)}{content.length > 50 ? '...' : ''}
+                            - {safeContent.slice(0, 50)}{safeContent.length > 50 ? '...' : ''}
                         </span>
                     )}
                 </div>
             </div>
 
-            {/* Expanded Content */}
             <AnimatePresence initial={false}>
                 {isExpanded && (
                     <motion.div
@@ -90,13 +87,11 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
                         className="overflow-hidden"
                     >
                         <div className="pl-[26px] pr-3 pb-3 pt-0 relative border-t-0">
-                            {/* Visual Threading Line */}
                             <div className="absolute left-[13.5px] top-0 bottom-4 w-[1.5px] bg-border/40 rounded-full" />
 
-                            {/* Content */}
                             <div className="relative z-10 mt-1">
                                 <div className="text-[11px] text-text-secondary/80 leading-relaxed font-sans whitespace-pre-wrap border-l-2 border-border/30 pl-2 ml-1">
-                                    {content}
+                                    {safeContent || (language === 'zh' ? '（空记忆内容）' : '(empty memory content)')}
                                 </div>
                             </div>
                         </div>
