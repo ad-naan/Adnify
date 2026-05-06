@@ -1,8 +1,9 @@
 import Store from 'electron-store'
+import Store from 'electron-store'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
+import { createScopedStore, getBootstrapStore } from './configPath'
 
-const configStore = new Store<Record<string, unknown>>({ name: 'config' })
 const APP_SETTINGS_KEY = 'app-settings'
 const DEFAULT_ACCEPT = 'application/vnd.github+json'
 const DEFAULT_USER_AGENT = 'Adnify-GitHub-Service'
@@ -20,8 +21,12 @@ export interface GitHubRelease {
   assets?: GitHubReleaseAsset[]
 }
 
+function getConfigStore(): Store<Record<string, unknown>> {
+  return createScopedStore('config', getBootstrapStore())
+}
+
 function getGitHubToken(): string | undefined {
-  const appSettings = configStore.get(APP_SETTINGS_KEY) as Record<string, unknown> | undefined
+  const appSettings = getConfigStore().get(APP_SETTINGS_KEY) as Record<string, unknown> | undefined
   const token = appSettings?.githubToken
   return typeof token === 'string' && token.trim() ? token.trim() : undefined
 }
