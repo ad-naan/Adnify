@@ -73,249 +73,54 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 
 ## 🏗 架构设计
 
-Adnify 采用 Electron 多进程架构，结合 Web Worker 和 Node.js Worker Threads 实现高性能并发处理。
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/architecture-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="images/architecture-light.png" />
+  <img alt="Adnify 架构图" src="images/architecture-light.png" />
+</picture>
 
-<div align="center">
+### 核心模块概览
 
-<!-- 架构图 - 使用 Mermaid.ink 在线渲染 -->
-[![Adnify 架构图](https://mermaid.ink/img/pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ?type=png)](https://mermaid.live/edit#pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ)
+**Renderer UI**
+- `src/renderer` 中的 React 组件负责面板、编辑器界面、聊天区、计划视图以及所有面向用户的交互流程。
 
-<p><em>多进程 + 多线程架构，充分利用多核 CPU，确保 UI 流畅响应</em></p>
-<p>💡 <strong>点击图片在 Mermaid Live 编辑器中查看和编辑完整架构图</strong></p>
+**Agent 运行时**
+- `src/renderer/agent` 已经不是单纯的聊天 UI 附属目录, 而是独立的运行时子系统, 负责编排、计划、上下文流转、工具调用和应用级协调。
 
-<details>
-<summary>📊 点击查看 Mermaid 源码（可在 <a href="https://mermaid.live/">Mermaid Live</a> 编辑）</summary>
+**状态与会话**
+- 渲染侧 stores 与 modes 管理 UI 状态、会话状态、checkpoint、branch 以及 session 生命周期。
 
-```mermaid
-graph TB
-    subgraph "用户界面层 UI Layer"
-        UI[React Components]
-        Monaco[Monaco Editor]
-        XTerm[XTerm Terminal]
-        ChatUI[Chat Panel]
-    end
+**前端服务**
+- 渲染进程中的轻量服务负责终端体验、补全、workspace/session 辅助能力, 并统一发起跨 Electron 边界的请求。
 
-    subgraph "渲染进程 Renderer Process"
-        subgraph "AI Agent 核心"
-            AgentCore[Agent Core]
-            EventBus[Event Bus]
-            ToolRegistry[Tool Registry]
-            ToolExecutors[Tool Executors]
-        end
-        
-        subgraph "状态管理"
-            AgentStore[Agent Store]
-            EditorStore[Editor Store]
-            UIStore[UI Store]
-        end
-        
-        subgraph "前端服务"
-            TermMgr[Terminal Manager]
-            LSPClient[LSP Client]
-            WorkspaceMgr[Workspace Manager]
-            CompletionSvc[Completion Service]
-        end
-        
-        subgraph "Agent 子系统"
-            Context[Context Manager]
-            Compression[Compression Manager]
-            Memory[Memory Service]
-            Session[Session Service]
-            Emotion[Emotion System]
-        end
-        
-        subgraph "Web Workers 线程池"
-            ComputeWorker[Compute Worker Pool]
-            MonacoWorkers[Monaco Language Workers]
-            TSWorker[TypeScript Worker]
-            JSONWorker[JSON Worker]
-            CSSWorker[CSS Worker]
-            HTMLWorker[HTML Worker]
-        end
-    end
+**Renderer Workers**
+- 浏览器 workers 处理文本或 diff 等重计算任务, Monaco language workers 则把编辑器语言服务从 UI 线程中拆开。
 
-    subgraph "IPC 通信层 IPC Bridge"
-        IPC[Type-Safe IPC Handlers]
-    end
+**Preload Bridge**
+- `src/main/preload.ts` 通过类型化的 `contextBridge` 暴露能力, 让 renderer 在不直接接触 Node 的情况下访问特权功能。
 
-    subgraph "主进程 Main Process"
-        subgraph "安全层"
-            Security[Security Module]
-            FileWatcher[File Watcher]
-            AuditLog[Audit Logger]
-        end
-        
-        subgraph "核心服务"
-            LSPMgr[LSP Manager]
-            IndexSvc[Indexing Service]
-            MCPMgr[MCP Manager]
-            LLMProxy[LLM Proxy]
-        end
-        
-        subgraph "索引系统"
-            Chunker[Code Chunker]
-            Embedder[Embedder]
-            VectorDB[(LanceDB)]
-        end
-        
-        subgraph "Node.js Worker Threads"
-            IndexWorker[Indexer Worker]
-        end
-        
-        subgraph "LSP 生态"
-            TSServer[TypeScript]
-            Pyright[Python]
-            Gopls[Go]
-            OtherLSP[10+ Languages]
-        end
-        
-        subgraph "MCP 生态"
-            MCPClient[MCP Client]
-            MCPAuth[OAuth Provider]
-            MCPServers[External MCP Servers]
-        end
-    end
+**IPC Handlers**
+- `src/main/ipc/*.ts` 是渲染层与主进程之间的契约边界, 负责校验请求并路由到主进程能力。
 
-    subgraph "外部服务 External Services"
-        OpenAI[OpenAI]
-        Claude[Anthropic]
-        Gemini[Google]
-        DeepSeek[DeepSeek]
-        Ollama[Ollama]
-    end
+**共享契约**
+- `src/shared` 存放跨进程复用的类型、配置、工具函数以及共享错误定义。
 
-    UI --> AgentStore
-    Monaco --> EditorStore
-    Monaco --> MonacoWorkers
-    XTerm --> TermMgr
-    ChatUI --> AgentCore
-    
-    AgentCore --> ToolRegistry
-    ToolRegistry --> ToolExecutors
-    AgentCore --> Context
-    AgentCore --> EventBus
-    Context --> Compression
-    AgentCore --> Memory
-    AgentCore --> Session
-    
-    MonacoWorkers --> TSWorker
-    MonacoWorkers --> JSONWorker
-    MonacoWorkers --> CSSWorker
-    MonacoWorkers --> HTMLWorker
-    
-    Context --> ComputeWorker
-    Compression --> ComputeWorker
-    
-    AgentStore --> AgentCore
-    ToolExecutors --> IPC
-    LSPClient --> IPC
-    TermMgr --> IPC
-    WorkspaceMgr --> IPC
-    CompletionSvc --> IPC
-    
-    IPC --> Security
-    Security --> LSPMgr
-    Security --> IndexSvc
-    Security --> FileWatcher
-    Security --> AuditLog
-    
-    IPC --> MCPMgr
-    IPC --> LLMProxy
-    
-    IndexSvc --> IndexWorker
-    IndexWorker --> Chunker
-    IndexWorker --> Embedder
-    Embedder --> VectorDB
-    
-    LSPMgr --> TSServer
-    LSPMgr --> Pyright
-    LSPMgr --> Gopls
-    LSPMgr --> OtherLSP
-    
-    MCPMgr --> MCPClient
-    MCPMgr --> MCPAuth
-    MCPClient --> MCPServers
-    
-    LLMProxy --> OpenAI
-    LLMProxy --> Claude
-    LLMProxy --> Gemini
-    LLMProxy --> DeepSeek
-    LLMProxy --> Ollama
-    
-    Emotion -.情绪感知.-> AgentCore
+**主进程服务**
+- `src/main` 负责窗口与应用生命周期、文件系统和 shell 安全边界、LLM 后端、MCP 后端、LSP 管理、索引能力以及其他桌面端辅助服务。
 
-    style AgentCore fill:#667eea
-    style Security fill:#764ba2
-    style IndexSvc fill:#f093fb
-    style LSPMgr fill:#4facfe
-    style LLMProxy fill:#43e97b
-    style MCPMgr fill:#fa709a
-    style VectorDB fill:#fee140
-    style Emotion fill:#ff6b9d
-    style ComputeWorker fill:#a8edea
-    style MonacoWorkers fill:#fed6e3
-    style IndexWorker fill:#c1dfc4
-```
-
-</details>
-
-</div>
-
-### 核心模块说明
-
-**渲染进程 (Frontend)**
-- **Agent Core**: AI 代理核心，协调消息流、工具执行、上下文管理
-- **Tool Registry**: 工具注册表，管理 23+ 内置工具的定义、验证和执行
-- **Context Manager**: 上下文管理器，支持 4 级压缩、Handoff 文档生成
-- **Event Bus**: 事件总线，解耦模块间通信
-- **Emotion System**: 情绪系统，实时感知用户状态并提供智能建议
-- **Agent Store**: Zustand 状态管理，持久化对话历史、分支、检查点
-- **Frontend Services**: 终端管理、LSP 客户端、工作区管理、代码补全
-
-**Web Workers (渲染进程线程池)**
-- **Compute Worker Pool**: 处理 Diff 计算、文本搜索等 CPU 密集型任务
-- **Monaco Language Workers**: Monaco 编辑器的语言服务 Workers
-  - TypeScript/JavaScript Worker: 语法高亮、代码补全
-  - JSON Worker: JSON 格式化、验证
-  - CSS Worker: CSS 语法分析
-  - HTML Worker: HTML 语法分析
-
-**主进程 (Backend)**
-- **Security Module**: 安全模块，工作区隔离、路径验证、命令白名单、审计日志
-- **LSP Manager**: 语言服务器管理，智能检测项目根目录，支持 10+ 语言
-- **Indexing Service**: 代码库索引，Tree-sitter 解析、语义分块、向量存储
-- **MCP Manager**: MCP 协议管理，支持外部工具、OAuth 认证、配置热重载
-- **LLM Proxy**: LLM 代理层，统一多家 AI 服务商接口，流式响应处理
-
-**Node.js Worker Threads (主进程线程池)**
-- **Indexer Worker**: 独立线程处理代码索引，避免阻塞主进程
-  - 代码分块 (Chunking)
-  - Embedding 生成
-  - 向量存储更新
-
-**通信层**
-- **IPC Bridge**: 类型安全的进程间通信，所有主进程功能通过 IPC 暴露
-
-**外部集成**
-- **多 LLM 支持**: OpenAI、Claude、Gemini、DeepSeek、Ollama 及自定义 API
-- **MCP 生态**: 可扩展的外部工具和服务，支持社区插件
+**索引 Worker**
+- `src/main/indexing/indexer.worker.ts` 将索引工作放到独立 Node worker 线程中, 避免解析、embedding 和向量库更新阻塞 Electron 主线程。
 
 ### 并发处理优势
 
-**多进程隔离**
-- 渲染进程崩溃不影响主进程
-- 主进程负责文件系统、LSP、索引等重任务
-- 进程间通过 IPC 安全通信
+**进程隔离**
+- renderer 专注交互与编排, main process 通过明确的 IPC 边界承载特权操作。
 
-**多线程并行**
-- Web Workers 处理前端计算密集任务（Diff、搜索）
-- Monaco Workers 独立处理语言服务，不阻塞 UI
-- Node.js Worker Threads 处理代码索引，支持大型项目
+**线程分工**
+- 重任务会拆分到 renderer workers 和独立的 Node 索引 worker 中执行, 避免拖慢应用外壳与 UI 响应。
 
-**性能优化**
-- UI 线程始终保持响应
-- 充分利用多核 CPU
-- 大文件操作不卡顿
+**运行安全**
+- preload bridge、共享契约和主进程安全层共同收窄能力暴露面, 让系统边界更清晰也更易审计。
 
 ---
 

@@ -922,6 +922,11 @@ export async function installClangd(): Promise<LspInstallResult> {
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
   logger.lsp.info('[LSP Installer] Downloading clangd from GitHub...')
+  logger.lsp.info('[LSP Installer] Requesting latest clangd release metadata', {
+    owner: 'clangd',
+    repo: 'clangd',
+    userAgent: 'Adnify-LSP-Installer',
+  })
 
   try {
     // 获取最新 release 信息
