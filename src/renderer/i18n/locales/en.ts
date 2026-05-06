@@ -721,4 +721,5 @@ export const en = {
   'preview.toast.source.terminal': 'Terminal',
   'preview.toast.source.workspace': 'Workspace',
   'preview.toast.source.discovery': 'Discovery',
+  'imagePreview.zoomHint': 'Double-click or use mouse wheel to zoom',
 } as const
