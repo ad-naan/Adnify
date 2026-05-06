@@ -76,249 +76,54 @@ Join our community to discuss Adnify usage and development!
 
 ## 🏗 Architecture Design
 
-Adnify adopts Electron multi-process architecture combined with Web Workers and Node.js Worker Threads for high-performance concurrent processing.
-
-<div align="center">
-
-<!-- Architecture Diagram - Rendered by Mermaid.ink -->
-[![Adnify Architecture Diagram](https://mermaid.ink/img/pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ?type=png)](https://mermaid.live/edit#pako:eNqVWFtvG0UU_iur5QVEEtlxYsd-QEqc0BrFjdVNKWLTh8nueL10vWvtJYqJKhVKES1UqkTLAxelrUCKQBQVEFQEKX-m9tJ_wZnbenY9S4kfds7M983MmTNnzjnykW4FNtZbuhOi0UDb3djzNfhFyT4b2NPTByfTz_5MH37x8rsnk2cfa1c62jYa43BPZ1Tyu9IxL2NkxVo7GI4CH_txdG2GdgMfWYHJGm3LduMglOD3dnE4NOlXIx_XR54EtwcohvVJo_WQjwWGfXvPn9N2-vzX6fGX_5x9k558rl0GDg5xqPXCwMJRJKsszVnvaOsO6KxNHz2fnN2SWeRHsXYQYpOxiHgtT9k6AGAjiUwqaCAVCLtB4F3GjhvF4dgkHU30FMStQ2wlYKOIMbOuRKWHFx3lodK7f0xvfpQ-fZze_1R5IiOeHYnKxTPRe2IsJitpVzqMAm5RhF-t5OTOvfSnX6bf3pvcfVxUkrhC1wlN4RJaF_nIwWFh_22j1_ZcOIQJksbEAuVqEF6PRsjCZLmsU7Ie8WAPx27gGweWOetpBg4PXOt852PWnfx8P_3tND09Lh6xHfgxPoxN3v6HRiF4LyhhSnIJu4uHAfgYaxRKk5_BV-NtCWtrGJCDm7zVjHEU4-G5zn8V71Pr4zDS0r_O4E1Onz2at8JwlMSY8Uze49O0HryA4glpHOHLiqiyjXwnAXOI7YrPyuDL745H2LBCdxRzZoH4jrFziVOJqCa1DbEcSGrKxd3uNucQcZ6UGU8dxzq9tvby5tcvzh6TmEt6G6FrO1g2HozS8ywaqI8p5yLybW92evXSL56f8vjYRa7_itg4eXpncvsEdCjemgFBKXTjsSkEuBc78YpO9Lbr4asotgZgCCJrvFOgrScQYbYDx6SCBpKjtlapq7HYrQ4lEBnI0ycBQv1oOpAnDsl7p4LrOyVPotumC0FTFo22u2DPw7EJgkal8wXt359M_n5YEiwGic8eiI1FZ-7F7mMbMp4phAL-LrYgRG9umK_Dc7Hw5sYb59LuEuy89EEknubuIMTIjop6UhNy16cyUMu9v3Qzclnpg2PIYXOJwSCXk3vLhXP2xqHrDGKzN44HgV8ALwQjLzIvBIXhnRi8EjY1q5U3s2hyvpRL3EKtMiA8SRGOMkkBsJ7EA3OHfInrHLjzFwgkdnaoNA5jHNK0CCvywf8fXibff_Xy1gl7LVq2FHf63JXujLC_3jFZI5dlHkpsqB_8eBAGI9eSoAsYErYLJg6cXDzYxHhkYHzdFIKE7XgeGiKTNfPhC6qLxcW3pMKFDfPgTyCpXJnDchmDoazcJCCvM9gwKzZne7Wz5dg3G2RTpaqO4fJIRskKONUaPPerIFFVctV4kcAmZWWAaiJL_irEkCfJdhJZmurMs1sZPsuRZYwsQZYRZulRVqV4xKwqEPCs-CmhSGemrqC6ydyVUAKkTgZlxWR-mLtIflCuKvNIroTMQ-xLUjW7DZY62WiWSAnEUpYCEKlKAUm5VoGKFKtShOW1_JhIZTk-33ymiWx8aYDdD0tSalCkKIaKHoVEmpJ3Zvbg7snC3RzAw_7cOI34c6Mi4OfeQjuDs5CtQkiMzsYlj5nF55zu3JJsWxpIFQALqAqAhVMFIMKoahcaR2UlRBW_uDS9dTs9_XH6yXF6_MNS_nnwPBGPoVCbBY6-63mt1-r1BsZIZmTuxQiN-so-WpYJmbswQr_SrPX3ZQK_Dgav9JHVxzlYHIkTarjZyM3nt8KXR41KM6egcCRBwLi6UpEJwigc79f3m7aM5yIMZ6E1bOftkA9vYi-7jmtzxsitZFXtvrWiL-gOlPZ6Kw4TvKAPIdYg0tWPyOw9Hdx0CGV_C0SPujck5xswaYT894NgKOaFQeIM9FYfeRH0kpGNYrzpIkj4Mwr9O6QdJH6st5prdAm9daQf6q1FMMzqUnV5rbFWrdYb1dXqyoI-JuPVylKlsVxrNpYb9bV6bbVxY0H_kO67vFRbra2sVlZrdQCb0C7omGbhLvtLyQr8vuvoN_4Fg7nCFQ?type=png)
-
-<p><em>Multi-process + multi-thread architecture, fully utilizing multi-core CPUs for smooth UI responsiveness</em></p>
-<p>💡 <strong>Click image to view and edit complete architecture diagram in Mermaid Live Editor</strong></p>
-
-<details>
-<summary>📊 Click to view Mermaid source code (editable at <a href="https://mermaid.live/">Mermaid Live</a>)</summary>
-
-```mermaid
-graph TB
-    subgraph "User Interface Layer"
-        UI[React Components]
-        Monaco[Monaco Editor]
-        XTerm[XTerm Terminal]
-        ChatUI[Chat Panel]
-    end
-
-    subgraph "Renderer Process"
-        subgraph "AI Agent Core"
-            AgentCore[Agent Core]
-            EventBus[Event Bus]
-            ToolRegistry[Tool Registry]
-            ToolExecutors[Tool Executors]
-        end
-        
-        subgraph "State Management"
-            AgentStore[Agent Store]
-            EditorStore[Editor Store]
-            UIStore[UI Store]
-        end
-        
-        subgraph "Frontend Services"
-            TermMgr[Terminal Manager]
-            LSPClient[LSP Client]
-            WorkspaceMgr[Workspace Manager]
-            CompletionSvc[Completion Service]
-        end
-        
-        subgraph "Agent Subsystems"
-            Context[Context Manager]
-            Compression[Compression Manager]
-            Memory[Memory Service]
-            Session[Session Service]
-            Emotion[Emotion System]
-        end
-        
-        subgraph "Web Workers Thread Pool"
-            ComputeWorker[Compute Worker Pool]
-            MonacoWorkers[Monaco Language Workers]
-            TSWorker[TypeScript Worker]
-            JSONWorker[JSON Worker]
-            CSSWorker[CSS Worker]
-            HTMLWorker[HTML Worker]
-        end
-    end
-
-    subgraph "IPC Communication Layer"
-        IPC[Type-Safe IPC Handlers]
-    end
-
-    subgraph "Main Process"
-        subgraph "Security Layer"
-            Security[Security Module]
-            FileWatcher[File Watcher]
-            AuditLog[Audit Logger]
-        end
-        
-        subgraph "Core Services"
-            LSPMgr[LSP Manager]
-            IndexSvc[Indexing Service]
-            MCPMgr[MCP Manager]
-            LLMProxy[LLM Proxy]
-        end
-        
-        subgraph "Indexing System"
-            Chunker[Code Chunker]
-            Embedder[Embedder]
-            VectorDB[(LanceDB)]
-        end
-        
-        subgraph "Node.js Worker Threads"
-            IndexWorker[Indexer Worker]
-        end
-        
-        subgraph "LSP Ecosystem"
-            TSServer[TypeScript]
-            Pyright[Python]
-            Gopls[Go]
-            OtherLSP[10+ Languages]
-        end
-        
-        subgraph "MCP Ecosystem"
-            MCPClient[MCP Client]
-            MCPAuth[OAuth Provider]
-            MCPServers[External MCP Servers]
-        end
-    end
-
-    subgraph "External Services"
-        OpenAI[OpenAI]
-        Claude[Anthropic]
-        Gemini[Google]
-        DeepSeek[DeepSeek]
-        Ollama[Ollama]
-    end
-
-    UI --> AgentStore
-    Monaco --> EditorStore
-    Monaco --> MonacoWorkers
-    XTerm --> TermMgr
-    ChatUI --> AgentCore
-    
-    AgentCore --> ToolRegistry
-    ToolRegistry --> ToolExecutors
-    AgentCore --> Context
-    AgentCore --> EventBus
-    Context --> Compression
-    AgentCore --> Memory
-    AgentCore --> Session
-    
-    MonacoWorkers --> TSWorker
-    MonacoWorkers --> JSONWorker
-    MonacoWorkers --> CSSWorker
-    MonacoWorkers --> HTMLWorker
-    
-    Context --> ComputeWorker
-    Compression --> ComputeWorker
-    
-    AgentStore --> AgentCore
-    ToolExecutors --> IPC
-    LSPClient --> IPC
-    TermMgr --> IPC
-    WorkspaceMgr --> IPC
-    CompletionSvc --> IPC
-    
-    IPC --> Security
-    Security --> LSPMgr
-    Security --> IndexSvc
-    Security --> FileWatcher
-    Security --> AuditLog
-    
-    IPC --> MCPMgr
-    IPC --> LLMProxy
-    
-    IndexSvc --> IndexWorker
-    IndexWorker --> Chunker
-    IndexWorker --> Embedder
-    Embedder --> VectorDB
-    
-    LSPMgr --> TSServer
-    LSPMgr --> Pyright
-    LSPMgr --> Gopls
-    LSPMgr --> OtherLSP
-    
-    MCPMgr --> MCPClient
-    MCPMgr --> MCPAuth
-    MCPClient --> MCPServers
-    
-    LLMProxy --> OpenAI
-    LLMProxy --> Claude
-    LLMProxy --> Gemini
-    LLMProxy --> DeepSeek
-    LLMProxy --> Ollama
-    
-    Emotion -.emotion awareness.-> AgentCore
-
-    style AgentCore fill:#667eea
-    style Security fill:#764ba2
-    style IndexSvc fill:#f093fb
-    style LSPMgr fill:#4facfe
-    style LLMProxy fill:#43e97b
-    style MCPMgr fill:#fa709a
-    style VectorDB fill:#fee140
-    style Emotion fill:#ff6b9d
-    style ComputeWorker fill:#a8edea
-    style MonacoWorkers fill:#fed6e3
-    style IndexWorker fill:#c1dfc4
-```
-
-</details>
-
-</div>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/architecture-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="images/architecture-light.png" />
+  <img alt="Adnify architecture diagram" src="images/architecture-light.png" />
+</picture>
 
 ### Core Module Overview
 
-**Renderer Process (Frontend)**
-- **Agent Core**: AI agent core, coordinates message flow, tool execution, and context management
-- **Tool Registry**: Tool registry, manages 23+ built-in tools' definitions, validation, and execution
-- **Context Manager**: Context manager, supports 4-level compression and Handoff document generation
-- **Event Bus**: Event bus, decouples inter-module communication
-- **Emotion System**: Emotion system, real-time user state awareness with intelligent suggestions
-- **Agent Store**: Zustand state management, persists conversation history, branches, and checkpoints
-- **Frontend Services**: Terminal management, LSP client, workspace management, code completion
+**Renderer UI**
+- React components in `src/renderer` own panels, editor surfaces, chat, plan views, and user-facing interaction flows.
 
-**Web Workers (Renderer Process Thread Pool)**
-- **Compute Worker Pool**: Handles CPU-intensive tasks like Diff computation and text search
-- **Monaco Language Workers**: Monaco editor's language service workers
-  - TypeScript/JavaScript Worker: Syntax highlighting, code completion
-  - JSON Worker: JSON formatting, validation
-  - CSS Worker: CSS syntax analysis
-  - HTML Worker: HTML syntax analysis
+**Agent Runtime**
+- `src/renderer/agent` is now a first-class runtime subsystem covering orchestration, planning, context flow, tool invocation, and application-level coordination.
 
-**Main Process (Backend)**
-- **Security Module**: Security module with workspace isolation, path validation, command whitelist, and audit logging
-- **LSP Manager**: Language server management, intelligent project root detection, supports 10+ languages
-- **Indexing Service**: Codebase indexing with Tree-sitter parsing, semantic chunking, and vector storage
-- **MCP Manager**: MCP protocol management, supports external tools, OAuth authentication, and config hot-reload
-- **LLM Proxy**: LLM proxy layer, unified interface for multiple AI service providers with streaming response handling
+**State and Session**
+- Renderer-side stores and modes manage UI state, conversation state, checkpoints, branches, and session lifecycle.
 
-**Node.js Worker Threads (Main Process Thread Pool)**
-- **Indexer Worker**: Dedicated thread for code indexing, prevents blocking main process
-  - Code chunking
-  - Embedding generation
-  - Vector store updates
+**Frontend Services**
+- Lightweight client services in the renderer coordinate terminal UX, completions, workspace/session helpers, and requests that cross into Electron APIs.
 
-**Communication Layer**
-- **IPC Bridge**: Type-safe inter-process communication, all main process features exposed via IPC
+**Renderer Workers**
+- Browser workers handle compute-heavy renderer work such as text/diff processing, while Monaco language workers keep editor language features off the UI thread.
 
-**External Integration**
-- **Multi-LLM Support**: OpenAI, Claude, Gemini, DeepSeek, Ollama, and custom APIs
-- **MCP Ecosystem**: Extensible external tools and services, supports community plugins
+**Preload Bridge**
+- `src/main/preload.ts` exposes a typed `contextBridge` surface so the renderer can access privileged features without direct Node access.
+
+**IPC Handlers**
+- `src/main/ipc/*.ts` is the contract boundary where renderer requests are validated and routed into main-process capabilities.
+
+**Shared Contracts**
+- `src/shared` contains cross-process types, config, utilities, and shared error definitions used by both renderer and main code.
+
+**Main Process Services**
+- `src/main` owns privileged capabilities: window/app lifecycle, filesystem and shell boundaries, LLM backends, MCP backends, LSP management, indexing, and auxiliary desktop services.
+
+**Indexing Worker**
+- `src/main/indexing/indexer.worker.ts` moves indexing work onto a Node worker thread so parsing, embedding, and vector-store updates do not block the Electron main thread.
 
 ### Concurrency Advantages
 
-**Multi-Process Isolation**
-- Renderer process crashes don't affect main process
-- Main process handles heavy tasks: file system, LSP, indexing
-- Secure inter-process communication via IPC
+**Process Isolation**
+- The renderer stays focused on UX and orchestration, while the main process contains privileged operations behind explicit IPC boundaries.
 
-**Multi-Thread Parallelism**
-- Web Workers handle frontend compute-intensive tasks (Diff, search)
-- Monaco Workers independently handle language services without blocking UI
-- Node.js Worker Threads handle code indexing, supporting large projects
+**Threaded Work**
+- Heavy background work is split between renderer workers and a dedicated Node indexing worker, so expensive tasks do not stall the app shell.
 
-**Performance Optimization**
-- UI thread always remains responsive
-- Fully utilizes multi-core CPUs
-- Large file operations without freezing
+**Operational Safety**
+- The preload bridge, shared contracts, and main-process security layers keep capability exposure narrow and auditable.
 
 ---
 
@@ -799,6 +604,16 @@ This project uses a custom license with main terms:
 See [LICENSE](LICENSE) file for details
 
 ---
+
+## Star History
+
+<a href="https://www.star-history.com/#adnaan-worker/adnify&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## 🙋 Q&A: About the License
 
