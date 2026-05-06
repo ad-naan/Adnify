@@ -19,7 +19,7 @@ import { smartReplace, normalizeLineEndings, checkLineReplaceWarnings } from '@/
 import { getAgentConfig } from '../utils/AgentConfig'
 import { fileCacheService } from '../services/fileCacheService'
 import { lintService } from '../services/lintService'
-import { memoryService } from '../services/memoryService'
+import { memoryService, normalizeMemoryContentInput } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { composerService } from '../services/composerService'
 import { agentStorePlanBridge, agentStoreTodoBridge } from '../store/agentStoreBridge'
@@ -1906,7 +1906,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async remember(args, _ctx) {
-        const content = args.content as string
+        const content = normalizeMemoryContentInput(args.content)
         if (!content) return { success: false, result: '', error: 'Missing content' }
 
         try {

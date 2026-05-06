@@ -14,6 +14,7 @@ import ToolCallCard from './ToolCallCard'
 import FileChangeCard from './FileChangeCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
+import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 
 /**
  * 渲染单个工具调用卡片的统一入口。
@@ -52,7 +53,7 @@ export function renderToolCallCard(
     return (
       <MemoryApprovalInline
         key={tc.id}
-        content={tc.arguments.content as string}
+        content={normalizeMemoryContentInput(tc.arguments.content)}
         isAwaitingApproval={isPending}
         isSuccess={tc.status === 'success'}
         messageId={opts.messageId || ''}
