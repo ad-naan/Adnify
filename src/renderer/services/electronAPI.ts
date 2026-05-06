@@ -111,7 +111,7 @@ function createGroupedAPI() {
     llm: {
       send: (params: Parameters<typeof raw.sendMessage>[0]) => raw.sendMessage(params),
       compactContext: (params: Parameters<typeof raw.compactContext>[0]) => raw.compactContext(params),
-      abort: () => raw.abortMessage(),
+      abort: (requestId?: string) => raw.abortMessage(requestId),
       // LLM 事件订阅（使用动态 IPC 频道实现请求隔离）
       onStream: (requestId: string, callback: (data: {
         type: string

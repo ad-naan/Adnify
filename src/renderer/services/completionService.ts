@@ -566,7 +566,7 @@ class CompletionService {
       // Handle abort signal
       const abortHandler = () => {
         isAborted = true
-        api.llm.abort()
+        api.llm.abort(requestId)
         reject(new DOMException('Aborted', 'AbortError'))
       }
       signal.addEventListener('abort', abortHandler)

@@ -110,8 +110,8 @@ export function registerLLMHandlers(_getMainWindow: () => BrowserWindow | null) 
     }
   })
 
-  ipcMain.on('llm:abort', (event) => {
-    llmServices.get(event.sender.id)?.abort()
+  ipcMain.on('llm:abort', (event, requestId?: string) => {
+    llmServices.get(event.sender.id)?.abort(requestId)
   })
 
   // ============================================
