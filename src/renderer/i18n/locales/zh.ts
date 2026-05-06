@@ -723,4 +723,5 @@ export const zh = {
   'preview.toast.source.terminal': '终端',
   'preview.toast.source.workspace': '工作区',
   'preview.toast.source.discovery': '发现',
+  'imagePreview.zoomHint': '双击图片或使用鼠标滚轮进行缩放',
 } as const
