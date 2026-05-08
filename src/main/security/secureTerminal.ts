@@ -879,7 +879,8 @@ export function registerSecureTerminalHandlers(
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
-    const { id, cwd, shell, backend = 'pty', remote } = options
+    const { id, cwd, shell, remote } = options
+    const backend = options.backend ?? (process.platform === 'darwin' ? 'pipe' : 'pty')
     const effectiveBackend: TerminalBackend = backend
 
     if (effectiveBackend === 'pty' && !pty) {
