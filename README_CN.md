@@ -11,7 +11,7 @@
   <p>一个拥有极致视觉体验、深度集成 AI Agent 的下一代代码编辑器。</p>
 
   <p>
-    <a href="https://deepwiki.com/adnaan-worker/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
+    <a href="https://deepwiki.com/ad-naan/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
     <img src="https://img.shields.io/badge/license-Custom%20License-blue.svg" alt="License" />
     <img src="https://img.shields.io/badge/Electron-39.0-blueviolet" alt="Electron 39.0" />
     <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" />
@@ -49,7 +49,7 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 | <img src="images/wechat-group.png" width="200" height="200" alt="微信群二维码" /> | <img src="images/qq-group.png" width="200" height="200" alt="QQ群二维码" /> | <img src="images/wechat-author.png" width="200" height="200" alt="作者微信" /> |
 | 扫码加入微信群 | QQ群号: `1076926858` | 微信号: `adnaan_worker` |
 
-> 💡 如有问题或建议，也可以直接在 [Gitee Issues](https://gitee.com/adnaan/adnify/issues) 或[Github Issues](https://github.com/adnaan-worker/adnify/issues)  提交
+> 💡 如有问题或建议，也可以直接在 [Gitee Issues](https://gitee.com/adnaan/adnify/issues) 或[Github Issues](https://github.com/ad-naan/adnify/issues)  提交
 
 ---
 
@@ -542,11 +542,11 @@ adnify/
 
 ## Star History
 
-<a href="https://www.star-history.com/#adnaan-worker/adnify&type=date&legend=top-left">
+<a href="https://www.star-history.com/#ad-naan/adnify&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=adnaan-worker/adnify&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ad-naan/adnify&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ad-naan/adnify&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ad-naan/adnify&type=date&legend=top-left" />
  </picture>
 </a>
 
@@ -554,7 +554,7 @@ adnify/
 
 感谢所有为 Adnify 做出贡献的开发者！你们是最棒的 🎉
 
-<a href="https://github.com/adnaan-worker"><img src="https://github.com/adnaan-worker.png" width="50" height="50" style="border-radius:50%" alt="adnaan"/></a>
+<a href="https://github.com/ad-naan"><img src="https://github.com/ad-naan.png" width="50" height="50" style="border-radius:50%" alt="adnaan"/></a>
 <a href="https://github.com/kerwin2046"><img src="https://github.com/kerwin2046.png" width="50" height="50" style="border-radius:50%" alt="kerwin"/></a>
 <a href="https://github.com/cniu6"><img src="https://github.com/cniu6.png" width="50" height="50" style="border-radius:50%" alt="cniu6"/></a>
 <a href="https://github.com/tss-tss"><img src="https://github.com/tss-tss.png" width="50" height="50" style="border-radius:50%" alt="晨曦"/></a>

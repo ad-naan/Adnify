@@ -13,7 +13,7 @@ const https = require('https')
 const fs = require('fs')
 const path = require('path')
 
-const GITHUB_REPO = 'adnaan-worker/adnify'
+const GITHUB_REPO = 'ad-naan/adnify'
 const GITEE_RELEASE_URL = 'https://gitee.com/adnaan/adnify/releases/new'
 const GITHUB_TOKEN = "999"
 

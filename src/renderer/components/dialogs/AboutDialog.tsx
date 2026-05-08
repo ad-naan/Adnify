@@ -16,7 +16,7 @@ interface AboutDialogProps {
 }
 
 const CONTRIBUTORS = [
-    { name: 'adnaan', avatar: 'https://github.com/adnaan-worker.png', url: 'https://github.com/adnaan-worker' },
+    { name: 'adnaan', avatar: 'https://github.com/ad-naan.png', url: 'https://github.com/ad-naan' },
     { name: 'kerwin', avatar: 'https://github.com/kerwin2046.png', url: 'https://github.com/kerwin2046' },
     { name: 'cniu6', avatar: 'https://github.com/cniu6.png', url: 'https://github.com/cniu6' },
     { name: '晨曦', avatar: 'https://github.com/tss-tss.png', url: 'https://github.com/tss-tss' },
@@ -146,7 +146,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                         {/* Author Info */}
                         <div className="flex items-center gap-3 group cursor-pointer">
                             <img
-                                src="https://github.com/adnaan-worker.png"
+                                src="https://github.com/ad-naan.png"
                                 alt="adnaan"
                                 className="w-10 h-10 rounded-full shadow-lg ring-2 ring-white/10 group-hover:scale-110 transition-transform duration-300"
                             />
@@ -158,7 +158,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
 
                         {/* Social Actions */}
                         <div className="flex gap-2">
-                            <SocialButton href="https://github.com/adnaan-worker/adnify" icon={Github} label="GitHub" />
+                            <SocialButton href="https://github.com/ad-naan/adnify" icon={Github} label="GitHub" />
                             <SocialButton href="https://gitee.com/adnaan/adnify" icon={ExternalLink} label="Gitee" />
                         </div>
                     </div>
