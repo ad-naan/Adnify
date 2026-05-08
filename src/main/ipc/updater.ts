@@ -26,7 +26,7 @@ export function registerUpdaterHandlers(): void {
 
   ipcMain.handle('updater:openDownloadPage', (_, url?: string) => {
     const status = updateService.getStatus()
-    const targetUrl = url || status.downloadUrl || 'https://github.com/adnaan-worker/adnify/releases/latest'
+    const targetUrl = url || status.downloadUrl || 'https://github.com/ad-naan/adnify/releases/latest'
     return openExternalSafely(targetUrl)
   })
 }
