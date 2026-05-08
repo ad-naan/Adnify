@@ -42,6 +42,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Windows watcher prebuild for ${{ matrix.arch }}
+        run: npm install --no-save --package-lock=false --os=win32 --cpu=${{ matrix.arch }} @parcel/watcher-win32-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-win32-${{ matrix.arch }}']")
+
       - name: Build
         run: npm run build
         env:
@@ -93,6 +96,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install macOS watcher prebuild for ${{ matrix.arch }}
+        run: npm install --no-save --package-lock=false --os=darwin --cpu=${{ matrix.arch }} @parcel/watcher-darwin-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-darwin-${{ matrix.arch }}']")
+
       - name: Build
         run: npm run build
         env:
@@ -143,6 +149,9 @@ jobs:
         run: npm ci --include=optional
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Linux watcher prebuild for ${{ matrix.arch }}
+        run: npm install --no-save --package-lock=false --os=linux --cpu=${{ matrix.arch }} @parcel/watcher-linux-${{ matrix.arch }}-glibc@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-linux-${{ matrix.arch }}-glibc']")
 
       - name: Build
         run: npm run build
