@@ -5,10 +5,10 @@
   "productName": "Adnify",
   "author": "adnaan <adnaan.worker@gmail.com>",
   "license": "SEE LICENSE IN LICENSE",
-  "homepage": "https://github.com/adnaan-worker/adnify",
+  "homepage": "https://github.com/ad-naan/adnify",
   "repository": {
     "type": "git",
-    "url": "https://github.com/adnaan-worker/adnify.git"
+    "url": "https://github.com/ad-naan/adnify.git"
   },
   "main": "dist/main/main.js",
   "scripts": {
@@ -114,7 +114,7 @@
     "productName": "Adnify",
     "publish": {
       "provider": "github",
-      "owner": "adnaan-worker",
+      "owner": "ad-naan",
       "repo": "adnify",
       "releaseType": "release"
     },

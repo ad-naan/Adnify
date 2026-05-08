@@ -6,7 +6,7 @@
 
 ### 报告 Bug
 
-1. 先搜索 [Issues](https://github.com/adnaan-worker/adnify/issues) 确认问题未被报告
+1. 先搜索 [Issues](https://github.com/ad-naan/adnify/issues) 确认问题未被报告
 2. 使用 Bug 报告模板创建新 Issue
 3. 提供详细的复现步骤、环境信息和截图
 
@@ -28,7 +28,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/adnaan-worker/adnify.git
+git clone https://github.com/ad-naan/adnify.git
 cd adnify
 
 # 安装依赖

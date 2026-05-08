@@ -96,7 +96,7 @@ class UpdateService {
     autoUpdater.channel = channel
     autoUpdater.setFeedURL({
       provider: 'github',
-      owner: 'adnaan-worker',
+      owner: 'ad-naan',
       repo: 'adnify',
     })
 
@@ -252,7 +252,7 @@ class UpdateService {
       const timeoutId = setTimeout(() => controller.abort(), 30 * 1000)
 
       try {
-        const latestRelease = await fetchLatestRelease('adnaan-worker', 'adnify', {
+        const latestRelease = await fetchLatestRelease('ad-naan', 'adnify', {
           userAgent: 'Adnify-Updater',
           signal: controller.signal,
         }) as {
@@ -404,7 +404,7 @@ class UpdateService {
       }
     }
 
-    return 'https://github.com/adnaan-worker/adnify/releases/latest'
+    return 'https://github.com/ad-naan/adnify/releases/latest'
   }
 
   private getUpdateChannel(): string {

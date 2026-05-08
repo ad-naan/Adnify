@@ -276,7 +276,7 @@ jobs:
           VERSION: ${{ needs.get-version.outputs.version }}
         run: |
           TAG="v$VERSION"
-          GITHUB_RELEASE_URL="https://github.com/adnaan-worker/adnify/releases/tag/$TAG"
+          GITHUB_RELEASE_URL="https://github.com/ad-naan/adnify/releases/tag/$TAG"
           
           BODY="## Adnify v$VERSION\n\n### 下载 / Downloads\n\n请前往 GitHub Release 下载：\n\n👉 **[$GITHUB_RELEASE_URL]($GITHUB_RELEASE_URL)**\n\n| 平台 | 架构 | 文件 |\n|------|------|------|\n| Windows 安装版 | x64 | [Adnify-Setup-$VERSION-x64.exe]($GITHUB_RELEASE_URL) |\n| Windows 安装版 | arm64 | [Adnify-Setup-$VERSION-arm64.exe]($GITHUB_RELEASE_URL) |\n| macOS | Intel (x64) | [Adnify-$VERSION-x64-mac.dmg]($GITHUB_RELEASE_URL) |\n| macOS | Apple Silicon | [Adnify-$VERSION-arm64-mac.dmg]($GITHUB_RELEASE_URL) |\n| Linux | x64 | [Adnify-$VERSION-x86_64-linux.AppImage]($GITHUB_RELEASE_URL) |\n| Linux | arm64 | [Adnify-$VERSION-arm64-linux.AppImage]($GITHUB_RELEASE_URL) |"
           

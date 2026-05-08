@@ -9,7 +9,7 @@
 感谢所有为 Adnify 做出贡献的开发者！你们是最棒的 🎉
 
 <!-- ALL-CONTRIBUTORS-LIST:START -->
-<a href="https://github.com/adnaan-worker"><img src="https://github.com/adnaan-worker.png" width="50" height="50" style="border-radius:50%" alt="adnaan"/></a>
+<a href="https://github.com/ad-naan"><img src="https://github.com/ad-naan.png" width="50" height="50" style="border-radius:50%" alt="adnaan"/></a>
 <a href="https://github.com/kerwin2046"><img src="https://github.com/kerwin2046.png" width="50" height="50" style="border-radius:50%" alt="kerwin"/></a>
 <a href="https://github.com/cniu6"><img src="https://github.com/cniu6.png" width="50" height="50" style="border-radius:50%" alt="cniu6"/></a>
 <a href="https://github.com/tss-tss"><img src="https://github.com/tss-tss.png" width="50" height="50" style="border-radius:50%" alt="晨曦"/></a>
