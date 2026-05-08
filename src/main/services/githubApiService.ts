@@ -1,5 +1,4 @@
 import Store from 'electron-store'
-import Store from 'electron-store'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { createScopedStore, getBootstrapStore } from './configPath'

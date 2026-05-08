@@ -1,0 +1,282 @@
+name: Internal Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to package, for example 1.7.47-beta.1'
+        required: true
+        type: string
+      ref:
+        description: 'Branch, tag, or commit to package. Leave empty for the selected workflow ref.'
+        required: false
+        type: string
+      platform:
+        description: 'Platform to package'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - windows
+          - macos
+          - linux
+      draft:
+        description: 'Create the GitHub internal release as draft'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Validate inputs
+        id: meta
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version: $VERSION"
+            exit 1
+          fi
+
+          TAG="internal-v${VERSION}-${{ github.run_number }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Internal version: $VERSION"
+          echo "Internal tag: $TAG"
+
+  build-windows:
+    needs: prepare
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'windows' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-11-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --include=optional
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set package version
+        run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Install Windows watcher prebuild for ${{ matrix.arch }}
+        run: npm install --no-save --package-lock=false --os=win32 --cpu=${{ matrix.arch }} @parcel/watcher-win32-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-win32-${{ matrix.arch }}']")
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+
+      - name: Package Windows ${{ matrix.arch }}
+        run: npx electron-builder --win --${{ matrix.arch }} -p never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.yml
+            release/*.yaml
+            release/*.blockmap
+          if-no-files-found: ignore
+
+  build-macos:
+    needs: prepare
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'macos' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: macos-15-intel
+          - arch: arm64
+            os: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools for node-gyp
+        run: pip install setuptools
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --include=optional
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set package version
+        run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Install macOS watcher prebuild for ${{ matrix.arch }}
+        run: npm install --no-save --package-lock=false --os=darwin --cpu=${{ matrix.arch }} @parcel/watcher-darwin-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-darwin-${{ matrix.arch }}']")
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+
+      - name: Package macOS ${{ matrix.arch }}
+        run: npx electron-builder --mac --${{ matrix.arch }} -p never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.yaml
+            release/*.blockmap
+          if-no-files-found: ignore
+
+  build-linux:
+    needs: prepare
+    if: ${{ inputs.platform == 'all' || inputs.platform == 'linux' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-latest
+          - arch: arm64
+            os: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools for node-gyp
+        run: pip install setuptools
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --include=optional
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set package version
+        run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Install Linux watcher prebuild for ${{ matrix.arch }}
+        run: npm install --no-save --package-lock=false --os=linux --cpu=${{ matrix.arch }} @parcel/watcher-linux-${{ matrix.arch }}-glibc@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-linux-${{ matrix.arch }}-glibc']")
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+
+      - name: Package Linux ${{ matrix.arch }}
+        run: npx electron-builder --linux --${{ matrix.arch }} -p never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.yml
+            release/*.yaml
+          if-no-files-found: ignore
+
+  release:
+    needs: [prepare, build-windows, build-macos, build-linux]
+    if: ${{ always() && needs.prepare.result == 'success' && (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') && (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name "Adnify-Setup-*.exe" -o -name "*.dmg" -o -name "*-mac.zip" -o -name "*.AppImage" -o -name "*.blockmap" \) -exec cp {} release-files/ \;
+
+          if [ -f "artifacts/windows-x64/latest.yml" ]; then cp artifacts/windows-x64/latest.yml release-files/latest.yml; fi
+          if [ -f "artifacts/windows-arm64/latest.yml" ]; then cp artifacts/windows-arm64/latest.yml release-files/latest-arm64.yml; fi
+          if [ -f "artifacts/macos-x64/latest-mac.yml" ]; then cp artifacts/macos-x64/latest-mac.yml release-files/latest-mac.yml; fi
+          if [ -f "artifacts/macos-arm64/latest-mac.yml" ]; then cp artifacts/macos-arm64/latest-mac.yml release-files/latest-arm64-mac.yml; fi
+          if [ -f "artifacts/linux-x64/latest-linux.yml" ]; then cp artifacts/linux-x64/latest-linux.yml release-files/latest-linux.yml; fi
+          if [ -f "artifacts/linux-arm64/latest-linux.yml" ]; then cp artifacts/linux-arm64/latest-linux.yml release-files/latest-linux-arm64.yml; fi
+
+          ls -la release-files/
+
+      - name: Create internal GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          target_commitish: ${{ inputs.ref || github.ref }}
+          name: Adnify ${{ needs.prepare.outputs.version }} Internal Test
+          body: |
+            ## Adnify ${{ needs.prepare.outputs.version }} Internal Test
+
+            This is an internal test build created manually from `${{ inputs.ref || github.ref }}`.
+
+            Platform selection: `${{ inputs.platform }}`
+            Workflow run: `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+
+            These artifacts are intended for validation only and are marked as a prerelease.
+          files: release-files/*
+          fail_on_unmatched_files: false
+          draft: ${{ inputs.draft }}
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -554,7 +554,7 @@ class TerminalManagerClass {
     const id = crypto.randomUUID();
     const backend =
       options.backend ??
-      (options.isAgent ? getInteractiveTerminalBackend() : 'pty');
+      getInteractiveTerminalBackend();
 
     const instance: TerminalInstance = {
       id,
