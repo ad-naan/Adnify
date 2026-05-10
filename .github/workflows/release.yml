@@ -117,6 +117,47 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify macOS package contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find release -maxdepth 3 -type d -name "Adnify.app" | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "Adnify.app was not produced"
+            exit 1
+          fi
+
+          RESOURCES="$APP_PATH/Contents/Resources"
+          APP_ASAR="$RESOURCES/app.asar"
+          if [ ! -f "$APP_ASAR" ]; then
+            echo "Missing app.asar"
+            exit 1
+          fi
+
+          APP_ASAR="$APP_ASAR" node <<'NODE'
+          const asar = require('@electron/asar')
+          const files = asar.listPackage(process.env.APP_ASAR)
+          const has = (path) => files.includes(`/${path}`)
+          const required = [
+            'dist/main/main.js',
+            'dist/preload/preload.js',
+            'dist/renderer/index.html'
+          ]
+          const missing = required.filter((path) => !has(path))
+          const hasRendererEntry = files.some((path) => /^\/dist\/renderer\/assets\/index-[^/]+\.js$/.test(path))
+          if (!hasRendererEntry) missing.push('dist/renderer/assets/index-*.js')
+          if (missing.length) {
+            console.error(`Missing packaged files: ${missing.join(', ')}`)
+            process.exit(1)
+          }
+          NODE
+
+          WATCHER_DIR="$RESOURCES/app.asar.unpacked/node_modules/@parcel/watcher-darwin-${{ matrix.arch }}"
+          if [ ! -d "$WATCHER_DIR" ]; then
+            echo "Missing $WATCHER_DIR"
+            exit 1
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         with:

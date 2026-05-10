@@ -1,5 +1,5 @@
 /**
- * 应用初始化 Hook
+ * App initialization hook.
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { api } from '@renderer/services/electronAPI'
@@ -22,16 +22,18 @@ export function useAppInit(options: UseAppInitOptions = {}) {
   const updateLoaderStatus = useCallback((status: string) => {
     const statusEl = document.querySelector('#initial-loader .loader-status span')
     const subStatusEl = document.querySelector('#initial-loader .loader-status-sub span')
+
     if (statusEl) {
       if (status === 'Initializing...') statusEl.textContent = '正在初始化 AI 引擎...'
       else if (status === 'Loading settings...') statusEl.textContent = '正在加载配置信息...'
       else if (status === 'Restoring workspace...') statusEl.textContent = '正在构建工作区...'
-      else if (status === 'Ready!') statusEl.textContent = '加载完成！'
+      else if (status === 'Ready!') statusEl.textContent = '加载完成'
       else statusEl.textContent = status
     }
+
     if (subStatusEl) {
       if (status === 'Initializing...') subStatusEl.textContent = '正在启动核心服务与通信通道'
-      else if (status === 'Loading settings...') subStatusEl.textContent = '正在读取您的偏好设置与插件配置'
+      else if (status === 'Loading settings...') subStatusEl.textContent = '正在读取偏好设置与插件配置'
       else if (status === 'Restoring workspace...') subStatusEl.textContent = '正在准备项目上下文、模型能力与最近会话'
       else if (status === 'Ready!') subStatusEl.textContent = '即将进入 Adnify'
     }
@@ -58,15 +60,12 @@ export function useAppInit(options: UseAppInitOptions = {}) {
     const init = async () => {
       const result = await initializeApp(updateLoaderStatus)
 
-      // 注册设置同步
       const unsubscribeSettings = registerSettingsSync()
       window.__settingsUnsubscribe = unsubscribeSettings
 
-      // 注册主进程错误监听
       const unsubscribeError = registerAppErrorListener()
       window.__errorUnsubscribe = unsubscribeError
 
-      // 短暂延迟后完成初始化
       setTimeout(() => {
         removeInitialLoader()
         api.appReady()
@@ -82,6 +81,7 @@ export function useAppInit(options: UseAppInitOptions = {}) {
         unsubscribeSettings()
         delete window.__settingsUnsubscribe
       }
+
       const unsubscribeError = window.__errorUnsubscribe
       if (unsubscribeError) {
         unsubscribeError()
@@ -90,7 +90,6 @@ export function useAppInit(options: UseAppInitOptions = {}) {
     }
   }, [updateLoaderStatus, removeInitialLoader])
 
-  // 初始化工作区状态同步
   useEffect(() => {
     return initWorkspaceStateSync()
   }, [])

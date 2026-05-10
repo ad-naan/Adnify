@@ -21,6 +21,15 @@ on:
           - windows
           - macos
           - linux
+      architecture:
+        description: 'Architecture to package'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - x64
+          - arm64
       draft:
         description: 'Create the GitHub internal release as draft'
         required: true
@@ -51,7 +60,7 @@ jobs:
 
   build-windows:
     needs: prepare
-    if: ${{ inputs.platform == 'all' || inputs.platform == 'windows' }}
+    if: ${{ (inputs.platform == 'all' || inputs.platform == 'windows') && (inputs.architecture == 'all' || inputs.architecture == 'x64' || inputs.architecture == 'arm64') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -63,38 +72,46 @@ jobs:
             os: windows-11-arm
     steps:
       - name: Checkout
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Node.js
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm ci --include=optional
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set package version
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Install Windows watcher prebuild for ${{ matrix.arch }}
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm install --no-save --package-lock=false --os=win32 --cpu=${{ matrix.arch }} @parcel/watcher-win32-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-win32-${{ matrix.arch }}']")
 
       - name: Build
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
       - name: Package Windows ${{ matrix.arch }}
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/upload-artifact@v6
         with:
           name: windows-${{ matrix.arch }}
@@ -107,7 +124,7 @@ jobs:
 
   build-macos:
     needs: prepare
-    if: ${{ inputs.platform == 'all' || inputs.platform == 'macos' }}
+    if: ${{ (inputs.platform == 'all' || inputs.platform == 'macos') && (inputs.architecture == 'all' || inputs.architecture == 'x64' || inputs.architecture == 'arm64') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -119,46 +136,98 @@ jobs:
             os: macos-latest
     steps:
       - name: Checkout
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Python
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install setuptools for node-gyp
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pip install setuptools
 
       - name: Setup Node.js
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm ci --include=optional
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set package version
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Install macOS watcher prebuild for ${{ matrix.arch }}
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm install --no-save --package-lock=false --os=darwin --cpu=${{ matrix.arch }} @parcel/watcher-darwin-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-darwin-${{ matrix.arch }}']")
 
       - name: Build
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
       - name: Package macOS ${{ matrix.arch }}
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Verify macOS package contents
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find release -maxdepth 3 -type d -name "Adnify.app" | head -n 1)"
+          if [ -z "$APP_PATH" ]; then
+            echo "Adnify.app was not produced"
+            exit 1
+          fi
+
+          RESOURCES="$APP_PATH/Contents/Resources"
+          APP_ASAR="$RESOURCES/app.asar"
+          if [ ! -f "$APP_ASAR" ]; then
+            echo "Missing app.asar"
+            exit 1
+          fi
+
+          APP_ASAR="$APP_ASAR" node <<'NODE'
+          const asar = require('@electron/asar')
+          const files = asar.listPackage(process.env.APP_ASAR)
+          const has = (path) => files.includes(`/${path}`)
+          const required = [
+            'dist/main/main.js',
+            'dist/preload/preload.js',
+            'dist/renderer/index.html'
+          ]
+          const missing = required.filter((path) => !has(path))
+          const hasRendererEntry = files.some((path) => /^\/dist\/renderer\/assets\/index-[^/]+\.js$/.test(path))
+          if (!hasRendererEntry) missing.push('dist/renderer/assets/index-*.js')
+          if (missing.length) {
+            console.error(`Missing packaged files: ${missing.join(', ')}`)
+            process.exit(1)
+          }
+          NODE
+
+          WATCHER_DIR="$RESOURCES/app.asar.unpacked/node_modules/@parcel/watcher-darwin-${{ matrix.arch }}"
+          if [ ! -d "$WATCHER_DIR" ]; then
+            echo "Missing $WATCHER_DIR"
+            exit 1
+          fi
+
       - name: Upload artifacts
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/upload-artifact@v6
         with:
           name: macos-${{ matrix.arch }}
@@ -172,7 +241,7 @@ jobs:
 
   build-linux:
     needs: prepare
-    if: ${{ inputs.platform == 'all' || inputs.platform == 'linux' }}
+    if: ${{ (inputs.platform == 'all' || inputs.platform == 'linux') && (inputs.architecture == 'all' || inputs.architecture == 'x64' || inputs.architecture == 'arm64') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -184,46 +253,56 @@ jobs:
             os: ubuntu-24.04-arm
     steps:
       - name: Checkout
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Python
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install setuptools for node-gyp
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pip install setuptools
 
       - name: Setup Node.js
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm ci --include=optional
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set package version
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Install Linux watcher prebuild for ${{ matrix.arch }}
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm install --no-save --package-lock=false --os=linux --cpu=${{ matrix.arch }} @parcel/watcher-linux-${{ matrix.arch }}-glibc@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-linux-${{ matrix.arch }}-glibc']")
 
       - name: Build
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
       - name: Package Linux ${{ matrix.arch }}
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/upload-artifact@v6
         with:
           name: linux-${{ matrix.arch }}
@@ -271,6 +350,7 @@ jobs:
             This is an internal test build created manually from `${{ inputs.ref || github.ref }}`.
 
             Platform selection: `${{ inputs.platform }}`
+            Architecture selection: `${{ inputs.architecture }}`
             Workflow run: `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
 
             These artifacts are intended for validation only and are marked as a prerelease.
