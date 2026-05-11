@@ -75,11 +75,22 @@ function getLanguageFromPath(path: string): string {
 function createStreamingDiff(newContent: string, maxLines = 100): DiffLine[] {
     if (!newContent) return []
 
-    const lines = newContent.split('\n').slice(0, maxLines)
+    // For very large content, only split the tail so we avoid O(N) splitting
+    // on each streaming delta. Keeping the last `maxLines * 200` chars is a
+    // safe upper bound for a 100-line window of typical source code.
+    const TAIL_SLICE_THRESHOLD = 64 * 1024
+    const source = newContent.length > TAIL_SLICE_THRESHOLD
+        ? newContent.slice(-Math.max(maxLines * 200, 8 * 1024))
+        : newContent
+
+    const allLines = source.split('\n')
+    const lines = allLines.slice(-maxLines)
+    const baseLineNumber = Math.max(1, allLines.length - lines.length + 1)
+
     return lines.map((content, idx) => ({
         type: 'add' as const,
         content: content.slice(0, 500),
-        newLineNumber: idx + 1,
+        newLineNumber: baseLineNumber + idx,
     }))
 }
 
@@ -411,8 +422,16 @@ export default function InlineDiffPreview({
 
     if (!diffLines || displayLines.length === 0) {
         return (
-            <div className="text-[10px] text-text-muted italic px-2 py-1">
-                {isStreaming ? 'Waiting for content...' : 'No changes'}
+            <div className="flex items-center gap-1.5 text-[10px] text-text-muted italic px-2 py-1">
+                {isStreaming ? (
+                    <>
+                        <span className="w-1 h-1 rounded-full bg-accent animate-pulse" />
+                        <span>Receiving content...</span>
+                        {newContent.length > 0 && (
+                            <span className="opacity-60">({(newContent.length / 1024).toFixed(1)} KB)</span>
+                        )}
+                    </>
+                ) : 'No changes'}
             </div>
         )
     }
