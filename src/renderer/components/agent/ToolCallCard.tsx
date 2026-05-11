@@ -11,7 +11,7 @@ import { useToolCardExpansion } from '@renderer/hooks'
 import { JsonHighlight } from '@utils/jsonHighlight'
 import { toast } from '@components/common/ToastProvider'
 import { RichContentRenderer } from './RichContentRenderer'
-import InlineDiffPreview from './InlineDiffPreview'
+import InlineDiffPreview, { countContentLines } from './InlineDiffPreview'
 import { getExtension, getFileName } from '@shared/utils/pathUtils'
 import { TextWithFileLinks } from '../common/TextWithFileLinks'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
@@ -542,6 +542,13 @@ function ToolPreview({
         const isLargeWrite = meta?.isLargeWrite === true || meta?.contentTruncated === true
         const isTruncated = isLargeWrite || nextContent.length > 5000 || oldString.length > 5000
 
+        // While streaming, a content payload over this threshold triggers a
+        // lightweight summary instead of a live diff render. The full diff is
+        // still computed once streaming settles.
+        const STREAMING_DIFF_BYPASS_THRESHOLD = 64 * 1024
+        const bypassStreamingDiff = isStreaming && nextContent.length > STREAMING_DIFF_BYPASS_THRESHOLD
+        const streamedLineCount = bypassStreamingDiff ? countContentLines(nextContent) : 0
+
         if (newContent || isStreaming) {
             return (
                 <div className="space-y-1">
@@ -560,6 +567,11 @@ function ToolPreview({
                             <span className="text-accent flex items-center gap-1">
                                 <span className="w-1 h-1 rounded-full bg-accent animate-pulse" />
                                 Writing...
+                                {bypassStreamingDiff && (
+                                    <span className="opacity-70">
+                                        {(nextContent.length / 1024).toFixed(1)} KB · {streamedLineCount} lines
+                                    </span>
+                                )}
                             </span>
                         )}
                         {isTruncated && !isStreaming && <span className="text-amber-500">(truncated)</span>}
@@ -567,6 +579,10 @@ function ToolPreview({
                     {isLargeWrite && !isStreaming ? (
                         <div className="ml-1 rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-2 text-[11px] text-text-muted">
                             Large file preview deferred. Open the file to inspect the full content safely.
+                        </div>
+                    ) : bypassStreamingDiff ? (
+                        <div className="ml-1 rounded-md border border-accent/20 bg-accent/5 px-2 py-2 text-[11px] text-text-muted">
+                            Large file streaming · diff will render after completion.
                         </div>
                     ) : (
                         <div className="max-h-64 overflow-auto custom-scrollbar pl-2 ml-1">
