@@ -23,7 +23,23 @@ const STREAMABLE_TOOL_ARG_KEYS = new Set([
   'source',
 ])
 
+// Short lookup fields are always extracted in full — they may appear at the
+// tail of the JSON (when the LLM emits `content` before `path`) and would
+// otherwise be missed if the args string exceeds the head scan window.
+const SHORT_LOOKUP_KEYS = [
+  'path',
+  'command',
+  'query',
+  'pattern',
+  'url',
+  'cwd',
+  'terminal_id',
+  'file_pattern',
+  'source',
+] as const
+
 const PARTIAL_ARGS_SCAN_LIMIT = 16384
+const PARTIAL_ARGS_TAIL_LIMIT = 4096
 
 function decodeJsonStringFragment(value: string): string {
   return value
@@ -244,6 +260,31 @@ export function parsePartialJsonArgs(argsString: string): Record<string, unknown
     ? argsString.slice(0, PARTIAL_ARGS_SCAN_LIMIT)
     : argsString
 
+  // For streams that exceed the head window (e.g. a large `content` field
+  // followed by `path`), also scan a small tail slice so short lookup fields
+  // remain recoverable during streaming.
+  const tailTarget = argsString.length > PARTIAL_ARGS_SCAN_LIMIT
+    ? argsString.slice(Math.max(PARTIAL_ARGS_SCAN_LIMIT, argsString.length - PARTIAL_ARGS_TAIL_LIMIT))
+    : ''
+
+  const hydrateShortFields = (target: Record<string, unknown>): Record<string, unknown> => {
+    if (!tailTarget) return target
+    for (const key of SHORT_LOOKUP_KEYS) {
+      if (typeof target[key] === 'string' && (target[key] as string).length > 0) continue
+      const tailValue = extractPartialStringField(tailTarget, key)
+      if (tailValue === null || tailValue.length === 0) continue
+      const decoded = decodeJsonStringFragment(tailValue)
+      // Sanity checks: short lookup values are never multi-line and stay
+      // well under typical filesystem path limits. This protects against
+      // accidentally matching a `"path":` fragment embedded inside a large
+      // `content` string value.
+      if (decoded.length > 1024) continue
+      if (decoded.includes('\n')) continue
+      target[key] = decoded
+    }
+    return target
+  }
+
   try {
     const parsed = JSON.parse(scanTarget)
     if (!parsed || typeof parsed !== 'object') return null
@@ -259,7 +300,8 @@ export function parsePartialJsonArgs(argsString: string): Record<string, unknown
       filtered.edits = parsedRecord.edits
     }
 
-    return Object.keys(filtered).length > 0 ? filtered : null
+    const hydrated = hydrateShortFields(filtered)
+    return Object.keys(hydrated).length > 0 ? hydrated : null
   } catch {
     const result: Record<string, unknown> = {}
 
@@ -300,6 +342,7 @@ export function parsePartialJsonArgs(argsString: string): Record<string, unknown
       result.edits = edits
     }
 
-    return Object.keys(result).length > 0 ? result : null
+    const hydrated = hydrateShortFields(result)
+    return Object.keys(hydrated).length > 0 ? hydrated : null
   }
 }

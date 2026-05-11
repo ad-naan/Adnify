@@ -65,6 +65,8 @@ export function createStreamProcessor(
   const streamingEditPreviewCoordinator = new StreamingEditPreviewCoordinator()
 
   let toolUpdateRafId: number | null = null
+  let lastFlushTimestamp = 0
+  let maxStreamingArgsLen = 0
   const pendingToolPreviewUpdates = new Map<string, {
     partialArgs?: Record<string, unknown>
     name?: string
@@ -92,16 +94,29 @@ export function createStreamProcessor(
     }
 
     pendingToolPreviewUpdates.clear()
+    lastFlushTimestamp = Date.now()
+  }
+
+  // Adaptive throttle interval based on the largest in-flight args string.
+  // Small args flush near-real-time; very large writes back off to keep the
+  // main thread responsive during streaming diff rendering.
+  const getFlushIntervalMs = (): number => {
+    if (maxStreamingArgsLen > 131072) return 600
+    if (maxStreamingArgsLen > 32768) return 300
+    return 150
   }
 
   const scheduleToolPreviewUpdates = () => {
     if (toolUpdateRafId !== null) return
 
-    // 降低工具预览更新频率，避免频繁触发状态更新
+    const interval = getFlushIntervalMs()
+    const elapsed = Date.now() - lastFlushTimestamp
+    const delay = Math.max(0, interval - elapsed)
+
     toolUpdateRafId = window.setTimeout(() => {
       toolUpdateRafId = null
       flushToolPreviewUpdates()
-    }, 150) as unknown as number
+    }, delay) as unknown as number
   }
 
   const queueToolPreviewUpdate = (
@@ -255,6 +270,9 @@ export function createStreamProcessor(
           if (tc) {
             if (argsDelta) {
               tc.argsString += argsDelta
+              if (tc.argsString.length > maxStreamingArgsLen) {
+                maxStreamingArgsLen = tc.argsString.length
+              }
 
               if (assistantId) {
                 const partialArgs = parsePartialJsonArgs(tc.argsString)
