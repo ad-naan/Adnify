@@ -98,7 +98,7 @@
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
     "electron": "^39.2.7",
-    "electron-builder": "^24.13.3",
+    "electron-builder": "^26.8.1",
     "fast-check": "^4.4.0",
     "fast-json-stable-stringify": "^2.1.0",
     "postcss": "^8.4.49",
