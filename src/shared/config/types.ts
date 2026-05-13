@@ -9,6 +9,37 @@ import type { LLMConfig, LLMProviderOptions } from '@/shared/types/llm'
 export type { LLMConfig }
 export type { ApiProtocol }
 
+export interface ModelReference {
+  provider: string
+  model: string
+}
+
+export type ModelRoutingFallbackPolicy = 'primary_with_notice'
+export type ModelRoutingHandoffFormat = 'structured_summary_with_raw_block'
+
+export interface PersistedModelRoutingConfig {
+  primary?: ModelReference
+  multimodal?: ModelReference
+  fallbackPolicy?: ModelRoutingFallbackPolicy
+  handoffFormat?: ModelRoutingHandoffFormat
+}
+
+export interface ResolvedModelRoutingConfig {
+  primary: ModelReference
+  multimodal?: ModelReference
+  fallbackPolicy: ModelRoutingFallbackPolicy
+  handoffFormat: ModelRoutingHandoffFormat
+}
+
+export interface MessageRoutingDecision {
+  primaryConfig: LLMConfig
+  multimodalConfig?: LLMConfig
+  shouldUseMultimodalPrepass: boolean
+  reason: 'no-image' | 'no-config' | 'configured'
+  fallbackPolicy: ModelRoutingFallbackPolicy
+  handoffFormat: ModelRoutingHandoffFormat
+}
+
 export interface ProviderConfig {
   apiKey?: string
   baseUrl?: string
@@ -191,6 +222,7 @@ export interface PersistedLLMConfig {
 
 export interface AppSettings {
   llmConfig: PersistedLLMConfig
+  modelRouting?: PersistedModelRoutingConfig
   language: string
   autoApprove: AutoApproveSettings
   promptTemplateId?: string

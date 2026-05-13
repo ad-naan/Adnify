@@ -100,6 +100,7 @@ function SettingsTabFallback({ language }: { language: Language }) {
 export default function SettingsModal() {
     const {
         llmConfig,
+        modelRouting,
         language,
         autoApprove,
         providerConfigs,
@@ -118,6 +119,7 @@ export default function SettingsModal() {
         save,
     } = useStore(useShallow(s => ({
         llmConfig: s.llmConfig,
+        modelRouting: s.modelRouting,
         language: s.language,
         autoApprove: s.autoApprove,
         providerConfigs: s.providerConfigs,
@@ -141,6 +143,7 @@ export default function SettingsModal() {
     const [saved, setSaved] = useState(false)
 
     const [localConfig, setLocalConfig] = useState(llmConfig)
+    const [localModelRouting, setLocalModelRouting] = useState(modelRouting)
     const [localLanguage, setLocalLanguage] = useState(language)
     const [localAutoApprove, setLocalAutoApprove] = useState(autoApprove)
     const [localPromptTemplateId, setLocalPromptTemplateId] = useState(promptTemplateId)
@@ -158,6 +161,7 @@ export default function SettingsModal() {
 
     useEffect(() => {
         setLocalConfig(llmConfig)
+        setLocalModelRouting(modelRouting)
         setLocalLanguage(language)
         setLocalAutoApprove(autoApprove)
         setLocalPromptTemplateId(promptTemplateId)
@@ -179,6 +183,7 @@ export default function SettingsModal() {
         enableFileLogging,
         language,
         llmConfig,
+        modelRouting,
         mcpConfig,
         githubToken,
         promptTemplateId,
@@ -233,6 +238,7 @@ export default function SettingsModal() {
 
     const sourceSnapshots = useMemo(() => ({
         llmConfig: serializeComparable(llmConfig),
+        modelRouting: serializeComparable(modelRouting),
         agentConfig: serializeComparable(agentConfig),
         webSearchConfig: serializeComparable(webSearchConfig),
         mcpConfig: serializeComparable(mcpConfig),
@@ -240,10 +246,11 @@ export default function SettingsModal() {
         providerConfigs: serializeComparable(providerConfigs),
         securitySettings: serializeComparable(securitySettings),
         editorConfig: serializeComparable(editorConfig),
-    }), [agentConfig, editorConfig, githubToken, llmConfig, mcpConfig, providerConfigs, securitySettings, webSearchConfig])
+    }), [agentConfig, editorConfig, githubToken, llmConfig, mcpConfig, modelRouting, providerConfigs, securitySettings, webSearchConfig])
 
     const localSnapshots = useMemo(() => ({
         llmConfig: serializeComparable(localConfig),
+        modelRouting: serializeComparable(localModelRouting),
         agentConfig: serializeComparable(localAgentConfig),
         webSearchConfig: serializeComparable(localWebSearchConfig),
         mcpConfig: serializeComparable(localMcpConfig),
@@ -251,10 +258,11 @@ export default function SettingsModal() {
         providerConfigs: serializeComparable(localProviderConfigs),
         securitySettings: serializeComparable(localSecuritySettings),
         editorConfig: serializeComparable(finalEditorConfig),
-    }), [finalEditorConfig, localAgentConfig, localConfig, localGithubToken, localMcpConfig, localProviderConfigs, localSecuritySettings, localWebSearchConfig])
+    }), [finalEditorConfig, localAgentConfig, localConfig, localGithubToken, localMcpConfig, localModelRouting, localProviderConfigs, localSecuritySettings, localWebSearchConfig])
 
     const isDirty = useMemo(() => {
         return localSnapshots.llmConfig !== sourceSnapshots.llmConfig ||
+            localSnapshots.modelRouting !== sourceSnapshots.modelRouting ||
             localLanguage !== language ||
             localAutoApprove !== autoApprove ||
             localPromptTemplateId !== promptTemplateId ||
@@ -295,6 +303,13 @@ export default function SettingsModal() {
 
         try {
             set('llmConfig', localConfig)
+            set('modelRouting', {
+                ...localModelRouting,
+                primary: {
+                    provider: localConfig.provider,
+                    model: localConfig.model,
+                },
+            })
             set('language', localLanguage)
             set('autoApprove', localAutoApprove)
             set('promptTemplateId', localPromptTemplateId)
@@ -340,6 +355,7 @@ export default function SettingsModal() {
         localGithubToken,
         localLanguage,
         localMcpConfig,
+        localModelRouting,
         localPromptTemplateId,
         localProviderConfigs,
         localSecuritySettings,
@@ -411,6 +427,8 @@ export default function SettingsModal() {
                     <ProviderSettings
                         localConfig={localConfig}
                         setLocalConfig={setLocalConfig}
+                        localModelRouting={localModelRouting}
+                        setLocalModelRouting={setLocalModelRouting}
                         localProviderConfigs={localProviderConfigs}
                         setLocalProviderConfigs={setLocalProviderConfigs}
                         showApiKey={showApiKey}

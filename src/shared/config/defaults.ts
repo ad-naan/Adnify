@@ -32,6 +32,11 @@ export const LLM_DEFAULTS = {
   stopSequences: undefined,  // 默认无停止序列
 } as const
 
+export const MODEL_ROUTING_DEFAULTS = {
+  fallbackPolicy: 'primary_with_notice',
+  handoffFormat: 'structured_summary_with_raw_block',
+} as const
+
 // ============================================
 // AI 补全配置默认值
 // ============================================

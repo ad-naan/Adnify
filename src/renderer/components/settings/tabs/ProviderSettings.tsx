@@ -700,6 +700,8 @@ function InlineCustomProviderForm({
 export function ProviderSettings({
   localConfig,
   setLocalConfig,
+  localModelRouting,
+  setLocalModelRouting,
   localProviderConfigs,
   setLocalProviderConfigs,
   showApiKey,
@@ -893,6 +895,89 @@ export function ProviderSettings({
     toast.success(language === 'zh' ? `已添加 ${newModels.length} 个模型` : `Added ${newModels.length} models`)
   }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
 
+  const providerHasApiKey = useCallback((providerId: string) => {
+    const providerConfig = localProviderConfigs[providerId]
+    if (providerConfig?.apiKey) {
+      return true
+    }
+
+    return localConfig.provider === providerId && Boolean(localConfig.apiKey)
+  }, [localConfig.apiKey, localConfig.provider, localProviderConfigs])
+
+  const allProviderOptions = useMemo(
+    () => [
+      ...providers,
+      ...customProviders.map(({ id, config }) => ({
+        id,
+        name: config.displayName || id,
+        models: config.customModels || [],
+      })),
+    ],
+    [customProviders, providers],
+  )
+
+  const collectProviderModels = useCallback((providerId: string, providerConfigs = localProviderConfigs) => {
+    if (!providerId) {
+      return []
+    }
+
+    const providerEntry = allProviderOptions.find(provider => provider.id === providerId)
+    const providerConfig = providerConfigs[providerId]
+    const models = new Set<string>(providerEntry?.models || [])
+
+    for (const model of providerConfig?.customModels || []) {
+      models.add(model)
+    }
+
+    if (providerConfig?.model) {
+      models.add(providerConfig.model)
+    }
+
+    if (localConfig.provider === providerId && localConfig.model) {
+      models.add(localConfig.model)
+    }
+
+    if (localModelRouting.multimodal?.provider === providerId && localModelRouting.multimodal.model) {
+      models.add(localModelRouting.multimodal.model)
+    }
+
+    return Array.from(models)
+  }, [
+    allProviderOptions,
+    localConfig.model,
+    localConfig.provider,
+    localModelRouting.multimodal?.model,
+    localModelRouting.multimodal?.provider,
+    localProviderConfigs,
+  ])
+
+  const updateMultimodalSelection = useCallback((
+    providerId: string,
+    explicitModel?: string | null,
+    providerConfigsOverride?: typeof localProviderConfigs,
+  ) => {
+    if (!providerId) {
+      setLocalModelRouting(prev => ({
+        ...prev,
+        multimodal: undefined,
+      }))
+      return
+    }
+
+    const availableModelsForProvider = collectProviderModels(
+      providerId,
+      providerConfigsOverride || localProviderConfigs,
+    )
+    const fallbackModel = explicitModel !== undefined
+      ? (explicitModel || '')
+      : availableModelsForProvider[0] || ''
+
+    setLocalModelRouting(prev => ({
+      ...prev,
+      multimodal: fallbackModel ? { provider: providerId, model: fallbackModel } : undefined,
+    }))
+  }, [collectProviderModels, localProviderConfigs, setLocalModelRouting])
+
   // 删除模型从本地配置
   const handleRemoveModel = (model: string) => {
     handleBatchRemoveModels([model])
@@ -903,12 +988,23 @@ export function ProviderSettings({
     const currentConfig = localProviderConfigs[localConfig.provider]
     if (!currentConfig) return
 
+    const remainingModels = (currentConfig.customModels || []).filter(m => !models.includes(m))
     const updatedConfigs = {
       ...localProviderConfigs,
       [localConfig.provider]: {
         ...currentConfig,
-        customModels: (currentConfig.customModels || []).filter(m => !models.includes(m))
+        customModels: remainingModels,
       }
+    }
+
+    if (
+      localModelRouting.multimodal?.provider === localConfig.provider &&
+      localModelRouting.multimodal.model &&
+      models.includes(localModelRouting.multimodal.model)
+    ) {
+      const remainingAvailableModels = collectProviderModels(localConfig.provider, updatedConfigs)
+        .filter(model => !models.includes(model))
+      updateMultimodalSelection(localConfig.provider, remainingAvailableModels[0] ?? null, updatedConfigs)
     }
 
     setLocalProviderConfigs(updatedConfigs)
@@ -919,7 +1015,7 @@ export function ProviderSettings({
     } else {
       toast.success(language === 'zh' ? `已清空 ${models.length} 个模型` : `Cleared ${models.length} models`)
     }
-  }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
+  }, [collectProviderModels, language, localConfig.provider, localModelRouting.multimodal?.model, localModelRouting.multimodal?.provider, localProviderConfigs, setLocalProviderConfigs, setProvider, updateMultimodalSelection])
 
   // 选择内置 Provider
   const handleSelectBuiltinProvider = (providerId: string, skipSaveCurrent = false) => {
@@ -1057,6 +1153,13 @@ export function ProviderSettings({
       variant: 'danger',
     })
     if (confirmed) {
+      if (localModelRouting.multimodal?.provider === id) {
+        setLocalModelRouting(prev => ({
+          ...prev,
+          multimodal: undefined,
+        }))
+      }
+
       // 如果当前选中的是被删除的 provider，先切换到默认（跳过保存当前配置）
       if (localConfig.provider === id) {
         handleSelectBuiltinProvider('openai', true)
@@ -1096,6 +1199,27 @@ export function ProviderSettings({
     () => availableModels.map((model) => ({ value: model, label: model })),
     [availableModels],
   )
+  const selectedMultimodalProviderId = localModelRouting.multimodal?.provider || ''
+  const multimodalProviderOptions = useMemo(() => [
+    {
+      value: '',
+      label: language === 'zh' ? '未配置（使用主模型）' : 'Not configured (use primary model)',
+    },
+    ...allProviderOptions
+      .filter(provider => providerHasApiKey(provider.id))
+      .map(provider => ({
+        value: provider.id,
+        label: provider.name,
+      })),
+  ], [allProviderOptions, language, providerHasApiKey])
+  const multimodalModelOptions = useMemo(() => {
+    if (!selectedMultimodalProviderId) {
+      return []
+    }
+
+    return collectProviderModels(selectedMultimodalProviderId)
+      .map(model => ({ value: model, label: model }))
+  }, [collectProviderModels, selectedMultimodalProviderId])
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -1376,6 +1500,60 @@ export function ProviderSettings({
                     onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value || undefined })}
                     placeholder="https://api.example.com/v1"
                     className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 text-xs font-mono h-10 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div className="relative space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h5 className="text-sm font-semibold text-text-primary">
+                    {language === 'zh' ? '多模态路由' : 'Multimodal Routing'}
+                  </h5>
+                  <p className="mt-1 text-[11px] text-text-muted">
+                    {language === 'zh'
+                      ? '配置多模态模型的连接参数，留空时使用主模型处理多模态任务。'
+                      : 'Configure the connection parameters for the multimodal model; if left blank, the main model will be used to process multimodal tasks.'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-right">
+                  <div className="text-[10px] uppercase tracking-wider text-text-muted">
+                    {language === 'zh' ? '当前主模型' : 'Primary Model'}
+                  </div>
+                  <div className="mt-1 text-xs font-medium text-text-primary">
+                    {localConfig.provider}/{localConfig.model}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? '多模态提供商' : 'Multimodal Provider'}
+                  </label>
+                  <Select
+                    value={selectedMultimodalProviderId}
+                    onChange={(value) => updateMultimodalSelection(value)}
+                    options={multimodalProviderOptions}
+                    className="w-full bg-background/50 border-border"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-text-secondary">
+                    {language === 'zh' ? '多模态模型' : 'Multimodal Model'}
+                  </label>
+                  <Select
+                    value={localModelRouting.multimodal?.model || ''}
+                    onChange={(value) => updateMultimodalSelection(selectedMultimodalProviderId, value)}
+                    options={multimodalModelOptions}
+                    placeholder={language === 'zh' ? '先选择提供商' : 'Select provider first'}
+                    disabled={!selectedMultimodalProviderId || multimodalModelOptions.length === 0}
+                    className="w-full bg-background/50 border-border"
                   />
                 </div>
               </div>
