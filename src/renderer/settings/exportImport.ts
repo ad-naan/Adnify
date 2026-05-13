@@ -33,6 +33,7 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
       provider: settings.llmConfig.provider,
       model: settings.llmConfig.model,
     } as SettingsState['llmConfig'],
+    modelRouting: settings.modelRouting,
     providerConfigs: {},
   }
 

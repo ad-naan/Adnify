@@ -48,13 +48,41 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
   hasExistingConfig: false,
 
   set: (key, value) => {
-    set({ [key]: value } as Partial<SettingsState>)
+    set((state) => {
+      const nextState: Partial<SettingsState> = { [key]: value } as Partial<SettingsState>
+      if (key === 'llmConfig') {
+        const llmConfig = value as SettingsState['llmConfig']
+        nextState.modelRouting = {
+          ...state.modelRouting,
+          primary: {
+            provider: llmConfig.provider,
+            model: llmConfig.model,
+          },
+        }
+      }
+      return nextState
+    })
   },
 
   update: (key, partial) => {
-    set((state) => ({
-      [key]: { ...(state[key] as object), ...partial },
-    } as Partial<SettingsState>))
+    set((state) => {
+      const nextState: Partial<SettingsState> = {
+        [key]: { ...(state[key] as object), ...partial },
+      } as Partial<SettingsState>
+
+      if (key === 'llmConfig') {
+        const nextLlmConfig = nextState.llmConfig as SettingsState['llmConfig']
+        nextState.modelRouting = {
+          ...state.modelRouting,
+          primary: {
+            provider: nextLlmConfig.provider,
+            model: nextLlmConfig.model,
+          },
+        }
+      }
+
+      return nextState
+    })
   },
 
   setProvider: (id, config) =>
@@ -138,6 +166,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
       const state = get()
       await settingsService.save({
         llmConfig: state.llmConfig,
+        modelRouting: state.modelRouting,
         language: state.language,
         autoApprove: state.autoApprove,
         promptTemplateId: state.promptTemplateId,
