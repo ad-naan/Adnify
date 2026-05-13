@@ -3,7 +3,7 @@
  */
 
 import { Language } from '@renderer/i18n'
-import type { LLMConfig, AutoApproveSettings, AgentConfig, WebSearchConfig } from '@shared/config/types'
+import type { LLMConfig, AutoApproveSettings, AgentConfig, WebSearchConfig, ResolvedModelRoutingConfig } from '@shared/config/types'
 import type { ProviderModelConfig } from '@shared/config/settings'
 
 export type SettingsTab = 'provider' | 'editor' | 'snippets' | 'agent' | 'rules' | 'skills' | 'mcp' | 'lsp' | 'keybindings' | 'indexing' | 'security' | 'system'
@@ -11,6 +11,8 @@ export type SettingsTab = 'provider' | 'editor' | 'snippets' | 'agent' | 'rules'
 export interface ProviderSettingsProps {
     localConfig: LLMConfig
     setLocalConfig: React.Dispatch<React.SetStateAction<LLMConfig>>
+    localModelRouting: ResolvedModelRoutingConfig
+    setLocalModelRouting: React.Dispatch<React.SetStateAction<ResolvedModelRoutingConfig>>
     localProviderConfigs: Record<string, ProviderModelConfig>
     setLocalProviderConfigs: React.Dispatch<React.SetStateAction<Record<string, ProviderModelConfig>>>
     showApiKey: boolean

@@ -24,6 +24,10 @@ import {
 } from '@shared/config/settings'
 import { resolveRuntimeLLMConfig } from '@shared/config/llmConfigResolver'
 import {
+  resolveRuntimeModelRoutingConfig,
+  serializePersistedModelRoutingConfig,
+} from '@shared/config/modelRouting'
+import {
   isBuiltinProvider,
   getBuiltinProvider,
   getDefaultOpenAICompatibilityProfile,
@@ -33,6 +37,7 @@ import { serializePersistedLLMConfig } from '@shared/config/llmPersistence'
 import type {
   ProviderConfig,
   PersistedLLMConfig,
+  PersistedModelRoutingConfig,
 } from '@shared/config/types'
 
 const STORAGE_KEYS = {
@@ -160,6 +165,7 @@ function buildPersistedSettingsPayload(
 ) {
   return {
     llmConfig: serializePersistedLLMConfig(settings.llmConfig),
+    modelRouting: serializePersistedModelRoutingConfig(settings.modelRouting, settings.llmConfig),
     language: settings.language,
     autoApprove: settings.autoApprove,
     promptTemplateId: settings.promptTemplateId,
@@ -269,9 +275,14 @@ class SettingsService {
       saved.llmConfig as Partial<PersistedLLMConfig> | undefined,
       providerConfigs,
     )
+    const modelRouting = resolveRuntimeModelRoutingConfig(
+      saved.modelRouting as PersistedModelRoutingConfig | undefined,
+      llmConfig,
+    )
 
     return {
       llmConfig,
+      modelRouting,
       language: ((saved.language as string) || defaults.language) as 'en' | 'zh',
       autoApprove: { ...defaults.autoApprove, ...(saved.autoApprove as object || {}) },
       promptTemplateId: (saved.promptTemplateId as string) || defaults.promptTemplateId,

@@ -5,6 +5,7 @@
  */
 
 import { sanitizePersistedLLMConfig } from './llmPersistence'
+import { sanitizePersistedModelRoutingConfig } from './modelRouting'
 
 // ============================================
 // EditorConfig 清理
@@ -266,6 +267,18 @@ export interface AppSettingsSchema {
       google?: Record<string, unknown>
     }
   }
+  modelRouting?: {
+    primary?: {
+      provider?: string
+      model?: string
+    }
+    multimodal?: {
+      provider?: string
+      model?: string
+    }
+    fallbackPolicy?: 'primary_with_notice'
+    handoffFormat?: 'structured_summary_with_raw_block'
+  }
   language?: string
   autoApprove?: {
     terminal?: boolean
@@ -293,6 +306,10 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
   // llmConfig
   if (config.llmConfig && typeof config.llmConfig === 'object') {
     cleaned.llmConfig = sanitizePersistedLLMConfig(config.llmConfig)
+  }
+
+  if (config.modelRouting && typeof config.modelRouting === 'object') {
+    cleaned.modelRouting = sanitizePersistedModelRoutingConfig(config.modelRouting)
   }
 
   if (typeof config.language === 'string') cleaned.language = config.language
