@@ -12,6 +12,7 @@ export * from './defaults'
 
 // Provider 配置
 export * from './providers'
+export * from './modelRouting'
 
 // Agent 配置（缓存、工具截断等内部配置）
 export * from './agentConfig'

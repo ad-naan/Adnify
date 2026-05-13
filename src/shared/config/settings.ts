@@ -14,6 +14,7 @@
 
 import {
   LLM_DEFAULTS,
+  MODEL_ROUTING_DEFAULTS,
   AGENT_DEFAULTS,
   AUTO_APPROVE_DEFAULTS,
   EDITOR_DEFAULTS,
@@ -33,6 +34,7 @@ import type {
   WebSearchConfig,
   McpConfig,
   ProviderConfig,
+  ResolvedModelRoutingConfig,
 } from './types'
 import {
   BUILTIN_PROVIDERS,
@@ -95,6 +97,15 @@ const defaultLLMConfig: LLMConfig = {
   capabilities: {
     thinkingTagFormat: 'native',
   },
+}
+
+const defaultModelRouting: ResolvedModelRoutingConfig = {
+  primary: {
+    provider: defaultLLMConfig.provider,
+    model: defaultLLMConfig.model,
+  },
+  fallbackPolicy: MODEL_ROUTING_DEFAULTS.fallbackPolicy,
+  handoffFormat: MODEL_ROUTING_DEFAULTS.handoffFormat,
 }
 
 const defaultAgentConfig: AgentConfig = {
@@ -195,6 +206,9 @@ export const SETTINGS = {
     default: defaultLLMConfig,
     // 注意：完整的 llmConfig 由 settingsService 单独处理
   },
+  modelRouting: {
+    default: defaultModelRouting,
+  },
   language: {
     default: 'en' as const,
   },
@@ -253,6 +267,7 @@ export type SettingValue<K extends SettingKey> = SettingsSchema[K]['default']
 /** 完整设置状态 */
 export type SettingsState = {
   llmConfig: LLMConfig
+  modelRouting: ResolvedModelRoutingConfig
   language: 'en' | 'zh'
   autoApprove: AutoApproveSettings
   promptTemplateId: string
@@ -281,6 +296,13 @@ export function getDefault<K extends SettingKey>(key: K): SettingValue<K> {
 export function getAllDefaults(): SettingsState {
   return {
     llmConfig: SETTINGS.llmConfig.default,
+    modelRouting: {
+      ...SETTINGS.modelRouting.default,
+      primary: { ...SETTINGS.modelRouting.default.primary },
+      multimodal: SETTINGS.modelRouting.default.multimodal
+        ? { ...SETTINGS.modelRouting.default.multimodal }
+        : undefined,
+    },
     language: SETTINGS.language.default as 'en' | 'zh',
     autoApprove: SETTINGS.autoApprove.default,
     promptTemplateId: SETTINGS.promptTemplateId.default,
