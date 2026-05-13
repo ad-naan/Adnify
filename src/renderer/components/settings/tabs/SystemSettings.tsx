@@ -15,6 +15,7 @@ import { downloadSettings, importSettings, settingsService } from '@renderer/set
 import { Agent } from '@/renderer/agent/core'
 import { memoryService } from '@/renderer/agent/services/memoryService'
 import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
+import { resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 
 interface SystemSettingsProps {
@@ -68,6 +69,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
         // 如果缓存不存在，从 store 构建
         return {
             llmConfig: getStore().llmConfig,
+            modelRouting: getStore().modelRouting,
             language: getStore().language,
             autoApprove: getStore().autoApprove,
             promptTemplateId: getStore().promptTemplateId,
@@ -133,6 +135,15 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     provider: settings.llmConfig.provider || getStore().llmConfig.provider,
                     model: settings.llmConfig.model || getStore().llmConfig.model,
                 })
+            }
+
+            if (settings.modelRouting) {
+                const currentLlmConfig = getStore().llmConfig
+                const routing = resolveRuntimeModelRoutingConfig(settings.modelRouting, {
+                    provider: currentLlmConfig.provider,
+                    model: currentLlmConfig.model,
+                })
+                getStore().set('modelRouting', routing)
             }
 
             // 保存设置到持久化存储
