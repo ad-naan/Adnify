@@ -52,6 +52,9 @@ import {
   type ChatTimelineItem,
   type TimelineArchiveItem,
 } from './chatTimelineProjection'
+import MessageQueuePanel from '../chat/MessageQueuePanel'
+import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
+import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -114,6 +117,9 @@ export default function ChatPanel() {
   const setChatMode = useModeStore(s => s.setMode)
 
   const toast = useToast()
+
+  // 消息队列自动消费
+  useMessageQueueConsumer()
 
   const {
     messages,
@@ -714,10 +720,7 @@ export default function ChatPanel() {
 
   // 提交
   const handleSubmit = useCallback(async () => {
-    if ((!input.trim() && images.length === 0) || isStreaming) return
-
-    // Handoff 现在由 StatusBar 自动处理，不再阻止发送
-    // 如果正在过渡中，等待完成后会自动继续
+    if (!input.trim() && images.length === 0) return
 
     let userMessage: string | Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = input.trim()
 
@@ -755,11 +758,24 @@ export default function ChatPanel() {
 
     setInput('')
     setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.previewUrl)); return [] })
+
+    // 如果正在执行中，将消息加入队列而不是直接发送
+    if (isStreaming) {
+      const enqueue = useMessageQueueStore.getState().enqueue
+      enqueue({
+        content: userMessage,
+        contextItems: [...contextItems],
+        chatMode,
+      })
+      toast.info(language === 'zh' ? '已加入发送队列' : 'Added to send queue')
+      return
+    }
+
     // 发送消息后主动滚到底部，确保用户消息和即将出现的 AI 回复可见
     // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
     scrollToBottom('smooth')
     await sendMessage(userMessage)
-  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom])
+  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, contextItems, chatMode, toast, language])
 
   // 编辑消息
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {
@@ -1333,6 +1349,18 @@ export default function ChatPanel() {
                   </div>
                 ) : null
               })()}
+
+              {/* Message Queue Panel */}
+              <AnimatePresence>
+                <MessageQueuePanel
+                  onSendNow={(id) => {
+                    // 强制模式：中断当前执行，立即发送该消息
+                    useMessageQueueStore.getState().promote(id)
+                    abort()
+                    // abort 后 streaming → idle，useMessageQueueConsumer 自动消费队首
+                  }}
+                />
+              </AnimatePresence>
 
               {/* Input Component */}
               <ChatInput
