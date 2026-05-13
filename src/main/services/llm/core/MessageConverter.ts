@@ -7,7 +7,7 @@ import type { JSONValue } from '@ai-sdk/provider'
 import type { ModelMessage, UserModelMessage, AssistantModelMessage, ToolModelMessage } from '@ai-sdk/provider-utils'
 import type { LLMMessage, MessageContentPart } from '@shared/types'
 import type { LLMConfig } from '@shared/types/llm'
-import { getOpenAIProviderOptionKeys, usesOpenAIProtocol } from './ProviderCompatibility'
+import { getOpenAIProviderOptionKeys, usesOpenAIProtocol, usesAnthropicProtocol } from './ProviderCompatibility'
 
 export class MessageConverter {
   /**
@@ -150,10 +150,33 @@ export class MessageConverter {
       return this.convertAssistantWithToolCalls(msg, config)
     }
 
-    const content = typeof msg.content === 'string' ? msg.content : ''
-    if (!content.trim()) return null
+    const textContent = typeof msg.content === 'string' ? msg.content : ''
+    if (!textContent.trim() && !msg.reasoning_content) return null
 
-    const result: AssistantModelMessage = { role: 'assistant', content }
+    // For Anthropic protocol with thinking enabled, use array content with reasoning part
+    if (config && usesAnthropicProtocol(config) && config.thinkingBudget && config.thinkingBudget > 0 && msg.reasoning_content) {
+      const signature = msg.reasoning_signature
+      if (signature) {
+        const parts: Array<
+          | { type: 'reasoning'; text: string; providerOptions?: Record<string, Record<string, JSONValue>> }
+          | { type: 'text'; text: string }
+        > = [
+          {
+            type: 'reasoning',
+            text: msg.reasoning_content,
+            providerOptions: {
+              anthropic: { signature },
+            },
+          },
+        ]
+        if (textContent.trim()) {
+          parts.push({ type: 'text', text: textContent })
+        }
+        return { role: 'assistant', content: parts }
+      }
+    }
+
+    const result: AssistantModelMessage = { role: 'assistant', content: textContent }
     if (msg.reasoning_content) {
       result.providerOptions = this.buildReasoningProviderOptions(msg.reasoning_content, config)
     }
@@ -165,8 +188,26 @@ export class MessageConverter {
    */
   private convertAssistantWithToolCalls(msg: LLMMessage, config?: LLMConfig): AssistantModelMessage {
     const content: Array<
-      { type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
+      | { type: 'text'; text: string }
+      | { type: 'reasoning'; text: string; providerOptions?: Record<string, Record<string, JSONValue>> }
+      | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
     > = []
+
+    // For Anthropic protocol with thinking enabled, always include a reasoning part
+    // before tool calls. The signature is required by AI SDK's Anthropic provider
+    // to emit the thinking block in the request payload.
+    if (config && usesAnthropicProtocol(config) && config.thinkingBudget && config.thinkingBudget > 0) {
+      const signature = msg.reasoning_signature
+      if (signature) {
+        content.push({
+          type: 'reasoning',
+          text: msg.reasoning_content || '',
+          providerOptions: {
+            anthropic: { signature },
+          },
+        })
+      }
+    }
 
     // 添加文本内容
     if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
@@ -186,7 +227,7 @@ export class MessageConverter {
     }
 
     const result: AssistantModelMessage = { role: 'assistant', content }
-    if (msg.reasoning_content) {
+    if (msg.reasoning_content && !usesAnthropicProtocol(config || {} as LLMConfig)) {
       result.providerOptions = this.buildReasoningProviderOptions(msg.reasoning_content, config)
     }
     return result

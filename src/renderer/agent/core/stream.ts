@@ -46,6 +46,7 @@ export function createStreamProcessor(
 
   let content = ''
   let reasoning = ''
+  let reasoningSignature: string | undefined
   let isInReasoning = false
   let reasoningPartId: string | null = null
   let toolCalls: ToolCall[] = []
@@ -448,7 +449,7 @@ export function createStreamProcessor(
     doResolve({ content, toolCalls, sources, usage, error: errorMsg })
   }
 
-  const handleDone = (result: { reasoning?: string; usage?: unknown; metadata?: LLMResponseMetadata }) => {
+  const handleDone = (result: { reasoning?: string; reasoningSignature?: string; usage?: unknown; metadata?: LLMResponseMetadata }) => {
     if (result?.usage) {
       usage = result.usage as TokenUsage
     }
@@ -469,13 +470,16 @@ export function createStreamProcessor(
         } as Partial<import('../types').AssistantMessage>)
       }
     }
+    if (result?.reasoningSignature) {
+      reasoningSignature = result.reasoningSignature
+    }
     flushToolPreviewUpdates()
 
     // `llm:done:*` and `llm:stream:*` are delivered on different IPC channels.
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
       finalizeReasoning()
-      doResolve({ content, reasoning, toolCalls, sources, usage, metadata, error })
+      doResolve({ content, reasoning, reasoningSignature, toolCalls, sources, usage, metadata, error })
     }, 0)
   }
 

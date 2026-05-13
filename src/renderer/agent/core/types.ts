@@ -38,6 +38,7 @@ export type { ToolExecutionContext } from '@/shared/types'
 export interface LLMCallResult {
   content?: string
   reasoning?: string
+  reasoningSignature?: string
   toolCalls?: ToolCall[]
   sources?: LLMStreamSource[]
   usage?: TokenUsage
