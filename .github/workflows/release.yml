@@ -23,14 +23,10 @@ jobs:
 
   build-windows:
     needs: get-version
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     strategy:
       matrix:
-        include:
-          - arch: x64
-            os: windows-latest
-          - arch: arm64
-            os: windows-11-arm
+        arch: [x64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -52,13 +48,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Package Windows ${{ matrix.arch }}
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -114,13 +110,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Package macOS ${{ matrix.arch }}
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
           # Workaround for hdiutil detach failures in CI
           DMG_BUILDER_DETACH_RETRY_COUNT: "10"
           DMG_BUILDER_DETACH_RETRY_DELAY: "3000"
@@ -180,14 +176,10 @@ jobs:
 
   build-linux:
     needs: get-version
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - arch: x64
-            os: ubuntu-latest
-          - arch: arm64
-            os: ubuntu-24.04-arm
+        arch: [x64, arm64]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -217,13 +209,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Package Linux ${{ matrix.arch }}
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
