@@ -33,6 +33,7 @@ export const LLM_DEFAULTS = {
 } as const
 
 export const MODEL_ROUTING_DEFAULTS = {
+  enabled: false,
   fallbackPolicy: 'primary_with_notice',
   handoffFormat: 'structured_summary_with_raw_block',
 } as const

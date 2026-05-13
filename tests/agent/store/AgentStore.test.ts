@@ -271,6 +271,7 @@ describe('AgentStore', () => {
         level: 4,
         levelName: 'Session Handoff',
         ratio: 1.1,
+        peakRatio: 1.1,
         inputTokens: 1000,
         outputTokens: 100,
         contextLimit: 1000,
@@ -278,6 +279,20 @@ describe('AgentStore', () => {
         savedPercent: 0,
         messageCount: 2,
         needsHandoff: true,
+        inputUsageRatio: 0.9,
+        memoryHealth: {
+          score: 1,
+          coverage: {
+            objective: true,
+            pendingSteps: true,
+            completedSteps: true,
+            userInstructions: true,
+            fileChanges: true,
+            todos: true,
+          },
+          staleTurns: 0,
+          risk: 'low',
+        },
         lastUpdatedAt: Date.now(),
       })
       store.setHandoffState({

@@ -39,13 +39,14 @@ export function sanitizePersistedModelRoutingConfig(value: unknown): PersistedMo
   const primary = sanitizeModelReference(value.primary)
   const multimodal = sanitizeModelReference(value.multimodal)
 
+  if (typeof value.enabled === 'boolean') cleaned.enabled = value.enabled
   if (primary) cleaned.primary = primary
   if (multimodal) cleaned.multimodal = multimodal
-  if (value.fallbackPolicy === DEFAULT_FALLBACK_POLICY) {
-    cleaned.fallbackPolicy = DEFAULT_FALLBACK_POLICY
+  if (typeof value.fallbackPolicy === 'string' && value.fallbackPolicy) {
+    cleaned.fallbackPolicy = value.fallbackPolicy as ModelRoutingFallbackPolicy
   }
-  if (value.handoffFormat === DEFAULT_HANDOFF_FORMAT) {
-    cleaned.handoffFormat = DEFAULT_HANDOFF_FORMAT
+  if (typeof value.handoffFormat === 'string' && value.handoffFormat) {
+    cleaned.handoffFormat = value.handoffFormat as ModelRoutingHandoffFormat
   }
 
   return Object.keys(cleaned).length > 0 ? cleaned : undefined
@@ -56,6 +57,7 @@ export function resolveRuntimeModelRoutingConfig(
   activeConfig: Pick<LLMConfig, 'provider' | 'model'>,
 ): ResolvedModelRoutingConfig {
   return {
+    enabled: saved?.enabled ?? false,
     primary: {
       provider: activeConfig.provider,
       model: activeConfig.model,
@@ -71,6 +73,7 @@ export function serializePersistedModelRoutingConfig(
   activeConfig: Pick<LLMConfig, 'provider' | 'model'>,
 ): PersistedModelRoutingConfig {
   return {
+    enabled: routingConfig.enabled,
     primary: {
       provider: activeConfig.provider,
       model: activeConfig.model,
@@ -120,6 +123,19 @@ export function resolveMessageRouting(
   activeConfig: LLMConfig,
 ): MessageRoutingDecision {
   const primaryConfig = resolveModelConfigForRole('primary', routingConfig, providerConfigs, activeConfig) || activeConfig
+
+  // If the user has not explicitly enabled multimodal routing, skip entirely.
+  // The primary model will receive images as-is (works for models like gpt-4o, claude-sonnet, gemini).
+  if (!routingConfig.enabled) {
+    return {
+      primaryConfig,
+      shouldUseMultimodalPrepass: false,
+      reason: 'no-config',
+      fallbackPolicy: routingConfig.fallbackPolicy,
+      handoffFormat: routingConfig.handoffFormat,
+    }
+  }
+
   const lastUserMessage = [...messages].reverse().find(message => message.role === 'user')
 
   if (!lastUserMessage || !messageContentHasImages(lastUserMessage.content)) {
@@ -138,6 +154,18 @@ export function resolveMessageRouting(
       primaryConfig,
       shouldUseMultimodalPrepass: false,
       reason: 'no-config',
+      fallbackPolicy: routingConfig.fallbackPolicy,
+      handoffFormat: routingConfig.handoffFormat,
+    }
+  }
+
+  // Short-circuit: if multimodal route points to the same provider+model as primary,
+  // skip the prepass entirely — the primary model can handle images directly.
+  if (multimodalConfig.provider === primaryConfig.provider && multimodalConfig.model === primaryConfig.model) {
+    return {
+      primaryConfig,
+      shouldUseMultimodalPrepass: false,
+      reason: 'same-model',
       fallbackPolicy: routingConfig.fallbackPolicy,
       handoffFormat: routingConfig.handoffFormat,
     }
