@@ -3,17 +3,17 @@
  * 使用 AI SDK 6.0 的标准类型
  */
 
-import { tool } from '@ai-sdk/provider-utils'
+import { tool } from 'ai'
 import { z } from 'zod'
-import type { Tool } from '@ai-sdk/provider-utils'
+import type { ToolSet } from 'ai'
 import type { ToolDefinition } from '@shared/types'
 
 export class ToolConverter {
   /**
    * 转换工具列表
    */
-  convert(tools: ToolDefinition[]): Record<string, Tool> {
-    const result: Record<string, Tool> = {}
+  convert(tools: ToolDefinition[]): ToolSet {
+    const result: ToolSet = {}
 
     for (const t of tools) {
       const schema = this.convertSchema(t.parameters)

@@ -16,8 +16,10 @@ import type { LintCheckFile, ChatMessage, AssistantMessage, InteractiveContent }
 import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext, LoopCheckResult } from './types'
+import { resolveMessageRouting, resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
 import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
+import { injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromLatestUserMessage } from '../services/multimodalRoutingService'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
@@ -363,8 +365,8 @@ export async function runLoop(
   const enableAutoFix = mainStore.agentConfig.enableAutoFix
   const enableLLMSummary = mainStore.agentConfig.enableLLMSummary
   const autoHandoff = mainStore.agentConfig.autoHandoff ?? agentConfig.autoHandoff
-  const contextLimit = config.contextLimit || 128_000
   const requestId = context.requestId || crypto.randomUUID()
+  const routingConfig = resolveRuntimeModelRoutingConfig(mainStore.modelRouting, config)
 
   threadStore.setExecutionMeta({
     requestId,
@@ -386,8 +388,47 @@ export async function runLoop(
   const agentTools = context.chatMode === 'chat' ? [] : toolRuntime.toolManager.getAllToolDefinitions()
   const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
+  let requestMessages = llmMessages
   let iteration = 0
   let shouldContinue = true
+
+  const messageRouting = resolveMessageRouting(
+    requestMessages,
+    routingConfig,
+    mainStore.providerConfigs,
+    config,
+  )
+  const primaryConfig = messageRouting.primaryConfig
+  const contextLimit = config.contextLimit || 128_000
+
+  if (messageRouting.shouldUseMultimodalPrepass && messageRouting.multimodalConfig) {
+    const targetUserMessage = [...requestMessages].reverse().find(message => message.role === 'user')
+
+    if (targetUserMessage) {
+      try {
+        const prepassResult = await runMultimodalPrepass({
+          config: messageRouting.multimodalConfig,
+          userMessage: targetUserMessage,
+          requestId: `${requestId}-multimodal`,
+        })
+        requestMessages = injectVisualSummaryIntoMessages(requestMessages, prepassResult.summary)
+      } catch (error) {
+        requestMessages = stripImagesFromLatestUserMessage(requestMessages)
+        const { language } = useStore.getState()
+        const reason = error instanceof Error && error.message ? ` ${error.message}` : ''
+        threadStore.addSystemAlertPart(assistantId, {
+          alertType: 'warning',
+          title: getLocalizedText(language, '多模态回退', 'Multimodal Fallback'),
+          message: getLocalizedText(
+            language,
+            `多模态模型调用失败，已回退到主模型继续处理。${reason}`,
+            `The multimodal model failed, so Adnify fell back to the primary model.${reason}`,
+          ),
+          compact: true,
+        })
+      }
+    }
+  }
 
   const completeWithSoftLimitFeedback = async (
     title: string,
@@ -398,7 +439,7 @@ export async function runLoop(
     const { language } = useStore.getState()
     const diagnosticText = formatLoopDiagnostic(language, loopCheck)
 
-    llmMessages.push({
+    requestMessages.push({
       role: 'user',
       content: [buildSoftLimitFeedback(language, title, detail, suggestion), diagnosticText]
         .filter(Boolean)
@@ -406,8 +447,8 @@ export async function runLoop(
     })
 
     const finalResult = await callLLMWithRetry(
-      config,
-      llmMessages,
+      primaryConfig,
+      requestMessages,
       context.systemPrompt,
       assistantId,
       threadStore,
@@ -463,7 +504,7 @@ export async function runLoop(
       break
     }
 
-    if (llmMessages.length === 0) {
+    if (requestMessages.length === 0) {
       const { language } = useStore.getState()
       logger.agent.error('[Loop] No messages to send')
       threadStore.addSystemAlertPart(assistantId, {
@@ -477,8 +518,8 @@ export async function runLoop(
     }
 
     const result = await callLLMWithRetry(
-      config,
-      llmMessages,
+      primaryConfig,
+      requestMessages,
       context.systemPrompt,
       assistantId,
       threadStore,
@@ -502,7 +543,7 @@ export async function runLoop(
         const { language } = useStore.getState()
         logger.agent.warn('[Loop] Tool parse error, adding as feedback:', result.error)
 
-        llmMessages.push({
+        requestMessages.push({
           role: 'user',
           content: language === 'zh'
             ? `工具调用出错: ${result.error}
@@ -567,7 +608,7 @@ Try again with the corrected tool call.`,
     } else {
       logger.agent.warn('[Loop] No valid usage data from LLM, using estimated tokens')
 
-      const estimatedTokens = estimateMessagesTokens(llmMessages as ChatMessage[])
+      const estimatedTokens = estimateMessagesTokens(requestMessages as ChatMessage[])
       const usage = {
         input: Math.floor(estimatedTokens * 0.9),
         output: Math.floor(estimatedTokens * 0.1),
@@ -605,12 +646,12 @@ Try again with the corrected tool call.`,
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const hookResult = executeModePostProcessHook(context.chatMode, {
         mode: context.chatMode,
-        messages: llmMessages,
-        hasWriteOps: llmMessages.some(m => {
+        messages: requestMessages,
+        hasWriteOps: requestMessages.some(m => {
           const readOnlyTools = getReadOnlyTools()
           return m.role === 'assistant' && m.tool_calls?.some((tc: any) => !readOnlyTools.includes(tc.function.name))
         }),
-        hasSpecificTool: (toolName: string) => llmMessages.some(m =>
+        hasSpecificTool: (toolName: string) => requestMessages.some(m =>
           m.role === 'assistant' && m.tool_calls?.some((tc: any) => tc.function.name === toolName)
         ),
         iteration,
@@ -618,7 +659,7 @@ Try again with the corrected tool call.`,
       })
 
       if (hookResult?.shouldContinue && hookResult.reminderMessage) {
-        llmMessages.push({ role: 'user', content: hookResult.reminderMessage })
+        requestMessages.push({ role: 'user', content: hookResult.reminderMessage })
         shouldContinue = true
         continue
       }
@@ -666,7 +707,7 @@ Try again with the corrected tool call.`,
       })
       EventBus.emit({ type: 'loop:warning', message: warningMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
 
-      llmMessages.push({
+      requestMessages.push({
         role: 'user',
         content: [
           buildSoftLimitFeedback(language, warningTitle, warningMessage, warningSuggestion),
@@ -678,7 +719,7 @@ Try again with the corrected tool call.`,
       continue
     }
 
-    llmMessages.push({
+    requestMessages.push({
       role: 'assistant',
       content: result.content || null,
       reasoning_content: result.reasoning,
@@ -734,7 +775,7 @@ Try again with the corrected tool call.`,
     }
 
     for (const { toolCall, result: toolResult } of toolResults) {
-      llmMessages.push({
+      requestMessages.push({
         role: 'tool' as const,
         tool_call_id: toolCall.id,
         name: toolCall.name,
@@ -783,7 +824,7 @@ Try again with the corrected tool call.`,
           files: autoFixResult.files,
           status: 'failed',
         })
-        llmMessages.push({ role: 'user', content: autoFixResult.content })
+        requestMessages.push({ role: 'user', content: autoFixResult.content })
         shouldContinue = true
         threadStore.setStreamPhase('streaming')
         continue

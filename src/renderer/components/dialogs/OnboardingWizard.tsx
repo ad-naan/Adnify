@@ -75,7 +75,16 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
   }
 
   const handleComplete = async () => {
-    const { settingsService, defaultAgentConfig, defaultAutoApprove, defaultEditorConfig, defaultSecuritySettings, defaultWebSearchConfig, defaultMcpConfig } = await import('@renderer/settings')
+    const {
+      settingsService,
+      defaultAgentConfig,
+      defaultAutoApprove,
+      defaultEditorConfig,
+      defaultSecuritySettings,
+      defaultWebSearchConfig,
+      defaultMcpConfig,
+    } = await import('@renderer/settings')
+    const { createDefaultModelRoutingConfig } = await import('@shared/config/modelRouting')
 
     set('language', selectedLanguage)
     set('llmConfig', providerConfig)
@@ -87,6 +96,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     try {
       await settingsService.save({
         llmConfig: providerConfig,
+        modelRouting: createDefaultModelRoutingConfig(providerConfig),
         language: selectedLanguage,
         autoApprove: defaultAutoApprove,
         agentConfig: defaultAgentConfig,
