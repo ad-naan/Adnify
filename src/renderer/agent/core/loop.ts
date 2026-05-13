@@ -728,6 +728,7 @@ Try again with the corrected tool call.`,
       role: 'assistant',
       content: result.content || null,
       reasoning_content: result.reasoning,
+      reasoning_signature: result.reasoningSignature,
       tool_calls: result.toolCalls.map(tc => ({
         id: tc.id,
         type: 'function' as const,
