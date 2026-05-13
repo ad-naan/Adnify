@@ -268,6 +268,7 @@ export interface AppSettingsSchema {
     }
   }
   modelRouting?: {
+    enabled?: boolean
     primary?: {
       provider?: string
       model?: string

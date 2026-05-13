@@ -24,6 +24,7 @@ describe('model routing', () => {
     const config = createConfig({ provider: 'anthropic', model: 'claude-sonnet-4-20250514' })
 
     expect(resolveRuntimeModelRoutingConfig(undefined, config)).toEqual({
+      enabled: false,
       primary: {
         provider: 'anthropic',
         model: 'claude-sonnet-4-20250514',
@@ -34,9 +35,33 @@ describe('model routing', () => {
     })
   })
 
+  it('skips multimodal prepass when routing is not enabled', () => {
+    const config = createConfig()
+    const routingConfig = resolveRuntimeModelRoutingConfig({
+      enabled: false,
+      multimodal: { provider: 'gemini', model: 'gemini-2.0-flash-exp' },
+    }, config)
+    const messages: LLMMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'describe this' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } },
+        ],
+      },
+    ]
+
+    const result = resolveMessageRouting(messages, routingConfig, {
+      gemini: { apiKey: 'gemini-key', model: 'gemini-2.0-flash-exp' },
+    }, config)
+
+    expect(result.shouldUseMultimodalPrepass).toBe(false)
+    expect(result.reason).toBe('no-config')
+  })
+
   it('keeps the old path when the latest user message has no image', () => {
     const config = createConfig()
-    const routingConfig = resolveRuntimeModelRoutingConfig(undefined, config)
+    const routingConfig = resolveRuntimeModelRoutingConfig({ enabled: true }, config)
     const messages: LLMMessage[] = [
       { role: 'user', content: 'plain text request' },
     ]
@@ -50,7 +75,7 @@ describe('model routing', () => {
 
   it('keeps the old path when images exist but no multimodal model is configured', () => {
     const config = createConfig()
-    const routingConfig = resolveRuntimeModelRoutingConfig(undefined, config)
+    const routingConfig = resolveRuntimeModelRoutingConfig({ enabled: true }, config)
     const messages: LLMMessage[] = [
       {
         role: 'user',
@@ -71,6 +96,7 @@ describe('model routing', () => {
   it('enables multimodal prepass when an image is present and the multimodal route resolves', () => {
     const config = createConfig()
     const routingConfig = resolveRuntimeModelRoutingConfig({
+      enabled: true,
       multimodal: {
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
@@ -105,6 +131,7 @@ describe('model routing', () => {
   it('does not retrigger multimodal prepass for historical image messages', () => {
     const config = createConfig()
     const routingConfig = resolveRuntimeModelRoutingConfig({
+      enabled: true,
       multimodal: {
         provider: 'gemini',
         model: 'gemini-2.0-flash-exp',
@@ -131,6 +158,33 @@ describe('model routing', () => {
 
     expect(result.shouldUseMultimodalPrepass).toBe(false)
     expect(result.reason).toBe('no-image')
+  })
+
+  it('skips prepass when multimodal route points to the same model as primary', () => {
+    const config = createConfig({ provider: 'openai', model: 'gpt-4o' })
+    const routingConfig = resolveRuntimeModelRoutingConfig({
+      enabled: true,
+      multimodal: {
+        provider: 'openai',
+        model: 'gpt-4o',
+      },
+    }, config)
+    const messages: LLMMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'what is this?' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } },
+        ],
+      },
+    ]
+
+    const result = resolveMessageRouting(messages, routingConfig, {
+      openai: { apiKey: 'openai-key', model: 'gpt-4o' },
+    }, config)
+
+    expect(result.shouldUseMultimodalPrepass).toBe(false)
+    expect(result.reason).toBe('same-model')
   })
 
   it('injects the visual analysis summary into the latest user message only', () => {

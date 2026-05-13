@@ -50,13 +50,22 @@ export async function runMultimodalPrepass(params: {
   config: LLMConfig
   userMessage: LLMMessage
   requestId: string
+  abortSignal?: AbortSignal
 }): Promise<MultimodalPrepassResult> {
+  if (params.abortSignal?.aborted) {
+    throw new Error('Aborted before multimodal prepass')
+  }
+
   const response = await api.llm.compactContext({
     config: params.config,
     messages: [params.userMessage],
     systemPrompt: MULTIMODAL_PREPASS_SYSTEM_PROMPT,
     requestId: params.requestId,
   })
+
+  if (params.abortSignal?.aborted) {
+    throw new Error('Aborted during multimodal prepass')
+  }
 
   if (response.error) {
     throw new Error(response.error)
