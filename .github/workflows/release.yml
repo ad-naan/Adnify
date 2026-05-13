@@ -52,13 +52,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NODE_OPTIONS: '--max-old-space-size=6144'
+          NODE_OPTIONS: '--max-old-space-size=10240'
 
       - name: Package Windows ${{ matrix.arch }}
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=6144'
+          NODE_OPTIONS: '--max-old-space-size=10240'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -114,13 +114,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NODE_OPTIONS: '--max-old-space-size=6144'
+          NODE_OPTIONS: '--max-old-space-size=10240'
 
       - name: Package macOS ${{ matrix.arch }}
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=6144'
+          NODE_OPTIONS: '--max-old-space-size=10240'
           # Workaround for hdiutil detach failures in CI
           DMG_BUILDER_DETACH_RETRY_COUNT: "10"
           DMG_BUILDER_DETACH_RETRY_DELAY: "3000"
@@ -197,7 +197,7 @@ jobs:
         run: |
           sudo swapoff /swapfile 2>/dev/null || true
           sudo rm -f /swapfile
-          sudo fallocate -l 4G /swapfile
+          sudo fallocate -l 8G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
@@ -227,13 +227,13 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          NODE_OPTIONS: '--max-old-space-size=6144'
+          NODE_OPTIONS: '--max-old-space-size=10240'
 
       - name: Package Linux ${{ matrix.arch }}
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=6144'
+          NODE_OPTIONS: '--max-old-space-size=10240'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
