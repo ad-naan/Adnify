@@ -109,6 +109,7 @@ jobs:
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -187,6 +188,7 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
           # Workaround for hdiutil detach failures in CI
           DMG_BUILDER_DETACH_RETRY_COUNT: "10"
           DMG_BUILDER_DETACH_RETRY_DELAY: "3000"
@@ -307,6 +309,7 @@ jobs:
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
