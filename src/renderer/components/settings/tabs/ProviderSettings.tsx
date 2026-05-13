@@ -1516,47 +1516,61 @@ export function ProviderSettings({
                   </h5>
                   <p className="mt-1 text-[11px] text-text-muted">
                     {language === 'zh'
-                      ? '配置多模态模型的连接参数，留空时使用主模型处理多模态任务。'
-                      : 'Configure the connection parameters for the multimodal model; if left blank, the main model will be used to process multimodal tasks.'}
+                      ? '启用后，图片消息将先由多模态模型分析，再将结果交给主模型处理。关闭时图片直接发送给主模型。'
+                      : 'When enabled, image messages are first analyzed by the multimodal model, then handed off to the primary model. When disabled, images are sent directly to the primary model.'}
                   </p>
                 </div>
-                <div className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-right">
-                  <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                    {language === 'zh' ? '当前主模型' : 'Primary Model'}
-                  </div>
-                  <div className="mt-1 text-xs font-medium text-text-primary">
-                    {localConfig.provider}/{localConfig.model}
-                  </div>
-                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={localModelRouting.enabled ?? false}
+                    onChange={(e) => setLocalModelRouting(prev => ({ ...prev, enabled: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-border/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+                </label>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '多模态提供商' : 'Multimodal Provider'}
-                  </label>
-                  <Select
-                    value={selectedMultimodalProviderId}
-                    onChange={(value) => updateMultimodalSelection(value)}
-                    options={multimodalProviderOptions}
-                    className="w-full bg-background/50 border-border"
-                  />
-                </div>
+              {localModelRouting.enabled && (
+                <>
+                  <div className="rounded-lg border border-border/60 bg-background/30 px-3 py-2">
+                    <div className="text-[10px] uppercase tracking-wider text-text-muted">
+                      {language === 'zh' ? '当前主模型' : 'Primary Model'}
+                    </div>
+                    <div className="mt-1 text-xs font-medium text-text-primary">
+                      {selectedProvider?.name ?? localProviderConfigs[localConfig.provider]?.displayName ?? localConfig.provider}/{localConfig.model}
+                    </div>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '多模态模型' : 'Multimodal Model'}
-                  </label>
-                  <Select
-                    value={localModelRouting.multimodal?.model || ''}
-                    onChange={(value) => updateMultimodalSelection(selectedMultimodalProviderId, value)}
-                    options={multimodalModelOptions}
-                    placeholder={language === 'zh' ? '先选择提供商' : 'Select provider first'}
-                    disabled={!selectedMultimodalProviderId || multimodalModelOptions.length === 0}
-                    className="w-full bg-background/50 border-border"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-secondary">
+                        {language === 'zh' ? '多模态提供商' : 'Multimodal Provider'}
+                      </label>
+                      <Select
+                        value={selectedMultimodalProviderId}
+                        onChange={(value) => updateMultimodalSelection(value)}
+                        options={multimodalProviderOptions}
+                        className="w-full bg-background/50 border-border"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-secondary">
+                        {language === 'zh' ? '多模态模型' : 'Multimodal Model'}
+                      </label>
+                      <Select
+                        value={localModelRouting.multimodal?.model || ''}
+                        onChange={(value) => updateMultimodalSelection(selectedMultimodalProviderId, value)}
+                        options={multimodalModelOptions}
+                        placeholder={language === 'zh' ? '先选择提供商' : 'Select provider first'}
+                        disabled={!selectedMultimodalProviderId || multimodalModelOptions.length === 0}
+                        className="w-full bg-background/50 border-border"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 

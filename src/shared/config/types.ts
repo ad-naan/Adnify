@@ -18,6 +18,7 @@ export type ModelRoutingFallbackPolicy = 'primary_with_notice'
 export type ModelRoutingHandoffFormat = 'structured_summary_with_raw_block'
 
 export interface PersistedModelRoutingConfig {
+  enabled?: boolean
   primary?: ModelReference
   multimodal?: ModelReference
   fallbackPolicy?: ModelRoutingFallbackPolicy
@@ -25,6 +26,7 @@ export interface PersistedModelRoutingConfig {
 }
 
 export interface ResolvedModelRoutingConfig {
+  enabled: boolean
   primary: ModelReference
   multimodal?: ModelReference
   fallbackPolicy: ModelRoutingFallbackPolicy
@@ -35,7 +37,7 @@ export interface MessageRoutingDecision {
   primaryConfig: LLMConfig
   multimodalConfig?: LLMConfig
   shouldUseMultimodalPrepass: boolean
-  reason: 'no-image' | 'no-config' | 'configured'
+  reason: 'no-image' | 'no-config' | 'same-model' | 'configured'
   fallbackPolicy: ModelRoutingFallbackPolicy
   handoffFormat: ModelRoutingHandoffFormat
 }

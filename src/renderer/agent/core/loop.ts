@@ -410,22 +410,27 @@ export async function runLoop(
           config: messageRouting.multimodalConfig,
           userMessage: targetUserMessage,
           requestId: `${requestId}-multimodal`,
+          abortSignal: context.abortSignal,
         })
         requestMessages = injectVisualSummaryIntoMessages(requestMessages, prepassResult.summary)
       } catch (error) {
-        requestMessages = stripImagesFromLatestUserMessage(requestMessages)
-        const { language } = useStore.getState()
-        const reason = error instanceof Error && error.message ? ` ${error.message}` : ''
-        threadStore.addSystemAlertPart(assistantId, {
-          alertType: 'warning',
-          title: getLocalizedText(language, '多模态回退', 'Multimodal Fallback'),
-          message: getLocalizedText(
-            language,
-            `多模态模型调用失败，已回退到主模型继续处理。${reason}`,
-            `The multimodal model failed, so Adnify fell back to the primary model.${reason}`,
-          ),
-          compact: true,
-        })
+        // On prepass failure, strip images only if the abort was not triggered.
+        // The primary model will attempt to handle the text-only version.
+        if (!context.abortSignal?.aborted) {
+          requestMessages = stripImagesFromLatestUserMessage(requestMessages)
+          const { language } = useStore.getState()
+          const reason = error instanceof Error && error.message ? ` ${error.message}` : ''
+          threadStore.addSystemAlertPart(assistantId, {
+            alertType: 'warning',
+            title: getLocalizedText(language, '多模态回退', 'Multimodal Fallback'),
+            message: getLocalizedText(
+              language,
+              `多模态模型调用失败，已回退到主模型继续处理。${reason}`,
+              `The multimodal model failed, so Adnify fell back to the primary model.${reason}`,
+            ),
+            compact: true,
+          })
+        }
       }
     }
   }

@@ -100,6 +100,7 @@ const defaultLLMConfig: LLMConfig = {
 }
 
 const defaultModelRouting: ResolvedModelRoutingConfig = {
+  enabled: MODEL_ROUTING_DEFAULTS.enabled,
   primary: {
     provider: defaultLLMConfig.provider,
     model: defaultLLMConfig.model,
