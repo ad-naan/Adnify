@@ -15,7 +15,8 @@ import {
   Folder,
   Globe,
   Wrench,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ListOrdered
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -311,26 +312,42 @@ const ChatInput = memo(function ChatInput({
                 <ImageIcon className="w-4 h-4 opacity-70 group-hover:opacity-100" />
               </Button>
 
-              <button
-                onClick={isStreaming ? onAbort : onSubmit}
-                disabled={
-                  !hasApiKey || ((!input.trim() && images.length === 0) && !isStreaming) || hasPendingToolCall
-                }
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300
-                  ${isStreaming
-                    ? 'bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20'
-                    : isSendable
+              {/* Send / Queue / Stop buttons */}
+              {isStreaming ? (
+                <div className="flex items-center gap-1.5">
+                  {/* Queue Send button - visible when there's input during streaming */}
+                  {isSendable && (
+                    <button
+                      onClick={onSubmit}
+                      disabled={!hasApiKey || hasPendingToolCall}
+                      title={language === 'zh' ? '加入队列 (⏎)' : 'Queue message (⏎)'}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 bg-accent/80 text-white shadow-sm shadow-accent/10 hover:bg-accent hover:shadow-accent/30 hover:-translate-y-0.5 active:translate-y-0 border border-transparent"
+                    >
+                      <ListOrdered className="w-4 h-4 stroke-[2.5]" />
+                    </button>
+                  )}
+                  {/* Stop button */}
+                  <button
+                    onClick={onAbort}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 bg-surface/50 text-text-primary border border-text-primary/10 hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20"
+                  >
+                    <div className="w-2.5 h-2.5 bg-current rounded-[1px] animate-pulse" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={onSubmit}
+                  disabled={!hasApiKey || !isSendable || hasPendingToolCall}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300
+                    ${isSendable
                       ? 'bg-accent text-white shadow-md shadow-accent/20 hover:shadow-accent/40 hover:-translate-y-0.5 active:translate-y-0 border border-transparent'
                       : 'bg-text-primary/5 text-text-muted/30 cursor-not-allowed border border-transparent'
-                  }
+                    }
                   `}
-              >
-                {isStreaming ? (
-                  <div className="w-2.5 h-2.5 bg-current rounded-[1px] animate-pulse" />
-                ) : (
+                >
                   <ArrowUp className="w-5 h-5 stroke-[3]" />
-                )}
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -346,7 +363,7 @@ const ChatInput = memo(function ChatInput({
 
         {/* Right Side: Key Shortcuts */}
         <div className="hidden sm:flex items-center gap-2 text-[10px] text-text-muted/40 font-medium tracking-wide whitespace-nowrap overflow-hidden shrink-0">
-          <span>⏎ Send</span>
+          <span>{isStreaming ? '⏎ Queue' : '⏎ Send'}</span>
           <span className="w-1 h-1 rounded-full bg-current opacity-30" />
           <span>⇧⏎ New Line</span>
         </div>
