@@ -61,11 +61,15 @@ jobs:
   build-windows:
     needs: prepare
     if: ${{ (inputs.platform == 'all' || inputs.platform == 'windows') && (inputs.architecture == 'all' || inputs.architecture == 'x64' || inputs.architecture == 'arm64') }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        include:
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-11-arm
     steps:
       - name: Checkout
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -247,17 +251,29 @@ jobs:
   build-linux:
     needs: prepare
     if: ${{ (inputs.platform == 'all' || inputs.platform == 'linux') && (inputs.architecture == 'all' || inputs.architecture == 'x64' || inputs.architecture == 'arm64') }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        include:
+          - arch: x64
+            os: ubuntu-latest
+          - arch: arm64
+            os: ubuntu-24.04-arm
     steps:
       - name: Checkout
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup swap space
+        if: ${{ (inputs.architecture == 'all' || inputs.architecture == matrix.arch) && matrix.arch == 'arm64' }}
+        run: |
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
 
       - name: Setup Python
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
