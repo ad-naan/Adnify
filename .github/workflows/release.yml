@@ -23,10 +23,14 @@ jobs:
 
   build-windows:
     needs: get-version
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        arch: [x64, arm64]
+        include:
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-11-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -176,13 +180,25 @@ jobs:
 
   build-linux:
     needs: get-version
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        arch: [x64, arm64]
+        include:
+          - arch: x64
+            os: ubuntu-latest
+          - arch: arm64
+            os: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Setup swap space
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
 
       - name: Setup Python
         uses: actions/setup-python@v6
