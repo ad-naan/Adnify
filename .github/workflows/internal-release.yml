@@ -104,6 +104,10 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=10240'
 
+      - name: Prune to production dependencies
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        run: npm prune --omit=dev
+
       - name: Package Windows ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npx electron-builder --win --${{ matrix.arch }} -p never
@@ -182,6 +186,10 @@ jobs:
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=10240'
+
+      - name: Prune to production dependencies
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        run: npm prune --omit=dev
 
       - name: Package macOS ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -313,6 +321,10 @@ jobs:
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=10240'
+
+      - name: Prune to production dependencies
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        run: npm prune --omit=dev
 
       - name: Package Linux ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}

@@ -54,6 +54,9 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=10240'
 
+      - name: Prune to production dependencies
+        run: npm prune --omit=dev
+
       - name: Package Windows ${{ matrix.arch }}
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
@@ -115,6 +118,9 @@ jobs:
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=10240'
+
+      - name: Prune to production dependencies
+        run: npm prune --omit=dev
 
       - name: Package macOS ${{ matrix.arch }}
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
@@ -228,6 +234,9 @@ jobs:
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=10240'
+
+      - name: Prune to production dependencies
+        run: npm prune --omit=dev
 
       - name: Package Linux ${{ matrix.arch }}
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
