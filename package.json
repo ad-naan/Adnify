@@ -19,7 +19,7 @@
     "build:main": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc -p tsconfig.main.json --noEmit",
     "build:renderer": "vite build",
     "start": "electron .",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && node --max-old-space-size=8192 ./node_modules/electron-builder/cli.js",
     "pack": "npm run build && electron-builder --dir",
     "preview": "npm run build && electron .",
     "test": "vitest --run",
