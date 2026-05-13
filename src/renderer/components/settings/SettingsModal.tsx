@@ -574,10 +574,10 @@ export default function SettingsModal() {
                                     {t('cancel', language as Language)}
                                 </Button>
                                 <Button
-                                    variant={saved ? 'success' : 'primary'}
+                                    variant={saved ? 'primary' : 'primary'}
                                     onClick={handleSave}
                                     disabled={!isDirty}
-                                    className={`min-w-[140px] shadow-lg transition-all duration-300 rounded-xl ${saved ? 'bg-status-success hover:bg-status-success/90 text-white' : 'bg-accent hover:bg-accent-hover text-white shadow-accent/20 disabled:opacity-50 disabled:cursor-not-allowed'}`}
+                                    className={`min-w-[140px] shadow-lg transition-all duration-300 rounded-xl ${saved ? '!bg-status-success hover:!bg-status-success/90 !text-white !border-status-success/30' : ''}`}
                                 >
                                     {saved ? (
                                         <span className="flex items-center gap-2 justify-center font-bold">
