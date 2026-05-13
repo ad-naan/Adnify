@@ -114,12 +114,20 @@ export function parseSystemAlert(text: string): {
   suggestion?: string
 } | null {
   // 检测循环警告
-  const loopPattern = /⚠️\s*(.+?)(?:\n💡\s*(.+))?$/s
+  // 要求 ⚠️ 在行首（前面只能是换行或字符串开头），避免误匹配正文中的 emoji
+  const loopPattern = /(?:^|\n)⚠️\s*(.+?)(?:\n💡\s*(.+))?$/s
   const match = text.match(loopPattern)
 
   if (match) {
     const message = match[1].trim()
     const suggestion = match[2]?.trim()
+
+    // 额外验证：消息内容应该像是循环检测的诊断信息，而不是普通对话内容
+    // 循环检测消息通常包含特定关键词
+    const isLikelyLoopMessage = /repeat|loop|cycling|pattern|identical|同一|重复|循环/i.test(message)
+    if (!isLikelyLoopMessage) {
+      return null
+    }
 
     // 根据消息内容判断类型
     let type: AlertType = 'warning'
