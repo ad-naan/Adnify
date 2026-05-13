@@ -108,7 +108,7 @@ export type StreamEvent =
   | { type: 'tool-call-available'; id: string; name: string; arguments: Record<string, unknown> }
   | { type: 'source'; source: StreamSource }
   | { type: 'error'; error: LLMError }
-  | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata; reasoning?: string }
+  | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata; reasoning?: string; reasoningSignature?: string }
 
 // ============================================
 // 结构化输出类型

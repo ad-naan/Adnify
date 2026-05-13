@@ -32,6 +32,7 @@ export interface StreamingParams {
 export interface StreamingResult {
   content: string
   reasoning?: string
+  reasoningSignature?: string
   usage?: TokenUsage
   metadata?: ResponseMetadata
 }
@@ -494,6 +495,7 @@ export class StreamingService {
     cacheWriteTokens?: number,
   ): Promise<StreamingResult> {
     let reasoning = ''
+    let reasoningSignature = ''
     let streamedText = ''
     let streamedResponseMetadata: ResponseMetadata | undefined
     let sawNonTextOutput = false
@@ -578,6 +580,10 @@ export class StreamingService {
             if (part.text) {
               reasoning += part.text
               this.sendEvent(requestId, { type: 'reasoning', content: part.text })
+            }
+            // Capture signature from Anthropic provider metadata (used for thinking block replay)
+            if ((part as any).providerMetadata?.anthropic?.signature) {
+              reasoningSignature += (part as any).providerMetadata.anthropic.signature
             }
             break
 
@@ -744,6 +750,7 @@ export class StreamingService {
     const streamingResult: StreamingResult = {
       content: finalText,
       reasoning: finalReasoning || undefined,
+      reasoningSignature: reasoningSignature || undefined,
       usage: usage ? convertUsage(usage, providerMetadata, { cacheWriteTokens }) : undefined,
       metadata: {
         id: streamedResponseMetadata?.id ?? response.id,
@@ -756,6 +763,7 @@ export class StreamingService {
     this.sendEvent(requestId, {
       type: 'done',
       reasoning: streamingResult.reasoning,
+      reasoningSignature: streamingResult.reasoningSignature,
       usage: streamingResult.usage,
       metadata: streamingResult.metadata,
     })
@@ -888,6 +896,7 @@ export class StreamingService {
           logger.llm.info('[StreamingService] Sending done event', { requestId, channel: `llm:done:${requestId}` })
           this.window.webContents.send(`llm:done:${requestId}`, {
             reasoning: event.reasoning,
+            reasoningSignature: event.reasoningSignature,
             usage: event.usage ? {
               promptTokens: event.usage.inputTokens,
               completionTokens: event.usage.outputTokens,

@@ -40,6 +40,8 @@ export interface LLMMessage {
     name?: string
     /** Reasoning text for providers that expose it. */
     reasoning_content?: string
+    /** Anthropic thinking block signature for replay. */
+    reasoning_signature?: string
 }
 
 export interface LLMToolCallMessage {
