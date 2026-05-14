@@ -58,7 +58,24 @@ jobs:
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
+
+      - name: Smoke test packaged app
+        if: matrix.arch == 'x64'
+        shell: bash
+        run: |
+          APP="release/win-unpacked/Adnify.exe"
+          if [ ! -f "$APP" ]; then echo "App binary not found"; exit 1; fi
+          # Start app, wait for main process to initialize, then check it's still running
+          "$APP" &
+          APP_PID=$!
+          sleep 8
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "✓ App started successfully (PID: $APP_PID)"
+            kill $APP_PID 2>/dev/null || true
+          else
+            echo "✗ App crashed during startup"
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -120,10 +137,24 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
           # Workaround for hdiutil detach failures in CI
           DMG_BUILDER_DETACH_RETRY_COUNT: "10"
           DMG_BUILDER_DETACH_RETRY_DELAY: "3000"
+
+      - name: Smoke test packaged app
+        shell: bash
+        run: |
+          APP_PATH="$(find release -maxdepth 3 -type d -name 'Adnify.app' | head -n 1)"
+          if [ -z "$APP_PATH" ]; then echo "App bundle not found"; exit 1; fi
+          open -a "$APP_PATH" &
+          sleep 8
+          if pgrep -f "Adnify" > /dev/null; then
+            echo "✓ App started successfully"
+            pkill -f "Adnify" || true
+          else
+            echo "✗ App crashed during startup"
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -182,7 +213,6 @@ jobs:
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=4096'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6

@@ -150,16 +150,6 @@ export default defineConfig({
             return 'animation'
           }
 
-          // Agent internals are tightly coupled and mix static/dynamic imports.
-          // Keep them in one chunk for packaged startup stability.
-          if (
-            id.includes('/renderer/agent/') ||
-            id.includes('/renderer/components/agent/') ||
-            id.includes('/renderer/components/plan/')
-          ) {
-            return 'agent'
-          }
-
           if (id.includes('/renderer/components/sidebar/')) {
             return 'sidebar'
           }
