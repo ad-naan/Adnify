@@ -78,7 +78,7 @@
     "diff": "^8.0.2",
     "dompurify": "^3.3.1",
     "electron": "^39.2.7",
-    "electron-builder": "^26.8.1",
+    "electron-builder": "^24.13.3",
     "fast-check": "^4.4.0",
     "fast-json-stable-stringify": "^2.1.0",
     "framer-motion": "^12.25.0",
@@ -121,12 +121,15 @@
     "directories": {
       "output": "release"
     },
-    "electronVersion": "39.2.7",
     "asar": true,
     "asarUnpack": [
       "node_modules/node-pty/**",
+      "node_modules/@vscode/ripgrep/**",
+      "node_modules/dugite/**",
+      "node_modules/@lancedb/**",
       "node_modules/@parcel/watcher/**",
       "node_modules/@parcel/watcher-*/**",
+      "node_modules/sharp/**",
       "node_modules/ssh2/**",
       "node_modules/cpu-features/**"
     ],
@@ -136,11 +139,6 @@
       "LICENSE",
       "NOTICE",
       "!**/*.map",
-      "!**/node_modules/@lancedb/**",
-      "!**/node_modules/dugite/**",
-      "!**/node_modules/@vscode/ripgrep/**",
-      "!**/node_modules/sharp/**",
-      "!**/node_modules/@xenova/transformers/**",
       "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
       "!**/node_modules/*.d.ts",
@@ -224,26 +222,6 @@
       {
         "from": "resources/uiux",
         "to": "uiux"
-      },
-      {
-        "from": "node_modules/@lancedb",
-        "to": "app.asar.unpacked/node_modules/@lancedb"
-      },
-      {
-        "from": "node_modules/dugite",
-        "to": "app.asar.unpacked/node_modules/dugite"
-      },
-      {
-        "from": "node_modules/@vscode/ripgrep",
-        "to": "app.asar.unpacked/node_modules/@vscode/ripgrep"
-      },
-      {
-        "from": "node_modules/sharp",
-        "to": "app.asar.unpacked/node_modules/sharp"
-      },
-      {
-        "from": "node_modules/@xenova/transformers",
-        "to": "app.asar.unpacked/node_modules/@xenova/transformers"
       }
     ]
   },
