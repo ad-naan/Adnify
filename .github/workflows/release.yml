@@ -146,11 +146,13 @@ jobs:
         run: |
           APP_PATH="$(find release -maxdepth 3 -type d -name 'Adnify.app' | head -n 1)"
           if [ -z "$APP_PATH" ]; then echo "App bundle not found"; exit 1; fi
-          open -a "$APP_PATH" &
+          APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
+          "$APP_PATH/Contents/MacOS/Adnify" &
+          APP_PID=$!
           sleep 8
-          if pgrep -f "Adnify" > /dev/null; then
-            echo "✓ App started successfully"
-            pkill -f "Adnify" || true
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "✓ App started successfully (PID: $APP_PID)"
+            kill $APP_PID 2>/dev/null || true
           else
             echo "✗ App crashed during startup"
             exit 1
