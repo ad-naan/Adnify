@@ -121,6 +121,7 @@
     "directories": {
       "output": "release"
     },
+    "electronVersion": "39.2.7",
     "asar": true,
     "asarUnpack": [
       "node_modules/node-pty/**",
