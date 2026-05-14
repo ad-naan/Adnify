@@ -673,10 +673,20 @@ class AdnifyDirService {
 
     for (const [threadId, data] of Object.entries(threads)) {
       const threadData = toPersistedChatThread(data)
-      // Messages still loading from disk should not be marked dirty yet.
-      // Otherwise shutdown can flush the placeholder thread and wipe the real JSONL payload.
+      // Threads whose messages have not been loaded from disk must not be marked dirty.
+      // Writing them would overwrite the existing .jsonl with an empty payload.
+      // However, we still update the in-memory cache so metadata queries stay consistent.
       if (data.messagesHydrated === false) {
-        this.cache.threads.set(threadId, threadData)
+        // Only update cache metadata (title, lastModified, etc.) without touching dirty set.
+        // This preserves the existing .jsonl on disk while keeping the cache fresh.
+        const existing = this.cache.threads.get(threadId)
+        if (existing) {
+          // Merge: keep existing messages, update metadata only
+          const merged = { ...existing, ...threadData, messages: existing.messages }
+          this.cache.threads.set(threadId, merged)
+        } else {
+          this.cache.threads.set(threadId, threadData)
+        }
         continue
       }
       this.setThreadDirty(threadId, threadData)
