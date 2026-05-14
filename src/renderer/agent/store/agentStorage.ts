@@ -154,13 +154,24 @@ export function flushScheduledPersistedAgentSessionState(
   getState?: () => Partial<PersistedAgentSessionState>
 ): void {
   clearScheduledPersistTimer()
+  // During shutdown, prefer the explicitly provided getState (which reads the live store)
+  // over the stale pendingStateGetter that was captured at debounce-schedule time.
   const stateGetter = getState || pendingStateGetter
   pendingStateGetter = null
   if (!stateGetter) {
     return
   }
 
-  stagePersistedAgentSessionFromGetter(stateGetter)
+  // Temporarily lift write suspension for shutdown flush.
+  // During normal operation, writes may be suspended (e.g., during rehydration),
+  // but at shutdown time we must persist regardless.
+  const wasSuspended = writeSuspendCount
+  writeSuspendCount = 0
+  try {
+    stagePersistedAgentSessionFromGetter(stateGetter)
+  } finally {
+    writeSuspendCount = wasSuspended
+  }
 }
 
 export function stageAgentSessionState(

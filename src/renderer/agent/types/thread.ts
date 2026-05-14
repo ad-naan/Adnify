@@ -180,10 +180,18 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
 }
 
 export function fromPersistedChatThread(thread: PersistedChatThread): ChatThread {
+  const messages = thread.messages || []
+  // A thread is considered hydrated if it has messages loaded in memory,
+  // OR if the persisted messageCount indicates there are no messages on disk to load.
+  // This prevents empty threads from being incorrectly marked as "not hydrated",
+  // which would block their future state changes from being persisted.
+  const persistedMessageCount = typeof thread.messageCount === 'number' ? thread.messageCount : messages.length
+  const messagesHydrated = messages.length > 0 || persistedMessageCount === 0
+
   return {
     ...thread,
-    messages: thread.messages || [],
-    messagesHydrated: (thread.messages?.length || 0) > 0,
+    messages,
+    messagesHydrated,
     contextItems: thread.contextItems || [],
     messageCheckpoints: thread.messageCheckpoints || [],
     ...createRuntimeThreadState(),
