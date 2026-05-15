@@ -49,6 +49,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
+import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import type { ToolStreamingPreview } from '@shared/types'
 import { publicAsset } from '@utils/publicAsset'
 import { ImageLightbox } from './ImageLightbox'
@@ -153,7 +154,8 @@ CodeBlock.displayName = 'CodeBlock'
 
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
-  return stripToolCallLeaks(text)
+  const withoutLeaks = stripToolCallLeaks(text)
+  return fixMarkdownTables(withoutLeaks)
 }
 
 const renderStreamingTailText = (value: string, key: string) => {
@@ -453,7 +455,9 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   // 所有 useMemo 必须在前面
   const cleanedContent = React.useMemo(() => {
-    return isStreaming ? cleanStreamingContent(content) : content
+    const cleaned = isStreaming ? cleanStreamingContent(content) : content
+    // 对所有内容应用表格修复（包括非流式内容）
+    return fixMarkdownTables(cleaned)
   }, [content, isStreaming])
 
   // 检测系统警告
