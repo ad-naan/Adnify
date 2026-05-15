@@ -10,19 +10,11 @@ import { Logo } from '../common/Logo'
 import { useStore } from '@store'
 import { Modal } from '../ui'
 import { motion } from 'framer-motion'
+import { CONTRIBUTORS } from '@shared/config/contributors'
 
 interface AboutDialogProps {
     onClose: () => void
 }
-
-const CONTRIBUTORS = [
-    { name: 'adnaan', avatar: 'https://github.com/ad-naan.png', url: 'https://github.com/ad-naan' },
-    { name: 'kerwin', avatar: 'https://github.com/kerwin2046.png', url: 'https://github.com/kerwin2046' },
-    { name: 'cniu6', avatar: 'https://github.com/cniu6.png', url: 'https://github.com/cniu6' },
-    { name: '晨曦', avatar: 'https://github.com/tss-tss.png', url: 'https://github.com/tss-tss' },
-    { name: 'joanboss', avatar: 'https://github.com/joanboss.png', url: 'https://github.com/joanboss' },
-    { name: '玉衡', avatar: 'https://github.com/yuheng-888.png', url: 'https://github.com/yuheng-888' },
-]
 
 export default function AboutDialog({ onClose }: AboutDialogProps) {
     const language = useStore(s => s.language)
