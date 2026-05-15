@@ -12,30 +12,36 @@ import { useModeStore } from '@/renderer/modes/modeStore'
 /**
  * 自动消费队列的 hook
  * 放在 ChatPanel 中使用，监听 streaming 状态变化
+ * 
+ * 修复：使用完整的 "busy" 判断（streaming | tool_running | tool_pending）
+ * 确保从任何忙碌状态转为 idle 时都能触发队列消费
  */
 export function useMessageQueueConsumer() {
   const { sendMessage } = useAgentCommands()
-  const isStreaming = useAgentStore(state => {
+
+  // 使用与 selectIsStreaming 一致的逻辑：streaming 或 tool_running 都算 busy
+  const isBusy = useAgentStore(state => {
     const threadId = state.currentThreadId
     if (!threadId) return false
     const thread = state.threads[threadId]
-    return thread?.streamState?.phase === 'streaming'
+    const phase = thread?.streamState?.phase
+    return phase === 'streaming' || phase === 'tool_running' || phase === 'tool_pending'
   })
 
   const queue = useMessageQueueStore(s => s.queue)
   const dequeue = useMessageQueueStore(s => s.dequeue)
   const setMode = useModeStore(s => s.setMode)
 
-  // 用 ref 追踪上一次的 streaming 状态，检测从 streaming → idle 的转换
-  const wasStreamingRef = useRef(false)
+  // 用 ref 追踪上一次的 busy 状态，检测从 busy → idle 的转换
+  const wasBusyRef = useRef(false)
   const isConsumingRef = useRef(false)
 
   useEffect(() => {
-    const wasStreaming = wasStreamingRef.current
-    wasStreamingRef.current = isStreaming
+    const wasBusy = wasBusyRef.current
+    wasBusyRef.current = isBusy
 
-    // 从 streaming 变为 idle，且队列中有消息
-    if (wasStreaming && !isStreaming && queue.length > 0 && !isConsumingRef.current) {
+    // 从 busy 变为 idle，且队列中有消息
+    if (wasBusy && !isBusy && queue.length > 0 && !isConsumingRef.current) {
       isConsumingRef.current = true
 
       // 短暂延迟，让 UI 有时间更新
@@ -59,7 +65,7 @@ export function useMessageQueueConsumer() {
         isConsumingRef.current = false
       }
     }
-  }, [isStreaming, queue.length, dequeue, sendMessage, setMode])
+  }, [isBusy, queue.length, dequeue, sendMessage, setMode])
 }
 
 /**
