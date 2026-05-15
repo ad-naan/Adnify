@@ -1,13 +1,15 @@
 /**
  * 首次使用引导向导
- * 简化版 - 只包含基础设置
+ * 与 WelcomePage 视觉风格保持一致：CSS-driven 容器查询，IP 角色，渐变主按钮，柔和卡片
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
-  ChevronRight, ChevronLeft, Check, Sparkles, Palette,
-  Globe, Cpu, FolderOpen, Rocket, Eye, EyeOff, Settings
+  ChevronRight, ChevronLeft, Check, FolderOpen, Eye, EyeOff,
+  Sparkles, Bot, Plug, Lightbulb, FileText, Workflow as WorkflowIcon,
+  ShieldCheck, Search, Code2, Rocket, Globe, Palette, Cpu,
+  Minus, Square, X,
 } from 'lucide-react'
 import { useStore, LLMConfig } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -15,27 +17,48 @@ import { Language } from '@renderer/i18n'
 import { themeManager, Theme } from '@renderer/config/themeConfig'
 import { PROVIDERS } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@shared/config/defaults'
-import { Logo } from '../common/Logo'
 import { workspaceManager } from '@services/WorkspaceManager'
-import { Button, Input, Select } from '../ui'
-import { motion, AnimatePresence, Variants } from 'framer-motion'
+import { Input, Select } from '../ui'
+import { publicAsset } from '@utils/publicAsset'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
+import { CONTRIBUTORS, getCoreContributor, getOrbitContributors } from '@shared/config/contributors'
 
 interface OnboardingWizardProps {
   onComplete: () => void
 }
 
-type Step = 'welcome' | 'language' | 'theme' | 'provider' | 'workspace' | 'complete'
+type Step = 'welcome' | 'language' | 'theme' | 'provider' | 'capabilities' | 'workspace' | 'complete'
 
-const STEPS: Step[] = ['welcome', 'language', 'theme', 'provider', 'workspace', 'complete']
+const STEPS: Step[] = ['welcome', 'language', 'theme', 'provider', 'capabilities', 'workspace', 'complete']
 
-const LANGUAGES: { id: Language; name: string; native: string }[] = [
-  { id: 'en', name: 'English', native: 'English' },
-  { id: 'zh', name: 'Chinese', native: '中文' },
+const LANGUAGES: { id: Language; name: string; native: string; glyph: string; description: { en: string; zh: string } }[] = [
+  {
+    id: 'en',
+    name: 'English',
+    native: 'English',
+    glyph: 'Aa',
+    description: { en: 'Interface and AI in English', zh: '界面与 AI 使用英文' },
+  },
+  {
+    id: 'zh',
+    name: 'Chinese',
+    native: '中文',
+    glyph: '中',
+    description: { en: 'Interface and AI in Chinese', zh: '界面与 AI 使用中文' },
+  },
 ]
 
+const ROOT_CLASS = 'adnify-onboarding'
+
 export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
-  const { set, language, workspacePath } = useStore(useShallow(s => ({ set: s.set, language: s.language, workspacePath: s.workspacePath })))
+  const { set, language, workspacePath, currentTheme: currentThemeId } = useStore(
+    useShallow(s => ({
+      set: s.set,
+      language: s.language,
+      workspacePath: s.workspacePath,
+      currentTheme: s.currentTheme,
+    }))
+  )
 
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(language)
@@ -49,12 +72,17 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     maxTokens: LLM_DEFAULTS.maxTokens,
   })
   const [showApiKey, setShowApiKey] = useState(false)
-  const [direction, setDirection] = useState(0)
   const [isExiting, setIsExiting] = useState(false)
+  const [direction, setDirection] = useState<1 | -1>(1)
 
   const allThemes = themeManager.getAllThemes()
   const currentStepIndex = STEPS.indexOf(currentStep)
   const isZh = selectedLanguage === 'zh'
+
+  const welcomeArtwork = useMemo(
+    () => publicAsset(currentThemeId === 'dawn' ? 'brand/welcome/light.webp' : 'brand/welcome/dark.webp'),
+    [currentThemeId]
+  )
 
   useEffect(() => {
     themeManager.setTheme(selectedTheme)
@@ -112,14 +140,11 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         enableFileLogging: false,
       })
 
-      // Double check store update
       useStore.getState().set('onboardingCompleted', true)
-
       setIsExiting(true)
-      setTimeout(onComplete, 500)
+      setTimeout(onComplete, 350)
     } catch (error) {
       console.error('Failed to save onboarding settings:', error)
-      // Fallback: try to set store at least so UI updates
       useStore.getState().set('onboardingCompleted', true)
       onComplete()
     }
@@ -132,334 +157,312 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
     }
   }
 
-  const variants: Variants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 20 : -20,
-      opacity: 0,
-      scale: 0.98
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
-      opacity: 1,
-      scale: 1,
-      transition: {
-        type: "spring",
-        stiffness: 350,
-        damping: 30
-      }
-    },
-    exit: (direction: number) => ({
-      zIndex: 0,
-      x: direction < 0 ? 20 : -20,
-      opacity: 0,
-      scale: 0.98,
-      transition: {
-        duration: 0.2
-      }
-    })
-  }
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-[9999]"
+    <div
+      className={`${ROOT_CLASS} ${isExiting ? 'is-exiting' : ''}`}
+      role="dialog"
+      aria-modal="true"
     >
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <motion.div
-          animate={{
-            scale: [1, 1.2, 1],
-            rotate: [0, 90, 0],
-          }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[100px]"
-        />
-        <motion.div
-          animate={{
-            scale: [1, 1.1, 1],
-            rotate: [0, -45, 0],
-          }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-          className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-purple-500/5 rounded-full blur-[100px]"
-        />
+      <OnboardingStyles rootClass={ROOT_CLASS} />
+
+      <div className="adnify-onboarding-backdrop" />
+      <div className="adnify-onboarding-glow adnify-onboarding-glow-1" />
+      <div className="adnify-onboarding-glow adnify-onboarding-glow-2" />
+
+      {/* Frameless window controls (drag region + min/max/close) */}
+      <div className="adnify-onboarding-titlebar drag-region">
+        <div className="adnify-onboarding-titlebar-controls no-drag">
+          <button
+            type="button"
+            className="adnify-onboarding-titlebar-btn"
+            onClick={() => api.window.minimize()}
+            aria-label="Minimize"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            className="adnify-onboarding-titlebar-btn"
+            onClick={() => api.window.maximize()}
+            aria-label="Maximize"
+          >
+            <Square className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            className="adnify-onboarding-titlebar-btn adnify-onboarding-titlebar-close"
+            onClick={() => api.window.close()}
+            aria-label="Close"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0, y: 20 }}
-        animate={{
-          scale: isExiting ? 0.95 : 1,
-          opacity: isExiting ? 0 : 1,
-          y: 0
-        }}
-        transition={{ type: "spring", duration: 0.5 }}
-        className="relative w-full max-w-2xl mx-4"
-      >
-        {/* 进度指示器 */}
-        <div className="flex justify-center mb-8">
-          <div className="flex items-center gap-2 bg-background-secondary/50 backdrop-blur-md px-4 py-2 rounded-full border border-border shadow-sm">
-            {STEPS.slice(0, -1).map((step, index) => (
-              <React.Fragment key={step}>
-                <motion.div
-                  initial={false}
-                  animate={{
-                    backgroundColor: index <= currentStepIndex ? 'rgb(var(--accent))' : 'rgba(var(--text-muted), 0.2)',
-                    scale: index === currentStepIndex ? 1.2 : 1,
-                  }}
-                  className={`w-2.5 h-2.5 rounded-full`}
-                />
-                {index < STEPS.length - 2 && (
-                  <motion.div
-                    initial={false}
-                    animate={{
-                      backgroundColor: index < currentStepIndex ? 'rgba(var(--accent), 0.5)' : 'rgba(var(--text-muted), 0.1)',
-                    }}
-                    className="w-4 h-0.5"
-                  />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-
-        {/* 内容卡片 */}
-        <div className="bg-background-secondary/90 backdrop-blur-2xl border border-border rounded-3xl shadow-2xl overflow-hidden relative ring-1 ring-white/5">
-          <div className="min-h-[460px] flex flex-col">
-            <div className="flex-1 relative p-1 overflow-hidden">
-              <AnimatePresence initial={false} custom={direction} mode="wait">
-                <motion.div
-                  key={currentStep}
-                  custom={direction}
-                  variants={variants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  className="w-full h-full"
-                >
-                  {currentStep === 'welcome' && <WelcomeStep isZh={isZh} />}
-                  {currentStep === 'language' && (
-                    <LanguageStep isZh={isZh} selectedLanguage={selectedLanguage} onSelect={setSelectedLanguage} />
-                  )}
-                  {currentStep === 'theme' && (
-                    <ThemeStep isZh={isZh} themes={allThemes} selectedTheme={selectedTheme} onSelect={setSelectedTheme} />
-                  )}
-                  {currentStep === 'provider' && (
-                    <ProviderStep
-                      isZh={isZh}
-                      config={providerConfig}
-                      setConfig={setProviderConfig}
-                      showApiKey={showApiKey}
-                      setShowApiKey={setShowApiKey}
-                    />
-                  )}
-                  {currentStep === 'workspace' && (
-                    <WorkspaceStep isZh={isZh} workspacePath={workspacePath} onOpenFolder={handleOpenFolder} />
-                  )}
-                  {currentStep === 'complete' && <CompleteStep isZh={isZh} />}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* 底部导航 */}
-            <div className="flex items-center justify-between px-8 py-6 border-t border-border bg-background/20 backdrop-blur-sm">
-              <button
-                onClick={goPrev}
-                disabled={currentStepIndex === 0}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${currentStepIndex === 0
-                  ? 'opacity-0 pointer-events-none'
-                  : 'text-text-muted hover:text-text-primary hover:bg-white/5 active:scale-95'
-                  }`}
-              >
-                <ChevronLeft className="w-4 h-4" />
-                {isZh ? '上一步' : 'Back'}
-              </button>
-
-              {currentStep === 'complete' ? (
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={handleComplete}
-                    className="flex items-center gap-2 px-8 py-3 bg-accent hover:bg-accent-hover text-white rounded-xl text-sm font-bold shadow-lg shadow-accent/20 transition-all"
-                  >
-                    <Rocket className="w-4 h-4" />
-                    {isZh ? '开始使用' : 'Get Started'}
-                  </Button>
-                </motion.div>
-              ) : (
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={goNext}
-                    className="flex items-center gap-2 px-8 py-3 bg-white/10 hover:bg-white/15 text-text-primary border border-border hover:border-border rounded-xl text-sm font-medium backdrop-blur-sm transition-all shadow-lg"
-                  >
-                    {isZh ? '下一步' : 'Next'}
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </motion.div>
-              )}
+      <main className="adnify-onboarding-shell">
+        <header className="adnify-onboarding-header">
+          <div className="adnify-onboarding-brand">
+            <img
+              src={publicAsset(currentThemeId === 'dawn' ? 'brand/logos/app-light.png' : 'brand/logos/app.png')}
+              alt=""
+              className="adnify-onboarding-logo"
+            />
+            <div>
+              <p className="adnify-onboarding-eyebrow">{isZh ? '初始化' : 'Setup'}</p>
+              <p className="adnify-onboarding-brand-name">Adnify</p>
             </div>
           </div>
-        </div>
 
-        {/* 跳过按钮 */}
-        {currentStep !== 'complete' && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            onClick={handleComplete}
-            className="absolute -bottom-14 left-1/2 -translate-x-1/2 text-sm text-text-muted/60 hover:text-text-muted transition-colors flex items-center gap-1.5 py-2 px-4 rounded-full hover:bg-white/5"
+          <div className="adnify-onboarding-progress-wrap">
+            <ProgressBar
+              steps={STEPS.slice(0, -1)}
+              currentIndex={Math.min(currentStepIndex, STEPS.length - 2)}
+              isZh={isZh}
+            />
+          </div>
+
+          {currentStep !== 'complete' && (
+            <button
+              type="button"
+              className="adnify-onboarding-skip"
+              onClick={handleComplete}
+            >
+              <span>{isZh ? '跳过引导' : 'Skip setup'}</span>
+              <ChevronRight className="h-3 w-3" />
+            </button>
+          )}
+          {currentStep === 'complete' && <span className="adnify-onboarding-skip-spacer" />}
+        </header>
+
+        <section
+          key={currentStep}
+          className={`adnify-onboarding-card adnify-onboarding-card-${direction > 0 ? 'enter' : 'enter-reverse'}`}
+        >
+          {currentStep === 'welcome' && (
+            <WelcomeStep isZh={isZh} artwork={welcomeArtwork} onStart={goNext} />
+          )}
+          {currentStep === 'language' && (
+            <LanguageStep isZh={isZh} selectedLanguage={selectedLanguage} onSelect={setSelectedLanguage} />
+          )}
+          {currentStep === 'theme' && (
+            <ThemeStep isZh={isZh} themes={allThemes} selectedTheme={selectedTheme} onSelect={setSelectedTheme} />
+          )}
+          {currentStep === 'provider' && (
+            <ProviderStep
+              isZh={isZh}
+              config={providerConfig}
+              setConfig={setProviderConfig}
+              showApiKey={showApiKey}
+              setShowApiKey={setShowApiKey}
+            />
+          )}
+          {currentStep === 'capabilities' && <CapabilitiesStep isZh={isZh} />}
+          {currentStep === 'workspace' && (
+            <WorkspaceStep isZh={isZh} workspacePath={workspacePath} onOpenFolder={handleOpenFolder} />
+          )}
+          {currentStep === 'complete' && <CompleteStep isZh={isZh} />}
+        </section>
+
+        <footer className="adnify-onboarding-footer">
+          <button
+            type="button"
+            className="adnify-onboarding-back"
+            onClick={goPrev}
+            disabled={currentStepIndex === 0}
+            aria-hidden={currentStepIndex === 0}
           >
-            <span>{isZh ? '跳过引导' : 'Skip setup'}</span>
-            <ChevronRight className="w-3 h-3" />
-          </motion.button>
-        )}
-      </motion.div>
-    </motion.div>
+            <ChevronLeft className="h-4 w-4" />
+            {isZh ? '上一步' : 'Back'}
+          </button>
+
+          <span className="adnify-onboarding-step-count">
+            {currentStepIndex + 1} / {STEPS.length}
+          </span>
+
+          {currentStep === 'complete' ? (
+            <button
+              type="button"
+              className="adnify-onboarding-primary group"
+              onClick={handleComplete}
+            >
+              <span className="adnify-onboarding-primary-content">
+                <Rocket className="h-4 w-4" />
+                {isZh ? '开始使用' : 'Get Started'}
+              </span>
+              <span className="adnify-onboarding-button-mascot">
+                <img src={publicAsset('brand/ip/4.png')} alt="" draggable={false} />
+              </span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="adnify-onboarding-primary group"
+              onClick={goNext}
+            >
+              <span className="adnify-onboarding-primary-content">
+                {isZh ? '下一步' : 'Next'}
+                <ChevronRight className="h-4 w-4" />
+              </span>
+            </button>
+          )}
+        </footer>
+      </main>
+    </div>
   )
 }
 
+// =================== Progress Bar ===================
 
-// ============ Step Components ============
+function ProgressBar({
+  steps,
+  currentIndex,
+  isZh,
+}: {
+  steps: Step[]
+  currentIndex: number
+  isZh: boolean
+}) {
+  const STEP_LABELS: Record<Step, { en: string; zh: string }> = {
+    welcome: { en: 'Welcome', zh: '欢迎' },
+    language: { en: 'Language', zh: '语言' },
+    theme: { en: 'Theme', zh: '主题' },
+    provider: { en: 'AI Model', zh: 'AI 模型' },
+    capabilities: { en: 'Capabilities', zh: '能力' },
+    workspace: { en: 'Workspace', zh: '工作区' },
+    complete: { en: 'Done', zh: '完成' },
+  }
 
-function WelcomeStep({ isZh }: { isZh: boolean }) {
   return (
-    <div className="px-8 py-12 text-center h-full flex flex-col justify-center">
-      <motion.div
-        initial={{ scale: 0.5, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        className="mb-8 flex justify-center"
-      >
-        <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-accent to-purple-600 rounded-3xl blur opacity-20 group-hover:opacity-40 transition duration-500" />
-          <div className="relative w-28 h-28 rounded-2xl bg-gradient-to-br from-surface to-surface-active border border-border flex items-center justify-center shadow-2xl">
-            <Logo className="w-16 h-16" glow />
-          </div>
-        </div>
-      </motion.div>
+    <ol className="adnify-onboarding-progress" aria-label="Setup progress">
+      {steps.map((step, idx) => {
+        const isDone = idx < currentIndex
+        const isActive = idx === currentIndex
+        return (
+          <li
+            key={step}
+            className={`adnify-onboarding-progress-item ${isDone ? 'is-done' : ''} ${isActive ? 'is-active' : ''}`}
+          >
+            <span className="adnify-onboarding-progress-dot">
+              {isDone ? <Check className="h-3 w-3" /> : <span>{idx + 1}</span>}
+            </span>
+            <span className="adnify-onboarding-progress-label">
+              {isZh ? STEP_LABELS[step].zh : STEP_LABELS[step].en}
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
 
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.1 }}
-      >
-        <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-br from-text-primary to-text-muted mb-4 tracking-tight">
-          {isZh ? '欢迎使用 Adnify' : 'Welcome to Adnify'}
+// =================== Step Components ===================
+
+function WelcomeStep({
+  isZh,
+  artwork,
+  onStart,
+}: {
+  isZh: boolean
+  artwork: string
+  onStart: () => void
+}) {
+  return (
+    <div className="adnify-onboarding-step adnify-onboarding-welcome">
+      <div className="adnify-onboarding-copy">
+        <p className="adnify-onboarding-eyebrow">
+          {isZh ? '欢迎来到 Adnify' : 'Welcome to Adnify'}
+        </p>
+        <h1 className="adnify-onboarding-title">
+          {isZh ? '让我们一起，搭好工作台' : 'Let\'s set up your workspace'}
         </h1>
-        <p className="text-text-muted max-w-lg mx-auto leading-relaxed text-lg mb-2">
-          {isZh ? 'AI 驱动的下一代智能代码编辑器' : 'Next-gen AI-powered intelligent code editor'}
-        </p>
-        <p className="text-text-muted/50 max-w-sm mx-auto text-sm">
+        <p className="adnify-onboarding-subtitle">
           {isZh
-            ? '让我们快速完成几个基础设置，即可开始编程。'
-            : 'Let\'s quickly set up the basics and start coding.'}
+            ? '只需几步，配置语言、主题、AI 模型与工作区。完成后即可开始智能编程。'
+            : 'A few quick steps to pick your language, theme, AI model and workspace. Then you\'re ready to build.'}
         </p>
-      </motion.div>
 
-      <div className="mt-12 flex justify-center gap-12">
-        <FeatureItem
-          icon={<Sparkles className="w-5 h-5 text-accent" />}
-          label={isZh ? 'AI 辅助' : 'AI-Assisted'}
-          delay={0.2}
-        />
-        <FeatureItem
-          icon={<Cpu className="w-5 h-5 text-purple-400" />}
-          label={isZh ? '多模型' : 'Multi-Model'}
-          delay={0.3}
-        />
-        <FeatureItem
-          icon={<Settings className="w-5 h-5 text-blue-400" />}
-          label={isZh ? '可定制' : 'Customizable'}
-          delay={0.4}
-        />
+        <div className="adnify-onboarding-actions">
+          <button type="button" className="adnify-onboarding-primary group" onClick={onStart}>
+            <span className="adnify-onboarding-primary-content">
+              <Sparkles className="h-4 w-4" />
+              {isZh ? '开始设置' : 'Start setup'}
+            </span>
+            <span className="adnify-onboarding-button-mascot">
+              <img src={publicAsset('brand/ip/1.png')} alt="" draggable={false} />
+            </span>
+          </button>
+        </div>
+
+        <ul className="adnify-onboarding-perks">
+          <li><Check className="h-3.5 w-3.5" />{isZh ? '约 1 分钟完成' : 'Takes about a minute'}</li>
+          <li><Check className="h-3.5 w-3.5" />{isZh ? '随时可在设置中调整' : 'Change anything later in settings'}</li>
+          <li><Check className="h-3.5 w-3.5" />{isZh ? '本地保存，不上传' : 'Saved locally, never uploaded'}</li>
+        </ul>
+      </div>
+
+      <div className="adnify-onboarding-visual" aria-hidden="true">
+        <div className="adnify-onboarding-visual-glow" />
+        <img src={artwork} alt="" draggable={false} className="adnify-onboarding-artwork" />
       </div>
     </div>
   )
 }
 
-function FeatureItem({ icon, label, delay }: { icon: React.ReactNode, label: string, delay: number }) {
-  return (
-    <motion.div
-      initial={{ y: 10, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ delay }}
-      className="flex flex-col items-center gap-3"
-    >
-      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-border flex items-center justify-center shadow-lg">
-        {icon}
-      </div>
-      <span className="text-sm font-medium text-text-secondary">{label}</span>
-    </motion.div>
-  )
-}
-
-
 function LanguageStep({
   isZh,
   selectedLanguage,
-  onSelect
+  onSelect,
 }: {
   isZh: boolean
   selectedLanguage: Language
   onSelect: (lang: Language) => void
 }) {
   return (
-    <div className="px-12 py-10 h-full flex flex-col">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <Globe className="w-6 h-6 text-accent" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-text-primary">
-            {isZh ? '语言偏好' : 'Language Preference'}
-          </h2>
-          <p className="text-text-muted mt-1">
-            {isZh ? '选择界面语言' : 'Choose your interface language'}
-          </p>
-        </div>
-      </div>
+    <div className="adnify-onboarding-step">
+      <StepHeader
+        icon={<Globe className="h-5 w-5" />}
+        eyebrow={isZh ? '步骤一' : 'Step 1'}
+        title={isZh ? '选择你的语言' : 'Choose your language'}
+        subtitle={isZh ? '可随时在设置中切换' : 'You can switch anytime in settings'}
+      />
 
-      <div className="grid grid-cols-2 gap-6 mt-4 flex-1">
-        {LANGUAGES.map((lang, index) => (
-          <motion.button
-            key={lang.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onSelect(lang.id)}
-            className={`relative p-8 rounded-3xl border-2 text-left transition-all duration-300 group flex flex-col justify-center gap-2 ${selectedLanguage === lang.id
-              ? 'border-accent bg-accent/5 shadow-xl shadow-accent/5'
-              : 'border-border hover:border-accent/30 bg-white/5 hover:bg-white/10'
-              }`}
-          >
-            <div className="text-5xl mb-4 group-hover:scale-110 transition-transform duration-500 ease-out origin-left">
-              {lang.id === 'zh' ? '🇨🇳' : '🇺🇸'}
-            </div>
-            <div className="font-bold text-text-primary text-xl">{lang.native}</div>
-            <div className="text-text-muted font-medium">{lang.name}</div>
-            {selectedLanguage === lang.id && (
-              <motion.div
-                layoutId="lang-check"
-                className="absolute top-6 right-6 w-8 h-8 rounded-full bg-accent flex items-center justify-center shadow-lg shadow-accent/30"
-              >
-                <Check className="w-5 h-5 text-white" />
-              </motion.div>
-            )}
-          </motion.button>
-        ))}
+      <div className="adnify-onboarding-lang-grid">
+        {LANGUAGES.map((lang) => {
+          const active = selectedLanguage === lang.id
+          return (
+            <button
+              key={lang.id}
+              type="button"
+              className={`adnify-onboarding-pick-card ${active ? 'is-active' : ''}`}
+              onClick={() => onSelect(lang.id)}
+              aria-pressed={active}
+            >
+              <span className="adnify-onboarding-lang-glyph" aria-hidden="true">
+                {lang.glyph}
+              </span>
+              <span className="adnify-onboarding-pick-title">{lang.native}</span>
+              <span className="adnify-onboarding-pick-sub">{lang.name}</span>
+              <span className="adnify-onboarding-pick-desc">
+                {isZh ? lang.description.zh : lang.description.en}
+              </span>
+              {active && (
+                <span className="adnify-onboarding-pick-check">
+                  <Check className="h-3.5 w-3.5" />
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-
 function ThemeStep({
   isZh,
   themes,
   selectedTheme,
-  onSelect
+  onSelect,
 }: {
   isZh: boolean
   themes: Theme[]
@@ -467,53 +470,38 @@ function ThemeStep({
   onSelect: (id: string) => void
 }) {
   return (
-    <div className="px-10 py-10 h-full flex flex-col">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <Palette className="w-6 h-6 text-accent" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-text-primary">
-            {isZh ? '选择主题' : 'Choose Theme'}
-          </h2>
-          <p className="text-text-muted mt-1">
-            {isZh ? '选择一个符合你审美的外观' : 'Pick a look that matches your style'}
-          </p>
-        </div>
-      </div>
+    <div className="adnify-onboarding-step">
+      <StepHeader
+        icon={<Palette className="h-5 w-5" />}
+        eyebrow={isZh ? '步骤二' : 'Step 2'}
+        title={isZh ? '挑一个顺眼的主题' : 'Pick a theme you love'}
+        subtitle={isZh ? '主题会立即在背景中预览' : 'Themes preview live in the background'}
+      />
 
-      <div className="grid grid-cols-3 gap-4 mt-4 overflow-y-auto pb-2 pr-2">
-        {themes.map((theme, index) => (
-          <motion.button
-            key={theme.id}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: index * 0.05 }}
-            whileHover={{ y: -5 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onSelect(theme.id)}
-            className={`relative p-3 rounded-2xl border-2 text-left transition-all duration-300 ${selectedTheme === theme.id
-              ? 'border-accent bg-accent/5 shadow-lg shadow-accent/10'
-              : 'border-border hover:border-accent/30 bg-white/5'
-              }`}
-          >
-            <ThemeWorkbenchPreview theme={theme} className="mb-3 h-24" />
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-bold text-sm text-text-primary">{theme.name}</div>
-                <div className="text-[10px] text-text-muted capitalize opacity-70">{theme.type}</div>
+      <div className="adnify-onboarding-theme-grid custom-scrollbar">
+        {themes.map((theme) => {
+          const active = selectedTheme === theme.id
+          return (
+            <button
+              key={theme.id}
+              type="button"
+              className={`adnify-onboarding-theme-card ${active ? 'is-active' : ''}`}
+              onClick={() => onSelect(theme.id)}
+              aria-pressed={active}
+            >
+              <ThemeWorkbenchPreview theme={theme} className="adnify-onboarding-theme-preview" />
+              <div className="adnify-onboarding-theme-meta">
+                <span className="adnify-onboarding-theme-name">{theme.name}</span>
+                <span className="adnify-onboarding-theme-type">{theme.type}</span>
               </div>
-            </div>
-            {selectedTheme === theme.id && (
-              <motion.div
-                layoutId="theme-check"
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center shadow-lg ring-4 ring-background"
-              >
-                <Check className="w-3.5 h-3.5 text-white" />
-              </motion.div>
-            )}
-          </motion.button>
-        ))}
+              {active && (
+                <span className="adnify-onboarding-theme-check">
+                  <Check className="h-3 w-3" />
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -525,7 +513,7 @@ function ProviderStep({
   config,
   setConfig,
   showApiKey,
-  setShowApiKey
+  setShowApiKey,
 }: {
   isZh: boolean
   config: LLMConfig
@@ -533,110 +521,101 @@ function ProviderStep({
   showApiKey: boolean
   setShowApiKey: (show: boolean) => void
 }) {
-  const providers = Object.values(PROVIDERS).filter(p => p.id !== 'custom')
+  const providers = Object.values(PROVIDERS).filter((p) => p.id !== 'custom')
   const selectedProvider = PROVIDERS[config.provider]
 
   return (
-    <div className="px-10 py-10 h-full overflow-y-auto">
-      <div className="flex items-center gap-4 mb-8">
-        <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <Cpu className="w-6 h-6 text-accent" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-text-primary">
-            {isZh ? '配置 AI 模型' : 'Configure AI Model'}
-          </h2>
-          <p className="text-text-muted mt-1">
-            {isZh ? '连接你的 AI 服务' : 'Connect your AI service'}
-          </p>
-        </div>
-      </div>
+    <div className="adnify-onboarding-step">
+      <StepHeader
+        icon={<Cpu className="h-5 w-5" />}
+        eyebrow={isZh ? '步骤三' : 'Step 3'}
+        title={isZh ? '连接 AI 模型' : 'Connect your AI model'}
+        subtitle={isZh ? 'API Key 仅保存在本机，可稍后再填' : 'API key stays local. You can add it later.'}
+      />
 
-      <div className="space-y-8">
-        <div className="space-y-3">
-          <label className="text-xs font-bold text-text-muted uppercase tracking-wider ml-1">
-            {isZh ? '服务提供商' : 'Provider'}
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {providers.map(p => (
-              <motion.button
-                key={p.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setConfig({
-                  ...config,
-                  provider: p.id,
-                  model: p.models[0],
-                  baseUrl: undefined
-                })}
-                className={`px-3 py-4 rounded-xl border text-sm font-medium transition-all flex flex-col items-center gap-2 ${config.provider === p.id
-                  ? 'border-accent bg-accent/10 text-accent shadow-lg shadow-accent/5 ring-1 ring-accent/50'
-                  : 'border-border hover:border-white/20 text-text-muted bg-white/5'
-                  }`}
-              >
-                {/* 这里的 Icon 可以在 providers 配置中增加，暂时用文字首字母代替图形 */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold ${config.provider === p.id ? 'bg-accent text-white' : 'bg-white/10'}`}>
-                  {p.displayName[0]}
-                </div>
-                <span>{p.displayName}</span>
-              </motion.button>
-            ))}
+      <div className="adnify-onboarding-form">
+        <div className="adnify-onboarding-field">
+          <span className="adnify-onboarding-field-label">{isZh ? '服务商' : 'Provider'}</span>
+          <div className="adnify-onboarding-provider-grid">
+            {providers.map((p) => {
+              const active = config.provider === p.id
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`adnify-onboarding-provider-card ${active ? 'is-active' : ''}`}
+                  onClick={() =>
+                    setConfig({
+                      ...config,
+                      provider: p.id,
+                      model: p.models[0] || p.defaultModel,
+                      baseUrl: undefined,
+                    })
+                  }
+                  aria-pressed={active}
+                >
+                  <span className="adnify-onboarding-provider-badge">
+                    {p.displayName.charAt(0)}
+                  </span>
+                  <span className="adnify-onboarding-provider-meta">
+                    <span className="adnify-onboarding-provider-name">{p.displayName}</span>
+                    <span className="adnify-onboarding-provider-desc">{p.description}</span>
+                  </span>
+                  {active && (
+                    <span className="adnify-onboarding-provider-check">
+                      <Check className="h-3 w-3" />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
 
         {selectedProvider && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="space-y-3"
-          >
-            <label className="text-xs font-bold text-text-muted uppercase tracking-wider ml-1">
-              {isZh ? '默认模型' : 'Default Model'}
-            </label>
+          <div className="adnify-onboarding-field">
+            <span className="adnify-onboarding-field-label">{isZh ? '默认模型' : 'Default model'}</span>
             <Select
               value={config.model}
               onChange={(value) => setConfig({ ...config, model: value })}
-              options={selectedProvider.models.map(m => ({ value: m, label: m }))}
-              className="w-full bg-white/5 border-border hover:border-accent/50 transition-colors py-2"
+              options={selectedProvider.models.map((m) => ({ value: m, label: m }))}
+              className="adnify-onboarding-select"
             />
-          </motion.div>
+          </div>
         )}
 
-        <div className="space-y-3">
-          <label className="text-xs font-bold text-text-muted uppercase tracking-wider ml-1 flex items-center justify-between">
+        <div className="adnify-onboarding-field">
+          <span className="adnify-onboarding-field-label">
             <span>API Key</span>
-            <span className="text-[10px] font-normal normal-case opacity-50 bg-white/5 px-2 py-0.5 rounded-full">
-              {isZh ? '可稍后配置' : 'Optional for now'}
-            </span>
-          </label>
-          <div className="relative group">
+            <span className="adnify-onboarding-field-hint">{isZh ? '可选' : 'Optional'}</span>
+          </span>
+          <div className="adnify-onboarding-key-input">
             <Input
               type={showApiKey ? 'text' : 'password'}
               value={config.apiKey}
               onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
               placeholder={selectedProvider?.auth.placeholder || 'sk-...'}
-              className="w-full pr-10 bg-white/5 border-border focus:border-accent focus:ring-1 focus:ring-accent/50 transition-all py-2.5"
+              className="adnify-onboarding-input"
             />
             <button
               type="button"
+              className="adnify-onboarding-key-toggle"
               onClick={() => setShowApiKey(!showApiKey)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors p-1"
+              aria-label={showApiKey ? 'Hide key' : 'Show key'}
             >
-              {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
           {selectedProvider?.auth.helpUrl && (
-            <div className="flex justify-end">
-              <a
-                href={selectedProvider.auth.helpUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-accent hover:text-accent-hover hover:underline inline-flex items-center gap-1 transition-colors"
-              >
-                <span>{isZh ? '获取 API Key' : 'Get API Key'}</span>
-                <ChevronRight className="w-3 h-3" />
-              </a>
-            </div>
+            <a
+              href={selectedProvider.auth.helpUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="adnify-onboarding-link"
+            >
+              <span>{isZh ? '获取 API Key' : 'Get API key'}</span>
+              <ChevronRight className="h-3 w-3" />
+            </a>
           )}
         </div>
       </div>
@@ -644,152 +623,1835 @@ function ProviderStep({
   )
 }
 
+function CapabilitiesStep({ isZh }: { isZh: boolean }) {
+  const capabilities: { icon: React.ReactNode; title: string; desc: string; tone: string }[] = [
+    {
+      icon: <Bot className="h-[18px] w-[18px]" />,
+      tone: 'violet',
+      title: isZh ? 'AI Agent' : 'AI Agent',
+      desc: isZh ? '让 AI 自主读写代码与运行命令' : 'Reads, edits and runs commands for you',
+    },
+    {
+      icon: <Plug className="h-[18px] w-[18px]" />,
+      tone: 'blue',
+      title: isZh ? 'MCP 工具' : 'MCP tools',
+      desc: isZh ? '接入数据库、浏览器等外部能力' : 'Plug in databases, browsers and more',
+    },
+    {
+      icon: <Lightbulb className="h-[18px] w-[18px]" />,
+      tone: 'amber',
+      title: isZh ? 'Skills' : 'Skills',
+      desc: isZh ? '为不同任务装载专用工作流' : 'Load specialized workflows for tasks',
+    },
+    {
+      icon: <FileText className="h-[18px] w-[18px]" />,
+      tone: 'emerald',
+      title: isZh ? 'Rules & Memory' : 'Rules & Memory',
+      desc: isZh ? '将团队规范与项目上下文沉淀下来' : 'Persist team conventions and context',
+    },
+    {
+      icon: <WorkflowIcon className="h-[18px] w-[18px]" />,
+      tone: 'rose',
+      title: isZh ? 'Workflows' : 'Workflows',
+      desc: isZh ? '记录可复用的多步任务流程' : 'Capture reusable multi-step playbooks',
+    },
+    {
+      icon: <Search className="h-[18px] w-[18px]" />,
+      tone: 'cyan',
+      title: isZh ? '语义索引' : 'Semantic index',
+      desc: isZh ? '基于向量的代码搜索与理解' : 'Vector search across your codebase',
+    },
+    {
+      icon: <ShieldCheck className="h-[18px] w-[18px]" />,
+      tone: 'lime',
+      title: isZh ? '安全审批' : 'Safe approvals',
+      desc: isZh ? '危险操作前需要你点头' : 'Risky actions require your nod',
+    },
+    {
+      icon: <Code2 className="h-[18px] w-[18px]" />,
+      tone: 'sky',
+      title: isZh ? 'LSP 编辑器' : 'LSP editor',
+      desc: isZh ? '语言服务、片段、Git 一应俱全' : 'Language server, snippets, Git built-in',
+    },
+  ]
+
+  return (
+    <div className="adnify-onboarding-step">
+      <StepHeader
+        icon={<Sparkles className="h-5 w-5" />}
+        eyebrow={isZh ? '步骤四' : 'Step 4'}
+        title={isZh ? '你将获得这些能力' : 'What you get out of the box'}
+        subtitle={isZh ? '所有功能可在设置中启用或调整' : 'Every feature can be tuned in settings'}
+      />
+
+      <div className="adnify-onboarding-cap-grid">
+        {capabilities.map((cap) => (
+          <div key={cap.title} className={`adnify-onboarding-cap-card tone-${cap.tone}`}>
+            <span className="adnify-onboarding-cap-icon">{cap.icon}</span>
+            <span className="adnify-onboarding-cap-title">{cap.title}</span>
+            <span className="adnify-onboarding-cap-desc">{cap.desc}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function WorkspaceStep({
   isZh,
   workspacePath,
-  onOpenFolder
+  onOpenFolder,
 }: {
   isZh: boolean
   workspacePath: string | null
   onOpenFolder: () => void
 }) {
   return (
-    <div className="px-10 py-10 h-full flex flex-col">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <FolderOpen className="w-6 h-6 text-accent" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-text-primary">
-            {isZh ? '打开项目' : 'Open Project'}
-          </h2>
-          <p className="text-text-muted mt-1">
-            {isZh ? '选择一个文件夹开始编程' : 'Select a folder to start coding'}
-          </p>
-        </div>
-      </div>
+    <div className="adnify-onboarding-step">
+      <StepHeader
+        icon={<FolderOpen className="h-5 w-5" />}
+        eyebrow={isZh ? '步骤五' : 'Step 5'}
+        title={isZh ? '打开一个项目' : 'Open a project'}
+        subtitle={isZh ? '选择文件夹立即开始，也可以稍后再开' : 'Pick a folder now or skip and open later'}
+      />
 
-      <div className="flex-1 flex flex-col items-center justify-center">
+      <div className="adnify-onboarding-workspace">
         {workspacePath ? (
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="text-center w-full max-w-md"
-          >
-            <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-status-success/20 to-status-success/5 flex items-center justify-center mb-6 mx-auto shadow-xl shadow-status-success/10 border border-status-success/20 relative">
-              <div className="absolute inset-0 rounded-[2rem] blur-xl bg-status-success/20 -z-10" />
-              <Check className="w-12 h-12 text-status-success" />
+          <div className="adnify-onboarding-workspace-ready">
+            <div className="adnify-onboarding-workspace-check">
+              <Check className="h-7 w-7" />
             </div>
-            <h3 className="text-text-primary font-bold text-xl mb-3">{isZh ? '项目已就绪' : 'Project Ready'}</h3>
-            <div className="text-sm text-text-muted font-mono bg-white/5 px-6 py-4 rounded-2xl border border-border break-all shadow-inner">
-              {workspacePath}
-            </div>
+            <p className="adnify-onboarding-workspace-title">
+              {isZh ? '项目已就绪' : 'Project ready'}
+            </p>
+            <p className="adnify-onboarding-workspace-path">{workspacePath}</p>
             <button
+              type="button"
               onClick={onOpenFolder}
-              className="mt-8 text-sm text-accent hover:text-accent-hover font-medium transition-colors flex items-center gap-1 mx-auto hover:underline"
+              className="adnify-onboarding-link"
             >
               <span>{isZh ? '更换项目' : 'Change project'}</span>
-              <ChevronRight className="w-3 h-3" />
+              <ChevronRight className="h-3 w-3" />
             </button>
-          </motion.div>
-        ) : (
-          <div className="text-center w-full max-w-sm">
-            <motion.button
-              whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.08)' }}
-              whileTap={{ scale: 0.98 }}
-              onClick={onOpenFolder}
-              className="w-full aspect-[4/3] rounded-3xl border-2 border-dashed border-border bg-white/5 hover:border-accent/50 transition-all duration-300 flex flex-col items-center justify-center gap-5 group"
-            >
-              <div className="w-20 h-20 rounded-2xl bg-white/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-300 group-hover:bg-accent/10 group-hover:text-accent">
-                <FolderOpen className="w-10 h-10 text-text-muted group-hover:text-accent transition-colors" />
-              </div>
-              <span className="text-lg font-bold text-text-muted group-hover:text-text-primary transition-colors">
-                {isZh ? '点击选择文件夹' : 'Click to Select Folder'}
-              </span>
-            </motion.button>
-            <p className="text-xs text-text-muted mt-6 opacity-60">
-              {isZh ? '或者跳过，稍后在菜单中打开' : 'Or skip and open later via menu'}
-            </p>
           </div>
+        ) : (
+          <button
+            type="button"
+            className="adnify-onboarding-workspace-cta group"
+            onClick={onOpenFolder}
+          >
+            <span className="adnify-onboarding-workspace-mascot" aria-hidden="true">
+              <img src={publicAsset('brand/ip/3.png')} alt="" draggable={false} />
+            </span>
+            <span className="adnify-onboarding-workspace-text">
+              <span className="adnify-onboarding-workspace-cta-icon">
+                <FolderOpen className="h-5 w-5" />
+              </span>
+              <span className="adnify-onboarding-workspace-cta-title">
+                {isZh ? '选择一个文件夹' : 'Pick a folder'}
+              </span>
+              <span className="adnify-onboarding-workspace-cta-hint">
+                {isZh ? '点击这里浏览本地项目，或继续下一步稍后再开' : 'Click to browse, or continue and open it later'}
+              </span>
+              <span className="adnify-onboarding-workspace-action">
+                <span>{isZh ? '浏览本地项目' : 'Browse projects'}</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </span>
+            </span>
+          </button>
         )}
       </div>
     </div>
   )
 }
 
-
 function CompleteStep({ isZh }: { isZh: boolean }) {
   return (
-    <div className="px-10 py-12 text-center h-full flex flex-col items-center justify-center">
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: "spring", stiffness: 200, damping: 15 }}
-        className="mb-8 relative"
-      >
-        <div className="w-28 h-28 rounded-full bg-gradient-to-br from-status-success to-emerald-600 flex items-center justify-center shadow-2xl shadow-status-success/30">
-          <Check className="w-14 h-14 text-white" />
-        </div>
-        <motion.div
-          animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
-          transition={{ duration: 1.5, repeat: Infinity }}
-          className="absolute inset-0 bg-status-success rounded-full -z-10"
-        />
-      </motion.div>
+    <div className="adnify-onboarding-step adnify-onboarding-complete">
+      <ContributorGalaxy isZh={isZh} />
 
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-      >
-        <h2 className="text-3xl font-bold text-text-primary mb-3">
-          {isZh ? '设置完成！' : 'Setup Complete!'}
+      <div className="adnify-onboarding-complete-text">
+        <p className="adnify-onboarding-eyebrow">{isZh ? '一切就绪' : 'All set'}</p>
+        <h2 className="adnify-onboarding-complete-title">
+          {isZh ? '由社区共建，开始构建吧' : 'Built with the community'}
         </h2>
-        <p className="text-text-muted max-w-md mx-auto text-base mb-10">
+        <p className="adnify-onboarding-complete-sub">
           {isZh
-            ? '基础设置已完成，Adnify 已准备就绪。'
-            : 'Basic setup is done. Adnify is ready for you.'}
+            ? `感谢 ${CONTRIBUTORS.length} 位贡献者，让 Adnify 一路走到这里。`
+            : `Made possible by ${CONTRIBUTORS.length} contributors who shaped Adnify.`}
         </p>
-      </motion.div>
+      </div>
 
-      {/* 高级配置提示 */}
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.4 }}
-        className="bg-white/5 backdrop-blur-md rounded-2xl p-6 max-w-md w-full text-left border border-border hover:border-border transition-colors"
-      >
-        <div className="flex items-center gap-2 mb-4">
-          <Settings className="w-4 h-4 text-accent" />
-          <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
-            {isZh ? '提示：高级功能' : 'Tip: Advanced Features'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-xs mb-4">
-          {[
-            isZh ? 'Agent 自动化' : 'Agent Automation',
-            isZh ? '工作区安全' : 'Workspace Security',
-            isZh ? '向量索引' : 'Vector Indexing',
-            isZh ? '性能调优' : 'Performance Tuning'
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-2 text-text-secondary">
-              <div className="w-1.5 h-1.5 rounded-full bg-accent/50" />
-              <span>{item}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="pt-4 border-t border-border flex items-center justify-between text-xs">
-          <span className="text-text-muted">{isZh ? '稍后在设置中探索' : 'Explore in Settings later'}</span>
-          <div className="flex items-center gap-1">
-            <kbd className="px-2 py-1 bg-black/20 rounded-md border border-border font-mono text-text-muted">Ctrl</kbd>
-            <span className="text-text-muted/50">+</span>
-            <kbd className="px-2 py-1 bg-black/20 rounded-md border border-border font-mono text-text-muted">,</kbd>
-          </div>
-        </div>
-      </motion.div>
+      <div className="adnify-onboarding-complete-shortcuts">
+        <ShortcutChip label={isZh ? '命令面板' : 'Command palette'} keys={['Ctrl', 'P']} />
+        <ShortcutChip label={isZh ? 'AI 助手' : 'AI assistant'} keys={['Ctrl', 'L']} />
+        <ShortcutChip label={isZh ? '设置' : 'Settings'} keys={['Ctrl', ',']} />
+      </div>
     </div>
+  )
+}
+
+function ShortcutChip({ label, keys }: { label: string; keys: string[] }) {
+  return (
+    <span className="adnify-onboarding-shortcut-chip">
+      <span className="adnify-onboarding-shortcut-label">{label}</span>
+      <span className="adnify-onboarding-shortcut-keys">
+        {keys.map((k, i) => (
+          <React.Fragment key={k}>
+            {i > 0 && <span className="adnify-onboarding-shortcut-sep">+</span>}
+            <kbd>{k}</kbd>
+          </React.Fragment>
+        ))}
+      </span>
+    </span>
+  )
+}
+
+function ContributorGalaxy({ isZh }: { isZh: boolean }) {
+  const orbit = getOrbitContributors()
+  const core = getCoreContributor()
+
+  const layout = useMemo(() => computeGalaxyLayout(orbit.length), [orbit.length])
+  const rings = useMemo(() => assignRings(orbit, layout.rings), [orbit, layout.rings])
+  const visible = rings.flatMap((r) => r.items)
+  const overflow = orbit.length - visible.length
+
+  return (
+    <div
+      className="adnify-onboarding-galaxy"
+      role="img"
+      aria-label={isZh ? '贡献者星系' : 'Contributor galaxy'}
+    >
+      <div className="adnify-onboarding-galaxy-stars" aria-hidden="true" />
+
+      <svg className="adnify-onboarding-galaxy-svg" viewBox="-150 -150 300 300" aria-hidden="true">
+        <defs>
+          <radialGradient id="galaxyHalo" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient
+            id="galaxyLine"
+            cx="0"
+            cy="0"
+            r="140"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.7" />
+            <stop offset="60%" stopColor="rgb(var(--accent))" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="0" cy="0" r="60" fill="url(#galaxyHalo)" />
+
+        {rings.flatMap((ring, ringIdx) =>
+          ring.items.map((_, idx) => {
+            const angle = ((idx + ring.angleOffset) / ring.items.length) * Math.PI * 2 - Math.PI / 2
+            const x = Math.cos(angle) * ring.radius
+            const y = Math.sin(angle) * ring.radius
+            const flatIdx = ringIdx * ring.items.length + idx
+            const lineDelay = 0.2 + flatIdx * 0.05
+            const pulseDelay = (flatIdx * 0.3) % 4
+            return (
+              <line
+                key={`line-${ringIdx}-${idx}`}
+                x1="0"
+                y1="0"
+                x2={x}
+                y2={y}
+                stroke="url(#galaxyLine)"
+                strokeWidth="0.8"
+                strokeLinecap="round"
+                className="adnify-onboarding-galaxy-line"
+                style={{
+                  animationDelay: `${lineDelay}s, ${pulseDelay}s`,
+                }}
+              />
+            )
+          })
+        )}
+      </svg>
+
+      <a
+        href={core.url}
+        target="_blank"
+        rel="noreferrer"
+        className="adnify-onboarding-galaxy-core"
+        title={core.name}
+      >
+        <span className="adnify-onboarding-galaxy-core-pulse" aria-hidden="true" />
+        <img src={core.avatar} alt={core.name} draggable={false} />
+      </a>
+
+      {rings.map((ring, ringIdx) =>
+        ring.items.map((c, idx) => {
+          const angle = ((idx + ring.angleOffset) / ring.items.length) * Math.PI * 2 - Math.PI / 2
+          const x = Math.cos(angle) * ring.radius
+          const y = Math.sin(angle) * ring.radius
+          const flatIdx = ringIdx * ring.items.length + idx
+          const enterDelay = 0.25 + flatIdx * 0.05
+          const floatDelay = (flatIdx * 0.4) % 5
+          const nodeStyle = {
+            '--node-x': `${x}px`,
+            '--node-y': `${y}px`,
+            '--node-size': `${layout.avatarSize}px`,
+            '--node-enter-delay': `${enterDelay}s`,
+          } as React.CSSProperties
+          const innerStyle = {
+            '--node-float-delay': `${floatDelay}s`,
+          } as React.CSSProperties
+          return (
+            <a
+              key={c.name}
+              href={c.url}
+              target="_blank"
+              rel="noreferrer"
+              className="adnify-onboarding-galaxy-node"
+              style={nodeStyle}
+              title={c.name}
+            >
+              <span className="adnify-onboarding-galaxy-node-inner" style={innerStyle}>
+                <img src={c.avatar} alt={c.name} draggable={false} />
+              </span>
+              <span className="adnify-onboarding-galaxy-node-name">{c.name}</span>
+            </a>
+          )
+        })
+      )}
+
+      {overflow > 0 && (
+        <span className="adnify-onboarding-galaxy-overflow" aria-label={`+${overflow}`}>
+          +{overflow}
+        </span>
+      )}
+    </div>
+  )
+}
+
+interface RingSpec {
+  radius: number
+  capacity: number
+  angleOffset: number
+}
+
+interface RingLayout {
+  rings: RingSpec[]
+  avatarSize: number
+}
+
+interface RingAssignment<T> {
+  items: T[]
+  radius: number
+  angleOffset: number
+}
+
+function computeGalaxyLayout(count: number): RingLayout {
+  if (count <= 6) {
+    return {
+      rings: [{ radius: 110, capacity: 6, angleOffset: 0 }],
+      avatarSize: 38,
+    }
+  }
+  if (count <= 14) {
+    return {
+      rings: [
+        { radius: 72, capacity: 5, angleOffset: 0 },
+        { radius: 128, capacity: 9, angleOffset: 0.5 },
+      ],
+      avatarSize: 32,
+    }
+  }
+  // 15+: cap visible at 18 (5 + 13). overflow shown as +N badge.
+  return {
+    rings: [
+      { radius: 68, capacity: 5, angleOffset: 0 },
+      { radius: 130, capacity: 13, angleOffset: 0.5 },
+    ],
+    avatarSize: 26,
+  }
+}
+
+function assignRings<T>(items: T[], rings: RingSpec[]): RingAssignment<T>[] {
+  const result: RingAssignment<T>[] = []
+  let cursor = 0
+  for (const ring of rings) {
+    if (cursor >= items.length) break
+    const slice = items.slice(cursor, cursor + ring.capacity)
+    result.push({ items: slice, radius: ring.radius, angleOffset: ring.angleOffset })
+    cursor += slice.length
+  }
+  return result
+}
+
+function StepHeader({
+  icon,
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  icon: React.ReactNode
+  eyebrow: string
+  title: string
+  subtitle: string
+}) {
+  return (
+    <div className="adnify-onboarding-step-header">
+      <span className="adnify-onboarding-step-icon">{icon}</span>
+      <div>
+        <p className="adnify-onboarding-eyebrow">{eyebrow}</p>
+        <h2 className="adnify-onboarding-step-title">{title}</h2>
+        <p className="adnify-onboarding-step-subtitle">{subtitle}</p>
+      </div>
+    </div>
+  )
+}
+
+
+// =================== Styles ===================
+
+function OnboardingStyles({ rootClass }: { rootClass: string }) {
+  return (
+    <style>{`
+      .${rootClass} {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        animation: adnify-onboarding-fade 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .${rootClass}.is-exiting {
+        animation: adnify-onboarding-fade-out 0.35s ease forwards;
+      }
+
+      @keyframes adnify-onboarding-fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes adnify-onboarding-fade-out {
+        from { opacity: 1; }
+        to { opacity: 0; transform: scale(0.99); }
+      }
+
+      .${rootClass} .adnify-onboarding-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgb(var(--background) / 0.92);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+
+      .${rootClass} .adnify-onboarding-glow {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        pointer-events: none;
+        z-index: 0;
+      }
+      .${rootClass} .adnify-onboarding-glow-1 {
+        top: -10%;
+        left: -10%;
+        width: 50vw;
+        height: 50vw;
+        background: radial-gradient(circle, rgb(var(--accent) / 0.18), transparent 70%);
+        animation: adnify-onboarding-float-glow 18s ease-in-out infinite;
+      }
+      .${rootClass} .adnify-onboarding-glow-2 {
+        bottom: -15%;
+        right: -10%;
+        width: 45vw;
+        height: 45vw;
+        background: radial-gradient(circle, rgb(var(--accent) / 0.1), transparent 70%);
+        animation: adnify-onboarding-float-glow 22s ease-in-out -8s infinite;
+      }
+
+      @keyframes adnify-onboarding-float-glow {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(40px, -30px) scale(1.08); }
+      }
+
+      .${rootClass} .adnify-onboarding-titlebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 36px;
+        z-index: 10;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 0 8px;
+      }
+
+      .${rootClass} .adnify-onboarding-titlebar-controls {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+      }
+
+      .${rootClass} .adnify-onboarding-titlebar-btn {
+        width: 32px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        color: rgb(var(--text-muted));
+        transition: all 0.15s ease;
+      }
+      .${rootClass} .adnify-onboarding-titlebar-btn:hover {
+        background: rgb(var(--text-primary) / 0.06);
+        color: rgb(var(--text-primary));
+      }
+      .${rootClass} .adnify-onboarding-titlebar-close:hover {
+        background: rgb(248 113 113 / 0.85);
+        color: white;
+      }
+
+      .${rootClass} .adnify-onboarding-shell {
+        position: relative;
+        z-index: 1;
+        width: min(960px, 100vw - 32px);
+        margin: auto;
+        padding: 56px clamp(16px, 3vw, 32px) clamp(20px, 4vh, 36px);
+        display: flex;
+        flex-direction: column;
+        gap: clamp(14px, 2vh, 22px);
+        max-height: 100vh;
+      }
+
+      .${rootClass} .adnify-onboarding-header {
+        display: grid;
+        grid-template-columns: minmax(140px, auto) minmax(0, 1fr) minmax(80px, auto);
+        align-items: center;
+        gap: 16px;
+        min-width: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .${rootClass} .adnify-onboarding-logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        filter: drop-shadow(0 4px 12px rgb(var(--accent) / 0.35));
+      }
+
+      .${rootClass} .adnify-onboarding-brand-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+        line-height: 1;
+        margin-top: 2px;
+      }
+
+      .${rootClass} .adnify-onboarding-eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: rgb(var(--accent));
+        margin: 0 0 6px;
+      }
+
+      .${rootClass} .adnify-onboarding-progress-wrap {
+        min-width: 0;
+        display: flex;
+        justify-content: center;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .${rootClass} .adnify-onboarding-progress-wrap::-webkit-scrollbar {
+        display: none;
+      }
+
+      .${rootClass} .adnify-onboarding-progress {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        margin: 0;
+        padding: 6px 12px;
+        list-style: none;
+        background: rgb(var(--surface) / 0.6);
+        border: 1px solid rgb(var(--border) / 0.5);
+        border-radius: 999px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+        white-space: nowrap;
+      }
+
+      .${rootClass} .adnify-onboarding-progress-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        color: rgb(var(--text-muted));
+        white-space: nowrap;
+        transition: all 0.2s ease;
+      }
+
+      .${rootClass} .adnify-onboarding-progress-label {
+        white-space: nowrap;
+      }
+
+      .${rootClass} .adnify-onboarding-progress-item.is-active {
+        color: rgb(var(--text-primary));
+        background: rgb(var(--accent) / 0.12);
+      }
+
+      .${rootClass} .adnify-onboarding-progress-item.is-done {
+        color: rgb(var(--accent));
+      }
+
+      .${rootClass} .adnify-onboarding-progress-dot {
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 700;
+        background: rgb(var(--surface-hover) / 0.8);
+        border: 1px solid rgb(var(--border) / 0.6);
+        transition: all 0.2s ease;
+      }
+
+      .${rootClass} .adnify-onboarding-progress-item.is-active .adnify-onboarding-progress-dot {
+        background: rgb(var(--accent));
+        color: white;
+        border-color: transparent;
+        box-shadow: 0 0 0 4px rgb(var(--accent) / 0.18);
+      }
+
+      .${rootClass} .adnify-onboarding-progress-item.is-done .adnify-onboarding-progress-dot {
+        background: rgb(var(--accent) / 0.18);
+        color: rgb(var(--accent));
+        border-color: rgb(var(--accent) / 0.3);
+      }
+
+      .${rootClass} .adnify-onboarding-skip,
+      .${rootClass} .adnify-onboarding-skip-spacer {
+        justify-self: end;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 12px;
+        font-size: 12px;
+        color: rgb(var(--text-muted));
+        background: transparent;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+      }
+      .${rootClass} .adnify-onboarding-skip:hover {
+        color: rgb(var(--text-primary));
+        background: rgb(var(--surface-hover) / 0.6);
+      }
+      .${rootClass} .adnify-onboarding-skip-spacer {
+        visibility: hidden;
+      }
+
+      .${rootClass} .adnify-onboarding-card {
+        position: relative;
+        flex: 0 0 auto;
+        width: 100%;
+        height: 480px;
+        background: rgb(var(--surface) / 0.85);
+        border: 1px solid rgb(var(--border) / 0.5);
+        border-radius: 20px;
+        padding: clamp(20px, 3vw, 36px);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.18), 0 1px 0 rgb(var(--text-primary) / 0.04) inset;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .${rootClass} .adnify-onboarding-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent 0%, rgb(var(--accent) / 0.4) 50%, transparent 100%);
+        pointer-events: none;
+      }
+      .${rootClass} .adnify-onboarding-card::after {
+        content: '';
+        position: absolute;
+        top: -120px;
+        right: -120px;
+        width: 320px;
+        height: 320px;
+        background: radial-gradient(circle, rgb(var(--accent) / 0.08), transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-step {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-card-enter {
+        animation: adnify-onboarding-slide-in 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .${rootClass} .adnify-onboarding-card-enter-reverse {
+        animation: adnify-onboarding-slide-in-reverse 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      @keyframes adnify-onboarding-slide-in {
+        from { opacity: 0; transform: translateX(16px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      @keyframes adnify-onboarding-slide-in-reverse {
+        from { opacity: 0; transform: translateX(-16px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+
+      .${rootClass} .adnify-onboarding-step-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      .${rootClass} .adnify-onboarding-step-icon {
+        width: 44px;
+        height: 44px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: rgb(var(--accent) / 0.12);
+        color: rgb(var(--accent));
+        border: 1px solid rgb(var(--accent) / 0.22);
+      }
+
+      .${rootClass} .adnify-onboarding-step-title {
+        font-size: clamp(20px, 2.4vw, 24px);
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+        letter-spacing: -0.01em;
+        margin: 0 0 4px;
+      }
+
+      .${rootClass} .adnify-onboarding-step-subtitle {
+        font-size: 13px;
+        color: rgb(var(--text-secondary));
+        margin: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-title {
+        font-size: clamp(24px, 3vw, 34px);
+        font-weight: 800;
+        line-height: 1.15;
+        color: rgb(var(--text-primary));
+        letter-spacing: -0.02em;
+        margin: 0 0 12px;
+      }
+
+      .${rootClass} .adnify-onboarding-subtitle {
+        font-size: 15px;
+        line-height: 1.55;
+        color: rgb(var(--text-secondary));
+        max-width: 520px;
+        margin: 0;
+      }
+
+      /* ============== Welcome step ============== */
+      .${rootClass} .adnify-onboarding-welcome {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        align-items: center;
+        gap: 24px;
+        flex-direction: row;
+      }
+
+      .${rootClass} .adnify-onboarding-copy {
+        max-width: 460px;
+      }
+
+      .${rootClass} .adnify-onboarding-actions {
+        margin-top: 28px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .${rootClass} .adnify-onboarding-perks {
+        list-style: none;
+        margin: 24px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .${rootClass} .adnify-onboarding-perks li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: rgb(var(--text-secondary));
+      }
+      .${rootClass} .adnify-onboarding-perks svg {
+        color: rgb(var(--accent));
+      }
+
+      .${rootClass} .adnify-onboarding-visual {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 220px;
+        max-height: 100%;
+        overflow: hidden;
+      }
+
+      .${rootClass} .adnify-onboarding-visual-glow {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 70%;
+        padding-bottom: 70%;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        background: radial-gradient(circle, rgb(var(--accent) / 0.18), transparent 70%);
+        filter: blur(40px);
+      }
+
+      .${rootClass} .adnify-onboarding-artwork {
+        position: relative;
+        z-index: 1;
+        width: auto;
+        max-width: 100%;
+        max-height: 240px;
+        height: auto;
+        object-fit: contain;
+        -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, black 60%, transparent 100%);
+        mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, black 60%, transparent 100%);
+        animation: adnify-onboarding-float 8s ease-in-out infinite;
+      }
+
+      @keyframes adnify-onboarding-float {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-10px) scale(1.02); }
+      }
+
+      /* ============== Pick cards (language) ============== */
+      .${rootClass} .adnify-onboarding-lang-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        flex: 1;
+      }
+
+      .${rootClass} .adnify-onboarding-pick-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 8px;
+        padding: 28px;
+        text-align: left;
+        background: rgb(var(--surface-hover) / 0.4);
+        border: 1.5px solid rgb(var(--border) / 0.5);
+        border-radius: 16px;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: pointer;
+      }
+
+      .${rootClass} .adnify-onboarding-pick-card:hover {
+        border-color: rgb(var(--accent) / 0.4);
+        background: rgb(var(--surface-hover) / 0.6);
+        transform: translateY(-2px);
+      }
+
+      .${rootClass} .adnify-onboarding-pick-card.is-active {
+        border-color: rgb(var(--accent));
+        background: rgb(var(--accent) / 0.08);
+        box-shadow: 0 8px 24px -12px rgb(var(--accent) / 0.4);
+      }
+
+      .${rootClass} .adnify-onboarding-lang-flag {
+        display: none;
+      }
+
+      .${rootClass} .adnify-onboarding-lang-glyph {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        margin-bottom: 12px;
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        color: rgb(var(--accent));
+        background: rgb(var(--accent) / 0.12);
+        border-radius: 18px;
+        border: 1.5px solid rgb(var(--border) / 0.6);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        transition: all 0.25s ease;
+      }
+      .${rootClass} .adnify-onboarding-pick-card.is-active .adnify-onboarding-lang-glyph {
+        border-color: rgb(var(--accent) / 0.5);
+        background: rgb(var(--accent) / 0.18);
+        transform: scale(1.05);
+      }
+
+      .${rootClass} .adnify-onboarding-pick-desc {
+        margin-top: 6px;
+        font-size: 12px;
+        line-height: 1.45;
+        color: rgb(var(--text-muted));
+      }
+
+      .${rootClass} .adnify-onboarding-pick-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+      }
+
+      .${rootClass} .adnify-onboarding-pick-sub {
+        font-size: 12px;
+        color: rgb(var(--text-muted));
+      }
+
+      .${rootClass} .adnify-onboarding-pick-check {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgb(var(--accent));
+        color: white;
+        box-shadow: 0 0 0 4px rgb(var(--accent) / 0.18);
+      }
+
+      /* ============== Theme grid ============== */
+      .${rootClass} .adnify-onboarding-theme-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 14px;
+        max-height: 360px;
+        overflow-y: auto;
+        padding: 4px;
+        margin: -4px;
+      }
+
+      .${rootClass} .adnify-onboarding-theme-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+        background: rgb(var(--surface-hover) / 0.4);
+        border: 1.5px solid rgb(var(--border) / 0.5);
+        border-radius: 14px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+
+      .${rootClass} .adnify-onboarding-theme-card:hover {
+        border-color: rgb(var(--accent) / 0.4);
+        transform: translateY(-2px);
+      }
+
+      .${rootClass} .adnify-onboarding-theme-card.is-active {
+        border-color: rgb(var(--accent));
+        background: rgb(var(--accent) / 0.06);
+        box-shadow: 0 8px 24px -12px rgb(var(--accent) / 0.4);
+      }
+
+      .${rootClass} .adnify-onboarding-theme-preview {
+        height: 84px;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .${rootClass} .adnify-onboarding-theme-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .${rootClass} .adnify-onboarding-theme-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: rgb(var(--text-primary));
+      }
+
+      .${rootClass} .adnify-onboarding-theme-type {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: capitalize;
+        color: rgb(var(--text-muted));
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgb(var(--surface-active) / 0.6);
+      }
+
+      .${rootClass} .adnify-onboarding-theme-check {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgb(var(--accent));
+        color: white;
+        box-shadow: 0 0 0 3px rgb(var(--background));
+      }
+
+
+      /* ============== Provider step ============== */
+      .${rootClass} .adnify-onboarding-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .${rootClass} .adnify-onboarding-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .${rootClass} .adnify-onboarding-field-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: rgb(var(--text-muted));
+      }
+
+      .${rootClass} .adnify-onboarding-field-hint {
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: 0;
+        color: rgb(var(--text-muted));
+        background: rgb(var(--surface-active) / 0.5);
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-card {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px;
+        text-align: left;
+        background: rgb(var(--surface-hover) / 0.4);
+        border: 1.5px solid rgb(var(--border) / 0.5);
+        border-radius: 14px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        min-width: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-card:hover {
+        border-color: rgb(var(--accent) / 0.4);
+        transform: translateY(-1px);
+      }
+
+      .${rootClass} .adnify-onboarding-provider-card.is-active {
+        border-color: rgb(var(--accent));
+        background: rgb(var(--accent) / 0.08);
+        box-shadow: 0 8px 24px -12px rgb(var(--accent) / 0.4);
+      }
+
+      .${rootClass} .adnify-onboarding-provider-badge {
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: rgb(var(--accent) / 0.12);
+        color: rgb(var(--accent));
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-card.is-active .adnify-onboarding-provider-badge {
+        background: rgb(var(--accent));
+        color: rgb(var(--accent-foreground, 255 255 255));
+      }
+
+      .${rootClass} .adnify-onboarding-provider-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: rgb(var(--text-primary));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-desc {
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .${rootClass} .adnify-onboarding-provider-check {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgb(var(--accent));
+        color: white;
+      }
+
+      .${rootClass} .adnify-onboarding-select {
+        width: 100%;
+      }
+
+      .${rootClass} .adnify-onboarding-key-input {
+        position: relative;
+      }
+
+      .${rootClass} .adnify-onboarding-input {
+        width: 100%;
+        padding-right: 40px;
+      }
+
+      .${rootClass} .adnify-onboarding-key-toggle {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        padding: 6px;
+        border-radius: 6px;
+        color: rgb(var(--text-muted));
+        transition: all 0.2s ease;
+      }
+      .${rootClass} .adnify-onboarding-key-toggle:hover {
+        color: rgb(var(--text-primary));
+        background: rgb(var(--surface-hover) / 0.6);
+      }
+
+      .${rootClass} .adnify-onboarding-link {
+        align-self: flex-end;
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        font-size: 12px;
+        font-weight: 500;
+        color: rgb(var(--accent));
+        transition: all 0.2s ease;
+      }
+      .${rootClass} .adnify-onboarding-link:hover {
+        color: rgb(var(--accent-hover));
+        text-decoration: underline;
+      }
+
+      /* ============== Capabilities ============== */
+      .${rootClass} .adnify-onboarding-cap-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .${rootClass} .adnify-onboarding-cap-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 14px;
+        background: rgb(var(--surface-hover) / 0.4);
+        border: 1px solid rgb(var(--border) / 0.5);
+        border-radius: 14px;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: hidden;
+        isolation: isolate;
+      }
+
+      .${rootClass} .adnify-onboarding-cap-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, var(--cap-tone, transparent) 0%, transparent 60%);
+        opacity: 0;
+        z-index: -1;
+        transition: opacity 0.25s ease;
+      }
+
+      .${rootClass} .adnify-onboarding-cap-card:hover {
+        transform: translateY(-3px);
+        border-color: var(--cap-tone, rgb(var(--accent) / 0.3));
+        box-shadow: 0 12px 28px -16px var(--cap-tone, rgb(var(--accent) / 0.4));
+      }
+      .${rootClass} .adnify-onboarding-cap-card:hover::before {
+        opacity: 0.18;
+      }
+
+      .${rootClass} .adnify-onboarding-cap-icon {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        font-size: 16px;
+      }
+      .${rootClass} .adnify-onboarding-cap-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .${rootClass} .adnify-onboarding-cap-card.tone-violet { --cap-tone: rgb(139 92 246); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-blue { --cap-tone: rgb(96 165 250); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-amber { --cap-tone: rgb(251 191 36); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-emerald { --cap-tone: rgb(52 211 153); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-rose { --cap-tone: rgb(251 113 133); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-cyan { --cap-tone: rgb(34 211 238); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-lime { --cap-tone: rgb(163 230 53); }
+      .${rootClass} .adnify-onboarding-cap-card.tone-sky { --cap-tone: rgb(56 189 248); }
+
+      .${rootClass} .adnify-onboarding-cap-card .adnify-onboarding-cap-icon {
+        background: color-mix(in srgb, var(--cap-tone) 18%, transparent);
+        color: var(--cap-tone);
+        border: 1px solid color-mix(in srgb, var(--cap-tone) 30%, transparent);
+      }
+
+      .${rootClass} .adnify-onboarding-cap-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+      }
+
+      .${rootClass} .adnify-onboarding-cap-desc {
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgb(var(--text-muted));
+      }
+
+      /* ============== Workspace ============== */
+      .${rootClass} .adnify-onboarding-workspace {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 0;
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-cta {
+        position: relative;
+        width: 100%;
+        max-width: 620px;
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        align-items: stretch;
+        gap: 0;
+        padding: 0;
+        background: linear-gradient(135deg, rgb(var(--surface-hover) / 0.5), rgb(var(--surface) / 0.3));
+        border: 1.5px dashed rgb(var(--border));
+        border-radius: 20px;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: pointer;
+        overflow: hidden;
+        text-align: left;
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-cta:hover {
+        border-color: rgb(var(--accent) / 0.6);
+        border-style: solid;
+        background: rgb(var(--accent) / 0.06);
+        transform: translateY(-3px);
+        box-shadow: 0 16px 48px -16px rgb(var(--accent) / 0.4);
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-mascot {
+        position: relative;
+        height: 100%;
+        min-height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at 50% 60%, rgb(var(--accent) / 0.18), transparent 70%);
+        overflow: hidden;
+      }
+      .${rootClass} .adnify-onboarding-workspace-mascot::before {
+        content: '';
+        position: absolute;
+        inset: 20%;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgb(var(--accent) / 0.25), transparent 70%);
+        filter: blur(24px);
+        animation: adnify-onboarding-pulse 4s ease-in-out infinite;
+      }
+      .${rootClass} .adnify-onboarding-workspace-mascot img {
+        position: relative;
+        width: 80%;
+        height: auto;
+        max-height: 180px;
+        object-fit: contain;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        animation: adnify-onboarding-float 6s ease-in-out infinite;
+        -webkit-mask-image: radial-gradient(circle at 50% 55%, black 50%, transparent 80%);
+        mask-image: radial-gradient(circle at 50% 55%, black 50%, transparent 80%);
+      }
+      .${rootClass} .adnify-onboarding-workspace-cta:hover .adnify-onboarding-workspace-mascot img {
+        transform: scale(1.06) rotate(-3deg);
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        gap: 8px;
+        padding: 28px;
+        border-left: 1px dashed rgb(var(--border) / 0.7);
+      }
+      .${rootClass} .adnify-onboarding-workspace-cta:hover .adnify-onboarding-workspace-text {
+        border-left-color: rgb(var(--accent) / 0.4);
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-cta-icon {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        background: rgb(var(--accent) / 0.12);
+        color: rgb(var(--accent));
+        border: 1px solid rgb(var(--accent) / 0.22);
+        margin-bottom: 4px;
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-cta-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-cta-hint {
+        font-size: 13px;
+        line-height: 1.5;
+        color: rgb(var(--text-muted));
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-action {
+        margin-top: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 8px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgb(var(--accent));
+        background: rgb(var(--accent) / 0.1);
+        border: 1px solid rgb(var(--accent) / 0.25);
+        border-radius: 999px;
+        transition: all 0.2s ease;
+      }
+      .${rootClass} .adnify-onboarding-workspace-cta:hover .adnify-onboarding-workspace-action {
+        background: rgb(var(--accent));
+        color: white;
+        border-color: transparent;
+        transform: translateX(2px);
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-ready {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+        max-width: 480px;
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-check {
+        width: 64px;
+        height: 64px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: linear-gradient(135deg, rgb(var(--status-success) / 0.2), rgb(var(--status-success) / 0.05));
+        color: rgb(var(--status-success));
+        border: 1px solid rgb(var(--status-success) / 0.3);
+        box-shadow: 0 8px 24px -8px rgb(var(--status-success) / 0.3);
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+        margin: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-workspace-path {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: rgb(var(--text-secondary));
+        background: rgb(var(--surface-active) / 0.5);
+        border: 1px solid rgb(var(--border) / 0.5);
+        padding: 8px 14px;
+        border-radius: 8px;
+        word-break: break-all;
+        max-width: 100%;
+        margin: 0;
+      }
+
+      /* ============== Complete (community galaxy) ============== */
+      .${rootClass} .adnify-onboarding-complete {
+        align-items: center;
+        text-align: center;
+        gap: 8px;
+        justify-content: center;
+      }
+      .${rootClass} .adnify-onboarding-complete .adnify-onboarding-eyebrow {
+        color: rgb(var(--status-success));
+      }
+
+      .${rootClass} .adnify-onboarding-complete-text {
+        max-width: 540px;
+      }
+
+      .${rootClass} .adnify-onboarding-complete-title {
+        font-size: clamp(20px, 2.6vw, 26px);
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        color: rgb(var(--text-primary));
+        margin: 0 0 6px;
+      }
+
+      .${rootClass} .adnify-onboarding-complete-sub {
+        font-size: 13px;
+        line-height: 1.5;
+        color: rgb(var(--text-secondary));
+        margin: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-complete-shortcuts {
+        display: inline-flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .${rootClass} .adnify-onboarding-shortcut-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px 6px 12px;
+        background: rgb(var(--surface-hover) / 0.5);
+        border: 1px solid rgb(var(--border) / 0.5);
+        border-radius: 999px;
+      }
+      .${rootClass} .adnify-onboarding-shortcut-label {
+        font-size: 11px;
+        font-weight: 500;
+        color: rgb(var(--text-secondary));
+      }
+      .${rootClass} .adnify-onboarding-shortcut-keys {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .${rootClass} .adnify-onboarding-shortcut-keys kbd {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 10px;
+        font-weight: 600;
+        color: rgb(var(--text-muted));
+        padding: 1px 6px;
+        background: rgb(var(--surface-active) / 0.7);
+        border: 1px solid rgb(var(--border) / 0.6);
+        border-radius: 4px;
+      }
+      .${rootClass} .adnify-onboarding-shortcut-sep {
+        font-size: 10px;
+        color: rgb(var(--text-muted));
+      }
+
+      /* --- Galaxy --- */
+      .${rootClass} .adnify-onboarding-galaxy {
+        position: relative;
+        width: 320px;
+        height: 280px;
+        margin: 0 auto 4px;
+        flex-shrink: 0;
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-stars {
+        position: absolute;
+        inset: 0;
+        background-image:
+          radial-gradient(rgb(var(--text-primary) / 0.12) 1px, transparent 1px),
+          radial-gradient(rgb(var(--accent) / 0.18) 1px, transparent 1px);
+        background-size: 40px 40px, 70px 70px;
+        background-position: 0 0, 20px 30px;
+        opacity: 0.5;
+        animation: adnify-onboarding-stars 18s linear infinite;
+        pointer-events: none;
+        -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+        mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+      }
+
+      @keyframes adnify-onboarding-stars {
+        0% { background-position: 0 0, 20px 30px; }
+        100% { background-position: 80px 80px, 100px 110px; }
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-svg {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 280px;
+        height: 280px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-line {
+        opacity: 0;
+        animation:
+          adnify-onboarding-galaxy-line-in 0.6s ease forwards,
+          adnify-onboarding-galaxy-line-pulse 4s ease-in-out infinite;
+      }
+
+      @keyframes adnify-onboarding-galaxy-line-in {
+        from { opacity: 0; stroke-dasharray: 0 200; }
+        to { opacity: 1; stroke-dasharray: 200 0; }
+      }
+      @keyframes adnify-onboarding-galaxy-line-pulse {
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 0.85; }
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-core {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 64px;
+        height: 64px;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        overflow: visible;
+        z-index: 2;
+        animation: adnify-onboarding-galaxy-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      }
+      .${rootClass} .adnify-onboarding-galaxy-core img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 2px solid rgb(var(--accent));
+        box-shadow:
+          0 0 0 4px rgb(var(--accent) / 0.18),
+          0 8px 24px rgb(var(--accent) / 0.4);
+        background: rgb(var(--surface));
+      }
+      .${rootClass} .adnify-onboarding-galaxy-core-pulse {
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgb(var(--accent) / 0.5), transparent 70%);
+        animation: adnify-onboarding-galaxy-pulse 2.4s ease-in-out infinite;
+        pointer-events: none;
+      }
+      @keyframes adnify-onboarding-galaxy-pulse {
+        0%, 100% { opacity: 0.4; transform: scale(0.95); }
+        50% { opacity: 0.9; transform: scale(1.15); }
+      }
+      @keyframes adnify-onboarding-galaxy-pop {
+        from { opacity: 0; transform: translate(-50%, -50%) scale(0); }
+        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-node {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: var(--node-size, 38px);
+        height: var(--node-size, 38px);
+        opacity: 0;
+        z-index: 1;
+        transform: translate(-50%, -50%) scale(0.4);
+        animation: adnify-onboarding-galaxy-node-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) var(--node-enter-delay, 0s) forwards;
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-node-inner {
+        display: block;
+        width: 100%;
+        height: 100%;
+        animation: adnify-onboarding-galaxy-node-float 6s ease-in-out var(--node-float-delay, 0s) infinite;
+      }
+
+      @keyframes adnify-onboarding-galaxy-node-float {
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-3px) scale(1.02); }
+      }
+      .${rootClass} .adnify-onboarding-galaxy-node img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 2px solid rgb(var(--surface));
+        box-shadow:
+          0 0 0 1px rgb(var(--border)),
+          0 4px 12px rgba(0, 0, 0, 0.18);
+        background: rgb(var(--surface));
+        transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      .${rootClass} .adnify-onboarding-galaxy-node:hover img {
+        transform: scale(1.18);
+        border-color: rgb(var(--accent));
+      }
+      .${rootClass} .adnify-onboarding-galaxy-node-name {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 50%;
+        padding: 2px 8px;
+        font-size: 10px;
+        font-weight: 600;
+        color: rgb(var(--text-secondary));
+        background: rgb(var(--surface) / 0.95);
+        border: 1px solid rgb(var(--border));
+        border-radius: 999px;
+        opacity: 0;
+        transform: translate(-50%, -4px);
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        pointer-events: none;
+        backdrop-filter: blur(8px);
+      }
+      .${rootClass} .adnify-onboarding-galaxy-node:hover .adnify-onboarding-galaxy-node-name {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      .${rootClass} .adnify-onboarding-galaxy-overflow {
+        position: absolute;
+        bottom: 4px;
+        right: 12px;
+        padding: 3px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: rgb(var(--accent));
+        background: rgb(var(--accent) / 0.12);
+        border: 1px solid rgb(var(--accent) / 0.3);
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        animation: adnify-onboarding-galaxy-pop 0.6s ease 0.8s both;
+      }
+
+      @keyframes adnify-onboarding-galaxy-node-in {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.4);
+        }
+        60% { opacity: 1; }
+        100% {
+          opacity: 1;
+          transform: translate(calc(var(--node-x, 0px) - 50%), calc(var(--node-y, 0px) - 50%)) scale(1);
+        }
+      }
+
+      /* ============== Footer / nav buttons ============== */
+      .${rootClass} .adnify-onboarding-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .${rootClass} .adnify-onboarding-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 10px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        color: rgb(var(--text-muted));
+        background: transparent;
+        border-radius: 10px;
+        transition: all 0.2s ease;
+      }
+      .${rootClass} .adnify-onboarding-back:hover:not(:disabled) {
+        color: rgb(var(--text-primary));
+        background: rgb(var(--surface-hover) / 0.6);
+      }
+      .${rootClass} .adnify-onboarding-back:disabled {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .${rootClass} .adnify-onboarding-step-count {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        color: rgb(var(--text-muted));
+      }
+
+      .${rootClass} .adnify-onboarding-primary {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 44px;
+        min-width: 140px;
+        padding: 0 24px;
+        font-size: 14px;
+        font-weight: 600;
+        color: rgb(var(--accent-foreground, 255 255 255));
+        background: rgb(var(--accent));
+        border: 1px solid rgb(var(--accent));
+        border-radius: 12px;
+        box-shadow: 0 8px 24px -10px rgb(var(--accent) / 0.55);
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: visible;
+      }
+      .${rootClass} .adnify-onboarding-primary:hover {
+        transform: translateY(-2px);
+        background: rgb(var(--accent-hover));
+        border-color: rgb(var(--accent-hover));
+        box-shadow: 0 12px 28px -10px rgb(var(--accent) / 0.65);
+      }
+      .${rootClass} .adnify-onboarding-primary:active {
+        transform: translateY(0);
+        background: rgb(var(--accent-active));
+      }
+
+      .${rootClass} .adnify-onboarding-primary-content {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .${rootClass} .adnify-onboarding-button-mascot {
+        position: absolute;
+        right: -10px;
+        top: -20px;
+        width: 52px;
+        height: 52px;
+        pointer-events: none;
+        opacity: 0.85;
+        transform-origin: bottom center;
+        transition: all 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+        -webkit-mask-image: radial-gradient(circle at 50% 60%, black 35%, transparent 75%);
+        mask-image: radial-gradient(circle at 50% 60%, black 35%, transparent 75%);
+      }
+      .${rootClass} .adnify-onboarding-button-mascot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .${rootClass} .adnify-onboarding-primary:hover .adnify-onboarding-button-mascot {
+        opacity: 1;
+        transform: scale(1.2) translateY(-6px) rotate(-8deg);
+        filter: drop-shadow(0 6px 12px rgb(var(--accent) / 0.4));
+      }
+
+      /* ============== Responsive ============== */
+      @media (max-width: 720px) {
+        .${rootClass} .adnify-onboarding-shell {
+          padding: 48px 12px 16px;
+        }
+        .${rootClass} .adnify-onboarding-card {
+          height: auto;
+          min-height: 440px;
+        }
+        .${rootClass} .adnify-onboarding-header {
+          grid-template-columns: 1fr;
+          gap: 12px;
+          text-align: center;
+        }
+        .${rootClass} .adnify-onboarding-brand {
+          justify-content: center;
+        }
+        .${rootClass} .adnify-onboarding-progress-label {
+          display: none;
+        }
+        .${rootClass} .adnify-onboarding-skip,
+        .${rootClass} .adnify-onboarding-skip-spacer {
+          justify-self: center;
+        }
+        .${rootClass} .adnify-onboarding-welcome {
+          grid-template-columns: 1fr;
+        }
+        .${rootClass} .adnify-onboarding-visual {
+          display: none;
+        }
+        .${rootClass} .adnify-onboarding-cap-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .${rootClass} .adnify-onboarding-workspace-cta {
+          grid-template-columns: 1fr;
+        }
+        .${rootClass} .adnify-onboarding-workspace-mascot {
+          min-height: 140px;
+        }
+        .${rootClass} .adnify-onboarding-workspace-text {
+          border-left: none;
+          border-top: 1px dashed rgb(var(--border) / 0.7);
+          align-items: center;
+          text-align: center;
+        }
+      }
+    `}</style>
   )
 }
