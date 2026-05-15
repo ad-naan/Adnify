@@ -126,7 +126,12 @@ jobs:
         run: npm install --no-save --package-lock=false --os=darwin --cpu=${{ matrix.arch }} @parcel/watcher-darwin-${{ matrix.arch }}@$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies['@parcel/watcher-darwin-${{ matrix.arch }}']")
 
       - name: Disable Spotlight indexing (prevents hdiutil resource busy)
-        run: sudo mdutil -a -i off
+        run: |
+          sudo mdutil -a -i off
+          sudo mdutil -a -d
+          # Kill any mds processes that might hold file locks
+          sudo killall -9 mds mds_stores mdworker mdworker_shared 2>/dev/null || true
+          sleep 3
 
       - name: Build
         run: npm run build
@@ -137,9 +142,6 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Workaround for hdiutil detach failures in CI
-          DMG_BUILDER_DETACH_RETRY_COUNT: "10"
-          DMG_BUILDER_DETACH_RETRY_DELAY: "3000"
 
       - name: Smoke test packaged app
         shell: bash

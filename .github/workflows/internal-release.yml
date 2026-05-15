@@ -174,7 +174,11 @@ jobs:
 
       - name: Disable Spotlight indexing (prevents hdiutil resource busy)
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: sudo mdutil -a -i off
+        run: |
+          sudo mdutil -a -i off
+          sudo mdutil -a -d
+          sudo killall -9 mds mds_stores mdworker mdworker_shared 2>/dev/null || true
+          sleep 3
 
       - name: Build
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -187,9 +191,6 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Workaround for hdiutil detach failures in CI
-          DMG_BUILDER_DETACH_RETRY_COUNT: "10"
-          DMG_BUILDER_DETACH_RETRY_DELAY: "3000"
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
