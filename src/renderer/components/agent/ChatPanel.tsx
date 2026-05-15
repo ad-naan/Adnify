@@ -9,8 +9,6 @@ import {
   Trash2,
   Upload,
   ChevronDown,
-  FolderOpen,
-  ListTodo,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
@@ -34,8 +32,7 @@ import { ChatInput, PendingImage } from '@/renderer/components/chat'
 import MentionPopup from '@/renderer/components/agent/MentionPopup'
 import { MentionParser, MentionCandidate } from '@/renderer/agent/utils/MentionParser'
 import ChatMessageUI from './ChatMessage'
-import AgentStatusBar from './AgentStatusBar'
-import { TodoListPanel } from './TodoListPanel'
+import UnifiedStatusTray from './UnifiedStatusTray'
 import { keybindingService } from '@/renderer/services/keybindingService'
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import SlashCommandPopup from './SlashCommandPopup'
@@ -52,7 +49,6 @@ import {
   type ChatTimelineItem,
   type TimelineArchiveItem,
 } from './chatTimelineProjection'
-import MessageQueuePanel from '../chat/MessageQueuePanel'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 
@@ -262,16 +258,6 @@ export default function ChatPanel() {
 
   // Task List 状态
   const todos = useAgentStore(selectTodos)
-  const [bottomTab, setBottomTab] = useState<'files' | 'tasks'>('files')
-
-  // 当 todos 首次出现时自动切换到 tasks tab
-  const prevTodosLenRef = useRef(0)
-  useEffect(() => {
-    if (todos.length > 0 && prevTodosLenRef.current === 0) {
-      setBottomTab('tasks')
-    }
-    prevTodosLenRef.current = todos.length
-  }, [todos.length])
 
   // 监听选项卡片选择事件
   useEffect(() => {
@@ -1293,74 +1279,25 @@ export default function ChatPanel() {
           {/* Bottom Input Area - Unified Tray */}
           <div className="shrink-0 z-20 flex flex-col">
             <div className="mx-4 mb-4 flex flex-col">
-              {/* Status Bar + Task List */}
-              {(() => {
-                const hasChanges = pendingChanges.length > 0 || isStreaming || isAwaitingApproval
-                const hasTodos = todos.length > 0
-                const showBoth = hasChanges && hasTodos
-                const activeView = showBoth ? bottomTab : (hasChanges ? 'files' : 'tasks')
-
-                // 内联切换图标（仅两者都有时渲染）
-                const switcherIcons = showBoth ? (
-                  <div className="flex items-center gap-0.5 mr-1" onClick={e => e.stopPropagation()}>
-                    <button
-                      onClick={() => setBottomTab('files')}
-                      className={`p-1 rounded transition-colors ${activeView === 'files'
-                        ? 'text-text-primary bg-surface-hover'
-                        : 'text-text-muted/30 hover:text-text-muted/60'}`}
-                      title="Files"
-                    >
-                      <FolderOpen className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setBottomTab('tasks')}
-                      className={`p-1 rounded transition-colors ${activeView === 'tasks'
-                        ? 'text-text-primary bg-surface-hover'
-                        : 'text-text-muted/30 hover:text-text-muted/60'}`}
-                      title="Tasks"
-                    >
-                      <ListTodo className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : undefined
-
-                return (hasChanges || hasTodos) ? (
-                  <div className="mb-3">
-                    {activeView === 'files' && hasChanges && (
-                      <AgentStatusBar
-                        pendingChanges={pendingChanges}
-                        isStreaming={isStreaming}
-                        isAwaitingApproval={isAwaitingApproval}
-                        onStop={abort}
-                        headerPrefix={switcherIcons}
-                        onReviewFile={handleReviewFile}
-                        onAcceptFile={handleAcceptFile}
-                        onRejectFile={handleRejectFile}
-                        onUndoAll={handleUndoAll}
-                        onKeepAll={handleKeepAll}
-                        onApproveTool={approveCurrentTool}
-                        onRejectTool={rejectCurrentTool}
-                      />
-                    )}
-
-                    {activeView === 'tasks' && hasTodos && (
-                      <TodoListPanel todos={todos} headerPrefix={switcherIcons} />
-                    )}
-                  </div>
-                ) : null
-              })()}
-
-              {/* Message Queue Panel */}
-              <AnimatePresence>
-                <MessageQueuePanel
-                  onSendNow={(id) => {
-                    // 强制模式：中断当前执行，立即发送该消息
-                    useMessageQueueStore.getState().promote(id)
-                    abort()
-                    // abort 后 streaming → idle，useMessageQueueConsumer 自动消费队首
-                  }}
-                />
-              </AnimatePresence>
+              {/* Unified Status Tray: Files + Tasks + Queue */}
+              <UnifiedStatusTray
+                pendingChanges={pendingChanges}
+                todos={todos}
+                isStreaming={isStreaming}
+                isAwaitingApproval={isAwaitingApproval}
+                onStop={abort}
+                onReviewFile={handleReviewFile}
+                onAcceptFile={handleAcceptFile}
+                onRejectFile={handleRejectFile}
+                onUndoAll={handleUndoAll}
+                onKeepAll={handleKeepAll}
+                onApproveTool={approveCurrentTool}
+                onRejectTool={rejectCurrentTool}
+                onQueueSendNow={(id) => {
+                  useMessageQueueStore.getState().promote(id)
+                  abort()
+                }}
+              />
 
               {/* Input Component */}
               <ChatInput
