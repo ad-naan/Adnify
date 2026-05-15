@@ -242,29 +242,120 @@ textarea,
   text-underline-offset: 2px;
 }
 
-/* Keep Monaco find widget controls above hover overlays without changing its layout. */
+/* Monaco find widget - isolate from Tailwind preflight resets */
+.monaco-editor .find-widget,
+.monaco-editor .find-widget *,
+.monaco-editor .find-widget *::before,
+.monaco-editor .find-widget *::after {
+  border-width: revert;
+  border-style: revert;
+  border-color: revert;
+}
+
 .monaco-editor .find-widget {
-  z-index: 2600 !important;
-  isolation: isolate;
+  background-color: rgb(var(--surface)) !important;
+  color: rgb(var(--text-primary)) !important;
+  border-left: 1px solid rgb(var(--border)) !important;
+  border-right: 1px solid rgb(var(--border)) !important;
+  border-bottom: 1px solid rgb(var(--border)) !important;
+  border-bottom-left-radius: 4px !important;
+  border-bottom-right-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.monaco-editor .find-widget .button {
+  width: 16px !important;
+  height: 16px !important;
+  padding: 3px !important;
+  border-radius: 5px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-left: 3px !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  cursor: pointer !important;
+  flex: initial !important;
+  border: none !important;
+  background-color: transparent !important;
+  line-height: normal !important;
+}
+
+.monaco-editor .find-widget .codicon-find-selection {
+  width: 22px !important;
+  height: 22px !important;
+  padding: 3px !important;
+}
+
+.monaco-editor .find-widget .button.toggle {
+  width: 18px !important;
+  height: 100% !important;
+  margin-left: 0 !important;
+  border-radius: 0 !important;
+}
+
+.monaco-editor .find-widget .button:not(.disabled):hover,
+.monaco-editor .find-widget .codicon-find-selection:hover {
+  background-color: rgb(var(--surface-hover)) !important;
 }
 
 .monaco-editor .find-widget > .find-part,
-.monaco-editor .find-widget > .replace-part,
-.monaco-editor .find-widget > .button,
-.monaco-editor .find-widget .button.toggle,
-.monaco-editor .find-widget .find-actions,
-.monaco-editor .find-widget .replace-actions {
-  position: relative;
-  z-index: 2601;
+.monaco-editor .find-widget > .replace-part {
+  margin: 3px 25px 0 17px !important;
+  font-size: 12px !important;
+  display: flex !important;
 }
 
-.monaco-editor .find-widget .monaco-action-bar {
-  position: relative;
-  z-index: 2602;
+.monaco-editor .find-widget > .find-part .find-actions,
+.monaco-editor .find-widget > .replace-part .replace-actions {
+  height: 25px !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
-.monaco-editor .find-widget .monaco-sash {
-  z-index: 2599;
+/* Close button positioning */
+.monaco-editor .find-widget > .button.codicon-widget-close {
+  position: absolute !important;
+  top: 5px !important;
+  right: 4px !important;
+}
+
+/* Ensure find widget inputs are always visible */
+.monaco-editor .find-widget .monaco-inputbox {
+  background-color: rgb(var(--background)) !important;
+  border: 1px solid rgb(var(--border)) !important;
+  border-radius: 4px !important;
+  min-height: 25px !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox .input,
+.monaco-editor .find-widget .monaco-inputbox textarea {
+  padding: 2px 4px !important;
+  color: rgb(var(--text-primary)) !important;
+  background-color: transparent !important;
+  min-height: 0 !important;
+  font-size: 13px !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox.synthetic-focus {
+  outline: 1px solid rgb(var(--accent)) !important;
+  outline-offset: -1px !important;
+}
+
+.monaco-editor .find-widget .monaco-inputbox > .ibwrapper > .input::placeholder,
+.monaco-editor .find-widget .monaco-inputbox > .ibwrapper > textarea::placeholder {
+  color: rgb(var(--text-muted)) !important;
+}
+
+/* Monaco editor - ensure overflow widgets (tooltips) appear above all app UI */
+.monaco-editor .overflowingContentWidgets {
+  z-index: 9999 !important;
+}
+
+.monaco-editor-overlaymessage,
+.monaco-hover,
+.monaco-editor .monaco-hover {
+  z-index: 9999 !important;
 }
 
 
