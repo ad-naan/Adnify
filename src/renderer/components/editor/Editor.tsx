@@ -461,7 +461,7 @@ export default function Editor() {
       )}
 
       {/* 编辑器主体 */}
-      <div className="flex-1 relative min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 relative min-h-0 overflow-visible flex flex-col">
         {activeFile?.path.startsWith('diff://') || activeFile?.path.startsWith('git-diff://') ? (
           <DiffPreview
             diff={{
