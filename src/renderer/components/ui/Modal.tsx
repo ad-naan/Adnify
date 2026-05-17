@@ -46,7 +46,7 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3 }}
-                className={`absolute inset-0 ${disableGlassEffect ? 'bg-text-inverted/60' : 'bg-text-inverted/40 backdrop-blur-sm'}`}
+                className={`absolute inset-0 ${disableGlassEffect ? 'bg-text-inverted/60' : 'overlay-scrim'}`}
                 onClick={onClose}
             />
 
@@ -57,9 +57,9 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
                 className={`
                     relative w-full ${sizeClass} 
-                    ${disableGlassEffect ? 'bg-background/95' : 'bg-background/80 backdrop-blur-2xl'}
+                    ${disableGlassEffect ? 'bg-background/95' : 'floating-surface'}
                     border border-border/50 
-                    rounded-3xl shadow-2xl shadow-black/20 
+                    rounded-3xl
                     overflow-hidden 
                     flex flex-col ${className}
                 `}
@@ -72,7 +72,7 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                 )}
 
                 {title && (
-                    <div className="relative flex items-center justify-between px-6 py-5 border-b border-border/50 bg-text-primary/[0.02] z-10 shrink-0">
+                    <div className="floating-surface-header relative flex items-center justify-between px-6 py-5 border-b border-border/50 z-10 shrink-0">
                         <h3 className="text-lg font-bold text-text-primary tracking-tight">{title}</h3>
                         {showCloseButton && (
                             <button onClick={onClose} className="p-2 rounded-xl hover:bg-text-primary/[0.05] text-text-muted hover:text-text-primary transition-all duration-200 group">
