@@ -308,6 +308,12 @@ function createGroupedAPI() {
       setCustomBinDir: (customPath: string | null) => raw.lspSetCustomBinDir(customPath),
       installServer: (serverType: string) => raw.lspInstallServer(serverType),
       installBasicServers: () => raw.lspInstallBasicServers(),
+      // 语言环境配置
+      getLanguageEnv: (workspacePath: string, languageId: string) => raw.lspGetLanguageEnv(workspacePath, languageId),
+      setLanguageEnv: (workspacePath: string, languageId: string, runtimePath: string, extraPaths?: string[]) => raw.lspSetLanguageEnv(workspacePath, languageId, runtimePath, extraPaths),
+      removeLanguageEnv: (workspacePath: string, languageId: string) => raw.lspRemoveLanguageEnv(workspacePath, languageId),
+      getAllLanguageEnv: (workspacePath: string) => raw.lspGetAllLanguageEnv(workspacePath),
+      resolveRuntimePath: (workspacePath: string, languageId: string) => raw.lspResolveRuntimePath(workspacePath, languageId),
     },
 
     // Debug

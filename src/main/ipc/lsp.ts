@@ -15,6 +15,13 @@ import {
   getDefaultLspBinDir,
   setCustomLspBinDir,
 } from '../lsp/installer'
+import {
+  getLanguageEnv,
+  setLanguageEnv,
+  removeLanguageEnv,
+  getAllLanguageEnv,
+  resolveRuntimePath,
+} from '../lsp/languageEnvConfig'
 import { lspUriToPath } from '@shared/utils/uriUtils'
 
 function getFallbackRoot(filePath: string): string {
@@ -458,6 +465,53 @@ export function registerLspHandlers(preferencesStore?: any): void {
     } catch (err) {
       return { success: false, error: toAppError(err).message }
     }
+  })
+
+  // ============ 语言环境配置 ============
+
+  ipcMain.handle('lsp:getLanguageEnv', (_, params: { workspacePath: string; languageId: string }) => {
+    return getLanguageEnv(params.workspacePath, params.languageId)
+  })
+
+  ipcMain.handle('lsp:setLanguageEnv', async (_, params: { workspacePath: string; languageId: string; runtimePath: string; extraPaths?: string[] }) => {
+    setLanguageEnv(params.workspacePath, params.languageId, {
+      runtimePath: params.runtimePath,
+      extraPaths: params.extraPaths,
+    })
+
+    // 清除缓存并重启对应的 LSP 服务器以应用新配置
+    const { invalidatePythonPathCache } = await import('../lsp/lspManager')
+    invalidatePythonPathCache(params.workspacePath)
+
+    // 重启该语言的 LSP 服务器
+    const serverName = lspManager.getServerForLanguage(params.languageId as LanguageId)
+    if (serverName) {
+      const running = lspManager.getRunningServers()
+      const matchingKey = running.find(k => k.startsWith(serverName + ':'))
+      if (matchingKey) {
+        await lspManager.stopServerByKey(matchingKey)
+        await lspManager.startServer(serverName, params.workspacePath)
+      }
+    }
+
+    return { success: true }
+  })
+
+  ipcMain.handle('lsp:removeLanguageEnv', async (_, params: { workspacePath: string; languageId: string }) => {
+    removeLanguageEnv(params.workspacePath, params.languageId)
+
+    const { invalidatePythonPathCache } = await import('../lsp/lspManager')
+    invalidatePythonPathCache(params.workspacePath)
+
+    return { success: true }
+  })
+
+  ipcMain.handle('lsp:getAllLanguageEnv', (_, params: { workspacePath: string }) => {
+    return getAllLanguageEnv(params.workspacePath)
+  })
+
+  ipcMain.handle('lsp:resolveRuntimePath', (_, params: { workspacePath: string; languageId: string }) => {
+    return resolveRuntimePath(params.workspacePath, params.languageId)
   })
 
   logger.lsp.info('[LSP IPC] Handlers registered')

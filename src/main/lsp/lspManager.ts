@@ -138,6 +138,32 @@ async function getJsonServerCommand(): Promise<{ command: string; args: string[]
   return null
 }
 
+// ============ Python 环境检测 ============
+
+import { resolveRuntimePath } from './languageEnvConfig'
+
+/** 缓存已检测的 Python 路径（按工作区） */
+const pythonPathCache = new Map<string, string>()
+
+function getPythonPathForWorkspace(workspacePath: string): string {
+  const cached = pythonPathCache.get(workspacePath)
+  if (cached) return cached
+
+  const resolved = resolveRuntimePath(workspacePath, 'python')
+  pythonPathCache.set(workspacePath, resolved)
+  logger.lsp.info(`[LSP] Python path for ${workspacePath}: ${resolved}`)
+  return resolved
+}
+
+/** 清除缓存（配置变更后调用） */
+export function invalidatePythonPathCache(workspacePath?: string): void {
+  if (workspacePath) {
+    pythonPathCache.delete(workspacePath)
+  } else {
+    pythonPathCache.clear()
+  }
+}
+
 // Python LSP (pyright)
 async function getPythonServerCommand(): Promise<{ command: string; args: string[] } | null> {
   // 优先使用 pyright（通过 npm 安装）
@@ -704,10 +730,10 @@ class LspManager {
       const settings = items.map((item: any) => {
         const section = item.section || ''
 
-        // Python (Pyright)
+        // Python (Pyright) — 使用检测到的虚拟环境路径
         if (section === 'python' || section.startsWith('python.')) {
           return {
-            pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+            pythonPath: getPythonPathForWorkspace(instance.workspacePath),
             analysis: {
               typeCheckingMode: 'basic',
               diagnosticMode: 'openFilesOnly',
@@ -898,10 +924,10 @@ class LspManager {
     const instance = this.servers.get(key)
     const serverName = instance?.config.name
 
-    // 为 Pyright 添加 Python 解释器配置
+    // 为 Pyright 添加 Python 解释器配置（自动检测虚拟环境）
     const initializationOptions = serverName === 'python' ? {
       python: {
-        pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+        pythonPath: getPythonPathForWorkspace(workspacePath),
       },
     } : undefined
 
@@ -917,10 +943,11 @@ class LspManager {
 
     // 为 Pyright 发送配置
     if (serverName === 'python') {
+      const pythonPath = getPythonPathForWorkspace(workspacePath)
       this.sendNotification(key, 'workspace/didChangeConfiguration', {
         settings: {
           python: {
-            pythonPath: process.platform === 'win32' ? 'python' : 'python3',
+            pythonPath,
             analysis: {
               typeCheckingMode: 'basic',
               diagnosticMode: 'openFilesOnly',
