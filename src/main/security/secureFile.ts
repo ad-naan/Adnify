@@ -11,6 +11,7 @@ import { pathToFileURL } from 'url'
 import { promises as fsPromises } from 'fs'
 import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
+import { isUserAuthorizedPath } from '../services/fileAssociation'
 
 // 导入拆分的模块
 import { readFileWithEncodingInfo, readLargeFile, safeWriteFile } from './fileUtils'
@@ -146,12 +147,14 @@ export function registerSecureFileHandlers(
 
     const workspace = getWorkspaceSessionFn(event)
 
-    // 强制工作区边界
+    // 强制工作区边界（用户通过文件关联主动打开的文件可绕过）
     if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：超出工作区边界',
-      })
-      return null
+      if (!isUserAuthorizedPath(filePath)) {
+        securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
+          reason: '安全底线：超出工作区边界',
+        })
+        return null
+      }
     }
 
     if (securityManager.isSensitivePath(filePath)) {

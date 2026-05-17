@@ -151,11 +151,23 @@ class WorkspaceManager {
     const { addRoot } = useStore.getState()
     addRoot(folderPath)
     await workspaceStorageRuntime.initializeRoot(folderPath)
+
+    // 同步新的 roots 到主进程，确保安全检查能识别新添加的目录
+    const updatedWorkspace = useStore.getState().workspace
+    if (updatedWorkspace?.roots.length) {
+      await api.workspace.setActive(updatedWorkspace.roots)
+    }
   }
 
   removeFolder(folderPath: string): void {
     const { removeRoot } = useStore.getState()
     removeRoot(folderPath)
+
+    // 同步更新后的 roots 到主进程
+    const updatedWorkspace = useStore.getState().workspace
+    if (updatedWorkspace?.roots.length) {
+      void api.workspace.setActive(updatedWorkspace.roots)
+    }
   }
 
   private async handleWorkspaceRedirection(workspace: WorkspaceConfig): Promise<boolean> {
