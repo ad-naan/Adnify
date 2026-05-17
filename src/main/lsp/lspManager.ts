@@ -1056,6 +1056,21 @@ class LspManager {
     return success ? this.getInstanceKey(serverName, workspacePath) : null
   }
 
+  /**
+   * 清除指定服务器的 unavailable 冷却标记（安装后调用）
+   */
+  clearUnavailable(serverName?: string): void {
+    if (serverName) {
+      for (const key of this.unavailableServers.keys()) {
+        if (key.startsWith(serverName + ':')) {
+          this.unavailableServers.delete(key)
+        }
+      }
+    } else {
+      this.unavailableServers.clear()
+    }
+  }
+
   getRunningServers(): string[] {
     return Array.from(this.servers.keys())
   }
