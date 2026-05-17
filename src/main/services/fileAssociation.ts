@@ -13,6 +13,13 @@ type WindowResolver = () => BrowserWindow | null
 
 const pendingItems = new Map<string, OpenFilesPayload['items'][number]>()
 
+/**
+ * 用户授权路径集合
+ * 通过文件关联、拖拽等用户主动操作打开的文件路径，
+ * 允许绕过工作区边界检查（仍受敏感路径限制）
+ */
+const userAuthorizedPaths = new Set<string>()
+
 function readWorkspaceRoots(filePath: string): string[] | null {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
@@ -69,6 +76,10 @@ function extractFilePaths(argv: string[]): OpenFilesPayload['items'] {
 function pushPaths(items: OpenFilesPayload['items']): void {
   for (const item of items) {
     pendingItems.set(item.path.toLowerCase(), item)
+    // 将用户主动打开的文件路径加入授权集合
+    if (item.kind === 'file') {
+      userAuthorizedPaths.add(path.resolve(item.path).toLowerCase())
+    }
   }
 }
 
@@ -114,4 +125,35 @@ export async function pickLaunchTarget(win: BrowserWindow): Promise<OpenFilesPay
   }
 
   return normalizeCandidate(targetPath)
+}
+
+/**
+ * 检查文件路径是否在用户授权集合中
+ * 用于安全模块判断是否允许绕过工作区边界
+ */
+export function isUserAuthorizedPath(filePath: string): boolean {
+  try {
+    return userAuthorizedPaths.has(path.resolve(filePath).toLowerCase())
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 手动将路径加入用户授权集合（用于拖拽等场景）
+ */
+export function authorizeFilePath(filePath: string): void {
+  try {
+    userAuthorizedPaths.add(path.resolve(filePath).toLowerCase())
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * 清理用户授权路径（可选，防止无限增长）
+ * 在工作区切换时调用
+ */
+export function clearAuthorizedPaths(): void {
+  userAuthorizedPaths.clear()
 }
