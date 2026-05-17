@@ -1,10 +1,10 @@
 /**
  * LSP 状态指示器
- * 显示在状态栏右下角，点击可安装 LSP 服务器
+ * 显示在状态栏右下角，点击可安装 LSP 服务器 / 选择语言运行时环境
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { ZapOff, Download, Loader2, CheckCircle2 } from 'lucide-react'
+import { ZapOff, Download, Loader2, CheckCircle2, FolderOpen } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
@@ -66,11 +66,17 @@ const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boo
   php: { auto: true, hint: '可自动安装 Intelephense' },
 }
 
+// 需要运行时环境选择的语言（有解释器/SDK 路径概念的语言）
+const LANGUAGES_WITH_RUNTIME = new Set([
+  'python', 'go', 'rust', 'c', 'cpp', 'csharp', 'java', 'ruby', 'php',
+])
+
 export default function LspStatusIndicator() {
-  const { activeFilePath, language } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language })))
+  const { activeFilePath, language, workspacePath } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language, workspacePath: s.workspacePath })))
   const [serverStatus, setServerStatus] = useState<Record<string, LspServerStatus>>({})
   const [installing, setInstalling] = useState<string | null>(null)
   const [currentLanguageId, setCurrentLanguageId] = useState<string | null>(null)
+  const [runtimePath, setRuntimePath] = useState<string | null>(null)
 
   // 获取当前文件的语言 ID
   useEffect(() => {
@@ -87,13 +93,23 @@ export default function LspStatusIndicator() {
     api.lsp.getServerStatus().then(setServerStatus).catch((e) => logger.lsp.warn('Failed to get LSP server status:', e))
   }, [])
 
+  // 获取当前语言的运行时路径
+  useEffect(() => {
+    if (workspacePath && currentLanguageId) {
+      api.lsp.resolveRuntimePath(workspacePath, currentLanguageId)
+        .then(setRuntimePath)
+        .catch(() => setRuntimePath(null))
+    } else {
+      setRuntimePath(null)
+    }
+  }, [workspacePath, currentLanguageId])
+
   // 安装服务器
   const handleInstall = useCallback(async (serverType: string) => {
     setInstalling(serverType)
     try {
       const result = await api.lsp.installServer(serverType)
       if (result.success) {
-        // 刷新状态
         const newStatus = await api.lsp.getServerStatus()
         setServerStatus(newStatus)
       } else {
@@ -105,6 +121,25 @@ export default function LspStatusIndicator() {
       setInstalling(null)
     }
   }, [])
+
+  // 选择运行时路径
+  const handleSelectRuntime = useCallback(async () => {
+    if (!workspacePath || !currentLanguageId) return
+    const selected = await api.file.selectFolder()
+    if (!selected) return
+
+    await api.lsp.setLanguageEnv(workspacePath, currentLanguageId, selected)
+    setRuntimePath(selected)
+  }, [workspacePath, currentLanguageId])
+
+  // 清除手动配置（恢复自动检测）
+  const handleResetRuntime = useCallback(async () => {
+    if (!workspacePath || !currentLanguageId) return
+    await api.lsp.removeLanguageEnv(workspacePath, currentLanguageId)
+    // 重新获取自动检测的路径
+    const resolved = await api.lsp.resolveRuntimePath(workspacePath, currentLanguageId)
+    setRuntimePath(resolved)
+  }, [workspacePath, currentLanguageId])
 
   // 当前语言对应的服务器类型
   const currentServerType = currentLanguageId ? LANGUAGE_TO_SERVER[currentLanguageId] : null
@@ -242,17 +277,48 @@ export default function LspStatusIndicator() {
           </div>
         )}
 
-        {/* 已安装时显示路径 */}
-        {isInstalled && currentStatus?.path && (
-          <div className="space-y-1">
+        {/* 已安装时显示路径 + 运行时环境 */}
+        {isInstalled && (
+          <div className="space-y-2">
             {installInfo?.builtin && (
               <div className="text-xs text-blue-400">
                 {language === 'zh' ? '内置语言服务器' : 'Built-in Language Server'}
               </div>
             )}
-            <div className="text-xs text-text-muted bg-background-tertiary px-2 py-1.5 rounded font-mono truncate">
-              {currentStatus.path}
-            </div>
+            {currentStatus?.path && (
+              <div className="text-xs text-text-muted bg-background-tertiary px-2 py-1.5 rounded font-mono truncate">
+                {currentStatus.path}
+              </div>
+            )}
+
+            {/* 运行时环境选择 */}
+            {LANGUAGES_WITH_RUNTIME.has(currentLanguageId || '') && (
+              <div className="pt-2 border-t border-border/30 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-text-muted">
+                    {language === 'zh' ? '运行时环境' : 'Runtime'}
+                  </span>
+                  <button
+                    onClick={handleResetRuntime}
+                    className="text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                  >
+                    {language === 'zh' ? '自动检测' : 'Auto-detect'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 text-xs text-text-primary bg-background-tertiary px-2 py-1.5 rounded font-mono truncate" title={runtimePath || ''}>
+                    {runtimePath || (language === 'zh' ? '未检测到' : 'Not detected')}
+                  </div>
+                  <button
+                    onClick={handleSelectRuntime}
+                    className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors shrink-0"
+                    title={language === 'zh' ? '选择路径' : 'Browse'}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
