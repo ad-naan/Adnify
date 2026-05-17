@@ -550,6 +550,13 @@ export interface ElectronAPI {
   lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
   lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 
+  // LSP 语言环境配置
+  lspGetLanguageEnv: (workspacePath: string, languageId: string) => Promise<{ runtimePath?: string; env?: Record<string, string>; extraPaths?: string[] } | null>
+  lspSetLanguageEnv: (workspacePath: string, languageId: string, runtimePath: string, extraPaths?: string[]) => Promise<{ success: boolean }>
+  lspRemoveLanguageEnv: (workspacePath: string, languageId: string) => Promise<{ success: boolean }>
+  lspGetAllLanguageEnv: (workspacePath: string) => Promise<Record<string, { runtimePath?: string; env?: Record<string, string>; extraPaths?: string[] }>>
+  lspResolveRuntimePath: (workspacePath: string, languageId: string) => Promise<string>
+
   // HTTP
   httpReadUrl: (url: string, timeout?: number) => Promise<{
     success: boolean; content?: string; title?: string; error?: string; contentType?: string; statusCode?: number

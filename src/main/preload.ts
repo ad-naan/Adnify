@@ -718,6 +718,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   lspInstallServer: (serverType: string) => ipcRenderer.invoke('lsp:installServer', serverType),
   lspInstallBasicServers: () => ipcRenderer.invoke('lsp:installBasicServers'),
 
+  // LSP 语言环境配置
+  lspGetLanguageEnv: (workspacePath: string, languageId: string) => ipcRenderer.invoke('lsp:getLanguageEnv', { workspacePath, languageId }),
+  lspSetLanguageEnv: (workspacePath: string, languageId: string, runtimePath: string, extraPaths?: string[]) => ipcRenderer.invoke('lsp:setLanguageEnv', { workspacePath, languageId, runtimePath, extraPaths }),
+  lspRemoveLanguageEnv: (workspacePath: string, languageId: string) => ipcRenderer.invoke('lsp:removeLanguageEnv', { workspacePath, languageId }),
+  lspGetAllLanguageEnv: (workspacePath: string) => ipcRenderer.invoke('lsp:getAllLanguageEnv', { workspacePath }),
+  lspResolveRuntimePath: (workspacePath: string, languageId: string) => ipcRenderer.invoke('lsp:resolveRuntimePath', { workspacePath, languageId }),
+
   // HTTP API
   httpReadUrl: (url: string, timeout?: number) => ipcRenderer.invoke('http:readUrl', url, timeout),
   httpWebSearch: (query: string, maxResults?: number, timeout?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults, timeout),
