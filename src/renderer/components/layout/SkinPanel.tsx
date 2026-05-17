@@ -103,9 +103,9 @@ export default function SkinPanel() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.96 }}
             transition={{ type: 'spring', damping: 24, stiffness: 380 }}
-            className="absolute right-0 top-full mt-3 w-[560px] max-w-[calc(100vw-2rem)] rounded-3xl border border-border/50 bg-surface/85 backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.28)] overflow-hidden origin-top-right"
+            className="absolute right-0 top-full mt-3 w-[560px] max-w-[calc(100vw-2rem)] rounded-3xl border border-border/70 bg-background-secondary/95 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.28)] overflow-hidden origin-top-right"
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 bg-background-secondary/70">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.22em] text-text-muted">{copy.title}</div>
                 <div className="mt-1 text-sm text-text-secondary">{copy.subtitle}</div>
@@ -134,8 +134,8 @@ export default function SkinPanel() {
                           onClick={() => applyTheme(theme.id)}
                           className={`relative rounded-2xl border p-3 text-left transition-all ${
                             active
-                              ? 'border-accent/40 bg-accent/8 shadow-[0_0_0_1px_rgba(var(--accent),0.12)]'
-                              : 'border-border/50 bg-background/25 hover:border-accent/20 hover:bg-surface-hover/60'
+                              ? 'border-accent/40 bg-accent/10 shadow-[0_0_0_1px_rgba(var(--accent),0.12)]'
+                              : 'border-border/60 bg-background-secondary/[0.78] hover:border-accent/20 hover:bg-surface/90'
                           }`}
                         >
                           <ThemeWorkbenchPreview theme={theme} className="mb-3 h-[92px]" />
@@ -168,7 +168,7 @@ export default function SkinPanel() {
                             className={`h-10 rounded-xl border text-sm font-semibold transition-all ${
                               active
                                 ? 'border-accent/40 bg-accent/10 text-accent'
-                                : 'border-border/50 bg-background/25 text-text-secondary hover:text-text-primary hover:bg-surface-hover'
+                                : 'border-border/60 bg-background-secondary/[0.78] text-text-secondary hover:text-text-primary hover:bg-surface/90'
                             }`}
                           >
                             {Math.round(scale * 100)}%
@@ -192,8 +192,8 @@ export default function SkinPanel() {
                             onClick={() => applyLayoutDensity(item.id)}
                             className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
                               active
-                                ? 'border-accent/40 bg-accent/8'
-                                : 'border-border/50 bg-background/25 hover:border-accent/20 hover:bg-surface-hover/60'
+                                ? 'border-accent/40 bg-accent/10'
+                                : 'border-border/60 bg-background-secondary/[0.78] hover:border-accent/20 hover:bg-surface/90'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-3">

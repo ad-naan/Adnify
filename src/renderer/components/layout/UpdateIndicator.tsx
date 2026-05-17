@@ -108,9 +108,9 @@ export default function UpdateIndicator() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-            className="absolute right-0 top-full mt-3 w-[320px] rounded-3xl bg-surface/80 backdrop-blur-3xl border border-border/50 shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden origin-top-right"
+            className="absolute right-0 top-full mt-3 w-[320px] rounded-3xl bg-background-secondary/95 backdrop-blur-xl border border-border/70 shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden origin-top-right"
           >
-            <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background-secondary/70">
               <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">{t.title}</span>
               <button
                 onClick={() => setShowPopover(false)}
@@ -165,7 +165,7 @@ export default function UpdateIndicator() {
                             : t.notAvailable}
                 </h4>
 
-                <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[11px] font-medium">
+                <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-full bg-background-secondary/[0.78] border border-border/60 text-[11px] font-medium">
                   {status?.version && hasUpdate ? (
                     <>
                       <span className="text-text-muted opacity-60">v{currentVersion}</span>

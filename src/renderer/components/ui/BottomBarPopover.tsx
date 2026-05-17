@@ -83,12 +83,12 @@ export default memo(function BottomBarPopover({
             {isOpen && (
                 <div
                     ref={popoverRef}
-                    className="absolute bottom-full right-0 mb-3 bg-surface/80 backdrop-blur-2xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden animate-slide-up z-50 origin-bottom-right"
+                    className="floating-surface absolute bottom-full right-0 mb-3 border border-border/50 rounded-2xl overflow-hidden animate-slide-up z-50 origin-bottom-right"
                     style={{ width, ...(height !== undefined ? { height } : {}) }}
                 >
                     {/* 面板头部 */}
                     {title && (
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-white/[0.02] z-10 shrink-0">
+                        <div className="floating-surface-header flex items-center justify-between px-4 py-3 border-b border-border/50 z-10 shrink-0">
                             <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{title}</span>
                             <button
                                 onClick={handleClose}
