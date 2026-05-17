@@ -452,7 +452,12 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
   ipcMain.handle('lsp:installServer', async (_, serverType: string) => {
     try {
-      return await installServer(serverType)
+      const result = await installServer(serverType)
+      if (result.success) {
+        // 清除 unavailable 冷却标记，允许立即重试启动
+        lspManager.clearUnavailable(serverType)
+      }
+      return result
     } catch (err) {
       return { success: false, error: toAppError(err).message }
     }
