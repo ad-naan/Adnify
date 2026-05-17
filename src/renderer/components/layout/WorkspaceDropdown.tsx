@@ -108,7 +108,7 @@ export default function WorkspaceDropdown() {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 4, scale: 0.98 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="absolute top-full left-0 mt-2 w-72 p-1.5 bg-background/80 backdrop-blur-xl border border-border rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden"
+                        className="floating-surface absolute top-full left-0 mt-2 w-72 p-1.5 border border-border rounded-xl z-50 overflow-hidden"
                     >
                         <div className="space-y-0.5">
                             <MenuItem
@@ -141,7 +141,7 @@ export default function WorkspaceDropdown() {
                         {recentWorkspaces.length > 0 && (
                             <>
                                 <div className="h-px bg-border my-1.5 mx-2" />
-                                <div className="px-3 py-1.5 flex items-center gap-2">
+                                <div className="floating-surface-section-label px-3 py-1.5 flex items-center gap-2 rounded-lg mx-1">
                                     <History className="w-3 h-3 text-accent" />
                                     <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Recent</span>
                                 </div>
