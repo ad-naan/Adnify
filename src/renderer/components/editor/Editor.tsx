@@ -330,7 +330,15 @@ export default function Editor() {
         const currentFile = currentFiles.find(f => f.path === currentFilePath)
         syncFileEolFromModel(currentFilePath)
 
-        if (currentFile && editorContent === currentFile.content) {
+        if (!currentFile) return
+
+        // 如果 savedVersionId 未设置（刚从磁盘重新加载），直接标记为已保存
+        if (currentFile.savedVersionId === undefined) {
+          markFileSaved(currentFilePath, currentVersionId)
+          return
+        }
+
+        if (editorContent === currentFile.content) {
           markFileSaved(currentFilePath, currentVersionId)
         } else {
           updateFileDirtyState(currentFilePath, currentVersionId)
