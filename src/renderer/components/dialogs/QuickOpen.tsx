@@ -297,20 +297,19 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
       className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] animate-fade-in"
       onClick={onClose}
     >
-      <div className="fixed inset-0 bg-background/20 backdrop-blur-sm transition-opacity" />
+      <div className="overlay-scrim fixed inset-0 transition-opacity" />
 
       <div
         className="
             relative w-[640px] max-h-[65vh] flex flex-col
-            bg-background/80 backdrop-blur-2xl 
-            border border-border/50 rounded-2xl shadow-2xl shadow-black/40
+            floating-surface border rounded-2xl
             overflow-hidden animate-scale-in origin-top ring-1 ring-text-primary/5
         "
         onClick={e => e.stopPropagation()}
       >
         {/* Search Input - Big & Clean */}
-        <div className="flex items-center gap-4 px-5 py-5 border-b border-border/40 shrink-0">
-          <Search className="w-6 h-6 text-text-muted" strokeWidth={2} />
+        <div className="floating-surface-header flex items-center gap-4 px-5 py-5 border-b border-border/50 shrink-0">
+          <Search className="w-6 h-6 text-text-secondary" strokeWidth={2} />
           <input
             ref={inputRef}
             type="text"
@@ -318,7 +317,7 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('searchFilesPlaceholder', language)}
-            className="flex-1 bg-transparent text-xl font-medium text-text-primary placeholder:text-text-muted/40 focus:outline-none"
+            className="flex-1 bg-transparent text-xl font-medium text-text-primary placeholder:text-text-muted/55 focus:outline-none"
             spellCheck={false}
           />
           {query && (
@@ -334,7 +333,7 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
         </div>
 
         {/* File List */}
-        <div ref={listRef} className="flex-1 overflow-y-auto py-2 custom-scrollbar scroll-p-2">
+        <div ref={listRef} className="relative z-[1] flex-1 overflow-y-auto py-2 custom-scrollbar scroll-p-2">
           {isLoading ? (
             <div className="px-4 py-16 text-center text-text-muted flex flex-col items-center gap-4">
               <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
@@ -361,22 +360,22 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2.5 bg-surface/30 border-t border-border/40 text-[10px] font-medium text-text-muted/60 flex justify-between items-center shrink-0 backdrop-blur-md">
+        <div className="floating-surface-footer px-5 py-2.5 border-t border-border/50 text-[10px] font-medium text-text-muted/75 flex justify-between items-center shrink-0">
           <span className="font-mono tracking-tight">{matches.length} matches</span>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
               <div className="flex gap-0.5">
-                <kbd className="font-sans bg-surface/80 border border-border/50 px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↑</kbd>
-                <kbd className="font-sans bg-surface/80 border border-border/50 px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↓</kbd>
+                <kbd className="floating-surface-chip font-sans px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↑</kbd>
+                <kbd className="floating-surface-chip font-sans px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↓</kbd>
               </div>
               <span>to navigate</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="font-sans bg-surface/80 border border-border/50 px-1.5 py-0.5 rounded shadow-sm">↵</kbd>
+              <kbd className="floating-surface-chip font-sans px-1.5 py-0.5 rounded shadow-sm">↵</kbd>
               <span>to open</span>
             </span>
             <span className="flex items-center gap-1.5">
-              <kbd className="font-sans bg-surface/80 border border-border/50 px-1.5 py-0.5 rounded shadow-sm">esc</kbd>
+              <kbd className="floating-surface-chip font-sans px-1.5 py-0.5 rounded shadow-sm">esc</kbd>
               <span>to close</span>
             </span>
           </div>

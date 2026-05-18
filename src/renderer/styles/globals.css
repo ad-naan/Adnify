@@ -80,6 +80,17 @@
   --layout-sidebar-width: 60px;
   --layout-panel-padding: 1rem;
   --layout-control-height: 2.5rem;
+  --overlay-scrim-rgb: 6 8 12;
+  --overlay-scrim-alpha: 0.34;
+  --floating-surface-alpha: 0.94;
+  --floating-surface-secondary-alpha: 0.82;
+  --floating-surface-blur: 10px;
+  --floating-surface-saturate: 112%;
+  --floating-surface-border-alpha: 0.78;
+  --floating-surface-highlight-alpha: 0.055;
+  --floating-surface-shadow:
+    0 28px 72px -30px rgba(0, 0, 0, 0.62),
+    0 18px 40px -28px rgba(0, 0, 0, 0.55);
 }
 
 /* --- Global Custom Premium Cursors --- */
@@ -100,6 +111,14 @@
   --cursor-text: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M12 4h8v2h-3v20h3v2h-8v-2h3V6h-3V4z" fill="%2318181b" stroke="none"/></svg>') 16 16, text;
   --cursor-ew-resize: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M8 12L4 16L8 20V17H24V20L28 16L24 12V15H8V12Z" fill="%2318181b" stroke="%23ffffff" stroke-width="1" stroke-linejoin="round"/></svg>') 16 16, ew-resize;
   --cursor-ns-resize: url('data:image/svg+xml;utf8,<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><path d="M12 8L16 4L20 8H17V24H20L16 28L12 24H15V8H12Z" fill="%2318181b" stroke="%23ffffff" stroke-width="1" stroke-linejoin="round"/></svg>') 16 16, ns-resize;
+  --overlay-scrim-alpha: 0.22;
+  --floating-surface-alpha: 0.965;
+  --floating-surface-secondary-alpha: 0.9;
+  --floating-surface-border-alpha: 0.88;
+  --floating-surface-highlight-alpha: 0.035;
+  --floating-surface-shadow:
+    0 26px 60px -32px rgba(15, 23, 42, 0.22),
+    0 16px 36px -28px rgba(15, 23, 42, 0.18);
 }
 
 body {
@@ -230,6 +249,83 @@ textarea,
 
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+.overlay-scrim {
+  background: rgb(var(--overlay-scrim-rgb) / var(--overlay-scrim-alpha));
+  backdrop-filter: blur(6px) saturate(108%);
+  -webkit-backdrop-filter: blur(6px) saturate(108%);
+}
+
+.floating-surface {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--surface) / calc(var(--floating-surface-alpha) + 0.015)) 0%,
+      rgb(var(--background-secondary) / var(--floating-surface-alpha)) 100%
+    );
+  border-color: rgb(var(--border) / var(--floating-surface-border-alpha));
+  box-shadow: var(--floating-surface-shadow);
+  backdrop-filter: blur(var(--floating-surface-blur)) saturate(var(--floating-surface-saturate));
+  -webkit-backdrop-filter: blur(var(--floating-surface-blur)) saturate(var(--floating-surface-saturate));
+}
+
+.floating-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--text-primary) / var(--floating-surface-highlight-alpha)) 0%,
+      transparent 24%,
+      transparent 100%
+    );
+}
+
+.floating-surface-header,
+.floating-surface-footer,
+.floating-surface-section-label {
+  position: relative;
+  z-index: 1;
+}
+
+.floating-surface-header {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--background-secondary) / calc(var(--floating-surface-secondary-alpha) + 0.06)) 0%,
+      rgb(var(--surface) / var(--floating-surface-secondary-alpha)) 100%
+    );
+  backdrop-filter: blur(7px) saturate(108%);
+  -webkit-backdrop-filter: blur(7px) saturate(108%);
+}
+
+.floating-surface-footer {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--surface) / calc(var(--floating-surface-secondary-alpha) - 0.02)) 0%,
+      rgb(var(--background-secondary) / calc(var(--floating-surface-secondary-alpha) + 0.06)) 100%
+    );
+  backdrop-filter: blur(7px) saturate(108%);
+  -webkit-backdrop-filter: blur(7px) saturate(108%);
+}
+
+.floating-surface-section-label {
+  background: rgb(var(--surface) / 0.92);
+  backdrop-filter: blur(7px) saturate(106%);
+  -webkit-backdrop-filter: blur(7px) saturate(106%);
+  box-shadow: 0 1px 0 rgb(var(--border) / 0.45);
+}
+
+.floating-surface-chip {
+  background: rgb(var(--background-secondary) / 0.76);
+  border: 1px solid rgb(var(--border) / 0.72);
 }
 
 .monaco-editor {
