@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Search, Terminal, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Image as ImageIcon, Search, Terminal, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -30,6 +30,7 @@ type ToolArgs = Record<string, unknown>
 
 const TOOL_LABELS: Record<string, string> = {
     read_file: 'Read File',
+    read_image: 'Read Image',
     read_multiple_files: 'Read Files',
     list_directory: 'List Directory',
     search_files: 'Search Files',
@@ -138,6 +139,14 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
             return `Reading ${pathSummary}`
         }
         return 'Reading files'
+    }
+
+    if (name === 'read_image') {
+        if (!path) return isRunning ? 'Analyzing image...' : ''
+        if (isRunning) return `Analyzing ${path}...`
+        if (isSuccess) return `Analyzed ${path}`
+        if (isError) return `Failed to analyze ${path}`
+        return `Analyzing ${path}`
     }
 
     if (['read_file', 'list_directory'].includes(name)) {
@@ -637,6 +646,9 @@ function ToolPreview({
     if (['read_file', 'read_multiple_files'].includes(effectiveName)) {
         const paths = getToolPathList(args)
         const filePath = paths[0] || ''
+        const readMeta = args._meta && typeof args._meta === 'object' ? args._meta as Record<string, unknown> : undefined
+        const contentKind = typeof readMeta?.contentKind === 'string' ? readMeta.contentKind : undefined
+        const isDocumentRead = contentKind === 'document'
         const hasResolvedReadTarget = paths.length > 0
         if (!hasResolvedReadTarget && !toolCall.result && !toolCall.richContent?.length && !isRunning && !isStreaming) {
             return null
@@ -655,20 +667,58 @@ function ToolPreview({
                 </div>
                 {stringResult ? (
                     <ExpandablePreviewContainer language={language}>
-                        <SyntaxHighlighter
-                            style={syntaxStyle}
-                            language={filePath ? guessLanguage(filePath) : 'typescript'}
-                            PreTag="div"
-                            className="!bg-transparent !p-2 !m-0 !text-[11px] leading-relaxed font-mono"
-                            customStyle={{ background: 'transparent', margin: 0, padding: 0, border: 'none', boxShadow: 'none', fontFamily: 'inherit' }}
-                            wrapLines
-                            wrapLongLines
-                        >
-                            {stringResult.slice(0, 5000)}
-                        </SyntaxHighlighter>
+                        {isDocumentRead ? (
+                            <div className="p-2 text-[11px] leading-relaxed text-text-secondary whitespace-pre-wrap break-words">
+                                <TextWithFileLinks text={stringResult.slice(0, 5000)} />
+                                {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
+                            </div>
+                        ) : (
+                            <SyntaxHighlighter
+                                style={syntaxStyle}
+                                language={filePath ? guessLanguage(filePath) : 'typescript'}
+                                PreTag="div"
+                                className="!bg-transparent !p-2 !m-0 !text-[11px] leading-relaxed font-mono"
+                                customStyle={{ background: 'transparent', margin: 0, padding: 0, border: 'none', boxShadow: 'none', fontFamily: 'inherit' }}
+                                wrapLines
+                                wrapLongLines
+                            >
+                                {stringResult.slice(0, 5000)}
+                            </SyntaxHighlighter>
+                        )}
                     </ExpandablePreviewContainer>
                 ) : (isRunning || isStreaming) && (
                     pendingPreview('Reading file...')
+                )}
+            </div>
+        )
+    }
+
+    if (effectiveName === 'read_image') {
+        const path = getPrimaryToolPath(args)
+
+        return (
+            <div className="space-y-1 mt-1">
+                <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
+                    <ImageIcon className="w-3 h-3" />
+                    <span className="font-medium text-text-primary transition-colors hover:underline cursor-pointer" title={path || undefined}>
+                        <TextWithFileLinks text={getPathDisplayName(path) || '<no path>'} />
+                    </span>
+                </div>
+                {toolCall.richContent && toolCall.richContent.length > 0 ? (
+                    <ExpandablePreviewContainer language={language}>
+                        <div className="p-2">
+                            <RichContentRenderer content={toolCall.richContent} maxHeight="max-h-full" />
+                        </div>
+                    </ExpandablePreviewContainer>
+                ) : stringResult ? (
+                    <ExpandablePreviewContainer language={language}>
+                        <div className="p-2 text-[11px] text-text-secondary whitespace-pre-wrap break-words">
+                            {stringResult.slice(0, 5000)}
+                            {stringResult.length > 5000 && <span className="opacity-50 mt-1 block">... (truncated)</span>}
+                        </div>
+                    </ExpandablePreviewContainer>
+                ) : (isRunning || isStreaming) && (
+                    pendingPreview('Analyzing image...')
                 )}
             </div>
         )
