@@ -13,6 +13,45 @@ type WindowResolver = () => BrowserWindow | null
 
 const pendingItems = new Map<string, OpenFilesPayload['items'][number]>()
 
+function resolveLaunchPath(candidate: string): string {
+  const trimmed = candidate.trim()
+  if (path.isAbsolute(trimmed)) {
+    return path.normalize(trimmed)
+  }
+
+  const cwdResolved = path.resolve(process.cwd(), trimmed)
+  if (fs.existsSync(cwdResolved)) {
+    return path.normalize(cwdResolved)
+  }
+
+  return path.normalize(path.resolve(app.getAppPath(), trimmed))
+}
+
+function normalizeForCompare(candidate: string): string {
+  return path.normalize(candidate).replace(/[\\/]+$/, '').toLowerCase()
+}
+
+function isInternalLaunchArg(filePath: string): boolean {
+  const resolved = normalizeForCompare(filePath)
+  const internalPaths = [process.execPath]
+
+  try {
+    internalPaths.push(app.getPath('exe'))
+  } catch {
+    // app.getPath('exe') is best-effort during very early startup.
+  }
+
+  try {
+    internalPaths.push(app.getAppPath())
+  } catch {
+    // Ignore; missing app path should not block opening user-provided files.
+  }
+
+  return internalPaths
+    .filter(Boolean)
+    .some(internalPath => resolved === normalizeForCompare(internalPath))
+}
+
 /**
  * 用户授权路径集合
  * 通过文件关联、拖拽等用户主动操作打开的文件路径，
@@ -49,7 +88,11 @@ function normalizeCandidate(filePath: string): OpenFilesPayload['items'][number]
   if (!trimmed || trimmed.startsWith('-')) return null
 
   try {
-    const resolved = path.isAbsolute(trimmed) ? trimmed : path.resolve(app.getAppPath(), trimmed)
+    const resolved = resolveLaunchPath(trimmed)
+    if (isInternalLaunchArg(resolved)) {
+      return null
+    }
+
     if (!fs.existsSync(resolved)) {
       return null
     }
