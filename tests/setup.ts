@@ -13,6 +13,9 @@ declare global {
 const mockElectronAPI = {
   file: {
     read: vi.fn(),
+    readBinary: vi.fn(),
+    readRichContent: vi.fn(),
+    readImageAnalysis: vi.fn(),
     write: vi.fn(),
     exists: vi.fn(),
     readDir: vi.fn(),
@@ -119,6 +122,8 @@ global.window = {
   electronAPI: mockElectronAPI,
 } as any
 
+vi.stubGlobal('self', globalThis)
+
   // Mock the raw electronAPI that's accessed by the wrapper
   ; (global.window as any).electronAPI = {
     ...mockElectronAPI,
@@ -150,9 +155,26 @@ global.window = {
     // File operations
     fileExists: vi.fn(),
     readFile: vi.fn(),
+    readBinaryFile: vi.fn(),
+    readRichContent: vi.fn(),
+    readImageAnalysis: vi.fn(),
     writeFile: vi.fn(),
     saveFile: vi.fn(),
     mkdir: vi.fn(),
+    ensureDir: vi.fn(),
+    deleteFile: vi.fn(),
+    copyFile: vi.fn(),
+    renameFile: vi.fn(),
+    createTerminal: vi.fn(),
+    writeTerminal: vi.fn(),
+    resizeTerminal: vi.fn(),
+    killTerminal: vi.fn(),
+    getAvailableShells: vi.fn(() => []),
+    onTerminalData: vi.fn(() => vi.fn()),
+    onTerminalExit: vi.fn(() => vi.fn()),
+    onTerminalError: vi.fn(() => vi.fn()),
+    onShellOutput: vi.fn(() => vi.fn()),
+    indexParseCallGraph: vi.fn(async () => []),
   }
 
 // Mock performance API

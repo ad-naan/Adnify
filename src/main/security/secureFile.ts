@@ -25,6 +25,9 @@ import {
   WindowManagerContext,
 } from './workspaceHandlers'
 import { openExternalSafely } from './externalUrl'
+import { analyzeImage } from '@main/services/documentReader/imageAnalysisService'
+import { readRichContent } from '@main/services/documentReader/richContentReader'
+import type { ImageAnalysisRequest, ReadRichContentOptions } from '@shared/types'
 
 /**
  * 向渲染进程发送错误通知
@@ -225,6 +228,108 @@ export function registerSecureFileHandlers(
       logger.security.error('[File] read binary failed:', filePath, toAppError(err).message)
       return null
     }
+  })
+
+  // 读取富文档（PDF / Office 等），并在可用时联动分析嵌图
+  ipcMain.handle('file:readRichContent', async (event, filePath: string, options?: ReadRichContentOptions) => {
+    if (!filePath) {
+      return {
+        success: false,
+        error: 'Error: Missing file path',
+        contentKind: 'unknown',
+        sourceFormat: 'unknown',
+      }
+    }
+
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
+        reason: '安全底线：超出工作区边界',
+        richContent: true,
+      })
+      return {
+        success: false,
+        error: 'Error: File path is outside the active workspace.',
+        contentKind: 'unknown',
+        sourceFormat: path.extname(filePath).replace('.', '').toLowerCase() || 'unknown',
+      }
+    }
+
+    if (securityManager.isSensitivePath(filePath)) {
+      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
+        reason: '安全底线：敏感路径',
+        richContent: true,
+      })
+      return {
+        success: false,
+        error: 'Error: Access to this file is blocked by security rules.',
+        contentKind: 'unknown',
+        sourceFormat: path.extname(filePath).replace('.', '').toLowerCase() || 'unknown',
+      }
+    }
+
+    const imageAnalysisConfig = options?.imageAnalysis?.config
+    const result = await readRichContent(filePath, {
+      embeddedImageAnalyzer: imageAnalysisConfig
+        ? async (image) => {
+            const analysis = await analyzeImage({
+              config: imageAnalysisConfig,
+              prompt: options?.imageAnalysis?.prompt
+                || `Analyze this embedded document image (${image.displayName}). Extract visible text, chart or table data, layout, and key details that help understand the surrounding document.`,
+              image,
+            })
+            return analysis.success ? (analysis.content || '') : `Image analysis failed: ${analysis.error || 'Unknown error'}`
+          }
+        : undefined,
+      skipImageAnalysisReason: imageAnalysisConfig ? undefined : 'no multimodal model configured',
+    })
+
+    securityManager.logOperation(OperationType.FILE_READ, filePath, result.success, {
+      richContent: true,
+      contentKind: result.contentKind,
+      sourceFormat: result.sourceFormat,
+      embeddedImageCount: result.embeddedImageCount || 0,
+      embeddedImagesAnalyzed: result.embeddedImagesAnalyzed || 0,
+      usedFallback: result.usedFallback || false,
+    })
+    return result
+  })
+
+  // 读取并分析图片，返回分析文本和预览数据
+  ipcMain.handle('file:readImageAnalysis', async (event, request: ImageAnalysisRequest) => {
+    const targetPath = typeof request?.path === 'string' ? request.path : undefined
+    const workspace = getWorkspaceSessionFn(event)
+
+    if (targetPath) {
+      if (workspace && !securityManager.validateWorkspacePath(targetPath, workspace.roots)) {
+        securityManager.logOperation(OperationType.FILE_READ, targetPath, false, {
+          reason: '安全底线：超出工作区边界',
+          imageAnalysis: true,
+        })
+        return {
+          success: false,
+          error: 'Error: File path is outside the active workspace.',
+        }
+      }
+
+      if (securityManager.isSensitivePath(targetPath)) {
+        securityManager.logOperation(OperationType.FILE_READ, targetPath, false, {
+          reason: '安全底线：敏感路径',
+          imageAnalysis: true,
+        })
+        return {
+          success: false,
+          error: 'Error: Access to this file is blocked by security rules.',
+        }
+      }
+    }
+
+    const result = await analyzeImage(request)
+    securityManager.logOperation(OperationType.FILE_READ, targetPath || request?.image?.displayName || '<inline-image>', result.success, {
+      imageAnalysis: true,
+      inlineImage: !targetPath,
+    })
+    return result
   })
 
   // 写入文件（无弹窗）
