@@ -113,15 +113,6 @@ function isEmptyStringPlaceholder(data: Record<string, unknown>): boolean {
   return data.old_string === '' && data.new_string === ''
 }
 
-function stripBatchConflicts(normalized: Record<string, unknown>) {
-  delete normalized.start_line
-  delete normalized.end_line
-  delete normalized.content
-  delete normalized.old_string
-  delete normalized.new_string
-  delete normalized.replace_all
-}
-
 function getRequestedModes(data: Record<string, unknown>) {
   return {
     batch: hasBatchFields(data),
@@ -144,7 +135,20 @@ export function normalizeEditFileArgs(data: Record<string, unknown>): Record<str
   const { string: stringFields, line: lineFields, batch: batchFields } = getRequestedModes(normalized)
 
   if (batchFields) {
-    stripBatchConflicts(normalized)
+    // Some tool-call serializers emit empty top-level forms alongside real batch edits.
+    // Drop only placeholder fields here so genuine mixed modes still fail validation.
+    if (isLinePlaceholder(normalized)) {
+      delete normalized.start_line
+      delete normalized.end_line
+      delete normalized.content
+    }
+
+    if (isEmptyStringPlaceholder(normalized)) {
+      delete normalized.old_string
+      delete normalized.new_string
+      delete normalized.replace_all
+    }
+
     return normalized
   }
 
@@ -173,7 +177,9 @@ export function resolveEditFileRequest(data: Record<string, unknown>): EditFileR
     return {
       ok: false,
       normalized,
-      error: 'Cannot mix string mode, line mode, and batch mode parameters',
+      error: batchMode
+        ? 'Batch mode cannot be combined with top-level content/start_line/end_line/old_string/new_string'
+        : 'Cannot mix string mode, line mode, and batch mode parameters',
     }
   }
 
