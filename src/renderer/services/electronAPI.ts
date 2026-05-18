@@ -60,6 +60,8 @@ function createGroupedAPI() {
       getTree: (path: string, maxDepth?: number) => raw.getFileTree(path, maxDepth),
       read: (path: string, encoding?: string) => raw.readFile(path, encoding),
       readBinary: (path: string) => raw.readBinaryFile(path),
+      readRichContent: (path: string, options?: Parameters<typeof raw.readRichContent>[1]) => raw.readRichContent(path, options),
+      readImageAnalysis: (request: Parameters<typeof raw.readImageAnalysis>[0]) => raw.readImageAnalysis(request),
       write: (path: string, content: string, encoding?: string) => raw.writeFile(path, content, encoding),
       save: (content: string, path?: string, encoding?: string) => raw.saveFile(content, path, encoding),
       exists: (path: string) => raw.fileExists(path),
