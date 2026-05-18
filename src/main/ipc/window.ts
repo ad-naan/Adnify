@@ -5,6 +5,7 @@
 import { ipcMain, BrowserWindow, app, nativeTheme } from 'electron'
 import { logger } from '@shared/utils/Logger'
 import { ensureTrustedIpcSender } from './safeHandle'
+import { flushLaunchFilesToWindow } from '../services/fileAssociation'
 
 // 标记是否已注册基础窗口控制
 let basicHandlersRegistered = false
@@ -77,6 +78,7 @@ export function registerWindowHandlers(createWindow: (isEmpty?: boolean) => Brow
       ensureTrustedIpcSender(event)
       const win = BrowserWindow.fromWebContents(event.sender)
       if (win && !win.isDestroyed()) {
+        void flushLaunchFilesToWindow(win, 'startup')
         // 窗口已经显示，这里只是日志记录
         logger.system.info('[Window] Renderer ready for window:', { windowId: win.id })
       }
