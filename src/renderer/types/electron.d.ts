@@ -45,6 +45,14 @@ export type {
   LLMSendMessageParams,
 } from '@shared/types/llm'
 
+export type {
+  DocumentReaderEmbeddedImage,
+  ImageAnalysisRequest,
+  ImageAnalysisResult,
+  ReadRichContentOptions,
+  RichContentReadResult,
+} from '@shared/types'
+
 // LLM 响应类型
 export interface TokenUsage {
   inputTokens: number
@@ -351,6 +359,8 @@ export interface ElectronAPI {
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string, encoding?: string) => Promise<string | null>
   readBinaryFile: (path: string) => Promise<string | null>
+  readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
+  readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
   writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
   ensureDir: (path: string) => Promise<boolean>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>

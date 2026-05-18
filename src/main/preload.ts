@@ -105,6 +105,45 @@ interface LLMConfig {
   }
 }
 
+interface DocumentReaderEmbeddedImage {
+  displayName: string
+  mimeType: string
+  data: string
+}
+
+interface ImageAnalysisRequest {
+  config: LLMConfig
+  prompt?: string
+  path?: string
+  image?: DocumentReaderEmbeddedImage
+}
+
+interface ImageAnalysisResult {
+  success: boolean
+  content?: string
+  error?: string
+  image?: DocumentReaderEmbeddedImage
+}
+
+interface ReadRichContentOptions {
+  imageAnalysis?: {
+    config: LLMConfig
+    prompt?: string
+  }
+}
+
+interface RichContentReadResult {
+  success: boolean
+  content?: string
+  error?: string
+  contentKind: 'document' | 'text' | 'image' | 'unknown'
+  sourceFormat: string
+  usedFallback?: boolean
+  embeddedImageCount?: number
+  embeddedImagesAnalyzed?: number
+  imageAnalysisSkippedReason?: string
+}
+
 interface LLMSendMessageParams {
   config: LLMConfig
   messages: LLMMessage[]
@@ -214,6 +253,8 @@ export interface ElectronAPI {
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string, encoding?: string) => Promise<string | null>
+  readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
+  readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
   writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
   ensureDir: (path: string) => Promise<boolean>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
@@ -513,6 +554,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
   readFile: (path: string, encoding?: string) => ipcRenderer.invoke('file:read', path, encoding),
   readBinaryFile: (path: string) => ipcRenderer.invoke('file:readBinary', path),
+  readRichContent: (path: string, options?: ReadRichContentOptions) => ipcRenderer.invoke('file:readRichContent', path, options),
+  readImageAnalysis: (request: ImageAnalysisRequest) => ipcRenderer.invoke('file:readImageAnalysis', request),
   writeFile: (path: string, content: string, encoding?: string) => ipcRenderer.invoke('file:write', path, content, encoding),
   ensureDir: (path: string) => ipcRenderer.invoke('file:ensureDir', path),
   saveFile: (content: string, path?: string, encoding?: string) => ipcRenderer.invoke('file:save', content, path, encoding),
