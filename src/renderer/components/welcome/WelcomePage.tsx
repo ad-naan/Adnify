@@ -275,14 +275,14 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
 
       .${rootClass} .adnify-welcome-primary-button {
         color: white;
-        background: linear-gradient(135deg, rgb(var(--accent)), #8b5cf6);
-        box-shadow: 0 8px 24px -8px rgba(var(--accent), 0.6);
+        background: linear-gradient(135deg, rgb(var(--accent)), rgb(var(--accent-subtle)));
+        box-shadow: 0 8px 24px -8px rgb(var(--accent) / 0.6);
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
       
       .${rootClass} .adnify-welcome-primary-button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 12px 32px -8px rgba(var(--accent), 0.8);
+        box-shadow: 0 12px 32px -8px rgb(var(--accent) / 0.8);
         filter: brightness(1.05);
       }
 
@@ -294,7 +294,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       }
 
       .${rootClass} .adnify-welcome-outline-button:hover {
-        border-color: rgba(var(--accent), 0.5);
+        border-color: rgb(var(--accent) / 0.5);
         background: rgba(var(--surface-hover), 0.8);
         transform: translateY(-2px);
       }
@@ -356,7 +356,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .group:hover .adnify-welcome-button-mascot {
         transform: scale(1.3) translateY(-8px) rotate(-8deg);
         opacity: 1;
-        filter: drop-shadow(0 8px 16px rgba(var(--accent) / 0.5));
+        filter: drop-shadow(0 8px 16px rgb(var(--accent) / 0.5));
       }
 
       .${rootClass} .group:hover .adnify-welcome-button-mascot img {
@@ -383,7 +383,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         padding-bottom: 80%;
         transform: translate(-50%, -50%);
         border-radius: 50%;
-        background: radial-gradient(circle, rgba(var(--accent), 0.12) 0%, transparent 70%);
+        background: radial-gradient(circle, rgb(var(--accent) / 0.12) 0%, transparent 70%);
         filter: blur(40px);
         z-index: 0;
       }
@@ -483,7 +483,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
       .${rootClass} .adnify-welcome-recent-item:hover {
         color: rgb(var(--text-primary));
         background: rgba(var(--surface-hover), 0.8);
-        border-color: rgba(var(--accent), 0.3);
+        border-color: rgb(var(--accent) / 0.3);
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.05);
       }
@@ -503,7 +503,7 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
 
       .${rootClass} .adnify-welcome-recent-item:hover .adnify-welcome-recent-icon {
         color: rgb(var(--accent));
-        background: rgba(var(--accent), 0.1);
+        background: rgb(var(--accent) / 0.1);
       }
       
       .${rootClass} .adnify-welcome-empty-recent {
