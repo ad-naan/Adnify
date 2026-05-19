@@ -7,7 +7,7 @@ import { useWorkspaceAnalytics } from '@renderer/hooks/useWorkspaceAnalytics'
 import { Modal } from '../ui/Modal'
 import { getRelativeTime } from '@shared/utils/dateUtils'
 
-const MODEL_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#9ca3af']
+const MODEL_COLORS = ['rgb(var(--accent))', 'rgb(var(--accent-subtle))', '#10b981', '#f59e0b', '#9ca3af']
 
 export default function UsageDashboard({ language }: { language: Language }) {
   const [timeRange, setTimeRange] = useState<'daily' | 'weekly' | 'monthly'>('daily')
@@ -65,13 +65,13 @@ export default function UsageDashboard({ language }: { language: Language }) {
     {
       label: language === 'zh' ? '活跃项目' : 'Active Projects',
       value: data.workspace.activeProjects.toString(),
-      color: '#3b82f6',
+      color: 'rgb(var(--accent))',
       percent: normalizePercent(data.workspace.activeProjects, 10),
     },
     {
       label: language === 'zh' ? '文件变更' : 'File Changes',
       value: data.overview.fileChanges.value,
-      color: '#8b5cf6',
+      color: 'rgb(var(--accent-subtle))',
       percent: normalizePercent(data.overview.fileChanges.rawValue, 1),
     },
     {
@@ -284,7 +284,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
             </div>
           </div>
           <div className="workspace-footer">
-            <Zap className="w-4 h-4 text-purple-500" />
+            <Zap className="w-4 h-4 text-[rgb(var(--accent))]" />
             <span>
               {language === 'zh'
                 ? `${data.workspace.updatesToday} 个项目今天有重要更新`
@@ -731,12 +731,12 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
         <defs>
           <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+            <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path d={pathD} fill="url(#area-gradient)" vectorEffect="non-scaling-stroke" />
-        <path d={strokeD} fill="none" stroke="#8b5cf6" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        <path d={strokeD} fill="none" stroke="rgb(var(--accent))" strokeWidth="2" vectorEffect="non-scaling-stroke" />
 
         {hoverIdx !== null && (
           <line
@@ -744,7 +744,7 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
             y1={getY(safePoints[hoverIdx])}
             x2={getX(hoverIdx)}
             y2="100"
-            stroke="#8b5cf6"
+            stroke="rgb(var(--accent))"
             strokeWidth="1"
             strokeDasharray="4,4"
             opacity="0.5"
@@ -762,7 +762,7 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
           return (
             <div key={index}>
               <div
-                className={`absolute w-[9px] h-[9px] rounded-full bg-white border-[2px] border-[#8b5cf6] transform -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-200 pointer-events-none ${isHovered ? 'scale-[1.6] ring-4 ring-purple-500/20' : 'scale-100'}`}
+                className={`absolute w-[9px] h-[9px] rounded-full bg-white border-[2px] border-[rgb(var(--accent))] transform -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-200 pointer-events-none ${isHovered ? 'scale-[1.6] ring-4 ring-[rgb(var(--accent)/0.2)]' : 'scale-100'}`}
                 style={{ left: `${x}%`, top: `${y}%` }}
               />
               <div
@@ -794,7 +794,7 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
         >
           <span className="text-[10px] text-text-muted/80 mb-1">{labels[hoverIdx]}</span>
           <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#8b5cf6]"></span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--accent))]"></span>
             <span className="text-[12px] font-bold text-text-primary whitespace-nowrap">
               {language === 'zh' ? '文件变更' : 'File Changes'} {safePoints[hoverIdx]}
             </span>
@@ -864,8 +864,9 @@ function DashboardStyles() {
         border: none;
       }
       .time-tabs button.active {
-        background: #3b82f6;
+        background: rgb(var(--accent));
         color: white;
+        box-shadow: 0 6px 16px rgb(var(--accent) / 0.28);
       }
 
       .stat-cards-row {
@@ -949,7 +950,7 @@ function DashboardStyles() {
       }
       .view-report {
         font-size: 12px;
-        color: #3b82f6;
+        color: rgb(var(--accent));
         font-weight: 500;
         display: flex;
         align-items: center;
@@ -981,9 +982,9 @@ function DashboardStyles() {
         transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
       }
       .sidebar-carousel-tabs button.active {
-        background: #3b82f6;
+        background: rgb(var(--accent));
         color: white;
-        box-shadow: 0 6px 16px rgba(59,130,246,0.28);
+        box-shadow: 0 6px 16px rgb(var(--accent) / 0.28);
       }
       .sidebar-carousel-viewport {
         flex: 1;
@@ -1029,7 +1030,7 @@ function DashboardStyles() {
         justify-content: center;
         border-radius: 50%;
         border: 8px solid rgba(167, 139, 250, 0.2);
-        border-top-color: #a78bfa;
+        border-top-color: rgb(var(--accent));
       }
       .ring-chart span { font-size: 20px; font-weight: 700; color: rgb(var(--text-primary)); }
       .ring-chart small { font-size: 10px; color: rgb(var(--text-muted)); }
@@ -1225,8 +1226,8 @@ function DashboardStyles() {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: rgba(139, 92, 246, 0.12);
-        color: #7c3aed;
+        background: rgb(var(--accent) / 0.12);
+        color: rgb(var(--accent));
       }
       .ai-mini-stat span {
         display: block;
@@ -1329,13 +1330,13 @@ function DashboardStyles() {
         font-size: 12px;
         line-height: 1.45;
         font-weight: 600;
-        color: #2563eb;
+        color: rgb(var(--accent));
         background: transparent;
         border: 0;
         transition: color 0.15s ease;
       }
       .ai-detail-button:hover {
-        color: #1d4ed8;
+        color: rgb(var(--accent-hover));
       }
       .ai-modal-grid {
         display: flex;
