@@ -696,6 +696,10 @@ export function GitView() {
                 return
             }
 
+            await gitService.reconcileAiAttribution(targetRepoRoot).catch(error => {
+                logger.ui.warn('AI attribution reconcile failed during Git refresh:', { root: targetRepoRoot, error })
+            })
+
             const [s, c, b, st, op] = await Promise.all([
                 gitService.getStatus(targetRepoRoot),
                 gitService.getRecentCommits(30, targetRepoRoot),

@@ -46,6 +46,7 @@ export const ADNIFY_FILES = {
   INDEX_DIR: 'index',
   SESSIONS_DIR: 'sessions',
   STATS_DIR: 'stats',
+  AI_STATS_DIR: 'ai-stats',
   SETTINGS: 'settings.json',
   WORKSPACE_STATE: 'workspace-state.json',
   RULES: 'rules.md',
@@ -168,6 +169,7 @@ class AdnifyDirService {
         `${adnifyPath}/${ADNIFY_FILES.INDEX_DIR}`,
         `${adnifyPath}/${ADNIFY_FILES.SESSIONS_DIR}`,
         `${adnifyPath}/${ADNIFY_FILES.STATS_DIR}`,
+        `${adnifyPath}/${ADNIFY_FILES.AI_STATS_DIR}`,
       ]
 
       await Promise.all(requiredDirs.map(async dirPath => {

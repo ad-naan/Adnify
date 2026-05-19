@@ -97,5 +97,6 @@ export const SECURITY_DEFAULTS = {
     'push', 'pull', 'fetch', 'remote',
     'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
     'clone', 'init', 'stash', 'tag', 'config', 'symbolic-ref',
+    'merge-base', 'notes',
   ],
 } as const
