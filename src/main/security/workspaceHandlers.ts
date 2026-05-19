@@ -1,5 +1,5 @@
 import { logger } from '@shared/utils/Logger'
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { promises as fsPromises } from 'fs'
 import * as path from 'path'
 import { getWorkspaceConfigFilePath } from '../services/configPath'
@@ -26,6 +26,21 @@ function normalizeWorkspacePath(targetPath: string): string {
   const normalized = path.normalize(trimmed)
   if (/^[a-zA-Z]:\\$/.test(normalized)) return normalized
   return normalized.replace(/[\\/]+$/, '')
+}
+
+function normalizeWorkspacePathForCompare(targetPath: string): string {
+  return normalizeWorkspacePath(targetPath).toLowerCase()
+}
+
+function isInternalPackagedWorkspaceRoot(root: string): boolean {
+  if (!app.isPackaged) return false
+
+  try {
+    const exeDir = path.dirname(app.getPath('exe'))
+    return normalizeWorkspacePathForCompare(root) === normalizeWorkspacePathForCompare(exeDir)
+  } catch {
+    return false
+  }
 }
 
 function getWorkspaceDescriptorPath(workspaceRoot: string): string {
@@ -113,6 +128,8 @@ async function writeWorkspaceDescriptor(targetPath: string, roots: string[]): Pr
 
 async function isWorkspaceSessionRestorable(session: StoredWorkspaceSession): Promise<boolean> {
   if (!session.roots.length) return false
+  if (isInternalPackagedWorkspaceRoot(session.roots[0])) return false
+
   try {
     await Promise.all(session.roots.map(root => fsPromises.access(root)))
   } catch {

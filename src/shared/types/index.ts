@@ -15,6 +15,9 @@ export * from './preview'
 // Result 类型
 export * from './result'
 
+// 文档 / 图片读取类型
+export * from './documentReader'
+
 // ==========================================
 // 基础类型
 // ==========================================
