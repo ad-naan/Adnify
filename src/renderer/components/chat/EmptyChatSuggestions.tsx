@@ -32,7 +32,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
             >
                 {/* 1. Header Card */}
                 <div className="flex items-center gap-4 bg-gradient-to-r from-[rgb(var(--accent)/0.08)] to-[rgb(var(--accent)/0.02)] p-5 rounded-2xl mb-8 border border-[rgb(var(--accent)/0.1)]">
-                    <img src={publicAsset('brand/ip/3.png')} alt="AI" className="w-16 h-16 object-contain drop-shadow-md" draggable={false} />
+                    <img src={publicAsset('brand/ip/ai-avatar.gif')} alt="AI" className="w-16 h-16 object-contain drop-shadow-md" draggable={false} />
                     <div>
                         <h2 className="text-[15px] font-semibold text-[rgb(var(--text-primary))] mb-1.5 tracking-tight">
                             {language === 'zh' ? '今天准备推进哪一块？' : 'What are we pushing forward today?'}
@@ -57,7 +57,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                     <div className="grid grid-cols-2 gap-3">
                         {/* Branch */}
                         <div className="bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl p-3 flex items-start gap-3 hover:bg-[rgb(var(--surface))] transition-colors">
-                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500 shrink-0">
+                            <div className="p-2 bg-[rgb(var(--accent)/0.1)] rounded-lg text-[rgb(var(--accent))] shrink-0">
                                 <GitBranch className="w-4 h-4" />
                             </div>
                             <div className="min-w-0">
@@ -67,7 +67,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                         </div>
                         {/* Directory */}
                         <div className="bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl p-3 flex items-start gap-3 hover:bg-[rgb(var(--surface))] transition-colors">
-                            <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-500 shrink-0">
+                            <div className="p-2 bg-[rgb(var(--accent-subtle)/0.1)] rounded-lg text-[rgb(var(--accent-subtle))] shrink-0">
                                 <FolderOpen className="w-4 h-4" />
                             </div>
                             <div className="min-w-0">
@@ -84,18 +84,18 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                             </div>
                             <div className="min-w-0">
                                 <div className="text-[11px] text-[rgb(var(--text-muted))] mb-0.5">{language === 'zh' ? '变更文件' : 'Changes'}</div>
-                                <div className="text-[13px] font-medium text-blue-500">{changedFilesCount} {language === 'zh' ? '个' : 'files'}</div>
+                                <div className="text-[13px] font-medium text-emerald-500">{changedFilesCount} {language === 'zh' ? '个' : 'files'}</div>
                             </div>
                         </div>
                         {/* Commits */}
                         <div className="bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl p-3 flex items-start gap-3 hover:bg-[rgb(var(--surface))] transition-colors">
-                            <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 shrink-0">
+                            <div className="p-2 bg-[rgb(var(--accent)/0.1)] rounded-lg text-[rgb(var(--accent))] shrink-0">
                                 <Clock className="w-4 h-4" />
                             </div>
                             <div className="min-w-0">
                                 <div className="text-[11px] text-[rgb(var(--text-muted))] mb-0.5">{language === 'zh' ? '最新提交' : 'Latest Commit'}</div>
                                 <div className="text-[13px] font-medium text-[rgb(var(--text-primary))] truncate">
-                                    <span className="text-purple-500 mr-1.5">{latestCommitHash}</span>
+                                    <span className="text-[rgb(var(--accent))] mr-1.5">{latestCommitHash}</span>
                                     {latestCommitMsg}
                                 </div>
                             </div>
@@ -113,12 +113,12 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                         </div>
                     </div>
                     <div className="grid grid-cols-4 gap-2">
-                        <button onClick={() => onSelectSuggestion('/explain')} className="flex flex-col items-center justify-center py-3 px-1 bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl hover:bg-blue-500/10 hover:border-blue-500/30 transition-colors group">
-                            <div className="text-blue-500 text-[12px] font-bold mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> /explain</div>
+                        <button onClick={() => onSelectSuggestion('/explain')} className="flex flex-col items-center justify-center py-3 px-1 bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl hover:bg-[rgb(var(--accent)/0.1)] hover:border-[rgb(var(--accent)/0.3)] transition-colors group">
+                            <div className="text-[rgb(var(--accent))] text-[12px] font-bold mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3" /> /explain</div>
                             <div className="text-[10px] text-[rgb(var(--text-muted))] group-hover:text-[rgb(var(--text-secondary))]">{language === 'zh' ? '解释这段代码' : 'Explain code'}</div>
                         </button>
-                        <button onClick={() => onSelectSuggestion('/generate')} className="flex flex-col items-center justify-center py-3 px-1 bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl hover:bg-purple-500/10 hover:border-purple-500/30 transition-colors group">
-                            <div className="text-purple-500 text-[12px] font-bold mb-1 flex items-center gap-1"><Code className="w-3 h-3" /> /generate</div>
+                        <button onClick={() => onSelectSuggestion('/generate')} className="flex flex-col items-center justify-center py-3 px-1 bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl hover:bg-[rgb(var(--accent)/0.1)] hover:border-[rgb(var(--accent)/0.3)] transition-colors group">
+                            <div className="text-[rgb(var(--accent))] text-[12px] font-bold mb-1 flex items-center gap-1"><Code className="w-3 h-3" /> /generate</div>
                             <div className="text-[10px] text-[rgb(var(--text-muted))] group-hover:text-[rgb(var(--text-secondary))]">{language === 'zh' ? '生成代码' : 'Generate'}</div>
                         </button>
                         <button onClick={() => onSelectSuggestion('/refactor')} className="flex flex-col items-center justify-center py-3 px-1 bg-[rgb(var(--surface)/0.6)] border border-[rgb(var(--border)/0.5)] rounded-xl hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-colors group">
@@ -139,7 +139,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                         <div className="flex flex-col gap-2 pb-6 px-1">
                             {[
                             {
-                                icon: <Layers className="w-4 h-4 text-blue-500" />, iconBg: 'bg-blue-500/10',
+                                icon: <Layers className="w-4 h-4 text-[rgb(var(--accent))]" />, iconBg: 'bg-[rgb(var(--accent)/0.1)]',
                                 title: language === 'zh' ? '梳理当前项目' : 'Analyze current project',
                                 desc: language === 'zh' ? '分析结构与依赖，快速掌握项目全貌' : 'Analyze structure and dependencies to master the project',
                                 prompt: language === 'zh' ? '请帮我梳理当前项目，分析目录结构与核心依赖，让我快速掌握项目全貌。' : 'Please analyze the current project structure and dependencies.'
