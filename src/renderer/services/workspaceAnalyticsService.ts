@@ -3,6 +3,7 @@ import { agentSessionRepository } from './agentSessionRepository'
 import { ADNIFY_DIR_NAME, adnifyDir } from './adnifyDirService'
 import { gitService } from './gitService'
 import { ignoreService } from './ignoreService'
+import { EMPTY_AI_DASHBOARD_DATA, type AiDashboardData, aiAttributionService } from './aiAttributionService'
 import { logger } from '@utils/Logger'
 import { useStore, type WorkspaceConfig } from '@store'
 import { isAssistantMessage, isUserMessage, type AssistantMessage, type ChatMessage } from '@renderer/agent/types'
@@ -53,6 +54,7 @@ export interface WorkspaceDashboardData {
   chartPoints: number[]
   workspace: DashboardWorkspaceStats
   models: DashboardModelRow[]
+  ai: AiDashboardData
 }
 
 const EMPTY_WORKSPACE_DASHBOARD_DATA: WorkspaceDashboardData = {
@@ -70,6 +72,7 @@ const EMPTY_WORKSPACE_DASHBOARD_DATA: WorkspaceDashboardData = {
     updatesToday: 0,
   },
   models: [],
+  ai: EMPTY_AI_DASHBOARD_DATA,
 }
 
 const STATS_FILE = 'stats/events.jsonl'
@@ -104,6 +107,7 @@ class WorkspaceAnalyticsService {
     if (!nextRoot || !nextKey) {
       await this.flush()
       this.teardownCollectors()
+      aiAttributionService.reset()
       this.workspaceRoot = null
       this.currentWorkspaceKey = null
       this.eventsCache = null
@@ -120,6 +124,7 @@ class WorkspaceAnalyticsService {
     this.workspaceRoot = nextRoot
     this.currentWorkspaceKey = nextKey
     this.eventsCache = null
+    await aiAttributionService.bindWorkspace(workspace)
     await ignoreService.loadIgnoreFile(nextRoot).catch(error => {
       logger.system.warn('[WorkspaceAnalytics] Failed to load ignore rules:', error)
     })
@@ -146,6 +151,7 @@ class WorkspaceAnalyticsService {
     this.currentWorkspaceKey = null
     this.eventQueue = []
     this.eventsCache = null
+    aiAttributionService.reset()
   }
 
   async flush(): Promise<void> {
@@ -246,10 +252,11 @@ class WorkspaceAnalyticsService {
     const period = this.getPeriod(range, selectedDate)
     const previousPeriod = this.getPreviousPeriod(period)
 
-    const [events, sessionSnapshot, repositories] = await Promise.all([
+    const [events, sessionSnapshot, repositories, ai] = await Promise.all([
       this.readEvents(),
       agentSessionRepository.getSnapshot(),
       this.discoverWorkspaceRepositories(workspaceRoots),
+      aiAttributionService.getDashboardData(workspaceRoots),
     ])
 
     const threads = sessionSnapshot?.threads || {}
@@ -290,6 +297,7 @@ class WorkspaceAnalyticsService {
         updatesToday: this.countProjectsUpdatedToday(repositories, fileChangeEvents),
       },
       models: this.buildModelRows(period, allMessages),
+      ai,
     }
   }
 

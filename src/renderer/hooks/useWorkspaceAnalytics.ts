@@ -4,6 +4,7 @@ import {
   workspaceAnalyticsService,
   type WorkspaceDashboardData,
 } from '@renderer/services/workspaceAnalyticsService'
+import { EMPTY_AI_DASHBOARD_DATA } from '@renderer/services/aiAttributionService'
 
 const EMPTY_DASHBOARD_DATA: WorkspaceDashboardData = {
   overview: {
@@ -20,6 +21,7 @@ const EMPTY_DASHBOARD_DATA: WorkspaceDashboardData = {
     updatesToday: 0,
   },
   models: [],
+  ai: EMPTY_AI_DASHBOARD_DATA,
 }
 
 export function useWorkspaceAnalytics(
