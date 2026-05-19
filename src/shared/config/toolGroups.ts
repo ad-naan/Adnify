@@ -49,6 +49,7 @@ export interface TemplateToolConfig {
 const CORE_TOOLS: string[] = [
   // 文件读取
   'read_file',
+  'read_image',
   'list_directory',
   'get_dir_tree',
   'search_files',
@@ -101,6 +102,7 @@ const PLAN_EXECUTION_CONTROL_TOOLS: string[] = [
 
 const PLAN_EXPLORATION_TOOLS: string[] = [
   'read_file',
+  'read_image',
   'read_multiple_files',
   'list_directory',
   'get_dir_tree',

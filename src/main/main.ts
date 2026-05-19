@@ -387,7 +387,6 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
   win.webContents.once('dom-ready', () => {
     // 等待一帧（16ms）让 CSS 动画启动
     setTimeout(() => win.show(), 16)
-    void flushLaunchFilesToWindow(win, 'startup')
   })
 
   // Mac 上确保 traffic lights 始终显示
