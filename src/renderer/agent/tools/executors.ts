@@ -27,6 +27,8 @@ import { buildFileChangeDescriptor } from '../utils/fileChangeUtils'
 import { isLongRunningCommand } from './commandRuntime'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 import { toolRegistry } from './registry'
+import { terminalManager } from '@/renderer/services/TerminalManager'
+import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import pLimit from 'p-limit'
 import { skillService } from '../services/skillService'
 import type { TranslationKey } from '@/renderer/i18n'
@@ -969,6 +971,22 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 toolCallId: ctx.toolCallId
             })
 
+            await aiAttributionService.recordWriteEvent({
+                workspacePath: ctx.workspacePath || null,
+                filePath: path,
+                toolName: 'edit_file',
+                toolCallId: ctx.toolCallId,
+                threadId: ctx.threadId,
+                assistantId: ctx.currentAssistantId ?? ctx.assistantId,
+                requestId: ctx.requestId,
+                oldContent: originalContent,
+                newContent,
+                preHash: guardedWrite.meta.preHash,
+                postHash: guardedWrite.meta.postHash,
+                linesAdded,
+                linesRemoved,
+            })
+
             await notifyLspAfterWrite(path, newContent)
 
             if (allWarnings.length > 0) {
@@ -1074,6 +1092,22 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 linesRemoved: lineChanges.removed,
                 ...getWritePreviewFlags(originalContent, newContent),
                 toolCallId: ctx.toolCallId
+            })
+
+            await aiAttributionService.recordWriteEvent({
+                workspacePath: ctx.workspacePath || null,
+                filePath: path,
+                toolName: 'edit_file',
+                toolCallId: ctx.toolCallId,
+                threadId: ctx.threadId,
+                assistantId: ctx.currentAssistantId ?? ctx.assistantId,
+                requestId: ctx.requestId,
+                oldContent: originalContent,
+                newContent,
+                preHash: guardedWrite.meta.preHash,
+                postHash: guardedWrite.meta.postHash,
+                linesAdded: lineChanges.added,
+                linesRemoved: lineChanges.removed,
             })
 
             await notifyLspAfterWrite(path, newContent)
@@ -1230,6 +1264,21 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             ...getWritePreviewFlags(originalContent, content),
             toolCallId: ctx.toolCallId
         })
+        await aiAttributionService.recordWriteEvent({
+            workspacePath: ctx.workspacePath || null,
+            filePath: path,
+            toolName: 'write_file',
+            toolCallId: ctx.toolCallId,
+            threadId: ctx.threadId,
+            assistantId: ctx.currentAssistantId ?? ctx.assistantId,
+            requestId: ctx.requestId,
+            oldContent: originalContent,
+            newContent: content,
+            preHash: guardedWrite.meta.preHash,
+            postHash: guardedWrite.meta.postHash,
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+        })
         return {
             success: true,
             result: 'File written successfully',
@@ -1280,6 +1329,22 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 linesRemoved: 0,
                 ...getWritePreviewFlags(null, content),
                 toolCallId: ctx.toolCallId
+            })
+
+            await aiAttributionService.recordWriteEvent({
+                workspacePath: ctx.workspacePath || null,
+                filePath: path,
+                toolName: 'create_file_or_folder',
+                toolCallId: ctx.toolCallId,
+                threadId: ctx.threadId,
+                assistantId: ctx.currentAssistantId ?? ctx.assistantId,
+                requestId: ctx.requestId,
+                oldContent: originalContent || '',
+                newContent: content,
+                preHash: guardedWrite.meta.preHash,
+                postHash: guardedWrite.meta.postHash,
+                linesAdded: countLinesFast(content),
+                linesRemoved: 0,
             })
         }
 

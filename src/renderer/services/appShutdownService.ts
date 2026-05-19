@@ -6,6 +6,7 @@ import { adnifyDir } from './adnifyDirService'
 import { api } from './electronAPI'
 import { shellRegistryService } from '@renderer/shell/services/shellRegistryService'
 import { workspaceAnalyticsService } from './workspaceAnalyticsService'
+import { aiAttributionService } from './aiAttributionService'
 
 async function persistWorkspaceBinding(): Promise<void> {
   const workspace = useStore.getState().workspace
@@ -30,6 +31,7 @@ export async function persistAllRuntimeState(): Promise<void> {
 
   // 3. Persist workspace analytics and workspace state (independent of agent sessions)
   await workspaceAnalyticsService.flush()
+  await aiAttributionService.flush()
   await flushWorkspaceStatePersistence()
 
   // 4. Flush the adnifyDir service FIRST — it owns the actual disk writes for agent sessions.
