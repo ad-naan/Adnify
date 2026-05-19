@@ -221,24 +221,24 @@ export default function LspStatusIndicator() {
     >
       <div className="p-3 space-y-3">
         {/* 当前语言服务器状态 */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-text-primary">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-text-primary">
               {SERVER_NAMES[currentServerType] || currentServerType}
             </div>
-            <div className="text-xs text-text-muted mt-0.5">
+            <div className="mt-0.5 truncate text-xs text-text-muted">
               {language === 'zh' ? '当前文件语言' : 'Current file language'}: {currentLanguageId}
             </div>
           </div>
-          <div className={`flex items-center gap-1.5 ${isInstalled ? 'text-green-400' : 'text-yellow-400'}`}>
+          <div className={`flex shrink-0 items-center gap-1.5 ${isInstalled ? 'text-green-400' : 'text-yellow-400'}`}>
             {isInstalled ? (
               <>
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
                 <span className="text-xs">{language === 'zh' ? '已安装' : 'Installed'}</span>
               </>
             ) : (
               <>
-                <ZapOff className="w-4 h-4" />
+                <ZapOff className="h-4 w-4 shrink-0" />
                 <span className="text-xs">{language === 'zh' ? '未安装' : 'Not installed'}</span>
               </>
             )}
@@ -286,7 +286,7 @@ export default function LspStatusIndicator() {
               </div>
             )}
             {currentStatus?.path && (
-              <div className="text-xs text-text-muted bg-background-tertiary px-2 py-1.5 rounded font-mono truncate">
+              <div className="truncate rounded bg-background-tertiary px-2 py-1.5 font-mono text-xs text-text-muted" title={currentStatus.path}>
                 {currentStatus.path}
               </div>
             )}
@@ -305,8 +305,8 @@ export default function LspStatusIndicator() {
                     {language === 'zh' ? '自动检测' : 'Auto-detect'}
                   </button>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex-1 text-xs text-text-primary bg-background-tertiary px-2 py-1.5 rounded font-mono truncate" title={runtimePath || ''}>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="min-w-0 flex-1 truncate rounded bg-background-tertiary px-2 py-1.5 font-mono text-xs text-text-primary" title={runtimePath || ''}>
                     {runtimePath || (language === 'zh' ? '未检测到' : 'Not detected')}
                   </div>
                   <button
