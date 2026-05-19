@@ -15,6 +15,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
   const [selectedModel, setSelectedModel] = useState<string>('__all__')
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [isAiModalOpen, setIsAiModalOpen] = useState(false)
+  const [sidebarPage, setSidebarPage] = useState<'stats' | 'ai'>('stats')
   const { data } = useWorkspaceAnalytics(timeRange, selectedDate)
   const modelMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -246,6 +247,29 @@ export default function UsageDashboard({ language }: { language: Language }) {
       </div>
 
       <div className="dashboard-sidebar">
+        <div className="sidebar-carousel-tabs">
+          <button
+            className={sidebarPage === 'stats' ? 'active' : ''}
+            onClick={() => {
+              setSidebarPage('stats')
+              setIsModelMenuOpen(false)
+            }}
+          >
+            {language === 'zh' ? '基础统计' : 'Stats'}
+          </button>
+          <button
+            className={sidebarPage === 'ai' ? 'active' : ''}
+            onClick={() => {
+              setSidebarPage('ai')
+              setIsModelMenuOpen(false)
+            }}
+          >
+            {language === 'zh' ? 'AI 代码' : 'AI Code'}
+          </button>
+        </div>
+
+        <div className="sidebar-carousel-viewport">
+            <div className={`sidebar-carousel-page sidebar-page-stats ${sidebarPage === 'stats' ? 'active' : 'previous'}`}>
         <div className="dashboard-panel panel-workspace">
           <h3 className="panel-title mb-5">{language === 'zh' ? '工作区统计' : 'Workspace Stats'}</h3>
           <div className="workspace-content">
@@ -298,56 +322,65 @@ export default function UsageDashboard({ language }: { language: Language }) {
               )}
             </div>
           </div>
-          <table className="models-table">
-            <thead>
-              <tr>
-                <th>{language === 'zh' ? '模型' : 'Model'}</th>
-                <th>{language === 'zh' ? '总请求' : 'Requests'}</th>
-                <th>Tokens</th>
-                <th>{language === 'zh' ? '平均响应' : 'Avg Resp'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedModels.length > 0 ? (
-                displayedModels.map((model, index) => (
+          <div className="models-table-scroll custom-scrollbar">
+            <table className="models-table">
+              <thead>
+                <tr>
+                  <th>{language === 'zh' ? '模型' : 'Model'}</th>
+                  <th>{language === 'zh' ? '总请求' : 'Requests'}</th>
+                  <th>Tokens</th>
+                  <th>{language === 'zh' ? '平均响应' : 'Avg Resp'}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayedModels.length > 0 ? (
+                  displayedModels.map((model, index) => (
+                    <MTableRow
+                      key={model.name}
+                      name={model.name}
+                      color={MODEL_COLORS[index] || '#9ca3af'}
+                      percent={Math.max(12, Math.round((model.requests / Math.max(1, maxDisplayedModelRequests)) * 100))}
+                      req={model.requests.toLocaleString()}
+                      tok={formatTokens(model.tokens)}
+                      resp={model.avgResponseMs > 0 ? `${(model.avgResponseMs / 1000).toFixed(2)}s` : '--'}
+                    />
+                  ))
+                ) : (
                   <MTableRow
-                    key={model.name}
-                    name={model.name}
-                    color={MODEL_COLORS[index] || '#9ca3af'}
-                    percent={Math.max(12, Math.round((model.requests / Math.max(1, maxDisplayedModelRequests)) * 100))}
-                    req={model.requests.toLocaleString()}
-                    tok={formatTokens(model.tokens)}
-                    resp={model.avgResponseMs > 0 ? `${(model.avgResponseMs / 1000).toFixed(2)}s` : '--'}
+                    name={language === 'zh' ? '暂无统计' : 'No Data'}
+                    color="#9ca3af"
+                    percent={15}
+                    req="0"
+                    tok="0"
+                    resp="--"
                   />
-                ))
-              ) : (
-                <MTableRow
-                  name={language === 'zh' ? '暂无统计' : 'No Data'}
-                  color="#9ca3af"
-                  percent={15}
-                  req="0"
-                  tok="0"
-                  resp="--"
-                />
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
+      </div>
 
-        <div className="dashboard-panel panel-ai">
-          <div className="panel-header" style={{ marginBottom: '14px' }}>
-            <div>
+            <div className={`sidebar-carousel-page sidebar-page-ai ${sidebarPage === 'ai' ? 'active' : 'next'}`}>
+      <div className="dashboard-panel panel-ai">
+        <div className="panel-header ai-panel-header" style={{ marginBottom: '14px' }}>
+            <div className="ai-panel-heading">
               <h3 className="panel-title">{language === 'zh' ? 'AI 代码统计' : 'AI Code Attribution'}</h3>
               <p className="ai-panel-subtitle">
-                {data.ai.branch
-                  ? `${language === 'zh' ? '当前分支' : 'Current branch'}: ${data.ai.branch}`
-                  : (language === 'zh' ? '等待 Git 工作区' : 'Waiting for a Git workspace')}
+                <span>
+                  {data.ai.branch
+                    ? `${language === 'zh' ? '当前分支' : 'Current branch'}: ${data.ai.branch}`
+                    : (language === 'zh' ? '等待 Git 工作区' : 'Waiting for a Git workspace')}
+                </span>
+                <span className={`ai-hook-status ${data.ai.hook.installed ? 'ok' : 'warn'}`}>
+                  {data.ai.hook.installed ? <ShieldCheck className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
+                  {data.ai.hook.installed ? (language === 'zh' ? 'Hook 已启用' : 'Hook Ready') : (language === 'zh' ? 'Hook 未安装' : 'Hook Missing')}
+                </span>
               </p>
             </div>
-            <div className={`ai-hook-pill ${data.ai.hook.installed ? 'ok' : 'warn'}`}>
-              {data.ai.hook.installed ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
-              <span>{data.ai.hook.installed ? (language === 'zh' ? 'Hook 已启用' : 'Hook Ready') : (language === 'zh' ? 'Hook 未安装' : 'Hook Missing')}</span>
-            </div>
+            <button className="ai-detail-button" onClick={() => setIsAiModalOpen(true)}>
+              {language === 'zh' ? '查看明细' : 'Details'} <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <div className="ai-overview-grid">
@@ -374,8 +407,11 @@ export default function UsageDashboard({ language }: { language: Language }) {
           </div>
 
           <div className="ai-panel-copy">
-            <strong>{aiStatusCopy.title}</strong>
-            <p>{aiStatusCopy.body}</p>
+            <img src={publicAsset('brand/ip/3.png')} alt="" />
+            <div className="ai-panel-copy-text">
+              <strong>{aiStatusCopy.title}</strong>
+              <p>{aiStatusCopy.body}</p>
+            </div>
           </div>
 
           <div className="ai-last-commit-card">
@@ -399,9 +435,8 @@ export default function UsageDashboard({ language }: { language: Language }) {
             )}
           </div>
 
-          <button className="ai-detail-button" onClick={() => setIsAiModalOpen(true)}>
-            {language === 'zh' ? '查看 AI 明细' : 'Open AI Details'} <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+        </div>
+            </div>
         </div>
       </div>
 
@@ -409,7 +444,8 @@ export default function UsageDashboard({ language }: { language: Language }) {
         isOpen={isAiModalOpen}
         onClose={() => setIsAiModalOpen(false)}
         title={language === 'zh' ? 'AI 代码统计明细' : 'AI Code Attribution Details'}
-        size="4xl"
+        size="3xl"
+        className="max-h-[82vh]"
       >
         <div className="ai-modal-grid">
           <div className="ai-modal-section">
@@ -773,11 +809,18 @@ function DashboardStyles() {
   return (
     <style>{`
       .adnify-dashboard-grid {
+        --overview-row-height: 428px;
         display: grid;
         grid-template-columns: 1fr 320px;
         gap: 16px;
         margin-top: 16px;
         width: 100%;
+      }
+
+      .panel-main,
+      .dashboard-sidebar {
+        height: var(--overview-row-height);
+        min-height: var(--overview-row-height);
       }
 
       .dashboard-panel {
@@ -915,7 +958,59 @@ function DashboardStyles() {
       .dashboard-sidebar {
         display: flex;
         flex-direction: column;
+        gap: 10px;
+        align-self: stretch;
+      }
+      .sidebar-carousel-tabs {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 4px;
+        padding: 4px;
+        border-radius: 10px;
+        background: rgb(var(--surface-hover) / 0.5);
+        flex: 0 0 auto;
+        position: relative;
+        z-index: 2;
+      }
+      .sidebar-carousel-tabs button {
+        height: 28px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgb(var(--text-muted));
+        transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      }
+      .sidebar-carousel-tabs button.active {
+        background: #3b82f6;
+        color: white;
+        box-shadow: 0 6px 16px rgba(59,130,246,0.28);
+      }
+      .sidebar-carousel-viewport {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .sidebar-carousel-page {
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        display: none;
+        flex-direction: column;
         gap: 12px;
+      }
+      .sidebar-carousel-page.active {
+        display: flex;
+        animation: sidebarPageIn 0.18s ease-out;
+      }
+      @keyframes sidebarPageIn {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       .workspace-content {
@@ -1027,6 +1122,17 @@ function DashboardStyles() {
         color: rgb(var(--text-primary));
       }
 
+      .panel-models {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .models-table-scroll {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 2px;
+      }
       .models-table {
         width: 100%;
         border-collapse: collapse;
@@ -1051,29 +1157,48 @@ function DashboardStyles() {
       .m-bar-fill { height: 100%; border-radius: 2px; }
 
       .panel-ai {
+        height: 100%;
+        overflow-y: auto;
+        gap: 10px;
+        padding: 14px 16px;
+      }
+      .panel-ai .panel-header {
         gap: 12px;
+        margin-bottom: 8px !important;
+      }
+      .ai-panel-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+      }
+      .ai-panel-heading {
+        min-width: 0;
       }
       .ai-panel-subtitle {
-        margin-top: 3px;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
         font-size: 11px;
         color: rgb(var(--text-muted));
       }
-      .ai-hook-pill {
+      .ai-hook-status {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 6px 9px;
+        gap: 4px;
+        padding: 2px 7px;
         border-radius: 999px;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 600;
         border: 1px solid transparent;
       }
-      .ai-hook-pill.ok {
+      .ai-hook-status.ok {
         color: #0f766e;
         background: rgba(16, 185, 129, 0.12);
         border-color: rgba(16, 185, 129, 0.2);
       }
-      .ai-hook-pill.warn {
+      .ai-hook-status.warn {
         color: #b45309;
         background: rgba(245, 158, 11, 0.12);
         border-color: rgba(245, 158, 11, 0.2);
@@ -1085,17 +1210,18 @@ function DashboardStyles() {
       }
       .ai-mini-stat {
         display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: rgb(var(--surface-hover) / 0.55);
-        border: 1px solid rgb(var(--border) / 0.35);
+        align-items: center;
+        gap: 9px;
+        min-height: 62px;
+        padding: 9px 10px;
+        border-radius: 10px;
+        background: rgb(var(--surface-hover) / 0.32);
+        border: 1px solid rgb(var(--border) / 0.25);
       }
       .ai-mini-stat-icon {
-        width: 28px;
-        height: 28px;
-        border-radius: 10px;
+        width: 26px;
+        height: 26px;
+        border-radius: 9px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1109,32 +1235,46 @@ function DashboardStyles() {
       }
       .ai-mini-stat strong {
         display: block;
-        margin-top: 2px;
-        font-size: 15px;
+        margin-top: 1px;
+        font-size: 14px;
         color: rgb(var(--text-primary));
       }
       .ai-panel-copy {
-        padding: 12px;
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        align-items: center;
+        column-gap: 12px;
+        padding: 9px 10px 8px;
         border-radius: 12px;
-        background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
-        border: 1px solid rgb(var(--border) / 0.35);
+        background: rgb(var(--surface-hover) / 0.34);
+        min-width: 0;
+      }
+      .ai-panel-copy img {
+        width: 42px;
+        height: 42px;
+        object-fit: contain;
+        filter: drop-shadow(0 6px 12px rgba(0,0,0,0.18));
+      }
+      .ai-panel-copy-text {
+        min-width: 0;
       }
       .ai-panel-copy strong {
         display: block;
-        margin-bottom: 4px;
         font-size: 13px;
+        line-height: 1.35;
         color: rgb(var(--text-primary));
+        margin-bottom: 3px;
       }
       .ai-panel-copy p {
         font-size: 12px;
         color: rgb(var(--text-secondary));
-        line-height: 1.55;
+        line-height: 1.45;
       }
       .ai-last-commit-card {
-        padding: 12px;
-        border-radius: 12px;
-        border: 1px solid rgb(var(--border) / 0.35);
-        background: rgb(var(--surface-hover) / 0.3);
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgb(var(--border) / 0.25);
+        background: rgb(var(--surface-hover) / 0.22);
       }
       .ai-last-commit-title,
       .ai-last-commit-empty {
@@ -1163,6 +1303,10 @@ function DashboardStyles() {
         font-size: 12px;
         color: rgb(var(--text-secondary));
         line-height: 1.45;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       .ai-last-commit-meta {
         display: flex;
@@ -1176,37 +1320,51 @@ function DashboardStyles() {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        align-self: flex-start;
+        flex: 0 0 auto;
+        margin-top: 1px;
+        white-space: nowrap;
+        height: 24px;
+        padding: 0;
+        border-radius: 0;
         font-size: 12px;
+        line-height: 1.45;
         font-weight: 600;
         color: #2563eb;
+        background: transparent;
+        border: 0;
+        transition: color 0.15s ease;
+      }
+      .ai-detail-button:hover {
+        color: #1d4ed8;
       }
       .ai-modal-grid {
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 12px;
       }
       .ai-modal-section {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 14px;
-        border-radius: 16px;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 14px;
         border: 1px solid rgb(var(--border) / 0.4);
         background: rgb(var(--surface) / 0.4);
+        min-height: 0;
       }
       .ai-modal-summary,
       .ai-modal-metrics {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 10px;
+        gap: 8px;
       }
       .ai-modal-summary-card,
       .ai-metric-card {
-        padding: 12px;
+        padding: 10px 12px;
         border-radius: 12px;
         background: rgb(var(--surface-hover) / 0.45);
         border: 1px solid rgb(var(--border) / 0.3);
+        min-width: 0;
       }
       .ai-modal-summary-card span,
       .ai-metric-card span {
@@ -1240,11 +1398,15 @@ function DashboardStyles() {
       .ai-list-table {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
+        overflow-y: auto;
+        padding-right: 2px;
       }
+      .ai-commit-list { max-height: 210px; }
+      .ai-list-table { max-height: 220px; }
       .ai-commit-row,
       .ai-list-row {
-        padding: 12px;
+        padding: 10px 12px;
         border-radius: 12px;
         background: rgb(var(--surface-hover) / 0.35);
         border: 1px solid rgb(var(--border) / 0.25);
@@ -1255,6 +1417,13 @@ function DashboardStyles() {
         align-items: flex-start;
         justify-content: space-between;
         gap: 10px;
+      }
+      .ai-list-row > div:first-child {
+        min-width: 0;
+      }
+      .ai-list-row > div:last-child {
+        flex: 0 0 72px;
+        text-align: right;
       }
       .ai-commit-row-sha {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -1283,6 +1452,7 @@ function DashboardStyles() {
         color: rgb(var(--text-primary));
         font-size: 13px;
         line-height: 1.4;
+        overflow-wrap: anywhere;
       }
       .ai-list-row span {
         display: block;
@@ -1293,7 +1463,8 @@ function DashboardStyles() {
       .ai-modal-split {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 18px;
+        gap: 12px;
+        min-height: 0;
       }
       .ai-pending-list {
         display: flex;
@@ -1317,14 +1488,22 @@ function DashboardStyles() {
       @container (max-width: 900px) {
         .adnify-dashboard-grid {
           grid-template-columns: 1fr;
+          --overview-row-height: auto;
+        }
+        .panel-main,
+        .dashboard-sidebar {
+          height: auto;
+          min-height: 0;
+        }
+        .dashboard-sidebar {
+          min-height: 428px;
         }
         .stat-cards-row {
           grid-template-columns: repeat(2, 1fr);
         }
         .ai-modal-summary,
         .ai-modal-metrics,
-        .ai-modal-split,
-        .ai-overview-grid {
+        .ai-modal-split {
           grid-template-columns: 1fr;
         }
       }

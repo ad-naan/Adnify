@@ -4,7 +4,8 @@
  */
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useRef, useEffect } from 'react'
+import { CSSProperties, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Plus, FolderOpen, History, Folder, Monitor, LayoutGrid } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
@@ -23,44 +24,68 @@ export default function WorkspaceDropdown() {
     const language = useStore(s => s.language)
     const [isOpen, setIsOpen] = useState(false)
     const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([])
+    const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
+    const panelRef = useRef<HTMLDivElement>(null)
 
-    // 获取当前工作区显示名称
     const currentWorkspaceName = workspace?.roots[0]
         ? getFileName(workspace.roots[0]) || 'Workspace'
         : 'No Workspace'
 
-    // 加载最近工作区列表
     const loadRecent = async () => {
         try {
             const recent = await api.workspace.getRecent()
-            setRecentWorkspaces(
-                recent.map((path: string) => ({
-                    path,
-                    name: getFileName(path),
-                }))
-            )
+            setRecentWorkspaces(recent.map((path: string) => ({ path, name: getFileName(path) })))
         } catch (e) {
             logger.ui.error('[WorkspaceDropdown] Failed to load recent workspaces:', e)
         }
     }
 
     useEffect(() => {
-        if (isOpen) {
-            loadRecent()
-        }
+        if (isOpen) void loadRecent()
     }, [isOpen])
 
-    // 点击外部关闭
+    const updatePosition = useCallback(() => {
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (!rect) return
+
+        const width = 288
+        const margin = 12
+        const top = rect.bottom + 8
+        const maxHeight = Math.max(220, window.innerHeight - top - margin)
+        const left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin)
+
+        setPanelStyle({ position: 'fixed', top, left, width, maxHeight })
+    }, [])
+
+    useLayoutEffect(() => {
+        if (!isOpen) return
+        updatePosition()
+        window.addEventListener('resize', updatePosition)
+        window.addEventListener('scroll', updatePosition, true)
+        return () => {
+            window.removeEventListener('resize', updatePosition)
+            window.removeEventListener('scroll', updatePosition, true)
+        }
+    }, [isOpen, updatePosition])
+
     useEffect(() => {
+        if (!isOpen) return
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-                setIsOpen(false)
-            }
+            const target = event.target as Node
+            if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) return
+            setIsOpen(false)
+        }
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsOpen(false)
         }
         document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
+        document.addEventListener('keydown', handleKeyDown)
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+            document.removeEventListener('keydown', handleKeyDown)
+        }
+    }, [isOpen])
 
     const handleAction = async (action: () => Promise<void> | void) => {
         setIsOpen(false)
@@ -72,9 +97,68 @@ export default function WorkspaceDropdown() {
         await openRecentWorkspace(path, language)
     }
 
+    const recentItems = recentWorkspaces.filter((w) => w.path !== workspace?.roots[0]).slice(0, 8)
+
+    const dropdown = createPortal(
+        <AnimatePresence>
+            {isOpen && panelStyle && (
+                <motion.div
+                    ref={panelRef}
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 4, scale: 0.98 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="floating-surface z-[1000] overflow-hidden rounded-xl border border-border bg-background-secondary/95 p-1.5 shadow-2xl shadow-black/15 backdrop-blur-xl"
+                    style={panelStyle}
+                >
+                    <div className="space-y-0.5">
+                        <MenuItem icon={Monitor} label={t('workspace.newWindow', language)} description={t('workspace.newWindowDesc', language)} onClick={() => handleAction(() => api.window.new())} />
+                        <MenuItem icon={FolderOpen} label={t('workspace.openFolder', language)} onClick={() => handleAction(() => openFolderFromDialog(language))} />
+                        <MenuItem icon={LayoutGrid} label={t('workspace.openWorkspace', language)} onClick={() => handleAction(() => openWorkspaceFromDialog(language))} />
+                        <MenuItem
+                            icon={Plus}
+                            label={t('workspace.addFolder', language)}
+                            onClick={() => handleAction(async () => {
+                                const path = await api.workspace.addFolder()
+                                if (path) await workspaceManager.addFolder(path)
+                            })}
+                        />
+                    </div>
+
+                    {recentItems.length > 0 && (
+                        <>
+                            <div className="h-px bg-border my-1.5 mx-2" />
+                            <div className="floating-surface-section-label px-3 py-1.5 flex items-center gap-2 rounded-lg mx-1">
+                                <History className="w-3 h-3 text-accent" />
+                                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Recent</span>
+                            </div>
+                            <div className="space-y-0.5 overflow-y-auto custom-scrollbar" style={{ maxHeight: Math.max(96, Number(panelStyle.maxHeight) - 206) }}>
+                                {recentItems.map((recent) => (
+                                    <button
+                                        key={recent.path}
+                                        onClick={() => handleOpenRecent(recent.path)}
+                                        className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all group relative overflow-hidden"
+                                        title={recent.path}
+                                    >
+                                        <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <Folder className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors shrink-0" />
+                                        <span className="truncate relative z-10">{recent.name}</span>
+                                        <span className="ml-auto text-[10px] text-text-muted/40 group-hover:text-text-muted truncate max-w-[80px] shrink-0">
+                                            {getBasename(getDirname(recent.path))}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </motion.div>
+            )}
+        </AnimatePresence>,
+        document.body,
+    )
+
     return (
         <div ref={containerRef} className="relative">
-            {/* 触发按钮 - 胶囊风格 */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
@@ -100,76 +184,7 @@ export default function WorkspaceDropdown() {
                 />
             </button>
 
-            {/* 下拉菜单 - 玻璃拟态 */}
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 4, scale: 0.98 }}
-                        transition={{ duration: 0.15, ease: "easeOut" }}
-                        className="floating-surface absolute top-full left-0 mt-2 w-72 p-1.5 border border-border rounded-xl z-50 overflow-hidden"
-                    >
-                        <div className="space-y-0.5">
-                            <MenuItem
-                                icon={Monitor}
-                                label={t('workspace.newWindow', language)}
-                                description={t('workspace.newWindowDesc', language)}
-                                onClick={() => handleAction(() => api.window.new())}
-                            />
-                            <MenuItem
-                                icon={FolderOpen}
-                                label={t('workspace.openFolder', language)}
-                                onClick={() => handleAction(() => openFolderFromDialog(language))}
-                            />
-                            <MenuItem
-                                icon={LayoutGrid}
-                                label={t('workspace.openWorkspace', language)}
-                                onClick={() => handleAction(() => openWorkspaceFromDialog(language))}
-                            />
-                            <MenuItem
-                                icon={Plus}
-                                label={t('workspace.addFolder', language)}
-                                onClick={() => handleAction(async () => {
-                                    const path = await api.workspace.addFolder()
-                                    if (path) await workspaceManager.addFolder(path)
-                                })}
-                            />
-                        </div>
-
-                        {/* 最近打开 */}
-                        {recentWorkspaces.length > 0 && (
-                            <>
-                                <div className="h-px bg-border my-1.5 mx-2" />
-                                <div className="floating-surface-section-label px-3 py-1.5 flex items-center gap-2 rounded-lg mx-1">
-                                    <History className="w-3 h-3 text-accent" />
-                                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Recent</span>
-                                </div>
-                                <div className="space-y-0.5 max-h-[200px] overflow-y-auto custom-scrollbar">
-                                    {recentWorkspaces
-                                        .filter((w) => w.path !== workspace?.roots[0])
-                                        .slice(0, 5)
-                                        .map((recent) => (
-                                            <button
-                                                key={recent.path}
-                                                onClick={() => handleOpenRecent(recent.path)}
-                                                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all group relative overflow-hidden"
-                                                title={recent.path}
-                                            >
-                                                <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                <Folder className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors" />
-                                                <span className="truncate relative z-10">{recent.name}</span>
-                                                <span className="ml-auto text-[10px] text-text-muted/40 group-hover:text-text-muted truncate max-w-[80px]">
-                                                    {getBasename(getDirname(recent.path))}
-                                                </span>
-                                            </button>
-                                        ))}
-                                </div>
-                            </>
-                        )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {dropdown}
         </div>
     )
 }
@@ -181,10 +196,10 @@ function MenuItem({ icon: Icon, label, description, onClick }: { icon: any, labe
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm text-text-secondary hover:bg-surface-hover hover:text-text-primary transition-all group relative overflow-hidden"
         >
             <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <Icon className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors relative z-10" />
-            <div className="flex flex-col relative z-10">
-                <span className="font-medium">{label}</span>
-                {description && <span className="text-[10px] text-text-muted/60">{description}</span>}
+            <Icon className="w-4 h-4 text-text-muted group-hover:text-accent transition-colors relative z-10 shrink-0" />
+            <div className="flex flex-col relative z-10 min-w-0">
+                <span className="font-medium truncate">{label}</span>
+                {description && <span className="text-[10px] text-text-muted/60 truncate">{description}</span>}
             </div>
         </button>
     )

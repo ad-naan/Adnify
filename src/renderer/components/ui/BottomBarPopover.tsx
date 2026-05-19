@@ -1,32 +1,32 @@
-/**
- * 底部栏弹出框公共组件
- * 在底部状态栏显示图标，点击后向上展开一个面板
- */
-
-import { useState, useRef, useCallback, ReactNode, memo, useMemo } from 'react'
+import {
+    CSSProperties,
+    memo,
+    ReactNode,
+    useCallback,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useClickOutside, useEscapeKey } from '@/renderer/hooks/usePerformance'
 
 export interface BottomBarPopoverProps {
-    /** 触发按钮的图标 */
     icon: ReactNode
-    /** 按钮提示文字 */
     tooltip?: string
-    /** 面板标题 */
     title?: string
-    /** 面板内容 */
     children: ReactNode
-    /** 面板宽度 */
     width?: number
-    /** 面板高度；不传时自适应内容 */
     height?: number
-    /** 角标内容（如数量） */
     badge?: string | number
-    /** 语言 */
     language?: 'en' | 'zh'
-    /** 内容区域是否滚动 */
     scrollable?: boolean
 }
+
+const VIEWPORT_MARGIN = 12
+const TRIGGER_GAP = 10
+const HEADER_HEIGHT = 44
 
 export default memo(function BottomBarPopover({
     icon,
@@ -39,97 +39,140 @@ export default memo(function BottomBarPopover({
     scrollable = true,
 }: BottomBarPopoverProps) {
     const [isOpen, setIsOpen] = useState(false)
+    const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null)
     const popoverRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
 
     const handleClose = useCallback(() => setIsOpen(false), [])
     const handleToggle = useCallback(() => setIsOpen(prev => !prev), [])
 
-    // 使用 useClickOutside 处理点击外部关闭，需要排除按钮和弹框本身
     useClickOutside(handleClose, isOpen, [popoverRef, buttonRef])
-    // 使用 useEscapeKey 处理 ESC 键关闭
     useEscapeKey(handleClose, isOpen)
 
-    const contentHeight = useMemo(() => {
-        if (height === undefined) return undefined
-        return title ? Math.max(0, height - 44) : height
-    }, [title, height])
+    const updatePosition = useCallback(() => {
+        if (!buttonRef.current) return
+
+        const triggerRect = buttonRef.current.getBoundingClientRect()
+        const maxWidth = Math.max(240, window.innerWidth - VIEWPORT_MARGIN * 2)
+        const resolvedWidth = Math.min(width, maxWidth)
+        const maxHeight = Math.max(160, triggerRect.top - VIEWPORT_MARGIN - TRIGGER_GAP)
+        const resolvedHeight = height === undefined ? undefined : Math.min(height, maxHeight)
+
+        let left = triggerRect.right - resolvedWidth
+        left = Math.min(Math.max(left, VIEWPORT_MARGIN), window.innerWidth - resolvedWidth - VIEWPORT_MARGIN)
+
+        setPanelStyle({
+            position: 'fixed',
+            left,
+            bottom: Math.max(window.innerHeight - triggerRect.top + TRIGGER_GAP, VIEWPORT_MARGIN),
+            width: resolvedWidth,
+            maxHeight,
+            ...(resolvedHeight !== undefined ? { height: resolvedHeight } : {}),
+            transformOrigin: `${Math.min(Math.max(triggerRect.right - left, 24), resolvedWidth - 24)}px bottom`,
+        })
+    }, [height, width])
+
+    useLayoutEffect(() => {
+        if (!isOpen) return
+
+        updatePosition()
+        window.addEventListener('resize', updatePosition)
+        window.addEventListener('scroll', updatePosition, true)
+
+        return () => {
+            window.removeEventListener('resize', updatePosition)
+            window.removeEventListener('scroll', updatePosition, true)
+        }
+    }, [isOpen, updatePosition])
+
+    const contentStyle = useMemo<CSSProperties>(() => {
+        if (!panelStyle) return {}
+
+        const maxHeight = typeof panelStyle.maxHeight === 'number'
+            ? panelStyle.maxHeight - (title ? HEADER_HEIGHT : 0)
+            : undefined
+
+        if (height !== undefined) {
+            return { height: Math.max(0, Math.min(height - (title ? HEADER_HEIGHT : 0), maxHeight ?? height)) }
+        }
+
+        return maxHeight === undefined ? {} : { maxHeight }
+    }, [height, panelStyle, title])
+
+    const panel = isOpen && panelStyle ? createPortal(
+        <div
+            ref={popoverRef}
+            className="floating-surface fixed z-[1000] overflow-hidden rounded-lg border border-border/50 shadow-2xl shadow-black/20 animate-slide-up"
+            style={panelStyle}
+        >
+            {title && (
+                <div className="floating-surface-header flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4">
+                    <span className="min-w-0 truncate text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                        {title}
+                    </span>
+                    <button
+                        onClick={handleClose}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            )}
+
+            <div
+                className={scrollable ? 'min-h-0 overflow-auto custom-scrollbar' : 'min-h-0 overflow-hidden'}
+                style={contentStyle}
+            >
+                {children}
+            </div>
+        </div>,
+        document.body,
+    ) : null
 
     return (
-        <div className="relative">
-            {/* 触发按钮 */}
+        <div className="relative flex items-center">
             <button
                 ref={buttonRef}
                 onClick={handleToggle}
                 className={`
-          flex items-center justify-center p-1.5 rounded
-          transition-colors relative
-          ${isOpen
+                    relative flex items-center justify-center rounded p-1.5 transition-colors
+                    ${isOpen
                         ? 'bg-accent/20 text-accent'
-                        : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
+                        : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'
                     }
-        `}
+                `}
                 title={tooltip}
             >
                 {icon}
                 {badge !== undefined && (
-                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 text-[9px] font-medium bg-accent text-white rounded-full">
+                    <span className="absolute -right-1 -top-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-medium text-white">
                         {badge}
                     </span>
                 )}
             </button>
 
-            {/* 弹出面板 */}
-            {isOpen && (
-                <div
-                    ref={popoverRef}
-                    className="floating-surface absolute bottom-full right-0 mb-3 border border-border/50 rounded-2xl overflow-hidden animate-slide-up z-50 origin-bottom-right"
-                    style={{ width, ...(height !== undefined ? { height } : {}) }}
-                >
-                    {/* 面板头部 */}
-                    {title && (
-                        <div className="floating-surface-header flex items-center justify-between px-4 py-3 border-b border-border/50 z-10 shrink-0">
-                            <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider">{title}</span>
-                            <button
-                                onClick={handleClose}
-                                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                    )}
-
-                    {/* 面板内容 */}
-                    <div
-                        className={scrollable ? 'overflow-auto custom-scrollbar' : 'overflow-hidden'}
-                        style={contentHeight !== undefined ? { height: contentHeight } : undefined}
-                    >
-                        {children}
-                    </div>
-                </div>
-            )}
+            {panel}
         </div>
     )
 })
 
-// 添加动画样式
-const style = document.createElement('style')
-style.textContent = `
-  @keyframes slide-up {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  .animate-slide-up {
-    animation: slide-up 0.15s ease-out;
-  }
-`
 if (typeof document !== 'undefined' && !document.getElementById('bottom-bar-popover-style')) {
+    const style = document.createElement('style')
     style.id = 'bottom-bar-popover-style'
+    style.textContent = `
+      @keyframes slide-up {
+        from {
+          opacity: 0;
+          transform: translateY(8px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      .animate-slide-up {
+        animation: slide-up 0.15s ease-out;
+      }
+    `
     document.head.appendChild(style)
 }
