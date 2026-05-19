@@ -45,6 +45,11 @@ describe('Tool Definitions', () => {
       expect(TOOL_CONFIGS.read_file.name).toBe('read_file')
     })
 
+    it('should have read_image in configs', () => {
+      expect(TOOL_CONFIGS.read_image).toBeDefined()
+      expect(TOOL_CONFIGS.read_image.name).toBe('read_image')
+    })
+
     it('should have edit_file in configs', () => {
       expect(TOOL_CONFIGS.edit_file).toBeDefined()
       expect(TOOL_CONFIGS.edit_file.name).toBe('edit_file')
@@ -87,6 +92,15 @@ describe('Tool Definitions', () => {
       })
 
       expect(result.success).toBe(false)
+    })
+
+    it('should validate read_image path and optional prompt', () => {
+      const readImageSchema = TOOL_SCHEMAS.read_image
+      expect(readImageSchema).toBeDefined()
+
+      expect(readImageSchema.safeParse({ path: 'images/ui.png' }).success).toBe(true)
+      expect(readImageSchema.safeParse({ path: 'images/ui.png', prompt: 'Extract chart labels' }).success).toBe(true)
+      expect(readImageSchema.safeParse({}).success).toBe(false)
     })
 
     it('should ignore placeholder line fields and empty edits in edit_file string mode', () => {

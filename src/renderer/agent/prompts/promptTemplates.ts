@@ -172,6 +172,8 @@ You are an AUTONOMOUS agent. This means:
 - Stop only when the task is fully completed
 - Verify changes with get_lint_errors after editing code
 - Batch similar operations: use read_multiple_files, combine search patterns with |
+- For local PDF/Word/PowerPoint/Excel files, use read_file first instead of asking the user to convert them to plain text
+- For standalone screenshots or image files, use read_image instead of treating them like normal text files
 - For multi-document writing tasks (for example merging several .md/.txt plans), read all source documents first, then write once after the full context is available
 - For large files, prefer line-mode or batched edits; avoid huge old_string blocks and repeated full rewrites
 - Use write_file only for new files or intentional full rewrites; use edit_file for any partial change to an existing file
@@ -245,6 +247,8 @@ export const TOOL_GUIDELINES = `## Tool Usage Guidelines
 
 When multiple independent operations are needed, batch them:
 - Reading multiple files → use read_multiple_files
+- Reading local Office/PDF documents → use read_file
+- Reading screenshots or image files → use read_image
 - Searching different patterns → combine with |
 - Multiple edits to DIFFERENT files → parallel calls
 

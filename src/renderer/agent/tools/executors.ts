@@ -35,6 +35,7 @@ import type { TranslationKey } from '@/renderer/i18n'
 import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { guardWriteFile } from './fileWriteStrategy'
+import { analyzeImageSource, getReadImageUnavailableMessage, getReadRichContentOptions } from '../services/imageReadService'
 
 // ===== 辅助函数 =====
 
@@ -63,6 +64,20 @@ function getReplaceErrorMessage(errorCode?: ReplaceErrorCode): string {
         default:
             return translate('agent.tool.edit.replaceFailed')
     }
+}
+
+const RICH_DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'])
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'])
+
+function getFileExtension(targetPath: string): string {
+    const normalized = targetPath.replace(/\\/g, '/')
+    const fileName = normalized.split('/').pop() || ''
+    const match = fileName.match(/\.([^.]+)$/)
+    return match?.[1]?.toLowerCase() || ''
+}
+
+async function getTerminalManager() {
+    return (await import('@/renderer/services/TerminalManager')).terminalManager
 }
 
 /**
@@ -523,7 +538,6 @@ async function guardedWriteFile(opts: {
 
 const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
     async read_file(args, ctx) {
-        // 支持单个文件或多个文件
         const resolution = resolveReadFileRequest(args)
         if (!resolution.ok) {
             return {
@@ -535,34 +549,124 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         const paths = resolution.mode === 'multi' ? resolution.args.paths : [resolution.args.path]
 
-        // 如果是多个文件，使用并行读取
+        const readOnePath = async (
+            inputPath: string,
+            allowLineRange: boolean,
+        ): Promise<{ success: boolean; result: string; meta?: Record<string, unknown>; error?: string }> => {
+            const validPath = resolvePath(inputPath, ctx.workspacePath, true)
+            const extension = getFileExtension(validPath)
+
+            if (IMAGE_EXTENSIONS.has(extension)) {
+                return {
+                    success: false,
+                    result: '',
+                    error: 'This file is an image. Use read_image instead.',
+                    meta: {
+                        filePath: validPath,
+                        contentKind: 'image',
+                        sourceFormat: extension || 'image',
+                    },
+                }
+            }
+
+            if (RICH_DOCUMENT_EXTENSIONS.has(extension)) {
+                const richResult = await api.file.readRichContent(validPath, getReadRichContentOptions())
+                if (!richResult.success || !richResult.content) {
+                    return {
+                        success: false,
+                        result: '',
+                        error: richResult.error || `Failed to read rich document: ${validPath}`,
+                        meta: {
+                            filePath: validPath,
+                            contentKind: richResult.contentKind,
+                            sourceFormat: richResult.sourceFormat,
+                        },
+                    }
+                }
+
+                fileCacheService.markFileAsRead(validPath, richResult.content)
+                return {
+                    success: true,
+                    result: richResult.content,
+                    meta: {
+                        filePath: validPath,
+                        contentKind: richResult.contentKind,
+                        sourceFormat: richResult.sourceFormat,
+                        usedFallback: richResult.usedFallback,
+                        embeddedImageCount: richResult.embeddedImageCount || 0,
+                        embeddedImagesAnalyzed: richResult.embeddedImagesAnalyzed || 0,
+                        imageAnalysisSkippedReason: richResult.imageAnalysisSkippedReason,
+                    },
+                }
+            }
+
+            const content = await api.file.read(validPath)
+            if (content === null) {
+                return {
+                    success: false,
+                    result: '',
+                    error: `File not found: ${validPath}`,
+                }
+            }
+
+            fileCacheService.markFileAsRead(validPath, content)
+
+            let graphContent = ''
+            try {
+                const nodes = await api.index.parseCallGraph(validPath, content)
+                if (nodes && nodes.length > 0) {
+                    graphContent = '\n\n--- AST Call Graph Summary ---\n'
+                    const defs = nodes.filter(n => n.type === 'definition')
+                    const calls = nodes.filter(n => n.type === 'call')
+                    for (const def of defs) {
+                        const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
+                        const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
+                        graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
+                    }
+                }
+            } catch {
+                // ignore AST helper failures for non-code or unsupported files
+            }
+
+            const lines = content.split('\n')
+            const startLine = allowLineRange && resolution.mode === 'single' && typeof resolution.args.start_line === 'number'
+                ? Math.max(1, resolution.args.start_line)
+                : 1
+            const endLine = allowLineRange && resolution.mode === 'single' && typeof resolution.args.end_line === 'number'
+                ? Math.min(lines.length, resolution.args.end_line)
+                : lines.length
+            let numberedContent = lines.slice(startLine - 1, endLine).map((line, i) => `${startLine + i}: ${line}`).join('\n')
+
+            const config = getAgentConfig()
+            if (numberedContent.length > config.maxSingleFileChars) {
+                const totalLines = lines.length
+                const readLines = endLine - startLine + 1
+                numberedContent = numberedContent.slice(0, config.maxSingleFileChars) +
+                    `\n\n⚠️ FILE TRUNCATED (showing ${readLines} of ${totalLines} lines, ~${config.maxSingleFileChars} chars)\n` +
+                    'To read more: use search_files to find target location, then read_file with start_line/end_line'
+            }
+
+            return {
+                success: true,
+                result: numberedContent + graphContent,
+                meta: {
+                    filePath: validPath,
+                    contentKind: 'code',
+                    sourceFormat: extension || 'text',
+                },
+            }
+        }
+
         if (paths.length > 1) {
             const limit = pLimit(5)
-
             const results = await Promise.all(
                 paths.map(p => limit(async () => {
                     try {
-                        const validPath = resolvePath(p, ctx.workspacePath, true)
-                        const content = await api.file.read(validPath)
-                        if (content !== null) {
-                            fileCacheService.markFileAsRead(validPath, content)
-                            let graphContent = ''
-                            try {
-                                const nodes = await api.index.parseCallGraph(validPath, content)
-                                if (nodes && nodes.length > 0) {
-                                    graphContent = '\n--- AST Call Graph Summary ---\n'
-                                    const defs = nodes.filter(n => n.type === 'definition')
-                                    const calls = nodes.filter(n => n.type === 'call')
-                                    for (const def of defs) {
-                                        const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
-                                        const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
-                                        graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
-                                    }
-                                }
-                            } catch (e) { }
-                            return `\n--- File: ${p} ---\n${content}\n${graphContent}\n`
+                        const fileResult = await readOnePath(p, false)
+                        if (!fileResult.success) {
+                            return `\n--- File: ${p} ---\n[Error: ${fileResult.error || 'File not found'}]\n`
                         }
-                        return `\n--- File: ${p} ---\n[File not found]\n`
+                        return `\n--- File: ${p} ---\n${fileResult.result}\n`
                     } catch (e: unknown) {
                         return `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`
                     }
@@ -572,48 +676,52 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             return { success: true, result: results.join('') }
         }
 
-        // 单个文件读取（原有逻辑）
-        const path = resolvePath(paths[0], ctx.workspacePath, true)
-        const content = await api.file.read(path)
-        if (content === null) return { success: false, result: '', error: `File not found: ${path}` }
-
-        fileCacheService.markFileAsRead(path, content)
-
-        let graphContent = ''
-        try {
-            const nodes = await api.index.parseCallGraph(path, content)
-            if (nodes && nodes.length > 0) {
-                graphContent = '\n\n--- AST Call Graph Summary ---\n'
-                const defs = nodes.filter(n => n.type === 'definition')
-                const calls = nodes.filter(n => n.type === 'call')
-                for (const def of defs) {
-                    const relatedCalls = calls.filter(c => c.callerName === def.name).map(c => c.name)
-                    const callStr = relatedCalls.length > 0 ? ` (calls: ${Array.from(new Set(relatedCalls)).join(', ')})` : ''
-                    graphContent += `- func ${def.name}() [Line ${def.startLine}-${def.endLine}]${callStr}\n`
-                }
+        const singleResult = await readOnePath(paths[0], true)
+        if (!singleResult.success) {
+            return {
+                success: false,
+                result: '',
+                error: singleResult.error || 'Failed to read file',
             }
-        } catch (e) { }
-
-        const lines = content.split('\n')
-        const startLine = resolution.mode === 'single' && typeof resolution.args.start_line === 'number'
-            ? Math.max(1, resolution.args.start_line)
-            : 1
-        const endLine = resolution.mode === 'single' && typeof resolution.args.end_line === 'number'
-            ? Math.min(lines.length, resolution.args.end_line)
-            : lines.length
-        let numberedContent = lines.slice(startLine - 1, endLine).map((line, i) => `${startLine + i}: ${line}`).join('\n')
-
-        // 使用 maxSingleFileChars 限制单个文件的输出大小
-        const config = getAgentConfig()
-        if (numberedContent.length > config.maxSingleFileChars) {
-            const totalLines = lines.length
-            const readLines = endLine - startLine + 1
-            numberedContent = numberedContent.slice(0, config.maxSingleFileChars) +
-                `\n\n⚠️ FILE TRUNCATED (showing ${readLines} of ${totalLines} lines, ~${config.maxSingleFileChars} chars)\n` +
-                `To read more: use search_files to find target location, then read_file with start_line/end_line`
         }
 
-        return { success: true, result: numberedContent + graphContent, meta: { filePath: path } }
+        return {
+            success: true,
+            result: singleResult.result,
+            meta: singleResult.meta,
+        }
+    },
+
+    async read_image(args) {
+        const pathArg = typeof args.path === 'string' ? args.path : ''
+        if (!pathArg.trim()) {
+            return {
+                success: false,
+                result: '',
+                error: 'path is required',
+            }
+        }
+
+        const prompt = typeof args.prompt === 'string' ? args.prompt : undefined
+        const result = await analyzeImageSource({
+            path: pathArg,
+            prompt,
+        })
+
+        if (!result.success) {
+            return {
+                success: false,
+                result: '',
+                error: result.error || getReadImageUnavailableMessage(),
+            }
+        }
+
+        return {
+            success: true,
+            result: result.content,
+            richContent: result.richContent,
+            meta: result.meta,
+        }
     },
 
     async list_directory(args, ctx) {
@@ -1291,6 +1399,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             useStore.getState().setTerminalVisible(true)
 
             // 获取或复用 Agent 专属终端（初始 cwd 用工作区根目录，避免反复改变终端目录）
+            const terminalManager = await getTerminalManager()
             const termId = await terminalManager.getOrCreateAgentTerminal(
                 ctx.workspacePath || '/'
             )
@@ -1401,6 +1510,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const linesCount = (args.lines as number) || 100
 
         try {
+            const terminalManager = await getTerminalManager()
             const lines = terminalManager.getOutputBuffer(terminalId)
 
             if (!lines || lines.length === 0) {
@@ -1434,6 +1544,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const isCtrl = args.is_ctrl as boolean
 
         try {
+            const terminalManager = await getTerminalManager()
 
             let dataToSend = input
             if (isCtrl) {
@@ -1461,6 +1572,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const terminalId = args.terminal_id as string
 
         try {
+            const terminalManager = await getTerminalManager()
             terminalManager.closeTerminal(terminalId)
             return {
                 success: true,

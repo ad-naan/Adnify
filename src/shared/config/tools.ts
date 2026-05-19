@@ -67,12 +67,13 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     read_file: {
         name: 'read_file',
         displayName: 'Read File',
-        description: 'Read one or more files. Code/structured files include line numbers; markdown/plain-text documents are returned in readable text form unless start_line/end_line is requested. MUST read before editing.',
+        description: 'Read one or more local files. Supports code/text files plus PDF, Word, PowerPoint, and Excel documents. Rich documents are returned as readable extracted text and will analyze embedded images when a multimodal model is configured. MUST read before editing.',
         detailedDescription: `Read file contents from the filesystem.
 - Single file: path="src/main.ts"
 - Multiple files: path=["src/a.ts", "src/b.ts"]
 - Code files default to line-numbered output for precise edits
-- Markdown/plain-text documents default to readable full-text output
+- PDF/Office files are parsed into readable extracted text
+- If a rich document contains embedded images and a multimodal model is configured, Adnify will append embedded-image analyses automatically
 - Large files will be truncated, use search_files to locate target first`,
         customSchema: z.object({
             path: z.union([
@@ -108,6 +109,31 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
             },
             start_line: { type: 'number', description: 'Starting line (1-indexed, single file only)' },
             end_line: { type: 'number', description: 'Ending line inclusive (single file only)' },
+        },
+    },
+
+    read_image: {
+        name: 'read_image',
+        displayName: 'Read Image',
+        description: 'Analyze a local image with the configured multimodal model. Use for screenshots, scanned pages, charts, tables, or standalone image files.',
+        detailedDescription: `Analyze a local image file with the configured multimodal route.
+- Best for screenshots, diagrams, scans, charts, and tables
+- Returns structured visual analysis text
+- Rich document reads may reuse the same capability for embedded images
+- Requires a configured multimodal model route`,
+        category: 'read',
+        approvalType: 'none',
+        parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['filesystem:read', 'llm:generate'],
+        resultSemantics: 'file-read',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Image path relative to workspace root', required: true },
+            prompt: { type: 'string', description: 'Optional custom analysis instructions for the image' },
         },
     },
 
