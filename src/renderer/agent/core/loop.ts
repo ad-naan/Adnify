@@ -20,6 +20,7 @@ import { resolveMessageRouting, resolveRuntimeModelRoutingConfig } from '@shared
 import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
 import { injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromLatestUserMessage } from '../services/multimodalRoutingService'
+import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
@@ -179,16 +180,25 @@ async function callLLM(
     performanceMonitor.end(`llm:${config.model}`, !result.error)
 
     if (assistantId && result.usage) {
+      const responseMeta = {
+        provider: config.provider,
+        modelId: result.metadata?.modelId || config.model,
+        requestId,
+        durationMs: Date.now() - startedAt,
+        timestamp: Date.now(),
+      }
       useAgentStore.getState().updateMessage(assistantId, {
         usage: result.usage,
-        responseMeta: {
-          provider: config.provider,
-          modelId: result.metadata?.modelId || config.model,
-          requestId,
-          durationMs: Date.now() - startedAt,
-          timestamp: Date.now(),
-        },
+        responseMeta,
       } as Partial<AssistantMessage>)
+
+      void aiAttributionService.attachAssistantResponseMeta({
+        threadId: useAgentStore.getState().currentThreadId,
+        assistantId,
+        provider: responseMeta.provider,
+        modelId: responseMeta.modelId,
+        requestId: responseMeta.requestId,
+      })
     } else if (assistantId && !result.usage) {
       logger.agent.warn('[Loop] No usage data in LLM result')
     }

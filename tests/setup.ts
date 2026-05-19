@@ -9,6 +9,32 @@ declare global {
   var mainWindow: any
 }
 
+const localStorageStore = new Map<string, string>()
+const localStorageMock = {
+  getItem: vi.fn((key: string) => localStorageStore.get(key) ?? null),
+  setItem: vi.fn((key: string, value: string) => {
+    localStorageStore.set(key, String(value))
+  }),
+  removeItem: vi.fn((key: string) => {
+    localStorageStore.delete(key)
+  }),
+  clear: vi.fn(() => {
+    localStorageStore.clear()
+  }),
+}
+
+Object.defineProperty(global, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+  configurable: true,
+})
+
+Object.defineProperty(globalThis, 'self', {
+  value: globalThis,
+  writable: true,
+  configurable: true,
+})
+
 // Mock window.electronAPI
 const mockElectronAPI = {
   file: {
@@ -111,6 +137,7 @@ const mockElectronAPI = {
     commit: vi.fn(),
     push: vi.fn(),
     pull: vi.fn(),
+    execSecure: vi.fn(),
   },
 }
 
@@ -153,6 +180,19 @@ global.window = {
     writeFile: vi.fn(),
     saveFile: vi.fn(),
     mkdir: vi.fn(),
+    ensureDir: vi.fn(),
+    gitExecSecure: vi.fn(),
+    readDir: vi.fn(),
+    onFileChanged: vi.fn(() => vi.fn()),
+    getUserDataPath: vi.fn(),
+    createTerminal: vi.fn(),
+    writeTerminal: vi.fn(),
+    resizeTerminal: vi.fn(),
+    killTerminal: vi.fn(),
+    getAvailableShells: vi.fn(async () => []),
+    onTerminalData: vi.fn(() => vi.fn()),
+    onTerminalExit: vi.fn(() => vi.fn()),
+    onTerminalError: vi.fn(() => vi.fn()),
   }
 
 // Mock performance API

@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Zap, ChevronRight, ChevronDown } from 'lucide-react'
+import { Zap, ChevronRight, ChevronDown, Bot, GitCommitHorizontal, Clock3, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { type Language } from '@renderer/i18n'
 import { publicAsset } from '@utils/publicAsset'
 import { DatePicker } from '../ui/DatePicker'
 import { useWorkspaceAnalytics } from '@renderer/hooks/useWorkspaceAnalytics'
+import { Modal } from '../ui/Modal'
+import { getRelativeTime } from '@shared/utils/dateUtils'
 
 const MODEL_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#9ca3af']
 
@@ -12,6 +14,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
   const [selectedDate, setSelectedDate] = useState(() => formatDateInput(new Date()))
   const [selectedModel, setSelectedModel] = useState<string>('__all__')
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false)
   const { data } = useWorkspaceAnalytics(timeRange, selectedDate)
   const modelMenuRef = useRef<HTMLDivElement | null>(null)
 
@@ -107,6 +110,53 @@ export default function UsageDashboard({ language }: { language: Language }) {
     return modelOptions.find(option => option.value === selectedModel)?.label
       || (language === 'zh' ? '全部模型' : 'All Models')
   }, [language, modelOptions, selectedModel])
+
+  const aiOverview = data.ai.overview
+  const aiHasData = data.ai.available && (
+    aiOverview.totalAddedLines > 0
+    || data.ai.recentCommits.length > 0
+    || data.ai.hook.pendingCount > 0
+  )
+
+  const aiStatusCopy = useMemo(() => {
+    if (!data.ai.available) {
+      return language === 'zh'
+        ? {
+          title: '当前工作区还没有 Git 归因数据',
+          body: '当你通过 Adnify 写入代码并提交后，这里会显示分支级 AI 统计。',
+        }
+        : {
+          title: 'No Git attribution data yet',
+          body: 'Once Adnify-generated code lands in commits, branch-level AI stats will appear here.',
+        }
+    }
+
+    if (!aiHasData) {
+      return language === 'zh'
+        ? {
+          title: data.ai.hook.installed ? 'Hook 已就绪，等待第一批提交' : '欢迎页 AI 统计已启用',
+          body: data.ai.hook.installed
+            ? '当前仓库已经安装提交追踪 hook，后续终端提交也会进入待归因队列。'
+            : '当前还没有可归因的提交数据，首次提交后会生成分支级 AI 统计。',
+        }
+        : {
+          title: data.ai.hook.installed ? 'Hooks ready for the first tracked commit' : 'AI attribution is enabled',
+          body: data.ai.hook.installed
+            ? 'This repo already has commit tracking hooks, so terminal commits can be reconciled later as well.'
+            : 'There is no attributable commit data yet. Your first tracked commit will populate the branch summary.',
+        }
+    }
+
+    return language === 'zh'
+      ? {
+        title: `${formatSharePercent(aiOverview.aiAssistedShare)} 的新增代码带有 AI 痕迹`,
+        body: `当前分支累计 ${aiOverview.pureAiLines} 行纯 AI、${aiOverview.aiModifiedLines} 行 AI 后人工改写。`,
+      }
+      : {
+        title: `${formatSharePercent(aiOverview.aiAssistedShare)} of added lines are AI-assisted`,
+        body: `This branch currently includes ${aiOverview.pureAiLines} pure AI lines and ${aiOverview.aiModifiedLines} AI-modified lines.`,
+      }
+  }, [aiHasData, aiOverview.aiAssistedShare, aiOverview.aiModifiedLines, aiOverview.pureAiLines, data.ai.available, data.ai.hook.installed, language])
 
   useEffect(() => {
     if (selectedModel !== '__all__' && !data.models.some(model => model.name === selectedModel)) {
@@ -283,7 +333,202 @@ export default function UsageDashboard({ language }: { language: Language }) {
             </tbody>
           </table>
         </div>
+
+        <div className="dashboard-panel panel-ai">
+          <div className="panel-header" style={{ marginBottom: '14px' }}>
+            <div>
+              <h3 className="panel-title">{language === 'zh' ? 'AI 代码统计' : 'AI Code Attribution'}</h3>
+              <p className="ai-panel-subtitle">
+                {data.ai.branch
+                  ? `${language === 'zh' ? '当前分支' : 'Current branch'}: ${data.ai.branch}`
+                  : (language === 'zh' ? '等待 Git 工作区' : 'Waiting for a Git workspace')}
+              </p>
+            </div>
+            <div className={`ai-hook-pill ${data.ai.hook.installed ? 'ok' : 'warn'}`}>
+              {data.ai.hook.installed ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+              <span>{data.ai.hook.installed ? (language === 'zh' ? 'Hook 已启用' : 'Hook Ready') : (language === 'zh' ? 'Hook 未安装' : 'Hook Missing')}</span>
+            </div>
+          </div>
+
+          <div className="ai-overview-grid">
+            <AiMiniStat
+              icon={<Bot className="w-4 h-4" />}
+              label={language === 'zh' ? 'AI 辅助占比' : 'AI-assisted'}
+              value={formatSharePercent(aiOverview.aiAssistedShare)}
+            />
+            <AiMiniStat
+              icon={<Zap className="w-4 h-4" />}
+              label={language === 'zh' ? '纯 AI 行数' : 'Pure AI'}
+              value={aiOverview.pureAiLines.toLocaleString()}
+            />
+            <AiMiniStat
+              icon={<GitCommitHorizontal className="w-4 h-4" />}
+              label={language === 'zh' ? 'AI 后改写' : 'AI Modified'}
+              value={aiOverview.aiModifiedLines.toLocaleString()}
+            />
+            <AiMiniStat
+              icon={<Clock3 className="w-4 h-4" />}
+              label={language === 'zh' ? '待补偿提交' : 'Pending'}
+              value={data.ai.hook.pendingCount.toLocaleString()}
+            />
+          </div>
+
+          <div className="ai-panel-copy">
+            <strong>{aiStatusCopy.title}</strong>
+            <p>{aiStatusCopy.body}</p>
+          </div>
+
+          <div className="ai-last-commit-card">
+            <div className="ai-last-commit-title">{language === 'zh' ? '最近一次归因提交' : 'Latest Attributed Commit'}</div>
+            {data.ai.lastCommit ? (
+              <>
+                <div className="ai-last-commit-main">
+                  <span className="ai-last-commit-sha">{data.ai.lastCommit.shortSha}</span>
+                  <span className="ai-last-commit-time">{getRelativeTime(data.ai.lastCommit.timestamp, language)}</span>
+                </div>
+                <div className="ai-last-commit-message">{data.ai.lastCommit.message || '--'}</div>
+                <div className="ai-last-commit-meta">
+                  <span>{language === 'zh' ? 'AI 辅助' : 'AI-assisted'} {formatSharePercent(data.ai.lastCommit.totals.aiAssistedShare)}</span>
+                  <span>{language === 'zh' ? '总新增' : 'Added'} {data.ai.lastCommit.totals.totalAddedLines}</span>
+                </div>
+              </>
+            ) : (
+              <div className="ai-last-commit-empty">
+                {language === 'zh' ? '还没有生成 commit 级 AI 归因报告。' : 'No commit-level AI attribution report has been generated yet.'}
+              </div>
+            )}
+          </div>
+
+          <button className="ai-detail-button" onClick={() => setIsAiModalOpen(true)}>
+            {language === 'zh' ? '查看 AI 明细' : 'Open AI Details'} <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
+
+      <Modal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        title={language === 'zh' ? 'AI 代码统计明细' : 'AI Code Attribution Details'}
+        size="4xl"
+      >
+        <div className="ai-modal-grid">
+          <div className="ai-modal-section">
+            <div className="ai-modal-summary">
+              <div className="ai-modal-summary-card">
+                <span>{language === 'zh' ? '仓库' : 'Repository'}</span>
+                <strong>{data.ai.repoName || '--'}</strong>
+              </div>
+              <div className="ai-modal-summary-card">
+                <span>{language === 'zh' ? '分支' : 'Branch'}</span>
+                <strong>{data.ai.branch || '--'}</strong>
+              </div>
+              <div className="ai-modal-summary-card">
+                <span>{language === 'zh' ? '基线' : 'Base'}</span>
+                <strong>{data.ai.baseRef ? data.ai.baseRef.slice(0, 8) : '--'}</strong>
+              </div>
+              <div className="ai-modal-summary-card">
+                <span>{language === 'zh' ? 'Hook 状态' : 'Hook Status'}</span>
+                <strong>{data.ai.hook.installed ? (language === 'zh' ? '已安装' : 'Installed') : (language === 'zh' ? '未安装' : 'Missing')}</strong>
+              </div>
+            </div>
+
+            <div className="ai-modal-metrics">
+              <AiMetricCard label={language === 'zh' ? 'AI 辅助占比' : 'AI-assisted Share'} value={formatSharePercent(aiOverview.aiAssistedShare)} />
+              <AiMetricCard label={language === 'zh' ? '纯 AI 占比' : 'Pure AI Share'} value={formatSharePercent(aiOverview.pureAiShare)} />
+              <AiMetricCard label={language === 'zh' ? '人工行数' : 'Human Lines'} value={aiOverview.humanLines.toLocaleString()} />
+              <AiMetricCard label={language === 'zh' ? '累计新增' : 'Added Lines'} value={aiOverview.totalAddedLines.toLocaleString()} />
+            </div>
+          </div>
+
+          <div className="ai-modal-section">
+            <div className="ai-modal-section-header">
+              <h4>{language === 'zh' ? '最近提交' : 'Recent Commits'}</h4>
+              <span>{language === 'zh' ? `${data.ai.recentCommits.length} 条记录` : `${data.ai.recentCommits.length} entries`}</span>
+            </div>
+            <div className="ai-commit-list">
+              {data.ai.recentCommits.length > 0 ? data.ai.recentCommits.map(commit => (
+                <div className="ai-commit-row" key={commit.commitSha}>
+                  <div className="ai-commit-row-head">
+                    <span className="ai-commit-row-sha">{commit.shortSha}</span>
+                    <span className="ai-commit-row-time">{getRelativeTime(commit.timestamp, language)}</span>
+                  </div>
+                  <div className="ai-commit-row-message">{commit.message || '--'}</div>
+                  <div className="ai-commit-row-metrics">
+                    <span>{language === 'zh' ? 'AI 辅助' : 'AI-assisted'} {formatSharePercent(commit.totals.aiAssistedShare)}</span>
+                    <span>{language === 'zh' ? '纯 AI' : 'Pure AI'} {commit.totals.pureAiLines}</span>
+                    <span>{language === 'zh' ? 'AI 改写' : 'AI Modified'} {commit.totals.aiModifiedLines}</span>
+                    <span>{language === 'zh' ? '总新增' : 'Added'} {commit.totals.totalAddedLines}</span>
+                  </div>
+                </div>
+              )) : (
+                <div className="ai-empty">{language === 'zh' ? '暂无提交归因记录' : 'No commit attribution records yet'}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="ai-modal-split">
+            <div className="ai-modal-section">
+              <div className="ai-modal-section-header">
+                <h4>{language === 'zh' ? '模型明细' : 'Model Breakdown'}</h4>
+                <span>{language === 'zh' ? '按纯 AI + 改写行数排序' : 'Sorted by pure AI + modified lines'}</span>
+              </div>
+              <div className="ai-list-table">
+                {data.ai.modelBreakdown.length > 0 ? data.ai.modelBreakdown.map(model => (
+                  <div className="ai-list-row" key={`${model.provider}:${model.modelId}`}>
+                    <div>
+                      <strong>{model.modelId}</strong>
+                      <span>{model.provider}</span>
+                    </div>
+                    <div>
+                      <strong>{model.pureAiLines + model.aiModifiedLines}</strong>
+                      <span>{language === 'zh' ? `${model.pureAiLines} 纯 AI / ${model.aiModifiedLines} 改写` : `${model.pureAiLines} pure / ${model.aiModifiedLines} modified`}</span>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="ai-empty">{language === 'zh' ? '暂无模型归因数据' : 'No model attribution data yet'}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="ai-modal-section">
+              <div className="ai-modal-section-header">
+                <h4>{language === 'zh' ? '文件 Top N' : 'Top Files'}</h4>
+                <span>{language === 'zh' ? '按 AI 行数排序' : 'Sorted by AI-attributed lines'}</span>
+              </div>
+              <div className="ai-list-table">
+                {data.ai.topFiles.length > 0 ? data.ai.topFiles.map(file => (
+                  <div className="ai-list-row" key={file.path}>
+                    <div>
+                      <strong>{file.path}</strong>
+                      <span>{language === 'zh' ? `总新增 ${file.totalAddedLines}` : `${file.totalAddedLines} added`}</span>
+                    </div>
+                    <div>
+                      <strong>{file.pureAiLines + file.aiModifiedLines}</strong>
+                      <span>{language === 'zh' ? `${file.pureAiLines} 纯 AI / ${file.aiModifiedLines} 改写` : `${file.pureAiLines} pure / ${file.aiModifiedLines} modified`}</span>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="ai-empty">{language === 'zh' ? '暂无文件级归因数据' : 'No file-level attribution data yet'}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {data.ai.pendingCommits.length > 0 && (
+            <div className="ai-modal-section">
+              <div className="ai-modal-section-header">
+                <h4>{language === 'zh' ? '待补偿提交' : 'Pending Reconciliation'}</h4>
+                <span>{language === 'zh' ? '这些 commit 还没有生成 AI 归因报告' : 'These commits do not have AI attribution reports yet'}</span>
+              </div>
+              <div className="ai-pending-list">
+                {data.ai.pendingCommits.slice(0, 12).map(commitSha => (
+                  <span key={commitSha} className="ai-pending-chip">{commitSha.slice(0, 8)}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -303,6 +548,31 @@ function formatTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`
   return `${value}`
+}
+
+function formatSharePercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function AiMiniStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="ai-mini-stat">
+      <div className="ai-mini-stat-icon">{icon}</div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </div>
+  )
+}
+
+function AiMetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ai-metric-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
 }
 
 function StatItem({ title, value, unit, trend, trendLabel }: any) {
@@ -780,12 +1050,282 @@ function DashboardStyles() {
       }
       .m-bar-fill { height: 100%; border-radius: 2px; }
 
+      .panel-ai {
+        gap: 12px;
+      }
+      .ai-panel-subtitle {
+        margin-top: 3px;
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-hook-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        border: 1px solid transparent;
+      }
+      .ai-hook-pill.ok {
+        color: #0f766e;
+        background: rgba(16, 185, 129, 0.12);
+        border-color: rgba(16, 185, 129, 0.2);
+      }
+      .ai-hook-pill.warn {
+        color: #b45309;
+        background: rgba(245, 158, 11, 0.12);
+        border-color: rgba(245, 158, 11, 0.2);
+      }
+      .ai-overview-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .ai-mini-stat {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgb(var(--surface-hover) / 0.55);
+        border: 1px solid rgb(var(--border) / 0.35);
+      }
+      .ai-mini-stat-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(139, 92, 246, 0.12);
+        color: #7c3aed;
+      }
+      .ai-mini-stat span {
+        display: block;
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-mini-stat strong {
+        display: block;
+        margin-top: 2px;
+        font-size: 15px;
+        color: rgb(var(--text-primary));
+      }
+      .ai-panel-copy {
+        padding: 12px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
+        border: 1px solid rgb(var(--border) / 0.35);
+      }
+      .ai-panel-copy strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        color: rgb(var(--text-primary));
+      }
+      .ai-panel-copy p {
+        font-size: 12px;
+        color: rgb(var(--text-secondary));
+        line-height: 1.55;
+      }
+      .ai-last-commit-card {
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgb(var(--border) / 0.35);
+        background: rgb(var(--surface-hover) / 0.3);
+      }
+      .ai-last-commit-title,
+      .ai-last-commit-empty {
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-last-commit-main {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .ai-last-commit-sha {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+      }
+      .ai-last-commit-time {
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-last-commit-message {
+        margin-top: 6px;
+        font-size: 12px;
+        color: rgb(var(--text-secondary));
+        line-height: 1.45;
+      }
+      .ai-last-commit-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-detail-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        align-self: flex-start;
+        font-size: 12px;
+        font-weight: 600;
+        color: #2563eb;
+      }
+      .ai-modal-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .ai-modal-section {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 14px;
+        border-radius: 16px;
+        border: 1px solid rgb(var(--border) / 0.4);
+        background: rgb(var(--surface) / 0.4);
+      }
+      .ai-modal-summary,
+      .ai-modal-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .ai-modal-summary-card,
+      .ai-metric-card {
+        padding: 12px;
+        border-radius: 12px;
+        background: rgb(var(--surface-hover) / 0.45);
+        border: 1px solid rgb(var(--border) / 0.3);
+      }
+      .ai-modal-summary-card span,
+      .ai-metric-card span {
+        display: block;
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-modal-summary-card strong,
+      .ai-metric-card strong {
+        display: block;
+        margin-top: 5px;
+        font-size: 15px;
+        color: rgb(var(--text-primary));
+      }
+      .ai-modal-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .ai-modal-section-header h4 {
+        font-size: 14px;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+      }
+      .ai-modal-section-header span {
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-commit-list,
+      .ai-list-table {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ai-commit-row,
+      .ai-list-row {
+        padding: 12px;
+        border-radius: 12px;
+        background: rgb(var(--surface-hover) / 0.35);
+        border: 1px solid rgb(var(--border) / 0.25);
+      }
+      .ai-commit-row-head,
+      .ai-list-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .ai-commit-row-sha {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-weight: 700;
+        color: rgb(var(--text-primary));
+      }
+      .ai-commit-row-time {
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-commit-row-message {
+        margin-top: 6px;
+        font-size: 13px;
+        color: rgb(var(--text-secondary));
+      }
+      .ai-commit-row-metrics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-list-row strong {
+        display: block;
+        color: rgb(var(--text-primary));
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .ai-list-row span {
+        display: block;
+        margin-top: 4px;
+        font-size: 11px;
+        color: rgb(var(--text-muted));
+      }
+      .ai-modal-split {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .ai-pending-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .ai-pending-chip {
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgb(var(--surface-hover) / 0.5);
+        border: 1px solid rgb(var(--border) / 0.3);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 11px;
+        color: rgb(var(--text-secondary));
+      }
+      .ai-empty {
+        font-size: 12px;
+        color: rgb(var(--text-muted));
+      }
+
       @container (max-width: 900px) {
         .adnify-dashboard-grid {
           grid-template-columns: 1fr;
         }
         .stat-cards-row {
           grid-template-columns: repeat(2, 1fr);
+        }
+        .ai-modal-summary,
+        .ai-modal-metrics,
+        .ai-modal-split,
+        .ai-overview-grid {
+          grid-template-columns: 1fr;
         }
       }
     `}</style>

@@ -2,6 +2,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import { normalizePath, toRelativePath } from '@shared/utils/pathUtils'
+import { aiAttributionService, type AiCommitReport, type AiHookStatus } from './aiAttributionService'
 
 /**
  * Git 服务 (使用安全的 Git API)
@@ -527,13 +528,50 @@ class GitService {
     async commit(message: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
             const result = await this.exec(['commit', '-m', message], rootPath)
+            const success = result.exitCode === 0
+            if (success && (rootPath || this.primaryWorkspacePath)) {
+                void aiAttributionService.analyzeLatestCommit(rootPath || this.primaryWorkspacePath!, 'commit')
+                    .catch(error => logger.git.warn('[GitService] AI attribution after commit failed:', error))
+            }
             return {
-                success: result.exitCode === 0,
-                error: result.exitCode !== 0 ? result.stderr || result.stdout : undefined,
+                success,
+                error: !success ? result.stderr || result.stdout : undefined,
             }
         } catch (err) {
             return { success: false, error: handleGitError(err) }
         }
+    }
+
+    async installAiHooks(rootPath?: string): Promise<boolean> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) return false
+        return aiAttributionService.installHooks(targetRoot)
+    }
+
+    async getAiHookStatus(rootPath?: string): Promise<AiHookStatus> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) {
+            return { installed: false, pendingCount: 0 }
+        }
+        return aiAttributionService.getHookStatus(targetRoot)
+    }
+
+    async reconcileAiAttribution(rootPath?: string): Promise<void> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) return
+        await aiAttributionService.reconcileRepo(targetRoot)
+    }
+
+    async readAiNote(commitSha: string, rootPath?: string): Promise<AiCommitReport | null> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) return null
+        return aiAttributionService.readAiNote(targetRoot, commitSha)
+    }
+
+    async writeAiNote(commitSha: string, report: AiCommitReport, rootPath?: string): Promise<boolean> {
+        const targetRoot = rootPath || this.primaryWorkspacePath
+        if (!targetRoot) return false
+        return aiAttributionService.writeAiNote(targetRoot, commitSha, report)
     }
 
     async commitAmend(message?: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
