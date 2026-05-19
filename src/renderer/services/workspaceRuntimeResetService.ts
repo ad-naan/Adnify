@@ -12,6 +12,7 @@ import {
   markAgentStorageSnapshotAsCurrent,
 } from '@renderer/agent/store/agentStorage'
 import { workspaceAnalyticsService } from './workspaceAnalyticsService'
+import { aiAttributionService } from './aiAttributionService'
 
 export function resetWorkspaceRuntimeState(): void {
   useStore.setState({
@@ -49,5 +50,6 @@ export function resetWorkspaceRuntimeState(): void {
   streamingEditService.clearAll()
   clearHealthCache()
   workspaceAnalyticsService.reset()
+  aiAttributionService.reset()
   workspaceStorageRuntime.reset()
 }

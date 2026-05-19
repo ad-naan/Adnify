@@ -118,12 +118,13 @@ export function analyzeWriteIntent(originalContent: string, nextContent: string)
  *
  * 核心规则：
  * 1. 新文件允许直接 write_file。
- * 2. 已有文件如果没有先 read_file 建立上下文，不允许直接整写。
- * 3. 已有文件如果看起来只是局部修改，拒绝 write_file，强制引导走 edit_file。
+ * 2. 已有文件如果看起来只是局部修改，拒绝 write_file，强制引导走 edit_file。
+ * 3. 已有文件如果明显是整文件重写，则允许直接 write_file，不强制要求 recent read。
  *
  * 这层守卫的价值在于：
  * - 把“提示词建议”升级为“执行层硬约束”；
- * - 降低大文件误整写导致的超时、冲突和无意义重试。
+ * - 降低大文件误整写导致的超时、冲突和无意义重试；
+ * - 避免把本来合法的整文件重写先打成失败，迫使模型再退回 edit_file。
  */
 export function guardWriteFile(input: WriteGuardInput): WriteGuardDecision {
   const analysis = analyzeWriteIntent(input.originalContent, input.nextContent)
@@ -136,21 +137,15 @@ export function guardWriteFile(input: WriteGuardInput): WriteGuardDecision {
     }
   }
 
-  if (!input.hasRecentRead) {
-    return {
-      allow: false,
-      intent: analysis.intent,
-      reason: `Refusing write_file for existing file ${input.path}: read_file must be used first so the agent can choose between edit_file and write_file with current content.`,
-      analysis,
-    }
-  }
-
   const looksLikePartialUpdate =
     analysis.intent === 'partial-update' ||
-    analysis.changedOriginalChars <= SMALL_PARTIAL_CHANGE_CHARS ||
+    (input.originalContent.length >= LARGE_FILE_THRESHOLD && analysis.changedOriginalChars <= SMALL_PARTIAL_CHANGE_CHARS) ||
     (input.originalContent.length >= LARGE_FILE_THRESHOLD && analysis.changedRatio <= 0.5)
 
   if (looksLikePartialUpdate) {
+    const readHint = input.hasRecentRead
+      ? ''
+      : ' Read the file first so the agent can anchor a targeted edit safely.'
     return {
       allow: false,
       intent: 'partial-update',
@@ -158,7 +153,8 @@ export function guardWriteFile(input: WriteGuardInput): WriteGuardDecision {
         `Refusing write_file for existing file ${input.path}: the change appears partial ` +
         `(${Math.round(analysis.changedRatio * 100)}% of original content changed, ` +
         `${analysis.changedOriginalChars} original chars affected). ` +
-        'Use edit_file instead: string mode for a small unique local change, line mode for known line ranges, or batch mode for multiple edits.',
+        'Use edit_file instead: string mode for a small unique local change, line mode for known line ranges, or batch mode for multiple edits.' +
+        readHint,
       analysis,
     }
   }
