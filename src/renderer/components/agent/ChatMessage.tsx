@@ -53,6 +53,7 @@ import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import type { ToolStreamingPreview } from '@shared/types'
 import { publicAsset } from '@utils/publicAsset'
 import { ImageLightbox } from './ImageLightbox'
+import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -65,6 +66,7 @@ interface ChatMessageProps {
   onSelectOption?: (messageId: string, selectedIds: string[]) => void
   pendingToolId?: string
   hasCheckpoint?: boolean
+  isAwaitingApproval?: boolean
 }
 
 interface RenderPartProps {
@@ -362,6 +364,98 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
   )
 })
 MessageMetaGroup.displayName = 'MessageMetaGroup'
+
+function buildProcessSummaryText(summary: AssistantProcessSummary, language: 'zh' | 'en'): string {
+  const items: string[] = []
+
+  if (summary.toolCallCount > 0) {
+    items.push(language === 'zh'
+      ? `${summary.toolCallCount} 个工具`
+      : `${summary.toolCallCount} tool${summary.toolCallCount > 1 ? 's' : ''}`)
+  }
+
+  if (summary.hasReasoning) {
+    items.push(language === 'zh' ? '思考' : 'Thinking')
+  }
+
+  if (summary.hasSearch) {
+    items.push(language === 'zh' ? '搜索' : 'Search')
+  }
+
+  if (summary.hasContext) {
+    items.push(language === 'zh' ? '上下文' : 'Context')
+  }
+
+  if (summary.hasSources) {
+    items.push(language === 'zh' ? '来源' : 'Sources')
+  }
+
+  if (summary.hasLintCheck) {
+    items.push(language === 'zh' ? '检查' : 'Checks')
+  }
+
+  if (summary.hasSystemAlert) {
+    items.push(language === 'zh' ? '提示' : 'Alerts')
+  }
+
+  if (summary.hasProcessText) {
+    items.push(language === 'zh' ? '说明' : 'Notes')
+  }
+
+  return items.join(' · ')
+}
+
+interface ProcessFoldProps {
+  children: React.ReactNode
+  language: 'zh' | 'en'
+  summary: AssistantProcessSummary
+}
+
+const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProps) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const summaryText = buildProcessSummaryText(summary, language)
+
+  return (
+    <div className="my-3 overflow-hidden rounded-xl border border-border/60 bg-surface/35 backdrop-blur-sm">
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        onClick={() => setIsExpanded(prev => !prev)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-hover/50"
+      >
+        <motion.div
+          animate={{ rotate: isExpanded ? 0 : -90 }}
+          transition={{ duration: 0.15 }}
+          className="shrink-0 text-text-muted/60"
+        >
+          <ChevronDown className="w-3.5 h-3.5" />
+        </motion.div>
+        {summaryText && (
+          <div className="min-w-0 flex-1 truncate text-[11px] text-text-muted/75">
+            {summaryText}
+          </div>
+        )}
+      </button>
+
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="overflow-hidden border-t border-border/50"
+          >
+            <div className="px-3 py-2">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+})
+ProcessFold.displayName = 'ProcessFold'
 
 const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }: ThinkingBlockProps) => {
   const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
@@ -873,6 +967,7 @@ const ChatMessage = React.memo(({
   onOpenDiff,
   pendingToolId,
   hasCheckpoint,
+  isAwaitingApproval = false,
 }: ChatMessageProps) => {
   const message = messageProp
 
@@ -880,7 +975,11 @@ const ChatMessage = React.memo(({
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
-  const { editorConfig, language } = useStore(useShallow(s => ({ editorConfig: s.editorConfig, language: s.language })))
+  const { editorConfig, language, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
+    editorConfig: s.editorConfig,
+    language: s.language,
+    expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
+  })))
   const fontSize = editorConfig.chatFontSize ?? editorConfig.fontSize
 
   if (!isUserMessage(message) && !isAssistantMessage(message)) {
@@ -977,6 +1076,39 @@ const ChatMessage = React.memo(({
         status: 'pending' as const,
       }))
   }, [message, previewMap])
+
+  const hasMetaGroup = React.useMemo(() => {
+    if (!isAssistantMessage(message)) return false
+
+    return Boolean(
+      message.contextItems?.some((item: any) => item.type === 'Skill') ||
+      assistantParts?.some(isSearchPart)
+    )
+  }, [assistantParts, message])
+
+  const assistantProjection = React.useMemo(() => {
+    if (!isAssistantMessage(message) || !assistantParts) {
+      return null
+    }
+
+    const messageHasPendingApproval = isAwaitingApproval
+      && !!pendingToolId
+      && (message.toolCalls?.some(toolCall => toolCall.id === pendingToolId) ?? false)
+
+    return projectAssistantTurn(assistantParts, {
+      isStreaming,
+      isAwaitingApproval: messageHasPendingApproval,
+      expandProcessByDefault: expandAgentBlocksByDefault,
+      hasContextMeta: hasMetaGroup,
+    })
+  }, [assistantParts, expandAgentBlocksByDefault, hasMetaGroup, isAwaitingApproval, isStreaming, message, pendingToolId])
+
+  const shouldCollapseProcess = assistantProjection?.shouldCollapseProcess ?? false
+  const shouldRenderMetaGroup = isAssistantMessage(message) && !shouldCollapseProcess && hasMetaGroup
+  const visibleAssistantParts = shouldCollapseProcess
+    ? (assistantProjection?.finalReplyParts ?? [])
+    : (assistantParts ?? [])
+  const processAssistantParts = assistantProjection?.processParts ?? []
 
   return (
     <div className={`
@@ -1210,7 +1342,7 @@ const ChatMessage = React.memo(({
 
             <div className="w-full text-[15px] leading-relaxed text-text-primary/90 pl-1">
               {/* System Context Widget at the top of the content */}
-              {isAssistantMessage(message) && (message.contextItems?.some((item: any) => item.type === 'Skill') || assistantParts?.some(isSearchPart)) && (
+              {shouldRenderMetaGroup && (
                 <MessageMetaGroup
                   autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
                   manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
@@ -1219,9 +1351,33 @@ const ChatMessage = React.memo(({
                 />
               )}
               <div className="prose-custom w-full max-w-none">
-                {assistantParts && (
+                {shouldCollapseProcess && assistantProjection?.hasProcessContent && (
+                  <ProcessFold language={language} summary={assistantProjection.summary}>
+                    {hasMetaGroup && (
+                      <MessageMetaGroup
+                        autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
+                        manualSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && !item.auto)}
+                        searchContent={assistantParts?.find(isSearchPart)?.content || undefined}
+                        isSearchStreaming={(assistantParts?.find(isSearchPart) as any)?.isStreaming}
+                      />
+                    )}
+                    {processAssistantParts.length > 0 && (
+                      <AssistantMessageContent
+                        parts={processAssistantParts}
+                        pendingToolId={pendingToolId}
+                        onApproveTool={onApproveTool}
+                        onRejectTool={onRejectTool}
+                        onOpenDiff={onOpenDiff}
+                        fontSize={fontSize}
+                        isStreaming={false}
+                        messageId={message.id}
+                      />
+                    )}
+                  </ProcessFold>
+                )}
+                {visibleAssistantParts.length > 0 && (
                   <AssistantMessageContent
-                    parts={assistantParts}
+                    parts={visibleAssistantParts}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
                     onRejectTool={onRejectTool}
