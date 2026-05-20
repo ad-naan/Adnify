@@ -10,6 +10,7 @@ import { skillService, type SkillItem, type SkillTriggerType, type SkillSource }
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
 import { Button, Input } from '@components/ui'
+import { joinPath } from '@shared/utils/pathUtils'
 import {
     Zap, Plus, Trash2, RefreshCw, Download, Search,
     ToggleLeft, ToggleRight, ExternalLink, Github, FolderOpen
@@ -22,10 +23,13 @@ interface SkillSettingsProps {
 export function SkillSettings({ language }: SkillSettingsProps) {
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
     const workspacePath = useStore(s => s.workspacePath)
+    const projectSkillsDir = workspacePath ? joinPath(workspacePath, '.adnify/skills') : ''
 
     // Skills list
     const [skills, setSkills] = useState<SkillItem[]>([])
     const [loading, setLoading] = useState(true)
+    const [globalSkillsDir, setGlobalSkillsDir] = useState('')
+    const [openingDir, setOpeningDir] = useState<SkillSource | null>(null)
 
     // Install from marketplace
     const [searchQuery, setSearchQuery] = useState('')
@@ -53,6 +57,15 @@ export function SkillSettings({ language }: SkillSettingsProps) {
         setTimeout(() => setMessage(null), 3000)
     }
 
+    const loadGlobalSkillsDir = useCallback(async () => {
+        try {
+            const dir = await api.skills.getGlobalDir()
+            setGlobalSkillsDir(dir)
+        } catch {
+            setGlobalSkillsDir('')
+        }
+    }, [])
+
     // Load skills
     const loadSkills = useCallback(async () => {
         setLoading(true)
@@ -64,6 +77,10 @@ export function SkillSettings({ language }: SkillSettingsProps) {
     useEffect(() => {
         loadSkills()
     }, [loadSkills])
+
+    useEffect(() => {
+        loadGlobalSkillsDir()
+    }, [loadGlobalSkillsDir])
 
     // Search marketplace
     const handleSearch = async () => {
@@ -148,6 +165,37 @@ export function SkillSettings({ language }: SkillSettingsProps) {
         await skillService.toggleSkill(name, !currentEnabled)
         loadSkills()
     }
+
+    const handleOpenSkillsDir = async (source: SkillSource) => {
+        const dir = source === 'project' ? projectSkillsDir : globalSkillsDir || await api.skills.getGlobalDir()
+        if (!dir) {
+            showMessage('error', t('无法定位 Skills 目录', 'Failed to resolve Skills directory'))
+            return
+        }
+
+        setOpeningDir(source)
+        try {
+            await api.file.ensureDir(dir)
+            await api.file.showInFolder(dir)
+        } catch {
+            showMessage('error', t('打开 Skills 目录失败', 'Failed to open Skills directory'))
+        } finally {
+            setOpeningDir(null)
+            if (source === 'global') {
+                setGlobalSkillsDir(dir)
+            }
+        }
+    }
+
+    const createLocationHint = createLevel === 'project'
+        ? t(
+            '将在 .adnify/skills/ 下创建目录和 SKILL.md 模板',
+            'Creates a directory and SKILL.md template under .adnify/skills/'
+        )
+        : t(
+            '将在全局 skills 目录下创建目录和 SKILL.md 模板',
+            'Creates a directory and SKILL.md template under the global skills directory'
+        )
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
@@ -446,10 +494,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                             </div>
                         </div>
                         <p className="text-[11px] text-text-muted">
-                            {t(
-                                '将在 .adnify/skills/ 下创建目录和 SKILL.md 模板',
-                                'Creates a directory and SKILL.md template under .adnify/skills/'
-                            )}
+                            {createLocationHint}
                         </p>
                     </div>
                 )}
@@ -464,6 +509,115 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                     <li>{t('项目级 Skill 会覆盖同名的全局 Skill', 'Project-level skills override global skills with the same name')}</li>
                 </ul>
             </div>
+
+            {/* Local Skills Directories */}
+            <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                <div className="flex items-center gap-2">
+                    <FolderOpen className="w-4 h-4 text-accent" />
+                    <h5 className="text-sm font-medium text-text-primary">
+                        {t('本地 Skills 目录', 'Local Skills Directories')}
+                    </h5>
+                </div>
+
+                <p className="text-xs text-text-muted">
+                    {t(
+                        '已有 Skill 可直接放入项目或全局 Skills 目录中。放入后返回此页刷新列表即可被 Adnify 识别。',
+                        'Existing skills can be placed directly in the project or global Skills directories. Return here and refresh the list after copying them in.'
+                    )}
+                </p>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-border bg-surface p-3 space-y-3">
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-text-primary">{t('项目 Skills 目录', 'Project Skills Directory')}</span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{t('项目', 'Project')}</span>
+                            </div>
+                            <p className="text-[11px] text-text-muted break-all font-mono">
+                                {projectSkillsDir || t('请先打开一个项目', 'Open a project to see this path')}
+                            </p>
+                        </div>
+
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleOpenSkillsDir('project')}
+                            disabled={!workspacePath || openingDir === 'project'}
+                            className="w-full text-xs justify-center"
+                        >
+                            {openingDir === 'project'
+                                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                : <FolderOpen className="w-3.5 h-3.5 mr-1.5" />}
+                            {t('打开项目 Skills 目录', 'Open Project Skills Directory')}
+                        </Button>
+
+                        {!workspacePath && (
+                            <p className="text-[11px] text-text-muted">
+                                {t('请先打开一个项目后再使用项目级 Skills 目录。', 'Open a project before using the project Skills directory.')}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="rounded-lg border border-border bg-surface p-3 space-y-3">
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-text-primary">{t('全局 Skills 目录', 'Global Skills Directory')}</span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">{t('全局', 'Global')}</span>
+                            </div>
+                            <p className="text-[11px] text-text-muted break-all font-mono">
+                                {globalSkillsDir || t('正在加载全局目录...', 'Loading global directory...')}
+                            </p>
+                        </div>
+
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleOpenSkillsDir('global')}
+                            disabled={openingDir === 'global'}
+                            className="w-full text-xs justify-center"
+                        >
+                            {openingDir === 'global'
+                                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                : <FolderOpen className="w-3.5 h-3.5 mr-1.5" />}
+                            {t('打开全局 Skills 目录', 'Open Global Skills Directory')}
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-background/50 p-3 space-y-3">
+                    <div className="space-y-1">
+                        <p className="text-xs font-medium text-text-primary">{t('可识别的 Skill 文件夹格式', 'Recognized Skill folder structure')}</p>
+                        <p className="text-[11px] text-text-muted">
+                            {t(
+                                'Adnify 会扫描 Skills 根目录下的独立子目录，并读取其中的 SKILL.md。每个 Skill 使用独立子目录，目录内包含 SKILL.md，且可附带 scripts/、templates/、data/ 等辅助文件。',
+                                'Adnify scans standalone subdirectories inside a Skills root and reads the SKILL.md file in each one. Each skill uses its own subdirectory, includes SKILL.md, and can bundle supporting files such as scripts/, templates/, or data/.'
+                            )}
+                        </p>
+                        <p className="text-[11px] text-text-muted">
+                            {t(
+                                'SKILL.md 使用 frontmatter，并至少包含 name 和 description。',
+                                'SKILL.md uses frontmatter and includes at least name and description.'
+                            )}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1 text-[11px] text-text-muted">
+                            <p>{t('将已有 Skill 文件夹放入上述目录后，返回此页面并刷新列表即可使用。', 'After placing an existing skill folder into one of the directories above, return here and refresh the list to use it.')}</p>
+                            <p>{t('项目级 Skill 会覆盖同名全局 Skill。', 'Project-level skills override global skills with the same name.')}</p>
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={loadSkills}
+                            className="text-xs shrink-0"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                            {t('刷新 Skills 列表', 'Refresh Skills List')}
+                        </Button>
+                    </div>
+                </div>
+            </section>
         </div>
     )
 }
