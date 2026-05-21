@@ -26,6 +26,7 @@ import { useAgentStore } from '../store/AgentStore'
 import { buildExecutionBatches } from './toolExecutionPlan'
 import { streamingEditService } from '../services/streamingEditService'
 import { resolveStreamingEditFilePath } from '../services/streamingEditPreview'
+import { shellServerRoutingService } from '../services/shellServerRoutingService'
 
 // ===== 审批服务 =====
 
@@ -168,6 +169,93 @@ function hasDependencyFailure(content: string): boolean {
   return content.startsWith('Skipped: dependency') || content.startsWith('Error: dependency')
 }
 
+const REMOTE_ROUTE_META_TOOL_NAMES = new Set([
+  'run_command',
+  'list_remote_directory',
+  'read_remote_file',
+  'write_remote_file',
+  'rename_remote_path',
+  'delete_remote_path',
+  'upload_to_remote',
+  'download_from_remote',
+])
+
+const REMOTE_ONLY_TOOL_NAMES = new Set([
+  'list_remote_directory',
+  'read_remote_file',
+  'write_remote_file',
+  'rename_remote_path',
+  'delete_remote_path',
+  'upload_to_remote',
+  'download_from_remote',
+])
+
+function buildShellRouteMeta(target: {
+  executionTarget: 'local' | 'remote'
+  resolvedBy: 'arg' | 'explicit_context' | 'last_active_server' | 'auto_routing' | 'local_default'
+  server?: { serverLinkId: string; serverName: string } | null
+}): Record<string, unknown> {
+  return {
+    executionTarget: target.executionTarget,
+    serverLinkId: target.server?.serverLinkId,
+    serverName: target.server?.serverName,
+    resolvedBy: target.resolvedBy,
+  }
+}
+
+async function enrichToolArgumentsWithRoutingMeta(
+  toolCall: ToolCall,
+  context: ToolExecutionContext
+): Promise<Record<string, unknown>> {
+  if (!REMOTE_ROUTE_META_TOOL_NAMES.has(toolCall.name)) {
+    return toolCall.arguments
+  }
+
+  const explicitServerName = typeof toolCall.arguments.server_name === 'string'
+    ? toolCall.arguments.server_name.trim()
+    : ''
+
+  if (explicitServerName) {
+    const explicitResolution = await shellServerRoutingService.resolveServerName(explicitServerName)
+    if (explicitResolution.kind === 'not_found' || explicitResolution.kind === 'ambiguous') {
+      return {
+        ...toolCall.arguments,
+        _meta: {
+          ...(toolCall.arguments._meta as Record<string, unknown> | undefined),
+          executionTarget: 'remote',
+          resolvedBy: 'arg',
+          routeError: explicitResolution.kind === 'not_found'
+            ? `Remote server not found: ${explicitServerName}`
+            : `Remote server name is ambiguous: ${explicitServerName}`,
+        },
+      }
+    }
+  }
+
+  const target = await shellServerRoutingService.resolveExecutionTarget(toolCall.name, toolCall.arguments, {
+    threadId: context.threadId,
+    assistantId: context.assistantId,
+    currentAssistantId: context.currentAssistantId,
+  })
+
+  const baseMeta = buildShellRouteMeta(target)
+  const needsRemoteButUnresolved = REMOTE_ONLY_TOOL_NAMES.has(toolCall.name) && target.executionTarget !== 'remote'
+
+  return {
+    ...toolCall.arguments,
+    _meta: {
+      ...(toolCall.arguments._meta as Record<string, unknown> | undefined),
+      ...(needsRemoteButUnresolved
+        ? {
+            executionTarget: 'remote',
+            resolvedBy: target.resolvedBy,
+            routeError: `No remote server resolved for ${toolCall.name}`,
+          }
+        : baseMeta),
+    },
+  }
+}
+
 
 /**
  * 检查工具是否需要审批
@@ -277,15 +365,17 @@ async function executeSingle(
   const { currentAssistantId, workspacePath } = context
   const identity = buildToolExecutionIdentity(toolCall, context)
   const startTime = Date.now()
+  const toolArguments = await enrichToolArgumentsWithRoutingMeta(toolCall, context)
 
   if (currentAssistantId) {
     store.finalizeTextBeforeToolCall(currentAssistantId)
     store.addToolCallPart(currentAssistantId, {
       id: toolCall.id,
       name: toolCall.name,
-      arguments: toolCall.arguments,
+      arguments: toolArguments,
     })
     store.updateToolCall(currentAssistantId, toolCall.id, {
+      arguments: toolArguments,
       status: 'running',
       streamingState: undefined,
     })
@@ -305,13 +395,13 @@ async function executeSingle(
     threadId: context.threadId ?? undefined,
     type: 'request',
     toolName: toolCall.name,
-    data: toolCall.arguments,
+    data: toolArguments,
   })
 
   try {
     const result = await toolManager.execute(
       toolCall.name,
-      toolCall.arguments,
+      toolArguments,
       {
         workspacePath: workspacePath ?? null,
         currentAssistantId: currentAssistantId ?? null,
@@ -364,8 +454,8 @@ async function executeSingle(
     // 更新状态，并将 meta 数据合并到 arguments._meta
     if (currentAssistantId) {
       const updatedArguments = Object.keys(meta).length > 0
-        ? { ...toolCall.arguments, _meta: meta }
-        : toolCall.arguments
+        ? { ...toolArguments, _meta: { ...(toolArguments._meta as Record<string, unknown> | undefined), ...meta } }
+        : toolArguments
 
       const newStatus = result.success ? 'success' : 'error'
 
@@ -622,14 +712,18 @@ export async function executeTools(
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })
+    const pendingArguments = await enrichToolArgumentsWithRoutingMeta(tc, context)
     if (context.currentAssistantId) {
-      store.updateToolCall(context.currentAssistantId, tc.id, { status: 'awaiting' })
+      store.updateToolCall(context.currentAssistantId, tc.id, {
+        arguments: pendingArguments,
+        status: 'awaiting',
+      })
     }
     emitToolEvent({
       type: 'tool:pending',
       id: tc.id,
       name: tc.name,
-      args: tc.arguments,
+      args: pendingArguments,
       ...buildToolExecutionIdentity(tc, context),
     })
 

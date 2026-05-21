@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { pipeline } from 'stream/promises'
 import type { Client as Ssh2Client, ConnectConfig, FileEntry, SFTPWrapper, Stats } from 'ssh2'
+import { remoteHostTrustService } from '../services/remoteHostTrustService'
 
 interface RemoteServerConfig {
   host: string
@@ -77,7 +78,9 @@ function isDirectoryLike(attrs: { mode?: number; isDirectory?: (() => boolean) |
 }
 
 function createConnectionConfig(server: RemoteServerConfig): ConnectConfig {
-  const config: ConnectConfig = {
+  const config: ConnectConfig & {
+    hostVerifier?: (key: Buffer, callback: (trusted: boolean) => void) => void
+  } = {
     host: server.host.trim(),
     port: server.port && server.port > 0 ? server.port : 22,
     username: server.username?.trim() || 'root',
@@ -101,6 +104,8 @@ function createConnectionConfig(server: RemoteServerConfig): ConnectConfig {
 async function withSftp<T>(server: RemoteServerConfig, handler: (sftp: SFTPWrapper) => Promise<T>): Promise<T> {
   const Client = getSsh2Client()
   const connection = new Client()
+  const trustConfig = createConnectionConfig(server)
+  let verificationError: Error | null = null
   return await new Promise<T>((resolve, reject) => {
     let settled = false
 
@@ -109,6 +114,19 @@ async function withSftp<T>(server: RemoteServerConfig, handler: (sftp: SFTPWrapp
       settled = true
       connection.end()
       reject(error)
+    }
+
+    trustConfig.hostVerifier = (key: Buffer, callback: (trusted: boolean) => void) => {
+      remoteHostTrustService.verifyOrRecordHost({
+        host: String(trustConfig.host),
+        port: Number(trustConfig.port),
+        publicKey: key,
+      }).then(() => {
+        callback(true)
+      }).catch((error) => {
+        verificationError = error instanceof Error ? error : new Error(String(error))
+        callback(false)
+      })
     }
 
     connection
@@ -133,8 +151,8 @@ async function withSftp<T>(server: RemoteServerConfig, handler: (sftp: SFTPWrapp
       .on('keyboard-interactive', (_name: string, _instructions: string, _lang: string, _prompts: Array<unknown>, finish: (responses: string[]) => void) => {
         finish([server.password || ''])
       })
-      .on('error', fail)
-      .connect(createConnectionConfig(server))
+      .on('error', (error) => fail(verificationError || error))
+      .connect(trustConfig)
   })
 }
 
@@ -266,6 +284,14 @@ async function downloadRemoteFile(sftp: SFTPWrapper, remotePath: string, localPa
 }
 
 export function registerRemoteShellHandlers(): void {
+  ipcMain.handle('remoteHostTrust:getStatus', async (_, server: RemoteServerConfig): Promise<{ known: boolean; fingerprintSha256?: string }> => {
+    return await remoteHostTrustService.getStatus(server.host, server.port)
+  })
+
+  ipcMain.handle('remoteHostTrust:getLastDecision', async (_, server: RemoteServerConfig) => {
+    return remoteHostTrustService.getLastDecision(server.host, server.port)
+  })
+
   ipcMain.handle('remoteShell:list', async (_, server: RemoteServerConfig, remotePath?: string): Promise<RemoteEntry[]> => {
     return await withSftp(server, async (sftp) => {
       const targetPath = normalizeRemotePath(remotePath || server.remotePath || '.')

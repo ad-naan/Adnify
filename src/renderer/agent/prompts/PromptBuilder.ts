@@ -23,6 +23,7 @@ import {
 } from './promptTemplates'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
+import { shellServerRoutingService } from '../services/shellServerRoutingService'
 
 let projectSummaryCache: { path: string; summary: string; timestamp: number } | null = null
 const SUMMARY_CACHE_TTL = 5 * 60 * 1000
@@ -75,6 +76,7 @@ export interface PromptContext {
   templateId?: string
   projectSummary?: string | null
   planPhase?: 'planning' | 'executing'
+  remoteServerSection?: string | null
 }
 
 function buildTools(mode: WorkMode, templateId?: string, planPhase?: 'planning' | 'executing'): string {
@@ -129,6 +131,11 @@ ${summary.trim()}
 Note: This is an auto-generated project summary. Use it to understand the codebase structure before exploring files.`
 }
 
+function buildRemoteServerSection(section: string | null): string | null {
+  if (!section?.trim()) return null
+  return section.trim()
+}
+
 function buildSkillsSections(autoSkills: SkillItem[], mentionedSkills: SkillItem[]): (string | null)[] {
   const index = skillService.buildSkillsIndex(autoSkills) || null
   const fullContent = skillService.buildSkillsPrompt(mentionedSkills) || null
@@ -146,6 +153,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     WORKFLOW_GUIDELINES,
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
+    buildRemoteServerSection(ctx.remoteServerSection || null),
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
@@ -165,6 +173,7 @@ export function buildChatPrompt(ctx: PromptContext): string {
     CODE_CONVENTIONS,
     OUTPUT_FORMAT,
     buildEnvironment(ctx),
+    buildRemoteServerSection(ctx.remoteServerSection || null),
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
@@ -185,6 +194,7 @@ export async function buildAgentSystemPrompt(
     promptTemplateId?: string
     planPhase?: 'planning' | 'executing'
     mentionedSkills?: string[]
+    threadId?: string
   }
 ): Promise<{ prompt: string; activeSkills: { name: string; description: string }[] }> {
   const {
@@ -194,6 +204,7 @@ export async function buildAgentSystemPrompt(
     promptTemplateId,
     planPhase,
     mentionedSkills,
+    threadId,
   } = options || {}
 
   let template = promptTemplateId
@@ -205,11 +216,12 @@ export async function buildAgentSystemPrompt(
     template = getDefaultPromptTemplate()
   }
 
-  const [projectRules, memories, allSkills, projectSummary] = await Promise.all([
+  const [projectRules, memories, allSkills, projectSummary, remoteServerSection] = await Promise.all([
     rulesService.getRules(),
     memoryService.getMemories(),
     skillService.getSkills(),
     workspacePath ? loadProjectSummary(workspacePath) : Promise.resolve(null),
+    shellServerRoutingService.getPromptSection(threadId),
   ])
 
   const autoSkills = allSkills.filter(skill => skill.type === 'auto' && skill.enabled)
@@ -247,6 +259,7 @@ export async function buildAgentSystemPrompt(
     templateId: template.id,
     projectSummary,
     planPhase,
+    remoteServerSection,
   }
 
   const prompt = mode === 'chat' ? buildChatPrompt(ctx) : buildSystemPrompt(ctx)

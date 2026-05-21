@@ -214,6 +214,16 @@ export interface RemoteShellDownloadResult {
   localPath?: string
 }
 
+export type RemoteHostTrustStatus = 'known' | 'accepted_new' | 'mismatch_rejected'
+
+export interface RemoteHostTrustDecision {
+  host: string
+  port: number
+  hostTrustStatus: RemoteHostTrustStatus
+  hostFingerprintSha256: string
+  knownHostFingerprintSha256?: string
+}
+
 export interface EmbeddingConfigInput {
   provider?: 'jina' | 'voyage' | 'openai' | 'cohere' | 'huggingface' | 'ollama' | 'custom'
   apiKey?: string
@@ -480,6 +490,8 @@ export interface ElectronAPI {
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
   remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
+  remoteHostTrustGetStatus: (server: RemoteShellServer) => Promise<{ known: boolean; fingerprintSha256?: string }>
+  remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>
 
   // Shell
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) => Promise<{

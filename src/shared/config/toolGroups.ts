@@ -62,6 +62,13 @@ const CORE_TOOLS: string[] = [
   'delete_file_or_folder',
   // 终端
   'run_command',
+  'list_remote_directory',
+  'read_remote_file',
+  'write_remote_file',
+  'rename_remote_path',
+  'delete_remote_path',
+  'upload_to_remote',
+  'download_from_remote',
   'get_lint_errors',
   // 代码智能
   'find_references',
