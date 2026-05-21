@@ -909,7 +909,10 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: `Maximum number of terminals (${MAX_TERMINALS}) reached` }
     }
 
-    const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
+    const fallbackCwd = workspace?.roots?.[0] || process.cwd()
+    const targetCwd = remote?.host
+      ? fallbackCwd
+      : ((cwd && cwd.trim()) || fallbackCwd)
 
     if (workspace && workspace.roots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
@@ -965,7 +968,7 @@ export function registerSecureTerminalHandlers(
         return { success: false, error }
       }
 
-      if (!fs.existsSync(targetCwd)) {
+      if (!remote?.host && !fs.existsSync(targetCwd)) {
         const error = `Working directory not found: ${targetCwd}`
         logger.security.error(`[Terminal] ${error}`)
         return { success: false, error }
