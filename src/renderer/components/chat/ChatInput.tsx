@@ -17,7 +17,9 @@ import {
   Wrench,
   Server,
   Image as ImageIcon,
-  ListOrdered
+  ListOrdered,
+  Maximize2,
+  Minimize2
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -31,6 +33,9 @@ import ModeSelector from './ModeSelector'
 import { KaomojiPet } from './KaomojiPet'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
+
+const COLLAPSED_TEXTAREA_HEIGHT = 132
+const LONG_TEXT_THRESHOLD = 168
 
 export interface PendingImage {
   id: string
@@ -86,14 +91,30 @@ const ChatInput = memo(function ChatInput({
   const { language, editorConfig } = useStore(useShallow(s => ({ language: s.language, editorConfig: s.editorConfig })))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(false)
+  const [isInputExpanded, setIsInputExpanded] = useState(false)
+  const [canCollapseInput, setCanCollapseInput] = useState(false)
 
   // Auto-resize
   useLayoutEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    const fullHeight = textarea.scrollHeight
+    const isLongInput = fullHeight > LONG_TEXT_THRESHOLD
+    const maxExpandedHeight = Math.max(220, Math.floor(window.innerHeight * 0.5))
+    const targetHeight = isLongInput && !isInputExpanded
+      ? COLLAPSED_TEXTAREA_HEIGHT
+      : Math.min(fullHeight, maxExpandedHeight)
+
+    setCanCollapseInput(isLongInput)
+    if (!isLongInput && isInputExpanded) {
+      setIsInputExpanded(false)
     }
-  }, [input, textareaRef])
+
+    textarea.style.height = `${targetHeight}px`
+    textarea.style.overflowY = fullHeight > targetHeight ? 'auto' : 'hidden'
+  }, [input, isInputExpanded, textareaRef])
 
   // 文件引用检测
   const fileRefs = useMemo(() => {
@@ -149,12 +170,12 @@ const ChatInput = memo(function ChatInput({
     <div ref={inputContainerRef} className="z-20">
       <div
         className={`
-            relative group flex flex-col rounded-xl transition-all duration-500 ease-out border backdrop-blur-md
+            process-fluid-input relative group flex flex-col rounded-xl transition-all duration-500 ease-out backdrop-blur-md
             ${isStreaming
-            ? 'bg-surface/30 border-accent/20 shadow-[0_4px_24px_-12px_rgba(var(--accent)/0.15)]'
+            ? 'process-fluid-input--streaming'
             : isFocused
-              ? 'bg-background/80 border-accent/30 shadow-[0_8px_32px_-16px_rgba(var(--accent)/0.2)] ring-1 ring-accent/10 translate-y-[-1px]'
-              : 'bg-surface/60 border-border/50 hover:border-text-primary/10 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)]'
+              ? 'process-fluid-input--focused'
+              : ''
           }
         `}
       >
@@ -286,6 +307,22 @@ const ChatInput = memo(function ChatInput({
             rows={1}
             style={{ minHeight: '48px', fontSize: `${Math.max(14, editorConfig.chatFontSize ?? editorConfig.fontSize)}px` }}
           />
+
+          {canCollapseInput && (
+            <div className="-mt-1 flex justify-end pb-1">
+              <button
+                type="button"
+                onClick={() => setIsInputExpanded(prev => !prev)}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-text-muted/55 transition-colors hover:bg-text-primary/[0.04] hover:text-text-secondary"
+                title={isInputExpanded
+                  ? (language === 'zh' ? '收起输入内容' : 'Collapse input')
+                  : (language === 'zh' ? '展开输入内容' : 'Expand input')}
+              >
+                {isInputExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+                <span>{isInputExpanded ? (language === 'zh' ? '收起' : 'Collapse') : (language === 'zh' ? '展开' : 'Expand')}</span>
+              </button>
+            </div>
+          )}
 
           {/* Bottom Actions */}
           <div className="relative flex items-center justify-between pt-1 gap-2">

@@ -418,13 +418,17 @@ async function loadJsZip(): Promise<typeof JSZip> {
 }
 
 async function loadPdfParse(): Promise<PdfParse> {
-  pdfParseLoader ??= Promise.resolve()
-    .then(() => {
-      const pdfParse = require('pdf-parse') as unknown
-      if (typeof pdfParse !== 'function') {
+  pdfParseLoader ??= import('pdf-parse')
+    .then((pdfParse) => {
+      const parser = typeof pdfParse === 'function'
+        ? pdfParse
+        : typeof (pdfParse as { default?: unknown })?.default === 'function'
+          ? (pdfParse as { default: unknown }).default
+          : null
+      if (!parser) {
         throw new Error('pdf-parse did not export a parser function')
       }
-      return pdfParse as PdfParse
+      return parser as PdfParse
     })
     .catch((error) => {
       throw createDependencyLoadError('pdf-parse', error)

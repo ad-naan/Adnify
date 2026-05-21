@@ -2,7 +2,8 @@ import { Server } from 'lucide-react'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import type { ChatMessage, ContextItem, LastActiveServer, ShellServerContext } from '@/renderer/agent/types'
 import { getMessageText } from '@/renderer/agent/types'
-import { shellRegistryService, type ShellLink, type RemoteServerConfig } from '@/renderer/shell'
+import { shellRegistryService } from '@/renderer/shell/services/shellRegistryService'
+import type { ShellLink, RemoteServerConfig } from '@/renderer/shell/types'
 import type { ToolExecutionContext } from '@/shared/types'
 
 export interface RemoteShellLink extends ShellLink {

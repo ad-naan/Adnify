@@ -95,16 +95,16 @@ describe('assistantTurnProjection', () => {
     expect(projection.shouldCollapseProcess).toBe(true)
   })
 
-  it('keeps trailing sources inside the collapsed process block', () => {
+  it('keeps trailing sources visible with the final reply', () => {
     const projection = projectAssistantTurn([
       text('Answer with source.'),
       sources(),
     ])
 
-    expect(projection.finalReplyParts).toEqual([text('Answer with source.')])
-    expect(projection.processParts).toEqual([sources()])
-    expect(projection.summary.hasSources).toBe(true)
-    expect(projection.shouldCollapseProcess).toBe(true)
+    expect(projection.finalReplyParts).toEqual([text('Answer with source.'), sources()])
+    expect(projection.processParts).toEqual([])
+    expect(projection.summary.hasSources).toBe(false)
+    expect(projection.shouldCollapseProcess).toBe(false)
   })
 
   it('shows only the process block when there is no final text', () => {
