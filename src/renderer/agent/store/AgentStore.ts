@@ -33,6 +33,7 @@ import {
 } from './slices/planSlice'
 import { createIdleHandoffState } from '../types'
 import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats, ThreadHandoffState, AssistantMessage } from '../types'
+import type { LastActiveServer } from '../types'
 import type { CompressionStats } from '../core/types'
 import type { HandoffDocument, StructuredSummary } from '../domains/context/types'
 import { buildHandoffContext } from '../domains/context/HandoffManager'
@@ -125,6 +126,8 @@ export interface ThreadBoundStore {
     getToolStreamingPreview: (toolCallId: string) => ToolStreamingPreview | undefined
     setCompressionStats: (stats: CompressionStats | null) => void
     setContextStats: (stats: ContextStats | null) => void
+    setLastActiveServer: (server: LastActiveServer | null) => void
+    clearLastActiveServer: () => void
     setExecutionMeta: (meta: import('../types').ThreadExecutionMeta | null) => void
     updateExecutionMeta: (meta: Partial<import('../types').ThreadExecutionMeta>) => void
     clearExecutionMeta: () => void
@@ -452,6 +455,8 @@ export const useAgentStore = create<AgentStore>()(
                     threadSlice.getToolStreamingPreview(toolCallId, threadId),
                 setCompressionStats: (stats) => threadSlice.setCompressionStats(stats, threadId),
                 setContextStats: (stats) => threadSlice.setContextStats(stats, threadId),
+                setLastActiveServer: (server) => threadSlice.setLastActiveServer(server, threadId),
+                clearLastActiveServer: () => threadSlice.clearLastActiveServer(threadId),
                 setExecutionMeta: (meta) => threadSlice.setExecutionMeta(meta, threadId),
                 updateExecutionMeta: (meta) => threadSlice.updateExecutionMeta(meta, threadId),
                 clearExecutionMeta: () => threadSlice.clearExecutionMeta(threadId),

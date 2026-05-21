@@ -5,6 +5,7 @@
 
 import type { StateCreator } from 'zustand'
 import type { ChatThread, StreamState, CompressionPhase, TodoItem, ContextStats, ThreadHandoffState } from '../../types'
+import type { LastActiveServer } from '../../types'
 import type { CompressionStats } from '../../core/types'
 import type { StructuredSummary } from '../../domains/context/types'
 import type { BranchSlice } from './branchSlice'
@@ -41,6 +42,8 @@ export interface ThreadActions {
 
     setTodos: (todos: TodoItem[], threadId?: string) => void
     getTodos: (threadId?: string) => TodoItem[]
+    setLastActiveServer: (server: LastActiveServer | null, threadId?: string) => void
+    clearLastActiveServer: (threadId?: string) => void
     setExecutionMeta: (meta: import('../../types').ThreadExecutionMeta | null, threadId?: string) => void
     updateExecutionMeta: (meta: Partial<import('../../types').ThreadExecutionMeta>, threadId?: string) => void
     clearExecutionMeta: (threadId?: string) => void
@@ -458,6 +461,28 @@ export const createThreadSlice: StateCreator<
 
         const thread = get().threads[targetId]
         return thread?.todos || []
+    },
+
+    setLastActiveServer: (server, threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => ({
+            threads: updateThread(state.threads, targetId, {
+                lastActiveServer: server || undefined,
+            }),
+        }))
+    },
+
+    clearLastActiveServer: (threadId) => {
+        const targetId = threadId ?? get().currentThreadId
+        if (!targetId) return
+
+        set(state => ({
+            threads: updateThread(state.threads, targetId, {
+                lastActiveServer: undefined,
+            }),
+        }))
     },
 
     setExecutionMeta: (meta, threadId) => {
