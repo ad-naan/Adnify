@@ -587,6 +587,8 @@ export const zh = {
   'cmd.explorer.revealActiveFile': '在资源管理器中显示',
   'cmd.explorer.revealInSidebar': '在侧边栏中定位',
   'cmd.explorer.rename': '重命名文件/文件夹',
+  'cmd.explorer.copy': '复制文件/文件夹',
+  'cmd.explorer.paste': '粘贴文件/文件夹',
   'cmd.help.about': '关于',
 
   // Workspace Dropdown

@@ -325,7 +325,7 @@ export function SearchView() {
             onFocus={() => searchHistory.length > 0 && setShowHistory(true)}
             onBlur={() => setTimeout(() => setShowHistory(false), 200)}
             placeholder={t('searchPlaceholder', language)}
-            className="w-full h-9 text-xs pr-24" // Reserve space for icons
+            className="w-full h-9 !rounded-md text-xs pr-24 shadow-none focus:!ring-1 focus:shadow-none" // Reserve space for icons
           />
 
           {/* Search Options (Inside Input) */}
@@ -418,7 +418,7 @@ export function SearchView() {
               value={replaceQuery}
               onChange={(e) => setReplaceQuery(e.target.value)}
               placeholder={t('replacePlaceholder', language)}
-              className="flex-1 h-8 text-xs"
+              className="flex-1 h-8 !rounded-md text-xs shadow-none focus:!ring-1 focus:shadow-none"
             />
             {/* 单文件替换按钮已移至每个文件组头部 */}
             <button
@@ -439,7 +439,7 @@ export function SearchView() {
               value={excludePattern}
               onChange={(e) => setExcludePattern(e.target.value)}
               placeholder={t('excludePlaceholder', language)}
-              className="w-full h-7 text-xs"
+              className="w-full h-7 !rounded-md text-xs shadow-none focus:!ring-1 focus:shadow-none"
             />
           </div>
         )}

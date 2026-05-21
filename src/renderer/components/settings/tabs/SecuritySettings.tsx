@@ -86,10 +86,25 @@ export function SecuritySettings({ language, securitySettings, setSecuritySettin
                 <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60 ml-1">
                     {language === 'zh' ? '安全选项' : 'Security Options'}
                 </h4>
-                <div className="space-y-4">
-                    <Switch label={language === 'zh' ? '启用操作确认' : 'Enable permission confirmation'} checked={securitySettings.enablePermissionConfirm} onChange={(e) => updateSecuritySettings({ enablePermissionConfirm: e.target.checked })} />
-                    <Switch label={language === 'zh' ? '严格工作区模式' : 'Strict workspace mode'} checked={securitySettings.strictWorkspaceMode} onChange={(e) => updateSecuritySettings({ strictWorkspaceMode: e.target.checked })} />
-                    <Switch label={language === 'zh' ? '显示安全警告' : 'Show security warnings'} checked={securitySettings.showSecurityWarnings} onChange={(e) => updateSecuritySettings({ showSecurityWarnings: e.target.checked })} />
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-x-6 gap-y-3">
+                    <Switch
+                        label={language === 'zh' ? '启用操作确认' : 'Enable permission confirmation'}
+                        checked={securitySettings.enablePermissionConfirm}
+                        onChange={(e) => updateSecuritySettings({ enablePermissionConfirm: e.target.checked })}
+                        className="w-full"
+                    />
+                    <Switch
+                        label={language === 'zh' ? '严格工作区模式' : 'Strict workspace mode'}
+                        checked={securitySettings.strictWorkspaceMode}
+                        onChange={(e) => updateSecuritySettings({ strictWorkspaceMode: e.target.checked })}
+                        className="w-full"
+                    />
+                    <Switch
+                        label={language === 'zh' ? '显示安全警告' : 'Show security warnings'}
+                        checked={securitySettings.showSecurityWarnings}
+                        onChange={(e) => updateSecuritySettings({ showSecurityWarnings: e.target.checked })}
+                        className="w-full"
+                    />
                 </div>
             </section>
 
