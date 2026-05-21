@@ -15,11 +15,20 @@
 <a href="https://github.com/tss-tss"><img src="https://github.com/tss-tss.png" width="50" height="50" style="border-radius:50%" alt="晨曦"/></a>
 <a href="https://github.com/joanboss"><img src="https://github.com/joanboss.png" width="50" height="50" style="border-radius:50%" alt="joanboss"/></a>
 <a href="https://github.com/yuheng-888"><img src="https://github.com/yuheng-888.png" width="50" height="50" style="border-radius:50%" alt="玉衡"/></a>
+<a href="https://github.com/uiharuayako"><img src="https://github.com/uiharuayako.png" width="50" height="50" style="border-radius:50%" alt="uiharuayako"/></a>
 <!-- ALL-CONTRIBUTORS-LIST:END -->
 
 ---
 
-## [Unreleased] - 2026-05-13
+## [Unreleased] - 2026-05-21
+
+### 近期变更
+- **PDF 解析**：补齐 `pdf-parse` 类型依赖，完善富文本读取链路。
+- **远程 Shell 联动**：接入 Shell Studio remote servers，并修复 SSH 会话 cwd 校验。
+- **过程折叠 UI**：优化聊天过程折叠块的展示与收纳体验。
+- **AI 代码归因**：新增 AI code attribution dashboard。
+- **设置引导**：新增本地 skills 目录说明。
+- **UI 基础**：统一颜色系统，提升布局稳定性与可访问性。
 
 ### ✨ 新功能 / 优化
 - 🧭 **多模态模型路由**
@@ -34,6 +43,187 @@
 - 🛡️ **配置清理**
   - 删除提供商或模型时会自动清理失效的多模态引用，避免保存悬空配置。
   - 未配置多模态模型时，图片请求保持原有单模型处理流程。
+
+---
+
+## [1.7.49] - 2026-05-18
+
+### 新功能 / 优化
+- **文档与图片读取**：新增文档读取、PDF 解析和 `read_image` 能力，并整理相关依赖。
+- **浮层可读性**：优化悬浮覆盖层在复杂背景下的文本可读性。
+- **LSP 与安全边界**：新增语言环境配置管理，支持成功安装后清理不可用服务冷却，并允许用户授权路径绕过工作区边界。
+
+### 修复
+- 修复启动文件关联处理异常。
+- 修复 `edit_file` 混合批量 payload 被错误接收的问题。
+- 修复从磁盘重载文件时未保存版本状态处理不稳的问题。
+
+---
+
+## [1.7.48] - 2026-05-16
+
+### 新功能 / 优化
+- **贡献者体系**：抽取共享贡献者配置，并重设计 onboarding 向导展示。
+- **Markdown 渲染**：新增流式内容表格格式修复能力。
+- **编辑器体验**：优化 Monaco 主题和查找组件样式。
+
+### 工程
+- 重新整理依赖归属，将仅开发期依赖移动到 `devDependencies`。
+- 提升 macOS 构建可靠性，增强 Spotlight 清理流程。
+
+---
+
+## [1.7.47] - 2026-05-15
+
+### 新功能 / 优化
+- **消息队列**：新增 agent 执行期间的消息缓冲队列。
+- **多模态路由**：新增多模态模型路由、请求中断信号处理和路由配置优化。
+- **LLM 能力**：支持 Anthropic thinking block 签名追踪。
+- **Agent 稳定性**：改进系统告警循环检测。
+
+### 修复 / 工程
+- 修复设置页保存按钮样式逻辑。
+- 修复应用关闭时 agent 状态持久化问题。
+- 持续优化 GitHub Actions、Electron Builder、macOS 打包和 smoke test 流程。
+
+---
+
+## [1.7.46] - 2026-05-06
+
+### 新功能 / 优化
+- **上下文与记忆**：新增峰值上下文用量追踪、工作记忆健康度和压缩体验优化。
+- **图片体验**：新增图片灯箱，支持缩放与导航。
+- **LLM 请求控制**：新增请求级中断能力。
+- **GitHub API**：迁移到集中式 GitHub API 服务和 scoped store 配置。
+
+### 文档 / UI
+- 替换架构图为响应式图片资源。
+- 优化标题栏 logo 容器尺寸与间距。
+
+---
+
+## [1.7.45] - 2026-05-05
+
+### 新功能 / 优化
+- **剪贴板服务**：新增跨平台剪贴板服务并接入 Electron。
+- **GitHub API**：新增带 token 支持的集中式 GitHub API 服务。
+- **UI 重构**：ErrorBoundary 迁移到统一 Button 组件。
+
+### 修复
+- 修复删除文件后文件树未刷新的问题。
+- 修复剪贴板写入权限被拒绝的问题。
+- 修复 detached terminal 容器上的 fit 操作问题。
+
+---
+
+## [1.7.44] - 2026-05-03
+
+### 新功能 / 优化
+- **文件编码**：新增文件操作多编码支持。
+- **外观设置**：新增布局密度和主题预览自定义。
+- **编辑器缩放**：支持编辑器字体缩放快捷键与持久化。
+- **Agent 模块化**：从 shared 模块导入 approval service。
+
+---
+
+## [1.7.43] - 2026-05-01
+
+### 新功能 / 优化
+- **欢迎页与看板**：新增使用数据看板，优化欢迎页布局和初始加载动画。
+- **工作区生命周期**：新增深度缓存清理、生命周期管理、文件关联与启动文件处理。
+- **Agent 状态**：工作区运行时重置时同步清理 plan 与 task 状态。
+- **安全**：新增 IPC sender 校验、外部 URL 校验和安全导航。
+
+### 重构
+- 合并 chunk 策略，简化应用初始化。
+- Agent 文件操作迁移到异步流程，并抽取 approval service。
+
+---
+
+## [1.7.42] - 2026-05-01
+
+### 新功能 / 优化
+- **设置与模型**：抽取协议 profiles，重构供应商配置。
+- **Prompt Cache**：基于能力检测和缓存分析重构提示缓存。
+- **Agent 历史**：新增渐进式消息历史展开与 timeline projection。
+- **工具日志**：新增线程级 tool call 日志与过滤。
+
+### 修复
+- 修复 Explorer refresh 在删除路径比较上的冗余逻辑。
+- 修复 packaged LSP 安装和 definition navigation。
+- 规范 `package-lock` peer dependency 声明。
+
+---
+
+## [1.7.41] - 2026-04-27
+
+### 新功能 / 优化
+- **LLM 缓存管理**：新增 token 追踪与前缀清理。
+- **Agent 折叠块**：新增可展开块默认状态配置。
+- **上下文快照**：重构快照发布流程并新增展示模式。
+
+### 工程
+- Release workflow 纳入 optional dependencies。
+
+---
+
+## [1.7.40] - 2026-04-26
+
+### 新功能 / 优化
+- **Git 工作流**：新增仓库克隆能力与空状态 UI 优化。
+- **Plan 执行**：增强任务取消和执行校验。
+- **文档**：重构 README 文档内容。
+
+---
+
+## [1.7.39] - 2026-04-26
+
+### 新功能 / 优化
+- **品牌与欢迎页**：优化 About dialog、欢迎页、项目图标和品牌资源。
+- **AI 面板**：新增 AI 面板显示切换快捷键。
+- **LLM 请求设置**：新增请求设置层并扩展供应商兼容性。
+- **Agent 上下文**：重构 handoff session 管理和上下文追踪。
+
+---
+
+## [1.7.38] - 2026-04-26
+
+### 新功能 / 优化
+- **Mascot 系统**：新增交互式 IP mascot，并将 mascot 移动到标题栏以简化交互模型。
+- **品牌资产**：更新应用图标，新增暗色主题资源。
+- **渲染兼容**：修复打包环境下品牌资源路径。
+
+---
+
+## [1.7.37] - 2026-04-23
+
+### 新功能 / 优化
+- **Agent 状态**：新增任务执行重置、工作区树同步和消息版本追踪。
+- **LLM 兼容层**：新增 provider compatibility layer，并扩展文件操作能力。
+- **工具渲染**：合并 tool call 渲染逻辑到共享 handler。
+
+---
+
+## [1.7.36] - 2026-04-23
+
+### 新功能 / 优化
+- **Agent 交互**：抽取聊天滚动和工具卡片展开逻辑为自定义 hooks。
+- **资源树刷新**：实现细粒度 tree refresh 和定向缓存失效。
+- **数学渲染**：集成 KaTeX 支持 LaTeX 渲染。
+- **上下文压缩**：新增上下文压缩与自动 handoff runtime state。
+
+---
+
+## [1.7.35] - 2026-04-19
+
+### 新功能 / 优化
+- **安全终端**：增强 UTF-8 数据处理，并确保 stream closure 时完整输出。
+- **语言体验**：新增应用菜单动态语言切换。
+- **预览能力**：新增浏览器预览 tab 与 dev server discovery。
+- **Agent 文件追踪**：增强相对路径和大文件变更追踪。
+
+### 文档
+- 更新 README、演示媒体和二维码图片渲染。
 
 ---
 
