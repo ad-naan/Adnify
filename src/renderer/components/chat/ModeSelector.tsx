@@ -1,9 +1,5 @@
-/**
- * 模式选择器组件
- * 下拉方式选择 Chat/Agent 模式
- */
-
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check, MessageSquare, Sparkles, Workflow } from 'lucide-react'
 import { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
@@ -51,15 +47,50 @@ const MODES: Array<{
 export default function ModeSelector({ mode, onModeChange, className = '' }: ModeSelectorProps) {
   const language = useStore(s => s.language)
   const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  // 点击外部关闭
+  useLayoutEffect(() => {
+    if (!isOpen || !triggerRef.current) return
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const width = 192
+      setDropdownStyle({
+        position: 'fixed',
+        left: Math.min(Math.max(8, rect.left), window.innerWidth - width - 8),
+        width,
+        bottom: window.innerHeight - rect.top + 8,
+        zIndex: 9999,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [isOpen])
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (
+        triggerRef.current &&
+        !triggerRef.current.contains(target) &&
+        menuRef.current &&
+        !menuRef.current.contains(target)
+      ) {
         setIsOpen(false)
       }
     }
+
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -69,13 +100,50 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
   const currentMode = MODES.find((m) => m.id === mode) || MODES[0]
   const Icon = currentMode.icon
 
+  const dropdown = isOpen && (
+    <div
+      ref={menuRef}
+      style={dropdownStyle}
+      className="bg-surface border border-border rounded-xl shadow-2xl py-1 animate-scale-in"
+    >
+      {MODES.map((m) => {
+        const ModeIcon = m.icon
+        const isSelected = mode === m.id
+        return (
+          <button
+            key={m.id}
+            onClick={() => {
+              onModeChange(m.id)
+              setIsOpen(false)
+            }}
+            className={`
+              w-full flex items-center gap-3 px-3 py-2.5 text-left
+              transition-colors
+              ${isSelected ? 'bg-accent/10' : 'hover:bg-surface-hover'}
+            `}
+          >
+            <ModeIcon className={`w-4 h-4 ${m.color}`} />
+            <div className="flex-1 min-w-0">
+              <div className={`text-xs font-medium ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
+                {m.labelKey}
+              </div>
+              <div className="text-[10px] text-text-muted truncate opacity-80">
+                {language === 'zh' ? m.descZh : m.descEn}
+              </div>
+            </div>
+            {isSelected && <Check className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
+          </button>
+        )
+      })}
+    </div>
+  )
+
   return (
-    <div ref={dropdownRef} className={`relative ${className}`}>
-      {/* 触发按钮 */}
+    <div ref={triggerRef} className={`relative shrink-0 ${className}`}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border border-transparent
+          flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border border-transparent whitespace-nowrap
           transition-all duration-200
           ${isOpen
             ? 'bg-surface-active text-text-primary shadow-[0_0_0_2px_rgba(var(--accent)/0.15)]'
@@ -88,43 +156,7 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
         <ChevronDown className={`w-3 h-3 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* 下拉菜单 */}
-      {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-48 bg-surface border border-border rounded-xl shadow-2xl z-50 py-1 animate-scale-in">
-          {MODES.map((m) => {
-            const ModeIcon = m.icon
-            const isSelected = mode === m.id
-            return (
-              <button
-                key={m.id}
-                onClick={() => {
-                  onModeChange(m.id)
-                  setIsOpen(false)
-                }}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 text-left
-                  transition-colors
-                  ${isSelected
-                    ? 'bg-accent/10'
-                    : 'hover:bg-surface-hover'
-                  }
-                `}
-              >
-                <ModeIcon className={`w-4 h-4 ${m.color}`} />
-                <div className="flex-1 min-w-0">
-                  <div className={`text-xs font-medium ${isSelected ? 'text-accent' : 'text-text-primary'}`}>
-                    {m.labelKey}
-                  </div>
-                  <div className="text-[10px] text-text-muted truncate opacity-80">
-                    {language === 'zh' ? m.descZh : m.descEn}
-                  </div>
-                </div>
-                {isSelected && <Check className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
-              </button>
-            )
-          })}
-        </div>
-      )}
+      {createPortal(dropdown, document.body)}
     </div>
   )
 }
