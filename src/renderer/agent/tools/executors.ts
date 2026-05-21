@@ -35,6 +35,15 @@ import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { guardWriteFile } from './fileWriteStrategy'
 import { analyzeImageSource, getReadImageUnavailableMessage, getReadRichContentOptions } from '../services/imageReadService'
+import {
+    shellServerRoutingService,
+    type RemoteShellLink,
+    type ResolvedShellServerTarget,
+} from '../services/shellServerRoutingService'
+import type {
+    RemoteHostTrustDecision,
+    RemoteShellServer,
+} from '@/renderer/types/electron'
 
 // ===== 辅助函数 =====
 
@@ -418,6 +427,181 @@ function parseInlineScriptCommand(command: string): InlineScriptCommand | null {
     }
 
     return null
+}
+
+function escapeShellSingleQuotes(value: string): string {
+    return value.replace(/'/g, `'\\''`)
+}
+
+function buildShellRouteMeta(target: ResolvedShellServerTarget): Record<string, unknown> {
+    return {
+        executionTarget: target.executionTarget,
+        serverLinkId: target.server?.serverLinkId,
+        serverName: target.server?.serverName,
+        resolvedBy: target.resolvedBy,
+    }
+}
+
+function getRemotePathArg(value: unknown, fallback = '.'): string {
+    if (typeof value !== 'string') return fallback
+    const trimmed = value.trim()
+    return trimmed || fallback
+}
+
+function formatServerResolutionError(
+    toolName: string,
+    serverName: string,
+    resolution: Awaited<ReturnType<typeof shellServerRoutingService.resolveServerName>>
+): string {
+    if (resolution.kind === 'not_found') {
+        return `Remote server not found for ${toolName}: "${serverName}". Use an existing Shell Studio server name.`
+    }
+    if (resolution.kind === 'ambiguous') {
+        const labels = resolution.matches?.map(match => match.serverName).join(', ') || serverName
+        return `Remote server name is ambiguous for ${toolName}: "${serverName}" (${labels}).`
+    }
+    return `Failed to resolve remote server for ${toolName}: "${serverName}".`
+}
+
+async function resolveShellRoute(
+    toolName: string,
+    args: Record<string, unknown>,
+    ctx: Pick<ToolExecutionContext, 'threadId' | 'assistantId' | 'currentAssistantId'>,
+    options: { requireRemote: boolean }
+): Promise<
+    | { ok: true; target: ResolvedShellServerTarget; routeMeta: Record<string, unknown>; remoteLink?: RemoteShellLink }
+    | { ok: false; errorResult: ToolExecutionResult }
+> {
+    const explicitServerName = typeof args.server_name === 'string' ? args.server_name.trim() : ''
+    if (explicitServerName) {
+        const resolution = await shellServerRoutingService.resolveServerName(explicitServerName)
+        if (resolution.kind !== 'resolved' || !resolution.server) {
+            return {
+                ok: false,
+                errorResult: {
+                    success: false,
+                    result: `Error: ${formatServerResolutionError(toolName, explicitServerName, resolution)}`,
+                    error: formatServerResolutionError(toolName, explicitServerName, resolution),
+                    meta: {
+                        executionTarget: 'remote',
+                        resolvedBy: 'arg',
+                    },
+                },
+            }
+        }
+    }
+
+    const target = await shellServerRoutingService.resolveExecutionTarget(toolName, args, ctx)
+    const routeMeta = buildShellRouteMeta(target)
+
+    if (target.executionTarget !== 'remote') {
+        if (options.requireRemote) {
+            return {
+                ok: false,
+                errorResult: {
+                    success: false,
+                    result: `Error: No remote server resolved for ${toolName}. Use server_name or mention #server-name# in the user message.`,
+                    error: `No remote server resolved for ${toolName}`,
+                    meta: routeMeta,
+                },
+            }
+        }
+
+        return { ok: true, target, routeMeta }
+    }
+
+    if (!target.server) {
+        return {
+            ok: false,
+            errorResult: {
+                success: false,
+                result: `Error: Remote routing for ${toolName} did not resolve a server configuration.`,
+                error: `Remote routing for ${toolName} did not resolve a server configuration`,
+                meta: routeMeta,
+            },
+        }
+    }
+
+    const remoteLinks = await shellServerRoutingService.getRemoteServerLinks()
+    const remoteLink = remoteLinks.find(link => link.id === target.server?.serverLinkId)
+    if (!remoteLink) {
+        return {
+            ok: false,
+            errorResult: {
+                success: false,
+                result: `Error: Remote server "${target.server.serverName}" is no longer available in Shell Studio.`,
+                error: `Remote server "${target.server.serverName}" is no longer available in Shell Studio`,
+                meta: routeMeta,
+            },
+        }
+    }
+
+    return {
+        ok: true,
+        target,
+        routeMeta,
+        remoteLink,
+    }
+}
+
+function isRemoteHostMismatchError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.includes('Remote host fingerprint mismatch')
+        || message.includes('REMOTE_HOST_FINGERPRINT_MISMATCH')
+}
+
+async function buildRemoteTrustMeta(
+    server: RemoteShellServer,
+    error?: unknown,
+    options?: { preferKnownStatus?: boolean }
+): Promise<Record<string, unknown>> {
+    let statusSnapshot: { known: boolean; fingerprintSha256?: string } | null = null
+    let decision: RemoteHostTrustDecision | null = null
+
+    try {
+        statusSnapshot = await api.remoteHostTrust.getStatus(server)
+    } catch {
+        statusSnapshot = null
+    }
+
+    try {
+        decision = await api.remoteHostTrust.getLastDecision(server)
+    } catch {
+        decision = null
+    }
+
+    if (decision?.hostTrustStatus === 'mismatch_rejected') {
+        if (error && !isRemoteHostMismatchError(error)) {
+            return {}
+        }
+        return {
+            hostTrustStatus: decision.hostTrustStatus,
+            hostFingerprintSha256: decision.hostFingerprintSha256,
+            knownHostFingerprintSha256: decision.knownHostFingerprintSha256,
+        }
+    }
+
+    if (decision) {
+        if (options?.preferKnownStatus && decision.hostTrustStatus === 'accepted_new' && statusSnapshot?.fingerprintSha256) {
+            return {
+                hostTrustStatus: 'known',
+                hostFingerprintSha256: statusSnapshot.fingerprintSha256,
+            }
+        }
+        return {
+            hostTrustStatus: decision.hostTrustStatus,
+            hostFingerprintSha256: decision.hostFingerprintSha256,
+        }
+    }
+
+    if (statusSnapshot?.known && statusSnapshot.fingerprintSha256) {
+        return {
+            hostTrustStatus: 'known',
+            hostFingerprintSha256: statusSnapshot.fingerprintSha256,
+        }
+    }
+
+    return {}
 }
 
 async function runInlineScriptViaTempFile(
@@ -1374,24 +1558,42 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async run_command(args, ctx) {
         const command = args.command as string
-        // cwd 解析：若 AI 传了 cwd 参数，解析为绝对路径；否则用工作区根目录
-        const resolvedCwd = args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : null
         const isBackground = args.is_background as boolean
         const config = getAgentConfig()
         const timeout = args.timeout
             ? (args.timeout as number) * 1000
             : config.toolTimeoutMs
+        let routeMeta: Record<string, unknown> = {
+            executionTarget: 'local',
+            resolvedBy: 'local_default',
+        }
+        let remoteServerForTrust: RemoteShellServer | null = null
 
         const isLongRunningProcess = isLongRunningCommand(command, isBackground)
 
         try {
-            if (!isLongRunningProcess) {
+            const routeResolution = await resolveShellRoute('run_command', args, ctx, { requireRemote: false })
+            if (!routeResolution.ok) {
+                return routeResolution.errorResult
+            }
+
+            const { target, routeMeta: resolvedRouteMeta, remoteLink } = routeResolution
+            routeMeta = resolvedRouteMeta
+            remoteServerForTrust = remoteLink?.remote || null
+            const resolvedCwd = remoteLink
+                ? null
+                : (args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : null)
+
+            if (!remoteLink && !isLongRunningProcess) {
                 const directExecutionResult = await runInlineScriptViaTempFile(command, ctx, timeout)
                 if (directExecutionResult) {
+                    directExecutionResult.meta = {
+                        ...(directExecutionResult.meta || {}),
+                        ...routeMeta,
+                    }
                     return directExecutionResult
                 }
             }
-
 
             // 先唤出面板，再创建/获取终端，避免竞态：
             // 若先创建终端，notify() 触发时面板还不可见 → useEffect 销毁刚创建的终端
@@ -1399,17 +1601,34 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // 获取或复用 Agent 专属终端（初始 cwd 用工作区根目录，避免反复改变终端目录）
             const terminalManager = await getTerminalManager()
-            const termId = await terminalManager.getOrCreateAgentTerminal(
-                ctx.workspacePath || '/'
+            const { terminalId: termId, reused } = await terminalManager.getOrCreateAgentTerminalLease(
+                remoteLink?.remote.remotePath || ctx.workspacePath || '/',
+                remoteLink ? {
+                    remote: remoteLink.remote,
+                    agentTerminalKey: target.server?.serverLinkId,
+                    name: `Agent · ${target.server?.serverName || remoteLink.name}`,
+                } : undefined,
             )
+            const trustMeta = remoteLink
+                ? await buildRemoteTrustMeta(remoteLink.remote, undefined, { preferKnownStatus: reused })
+                : {}
 
             // 激活 Agent 终端 tab，让用户看到执行过程
             terminalManager.setActiveTerminal(termId)
 
+            const remoteCwd = remoteLink
+                ? getRemotePathArg(args.cwd, remoteLink.remote.remotePath || '.')
+                : undefined
+            const remoteCommand = remoteLink && remoteCwd
+                ? `cd '${escapeShellSingleQuotes(remoteCwd)}' && ${command}`
+                : command
+
             // === 长进程：直接写入并立即返回，让用户在终端里跟踪 ===
             if (isLongRunningProcess) {
                 // 长进程也需要处理 cwd
-                const bgCmd = resolvedCwd
+                const bgCmd = remoteLink
+                    ? remoteCommand
+                    : resolvedCwd
                     ? (/windows/i.test(navigator.userAgent)
                         ? `Push-Location "${resolvedCwd}"; ${command}; Pop-Location`
                         : `(cd "${resolvedCwd}" && ${command})`)
@@ -1419,20 +1638,22 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 const detachedSession = terminalManager.recordDetachedCommand(
                     termId,
                     command,
-                    resolvedCwd || undefined,
+                    remoteLink ? remoteCwd : resolvedCwd || undefined,
                     'agent',
                 )
 
                 // 长进程占用了当前终端的 shell，释放 agentTerminalId
                 // 使下一次 run_command 自动创建新终端，避免命令被 stdin 吞掉
-                terminalManager.releaseAgentTerminal()
+                terminalManager.releaseAgentTerminal(termId)
 
                 return {
                     success: true,
                     result: `[Background Process Started]\nCommand: ${command}\nTerminal ID: ${termId}\nSession ID: ${detachedSession.commandSessionId}\n\nThe process is running in the Agent terminal panel. Use 'read_terminal_output' with terminal_id="${termId}" to check logs. Use 'send_terminal_input' to send input or Ctrl+C (is_ctrl=true). Use 'stop_terminal' to kill it.`,
                     meta: {
+                        ...routeMeta,
+                        ...trustMeta,
                         command,
-                        cwd: resolvedCwd,
+                        cwd: remoteLink ? remoteCwd : resolvedCwd,
                         terminalId: termId,
                         commandSessionId: detachedSession.commandSessionId,
                         finalStatus: detachedSession.status,
@@ -1444,9 +1665,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             const commandResult = await terminalManager.executeCommandWithOutput(
                 termId,
-                command,
+                remoteLink ? remoteCommand : command,
                 timeout,
-                resolvedCwd || undefined,
+                remoteLink ? undefined : (resolvedCwd || undefined),
             )
 
             const displayOutput = (commandResult.output || commandResult.partialOutput || '').trim()
@@ -1480,8 +1701,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 success: commandResult.success,
                 result: resultText,
                 meta: {
+                    ...routeMeta,
+                    ...trustMeta,
                     command,
-                    cwd: resolvedCwd,
+                    cwd: remoteLink ? remoteCwd : resolvedCwd,
                     terminalId: termId,
                     commandSessionId: commandResult.commandSessionId,
                     exitCode: commandResult.exitCode,
@@ -1496,10 +1719,17 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error)
             logger.agent.error('[run_command] Execution failed:', errorMsg)
+            const trustMeta = remoteServerForTrust
+                ? await buildRemoteTrustMeta(remoteServerForTrust, error)
+                : {}
             return {
                 success: false,
                 result: `Error: Failed to execute command: ${errorMsg}`,
-                error: errorMsg
+                error: errorMsg,
+                meta: {
+                    ...routeMeta,
+                    ...trustMeta,
+                },
             }
         }
     },
@@ -1581,6 +1811,281 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error)
             return { success: false, result: `Failed to stop terminal: ${errorMsg}`, error: errorMsg }
+        }
+    },
+
+    async list_remote_directory(args, ctx) {
+        const routeResolution = await resolveShellRoute('list_remote_directory', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const remotePath = getRemotePathArg(args.path, routeResolution.remoteLink?.remote.remotePath || '.')
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            const entries = await api.remoteShell.list(routeResolution.remoteLink!.remote, remotePath)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            const lines = entries.map((entry) => {
+                const kind = entry.isDirectory ? 'dir' : 'file'
+                const size = entry.isDirectory ? '' : ` (${entry.size} B)`
+                return `[${kind}] ${entry.path}${size}`
+            })
+
+            return {
+                success: true,
+                result: lines.length > 0 ? lines.join('\n') : '[Empty directory]',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    path: remotePath,
+                    entryCount: entries.length,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to list remote directory: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    path: remotePath,
+                },
+            }
+        }
+    },
+
+    async read_remote_file(args, ctx) {
+        const routeResolution = await resolveShellRoute('read_remote_file', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const remotePath = getRemotePathArg(args.path)
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            const content = await api.remoteShell.readText(routeResolution.remoteLink!.remote, remotePath)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            return {
+                success: true,
+                result: content ?? '',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    path: remotePath,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to read remote file: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    path: remotePath,
+                },
+            }
+        }
+    },
+
+    async write_remote_file(args, ctx) {
+        const routeResolution = await resolveShellRoute('write_remote_file', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const remotePath = getRemotePathArg(args.path)
+        const content = typeof args.content === 'string' ? args.content : ''
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            await api.remoteShell.writeText(routeResolution.remoteLink!.remote, remotePath, content)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            return {
+                success: true,
+                result: 'Remote file written successfully',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    path: remotePath,
+                    contentLength: content.length,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to write remote file: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    path: remotePath,
+                    contentLength: content.length,
+                },
+            }
+        }
+    },
+
+    async rename_remote_path(args, ctx) {
+        const routeResolution = await resolveShellRoute('rename_remote_path', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const oldPath = getRemotePathArg(args.old_path)
+        const newPath = getRemotePathArg(args.new_path)
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            await api.remoteShell.rename(routeResolution.remoteLink!.remote, oldPath, newPath)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            return {
+                success: true,
+                result: 'Remote path renamed successfully',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    oldPath,
+                    newPath,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to rename remote path: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    oldPath,
+                    newPath,
+                },
+            }
+        }
+    },
+
+    async delete_remote_path(args, ctx) {
+        const routeResolution = await resolveShellRoute('delete_remote_path', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const remotePath = getRemotePathArg(args.path)
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            await api.remoteShell.delete(routeResolution.remoteLink!.remote, remotePath)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            return {
+                success: true,
+                result: 'Remote path deleted successfully',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    path: remotePath,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to delete remote path: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    path: remotePath,
+                },
+            }
+        }
+    },
+
+    async upload_to_remote(args, ctx) {
+        const routeResolution = await resolveShellRoute('upload_to_remote', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const remotePath = getRemotePathArg(args.path, routeResolution.remoteLink?.remote.remotePath || '.')
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            const uploadResult = await api.remoteShell.upload(routeResolution.remoteLink!.remote, remotePath)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            return {
+                success: true,
+                result: uploadResult.canceled
+                    ? 'Remote upload canceled by user'
+                    : uploadResult.uploaded.length > 0
+                        ? uploadResult.uploaded.join('\n')
+                        : 'No files were uploaded',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    path: remotePath,
+                    canceled: uploadResult.canceled,
+                    uploaded: uploadResult.uploaded,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to upload to remote: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    path: remotePath,
+                },
+            }
+        }
+    },
+
+    async download_from_remote(args, ctx) {
+        const routeResolution = await resolveShellRoute('download_from_remote', args, ctx, { requireRemote: true })
+        if (!routeResolution.ok) return routeResolution.errorResult
+
+        const remotePath = getRemotePathArg(args.path)
+        const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+
+        try {
+            const downloadResult = await api.remoteShell.download(routeResolution.remoteLink!.remote, remotePath)
+            const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            return {
+                success: true,
+                result: downloadResult.canceled
+                    ? 'Remote download canceled by user'
+                    : downloadResult.localPath || 'Remote file downloaded successfully',
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...trustMeta,
+                    path: remotePath,
+                    canceled: downloadResult.canceled,
+                    localPath: downloadResult.localPath,
+                },
+            }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error)
+            return {
+                success: false,
+                result: `Error: Failed to download from remote: ${errorMsg}`,
+                error: errorMsg,
+                meta: {
+                    ...routeResolution.routeMeta,
+                    ...(isRemoteHostMismatchError(error)
+                        ? await buildRemoteTrustMeta(routeResolution.remoteLink!.remote, error)
+                        : trustMetaBase),
+                    path: remotePath,
+                },
+            }
         }
     },
 

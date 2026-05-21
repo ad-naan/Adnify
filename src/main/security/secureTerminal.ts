@@ -15,6 +15,7 @@ import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
+import { remoteHostTrustService } from '../services/remoteHostTrustService'
 
 
 interface SecureShellRequest {
@@ -687,7 +688,9 @@ export function registerSecureTerminalHandlers(
       const Client = getSsh2ClientCtor()
       this.connection = new Client()
 
-      const config: Record<string, unknown> = {
+      const config: Record<string, unknown> & {
+        hostVerifier?: (key: Buffer, callback: (trusted: boolean) => void) => void
+      } = {
         host: this.server.host.trim(),
         port: this.server.port && this.server.port > 0 ? this.server.port : 22,
         username: this.server.username?.trim() || 'root',
@@ -706,10 +709,24 @@ export function registerSecureTerminalHandlers(
 
       await new Promise<void>((resolve, reject) => {
         let settled = false
+        let verificationError: Error | null = null
         const finishReject = (error: unknown) => {
           if (settled) return
           settled = true
           reject(error)
+        }
+
+        config.hostVerifier = (key: Buffer, callback: (trusted: boolean) => void) => {
+          remoteHostTrustService.verifyOrRecordHost({
+            host: String(config.host),
+            port: Number(config.port),
+            publicKey: key,
+          }).then(() => {
+            callback(true)
+          }).catch((error) => {
+            verificationError = error instanceof Error ? error : new Error(String(error))
+            callback(false)
+          })
         }
 
         this.connection
@@ -758,8 +775,9 @@ export function registerSecureTerminalHandlers(
             finish([this.server.password || ''])
           })
           .on('error', (error: unknown) => {
-            this.emit('error', error)
-            finishReject(error)
+            const effectiveError = verificationError || error
+            this.emit('error', effectiveError)
+            finishReject(effectiveError)
           })
           .on('close', () => {
             if (this.closed) return

@@ -64,6 +64,16 @@ export interface HandoffResumeMeta {
   createdAt: number
 }
 
+export interface LastActiveServer {
+  serverLinkId: string
+  serverName: string
+  host: string
+  port?: number
+  username?: string
+  remotePath?: string
+  updatedAt: number
+}
+
 /** Complete persisted thread record plus thread-scoped ephemeral preview state. */
 export interface ChatThread {
   id: string
@@ -100,6 +110,7 @@ export interface ChatThread {
   handoffResume?: HandoffResumeMeta
   pendingObjective?: string
   pendingSteps?: string[]
+  lastActiveServer?: LastActiveServer
 
   // ===== Thread Ownership Metadata (Phase 3.1) =====
   /** Thread mode: chat/agent/plan */
@@ -127,6 +138,7 @@ export interface PersistedChatThread {
   handoffResume?: HandoffResumeMeta
   pendingObjective?: string
   pendingSteps?: string[]
+  lastActiveServer?: LastActiveServer
   mode?: import('@/shared/types/workMode').WorkMode
   origin?: 'user' | 'plan-task'
   planId?: string
@@ -172,6 +184,7 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
     handoffResume: thread.handoffResume,
     pendingObjective: thread.pendingObjective,
     pendingSteps: thread.pendingSteps,
+    lastActiveServer: thread.lastActiveServer,
     mode: thread.mode,
     origin: thread.origin,
     planId: thread.planId,

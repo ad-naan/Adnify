@@ -5,10 +5,11 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { FileText, Folder, Database, Globe, FileCode, Terminal, GitBranch, AlertCircle, Wrench } from 'lucide-react'
+import { FileText, Folder, Database, Globe, FileCode, Terminal, GitBranch, AlertCircle, Wrench, Server } from 'lucide-react'
 import { skillService } from '@/renderer/agent/services/skillService'
+import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
 
-export type MentionType = 'file' | 'folder' | 'codebase' | 'web' | 'git' | 'terminal' | 'symbols' | 'problems' | 'skill'
+export type MentionType = 'file' | 'folder' | 'codebase' | 'web' | 'git' | 'terminal' | 'symbols' | 'problems' | 'skill' | 'server'
 
 export interface MentionCandidate {
     id: string
@@ -21,7 +22,7 @@ export interface MentionCandidate {
 }
 
 export interface MentionParseResult {
-    trigger: string
+    trigger: '@' | '#'
     query: string
     range: { start: number; end: number }
 }
@@ -78,23 +79,27 @@ export class MentionParser {
     static parse(text: string, cursorPosition: number): MentionParseResult | null {
         const textBeforeCursor = text.slice(0, cursorPosition)
         const lastAt = textBeforeCursor.lastIndexOf('@')
+        const lastHash = textBeforeCursor.lastIndexOf('#')
+        const lastTriggerIndex = Math.max(lastAt, lastHash)
 
-        if (lastAt === -1) return null
+        if (lastTriggerIndex === -1) return null
+        const trigger = textBeforeCursor[lastTriggerIndex] as '@' | '#'
 
         // @ 前必须是空白或行首
-        if (lastAt > 0 && !/\s/.test(textBeforeCursor[lastAt - 1])) {
+        if (lastTriggerIndex > 0 && !/\s/.test(textBeforeCursor[lastTriggerIndex - 1])) {
             return null
         }
 
-        const query = textBeforeCursor.slice(lastAt + 1)
+        const query = textBeforeCursor.slice(lastTriggerIndex + 1)
 
         // 查询中不能有空白
         if (/[\s\n]/.test(query)) return null
+        if (trigger === '#' && query.includes('#')) return null
 
         return {
-            trigger: '@',
+            trigger,
             query,
-            range: { start: lastAt, end: cursorPosition }
+            range: { start: lastTriggerIndex, end: cursorPosition }
         }
     }
 
@@ -104,8 +109,19 @@ export class MentionParser {
     static async getSuggestions(
         query: string,
         workspacePath: string | null,
-        options: { includeFiles?: boolean; includeFolders?: boolean } = { includeFiles: true, includeFolders: true }
+        options: { includeFiles?: boolean; includeFolders?: boolean; trigger?: '@' | '#' } = { includeFiles: true, includeFolders: true, trigger: '@' }
     ): Promise<MentionCandidate[]> {
+        if (options.trigger === '#') {
+            return (await shellServerRoutingService.getRemoteServerCandidates(query)).map(candidate => ({
+                id: candidate.id,
+                type: 'server' as const,
+                label: candidate.label,
+                description: candidate.description,
+                icon: Server,
+                data: candidate.data,
+            }))
+        }
+
         const lowerQuery = query.toLowerCase()
         const suggestions: MentionCandidate[] = []
 
