@@ -450,11 +450,13 @@ Skills are instruction packages that give AI specialized capabilities (e.g., opt
    - **Search Market**: Click "Search Market" to find community-contributed skills on `skills.sh`.
    - **GitHub Install**: Enter a GitHub repo URL containing a `SKILL.md` file to clone it directly.
    - **Create Manually**: Create an exclusive skill for the current project and edit the generated `SKILL.md` template.
+   - **Use Existing Local Skills**: Open the project or global Skills directory from settings, place an existing skill folder there, then refresh the Skills list.
 2. **How it Works**:
    - Enabled skills are automatically injected into the AI's System Prompt.
    - When a task touches on the skill's domain, the AI will automatically follow the expert instructions in the skill package.
 3. **Management**:
    - You can enable/disable specific skills in settings at any time, or click the "Folder" icon to edit the skill's source code directly.
+   - Recognized local skills use a dedicated folder per skill with a `SKILL.md` file plus optional supporting files such as `scripts/`, `templates/`, or `data/`.
 
 ---
 
