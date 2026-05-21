@@ -56,6 +56,12 @@ export const CONTRIBUTORS: Contributor[] = [
     url: 'https://github.com/yuheng-888',
     role: 'contributor',
   },
+  {
+    name: 'uiharuayako',
+    avatar: 'https://github.com/uiharuayako.png',
+    url: 'https://github.com/uiharuayako',
+    role: 'contributor',
+  },
 ]
 
 /** Returns the lead/creator contributor (first entry, by convention). */
