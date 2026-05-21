@@ -51,6 +51,7 @@ import {
 } from './chatTimelineProjection'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
+import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -605,7 +606,7 @@ export default function ChatPanel() {
       const requestId = ++suggestionRequestId.current
       setMentionLoading(true)
       try {
-        const suggestions = await MentionParser.getSuggestions(parseResult.query, workspacePath)
+        const suggestions = await MentionParser.getSuggestions(parseResult.query, workspacePath, { trigger: parseResult.trigger })
         if (requestId === suggestionRequestId.current) {
           setMentionCandidates(suggestions)
         }
@@ -679,6 +680,19 @@ export default function ChatPanel() {
         replacement = '@web '
         contextItem = { type: 'Web' }
         break
+      case 'server':
+        replacement = `#${candidate.data.serverName}# `
+        contextItem = {
+          type: 'ShellServer',
+          serverLinkId: candidate.data.serverLinkId,
+          serverName: candidate.data.serverName,
+          host: candidate.data.host,
+          port: candidate.data.port,
+          username: candidate.data.username,
+          remotePath: candidate.data.remotePath,
+          bindingMode: 'explicit',
+        }
+        break
     }
 
     const newInput = textBeforeMention + replacement + textAfterMention
@@ -690,6 +704,9 @@ export default function ChatPanel() {
         if (item.type !== contextItem!.type) return false
         if (item.type === 'File' && contextItem!.type === 'File') {
           return (item as FileContext).uri === (contextItem as FileContext).uri
+        }
+        if (item.type === 'ShellServer' && contextItem!.type === 'ShellServer') {
+          return item.serverLinkId === contextItem.serverLinkId
         }
         return true
       })
@@ -707,6 +724,12 @@ export default function ChatPanel() {
   // 提交
   const handleSubmit = useCallback(async () => {
     if (!input.trim() && images.length === 0) return
+
+    const explicitServer = await shellServerRoutingService.buildExplicitShellServerContext(input)
+    if (explicitServer.error) {
+      toast.error(explicitServer.error)
+      return
+    }
 
     let userMessage: string | Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = input.trim()
 
@@ -745,12 +768,38 @@ export default function ChatPanel() {
     setInput('')
     setImages((prev) => { prev.forEach((img) => URL.revokeObjectURL(img.previewUrl)); return [] })
 
+    const contextItemsForSend = explicitServer.contextItem
+      ? [
+        ...contextItems.filter(item => item.type !== 'ShellServer'),
+        explicitServer.contextItem,
+      ]
+      : contextItems.filter(item => item.type !== 'ShellServer')
+
+    let targetThreadId = currentThreadId
+    if (!targetThreadId && (contextItemsForSend.length > 0 || explicitServer.lastActiveServer)) {
+      targetThreadId = createThread()
+    }
+
+    if (targetThreadId) {
+      const currentContextItems = useAgentStore.getState().threads[targetThreadId]?.contextItems || []
+      const hasDifferentContext =
+        currentContextItems.length !== contextItemsForSend.length ||
+        currentContextItems.some((item, index) => item !== contextItemsForSend[index])
+      if (hasDifferentContext) {
+        useAgentStore.getState().clearContextItems(targetThreadId)
+        contextItemsForSend.forEach((item) => useAgentStore.getState().addContextItem(item, targetThreadId))
+      }
+      if (explicitServer.lastActiveServer) {
+        useAgentStore.getState().setLastActiveServer(explicitServer.lastActiveServer, targetThreadId)
+      }
+    }
+
     // 如果正在执行中，将消息加入队列而不是直接发送
     if (isStreaming) {
       const enqueue = useMessageQueueStore.getState().enqueue
       enqueue({
         content: userMessage,
-        contextItems: [...contextItems],
+        contextItems: [...contextItemsForSend],
         chatMode,
       })
       toast.info(language === 'zh' ? '已加入发送队列' : 'Added to send queue')
@@ -761,7 +810,7 @@ export default function ChatPanel() {
     // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
     scrollToBottom('smooth')
     await sendMessage(userMessage)
-  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, contextItems, chatMode, toast, language])
+  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, contextItems, chatMode, toast, language, currentThreadId, createThread])
 
   // 编辑消息
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {

@@ -15,6 +15,7 @@ import {
   Folder,
   Globe,
   Wrench,
+  Server,
   Image as ImageIcon,
   ListOrdered
 } from 'lucide-react'
@@ -199,13 +200,14 @@ const ChatInput = memo(function ChatInput({
               )}
 
               {/* Context Items */}
-              {contextItems.filter(item => ['File', 'Folder', 'CodeSelection', 'Skill'].includes(item.type)).map((item, i) => {
+              {contextItems.filter(item => ['File', 'Folder', 'CodeSelection', 'Skill', 'ShellServer'].includes(item.type)).map((item, i) => {
                 const getContextStyle = (type: string) => {
                   switch (type) {
                     case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
                     case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
                     case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
                     case 'Skill': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', Icon: Wrench }
+                    case 'ShellServer': return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', Icon: Server }
                     default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
                   }
                 }
@@ -227,6 +229,9 @@ const ChatInput = memo(function ChatInput({
                     }
                     case 'Skill': {
                       return `@${(item as import('@/renderer/agent/types').SkillContext).skillId || 'skill'}`
+                    }
+                    case 'ShellServer': {
+                      return `#${(item as import('@/renderer/agent/types').ShellServerContext).serverName}#`
                     }
                     default: return 'Context'
                   }

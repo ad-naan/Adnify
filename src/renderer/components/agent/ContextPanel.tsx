@@ -6,6 +6,7 @@ import {
     Database,
     GitBranch,
     Terminal,
+    Server,
     X,
     Plus,
     ChevronDown,
@@ -50,6 +51,7 @@ export default function ContextPanel({
             case 'Codebase': return { icon: <Database className="w-3 h-3 text-purple-400" />, label: '@codebase' }
             case 'Git': return { icon: <GitBranch className="w-3 h-3 text-orange-400" />, label: '@git' }
             case 'Terminal': return { icon: <Terminal className="w-3 h-3 text-green-400" />, label: '@terminal' }
+            case 'ShellServer': return { icon: <Server className="w-3 h-3 text-emerald-400" />, label: `#${item.serverName}#` }
             case 'Symbols': return { icon: <Code className="w-3 h-3 text-blue-400" />, label: '@symbols' }
             default: return { icon: <File className="w-3 h-3" />, label: 'Unknown' }
         }
