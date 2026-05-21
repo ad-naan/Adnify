@@ -1601,8 +1601,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
             // 获取或复用 Agent 专属终端（初始 cwd 用工作区根目录，避免反复改变终端目录）
             const terminalManager = await getTerminalManager()
+            const terminalAnchorCwd = ctx.workspacePath || await api.settings.getUserDataPath()
             const { terminalId: termId, reused } = await terminalManager.getOrCreateAgentTerminalLease(
-                remoteLink?.remote.remotePath || ctx.workspacePath || '/',
+                terminalAnchorCwd,
                 remoteLink ? {
                     remote: remoteLink.remote,
                     agentTerminalKey: target.server?.serverLinkId,

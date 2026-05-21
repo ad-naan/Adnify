@@ -116,4 +116,3 @@ describe('secureTerminal', () => {
     expect(childSpawnMock).toHaveBeenCalledTimes(1)
   })
 })
-
