@@ -9,6 +9,7 @@ import type {
   RemoteShellServer,
   RemoteShellUploadResult,
   RemoteShellDownloadResult,
+  RemoteHostTrustDecision,
 } from '@renderer/types/electron'
 
 type ElectronAPIWithRemoteShell = ElectronAPI & {
@@ -21,6 +22,8 @@ type ElectronAPIWithRemoteShell = ElectronAPI & {
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
   remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
+  remoteHostTrustGetStatus: (server: RemoteShellServer) => Promise<{ known: boolean; fingerprintSha256?: string }>
+  remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>
 }
 
 // 创建分组 API 适配器
@@ -175,6 +178,11 @@ function createGroupedAPI() {
       testConnection: (server: RemoteShellServer) => raw.remoteShellTestConnection(server),
       upload: (server: RemoteShellServer, remoteDirectory: string) => raw.remoteShellUpload(server, remoteDirectory),
       download: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDownload(server, remotePath),
+    },
+
+    remoteHostTrust: {
+      getStatus: (server: RemoteShellServer) => raw.remoteHostTrustGetStatus(server),
+      getLastDecision: (server: RemoteShellServer) => raw.remoteHostTrustGetLastDecision(server),
     },
 
     // Shell 执行

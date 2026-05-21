@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2 } from 'lucide-react'
+import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2, Server } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -1187,6 +1187,7 @@ const ChatMessage = React.memo(({
                             case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
                             case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
                             case 'Skill': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', Icon: Wrench }
+                            case 'ShellServer': return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', Icon: Server }
                             default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
                           }
                         }
@@ -1206,6 +1207,9 @@ const ChatMessage = React.memo(({
                             }
                             case 'Skill': {
                               return `@${item.skillId || 'skill'}`
+                            }
+                            case 'ShellServer': {
+                              return `#${item.serverName || 'server'}#`
                             }
                             default: return 'Context'
                           }

@@ -15,6 +15,7 @@ import { securityManager, OperationType } from './securityModule'
 import { SECURITY_DEFAULTS } from '@shared/constants'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
+import { remoteHostTrustService } from '../services/remoteHostTrustService'
 
 
 interface SecureShellRequest {
@@ -687,7 +688,9 @@ export function registerSecureTerminalHandlers(
       const Client = getSsh2ClientCtor()
       this.connection = new Client()
 
-      const config: Record<string, unknown> = {
+      const config: Record<string, unknown> & {
+        hostVerifier?: (key: Buffer, callback: (trusted: boolean) => void) => void
+      } = {
         host: this.server.host.trim(),
         port: this.server.port && this.server.port > 0 ? this.server.port : 22,
         username: this.server.username?.trim() || 'root',
@@ -706,10 +709,24 @@ export function registerSecureTerminalHandlers(
 
       await new Promise<void>((resolve, reject) => {
         let settled = false
+        let verificationError: Error | null = null
         const finishReject = (error: unknown) => {
           if (settled) return
           settled = true
           reject(error)
+        }
+
+        config.hostVerifier = (key: Buffer, callback: (trusted: boolean) => void) => {
+          remoteHostTrustService.verifyOrRecordHost({
+            host: String(config.host),
+            port: Number(config.port),
+            publicKey: key,
+          }).then(() => {
+            callback(true)
+          }).catch((error) => {
+            verificationError = error instanceof Error ? error : new Error(String(error))
+            callback(false)
+          })
         }
 
         this.connection
@@ -758,8 +775,9 @@ export function registerSecureTerminalHandlers(
             finish([this.server.password || ''])
           })
           .on('error', (error: unknown) => {
-            this.emit('error', error)
-            finishReject(error)
+            const effectiveError = verificationError || error
+            this.emit('error', effectiveError)
+            finishReject(effectiveError)
           })
           .on('close', () => {
             if (this.closed) return
@@ -891,7 +909,10 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: `Maximum number of terminals (${MAX_TERMINALS}) reached` }
     }
 
-    const targetCwd = (cwd && cwd.trim()) || workspace?.roots?.[0] || process.cwd()
+    const fallbackCwd = workspace?.roots?.[0] || process.cwd()
+    const targetCwd = remote?.host
+      ? fallbackCwd
+      : ((cwd && cwd.trim()) || fallbackCwd)
 
     if (workspace && workspace.roots.length > 0 && !remote?.host && !securityManager.validateWorkspacePath(targetCwd, workspace.roots)) {
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', false, {
@@ -947,7 +968,7 @@ export function registerSecureTerminalHandlers(
         return { success: false, error }
       }
 
-      if (!fs.existsSync(targetCwd)) {
+      if (!remote?.host && !fs.existsSync(targetCwd)) {
         const error = `Working directory not found: ${targetCwd}`
         logger.security.error(`[Terminal] ${error}`)
         return { success: false, error }

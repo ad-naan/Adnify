@@ -9,7 +9,7 @@ import { useStore } from '@store'
 import { useAgentStore } from '../store/AgentStore'
 import { toolRegistry } from '../tools'
 import { getAgentConfig } from '../utils/AgentConfig'
-import { ContextItem, MessageContent, TextContent, ProblemsContext, ChatMessage, getMessageText } from '../types'
+import { ContextItem, MessageContent, TextContent, ProblemsContext, ChatMessage, getMessageText, ShellServerContext } from '../types'
 import { CacheService } from '@shared/utils/CacheService'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
 import { normalizePath } from '@shared/utils/pathUtils'
@@ -113,6 +113,9 @@ async function processContextItem(
     case 'Terminal':
       return processTerminalContext(workspacePath)
 
+    case 'ShellServer':
+      return processShellServerContext(item as ShellServerContext)
+
     case 'Symbols':
       return processSymbolsContext(workspacePath)
 
@@ -122,6 +125,12 @@ async function processContextItem(
     default:
       return null
   }
+}
+
+function processShellServerContext(item: ShellServerContext): string {
+  const login = item.username ? `${item.username}@` : ''
+  const remotePath = item.remotePath ? `\nRemote Path: ${item.remotePath}` : ''
+  return `\n### Remote Server Context\nName: ${item.serverName}\nHost: ${login}${item.host}:${item.port || 22}${remotePath}\nBinding: ${item.bindingMode}\n`
 }
 
 /**

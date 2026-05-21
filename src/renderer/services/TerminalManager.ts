@@ -113,6 +113,11 @@ export interface CommandResult {
   signal?: number;
 }
 
+export interface AgentTerminalLease {
+  terminalId: string;
+  reused: boolean;
+}
+
 export interface TerminalDataEvent {
   id: string;
   data: string;
@@ -269,6 +274,8 @@ class TerminalManagerClass {
   /** Agent 专属终端 ID（跨 tool call 复用） */
   private agentTerminalId: string | null = null;
   private agentTerminalCreating: Promise<string> | null = null;
+  private agentRemoteTerminalIds = new Map<string, string>();
+  private agentRemoteTerminalCreating = new Map<string, Promise<string>>();
 
   // xterm 实例管理
   private xtermInstances = new Map<string, XTermInstance>();
@@ -283,6 +290,7 @@ class TerminalManagerClass {
   // PTY 状态
   private ptyReady = new Map<string, boolean>();
   private pendingPtyCreation = new Map<string, Promise<boolean>>();
+  private terminalCreateErrors = new Map<string, string>();
 
   // 监听器
   private stateListeners = new Set<StateListener>();
@@ -578,8 +586,14 @@ class TerminalManagerClass {
     try {
       const success = await ptyPromise;
       this.ptyReady.set(id, success);
+      if (!success && !this.terminalCreateErrors.has(id)) {
+        this.terminalCreateErrors.set(id, 'Failed to create terminal session')
+      }
     } catch {
       this.ptyReady.set(id, false);
+      if (!this.terminalCreateErrors.has(id)) {
+        this.terminalCreateErrors.set(id, 'Failed to create terminal session')
+      }
     } finally {
       this.pendingPtyCreation.delete(id);
     }
@@ -598,6 +612,7 @@ class TerminalManagerClass {
       const result = await api.terminal.create({ id, cwd, shell, backend, remote });
       if (!result?.success) {
         const errorMsg = result?.error || "Unknown error";
+        this.terminalCreateErrors.set(id, errorMsg)
         logger.system.error(
           `[TerminalManager] Failed to create PTY for ${id}:`,
           errorMsg,
@@ -618,6 +633,7 @@ class TerminalManagerClass {
       return true;
     } catch (err) {
       const error = toAppError(err);
+      this.terminalCreateErrors.set(id, error.message)
       logger.system.error(
         `[TerminalManager] Exception creating PTY for ${id}: ${error.code}`,
         error,
@@ -826,12 +842,11 @@ class TerminalManagerClass {
       this.xtermInstances.delete(id);
     }
 
-    if (this.agentTerminalId === id) {
-      this.agentTerminalId = null
-    }
+    this.removeAgentTerminalReference(id)
 
     this.outputBuffers.delete(id);
     this.ptyReady.delete(id);
+    this.terminalCreateErrors.delete(id);
     this.clearCommandState(id)
     api.terminal.kill(id);
 
@@ -905,6 +920,14 @@ class TerminalManagerClass {
     return this.xtermInstances.get(id)?.terminal || null;
   }
 
+  getTerminalCreateError(id: string): string | null {
+    return this.terminalCreateErrors.get(id) || null
+  }
+
+  isTerminalReady(id: string): boolean {
+    return this.ptyReady.get(id) === true
+  }
+
   focusTerminal(id: string) {
     const xterm = this.xtermInstances.get(id);
     if (xterm) {
@@ -914,46 +937,117 @@ class TerminalManagerClass {
 
   // ===== Agent 专属终端 =====
 
+  private isReusableAgentTerminal(terminalId: string): boolean {
+    const exists = this.state.terminals.find(t => t.id === terminalId)
+    if (!exists) return false
+
+    const commandInfo = this.getTerminalCommandState(terminalId)
+    const occupiedByDetachedWork =
+      commandInfo.current?.status === 'detached' ||
+      commandInfo.last?.status === 'detached'
+    const occupiedByActiveCommand =
+      commandInfo.current?.status === 'queued' ||
+      commandInfo.current?.status === 'running'
+
+    return !occupiedByDetachedWork && !occupiedByActiveCommand
+  }
+
+  private removeAgentTerminalReference(id: string): void {
+    if (this.agentTerminalId === id) {
+      this.agentTerminalId = null
+    }
+
+    for (const [key, value] of this.agentRemoteTerminalIds.entries()) {
+      if (value === id) {
+        this.agentRemoteTerminalIds.delete(key)
+      }
+    }
+  }
+
   /**
    * 获取或创建 Agent 专属终端。
    * Agent 终端跨 tool call 复用，避免每次 run_command 产生孤立 tab。
    */
-  async getOrCreateAgentTerminal(cwd: string, shell?: string): Promise<string> {
+  async getOrCreateAgentTerminalLease(cwd: string, options?: {
+    shell?: string
+    remote?: TerminalInstance['remote']
+    agentTerminalKey?: string
+    name?: string
+  }): Promise<AgentTerminalLease> {
+    if (options?.remote) {
+      const key = options.agentTerminalKey || `${options.remote.username || 'root'}@${options.remote.host}:${options.remote.port || 22}`
+      const existingId = this.agentRemoteTerminalIds.get(key)
+      if (existingId) {
+        if (this.isReusableAgentTerminal(existingId)) {
+          return { terminalId: existingId, reused: true }
+        }
+        this.agentRemoteTerminalIds.delete(key)
+      }
+
+      const pendingCreation = this.agentRemoteTerminalCreating.get(key)
+      if (pendingCreation) {
+        const terminalId = await pendingCreation
+        return { terminalId, reused: false }
+      }
+
+      const creating = this.createTerminal({
+        name: options.name || 'Agent',
+        cwd,
+        shell: options.shell,
+        isAgent: true,
+        remote: options.remote,
+      }).then(id => {
+        if (!this.isTerminalReady(id)) {
+          const error = this.getTerminalCreateError(id) || 'Failed to create remote terminal session'
+          this.removeAgentTerminalReference(id)
+          if (this.hasTerminal(id)) {
+            this.closeTerminal(id)
+          }
+          throw new Error(error)
+        }
+        this.agentRemoteTerminalIds.set(key, id)
+        this.cleanupIdleAgentTerminals()
+        this.agentRemoteTerminalCreating.delete(key)
+        return id
+      }).catch(err => {
+        this.agentRemoteTerminalCreating.delete(key)
+        throw err
+      })
+
+      this.agentRemoteTerminalCreating.set(key, creating)
+      const terminalId = await creating
+      return { terminalId, reused: false }
+    }
+
     // 检查现有 agent 终端是否仍然存活
     if (this.agentTerminalId) {
-      const exists = this.state.terminals.find(t => t.id === this.agentTerminalId)
-      if (exists) {
-        const commandInfo = this.getTerminalCommandState(this.agentTerminalId)
-        const occupiedByDetachedWork =
-          commandInfo.current?.status === 'detached' ||
-          commandInfo.last?.status === 'detached'
-        const occupiedByActiveCommand =
-          commandInfo.current?.status === 'queued' ||
-          commandInfo.current?.status === 'running'
-
-        if (!occupiedByDetachedWork && !occupiedByActiveCommand) {
-          return this.agentTerminalId
-        }
-
-        this.agentTerminalId = null
-      }
-      // 已被关闭，重置
-      else {
+      if (this.isReusableAgentTerminal(this.agentTerminalId)) {
+        return { terminalId: this.agentTerminalId, reused: true }
+      } else {
         this.agentTerminalId = null
       }
     }
 
     // 并发锁：防止快速连续的 run_command 创建多个 Agent 终端
     if (this.agentTerminalCreating) {
-      return this.agentTerminalCreating
+      const terminalId = await this.agentTerminalCreating
+      return { terminalId, reused: false }
     }
 
     this.agentTerminalCreating = this.createTerminal({
-      name: this.getNextAgentTerminalName(),
+      name: options?.name || this.getNextAgentTerminalName(),
       cwd,
-      shell,
+      shell: options?.shell,
       isAgent: true,
     }).then(id => {
+      if (!this.isTerminalReady(id)) {
+        const error = this.getTerminalCreateError(id) || 'Failed to create terminal session'
+        this.removeAgentTerminalReference(id)
+        if (this.hasTerminal(id)) {
+          this.closeTerminal(id)
+        }
+        throw new Error(error)
+      }
       this.agentTerminalId = id
       this.cleanupIdleAgentTerminals()
       this.agentTerminalCreating = null
@@ -963,15 +1057,31 @@ class TerminalManagerClass {
       throw err
     })
 
-    return this.agentTerminalCreating
+    const terminalId = await this.agentTerminalCreating
+    return { terminalId, reused: false }
+  }
+
+  async getOrCreateAgentTerminal(cwd: string, options?: {
+    shell?: string
+    remote?: TerminalInstance['remote']
+    agentTerminalKey?: string
+    name?: string
+  }): Promise<string> {
+    const lease = await this.getOrCreateAgentTerminalLease(cwd, options)
+    return lease.terminalId
   }
 
   /**
    * 释放当前 Agent 终端绑定（不关闭终端）。
    * 长进程占用终端后调用，使下一次 getOrCreateAgentTerminal() 创建新终端。
    */
-  releaseAgentTerminal() {
-    this.agentTerminalId = null
+  releaseAgentTerminal(terminalId?: string) {
+    if (!terminalId) {
+      this.agentTerminalId = null
+      return
+    }
+
+    this.removeAgentTerminalReference(terminalId)
   }
 
   private getNextAgentTerminalName(): string {
@@ -981,9 +1091,14 @@ class TerminalManagerClass {
   }
 
   private cleanupIdleAgentTerminals(): void {
+    const reservedAgentTerminalIds = new Set<string>([
+      this.agentTerminalId,
+      ...this.agentRemoteTerminalIds.values(),
+    ].filter((id): id is string => Boolean(id)))
+
     const idleAgentTerminals = this.state.terminals
       .filter(terminal => terminal.isAgent)
-      .filter(terminal => terminal.id !== this.agentTerminalId)
+      .filter(terminal => !reservedAgentTerminalIds.has(terminal.id))
       .filter(terminal => terminal.id !== this.state.activeId)
       .filter((terminal) => {
         const commandInfo = this.getTerminalCommandState(terminal.id)
@@ -1324,6 +1439,8 @@ class TerminalManagerClass {
 
     this.agentTerminalId = null
     this.agentTerminalCreating = null
+    this.agentRemoteTerminalIds.clear()
+    this.agentRemoteTerminalCreating.clear()
     this.currentCommandSessions.clear()
     this.lastCommandSessions.clear()
     this.activeExecutions.clear()

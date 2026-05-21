@@ -40,33 +40,6 @@ class ShellService {
     return requestedCwd || context.selectedRoot || context.workspaceRoots?.[0] || '';
   }
 
-  buildRemoteCommand(server: RemoteServerConfig): string {
-    const host = server.host.trim();
-    const username = server.username?.trim();
-    const login = username ? `${username}@${host}` : host;
-    const port = server.port && server.port > 0 ? server.port : 22;
-    const privateKey = server.privateKeyPath?.trim();
-    const remotePath = server.remotePath?.trim();
-
-    const args: string[] = ['ssh', '-tt', '-o', 'StrictHostKeyChecking=accept-new'];
-    if (port !== 22) args.push('-p', String(port));
-    if (privateKey) args.push('-i', this.quoteShellArg(privateKey));
-    args.push(login);
-    if (remotePath) {
-      args.push(`'cd ${this.escapeSingleQuotes(remotePath)} && exec \${SHELL:-sh} -l'`);
-    }
-
-    return args.join(' ');
-  }
-
-  private quoteShellArg(value: string): string {
-    return `'${this.escapeSingleQuotes(value)}'`;
-  }
-
-  private escapeSingleQuotes(value: string): string {
-    return value.replace(/'/g, `'\\''`);
-  }
-
   async createSession(options: CreateShellSessionOptions) {
     const terminalId = await terminalManager.createTerminal({
       name: options.name,

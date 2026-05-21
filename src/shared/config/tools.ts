@@ -399,10 +399,12 @@ Do not use for partial edits; write_file overwrites the whole file, so use edit_
     run_command: {
         name: 'run_command',
         displayName: 'Run Command',
-        description: 'Execute shell command. Requires user approval. Use cwd parameter to set working directory. Do NOT use for reading files (use read_file), searching (use search_files), or editing (use edit_file).',
+        description: 'Execute shell command locally or on a configured remote server. Requires user approval. Use cwd parameter to set working directory for local runs. Do NOT use for reading files (use read_file/read_remote_file), searching (use search_files), or editing (use edit_file/write_remote_file).',
         detailedDescription: `Execute shell commands in workspace.
 - Requires user approval
 - Use cwd parameter instead of cd commands
+- To force a remote target, set server_name or rely on an explicit #server-name# mention in the user message
+- Never assume remote file tools and local file tools are interchangeable
 For long-running servers or watch tasks:
 - Set is_background=true to run in a UI terminal panel
 - The command returns a terminal ID immediately
@@ -433,8 +435,182 @@ For long-running servers or watch tasks:
         parameters: {
             command: { type: 'string', description: 'Shell command', required: true },
             cwd: { type: 'string', description: 'Working directory relative to workspace root (e.g., "packages/core", NOT "./packages/core")', },
+            server_name: { type: 'string', description: 'Optional remote server name from Shell Studio. When set, command must run on that remote server instead of locally.' },
             timeout: { type: 'number', description: 'Timeout seconds (default: 60). Increase for slow commands like installs.', default: 60 },
             is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
+        },
+    },
+
+    list_remote_directory: {
+        name: 'list_remote_directory',
+        displayName: 'List Remote Directory',
+        description: 'List files and folders on a remote server via Shell Studio remote connections. Never use for local files.',
+        detailedDescription: `List one directory level on a remote server.
+- Resolves the remote target from server_name, #server-name#, or recent remote memory
+- Uses remote SFTP capabilities only
+- Never falls back to local listing`,
+        category: 'read',
+        approvalType: 'none',
+        parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['remote:filesystem:list'],
+        resultSemantics: 'file-read',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Remote directory path. Defaults to the server remotePath or "." when omitted.', default: '.' },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
+        },
+    },
+
+    read_remote_file: {
+        name: 'read_remote_file',
+        displayName: 'Read Remote File',
+        description: 'Read a text file from a remote server. Never use for local files.',
+        detailedDescription: `Read a remote text file through Shell Studio remote connections.
+- Resolves the remote target from server_name, #server-name#, or recent remote memory
+- Uses remote SFTP only
+- Never falls back to a local file read`,
+        category: 'read',
+        approvalType: 'none',
+        parallel: true,
+        concurrencyMode: 'parallel-safe',
+        resourceScope: ['remote:filesystem:read'],
+        resultSemantics: 'file-read',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Remote file path', required: true },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
+        },
+    },
+
+    write_remote_file: {
+        name: 'write_remote_file',
+        displayName: 'Write Remote File',
+        description: 'Create or overwrite a remote text file. Requires approval. Never use for local files.',
+        detailedDescription: `Write text content to a remote file.
+- Requires dangerous approval
+- Resolves the remote target from server_name, #server-name#, or recent remote memory
+- Uses remote SFTP only
+- Never falls back to a local write`,
+        category: 'write',
+        approvalType: 'dangerous',
+        parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['remote:filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Remote file path', required: true },
+            content: { type: 'string', description: 'Full file content to write', required: true },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
+        },
+    },
+
+    rename_remote_path: {
+        name: 'rename_remote_path',
+        displayName: 'Rename Remote Path',
+        description: 'Rename or move a remote file or directory. Requires approval.',
+        detailedDescription: `Rename or move a remote file or folder.
+- Requires dangerous approval
+- Uses remote SFTP only
+- Never falls back to a local rename`,
+        category: 'write',
+        approvalType: 'dangerous',
+        parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['remote:filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            old_path: { type: 'string', description: 'Existing remote path', required: true },
+            new_path: { type: 'string', description: 'New remote path', required: true },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
+        },
+    },
+
+    delete_remote_path: {
+        name: 'delete_remote_path',
+        displayName: 'Delete Remote Path',
+        description: 'Delete a remote file or directory recursively. Requires approval.',
+        detailedDescription: `Delete a remote file or directory.
+- Requires dangerous approval
+- Uses remote SFTP only
+- Never falls back to a local delete`,
+        category: 'write',
+        approvalType: 'dangerous',
+        parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['remote:filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Remote file or directory path', required: true },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
+        },
+    },
+
+    upload_to_remote: {
+        name: 'upload_to_remote',
+        displayName: 'Upload To Remote',
+        description: 'Open the native file picker and upload one or more local files to a remote directory. Requires approval.',
+        detailedDescription: `Upload local files to a remote directory.
+- Requires dangerous approval
+- Opens the desktop file picker for the user to choose local files
+- Uses remote SFTP only
+- Never writes into the local workspace on fallback`,
+        category: 'write',
+        approvalType: 'dangerous',
+        parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['remote:filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Remote destination directory. Defaults to the server remotePath or "." when omitted.', default: '.' },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
+        },
+    },
+
+    download_from_remote: {
+        name: 'download_from_remote',
+        displayName: 'Download From Remote',
+        description: 'Download a remote file through the native save dialog. Requires approval.',
+        detailedDescription: `Download a remote file to the local machine.
+- Requires dangerous approval
+- Opens the desktop save dialog for the user to choose the local destination
+- Uses remote SFTP only
+- Never falls back to a local file copy`,
+        category: 'write',
+        approvalType: 'dangerous',
+        parallel: false,
+        concurrencyMode: 'approval-gated',
+        resourceScope: ['remote:filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'schema',
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            path: { type: 'string', description: 'Remote file path to download', required: true },
+            server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
         },
     },
 

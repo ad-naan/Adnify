@@ -207,6 +207,16 @@ interface RemoteShellServer {
   remotePath?: string
 }
 
+type RemoteHostTrustStatus = 'known' | 'accepted_new' | 'mismatch_rejected'
+
+interface RemoteHostTrustDecision {
+  host: string
+  port: number
+  hostTrustStatus: RemoteHostTrustStatus
+  hostFingerprintSha256: string
+  knownHostFingerprintSha256?: string
+}
+
 interface OpenFilesPayload {
   paths: string[]
   source: 'startup' | 'second-instance' | 'open-file'
@@ -314,6 +324,8 @@ export interface ElectronAPI {
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
   remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<{ canceled: boolean; uploaded: string[] }>
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<{ canceled: boolean; localPath?: string }>
+  remoteHostTrustGetStatus: (server: RemoteShellServer) => Promise<{ known: boolean; fingerprintSha256?: string }>
+  remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>
 
   // Secure Shell Execution
   executeSecureCommand: (request: {
@@ -677,6 +689,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   remoteShellTestConnection: (server: RemoteShellServer) => ipcRenderer.invoke('remoteShell:testConnection', server),
   remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => ipcRenderer.invoke('remoteShell:upload', server, remoteDirectory),
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:download', server, remotePath),
+  remoteHostTrustGetStatus: (server: RemoteShellServer) => ipcRenderer.invoke('remoteHostTrust:getStatus', server),
+  remoteHostTrustGetLastDecision: (server: RemoteShellServer) => ipcRenderer.invoke('remoteHostTrust:getLastDecision', server),
 
   executeSecureCommand: (request: { command: string; args?: string[]; cwd?: string; timeout?: number; requireConfirm?: boolean }) =>
     ipcRenderer.invoke('shell:executeSecure', request),
