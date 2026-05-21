@@ -63,6 +63,14 @@ function normalizeRemotePath(target?: string): string {
   return normalized || '.'
 }
 
+function assertSafeExplicitRemotePath(remotePath: string, operation: string): string {
+  const normalized = normalizeRemotePath(remotePath)
+  if (!remotePath?.trim() || normalized === '.' || normalized === '/' || normalized === '~') {
+    throw new Error(`${operation} refuses unsafe remote path: "${remotePath || ''}"`)
+  }
+  return normalized
+}
+
 function joinRemotePath(base: string, name: string): string {
   if (!base || base === '.') return normalizeRemotePath(name)
   if (base === '/') return path.posix.join('/', name)
@@ -313,12 +321,12 @@ export function registerRemoteShellHandlers(): void {
   })
 
   ipcMain.handle('remoteShell:readText', async (_, server: RemoteServerConfig, remotePath: string): Promise<string | null> => {
-    return await withSftp(server, async (sftp) => readTextFile(sftp, normalizeRemotePath(remotePath)))
+    return await withSftp(server, async (sftp) => readTextFile(sftp, assertSafeExplicitRemotePath(remotePath, 'readText')))
   })
 
   ipcMain.handle('remoteShell:writeText', async (_, server: RemoteServerConfig, remotePath: string, content: string): Promise<boolean> => {
     await withSftp(server, async (sftp) => {
-      await writeTextFile(sftp, normalizeRemotePath(remotePath), content)
+      await writeTextFile(sftp, assertSafeExplicitRemotePath(remotePath, 'writeText'), content)
     })
     return true
   })
@@ -332,14 +340,18 @@ export function registerRemoteShellHandlers(): void {
 
   ipcMain.handle('remoteShell:rename', async (_, server: RemoteServerConfig, oldPath: string, newPath: string): Promise<boolean> => {
     await withSftp(server, async (sftp) => {
-      await rename(sftp, normalizeRemotePath(oldPath), normalizeRemotePath(newPath))
+      await rename(
+        sftp,
+        assertSafeExplicitRemotePath(oldPath, 'rename'),
+        assertSafeExplicitRemotePath(newPath, 'rename'),
+      )
     })
     return true
   })
 
   ipcMain.handle('remoteShell:delete', async (_, server: RemoteServerConfig, remotePath: string): Promise<boolean> => {
     await withSftp(server, async (sftp) => {
-      await removeRecursive(sftp, normalizeRemotePath(remotePath))
+      await removeRecursive(sftp, assertSafeExplicitRemotePath(remotePath, 'delete'))
     })
     return true
   })
@@ -381,7 +393,7 @@ export function registerRemoteShellHandlers(): void {
   })
 
   ipcMain.handle('remoteShell:download', async (event, server: RemoteServerConfig, remotePath: string): Promise<RemoteDownloadResult> => {
-    const normalizedRemotePath = normalizeRemotePath(remotePath)
+    const normalizedRemotePath = assertSafeExplicitRemotePath(remotePath, 'download')
     const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
     const saveResult = await dialog.showSaveDialog(window as BrowserWindow, {
       title: 'Download remote file',

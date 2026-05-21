@@ -409,50 +409,74 @@ interface ProcessFoldProps {
   children: React.ReactNode
   language: 'zh' | 'en'
   summary: AssistantProcessSummary
+  settleExpanded?: boolean
 }
 
-const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProps) => {
-  const [isExpanded, setIsExpanded] = useState(false)
+const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => (
+  <div className="relative h-px flex-1 overflow-hidden rounded-full bg-border/45">
+    <div
+      className={`absolute inset-0 ${
+        side === 'left'
+          ? 'bg-gradient-to-r from-transparent via-border/60 to-accent/15'
+          : 'bg-gradient-to-r from-accent/15 via-border/60 to-transparent'
+      }`}
+    />
+  </div>
+))
+ProcessFoldDivider.displayName = 'ProcessFoldDivider'
+
+const ProcessFold = React.memo(({ children, language, summary, settleExpanded = false }: ProcessFoldProps) => {
+  const [isExpanded, setIsExpanded] = useState(settleExpanded)
   const summaryText = buildProcessSummaryText(summary, language)
+  const titleText = summaryText || (language === 'zh' ? '过程' : 'Process')
+  const detailLabel = isExpanded
+    ? (language === 'zh' ? '收起过程' : 'Hide details')
+    : (language === 'zh' ? '查看过程' : 'View process')
+
+  useEffect(() => {
+    if (!settleExpanded) return
+
+    setIsExpanded(true)
+    const timer = window.setTimeout(() => {
+      setIsExpanded(false)
+    }, 180)
+
+    return () => window.clearTimeout(timer)
+  }, [settleExpanded])
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-border/60 bg-surface/35 backdrop-blur-sm">
+    <motion.div layout className="my-3 w-full">
       <button
         type="button"
         aria-expanded={isExpanded}
         onClick={() => setIsExpanded(prev => !prev)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-surface-hover/50"
+        className="group flex w-full items-center gap-2 text-left text-text-muted/55 transition-colors hover:text-text-secondary"
       >
-        <motion.div
-          animate={{ rotate: isExpanded ? 0 : -90 }}
-          transition={{ duration: 0.15 }}
-          className="shrink-0 text-text-muted/60"
-        >
-          <ChevronDown className="w-3.5 h-3.5" />
-        </motion.div>
-        {summaryText && (
-          <div className="min-w-0 flex-1 truncate text-[11px] text-text-muted/75">
-            {summaryText}
-          </div>
-        )}
+        <ProcessFoldDivider side="left" />
+        <div className="process-fluid-pill shrink-0">
+          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+          <span className="truncate font-medium text-text-secondary">{titleText}</span>
+          <span className="shrink-0 text-text-muted/45">· {detailLabel}</span>
+        </div>
+        <ProcessFoldDivider side="right" />
       </button>
 
       <AnimatePresence initial={false}>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
+            initial={settleExpanded ? false : { height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="overflow-hidden border-t border-border/50"
+            transition={{ duration: 0.24, ease: 'easeInOut' }}
+            className="overflow-hidden"
           >
-            <div className="px-3 py-2">
+            <div className="mt-2 w-full space-y-1 text-[11px] text-text-secondary [&>*]:my-0.5">
               {children}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   )
 })
 ProcessFold.displayName = 'ProcessFold'
@@ -975,6 +999,8 @@ const ChatMessage = React.memo(({
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
+  const wasStreamingRef = React.useRef(false)
+  const [isProcessSettling, setIsProcessSettling] = useState(false)
   const { editorConfig, language, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
     editorConfig: s.editorConfig,
     language: s.language,
@@ -1051,6 +1077,7 @@ const ChatMessage = React.memo(({
 
   const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
   const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined
+  const didJustFinishStreaming = wasStreamingRef.current && !isStreaming
 
   useEffect(() => {
     if (isStreaming) {
@@ -1060,6 +1087,26 @@ const ChatMessage = React.memo(({
       return () => clearInterval(interval)
     }
   }, [isStreaming])
+
+  useEffect(() => {
+    if (!isAssistantMessage(message)) return
+
+    if (isStreaming) {
+      wasStreamingRef.current = true
+      setIsProcessSettling(false)
+      return
+    }
+
+    if (wasStreamingRef.current) {
+      wasStreamingRef.current = false
+      setIsProcessSettling(true)
+      const timer = window.setTimeout(() => {
+        setIsProcessSettling(false)
+      }, 520)
+
+      return () => window.clearTimeout(timer)
+    }
+  }, [isStreaming, message])
 
   const previewToolCalls = React.useMemo(() => {
     if (!isAssistantMessage(message)) return []
@@ -1104,6 +1151,7 @@ const ChatMessage = React.memo(({
   }, [assistantParts, expandAgentBlocksByDefault, hasMetaGroup, isAwaitingApproval, isStreaming, message, pendingToolId])
 
   const shouldCollapseProcess = assistantProjection?.shouldCollapseProcess ?? false
+  const shouldSettleProcess = shouldCollapseProcess && (didJustFinishStreaming || isProcessSettling)
   const shouldRenderMetaGroup = isAssistantMessage(message) && !shouldCollapseProcess && hasMetaGroup
   const visibleAssistantParts = shouldCollapseProcess
     ? (assistantProjection?.finalReplyParts ?? [])
@@ -1356,7 +1404,7 @@ const ChatMessage = React.memo(({
               )}
               <div className="prose-custom w-full max-w-none">
                 {shouldCollapseProcess && assistantProjection?.hasProcessContent && (
-                  <ProcessFold language={language} summary={assistantProjection.summary}>
+                  <ProcessFold language={language} summary={assistantProjection.summary} settleExpanded={shouldSettleProcess}>
                     {hasMetaGroup && (
                       <MessageMetaGroup
                         autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
