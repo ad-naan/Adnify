@@ -1,5 +1,5 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Image as ImageIcon, Search, Terminal, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, Copy, FileCode, Image as ImageIcon, Search, Server, Terminal, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -41,6 +41,13 @@ const TOOL_LABELS: Record<string, string> = {
     create_file_or_folder: 'Create',
     delete_file_or_folder: 'Delete',
     run_command: 'Run Command',
+    list_remote_directory: 'List Remote Directory',
+    read_remote_file: 'Read Remote File',
+    write_remote_file: 'Write Remote File',
+    rename_remote_path: 'Rename Remote Path',
+    delete_remote_path: 'Delete Remote Path',
+    upload_to_remote: 'Upload To Remote',
+    download_from_remote: 'Download From Remote',
     get_lint_errors: 'Lint Errors',
     find_references: 'Find References',
     go_to_definition: 'Go to Definition',
@@ -102,6 +109,39 @@ const getPrimaryToolPath = (args: ToolArgs): string => getToolPathList(args)[0] 
 
 const getPathDisplayName = (path: string): string => getFileName(path) || path
 
+type RouteMeta = {
+    executionTarget?: 'local' | 'remote'
+    serverName?: string
+    resolvedBy?: 'arg' | 'explicit_context' | 'last_active_server' | 'auto_routing' | 'local_default'
+    routeError?: string
+    hostTrustStatus?: 'known' | 'accepted_new' | 'mismatch_rejected'
+    hostFingerprintSha256?: string
+    knownHostFingerprintSha256?: string
+}
+
+function getRouteMeta(args: ToolArgs): RouteMeta | null {
+    const meta = args._meta
+    if (!meta || typeof meta !== 'object') return null
+    return meta as RouteMeta
+}
+
+function getRouteSourceLabel(resolvedBy?: RouteMeta['resolvedBy']): string {
+    switch (resolvedBy) {
+        case 'arg':
+            return 'server_name'
+        case 'explicit_context':
+            return '#server#'
+        case 'last_active_server':
+            return 'recent memory'
+        case 'auto_routing':
+            return 'auto routing'
+        case 'local_default':
+            return 'local default'
+        default:
+            return 'routing'
+    }
+}
+
 const getPathSummary = (paths: string[], maxItems = 3): string => {
     if (paths.length === 0) return ''
     if (paths.length === 1) return getPathDisplayName(paths[0])
@@ -131,6 +171,68 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
         return cmd
     }
 
+    if (name === 'list_remote_directory') {
+        const remotePath = asString(args.path) || '.'
+        if (isRunning) return `Listing remote ${remotePath}...`
+        if (isSuccess) return `Listed remote ${remotePath}`
+        if (isError) return `Failed to list remote ${remotePath}`
+        return `Listing remote ${remotePath}`
+    }
+
+    if (name === 'read_remote_file') {
+        const remotePath = asString(args.path)
+        if (!remotePath) return isRunning ? 'Reading remote file...' : ''
+        if (isRunning) return `Reading remote ${remotePath}...`
+        if (isSuccess) return `Read remote ${remotePath}`
+        if (isError) return `Failed to read remote ${remotePath}`
+        return `Reading remote ${remotePath}`
+    }
+
+    if (name === 'write_remote_file') {
+        const remotePath = asString(args.path)
+        if (!remotePath) return isRunning ? 'Writing remote file...' : ''
+        if (isRunning) return `Writing remote ${remotePath}...`
+        if (isSuccess) return `Wrote remote ${remotePath}`
+        if (isError) return `Failed to write remote ${remotePath}`
+        return `Writing remote ${remotePath}`
+    }
+
+    if (name === 'rename_remote_path') {
+        const oldPath = asString(args.old_path)
+        const newPath = asString(args.new_path)
+        const summary = oldPath && newPath ? `${oldPath} -> ${newPath}` : 'remote path'
+        if (isRunning) return `Renaming ${summary}...`
+        if (isSuccess) return `Renamed ${summary}`
+        if (isError) return `Failed to rename ${summary}`
+        return `Renaming ${summary}`
+    }
+
+    if (name === 'delete_remote_path') {
+        const remotePath = asString(args.path)
+        if (!remotePath) return isRunning ? 'Deleting remote path...' : ''
+        if (isRunning) return `Deleting remote ${remotePath}...`
+        if (isSuccess) return `Deleted remote ${remotePath}`
+        if (isError) return `Failed to delete remote ${remotePath}`
+        return `Deleting remote ${remotePath}`
+    }
+
+    if (name === 'upload_to_remote') {
+        const remotePath = asString(args.path) || '.'
+        if (isRunning) return `Uploading to remote ${remotePath}...`
+        if (isSuccess) return `Uploaded to remote ${remotePath}`
+        if (isError) return `Failed to upload to remote ${remotePath}`
+        return `Uploading to remote ${remotePath}`
+    }
+
+    if (name === 'download_from_remote') {
+        const remotePath = asString(args.path)
+        if (!remotePath) return isRunning ? 'Downloading remote file...' : ''
+        if (isRunning) return `Downloading remote ${remotePath}...`
+        if (isSuccess) return `Downloaded remote ${remotePath}`
+        if (isError) return `Failed to download remote ${remotePath}`
+        return `Downloading remote ${remotePath}`
+    }
+
     if (name === 'read_multiple_files') {
         if (paths.length > 0) {
             if (isRunning) return `Reading ${pathSummary}...`
@@ -149,7 +251,7 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
         return `Analyzing ${path}`
     }
 
-    if (['read_file', 'list_directory'].includes(name)) {
+    if (['read_file', 'list_directory', 'read_remote_file', 'list_remote_directory'].includes(name)) {
         if (paths.length > 1) {
             if (isRunning) return `Reading ${pathSummary}...`
             if (isSuccess) return `Read ${pathSummary}`
@@ -256,6 +358,56 @@ function PendingPreviewSkeleton() {
         <div className="p-2 space-y-1.5 opacity-70" aria-hidden="true">
             <div className="h-2 rounded-full bg-text-primary/[0.06] animate-pulse w-[72%]" />
             <div className="h-2 rounded-full bg-text-primary/[0.06] animate-pulse w-[48%]" />
+        </div>
+    )
+}
+
+function ExecutionTargetBadge({ args }: { args: ToolArgs }) {
+    const routeMeta = getRouteMeta(args)
+    if (!routeMeta?.executionTarget) return null
+
+    const isRemote = routeMeta.executionTarget === 'remote'
+
+    return (
+        <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 border ${
+                    isRemote
+                        ? 'bg-sky-500/10 text-sky-300 border-sky-500/20'
+                        : 'bg-surface-elevated text-text-muted border-border/60'
+                }`}>
+                    {isRemote ? <Server className="w-3 h-3" /> : <Terminal className="w-3 h-3" />}
+                    {isRemote ? 'Remote' : 'Local'}
+                </span>
+                {routeMeta.serverName && (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-surface-elevated text-text-secondary border border-border/60">
+                        {routeMeta.serverName}
+                    </span>
+                )}
+                {routeMeta.resolvedBy && (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-surface-elevated text-text-muted border border-border/60">
+                        via {getRouteSourceLabel(routeMeta.resolvedBy)}
+                    </span>
+                )}
+            </div>
+            {routeMeta.routeError && (
+                <div className="text-[10px] text-amber-400 break-all">
+                    {routeMeta.routeError}
+                </div>
+            )}
+            {isRemote && routeMeta.hostTrustStatus === 'accepted_new' && (
+                <div className="text-[10px] text-emerald-300 break-all">
+                    Trusted this host fingerprint automatically for future remote sessions.
+                    {routeMeta.hostFingerprintSha256 ? ` ${routeMeta.hostFingerprintSha256}` : ''}
+                </div>
+            )}
+            {isRemote && routeMeta.hostTrustStatus === 'mismatch_rejected' && (
+                <div className="text-[10px] text-red-300 break-all">
+                    Host fingerprint mismatch blocked the remote connection.
+                    {routeMeta.knownHostFingerprintSha256 ? ` Known: ${routeMeta.knownHostFingerprintSha256}.` : ''}
+                    {routeMeta.hostFingerprintSha256 ? ` Received: ${routeMeta.hostFingerprintSha256}.` : ''}
+                </div>
+            )}
         </div>
     )
 }
@@ -516,9 +668,9 @@ function ToolPreview({
         )
     }
 
-    if (effectiveName === 'list_directory') {
+    if (['list_directory', 'list_remote_directory'].includes(effectiveName)) {
         const paths = getToolPathList(args)
-        const path = paths[0] || ''
+        const path = paths[0] || asString(args.path) || ''
         const displayName = paths.length > 1 ? getPathSummary(paths) : getPathDisplayName(path) || '.'
 
         return (
@@ -535,7 +687,7 @@ function ToolPreview({
                         </div>
                     </ExpandablePreviewContainer>
                 ) : (isRunning || isStreaming) && (
-                    pendingPreview('Reading directory...')
+                    pendingPreview(effectiveName === 'list_remote_directory' ? 'Reading remote directory...' : 'Reading directory...')
                 )}
             </div>
         )
@@ -643,9 +795,9 @@ function ToolPreview({
         )
     }
 
-    if (['read_file', 'read_multiple_files'].includes(effectiveName)) {
+    if (['read_file', 'read_multiple_files', 'read_remote_file'].includes(effectiveName)) {
         const paths = getToolPathList(args)
-        const filePath = paths[0] || ''
+        const filePath = paths[0] || asString(args.path) || ''
         const readMeta = args._meta && typeof args._meta === 'object' ? args._meta as Record<string, unknown> : undefined
         const contentKind = typeof readMeta?.contentKind === 'string' ? readMeta.contentKind : undefined
         const isDocumentRead = contentKind === 'document'
@@ -687,7 +839,7 @@ function ToolPreview({
                         )}
                     </ExpandablePreviewContainer>
                 ) : (isRunning || isStreaming) && (
-                    pendingPreview('Reading file...')
+                    pendingPreview(effectiveName === 'read_remote_file' ? 'Reading remote file...' : 'Reading file...')
                 )}
             </div>
         )
@@ -884,6 +1036,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     }}
                     setTerminalVisible={setTerminalVisible}
                 />
+                <ExecutionTargetBadge args={args} />
                 {toolCall.error && (
                     <div className="px-3 py-2 bg-red-500/10 rounded-md">
                         <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-1">

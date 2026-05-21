@@ -10,6 +10,7 @@ export type ContextItemType =
   | 'Codebase'
   | 'Git'
   | 'Terminal'
+  | 'ShellServer'
   | 'Symbols'
   | 'Web'
   | 'Problems'
@@ -44,6 +45,17 @@ export interface TerminalContext {
   type: 'Terminal'
 }
 
+export interface ShellServerContext {
+  type: 'ShellServer'
+  serverLinkId: string
+  serverName: string
+  host: string
+  port?: number
+  username?: string
+  remotePath?: string
+  bindingMode: 'explicit' | 'recent-memory'
+}
+
 export interface SymbolsContext {
   type: 'Symbols'
 }
@@ -75,6 +87,7 @@ export type ContextItem =
   | CodebaseContext
   | GitContext
   | TerminalContext
+  | ShellServerContext
   | SymbolsContext
   | WebContext
   | ProblemsContext

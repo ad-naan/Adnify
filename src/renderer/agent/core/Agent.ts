@@ -152,6 +152,7 @@ export class AgentClass {
       const buildAgentSystemPrompt = await importBuildAgentSystemPrompt()
       const { prompt: systemPrompt, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
         ...promptOptions,
+        threadId,
         mentionedSkills: mentionedSkills.length > 0 ? mentionedSkills : undefined,
       })
 

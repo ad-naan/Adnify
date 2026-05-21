@@ -229,6 +229,21 @@ export function ShellManagerDialog({
   const remoteCount = useMemo(() => formLinks.filter((item) => item.type === 'remote').length, [formLinks])
   const favoriteCount = useMemo(() => formPresets.filter((item) => item.favorite).length + formLinks.filter((item) => item.favorite).length, [formLinks, formPresets])
   const commandCount = useMemo(() => formLinks.filter((item) => item.type === 'command').length, [formLinks])
+  const duplicateRemoteServerNames = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const link of formLinks) {
+      if (link.type !== 'remote') continue
+      const normalized = link.name.trim().toLocaleLowerCase()
+      if (!normalized) continue
+      counts.set(normalized, (counts.get(normalized) || 0) + 1)
+    }
+
+    return formLinks
+      .filter((link) => link.type === 'remote')
+      .map((link) => link.name.trim())
+      .filter((name) => name && (counts.get(name.toLocaleLowerCase()) || 0) > 1)
+      .filter((name, index, array) => array.indexOf(name) === index)
+  }, [formLinks])
 
   const sectionItems = useMemo(() => {
     if (activeSection === 'preset') {
@@ -362,6 +377,11 @@ export function ShellManagerDialog({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Shell 管理" size="5xl">
       <div className="space-y-6 max-h-[78vh] overflow-y-auto pr-1">
+        {duplicateRemoteServerNames.length > 0 && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Remote server names should be unique for agent routing. Current duplicates: {duplicateRemoteServerNames.join(', ')}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-border/60 bg-surface/50 p-4"><div className="flex items-center gap-2 text-text-primary mb-2"><TerminalSquare className="w-4 h-4 text-accent" /><span className="text-sm font-medium">默认 Shell</span></div><div className="text-sm text-text-secondary break-all">{resolvedDefaultShell}</div></div>
           <div className="rounded-2xl border border-border/60 bg-surface/50 p-4"><div className="flex items-center gap-2 text-text-primary mb-2"><Star className="w-4 h-4 text-accent" /><span className="text-sm font-medium">收藏</span></div><div className="text-2xl font-semibold text-text-primary">{favoriteCount}</div></div>

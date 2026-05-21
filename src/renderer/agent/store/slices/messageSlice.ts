@@ -1292,6 +1292,9 @@ export const createMessageSlice: StateCreator<
                 if ('uri' in existing && 'uri' in item) {
                     return existing.uri === item.uri
                 }
+                if (existing.type === 'ShellServer' && item.type === 'ShellServer') {
+                    return existing.serverLinkId === item.serverLinkId
+                }
                 return existing.type === item.type
             })
 
@@ -1348,4 +1351,3 @@ export const createMessageSlice: StateCreator<
         })
     },
 })
-
