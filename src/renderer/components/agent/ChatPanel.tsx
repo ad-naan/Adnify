@@ -1031,9 +1031,10 @@ export default function ChatPanel() {
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
         hasCheckpoint={item.item.hasCheckpoint}
+        isAwaitingApproval={isAwaitingApproval}
       />
     )
-  }, [approveCurrentTool, handleEditMessage, handleRegenerate, handleRestore, handleShowDiff, pendingToolCall?.id, rejectCurrentTool, renderArchiveItem])
+  }, [approveCurrentTool, handleEditMessage, handleRegenerate, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, rejectCurrentTool, renderArchiveItem])
 
   const handleTimelineRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
     visibleRangeRef.current = range
