@@ -448,6 +448,48 @@ function getRemotePathArg(value: unknown, fallback = '.'): string {
     return trimmed || fallback
 }
 
+function normalizeRemotePathForSafety(value: string): string {
+    const normalizedSeparators = value.trim().replace(/\\/g, '/')
+    return normalizedSeparators.replace(/\/+$/g, '') || '/'
+}
+
+function getRequiredRemotePathArg(
+    value: unknown,
+    argName: string,
+    toolName: string,
+    options: { rejectDangerousTarget?: boolean } = {}
+): string | ToolExecutionResult {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        const error = `${toolName} requires a non-empty ${argName}.`
+        return {
+            success: false,
+            result: `Error: ${error}`,
+            error,
+        }
+    }
+
+    const remotePath = value.trim()
+    const safetyPath = normalizeRemotePathForSafety(remotePath)
+    if (
+        options.rejectDangerousTarget &&
+        (safetyPath === '.' || safetyPath === '/' || safetyPath === '~')
+    ) {
+        const error = `${toolName} refuses unsafe remote ${argName}: "${remotePath}". Use an explicit file or subdirectory path.`
+        return {
+            success: false,
+            result: `Error: ${error}`,
+            error,
+            meta: { path: remotePath },
+        }
+    }
+
+    return remotePath
+}
+
+function isToolExecutionResult(value: string | ToolExecutionResult): value is ToolExecutionResult {
+    return typeof value !== 'string'
+}
+
 function formatServerResolutionError(
     toolName: string,
     serverName: string,
@@ -1862,7 +1904,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const routeResolution = await resolveShellRoute('read_remote_file', args, ctx, { requireRemote: true })
         if (!routeResolution.ok) return routeResolution.errorResult
 
-        const remotePath = getRemotePathArg(args.path)
+        const remotePath = getRequiredRemotePathArg(args.path, 'path', 'read_remote_file')
+        if (isToolExecutionResult(remotePath)) return remotePath
         const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
 
         try {
@@ -1898,7 +1941,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const routeResolution = await resolveShellRoute('write_remote_file', args, ctx, { requireRemote: true })
         if (!routeResolution.ok) return routeResolution.errorResult
 
-        const remotePath = getRemotePathArg(args.path)
+        const remotePath = getRequiredRemotePathArg(args.path, 'path', 'write_remote_file', { rejectDangerousTarget: true })
+        if (isToolExecutionResult(remotePath)) return remotePath
         const content = typeof args.content === 'string' ? args.content : ''
         const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
 
@@ -1937,8 +1981,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const routeResolution = await resolveShellRoute('rename_remote_path', args, ctx, { requireRemote: true })
         if (!routeResolution.ok) return routeResolution.errorResult
 
-        const oldPath = getRemotePathArg(args.old_path)
-        const newPath = getRemotePathArg(args.new_path)
+        const oldPath = getRequiredRemotePathArg(args.old_path, 'old_path', 'rename_remote_path', { rejectDangerousTarget: true })
+        if (isToolExecutionResult(oldPath)) return oldPath
+        const newPath = getRequiredRemotePathArg(args.new_path, 'new_path', 'rename_remote_path', { rejectDangerousTarget: true })
+        if (isToolExecutionResult(newPath)) return newPath
         const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
 
         try {
@@ -1976,7 +2022,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const routeResolution = await resolveShellRoute('delete_remote_path', args, ctx, { requireRemote: true })
         if (!routeResolution.ok) return routeResolution.errorResult
 
-        const remotePath = getRemotePathArg(args.path)
+        const remotePath = getRequiredRemotePathArg(args.path, 'path', 'delete_remote_path', { rejectDangerousTarget: true })
+        if (isToolExecutionResult(remotePath)) return remotePath
         const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
 
         try {
@@ -2054,7 +2101,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const routeResolution = await resolveShellRoute('download_from_remote', args, ctx, { requireRemote: true })
         if (!routeResolution.ok) return routeResolution.errorResult
 
-        const remotePath = getRemotePathArg(args.path)
+        const remotePath = getRequiredRemotePathArg(args.path, 'path', 'download_from_remote', { rejectDangerousTarget: true })
+        if (isToolExecutionResult(remotePath)) return remotePath
         const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
 
         try {

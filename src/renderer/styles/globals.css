@@ -471,6 +471,140 @@ textarea,
   background-size: 200% 100%;
 }
 
+@keyframes process-fluid-border {
+  0% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+
+  50% {
+    background-position: 100% 50%;
+    filter: hue-rotate(8deg);
+  }
+
+  100% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+}
+
+.process-fluid-pill {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  overflow: hidden;
+  background:
+    linear-gradient(rgb(var(--surface) / 0.82), rgb(var(--surface) / 0.82)) padding-box,
+    linear-gradient(110deg,
+      rgb(var(--border) / 0.64) 0%,
+      rgb(var(--accent) / 0.10) 18%,
+      rgb(var(--accent) / 0.42) 34%,
+      rgb(var(--border) / 0.52) 52%,
+      rgb(var(--accent) / 0.24) 72%,
+      rgb(var(--border) / 0.66) 100%) border-box;
+  background-size: 100% 100%, 260% 100%;
+  border: 1px solid transparent;
+  box-shadow:
+    0 1px 4px rgb(0 0 0 / 0.04),
+    0 0 16px rgb(var(--accent) / 0.07);
+  backdrop-filter: blur(8px);
+  color: rgb(var(--text-muted) / 0.55);
+  font-size: 11px;
+  line-height: 1.25rem;
+  animation: process-fluid-border 7s ease-in-out infinite;
+}
+
+.process-fluid-pill::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 120% at 20% 0%,
+      rgb(var(--accent) / 0.08),
+      transparent 48%),
+    radial-gradient(80% 120% at 86% 100%,
+      rgb(var(--accent) / 0.06),
+      transparent 52%);
+  opacity: 0.9;
+}
+
+.process-fluid-pill > * {
+  position: relative;
+  z-index: 1;
+}
+
+.process-fluid-input {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(var(--border) / 0.46);
+  background: rgb(var(--surface) / 0.60);
+  box-shadow:
+    0 4px 16px -8px rgb(0 0 0 / 0.16),
+    0 0 0 1px rgb(var(--accent) / 0.035);
+}
+
+.process-fluid-input::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(115deg,
+      rgb(var(--border) / 0.65) 0%,
+      rgb(var(--accent) / 0.14) 18%,
+      rgb(var(--accent) / 0.38) 36%,
+      rgb(var(--border) / 0.56) 52%,
+      rgb(var(--accent) / 0.22) 72%,
+      rgb(var(--border) / 0.65) 100%);
+  background-size: 260% 100%;
+  opacity: 0.8;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: process-fluid-border 9s ease-in-out infinite;
+  transition: opacity 0.35s ease;
+}
+
+.process-fluid-input::after {
+  content: none;
+}
+
+.process-fluid-input--focused,
+.process-fluid-input--streaming {
+  border-color: rgb(var(--border) / 0.42);
+  background: rgb(var(--surface) / 0.64);
+  box-shadow:
+    0 6px 24px -16px rgb(var(--accent) / 0.20),
+    0 0 0 1px rgb(var(--accent) / 0.06);
+}
+
+.process-fluid-input--focused::before,
+.process-fluid-input--streaming::before {
+  opacity: 0.92;
+}
+
+.process-fluid-input--focused::after,
+.process-fluid-input--streaming::after {
+  content: none;
+}
+
+.process-fluid-input > * {
+  position: relative;
+  z-index: 1;
+}
+
 @keyframes scale-in {
   from {
     opacity: 0;

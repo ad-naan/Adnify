@@ -51,6 +51,10 @@ function findFinalReplyRange(parts: AssistantPart[]): { start: number; end: numb
     start -= 1
   }
 
+  while (end + 1 < parts.length && isSourcesPart(parts[end + 1])) {
+    end += 1
+  }
+
   return { start, end }
 }
 
