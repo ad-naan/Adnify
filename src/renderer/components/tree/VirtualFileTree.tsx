@@ -861,7 +861,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
           <Input
             autoFocus
             placeholder={creatingIn.type === 'file' ? 'filename.ext' : 'folder name'}
-            className="flex-1 h-6 text-[13px]"
+            className="flex-1 h-6 !rounded-md px-2 text-[13px] shadow-none focus:!ring-1 focus:shadow-none"
             onBlur={(e) => {
               if (e.target.value.trim()) {
                 onCreateSubmit(creatingIn.path, e.target.value.trim(), creatingIn.type)
@@ -1035,7 +1035,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
               if (e.key === 'Escape') setRenamingPath(null)
             }}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 h-5 text-[13px] px-1 py-0"
+            className="flex-1 h-5 !rounded-md px-2 py-0 text-[13px] shadow-none focus:!ring-1 focus:shadow-none"
             autoFocus
           />
         ) : (

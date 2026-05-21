@@ -406,24 +406,27 @@ export function AgentSettings({
                                     </div>
 
                                     <div className="flex flex-col gap-3 pt-2 border-t border-border/30">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-[repeat(auto-fit,minmax(190px,1fr))] gap-x-6 gap-y-3">
                                             <Switch
                                                 label={t('启用 LLM 摘要', 'Enable LLM Summary')}
                                                 checked={agentConfig.enableLLMSummary ?? true}
                                                 onChange={(e) => setAgentConfig({ ...agentConfig, enableLLMSummary: e.target.checked })}
-                                                className="text-[11px]"
+                                                className="w-full"
+                                                labelClassName="text-xs"
                                             />
                                             <Switch
                                                 label={t('自动会话交接', 'Auto Handoff')}
                                                 checked={agentConfig.autoHandoff ?? true}
                                                 onChange={(e) => setAgentConfig({ ...agentConfig, autoHandoff: e.target.checked })}
-                                                className="text-[11px]"
+                                                className="w-full"
+                                                labelClassName="text-xs"
                                             />
                                             <Switch
                                                 label={t('智能上下文 (隐式检索)', 'Auto-Context (RAG)')}
                                                 checked={agentConfig.enableAutoContext ?? true}
                                                 onChange={(e) => setAgentConfig({ ...agentConfig, enableAutoContext: e.target.checked })}
-                                                className="text-[11px]"
+                                                className="w-full"
+                                                labelClassName="text-xs"
                                             />
                                         </div>
                                     </div>

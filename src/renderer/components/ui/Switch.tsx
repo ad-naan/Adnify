@@ -2,13 +2,14 @@ import React, { forwardRef } from 'react'
 
 export interface SwitchProps extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string
+    labelClassName?: string
 }
 
 export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
-    ({ className = '', label, ...props }, ref) => {
+    ({ className = '', label, labelClassName = '', ...props }, ref) => {
         return (
-            <label className={`inline-flex items-center cursor-pointer group select-none ${className}`}>
-                <div className="relative">
+            <label className={`inline-flex items-center gap-3 cursor-pointer group select-none min-w-0 ${className}`}>
+                <div className="relative shrink-0">
                     <input type="checkbox" className="sr-only peer" ref={ref} {...props} />
                     {/* Track */}
                     <div className="
@@ -33,7 +34,7 @@ export const Switch = forwardRef<HTMLInputElement, SwitchProps>(
                     </div>
                 </div>
                 {label && (
-                    <span className="ml-3 text-sm font-medium text-text-muted group-hover:text-text-primary transition-colors duration-200">
+                    <span className={`min-w-0 break-keep text-sm font-medium leading-snug text-text-muted group-hover:text-text-primary transition-colors duration-200 ${labelClassName}`}>
                         {label}
                     </span>
                 )}

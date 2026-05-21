@@ -55,7 +55,7 @@ export function InlineCreateInput({ type, depth, onSubmit, onCancel }: InlineCre
         onBlur={handleSubmit}
         onKeyDown={handleKeyDown}
         placeholder={type === 'file' ? 'filename.ext' : 'folder name'}
-        className="flex-1 h-6 text-[13px]"
+        className="flex-1 h-6 !rounded-md px-2 text-[13px] shadow-none focus:!ring-1 focus:shadow-none"
         autoFocus
       />
     </div>

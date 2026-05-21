@@ -587,6 +587,8 @@ export const en = {
   'cmd.explorer.revealActiveFile': 'Reveal Active File in Explorer',
   'cmd.explorer.revealInSidebar': 'Reveal in Sidebar',
   'cmd.explorer.rename': 'Rename File/Folder',
+  'cmd.explorer.copy': 'Copy File/Folder',
+  'cmd.explorer.paste': 'Paste File/Folder',
   'cmd.help.about': 'About',
 
   // Workspace Dropdown

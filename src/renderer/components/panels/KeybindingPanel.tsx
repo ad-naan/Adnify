@@ -74,22 +74,23 @@ export default function KeybindingPanel() {
     })
 
     return (
-        <div className="flex flex-col h-full bg-background text-text-primary">
-            <div className="p-4 border-b border-border-subtle flex items-center gap-3">
+        <div className="flex flex-col h-full bg-transparent text-text-primary">
+            <div className="px-4 py-4 border-b border-border-subtle/60 flex items-center gap-3 bg-surface/10">
                 <div className="relative flex-1">
                     <Input
                         leftIcon={<Search className="w-4 h-4" />}
                         placeholder={t('kb.searchPlaceholder' as TranslationKey, language) || "Search keybindings..."}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
+                        className="bg-surface/35 border-border/70 shadow-sm"
                     />
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar">
                 <div className="space-y-1">
                     {filteredCommands.map(cmd => (
-                        <div key={cmd.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-surface-hover group transition-colors">
+                        <div key={cmd.id} className="flex items-center justify-between p-3 rounded-lg group transition-colors odd:bg-surface/[0.035] hover:bg-surface-hover/70">
                             <div className="flex flex-col gap-0.5">
                                 <span className="text-sm font-medium">{t(`cmd.${cmd.id}` as TranslationKey, language) || cmd.title}</span>
                                 <span className="text-xs text-text-muted">{cmd.category ? (t(`kb.category.${cmd.category}` as TranslationKey, language) || cmd.category) : ''} • {cmd.id}</span>
