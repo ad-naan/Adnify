@@ -77,26 +77,3 @@ export function isSensitivePath(path: string): boolean {
 export function hasPathTraversal(path: string): boolean {
   return DANGEROUS_PATH_PATTERNS.some(pattern => pattern.test(path))
 }
-
-/** 允许的 Shell 命令（安全白名单） */
-export const SECURITY_DEFAULTS = {
-  SHELL_COMMANDS: [
-    'npm', 'yarn', 'pnpm', 'bun',
-    'node', 'npx', 'deno',
-    'eslint', 'tsc',
-    'git',
-    'python', 'python3', 'pip', 'pip3',
-    'java', 'javac', 'mvn', 'gradle',
-    'go', 'rust', 'cargo',
-    'make', 'gcc', 'clang', 'cmake',
-    'pwd', 'ls', 'dir', 'cat', 'type', 'echo', 'mkdir', 'touch', 'rm', 'mv', 'cp', 'cd',
-  ],
-  GIT_SUBCOMMANDS: [
-    'status', 'log', 'diff', 'show', 'ls-files', 'rev-parse', 'rev-list', 'blame',
-    'add', 'commit', 'reset', 'restore',
-    'push', 'pull', 'fetch', 'remote',
-    'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
-    'clone', 'init', 'stash', 'tag', 'config', 'symbolic-ref',
-    'merge-base', 'notes',
-  ],
-} as const

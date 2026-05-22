@@ -9,7 +9,7 @@ import * as fs from 'fs'
 import Store from 'electron-store'
 import { getBootstrapStore, getUserConfigDir, setUserConfigDir } from '../services/configPath'
 import { cleanConfigValue } from '@shared/config/configCleaner'
-import { SECURITY_DEFAULTS } from '@shared/constants'
+import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 
 interface SecurityModuleRef {
   securityManager: any
@@ -105,24 +105,12 @@ export function registerSettingsHandlers(
       })
 
       if (key === 'securitySettings' && securityRef) {
-        const securitySettings = (cleanedValue ?? value) as any
-        const defaults = {
-          enablePermissionConfirm: true,
-          strictWorkspaceMode: true,
-          allowedShellCommands: SECURITY_DEFAULTS.SHELL_COMMANDS,
-          allowedGitSubcommands: SECURITY_DEFAULTS.GIT_SUBCOMMANDS,
-        }
-        securityRef.securityManager.updateConfig(securitySettings ?? defaults)
-
-        const shellCommands =
-          securitySettings?.allowedShellCommands != null
-            ? securitySettings.allowedShellCommands
-            : SECURITY_DEFAULTS.SHELL_COMMANDS
-        const gitCommands =
-          securitySettings?.allowedGitSubcommands != null
-            ? securitySettings.allowedGitSubcommands
-            : SECURITY_DEFAULTS.GIT_SUBCOMMANDS
-        securityRef.updateWhitelist(shellCommands, gitCommands)
+        const securitySettings = normalizeSecuritySettings(cleanedValue ?? value)
+        securityRef.securityManager.updateConfig(securitySettings)
+        securityRef.updateWhitelist(
+          securitySettings.allowedShellCommands,
+          securitySettings.allowedGitSubcommands,
+        )
       }
 
       return true
@@ -140,8 +128,8 @@ export function registerSettingsHandlers(
   })
 
   ipcMain.handle('settings:resetWhitelist', () => {
-    const defaultShellCommands = [...SECURITY_DEFAULTS.SHELL_COMMANDS]
-    const defaultGitCommands = [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS]
+    const defaultShellCommands = [...SECURITY_SETTINGS_DEFAULTS.allowedShellCommands]
+    const defaultGitCommands = [...SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands]
 
     if (securityRef) {
       securityRef.updateWhitelist(defaultShellCommands, defaultGitCommands)

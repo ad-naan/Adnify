@@ -12,7 +12,7 @@ export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
 import * as path from 'path'
 import { logger } from '@shared/utils/Logger'
-import { SECURITY_DEFAULTS } from '@shared/constants'
+import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import type Store from 'electron-store'
 import { destroyIndexService } from './indexing/indexService'
 import { setCustomLspBinDir } from './lsp/installer'
@@ -583,17 +583,19 @@ async function initializeModules(firstWin: BrowserWindow) {
   updaterService.updateService.initialize(firstWin)
 
   // 配置安全模块
-  const securityConfig = configStore.get('securitySettings', {
-    enablePermissionConfirm: true,
-    strictWorkspaceMode: true,
-    allowedShellCommands: [...SECURITY_DEFAULTS.SHELL_COMMANDS],
-    allowedGitSubcommands: [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS],
-  }) as any
+  const persistedSecurityConfig = configStore.get('securitySettings') as unknown
+  const securityConfig = normalizeSecuritySettings(
+    persistedSecurityConfig ?? SECURITY_SETTINGS_DEFAULTS,
+  )
+
+  if (JSON.stringify(persistedSecurityConfig ?? null) !== JSON.stringify(securityConfig)) {
+    configStore.set('securitySettings', securityConfig)
+  }
 
   securityManager.updateConfig(securityConfig)
   security.updateWhitelist(
-    securityConfig.allowedShellCommands || [...SECURITY_DEFAULTS.SHELL_COMMANDS],
-    securityConfig.allowedGitSubcommands || [...SECURITY_DEFAULTS.GIT_SUBCOMMANDS]
+    securityConfig.allowedShellCommands,
+    securityConfig.allowedGitSubcommands,
   )
 
   // 注册 IPC 处理器
