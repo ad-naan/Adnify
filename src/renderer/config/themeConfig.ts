@@ -217,7 +217,8 @@ class ThemeManager {
 
   async loadFromConfig() {
     try {
-      const [savedThemeId, savedCustomThemes] = await Promise.all([
+      const [savedCurrentTheme, savedThemeId, savedCustomThemes] = await Promise.all([
+        api.settings.get('currentTheme'),
         api.settings.get('themeId'),
         api.settings.get('customThemes'),
       ])
@@ -226,7 +227,11 @@ class ThemeManager {
         this.customThemes = savedCustomThemes.filter(isValidTheme)
       }
 
-      const themeId = typeof savedThemeId === 'string' ? savedThemeId : null
+      const themeId = typeof savedCurrentTheme === 'string'
+        ? savedCurrentTheme
+        : typeof savedThemeId === 'string'
+          ? savedThemeId
+          : null
       const theme = themeId ? this.getThemeById(themeId) : null
       if (theme) {
         this.currentTheme = theme
@@ -267,12 +272,21 @@ class ThemeManager {
 
     try {
       localStorage.setItem(LOCAL_STORAGE_THEME_KEY, theme.id)
+      localStorage.setItem('adnify-current-theme', theme.id)
+      localStorage.setItem('adnify-theme-type', theme.type)
+      localStorage.setItem('adnify-theme-bg', theme.colors.background)
     } catch {
       // Ignore localStorage errors.
     }
 
     api.settings.set('themeId', theme.id).catch(error => {
       logger.settings.warn('[ThemeManager] Failed to persist theme:', error)
+    })
+    api.settings.set('themeBg', theme.colors.background).catch(error => {
+      logger.settings.warn('[ThemeManager] Failed to persist theme background:', error)
+    })
+    api.settings.set('currentTheme', theme.id).catch(error => {
+      logger.settings.warn('[ThemeManager] Failed to persist current theme:', error)
     })
 
     this.listeners.forEach(listener => listener(theme))

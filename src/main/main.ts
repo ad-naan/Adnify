@@ -169,9 +169,16 @@ function findWindowByWorkspace(roots: string[]): BrowserWindow | null {
 
 function getThemeBackgroundColor(): string {
   try {
-    const themeBg = configStore?.get('themeBg') as string;
+    const themeId = getPersistedThemeId()
+    const themeBg = normalizeRgbColor(configStore?.get('themeBg'), '')
+    const themes: Record<string, string> = {
+      'adnify-dark': '#121215',
+      'midnight': '#161b22',
+      'cyberpunk': '#030305',
+      'dawn': '#ffffff'
+    };
+
     if (themeBg) {
-      // If the color format is RGB with spaces like "18 18 21"
       if (themeBg.includes(' ')) {
         const [r, g, b] = themeBg.split(' ').map(Number);
         const toHex = (n: number) => n.toString(16).padStart(2, '0');
@@ -179,21 +186,25 @@ function getThemeBackgroundColor(): string {
           return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
         }
       }
-      return themeBg; // Assuming it's already a valid hex color
+      return themeBg;
     }
 
-    // Fallback dictionary for older configurations before migration
-    const themeId = configStore?.get('themeId') as string || 'adnify-dark';
-    const themes: Record<string, string> = {
-      'adnify-dark': '#121215',
-      'midnight': '#161b22',
-      'cyberpunk': '#030305',
-      'dawn': '#ffffff'
-    };
     return themes[themeId] || WINDOW_CONFIG.BG_COLOR;
   } catch {
     return WINDOW_CONFIG.BG_COLOR;
   }
+}
+
+function getPersistedThemeId(): string {
+  const currentTheme = typeof configStore?.get('currentTheme') === 'string'
+    ? String(configStore.get('currentTheme'))
+    : ''
+  if (currentTheme) return currentTheme
+
+  const themeId = typeof configStore?.get('themeId') === 'string'
+    ? String(configStore.get('themeId'))
+    : ''
+  return themeId
 }
 
 function normalizeRgbColor(value: unknown, fallback: string): string {
@@ -246,7 +257,7 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
 
 function getShutdownFallbackPresentation(): ShutdownWindowPresentation {
   const themeBg = normalizeRgbColor(configStore?.get('themeBg'), '18 18 21')
-  const themeType = configStore?.get('themeId') === 'dawn' ? 'light' : 'dark'
+  const themeType = getPersistedThemeId() === 'dawn' ? 'light' : 'dark'
 
   return {
     language: configStore?.get('language') === 'en' ? 'en' : 'zh',
@@ -501,12 +512,23 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 
 /** 加载窗口页面内容 */
 function loadWindowContent(win: BrowserWindow, isEmpty: boolean) {
+  const themeId = getPersistedThemeId()
+  const themeBg = typeof configStore?.get('themeBg') === 'string' ? String(configStore.get('themeBg')) : ''
+  const themeType = themeId === 'dawn' ? 'light' : 'dark'
+  const query = new URLSearchParams({
+    ...(isEmpty ? { empty: '1' } : {}),
+    ...(themeId ? { currentTheme: themeId, themeId } : {}),
+    ...(themeBg ? { themeBg } : {}),
+    ...(themeId ? { currentThemeType: themeType } : {}),
+    themeType,
+  }).toString()
+
   if (app.isPackaged) {
     win.loadFile(path.join(__dirname, '../renderer/index.html'), {
-      query: isEmpty ? { empty: '1' } : undefined
+      query: query ? Object.fromEntries(new URLSearchParams(query)) : undefined
     })
   } else {
-    win.loadURL(`http://localhost:5173${isEmpty ? '?empty=1' : ''}`)
+    win.loadURL(`http://localhost:5173${query ? `?${query}` : ''}`)
   }
 }
 
