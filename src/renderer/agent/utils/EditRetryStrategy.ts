@@ -358,7 +358,7 @@ export function generateFixSuggestion(
       return `Multiple matches found for the text. To fix:\n` +
         `1. Include more context (2-3 lines before and after the change)\n` +
         `2. Or use \`replace_all=true\` if you want to replace all occurrences\n` +
-        `3. Or use \`replace_file_content\` with specific line numbers`
+        `3. Or use \`edit_file\` line mode with specific line numbers`
 
     case 'file_not_found':
       return `File ${path} does not exist. Use \`write_file\` to create it.`
