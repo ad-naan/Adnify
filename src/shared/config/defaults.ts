@@ -8,6 +8,8 @@
  * - 其他配置文件应从此处导入默认值，而非重复定义
  */
 
+export { SECURITY_SETTINGS_DEFAULTS } from './securitySettings'
+
 // ============================================
 // LLM 配置默认值
 // ============================================
@@ -221,32 +223,3 @@ export const AUTO_APPROVE_DEFAULTS = {
   dangerous: false,
 } as const
 
-
-// ============================================
-// 安全设置默认值
-// ============================================
-
-export const SECURITY_SETTINGS_DEFAULTS = {
-  enablePermissionConfirm: true,
-  strictWorkspaceMode: true,
-  allowedShellCommands: [
-    'npm', 'yarn', 'pnpm', 'bun',
-    'node', 'npx', 'deno',
-    'powershell', 'pwsh', 'bash', 'sh',
-    'eslint', 'tsc',
-    'git',
-    'python', 'python3', 'py', 'pip', 'pip3',
-    'java', 'javac', 'mvn', 'gradle',
-    'go', 'rust', 'cargo',
-    'make', 'gcc', 'clang', 'cmake',
-    'pwd', 'ls', 'dir', 'cat', 'type', 'echo', 'mkdir', 'touch', 'rm', 'mv', 'cp', 'cd',
-  ],
-  allowedGitSubcommands: [
-    'status', 'log', 'diff', 'show', 'ls-files', 'rev-parse', 'rev-list', 'blame',
-    'add', 'commit', 'reset', 'restore',
-    'push', 'pull', 'fetch', 'remote',
-    'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
-    'clone', 'init', 'stash', 'tag', 'config',
-  ],
-  showSecurityWarnings: true,
-} as const

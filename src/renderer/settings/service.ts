@@ -22,6 +22,7 @@ import {
   type ProviderModelConfig,
   getAllDefaults,
 } from '@shared/config/settings'
+import { normalizeSecuritySettings } from '@shared/config/securitySettings'
 import { resolveRuntimeLLMConfig } from '@shared/config/llmConfigResolver'
 import {
   resolveRuntimeModelRoutingConfig,
@@ -291,9 +292,11 @@ class SettingsService {
       editorConfig: saved.editorConfig
         ? deepMerge(defaults.editorConfig, saved.editorConfig as object)
         : defaults.editorConfig,
-      securitySettings: saved.securitySettings
-        ? deepMerge(defaults.securitySettings, saved.securitySettings as object)
-        : defaults.securitySettings,
+      securitySettings: normalizeSecuritySettings(
+        saved.securitySettings
+          ? deepMerge(defaults.securitySettings, saved.securitySettings as object)
+          : defaults.securitySettings,
+      ),
       webSearchConfig: { ...defaults.webSearchConfig, ...(saved.webSearchConfig as object || {}) },
       mcpConfig: { ...defaults.mcpConfig, ...(saved.mcpConfig as object || {}) },
       githubToken: typeof saved.githubToken === 'string'
