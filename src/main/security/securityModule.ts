@@ -7,7 +7,8 @@ import { logger } from '@shared/utils/Logger'
 import Store from 'electron-store'
 import * as path from 'path'
 import { dialog, BrowserWindow } from 'electron'
-import { SECURITY_DEFAULTS, isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
+import { isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
+import { SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 
 // 敏感操作类型
@@ -93,10 +94,10 @@ const DEFAULT_PERMISSIONS: PermissionConfig = {
   [OperationType.SYSTEM_SHELL]: PermissionLevel.DENIED,
 }
 
-// 命令白名单（已统一到 constants.ts）
-const ALLOWED_SHELL_COMMANDS = new Set(SECURITY_DEFAULTS.SHELL_COMMANDS.map(cmd => cmd.toLowerCase()))
+// 命令白名单（已统一到 shared/config/securitySettings.ts）
+const ALLOWED_SHELL_COMMANDS = new Set(SECURITY_SETTINGS_DEFAULTS.allowedShellCommands.map(cmd => cmd.toLowerCase()))
 
-const ALLOWED_GIT_SUBCOMMANDS = new Set(SECURITY_DEFAULTS.GIT_SUBCOMMANDS.map(cmd => cmd.toLowerCase()))
+const ALLOWED_GIT_SUBCOMMANDS = new Set(SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands.map(cmd => cmd.toLowerCase()))
 
 function normalizeCommandName(command: string): string {
   const baseName = path.basename(command).toLowerCase()

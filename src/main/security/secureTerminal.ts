@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile)
 import { EventEmitter } from 'events'
 import { StringDecoder } from 'node:string_decoder'
 import { securityManager, OperationType } from './securityModule'
-import { SECURITY_DEFAULTS } from '@shared/constants'
+import { SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
 import { remoteHostTrustService } from '../services/remoteHostTrustService'
@@ -31,10 +31,10 @@ interface CommandWhitelist {
   git: Set<string>
 }
 
-// 白名单配置（已统一到 constants.ts）
+// 白名单配置（已统一到 shared/config/securitySettings.ts）
 let WHITELIST: CommandWhitelist = {
-  shell: new Set(SECURITY_DEFAULTS.SHELL_COMMANDS.map(cmd => cmd.toLowerCase())),
-  git: new Set(SECURITY_DEFAULTS.GIT_SUBCOMMANDS.map(cmd => cmd.toLowerCase())),
+  shell: new Set(SECURITY_SETTINGS_DEFAULTS.allowedShellCommands.map(cmd => cmd.toLowerCase())),
+  git: new Set(SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands.map(cmd => cmd.toLowerCase())),
 }
 
 // 更新白名单配置
@@ -234,6 +234,17 @@ class SecureCommandParser {
       })
     })
   }
+}
+
+function shouldLogGitNonZeroAsWarning(args: string[], stderr: string, stdout: string): boolean {
+  const gitSubCommand = args.find(arg => !arg.startsWith('-'))?.toLowerCase()
+  const output = `${stderr}\n${stdout}`.toLowerCase()
+
+  if (gitSubCommand === 'notes' && args.includes('show') && output.includes('no note found for object')) {
+    return true
+  }
+
+  return false
 }
 
 /**
@@ -478,6 +489,8 @@ export function registerSecureTerminalHandlers(
         const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
         if (isQueryCommand) {
           logger.security.debug('[Git] dugite query returned non-zero:', args)
+        } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
+          logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
         } else {
           logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
         }
