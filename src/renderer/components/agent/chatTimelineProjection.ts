@@ -1,6 +1,7 @@
 import {
   isAssistantMessage,
   isUserMessage,
+  isContextSnapshotPart,
   type ChatMessage as ChatMessageType,
   type ToolCall,
 } from '@/renderer/agent/types'
@@ -39,6 +40,12 @@ const ACTIVE_TOOL_STATUSES = new Set<ToolCall['status']>(['pending', 'awaiting',
 
 function hasActiveToolCall(message: ChatMessageType): boolean {
   return isAssistantMessage(message) && (message.toolCalls?.some(toolCall => ACTIVE_TOOL_STATUSES.has(toolCall.status)) ?? false)
+}
+
+function isContextSnapshotOnlyMessage(message: ChatMessageType): boolean {
+  return isAssistantMessage(message) &&
+    message.parts.length > 0 &&
+    message.parts.every(isContextSnapshotPart)
 }
 
 function getActiveTailStartIndex(messages: ChatMessageType[]): number {
@@ -83,11 +90,16 @@ export function buildChatTimelineProjection(
   const activeTailStart = getActiveTailStartIndex(messages)
   const recentVisibleStart = Math.min(baseVisibleStart, activeTailStart)
   const visibleStart = Math.max(0, recentVisibleStart - Math.max(0, expandedHistoryCount))
-  const hiddenCount = visibleStart
+  const hiddenMessages = messages.slice(0, visibleStart)
+  const visibleSnapshotMessages = hiddenMessages.filter(isContextSnapshotOnlyMessage)
+  const hiddenCount = hiddenMessages.length - visibleSnapshotMessages.length
 
   return {
     hiddenCount,
     revealCount: Math.min(revealBatchSize, hiddenCount),
-    visibleMessages: messages.slice(visibleStart),
+    visibleMessages: [
+      ...visibleSnapshotMessages,
+      ...messages.slice(visibleStart),
+    ],
   }
 }
