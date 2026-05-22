@@ -1153,9 +1153,10 @@ const ChatMessage = React.memo(({
   const shouldCollapseProcess = assistantProjection?.shouldCollapseProcess ?? false
   const shouldSettleProcess = shouldCollapseProcess && (didJustFinishStreaming || isProcessSettling)
   const shouldRenderMetaGroup = isAssistantMessage(message) && !shouldCollapseProcess && hasMetaGroup
+  const alertAssistantParts = assistantProjection?.alertParts ?? []
   const visibleAssistantParts = shouldCollapseProcess
     ? (assistantProjection?.finalReplyParts ?? [])
-    : (assistantParts ?? [])
+    : (assistantParts ?? []).filter(part => !isSystemAlertPart(part))
   const processAssistantParts = assistantProjection?.processParts ?? []
 
   return (
@@ -1426,6 +1427,18 @@ const ChatMessage = React.memo(({
                       />
                     )}
                   </ProcessFold>
+                )}
+                {alertAssistantParts.length > 0 && (
+                  <AssistantMessageContent
+                    parts={alertAssistantParts}
+                    pendingToolId={pendingToolId}
+                    onApproveTool={onApproveTool}
+                    onRejectTool={onRejectTool}
+                    onOpenDiff={onOpenDiff}
+                    fontSize={fontSize}
+                    isStreaming={message.isStreaming}
+                    messageId={message.id}
+                  />
                 )}
                 {visibleAssistantParts.length > 0 && (
                   <AssistantMessageContent
