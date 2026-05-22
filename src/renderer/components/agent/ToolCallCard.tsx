@@ -17,6 +17,7 @@ import { TextWithFileLinks } from '../common/TextWithFileLinks'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { themeManager } from '../../config/themeConfig'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
+import { resolveWriteFileStatusText } from '@renderer/agent/utils/fileWriteDisplay'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -37,8 +38,8 @@ const TOOL_LABELS: Record<string, string> = {
     codebase_search: 'Semantic Search',
     edit_file: 'Edit File',
     write_file: 'Write File',
+    create_directory: 'Create Directory',
     create_file: 'Create File',
-    create_file_or_folder: 'Create',
     delete_file_or_folder: 'Delete',
     run_command: 'Run Command',
     get_lint_errors: 'Lint Errors',
@@ -163,7 +164,19 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
         return `Reading ${path}`
     }
 
-    if (['write_file', 'create_file', 'create_file_or_folder'].includes(name)) {
+    if (name === 'write_file') {
+        const meta = args._meta && typeof args._meta === 'object' ? args._meta as Record<string, unknown> : undefined
+        const oldContent = typeof meta?.oldContent === 'string' ? meta.oldContent : ''
+        const newContent = typeof meta?.newContent === 'string'
+            ? meta.newContent
+            : (typeof args.content === 'string' ? args.content : '')
+        if (isRunning) return resolveWriteFileStatusText(meta, oldContent, newContent, 'running', path)
+        if (isSuccess) return resolveWriteFileStatusText(meta, oldContent, newContent, 'success', path)
+        if (isError) return resolveWriteFileStatusText(meta, oldContent, newContent, 'error', path)
+        return resolveWriteFileStatusText(meta, oldContent, newContent, 'running', path)
+    }
+
+    if (name === 'create_directory' || name === 'create_file') {
         if (!path) return isRunning ? 'Creating...' : ''
         if (isRunning) return `Creating ${path}...`
         if (isSuccess) return `Created ${path}`
@@ -616,11 +629,11 @@ function ToolPreview({
         }
     }
 
-    if (['create_file_or_folder', 'delete_file_or_folder'].includes(effectiveName)) {
+    if (effectiveName === 'create_directory' || effectiveName === 'delete_file_or_folder') {
         const paths = getToolPathList(args)
         const path = paths[0] || ''
         const isDelete = effectiveName === 'delete_file_or_folder'
-        const isFolder = path.endsWith('/')
+        const isFolder = effectiveName === 'create_directory' || path.endsWith('/')
         const displayName = paths.length > 1 ? getPathSummary(paths) : (path ? getPathDisplayName(path) : '<no path>')
 
         return (

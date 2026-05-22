@@ -37,7 +37,7 @@ tests/
 │   │   └── executors/
 │   │       ├── file.test.ts
 │   │       ├── command.test.ts
-│   │       └── replace_file_content.test.ts
+│   │       └── batchEdit.test.ts
 │   ├── store/                        # 状态管理
 │   │   ├── AgentStore.test.ts
 │   │   ├── threadSlice.test.ts
