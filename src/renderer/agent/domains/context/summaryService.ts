@@ -568,6 +568,9 @@ function extractCompletedSteps(messages: ChatMessage[]): string[] {
         case 'create_file':
           steps.push(`Created file: ${args.path}`)
           break
+        case 'create_directory':
+          steps.push(`Created directory: ${args.path}`)
+          break
         case 'edit_file':
           steps.push(`Modified file: ${args.path}`)
           break
