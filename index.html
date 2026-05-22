@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" style="background:#09090b">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
@@ -14,10 +14,38 @@
       var loaderBg = '#121215';
       var isLight = false;
       try {
-        var themeBg = localStorage.getItem('adnify-theme-bg');
+        var urlParams = new URLSearchParams(window.location.search);
+        var themeId = localStorage.getItem('adnify-theme-id') || localStorage.getItem('adnify-theme-current');
         var themeType = localStorage.getItem('adnify-theme-type');
+        var themeBg = localStorage.getItem('adnify-theme-bg');
+        var currentTheme = localStorage.getItem('adnify-current-theme');
+        var queryThemeId = urlParams.get('themeId');
+        var queryCurrentTheme = urlParams.get('currentTheme');
+        var queryThemeType = urlParams.get('themeType');
+        var queryCurrentThemeType = urlParams.get('currentThemeType');
+        var queryThemeBg = urlParams.get('themeBg');
+        var themes = {
+          'adnify-dark': { bg: '#121215', twBg: '18 18 21', light: false },
+          'midnight': { bg: '#161B22', twBg: '22 27 34', light: false },
+          'cyberpunk': { bg: '#030305', twBg: '3 3 5', light: false },
+          'dawn': { bg: '#FFFFFF', twBg: '255 255 255', light: true }
+        };
+        themeId = queryThemeId || themeId;
+        currentTheme = queryCurrentTheme || currentTheme;
+        themeType = queryThemeType || themeType;
+        if (queryCurrentThemeType) {
+          themeType = queryCurrentThemeType;
+        }
+        themeBg = queryThemeBg || themeBg;
+        var resolvedThemeId = currentTheme || themeId;
+        var theme = resolvedThemeId && themes[resolvedThemeId] ? themes[resolvedThemeId] : null;
+        isLight = themeType === 'light' || (theme && theme.light);
 
-        if (themeBg) {
+        if (theme) {
+          bg = theme.bg;
+          loaderBg = theme.bg;
+          document.documentElement.style.setProperty('--background', theme.twBg);
+        } else if (themeBg) {
           if (themeBg.indexOf(' ') !== -1) {
             bg = 'rgb(' + themeBg.replace(/ /g, ', ') + ')';
             document.documentElement.style.setProperty('--background', themeBg);
@@ -25,24 +53,6 @@
             bg = themeBg;
           }
           loaderBg = bg;
-        } else {
-          var themes = {
-            'adnify-dark': { bg: '#121215', twBg: '18 18 21' },
-            'midnight': { bg: '#161B22', twBg: '22 27 34' },
-            'cyberpunk': { bg: '#030305', twBg: '3 3 5' },
-            'dawn': { bg: '#FFFFFF', twBg: '255 255 255' }
-          };
-          var themeId = localStorage.getItem('adnify-theme-id');
-          if (themeId && themes[themeId]) {
-            bg = themes[themeId].bg;
-            loaderBg = themes[themeId].bg;
-            document.documentElement.style.setProperty('--background', themes[themeId].twBg);
-            isLight = themeId === 'dawn';
-          }
-        }
-
-        if (themeType === 'light') {
-          isLight = true;
         }
       } catch (e) { }
 
@@ -53,17 +63,6 @@
 
       document.documentElement.style.background = bg;
       document.documentElement.style.setProperty('--loader-bg', loaderBg);
-
-      // Default Dark Mode
-      document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app.png') + ')');
-      document.documentElement.style.setProperty('--loader-glass-bg', 'rgba(255, 255, 255, 0.03)');
-      document.documentElement.style.setProperty('--loader-glass-border', 'rgba(255, 255, 255, 0.08)');
-      document.documentElement.style.setProperty('--loader-glass-shadow', 'rgba(0, 0, 0, 0.3)');
-      document.documentElement.style.setProperty('--loader-orbit-color', 'rgba(255, 255, 255, 0.04)');
-      document.documentElement.style.setProperty('--loader-inner-glow', 'rgba(139, 92, 246, 0.15)');
-      document.documentElement.style.setProperty('--loader-aura-1', '#8b5cf6');
-      document.documentElement.style.setProperty('--loader-aura-2', '#3b82f6');
-      document.documentElement.style.setProperty('--loader-aura-opacity', '0.08');
 
       if (isLight) {
         document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app-light.png') + ')');
@@ -86,6 +85,18 @@
         }
         document.documentElement.style.setProperty('--surface', '241 243 245');
         document.documentElement.style.setProperty('--border', '222 226 230');
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.style.setProperty('--loader-logo-url', 'url(' + JSON.stringify(publicBase + 'brand/logos/app.png') + ')');
+        document.documentElement.style.setProperty('--loader-glass-bg', 'rgba(255, 255, 255, 0.03)');
+        document.documentElement.style.setProperty('--loader-glass-border', 'rgba(255, 255, 255, 0.08)');
+        document.documentElement.style.setProperty('--loader-glass-shadow', 'rgba(0, 0, 0, 0.3)');
+        document.documentElement.style.setProperty('--loader-orbit-color', 'rgba(255, 255, 255, 0.04)');
+        document.documentElement.style.setProperty('--loader-inner-glow', 'rgba(139, 92, 246, 0.15)');
+        document.documentElement.style.setProperty('--loader-aura-1', '#8b5cf6');
+        document.documentElement.style.setProperty('--loader-aura-2', '#3b82f6');
+        document.documentElement.style.setProperty('--loader-aura-opacity', '0.08');
+        document.documentElement.setAttribute('data-theme', 'dark');
       }
     })();
   </script>
@@ -93,7 +104,7 @@
   <!-- 关键 CSS 内联 -->
   <style>
     :root {
-      --loader-bg: #09090b;
+      --loader-bg: #121215;
       --loader-accent: #8b5cf6;
       --loader-text: #fafafa;
       --loader-text-dim: #71717a;

@@ -31,7 +31,7 @@ interface FullScreenLoadingProps {
 }
 
 export const FullScreenLoading = memo(({ message }: FullScreenLoadingProps) => (
-  <div className="h-full flex flex-col items-center justify-center gap-3 bg-background">
+  <div className="h-full flex flex-col items-center justify-center gap-3 bg-background" data-loading-shell="true">
     <Spinner size="lg" />
     {message && <span className="text-xs text-text-muted">{message}</span>}
   </div>
@@ -259,7 +259,7 @@ InlineLoading.displayName = 'InlineLoading'
 // ============ 设置弹窗骨架屏 ============
 
 export const SettingsSkeleton = memo(() => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" data-loading-shell="true">
     <div className="w-full max-w-5xl mx-4 overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
       <div className="flex h-[75vh] max-h-[800px]">
         {/* 左侧导航栏 */}
