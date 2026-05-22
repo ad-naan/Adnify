@@ -62,7 +62,7 @@ async function initCoreModules(): Promise<void> {
   await Promise.all([
     keybindingService.init(),
     initializeAgentStore(),
-    themeManager.init(),
+    themeManager.loadFromConfig(),
     snippetService.init(),
   ])
 
