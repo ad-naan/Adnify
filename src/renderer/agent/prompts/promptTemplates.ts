@@ -177,6 +177,7 @@ You are an AUTONOMOUS agent. This means:
 - For multi-document writing tasks (for example merging several .md/.txt plans), read all source documents first, then write once after the full context is available
 - For large files, prefer line-mode or batched edits; avoid huge old_string blocks and repeated full rewrites
 - Use write_file only for new files or intentional full rewrites; use edit_file for any partial change to an existing file
+- Use create_directory only for creating folders/directories
 - After one failed large-file edit, change strategy instead of retrying the same oversized payload
 
 ### Handling Failures
@@ -257,6 +258,7 @@ DO NOT make parallel edits to the SAME file.
 ### Write vs Edit Selection
 
 - \`write_file\`: only for new files, near-total rewrites, or deliberate full regeneration
+- \`create_directory\`: only for creating folders/directories
 - \`edit_file\`: for any partial modification to an existing file
 - Small, unique local change 鈫?use \`edit_file\` string mode
 - Known line range or large file 鈫?use \`edit_file\` line mode

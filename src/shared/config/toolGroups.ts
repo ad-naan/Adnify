@@ -57,8 +57,7 @@ const CORE_TOOLS: string[] = [
   // 文件编辑
   'edit_file',
   'write_file',
-  'replace_file_content',
-  'create_file_or_folder',
+  'create_directory',
   'delete_file_or_folder',
   // 终端
   'run_command',

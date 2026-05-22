@@ -55,6 +55,18 @@ describe('Tool Definitions', () => {
       expect(TOOL_CONFIGS.edit_file.name).toBe('edit_file')
     })
 
+    it('should have create_directory in configs', () => {
+      expect(TOOL_CONFIGS.create_directory).toBeDefined()
+      expect(TOOL_CONFIGS.create_directory.name).toBe('create_directory')
+    })
+
+    it('should not expose removed file tools', () => {
+      expect(TOOL_CONFIGS.create_file_or_folder).toBeUndefined()
+      expect(TOOL_CONFIGS.replace_file_content).toBeUndefined()
+      expect(TOOL_SCHEMAS.create_file_or_folder).toBeUndefined()
+      expect(TOOL_SCHEMAS.replace_file_content).toBeUndefined()
+    })
+
     it('should have run_command in configs', () => {
       expect(TOOL_CONFIGS.run_command).toBeDefined()
       expect(TOOL_CONFIGS.run_command.name).toBe('run_command')
@@ -101,6 +113,15 @@ describe('Tool Definitions', () => {
       expect(readImageSchema.safeParse({ path: 'images/ui.png' }).success).toBe(true)
       expect(readImageSchema.safeParse({ path: 'images/ui.png', prompt: 'Extract chart labels' }).success).toBe(true)
       expect(readImageSchema.safeParse({}).success).toBe(false)
+    })
+
+    it('should validate create_directory path', () => {
+      const createDirectorySchema = TOOL_SCHEMAS.create_directory
+      expect(createDirectorySchema).toBeDefined()
+
+      expect(createDirectorySchema.safeParse({ path: 'src/utils' }).success).toBe(true)
+      expect(createDirectorySchema.safeParse({ path: 'src/utils/' }).success).toBe(true)
+      expect(createDirectorySchema.safeParse({}).success).toBe(false)
     })
 
     it('should ignore placeholder line fields and empty edits in edit_file string mode', () => {

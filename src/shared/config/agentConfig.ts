@@ -212,10 +212,6 @@ export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
       dependsOn: ['read_file'],
       type: 'sequential',
     },
-    replace_file_content: {
-      dependsOn: ['read_file'],
-      type: 'sequential',
-    },
   },
   // Auto-Context Configuration
   enableAutoContext: true,
@@ -233,4 +229,3 @@ export function getCacheConfig(type: keyof CacheConfigs, override?: Partial<Cach
 export function getToolTruncateConfig(toolName: string): ToolTruncateConfig {
   return TOOL_TRUNCATE_DEFAULTS[toolName] || TOOL_TRUNCATE_DEFAULTS.default
 }
-

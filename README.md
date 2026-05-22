@@ -154,7 +154,7 @@ Join our community to discuss Adnify usage and development!
 
 - **24+ Built-in Native Core Tools**: Building a universal foundation allowing AI to fully take over projects
   - 📂 **File System Management**: `read_file` (supports single/batch file reading), `list_directory` (supports recursive traversal)
-  - ✍️ **Smart Code Editing**: `edit_file` (9-strategy intelligent matching), `write_file`, `create_file_or_folder`, `delete_file_or_folder`
+- ✍️ **Smart Code Editing**: `edit_file` (9-strategy intelligent matching), `write_file`, `create_directory`, `delete_file_or_folder`
   - 🔎 **Full-scale Search Engine**: `search_files` (ultra-fast regex scan, supports | pattern combination), `codebase_search` (LanceDB vector semantic insight)
   - 🧠 **Language Service (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors` (supports force refresh)
   - 💻 **Sandbox Terminal Control**: `run_command` (supports background execution), `read_terminal_output`, `send_terminal_input` (supports Ctrl key combinations), `stop_terminal`

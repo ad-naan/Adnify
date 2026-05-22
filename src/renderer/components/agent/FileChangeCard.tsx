@@ -13,6 +13,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { toast } from '@components/common/ToastProvider'
+import { isCreateActionLabel, resolveFileChangeActionLabel } from '@renderer/agent/utils/fileWriteDisplay'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -142,8 +143,10 @@ function FileChangeCard({
         }
     }, [oldContent, newContent, meta, isRunning, isStreaming])
 
-    const isNewFile = ['create_file', 'create_file_or_folder'].includes(toolCall.name) ||
-        (!oldContent && !!newContent && !['edit_file', 'replace_file_content', 'write_file'].includes(toolCall.name))
+    const changeLabel = useMemo(() => (
+        resolveFileChangeActionLabel(toolCall.name, meta, oldContent, newContent)
+    ), [toolCall.name, meta, oldContent, newContent])
+    const isCreateAction = isCreateActionLabel(changeLabel)
     // Card style only; visual design remains unchanged.
     const cardStyle = useMemo(() => {
         if (isAwaitingApproval) return 'border-l-2 border-yellow-500 bg-yellow-500/5'
@@ -247,10 +250,10 @@ function FileChangeCard({
                                 <span
                                     className={`text-[12px] truncate transition-colors ${isStreaming || isRunning ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}
                                 >
-                                    {isNewFile ? 'Create ' : 'Update '}
+                                    {changeLabel}{' '}
                                 </span>
                                 <span
-                                    className={`${isNewFile ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'tool-text-shimmer text-[12px] font-medium' : 'font-medium text-[12px]'} hover:underline hover:text-accent cursor-pointer transition-colors break-all`}
+                                    className={`${isCreateAction ? 'text-status-success' : 'text-text-primary'} ${isStreaming || isRunning ? 'tool-text-shimmer text-[12px] font-medium' : 'font-medium text-[12px]'} hover:underline hover:text-accent cursor-pointer transition-colors break-all`}
                                     onClick={(e) => {
                                         e.stopPropagation()
                                         if (isLargeWrite) {
@@ -298,7 +301,7 @@ function FileChangeCard({
                                 {diffStats.removed > 0 && (
                                     <span className="text-red-400">-{diffStats.removed}</span>
                                 )}
-                                {isNewFile && diffStats.added === 0 && (
+                                {isCreateAction && diffStats.added === 0 && (
                                     <span className="text-blue-400">new</span>
                                 )}
                             </span>

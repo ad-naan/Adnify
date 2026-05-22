@@ -239,7 +239,8 @@ Choose one mode only: string mode (old_string + new_string), line mode (start_li
 Never mix modes, never send empty placeholder edits, and never use edit_file to replace a whole file; use write_file for full replacement.`,
         detailedDescription: `When to use:
 - Use edit_file for partial changes to an existing file after read_file.
-- Use write_file for new files or intentional full-file replacement.
+- Use write_file for new files or intentional full rewrite.
+- Use create_directory when you need a new folder.
 
 Choose one mode:
 - String mode: old_string + new_string for one small unique replacement.
@@ -318,11 +319,11 @@ Avoid:
         name: 'write_file',
         displayName: 'Write File',
         description: `Write complete file content.
-Use for new files, intentional full-file replacement, or generated artifact files.
+Use for new files, intentional full rewrites, or generated artifact files.
 Do not use for partial edits; write_file overwrites the whole file, so use edit_file for targeted changes.`,
         criticalRules: [
             'Overwrites the entire file; use edit_file for partial changes',
-            'Prefer over create_file_or_folder when you have file content ready',
+            'Use write_file to create files; use create_directory to create folders',
             'Do not rewrite the same large file multiple times in one turn unless absolutely necessary',
             'If the file already exists and you are only changing a section, DO NOT use write_file',
         ],
@@ -342,16 +343,16 @@ Do not use for partial edits; write_file overwrites the whole file, so use edit_
         },
     },
 
-    create_file_or_folder: {
-        name: 'create_file_or_folder',
-        displayName: 'Create',
-        description: 'Create file or folder. Path ending with / creates folder.',
-        detailedDescription: `Create new files or directories.
-- Path ending with "/" creates folder
-- Can include initial content for files`,
+    create_directory: {
+        name: 'create_directory',
+        displayName: 'Create Directory',
+        description: 'Create a directory.',
+        detailedDescription: `Create a new directory.
+- Use this tool only for folders/directories
+- Trailing slash is optional`,
         examples: [
-            'create_file_or_folder path="src/utils/"',
-            'create_file_or_folder path="src/config.ts" content="export default {}"',
+            'create_directory path="src/utils"',
+            'create_directory path="src/components/"',
         ],
         category: 'write',
         approvalType: 'none',
@@ -364,8 +365,7 @@ Do not use for partial edits; write_file overwrites the whole file, so use edit_
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'Path relative to workspace root (end with / for folder, e.g., "src/utils/" or "src/config.ts")', required: true },
-            content: { type: 'string', description: 'Initial content for files' },
+            path: { type: 'string', description: 'Directory path relative to workspace root. Trailing slash is optional.', required: true },
         },
     },
 
@@ -1214,7 +1214,8 @@ export const FILE_EDIT_DECISION_GUIDE = `
 ## File Editing Decision Guide
 
 **1. Pick the tool**
-- New file or full-file replacement: use \`write_file\`.
+- New file or full rewrite: use \`write_file\`.
+- New directory: use \`create_directory\`.
 - Partial change to an existing file: use \`edit_file\` after \`read_file\`.
 
 **2. Pick exactly one edit_file mode**
@@ -1630,17 +1631,17 @@ export function isWriteTool(toolName: string): boolean {
 
 /** 检查工具是否为文件编辑工具（会产生文件内容变更，不包括删除） */
 export function isFileEditTool(toolName: string): boolean {
-    return ['edit_file', 'write_file', 'create_file_or_folder', 'replace_file_content'].includes(toolName)
+    return ['edit_file', 'write_file'].includes(toolName)
 }
 
 /** 检查工具是否需要保存文件快照（用于撤销功能） */
 export function needsFileSnapshot(toolName: string): boolean {
-    return ['edit_file', 'write_file', 'create_file_or_folder', 'replace_file_content', 'delete_file_or_folder'].includes(toolName)
+    return ['edit_file', 'write_file', 'delete_file_or_folder'].includes(toolName)
 }
 
 /** 检查工具是否需要 Diff 预览（使用 FileChangeCard） */
 export function needsDiffPreview(toolName: string): boolean {
-    return ['edit_file', 'write_file', 'replace_file_content'].includes(toolName)
+    return ['edit_file', 'write_file'].includes(toolName)
 }
 
 /** 获取工具元数据 */
