@@ -6,6 +6,7 @@
 
 import { sanitizePersistedLLMConfig } from './llmPersistence'
 import { sanitizePersistedModelRoutingConfig } from './modelRouting'
+import { normalizeSecuritySettings } from './securitySettings'
 
 // ============================================
 // EditorConfig 清理
@@ -359,6 +360,10 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
   return cleaned
 }
 
+export function cleanSecuritySettings(config: Record<string, unknown>) {
+  return normalizeSecuritySettings(config)
+}
+
 // ============================================
 // 统一清理入口
 // ============================================
@@ -375,6 +380,9 @@ export function cleanConfigValue(key: string, value: unknown): unknown {
 
     case 'app-settings':
       return typeof value === 'object' ? cleanAppSettings(value as Record<string, unknown>) : value
+
+    case 'securitySettings':
+      return typeof value === 'object' ? cleanSecuritySettings(value as Record<string, unknown>) : value
 
     default:
       return value
