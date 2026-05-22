@@ -1,9 +1,11 @@
 import { EventEmitter } from 'events'
 import * as fs from 'fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { logger } from '@shared/utils/Logger'
 
 const handlers = new Map<string, Function>()
 const childSpawnMock = vi.fn()
+const dugiteExecMock = vi.fn()
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => true),
@@ -20,6 +22,12 @@ vi.mock('child_process', () => ({
   spawn: childSpawnMock,
   execSync: vi.fn(),
   execFile: vi.fn(),
+}))
+
+vi.mock('dugite', () => ({
+  GitProcess: {
+    exec: dugiteExecMock,
+  },
 }))
 
 vi.mock('@shared/utils/Logger', () => ({
@@ -60,6 +68,7 @@ describe('secureTerminal', () => {
   beforeEach(() => {
     handlers.clear()
     childSpawnMock.mockReset()
+    dugiteExecMock.mockReset()
     vi.spyOn(fs, 'existsSync').mockReturnValue(true)
   })
 
@@ -114,5 +123,45 @@ describe('secureTerminal', () => {
 
     expect(result).toEqual({ success: true })
     expect(childSpawnMock).toHaveBeenCalledTimes(1)
+  })
+  it('logs git notes show misses as warnings instead of errors', async () => {
+    const workspaceRoot = process.cwd()
+    dugiteExecMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: '',
+      stderr: 'error: no note found for object 86436c51be5491ea46e883bc59b96a9786f0e525.\n',
+    })
+
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const handler = handlers.get('git:execSecure')
+    expect(handler).toBeTypeOf('function')
+
+    const result = await handler?.({ sender: { id: 1 } }, [
+      'notes',
+      '--ref',
+      'adnify-ai',
+      'show',
+      '86436c51be5491ea46e883bc59b96a9786f0e525',
+    ], workspaceRoot)
+
+    expect(result).toMatchObject({
+      success: false,
+      exitCode: 1,
+    })
+    expect(logger.security.warn).toHaveBeenCalledWith(
+      '[Git] dugite returned expected non-zero result:',
+      ['notes', '--ref', 'adnify-ai', 'show', '86436c51be5491ea46e883bc59b96a9786f0e525'],
+      'error: no note found for object 86436c51be5491ea46e883bc59b96a9786f0e525.\n',
+    )
+    expect(logger.security.error).not.toHaveBeenCalledWith(
+      '[Git] dugite exec failed:',
+      ['notes', '--ref', 'adnify-ai', 'show', '86436c51be5491ea46e883bc59b96a9786f0e525'],
+      'error: no note found for object 86436c51be5491ea46e883bc59b96a9786f0e525.\n',
+    )
   })
 })
