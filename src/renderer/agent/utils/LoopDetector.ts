@@ -86,8 +86,7 @@ const READ_OPERATIONS = new Set([
 const WRITE_OPERATIONS = new Set([
   'edit_file',
   'write_file',
-  'replace_file_content',
-  'create_file_or_folder',
+  'create_directory',
   'delete_file_or_folder',
   'run_command',
 ])

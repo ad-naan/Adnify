@@ -151,7 +151,7 @@ Adnify 不仅仅是一个编辑器，它是你的**智能编程伴侣**。它复
 
 - **24+ 个内置原生核心工具**: 构建出让 AI 可以完全接管项目的泛用型底座能力
   - 📂 **文件系统管理**: `read_file` (支持单文件/多文件批量读取), `list_directory` (支持递归遍历)
-  - ✍️ **智能代码编辑**: `edit_file` (9 策略智能匹配), `write_file`, `create_file_or_folder`, `delete_file_or_folder`
+- ✍️ **智能代码编辑**: `edit_file` (9 策略智能匹配), `write_file`, `create_directory`, `delete_file_or_folder`
   - 🔎 **全量检索引擎**: `search_files` (超高速正则扫描，支持 | 组合多模式), `codebase_search` (基于 LanceDB 向量的语义洞察)
   - 🧠 **语言服务层 (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors` (支持强制刷新)
   - 💻 **底层沙盒终端控制**: `run_command` (支持后台运行), `read_terminal_output`, `send_terminal_input` (支持 Ctrl 组合键), `stop_terminal`

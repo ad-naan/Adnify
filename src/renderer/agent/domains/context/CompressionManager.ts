@@ -53,7 +53,7 @@ export const LEVEL_NAMES = [
 ] as const
 
 /** 需要截断参数的工具 */
-const TRUNCATE_TOOLS = new Set(['write_file', 'edit_file', 'create_file_or_folder'])
+const TRUNCATE_TOOLS = new Set(['write_file', 'edit_file'])
 
 /** 受保护的工具（不清理结果） */
 const PROTECTED_TOOLS = new Set(['ask_user'])

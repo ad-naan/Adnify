@@ -1239,7 +1239,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         }
 
         if (hasLineMode) {
-            // 行模式（原 replace_file_content）
+            // 行模式
             const { start_line: startLine, end_line: endLine, content } = resolution.args
 
             // 验证缓存
@@ -1514,79 +1514,21 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         }
     },
 
-    async create_file_or_folder(args, ctx) {
+    async create_directory(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath)
-        const isFolder = path.endsWith('/') || path.endsWith('\\')
-
-        if (isFolder) {
-            const success = await api.file.mkdir(path)
-            if (success) {
-                notifyWorkspaceTreeChange({
-                    workspacePath: ctx.workspacePath || '',
-                    targetPath: path,
-                    changeType: 'create',
-                    isDirectory: true,
-                })
-            }
-            return { success, result: success ? 'Folder created' : 'Failed to create folder' }
-        }
-
-        const originalContent = await api.file.read(path)
-        const content = (args.content as string) || ''
-        const guardedWrite = await guardedWriteFile({
-            path,
-            nextContent: content,
-            originalContent,
-            staleMessage: 'Create file conflict detected: target path changed before creation completed',
-        })
-
-        if (guardedWrite.success) {
-            // 通知 LSP 并等待诊断
-            await notifyLspAfterWrite(path, content)
-
-            notifyComposerChange({
-                filePath: path,
+        const normalizedPath = path.endsWith('/') || path.endsWith('\\')
+            ? path.slice(0, -1)
+            : path
+        const success = await api.file.mkdir(normalizedPath)
+        if (success) {
+            notifyWorkspaceTreeChange({
                 workspacePath: ctx.workspacePath || '',
-                oldContent: null,
-                newContent: content,
+                targetPath: normalizedPath,
                 changeType: 'create',
-                linesAdded: content.split('\n').length,
-                linesRemoved: 0,
-                ...getWritePreviewFlags(null, content),
-                toolCallId: ctx.toolCallId
-            })
-
-            await aiAttributionService.recordWriteEvent({
-                workspacePath: ctx.workspacePath || null,
-                filePath: path,
-                toolName: 'create_file_or_folder',
-                toolCallId: ctx.toolCallId,
-                threadId: ctx.threadId,
-                assistantId: ctx.currentAssistantId ?? ctx.assistantId,
-                requestId: ctx.requestId,
-                oldContent: originalContent || '',
-                newContent: content,
-                preHash: guardedWrite.meta.preHash,
-                postHash: guardedWrite.meta.postHash,
-                linesAdded: countLinesFast(content),
-                linesRemoved: 0,
+                isDirectory: true,
             })
         }
-
-        if (!guardedWrite.success) return guardedWrite.result
-
-        return {
-            success: true,
-            result: 'File created',
-            meta: buildWriteMeta(
-                path,
-                null,
-                content,
-                { added: countLinesFast(content), removed: 0 },
-                guardedWrite.meta,
-                { isNewFile: true }
-            )
-        }
+        return { success, result: success ? 'Directory created' : 'Failed to create directory' }
     },
 
     async delete_file_or_folder(args, ctx) {
@@ -2892,7 +2834,7 @@ export const toolExecutors = Object.fromEntries(
     Object.entries(rawToolExecutors).map(([name, executor]) => [
         name,
         async (args: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
-            const timeoutMs = ['generate_tests', 'run_command', 'edit_file', 'replace_file_content', 'web_search'].includes(name) ? 120000 : 60000
+            const timeoutMs = ['generate_tests', 'run_command', 'edit_file', 'web_search'].includes(name) ? 120000 : 60000
             let timer: ReturnType<typeof setTimeout>
 
             try {
