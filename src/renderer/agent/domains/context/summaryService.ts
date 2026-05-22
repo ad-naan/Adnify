@@ -278,8 +278,6 @@ function extractAssistantSummary(message: AssistantMessage): string {
         case 'reasoning':
         case 'search':
           return part.content
-        case 'system_alert':
-          return [part.title, part.message, part.suggestion].filter(Boolean).join(' - ')
         default:
           return ''
       }

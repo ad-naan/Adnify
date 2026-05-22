@@ -21,6 +21,7 @@ export interface AssistantProcessSummary {
 
 export interface AssistantTurnProjection {
   finalReplyParts: AssistantPart[]
+  alertParts: AssistantPart[]
   processParts: AssistantPart[]
   hasVisibleFinalReply: boolean
   hasProcessContent: boolean
@@ -70,8 +71,6 @@ function buildSummary(processParts: AssistantPart[], hasContextMeta: boolean): A
       summary.hasSources = true
     } else if (isLintCheckPart(part)) {
       summary.hasLintCheck = true
-    } else if (isSystemAlertPart(part)) {
-      summary.hasSystemAlert = true
     } else if (isContextSnapshotPart(part)) {
       summary.hasContext = true
     } else if (isTextPart(part) && part.content.trim().length > 0) {
@@ -95,11 +94,13 @@ export function projectAssistantTurn(
   parts: AssistantPart[],
   options: AssistantTurnProjectionOptions = {},
 ): AssistantTurnProjection {
-  const finalReplyRange = findFinalReplyRange(parts)
+  const alertParts = parts.filter(isSystemAlertPart)
+  const nonAlertParts = parts.filter(part => !isSystemAlertPart(part))
+  const finalReplyRange = findFinalReplyRange(nonAlertParts)
   const finalReplyParts = finalReplyRange
-    ? parts.slice(finalReplyRange.start, finalReplyRange.end + 1)
+    ? nonAlertParts.slice(finalReplyRange.start, finalReplyRange.end + 1)
     : []
-  const processParts = parts.filter((_, index) => {
+  const processParts = nonAlertParts.filter((_, index) => {
     if (!finalReplyRange) {
       return true
     }
@@ -112,6 +113,7 @@ export function projectAssistantTurn(
 
   return {
     finalReplyParts,
+    alertParts,
     processParts,
     hasVisibleFinalReply,
     hasProcessContent,
