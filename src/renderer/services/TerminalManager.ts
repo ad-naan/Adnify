@@ -20,6 +20,8 @@ import { toAppError } from "@shared/utils/errorHandler";
 import { isMac } from "@services/keybindingService";
 import { getInteractiveTerminalBackend } from "@/renderer/agent/tools/commandRuntime";
 import { readClipboardText, writeClipboardText } from "@/renderer/services/clipboardService";
+import { detectTerminalShellFamily } from "@/renderer/services/terminalShell";
+import { shellRegistryService } from "@/renderer/shell/services/shellRegistryService";
 
 // ===== 类型定义 =====
 
@@ -1019,9 +1021,16 @@ class TerminalManagerClass {
       return { terminalId, reused: false }
     }
 
+    const resolvedShell = options?.shell || (await shellRegistryService.load()).defaultShell
+
     // 检查现有 agent 终端是否仍然存活
     if (this.agentTerminalId) {
-      if (this.isReusableAgentTerminal(this.agentTerminalId)) {
+      const existing = this.state.terminals.find(t => t.id === this.agentTerminalId)
+      const shellMismatch = Boolean(
+        resolvedShell && (!existing?.shell || existing.shell !== resolvedShell)
+      )
+
+      if (this.isReusableAgentTerminal(this.agentTerminalId) && !shellMismatch) {
         return { terminalId: this.agentTerminalId, reused: true }
       } else {
         this.agentTerminalId = null
@@ -1037,7 +1046,7 @@ class TerminalManagerClass {
     this.agentTerminalCreating = this.createTerminal({
       name: options?.name || this.getNextAgentTerminalName(),
       cwd,
-      shell: options?.shell,
+      shell: resolvedShell,
       isAgent: true,
     }).then(id => {
       if (!this.isTerminalReady(id)) {
@@ -1352,10 +1361,13 @@ class TerminalManagerClass {
       })
 
       // 必须先订阅，再写命令（避免竞态）
-      const isWindows = /windows/i.test(navigator.userAgent)
+      const terminal = this.state.terminals.find((item) => item.id === termId)
+      const shellFamily = detectTerminalShellFamily(terminal?.shell)
+      const usesPosixSyntax = shellFamily === 'posix'
+      const isPowerShell = !usesPosixSyntax
 
       // PowerShell 5.x 不支持 && 运算符；cmd.exe 的 cd /d 在 PS 里无效（/d 被当位置参数）
-      const sanitizedCommand = isWindows
+      const sanitizedCommand = isPowerShell
         ? command
           .replace(/\s*&&\s*/g, '; ')
           .replace(/\bcd\s+\/[dD]\s+(['"]?)([^;|&\n'"]+)\1/g, 'Push-Location "$2"')
@@ -1363,16 +1375,16 @@ class TerminalManagerClass {
 
       // cwd 参数：Agent 终端复用，需临时切换目录
       const cmdWithCwd = cwd
-        ? (isWindows
-          ? `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`
-          : `(cd "${cwd}" && ${sanitizedCommand})`)
+        ? (usesPosixSyntax
+          ? `(cd "${cwd}" && ${sanitizedCommand})`
+          : `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`)
         : sanitizedCommand
 
       // OSC sentinel 命令（Windows/Unix/macOS 三平台）
-      const sentinelStart = isWindows
+      const sentinelStart = isPowerShell
         ? `Write-Host -NoNewline "$([char]27)]9001;${START_PAYLOAD}$([char]7)"`
         : `printf '\\033]9001;${START_PAYLOAD}\\007'`
-      const sentinelEnd = isWindows
+      const sentinelEnd = isPowerShell
         ? `Write-Host -NoNewline "$([char]27)]9001;${END_PAYLOAD_PREFIX}$LASTEXITCODE$([char]7)"`
         : `printf '\\033]9001;${END_PAYLOAD_PREFIX}'"$?"'\\007'`
 
@@ -1388,10 +1400,10 @@ class TerminalManagerClass {
       // N 的计算：ceil((提示符估算长度 + 完整命令长度) / 终端列数) + 1
       const xtermInst = this.xtermInstances.get(termId)
       const cols = xtermInst?.fitAddon?.proposeDimensions?.()?.cols ?? 80
-      const promptLen = isWindows ? 60 : 35
+      const promptLen = isPowerShell ? 60 : 35
       // 每个清除单元的字面长度（PS 使用 $([char]N) 表达式，Unix 使用 octal 转义）
-      const clearUnit = isWindows ? '$([char]27)[1A$([char]27)[2K' : '\\033[1A\\033[2K'
-      const clearWrapLen = isWindows ? 22 : 10  // "Write-Host -NoNewline \"\"; " 或 "printf ''; "
+      const clearUnit = isPowerShell ? '$([char]27)[1A$([char]27)[2K' : '\\033[1A\\033[2K'
+      const clearWrapLen = isPowerShell ? 22 : 10  // "Write-Host -NoNewline \"\"; " 或 "printf ''; "
       // 两次迭代逼近（消除循环依赖）
       const roughLines = Math.ceil((promptLen + mainCommand.length) / cols)
       const clearOverhead = clearWrapLen + clearUnit.length * roughLines
@@ -1402,12 +1414,12 @@ class TerminalManagerClass {
       // 清除回显后，补打一行"伪提示符 + 原始命令"，让终端看起来像用户手动输入
       // Windows PS double-quoted string 转义：` → ``，" → `"，$ → `$
       // Unix double-quoted string 转义：\ → \\，" → \"，$ → \$，` → \`
-      const displayCmd = isWindows
+      const displayCmd = isPowerShell
         ? command.replace(/`/g, '``').replace(/"/g, '`"').replace(/\$/g, '`$')
         : command.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
 
       // 提示符路径：有 cwd 时直接嵌入，否则运行时动态获取当前目录
-      const fakeEchoCmd = isWindows
+      const fakeEchoCmd = isPowerShell
         ? `Write-Host -NoNewline "${clearSeq}"; Write-Host "PS ${cwd ?? '$(Get-Location)'}> ${displayCmd}"`
         : `printf '${clearSeq}'; printf '%s\\n' "${cwd ? cwd.replace(/\\/g, '/') : '$(pwd)'}\\$ ${displayCmd}"`
 

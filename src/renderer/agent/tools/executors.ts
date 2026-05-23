@@ -44,6 +44,7 @@ import type {
     RemoteHostTrustDecision,
     RemoteShellServer,
 } from '@/renderer/types/electron'
+import { detectTerminalShellFamily } from '@/renderer/services/terminalShell'
 
 // ===== 辅助函数 =====
 
@@ -1597,6 +1598,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const trustMeta = remoteLink
                 ? await buildRemoteTrustMeta(remoteLink.remote, undefined, { preferKnownStatus: reused })
                 : {}
+            const terminalShell = terminalManager.getState().terminals.find((terminal) => terminal.id === termId)?.shell
+            const terminalShellFamily = detectTerminalShellFamily(terminalShell)
 
             // 激活 Agent 终端 tab，让用户看到执行过程
             terminalManager.setActiveTerminal(termId)
@@ -1614,9 +1617,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 const bgCmd = remoteLink
                     ? remoteCommand
                     : resolvedCwd
-                    ? (/windows/i.test(navigator.userAgent)
-                        ? `Push-Location "${resolvedCwd}"; ${command}; Pop-Location`
-                        : `(cd "${resolvedCwd}" && ${command})`)
+                    ? (terminalShellFamily === 'posix'
+                        ? `(cd "${resolvedCwd}" && ${command})`
+                        : `Push-Location "${resolvedCwd}"; ${command}; Pop-Location`)
                     : command
                 terminalManager.writeToTerminal(termId, `${bgCmd}\r`)
 

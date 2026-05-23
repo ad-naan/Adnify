@@ -4,6 +4,8 @@ const createMock = vi.fn()
 const writeMock = vi.fn()
 const resizeMock = vi.fn()
 const killMock = vi.fn()
+const settingsGetMock = vi.fn()
+const settingsSetMock = vi.fn()
 let dataHandler: ((event: { id: string; data: string; seq: number; occurredAt: number }) => void) | null = null
 let exitHandler: ((event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) | null = null
 
@@ -25,6 +27,10 @@ vi.mock('@renderer/services/electronAPI', () => ({
       onError: vi.fn((_handler) => {
         return () => {}
       }),
+    },
+    settings: {
+      get: settingsGetMock,
+      set: settingsSetMock,
     },
   },
 }))
@@ -103,6 +109,10 @@ describe('TerminalManager command sessions', () => {
     writeMock.mockReset()
     resizeMock.mockReset()
     killMock.mockReset()
+    settingsGetMock.mockReset()
+    settingsGetMock.mockResolvedValue(null)
+    settingsSetMock.mockReset()
+    settingsSetMock.mockResolvedValue(undefined)
     dataHandler = null
     exitHandler = null
     vi.useFakeTimers()
@@ -178,6 +188,33 @@ describe('TerminalManager command sessions', () => {
       expect(resizeMock).not.toHaveBeenCalled()
     } finally {
       terminalManager.cleanup()
+    }
+  })
+
+  it('uses the configured Git Bash shell for agent terminals on Windows hosts', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' })
+    settingsGetMock.mockResolvedValue({
+      defaultShell: 'C:\\Program Files\\Git\\bin\\bash.exe',
+      presets: [],
+      links: [],
+    })
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    const resultPromise = terminalManager
+      .getOrCreateAgentTerminal('/tmp/adnify-agent')
+      .then((termId) => terminalManager.executeCommandWithOutput(termId, 'ps -ef', 5000, '/home'))
+
+    try {
+      await vi.waitFor(() => expect(writeMock).toHaveBeenCalledTimes(1))
+      expect(createMock.mock.calls[0]?.[0]?.shell).toBe('C:\\Program Files\\Git\\bin\\bash.exe')
+      const wrapped = writeMock.mock.calls[0]?.[1] as string
+
+      expect(wrapped).toContain("printf '\\033]9001;ADNIFY_CMD_START_")
+      expect(wrapped).toContain('(cd "/home" && ps -ef)')
+      expect(wrapped).not.toContain('Write-Host -NoNewline')
+    } finally {
+      terminalManager.cleanup()
+      await resultPromise
     }
   })
 })
