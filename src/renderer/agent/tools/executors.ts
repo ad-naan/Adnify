@@ -1600,11 +1600,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 : {}
             const terminalShell = terminalManager.getState().terminals.find((terminal) => terminal.id === termId)?.shell
             const terminalShellFamily = detectTerminalShellFamily(terminalShell)
-            const trustMeta = remoteLink
-                ? await buildRemoteTrustMeta(remoteLink.remote, undefined, { preferKnownStatus: reused })
-                : {}
-            const terminalShell = terminalManager.getState().terminals.find((terminal) => terminal.id === termId)?.shell
-            const terminalShellFamily = detectTerminalShellFamily(terminalShell)
 
             // 激活 Agent 终端 tab，让用户看到执行过程
             terminalManager.setActiveTerminal(termId)
