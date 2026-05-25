@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, FolderOpen, Plus, Server, Settings2, Sparkles, Star, TerminalSquare, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronRight, FolderOpen, Plus, Server, Settings2, Sparkles, Star, TerminalSquare, Trash2 } from 'lucide-react'
 import packageJson from '../../../../package.json'
-import { Button, Input, Modal } from '@/renderer/components/ui'
+import { Button, Checkbox, Input, Modal, Select } from '@/renderer/components/ui'
 import { shellRegistryService } from '../services/shellRegistryService'
 import { DEFAULT_REMOTE_PORT } from '../types'
 import type { AvailableShell, RemoteServerConfig, ShellLink, ShellPreset } from '../types'
@@ -158,6 +158,34 @@ export function ShellManagerDialog({
   const [formLinks, setFormLinks] = useState<ShellLink[]>([])
   const [activeSection, setActiveSection] = useState<ManagerSection>('overview')
   const [selectedItem, setSelectedItem] = useState<SelectedItem>({ kind: 'overview' })
+
+  // Custom Select options list
+  const defaultShellOptions = useMemo(() => {
+    return [
+      { value: '', label: '系统默认 Shell' },
+      ...availableShells.map((shell) => ({
+        value: shell.path || '',
+        label: `${shell.label}${shell.path ? ` (${shell.path})` : ''}`,
+      })),
+    ]
+  }, [availableShells])
+
+  const shellOptions = useMemo(() => {
+    return [
+      { value: '', label: '默认 Shell' },
+      ...availableShells.map((shell) => ({
+        value: shell.path || '',
+        label: shell.label,
+      })),
+    ]
+  }, [availableShells])
+
+  const linkTypeOptions = useMemo(() => [
+    { value: 'directory', label: '目录' },
+    { value: 'local-shell', label: '本地 Shell' },
+    { value: 'command', label: '常用命令' },
+    { value: 'remote', label: '远程服务器' },
+  ], [])
 
   useEffect(() => {
     if (!isOpen) return
@@ -372,64 +400,433 @@ export function ShellManagerDialog({
     }
   }
 
-  const sectionCardClass = (section: ManagerSection) => `w-full rounded-2xl border px-3 py-3 text-left transition-colors ${activeSection === section ? 'border-accent/50 bg-accent/10 text-text-primary' : 'border-border/60 bg-surface/30 text-text-secondary hover:bg-surface/50'}`
+  const sectionCardClass = (section: ManagerSection) =>
+    `w-full rounded-xl border px-3.5 py-3 text-left transition-all duration-200 flex items-center justify-between ${
+      activeSection === section
+        ? 'border-accent/30 bg-accent/10 text-accent font-medium shadow-[0_0_15px_-3px_rgba(var(--accent),0.1)]'
+        : 'border-border/50 bg-surface/30 text-text-muted hover:border-border hover:bg-surface/60 hover:text-text-primary'
+    }`
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Shell 管理" size="5xl">
-      <div className="space-y-6 max-h-[78vh] overflow-y-auto pr-1">
+      <div className="flex flex-col gap-4 h-[620px] overflow-hidden pr-1">
         {duplicateRemoteServerNames.length > 0 && (
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex-shrink-0">
             Remote server names should be unique for agent routing. Current duplicates: {duplicateRemoteServerNames.join(', ')}
           </div>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="rounded-2xl border border-border/60 bg-surface/50 p-4"><div className="flex items-center gap-2 text-text-primary mb-2"><TerminalSquare className="w-4 h-4 text-accent" /><span className="text-sm font-medium">默认 Shell</span></div><div className="text-sm text-text-secondary break-all">{resolvedDefaultShell}</div></div>
-          <div className="rounded-2xl border border-border/60 bg-surface/50 p-4"><div className="flex items-center gap-2 text-text-primary mb-2"><Star className="w-4 h-4 text-accent" /><span className="text-sm font-medium">收藏</span></div><div className="text-2xl font-semibold text-text-primary">{favoriteCount}</div></div>
-          <div className="rounded-2xl border border-border/60 bg-surface/50 p-4"><div className="flex items-center gap-2 text-text-primary mb-2"><Sparkles className="w-4 h-4 text-accent" /><span className="text-sm font-medium">命令</span></div><div className="text-2xl font-semibold text-text-primary">{commandCount}</div></div>
-          <div className="rounded-2xl border border-border/60 bg-surface/50 p-4"><div className="flex items-center gap-2 text-text-primary mb-2"><Server className="w-4 h-4 text-accent" /><span className="text-sm font-medium">服务器</span></div><div className="text-2xl font-semibold text-text-primary">{remoteCount}</div></div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-[240px_minmax(0,280px)_minmax(0,1fr)] gap-4 min-h-[520px]">
-          <div className="rounded-2xl border border-border/60 bg-surface/30 p-3 space-y-3">
-            <button className={sectionCardClass('overview')} onClick={() => { setActiveSection('overview'); setSelectedItem({ kind: 'overview' }) }}><div className="flex items-center gap-2 text-sm font-medium"><Settings2 className="w-4 h-4" />总览设置</div></button>
-            <div className="space-y-2">
-              <button className={sectionCardClass('preset')} onClick={() => setActiveSection('preset')}><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">Presets</span><span className="text-xs">{formPresets.length}</span></div></button>
-              <button className={sectionCardClass('directory')} onClick={() => setActiveSection('directory')}><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">目录 / 本地 Shell</span><span className="text-xs">{formLinks.filter((item) => item.type === 'directory' || item.type === 'local-shell').length}</span></div></button>
-              <button className={sectionCardClass('remote')} onClick={() => setActiveSection('remote')}><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">服务器</span><span className="text-xs">{remoteCount}</span></div></button>
-              <button className={sectionCardClass('command')} onClick={() => setActiveSection('command')}><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">命令</span><span className="text-xs">{commandCount}</span></div></button>
+        
+        <div className="grid grid-cols-[200px_250px_1fr] gap-4 flex-1 min-h-0">
+          {/* Left Navigation Sidebar */}
+          <div className="rounded-xl border border-border/50 bg-surface/30 p-3.5 flex flex-col justify-between h-full overflow-y-auto custom-scrollbar flex-shrink-0">
+            <div className="space-y-3.5">
+              <button
+                className={sectionCardClass('overview')}
+                onClick={() => {
+                  setActiveSection('overview')
+                  setSelectedItem({ kind: 'overview' })
+                }}
+              >
+                <span className="flex items-center gap-2.5">
+                  <Settings2 className="w-4 h-4 flex-shrink-0" />
+                  <span>总览设置</span>
+                </span>
+              </button>
+              
+              <div className="space-y-1.5 border-t border-border/30 pt-3.5">
+                <button className={sectionCardClass('preset')} onClick={() => setActiveSection('preset')}>
+                  <span className="flex items-center gap-2.5">
+                    <Star className="w-4 h-4 flex-shrink-0" />
+                    <span>Presets</span>
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                    activeSection === 'preset' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
+                  }`}>{formPresets.length}</span>
+                </button>
+                <button className={sectionCardClass('directory')} onClick={() => setActiveSection('directory')}>
+                  <span className="flex items-center gap-2.5">
+                    <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                    <span>目录 / Shell</span>
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                    activeSection === 'directory' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
+                  }`}>{formLinks.filter((item) => item.type === 'directory' || item.type === 'local-shell').length}</span>
+                </button>
+                <button className={sectionCardClass('remote')} onClick={() => setActiveSection('remote')}>
+                  <span className="flex items-center gap-2.5">
+                    <Server className="w-4 h-4 flex-shrink-0" />
+                    <span>服务器</span>
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                    activeSection === 'remote' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
+                  }`}>{remoteCount}</span>
+                </button>
+                <button className={sectionCardClass('command')} onClick={() => setActiveSection('command')}>
+                  <span className="flex items-center gap-2.5">
+                    <Sparkles className="w-4 h-4 flex-shrink-0" />
+                    <span>命令</span>
+                  </span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                    activeSection === 'command' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
+                  }`}>{commandCount}</span>
+                </button>
+              </div>
             </div>
-            <div className="rounded-2xl border border-border/60 bg-background/30 p-3 space-y-2">
-              <div className="text-xs uppercase tracking-wide text-text-muted">快速新增</div>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => createItem('preset')}><Plus className="w-3.5 h-3.5 mr-1" />Preset</Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => createItem('directory')}><FolderOpen className="w-3.5 h-3.5 mr-1" />目录链接</Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => createItem('remote')}><Server className="w-3.5 h-3.5 mr-1" />服务器</Button>
-              <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => createItem('command')}><Sparkles className="w-3.5 h-3.5 mr-1" />命令</Button>
+            
+            <div className="rounded-xl border border-border/50 bg-background/25 p-3 space-y-2.5 mt-4">
+              <div className="text-[10px] uppercase font-bold tracking-widest text-text-muted px-1">快速新增</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('preset')}>
+                  <Plus className="w-3 h-3 mr-1 text-accent flex-shrink-0" />Preset
+                </Button>
+                <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('directory')}>
+                  <FolderOpen className="w-3 h-3 mr-1 text-accent flex-shrink-0" />目录
+                </Button>
+                <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('remote')}>
+                  <Server className="w-3 h-3 mr-1 text-accent flex-shrink-0" />服务器
+                </Button>
+                <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('command')}>
+                  <Sparkles className="w-3 h-3 mr-1 text-accent flex-shrink-0" />命令
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/60 bg-surface/30 p-3">
-            <div className="flex items-center justify-between gap-2 px-1 pb-3 border-b border-border/40">
-              <div><div className="text-sm font-medium text-text-primary">{activeSection === 'overview' ? '总览' : activeSection === 'preset' ? 'Presets' : activeSection === 'directory' ? '目录 / 本地 Shell' : activeSection === 'remote' ? '服务器' : '命令'}</div><div className="text-xs text-text-muted">选择一个条目后在右侧编辑</div></div>
-              {activeSection !== 'overview' && <Button variant="ghost" size="sm" onClick={() => createItem(activeSection)}><Plus className="w-3.5 h-3.5 mr-1" />新增</Button>}
+          {/* Middle Item Selection List */}
+          <div className="rounded-xl border border-border/50 bg-surface/30 p-4 flex flex-col h-full overflow-hidden flex-shrink-0">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-border/30 flex-shrink-0">
+              <div>
+                <div className="text-sm font-semibold text-text-primary">
+                  {activeSection === 'overview' ? '总览' : activeSection === 'preset' ? 'Presets' : activeSection === 'directory' ? '目录 / 本地 Shell' : activeSection === 'remote' ? '服务器' : '命令'}
+                </div>
+                <div className="text-[11px] text-text-muted mt-0.5">选择条目后在右侧配置</div>
+              </div>
+              {activeSection !== 'overview' && (
+                <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2 hover:bg-white/5" onClick={() => createItem(activeSection)}>
+                  <Plus className="w-3.5 h-3.5 mr-1 text-accent" />新增
+                </Button>
+              )}
             </div>
-            <div className="mt-3 space-y-2">
-              {activeSection === 'overview' && <div className="rounded-2xl border border-border/60 bg-background/30 p-4 text-sm text-text-secondary">在左侧选择分类，或直接新增一个 Shell 入口开始配置。</div>}
-              {activeSection !== 'overview' && sectionItems.length === 0 && <div className="rounded-2xl border border-dashed border-border/60 bg-background/30 p-6 text-center text-sm text-text-secondary">当前分类还没有内容</div>}
+            
+            <div className="mt-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar pr-1">
+              {activeSection === 'overview' && (
+                <div className="rounded-xl border border-border/50 bg-background/20 p-4 text-xs text-text-secondary leading-relaxed">
+                  在左侧选择分类，或者点击“快速新增”按钮直接创建新的 Shell 入口进行配置。
+                </div>
+              )}
+              {activeSection !== 'overview' && sectionItems.length === 0 && (
+                <div className="rounded-xl border border-dashed border-border/50 bg-background/25 p-8 text-center text-xs text-text-secondary">
+                  当前分类下没有条目
+                </div>
+              )}
               {activeSection !== 'overview' && sectionItems.map((item) => {
                 const active = selectedItem.kind !== 'overview' && selectedItem.id === item.id
-                return <button key={item.key} onClick={() => setSelectedItem({ kind: item.kind, id: item.id })} className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${active ? 'border-accent/50 bg-accent/10' : 'border-border/60 bg-background/20 hover:bg-background/40'}`}><div className="flex items-center justify-between gap-2"><div className="min-w-0"><div className="truncate text-sm font-medium text-text-primary">{item.label}</div><div className="truncate text-xs text-text-muted">{item.sublabel}</div></div>{item.favorite && <Star className="w-3.5 h-3.5 text-yellow-400 fill-current flex-shrink-0" />}</div></button>
+                return (
+                  <button
+                    key={item.key}
+                    onClick={() => setSelectedItem({ kind: item.kind, id: item.id })}
+                    className={`w-full rounded-xl border px-3.5 py-2.5 text-left transition-all duration-200 relative group/item overflow-hidden ${
+                      active
+                        ? 'border-accent/40 bg-accent/10 shadow-[inset_0_1px_2px_rgba(var(--accent),0.05)]'
+                        : 'border-border/50 bg-background/20 hover:border-border hover:bg-background/40'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold text-text-primary group-hover/item:text-accent transition-colors duration-200">
+                          {item.label}
+                        </div>
+                        <div className="truncate text-[10px] text-text-muted mt-0.5">
+                          {item.sublabel}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {item.favorite && (
+                          <Star className="w-3.5 h-3.5 text-yellow-400 fill-current animate-pulse" />
+                        )}
+                        <ChevronRight className={`w-3.5 h-3.5 text-text-muted transition-all duration-300 ${
+                          active ? 'translate-x-0 opacity-100' : '-translate-x-1 opacity-0 group-hover/item:translate-x-0 group-hover/item:opacity-100'
+                        }`} />
+                      </div>
+                    </div>
+                  </button>
+                )
               })}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-border/60 bg-surface/30 p-4">
-            {selectedItem.kind === 'overview' && <div className="space-y-5"><div><div className="text-sm font-medium text-text-primary">默认 Shell</div><div className="text-xs text-text-muted mt-1">用于新建终端以及未指定 Shell 的入口</div></div><select value={formDefaultShell} onChange={(e) => setFormDefaultShell(e.target.value)} className="w-full rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm text-text-primary outline-none"><option value="">系统默认 Shell</option>{availableShells.map((shell) => <option key={`${shell.label}-${shell.path}`} value={shell.path}>{shell.label} {shell.path ? `(${shell.path})` : ''}</option>)}</select><div><div className="text-sm font-medium text-text-primary mb-2">命令建议</div><div className="flex flex-wrap gap-2">{suggestedCommands.map((command) => <Button key={command} variant="ghost" size="sm" onClick={() => createItem('command', command)}>{command}</Button>)}</div></div></div>}
-            {selectedPreset && <div className="space-y-4"><div className="flex items-center justify-between gap-2"><div><div className="text-sm font-medium text-text-primary">Preset 编辑</div><div className="text-xs text-text-muted">配置启动目录、参数和显示方式</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="icon" onClick={() => moveSelected(-1)}><ArrowUp className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => moveSelected(1)}><ArrowDown className="w-4 h-4" /></Button><Button variant="ghost" size="sm" onClick={() => updatePreset(selectedPreset.id, { favorite: !selectedPreset.favorite })}><Star className={`w-4 h-4 ${selectedPreset.favorite ? 'fill-current text-yellow-400' : ''}`} /></Button><Button variant="ghost" size="icon" onClick={removeSelected}><Trash2 className="w-4 h-4" /></Button></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Input value={selectedPreset.name} onChange={(e) => updatePreset(selectedPreset.id, { name: e.target.value })} placeholder="名称" /><Input value={selectedPreset.group || ''} onChange={(e) => updatePreset(selectedPreset.id, { group: e.target.value })} placeholder="分组（可选）" /><Input value={selectedPreset.cwd || ''} onChange={(e) => updatePreset(selectedPreset.id, { cwd: e.target.value })} placeholder="工作目录（可选）" /><Input value={selectedPreset.args?.join(' ') || ''} onChange={(e) => updatePreset(selectedPreset.id, { args: e.target.value.trim() ? e.target.value.trim().split(/\s+/) : undefined })} placeholder="启动命令（可选）" /></div><select value={selectedPreset.shellPath || ''} onChange={(e) => updatePreset(selectedPreset.id, { shellPath: e.target.value })} className="w-full rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm text-text-primary outline-none"><option value="">默认 Shell</option>{availableShells.map((shell) => <option key={`${selectedPreset.id}-${shell.path}`} value={shell.path}>{shell.label}</option>)}</select><label className="flex items-center gap-2 text-sm text-text-secondary px-1"><input type="checkbox" checked={selectedPreset.visibleInMenu !== false} onChange={(e) => updatePreset(selectedPreset.id, { visibleInMenu: e.target.checked })} />在菜单中显示</label></div>}
-            {selectedLink && <div className="space-y-4"><div className="flex items-center justify-between gap-2"><div><div className="text-sm font-medium text-text-primary">{selectedLink.type === 'remote' ? '服务器编辑' : selectedLink.type === 'command' ? '命令编辑' : '链接编辑'}</div><div className="text-xs text-text-muted">当前入口的详细配置</div></div><div className="flex items-center gap-1"><Button variant="ghost" size="icon" onClick={() => moveSelected(-1)}><ArrowUp className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => moveSelected(1)}><ArrowDown className="w-4 h-4" /></Button><Button variant="ghost" size="sm" onClick={() => updateLink(selectedLink.id, { favorite: !selectedLink.favorite })}><Star className={`w-4 h-4 ${selectedLink.favorite ? 'fill-current text-yellow-400' : ''}`} /></Button><Button variant="ghost" size="icon" onClick={removeSelected}><Trash2 className="w-4 h-4" /></Button></div></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Input value={selectedLink.name} onChange={(e) => updateLink(selectedLink.id, { name: e.target.value })} placeholder="名称" /><Input value={selectedLink.group || ''} onChange={(e) => updateLink(selectedLink.id, { group: e.target.value })} placeholder="分组（可选）" /><select value={selectedLink.type} onChange={(e) => updateLink(selectedLink.id, { type: e.target.value as ShellLink['type'], target: '', cwd: '', remote: e.target.value === 'remote' ? normalizeRemote(selectedLink.remote) : undefined })} className="w-full rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm text-text-primary outline-none"><option value="directory">目录</option><option value="local-shell">本地 Shell</option><option value="command">常用命令</option><option value="remote">远程服务器</option></select><select value={selectedLink.shellPath || ''} onChange={(e) => updateLink(selectedLink.id, { shellPath: e.target.value })} className="w-full rounded-xl border border-border/60 bg-background/60 px-3 py-2 text-sm text-text-primary outline-none"><option value="">默认 Shell</option>{availableShells.map((shell) => <option key={`${selectedLink.id}-${shell.path}`} value={shell.path}>{shell.label}</option>)}</select></div>{selectedLink.type === 'remote' ? <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Input value={normalizeRemote(selectedLink.remote).host} onChange={(e) => updateRemote(selectedLink.id, { host: e.target.value })} placeholder="Host" /><Input value={normalizeRemote(selectedLink.remote).username || ''} onChange={(e) => updateRemote(selectedLink.id, { username: e.target.value })} placeholder="Username" /><Input type="number" value={String(normalizeRemote(selectedLink.remote).port || DEFAULT_REMOTE_PORT)} onChange={(e) => updateRemote(selectedLink.id, { port: Number(e.target.value) || DEFAULT_REMOTE_PORT })} placeholder="Port" /><Input type="password" value={normalizeRemote(selectedLink.remote).password || ''} onChange={(e) => updateRemote(selectedLink.id, { password: e.target.value })} placeholder="密码（可选）" /><Input value={normalizeRemote(selectedLink.remote).remotePath || ''} onChange={(e) => updateRemote(selectedLink.id, { remotePath: e.target.value })} placeholder="远程目录（可选）" /><div className="md:col-span-2"><Input value={normalizeRemote(selectedLink.remote).privateKeyPath || ''} onChange={(e) => updateRemote(selectedLink.id, { privateKeyPath: e.target.value })} placeholder="私钥路径（可选）" /></div></div> : selectedLink.type === 'command' ? <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder="命令内容，例如 npm run dev" /><Input value={selectedLink.cwd || ''} onChange={(e) => updateLink(selectedLink.id, { cwd: e.target.value })} placeholder="工作目录（可选）" /></div> : <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder={selectedLink.type === 'local-shell' ? 'Shell 路径' : '目录路径'} />}<label className="flex items-center gap-2 text-sm text-text-secondary px-1"><input type="checkbox" checked={selectedLink.visibleInMenu !== false} onChange={(e) => updateLink(selectedLink.id, { visibleInMenu: e.target.checked })} />在菜单中显示</label></div>}
+          {/* Right Editor Area */}
+          <div className="rounded-xl border border-border/50 bg-surface/30 p-5 flex flex-col h-full overflow-hidden">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              {selectedItem.kind === 'overview' && (
+                <div className="space-y-6">
+                  <div>
+                    <div className="text-sm font-semibold text-text-primary">系统状态与配置总览</div>
+                    <div className="text-xs text-text-muted mt-0.5">配置全局默认 Shell，并查看当前已保存的 Shell 统计信息</div>
+                  </div>
+
+                  {/* Status Cards Grid inside Overview */}
+                  <div className="grid grid-cols-2 gap-3.5">
+                    <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
+                      <div className="flex items-center gap-2 text-text-muted mb-1.5">
+                        <TerminalSquare className="w-3.5 h-3.5 text-accent" />
+                        <span className="text-[11px] uppercase font-bold tracking-wider">默认 Shell</span>
+                      </div>
+                      <div className="text-xs font-medium text-text-primary truncate" title={resolvedDefaultShell}>
+                        {resolvedDefaultShell}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
+                      <div className="flex items-center gap-2 text-text-muted mb-1.5">
+                        <Star className="w-3.5 h-3.5 text-accent" />
+                        <span className="text-[11px] uppercase font-bold tracking-wider">已收藏项</span>
+                      </div>
+                      <div className="text-xl font-bold text-text-primary font-mono leading-none">
+                        {favoriteCount}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
+                      <div className="flex items-center gap-2 text-text-muted mb-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-accent" />
+                        <span className="text-[11px] uppercase font-bold tracking-wider">快捷命令</span>
+                      </div>
+                      <div className="text-xl font-bold text-text-primary font-mono leading-none">
+                        {commandCount}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
+                      <div className="flex items-center gap-2 text-text-muted mb-1.5">
+                        <Server className="w-3.5 h-3.5 text-accent" />
+                        <span className="text-[11px] uppercase font-bold tracking-wider">远程服务器</span>
+                      </div>
+                      <div className="text-xl font-bold text-text-primary font-mono leading-none">
+                        {remoteCount}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 pt-2">
+                    <label className="text-xs font-semibold text-text-muted">修改全局默认 Shell</label>
+                    <Select
+                      options={defaultShellOptions}
+                      value={formDefaultShell}
+                      onChange={(val) => setFormDefaultShell(val)}
+                    />
+                  </div>
+
+                  <div className="border-t border-border/30 pt-4">
+                    <div className="text-xs uppercase font-bold tracking-wider text-text-muted mb-3 px-0.5">常用命令模板快捷创建</div>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestedCommands.map((command) => (
+                        <Button
+                          key={command}
+                          variant="ghost"
+                          size="sm"
+                          className="bg-surface/40 border border-border/50 hover:bg-surface hover:border-border-active transition-all py-1.5 rounded-lg text-xs"
+                          onClick={() => createItem('command', command)}
+                        >
+                          {command}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {selectedPreset && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-3">
+                    <div>
+                      <div className="text-sm font-semibold text-text-primary">Preset 编辑</div>
+                      <div className="text-xs text-text-muted mt-0.5">配置启动目录、参数和显示方式</div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(-1)} title="上移">
+                        <ArrowUp className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(1)} title="下移">
+                        <ArrowDown className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" onClick={() => updatePreset(selectedPreset.id, { favorite: !selectedPreset.favorite })} title="收藏">
+                        <Star className={`w-4 h-4 ${selectedPreset.favorite ? 'fill-current text-yellow-400' : 'text-text-muted'}`} />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-status-error/10 hover:text-status-error" onClick={removeSelected} title="删除">
+                        <Trash2 className="w-4 h-4 text-text-muted" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-text-muted">配置名称</label>
+                      <Input value={selectedPreset.name} onChange={(e) => updatePreset(selectedPreset.id, { name: e.target.value })} placeholder="例如：开发环境" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-text-muted">显示分组 (可选)</label>
+                      <Input value={selectedPreset.group || ''} onChange={(e) => updatePreset(selectedPreset.id, { group: e.target.value })} placeholder="例如：工作 / 个人" />
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <label className="text-xs font-semibold text-text-muted">默认工作目录 (CWD - 可选)</label>
+                      <Input value={selectedPreset.cwd || ''} onChange={(e) => updatePreset(selectedPreset.id, { cwd: e.target.value })} placeholder="输入工作空间目录绝对路径" />
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <label className="text-xs font-semibold text-text-muted">启动参数 (可选)</label>
+                      <Input value={selectedPreset.args?.join(' ') || ''} onChange={(e) => updatePreset(selectedPreset.id, { args: e.target.value.trim() ? e.target.value.trim().split(/\s+/) : undefined })} placeholder="多个启动参数用空格分隔" />
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <label className="text-xs font-semibold text-text-muted">Shell 解释器类型</label>
+                      <Select
+                        options={shellOptions}
+                        value={selectedPreset.shellPath || ''}
+                        onChange={(val) => updatePreset(selectedPreset.id, { shellPath: val })}
+                        placeholder="选择 Shell 类型"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-border/30 pt-4 flex items-center justify-between">
+                    <Checkbox
+                      checked={selectedPreset.visibleInMenu !== false}
+                      onChange={(e) => updatePreset(selectedPreset.id, { visibleInMenu: e.target.checked })}
+                      label="在菜单中显示"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {selectedLink && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-3">
+                    <div>
+                      <div className="text-sm font-semibold text-text-primary">
+                        {selectedLink.type === 'remote' ? '服务器编辑' : selectedLink.type === 'command' ? '命令编辑' : '链接编辑'}
+                      </div>
+                      <div className="text-xs text-text-muted mt-0.5">当前入口的详细配置</div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(-1)} title="上移">
+                        <ArrowUp className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(1)} title="下移">
+                        <ArrowDown className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" onClick={() => updateLink(selectedLink.id, { favorite: !selectedLink.favorite })} title="收藏">
+                        <Star className={`w-4 h-4 ${selectedLink.favorite ? 'fill-current text-yellow-400' : 'text-text-muted'}`} />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-status-error/10 hover:text-status-error" onClick={removeSelected} title="删除">
+                        <Trash2 className="w-4 h-4 text-text-muted" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-text-muted">入口名称</label>
+                      <Input value={selectedLink.name} onChange={(e) => updateLink(selectedLink.id, { name: e.target.value })} placeholder="例如：服务器终端" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-text-muted">显示分组 (可选)</label>
+                      <Input value={selectedLink.group || ''} onChange={(e) => updateLink(selectedLink.id, { group: e.target.value })} placeholder="例如：开发 / 部署" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-text-muted">入口类型</label>
+                      <Select
+                        options={linkTypeOptions}
+                        value={selectedLink.type}
+                        onChange={(val) => updateLink(selectedLink.id, { type: val as ShellLink['type'], target: '', cwd: '', remote: val === 'remote' ? normalizeRemote(selectedLink.remote) : undefined })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-text-muted">默认 Shell 解释器</label>
+                      <Select
+                        options={shellOptions}
+                        value={selectedLink.shellPath || ''}
+                        onChange={(val) => updateLink(selectedLink.id, { shellPath: val })}
+                        placeholder="默认系统 Shell"
+                      />
+                    </div>
+                  </div>
+                  
+                  {selectedLink.type === 'remote' ? (
+                    <div className="space-y-3 pt-2">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">远程 SSH 服务器配置</div>
+                      <div className="grid grid-cols-4 gap-4 rounded-xl border border-border/50 bg-background/20 p-4">
+                        <div className="col-span-3 space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">主机地址 (Host)</label>
+                          <Input value={normalizeRemote(selectedLink.remote).host} onChange={(e) => updateRemote(selectedLink.id, { host: e.target.value })} placeholder="例如：192.168.1.100" />
+                        </div>
+                        <div className="col-span-1 space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">端口 (Port)</label>
+                          <Input type="number" value={String(normalizeRemote(selectedLink.remote).port || DEFAULT_REMOTE_PORT)} onChange={(e) => updateRemote(selectedLink.id, { port: Number(e.target.value) || DEFAULT_REMOTE_PORT })} placeholder="22" />
+                        </div>
+                        <div className="col-span-2 space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">登录用户名 (Username)</label>
+                          <Input value={normalizeRemote(selectedLink.remote).username || ''} onChange={(e) => updateRemote(selectedLink.id, { username: e.target.value })} placeholder="例如：root" />
+                        </div>
+                        <div className="col-span-2 space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">登录密码 (Password - 可选)</label>
+                          <Input type="password" value={normalizeRemote(selectedLink.remote).password || ''} onChange={(e) => updateRemote(selectedLink.id, { password: e.target.value })} placeholder="留空则使用密钥登录" />
+                        </div>
+                        <div className="col-span-4 space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">远程默认工作路径 (可选)</label>
+                          <Input value={normalizeRemote(selectedLink.remote).remotePath || ''} onChange={(e) => updateRemote(selectedLink.id, { remotePath: e.target.value })} placeholder="例如：/var/www/project" />
+                        </div>
+                        <div className="col-span-4 space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">私钥文件绝对路径 (Private Key Path - 可选)</label>
+                          <Input value={normalizeRemote(selectedLink.remote).privateKeyPath || ''} onChange={(e) => updateRemote(selectedLink.id, { privateKeyPath: e.target.value })} placeholder="例如：C:\Users\Admin\.ssh\id_rsa" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : selectedLink.type === 'command' ? (
+                    <div className="space-y-3 pt-2">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">常用命令配置</div>
+                      <div className="grid grid-cols-1 gap-4 rounded-xl border border-border/50 bg-background/20 p-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">要执行的命令内容</label>
+                          <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder="例如：npm run dev" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-text-muted">工作执行目录 (CWD - 可选)</label>
+                          <Input value={selectedLink.cwd || ''} onChange={(e) => updateLink(selectedLink.id, { cwd: e.target.value })} placeholder="留空则在当前终端目录下执行" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-2">
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">
+                        {selectedLink.type === 'local-shell' ? '本地 Shell 路径配置' : '目标目录配置'}
+                      </div>
+                      <div className="rounded-xl border border-border/50 bg-background/20 p-4 space-y-1.5">
+                        <label className="text-xs font-semibold text-text-muted">
+                          {selectedLink.type === 'local-shell' ? 'Shell 可执行文件绝对路径' : '文件夹绝对路径'}
+                        </label>
+                        <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder={selectedLink.type === 'local-shell' ? '例如：C:\Program Files\Git\bin\bash.exe' : '例如：E:\Project\adnify'} />
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="border-t border-border/30 pt-4">
+                    <Checkbox
+                      checked={selectedLink.visibleInMenu !== false}
+                      onChange={(e) => updateLink(selectedLink.id, { visibleInMenu: e.target.checked })}
+                      label="在菜单中显示"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pb-1"><Button variant="ghost" onClick={onClose}>取消</Button><Button onClick={handleSave} disabled={saving}>{saving ? '保存中...' : '保存'}</Button></div>
+        {/* Bottom Action Footer */}
+        <div className="flex items-center justify-end gap-3 border-t border-border/30 pt-4 flex-shrink-0">
+          <Button variant="ghost" size="md" className="rounded-xl px-5 hover:bg-white/5" onClick={onClose}>
+            取消
+          </Button>
+          <Button variant="primary" size="md" className="rounded-xl px-6 min-w-[90px]" onClick={handleSave} disabled={saving}>
+            {saving ? '保存中...' : '保存'}
+          </Button>
+        </div>
       </div>
     </Modal>
   )
