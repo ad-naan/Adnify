@@ -134,9 +134,9 @@ export function OutlineView() {
 
   return (
     <div className="flex flex-col h-full bg-transparent">
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-background-secondary/95 backdrop-blur-md sticky top-0 z-10">
-        <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
-          {language === 'zh' ? '大纲' : 'Outline'}
+      <div className="h-11 px-4 flex items-center justify-between border-b border-border/30 bg-transparent sticky top-0 z-10">
+        <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
+          {language === 'zh' ? '大纲视图' : 'OUTLINE'}
         </span>
         {isLoading && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
       </div>
@@ -164,12 +164,30 @@ export function OutlineView() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar py-1">
         {!activeFilePath ? (
-          <div className="p-6 text-center text-xs text-text-muted">
-            {language === 'zh' ? '没有打开的文件' : 'No file open'}
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+              <FileText className="w-6 h-6 text-text-muted relative opacity-70" />
+            </div>
+            <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
+              {language === 'zh' ? '无活动编辑器' : 'No active file'}
+            </p>
+            <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
+              {language === 'zh' ? '请在编辑器中打开一个代码文件以查看大纲符号结构。' : 'Open a document to display its structured outline view.'}
+            </p>
           </div>
         ) : symbols.length === 0 && !isLoading ? (
-          <div className="p-6 text-center text-xs text-text-muted">
-            {language === 'zh' ? '没有找到符号' : 'No symbols found'}
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+              <Code className="w-6 h-6 text-text-muted relative opacity-70" />
+            </div>
+            <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
+              {language === 'zh' ? '没有找到任何符号' : 'No symbols found'}
+            </p>
+            <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
+              {language === 'zh' ? '此文件不包含大纲结构，或者分析引擎尚未就绪。' : 'No methods, classes or variables were found in this file.'}
+            </p>
           </div>
         ) : (
           symbols.map((symbol, idx) => renderSymbol(symbol, 0, String(idx)))

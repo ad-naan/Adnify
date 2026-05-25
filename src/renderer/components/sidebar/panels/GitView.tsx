@@ -1597,14 +1597,20 @@ Commit message:`
 
     if (!workspacePath) {
         return (
-            <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
-                    <FolderOpen className="h-7 w-7 text-text-muted opacity-70" />
+            <div className="flex flex-col items-center justify-center h-full px-6 text-center select-none animate-fade-in">
+                <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+                    <FolderOpen className="w-6 h-6 text-text-muted relative opacity-70" />
                 </div>
-                <p className="mb-1 text-sm font-medium text-text-secondary">{tt('noFolderOpened')}</p>
-                <p className="mb-4 max-w-[240px] text-xs leading-5 text-text-muted">{tt('git.noWorkspaceDesc')}</p>
-                <Button onClick={handleOpenFolder} size="sm" className="px-4">
-                    <FolderOpen className="h-3.5 w-3.5" />
+                <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">{tt('noFolderOpened')}</p>
+                <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto mb-6 opacity-70">
+                    {tt('git.noWorkspaceDesc')}
+                </p>
+                <Button
+                    onClick={handleOpenFolder}
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl shadow-lg shadow-accent/15 bg-accent text-white hover:bg-accent/90 transition-all font-semibold text-xs active:scale-95"
+                >
+                    <FolderOpen className="w-3.5 h-3.5" />
                     {tt('openFolder')}
                 </Button>
             </div>
@@ -1614,79 +1620,80 @@ Commit message:`
     // 非 Git 仓库
     if (hasResolvedRepositories && repoRoots.length === 0 && isGitRepository === false && !isRefreshing && !isDiscoveringRepos) {
         return (
-            <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
-                    <FolderGit2 className="w-7 h-7 text-text-muted opacity-60" />
+            <div className="flex flex-col items-center justify-center h-full px-6 py-10 overflow-y-auto text-center select-none animate-fade-in">
+                <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+                    <FolderGit2 className="w-6 h-6 text-text-muted relative opacity-70" />
                 </div>
-                <p className="mb-1 text-sm font-medium text-text-secondary">{tt('git.noRepo')}</p>
-                <p className="mb-3 max-w-[260px] text-xs leading-5 text-text-muted">{tt('git.noRepoDesc')}</p>
-                <div className="mb-4 max-w-full rounded-md border border-border-subtle bg-surface/50 px-2.5 py-1.5 text-[10px] text-text-muted">
-                    <span className="mr-1 text-text-secondary">{tt('git.currentFolder')}</span>
-                    <span className="break-all font-mono">{workspacePath}</span>
+                <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">{tt('git.noRepo')}</p>
+                <p className="text-[10px] text-text-muted leading-relaxed max-w-[210px] mx-auto mb-4 opacity-70">
+                    {tt('git.noRepoDesc')}
+                </p>
+                <div className="mb-6 max-w-full rounded-lg border border-border-subtle bg-surface/30 px-3 py-1.5 text-[9px] text-text-muted font-mono break-all max-w-[220px]">
+                    <span className="text-text-secondary font-sans mr-1">{tt('git.currentFolder')}</span>
+                    {workspacePath}
                 </div>
 
-                <div className="flex w-full max-w-[260px] flex-col gap-2">
-                    <Button onClick={handleInit} size="sm" className="w-full">
+                <div className="flex w-full max-w-[200px] flex-col gap-2">
+                    <Button onClick={handleInit} className="w-full h-8 flex items-center justify-center gap-1.5 text-xs font-semibold">
                         <Plus className="w-3.5 h-3.5" />
                         {tt('git.initRepo')}
                     </Button>
                     <Button
                         variant="secondary"
-                        size="sm"
                         onClick={() => setShowCloneInput(prev => !prev)}
-                        className="w-full"
+                        className="w-full h-8 flex items-center justify-center gap-1.5 text-xs font-semibold"
                     >
                         <Download className="w-3.5 h-3.5" />
                         {tt('git.cloneRepo')}
                     </Button>
                     {showCloneInput && (
-                        <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface/40 p-2">
+                        <div className="flex flex-col gap-2 rounded-lg border border-border-subtle bg-surface/20 p-2 animate-slide-down">
                             <Input
                                 value={cloneUrl}
                                 onChange={(e) => setCloneUrl(e.target.value)}
                                 placeholder={tt('git.cloneUrlPlaceholder')}
-                                className="h-8 text-xs"
+                                className="h-8 text-xs bg-surface border-border-subtle"
                                 disabled={isCloning}
                             />
-                            <Button onClick={handleClone} size="sm" isLoading={isCloning} className="w-full">
+                            <Button onClick={handleClone} isLoading={isCloning} className="w-full h-7 text-[10px] font-semibold">
                                 {isCloning ? tt('git.cloning') : tt('git.clone')}
                             </Button>
                         </div>
                     )}
-                    <div className="grid grid-cols-2 gap-2">
-                        <Button variant="outline" size="sm" onClick={handleOpenFolder}>
-                            <FolderOpen className="w-3.5 h-3.5" />
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                        <Button variant="outline" className="h-7 text-[10px] font-medium" onClick={handleOpenFolder}>
                             {tt('openFolder')}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={handleRefreshAll}>
-                            <RefreshCw className="w-3.5 h-3.5" />
+                        <Button variant="ghost" className="h-7 text-[10px] font-medium" onClick={handleRefreshAll}>
                             {tt('git.retry')}
                         </Button>
                     </div>
                 </div>
-                {error && <p className="mt-3 max-w-[260px] break-words text-[10px] leading-4 text-status-error">{error}</p>}
+                {error && <p className="mt-3 max-w-[200px] break-words text-[9px] text-status-error">{error}</p>}
             </div>
         )
     }
 
     if (!isRepoListMode && !status && (isRefreshing || isGitRepository === null || error)) {
         return (
-            <div className="flex h-full flex-col items-center justify-start overflow-y-auto px-6 pb-6 pt-24 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-surface-hover border border-border-subtle">
+            <div className="flex flex-col items-center justify-center h-full px-6 text-center select-none animate-fade-in">
+                <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
                     {isRefreshing ? (
-                        <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
+                        <Loader2 className="w-6 h-6 animate-spin text-accent relative" />
                     ) : (
-                        <AlertTriangle className="h-6 w-6 text-status-warning" />
+                        <AlertTriangle className="w-6 h-6 text-status-warning relative" />
                     )}
                 </div>
-                <p className="mb-1 text-sm font-medium text-text-secondary">
+                <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
                     {isRefreshing ? tt('git.loadingStatus') : tt('git.statusUnavailable')}
                 </p>
-                <p className="mb-4 max-w-[260px] break-words text-xs leading-5 text-text-muted">
+                <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto mb-6 opacity-70">
                     {error || tt('git.statusUnavailableDesc')}
                 </p>
-                <Button variant="outline" size="sm" onClick={handleRefreshAll} disabled={isRefreshing || isDiscoveringRepos}>
-                    <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <Button variant="outline" onClick={handleRefreshAll} disabled={isRefreshing || isDiscoveringRepos} className="h-8 text-xs font-semibold active:scale-95">
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
                     {tt('git.retry')}
                 </Button>
             </div>
@@ -1698,8 +1705,8 @@ Commit message:`
             {/* Unified Sticky Header */}
             <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-md border-b border-border-subtle flex flex-col shadow-sm">
                 {/* Title & Actions */}
-                <div className="h-11 px-3 flex items-center justify-between">
-                    <span className="text-xs font-bold text-text-primary uppercase tracking-widest opacity-90 pl-1">
+                <div className="h-11 px-4 flex items-center justify-between border-b border-border/10">
+                    <span className="min-w-0 flex-shrink-0 whitespace-nowrap text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans pl-1">
                         {tt('git.title')}
                     </span>
                     <div className="flex items-center gap-1 flex-shrink-0">

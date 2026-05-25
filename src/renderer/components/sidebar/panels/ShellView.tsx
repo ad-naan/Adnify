@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, FolderOpen, MoreHorizontal, Plus, Server, Settings2, Star, Terminal as TerminalIcon, TerminalSquare } from 'lucide-react'
+import { ChevronDown, ChevronRight, FolderOpen, MoreHorizontal, Plus, Server, Settings2, Star, TerminalSquare } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
@@ -24,7 +24,7 @@ export function ShellView() {
   const cwd = roots[0] || ''
 
   useEffect(() => {
-    shellRegistryService.load().catch(() => {})
+    shellRegistryService.load().catch(() => { })
     const unsubscribe = shellRegistryService.subscribe(setShellState)
     return unsubscribe
   }, [])
@@ -203,30 +203,31 @@ export function ShellView() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-background">
-      <div className="h-12 px-4 border-b border-border flex items-center justify-between">
+    <div className="w-full h-full flex flex-col bg-transparent">
+      <div className="h-11 px-4 border-b border-border/30 bg-transparent sticky top-0 z-10 flex items-center justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <TerminalIcon className="w-4 h-4 text-accent" />
-          <span className="text-sm font-medium text-text-primary">Shell</span>
+          <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
+            Shell
+          </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-lg"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90"
             onClick={() => createTerminal()}
             title={language === 'zh' ? '新建终端' : 'New Terminal'}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 rounded-lg"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90"
             onClick={() => setShowManager(true)}
             title={language === 'zh' ? 'Shell 管理' : 'Shell Manager'}
           >
-            <Settings2 className="w-4 h-4" />
+            <Settings2 className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
@@ -268,7 +269,7 @@ export function ShellView() {
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </Button>
             </div>
-          ))) }
+          )))}
 
         {presetGroups.map(({ group, items }) => renderSection(
           `preset-${group}`,

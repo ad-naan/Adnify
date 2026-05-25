@@ -79,18 +79,18 @@ export function ProblemsView() {
 
   return (
     <div className="flex flex-col h-full bg-transparent">
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-transparent sticky top-0 z-10">
-        <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
-          {language === 'zh' ? '问题' : 'Problems'}
+      <div className="h-11 px-4 flex items-center justify-between border-b border-border/30 bg-transparent sticky top-0 z-10">
+        <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
+          {language === 'zh' ? '问题面板' : 'PROBLEMS'}
         </span>
         <div className="flex items-center gap-2 text-[10px]">
           {errorCount > 0 && (
-            <span className="flex items-center gap-1 text-status-error">
+            <span className="flex items-center gap-1 text-status-error font-medium px-2 py-0.5 rounded-full bg-status-error/10 border border-status-error/15">
               <AlertCircle className="w-3 h-3" /> {errorCount}
             </span>
           )}
           {warningCount > 0 && (
-            <span className="flex items-center gap-1 text-status-warning">
+            <span className="flex items-center gap-1 text-status-warning font-medium px-2 py-0.5 rounded-full bg-status-warning/10 border border-status-warning/15">
               <AlertTriangle className="w-3 h-3" /> {warningCount}
             </span>
           )}
@@ -104,7 +104,7 @@ export function ProblemsView() {
             key={f}
             onClick={() => setFilter(f)}
             className={`px-2 py-1 text-[10px] rounded transition-colors ${
-              filter === f ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-surface-hover'
+              filter === f ? 'bg-accent/20 text-accent font-semibold' : 'text-text-muted hover:bg-surface-hover'
             }`}
           >
             {f === 'all'
@@ -124,15 +124,16 @@ export function ProblemsView() {
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {filteredDiagnostics.size === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-6 text-center animate-fade-in select-none">
-            <div className="w-12 h-12 bg-status-success/10 rounded-2xl flex items-center justify-center mb-3 border border-status-success/20 shadow-sm">
-              <CheckCircle2 className="w-6 h-6 text-status-success" />
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-status-success/5 border border-status-success/15 flex items-center justify-center mb-4 text-status-success relative group">
+              <div className="absolute -inset-0.5 bg-status-success/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+              <CheckCircle2 className="w-6 h-6 text-status-success relative animate-pulse" />
             </div>
-            <p className="text-xs font-medium text-text-primary">
-              {language === 'zh' ? '未发现问题' : 'No problems detected'}
+            <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
+              {language === 'zh' ? '未发现任何问题' : 'No problems detected'}
             </p>
-            <p className="text-[10px] text-text-muted mt-1 opacity-60">
-              {language === 'zh' ? '代码看起来很棒！' : 'Your code looks great!'}
+            <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
+              {language === 'zh' ? '工作区代码表现完美，未检测到任何错误或警告！' : 'No compilation issues or warnings found in active files.'}
             </p>
           </div>
         ) : (

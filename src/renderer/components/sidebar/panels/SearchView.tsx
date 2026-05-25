@@ -309,8 +309,8 @@ export function SearchView() {
 
   return (
     <div className="flex flex-col h-full bg-transparent text-sm">
-      <div className="h-10 px-3 flex items-center border-b border-border sticky top-0 z-10 bg-transparent">
-        <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
+      <div className="h-11 px-4 flex items-center border-b border-border/30 sticky top-0 z-10 bg-transparent">
+        <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
           {t('search', language)}
         </span>
       </div>
@@ -560,19 +560,32 @@ export function SearchView() {
         )}
 
         {!isSearching && query && searchResults.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 px-6 text-center animate-fade-in opacity-60">
-            <div className="w-12 h-12 bg-surface/30 rounded-2xl flex items-center justify-center mb-3 border border-border">
-              <Search className="w-6 h-6 text-text-muted" />
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+              <Search className="w-6 h-6 text-text-muted relative opacity-70" />
             </div>
-            <p className="text-xs font-medium text-text-secondary">{t('noResults', language)}</p>
-            <p className="text-[10px] text-text-muted mt-1">{t('tryDifferentKeyword', language) || 'Try a different keyword or regex'}</p>
+            <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
+              {t('noResults', language)}
+            </p>
+            <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
+              {t('tryDifferentKeyword', language) || 'Try a different keyword or regex'}
+            </p>
           </div>
         )}
 
         {!isSearching && !query && (
-          <div className="flex flex-col items-center justify-center py-16 px-6 text-center animate-fade-in opacity-40 select-none">
-            <Search className="w-8 h-8 text-text-muted mb-2" />
-            <p className="text-xs font-medium text-text-muted">Type to search across files</p>
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+              <Search className="w-6 h-6 text-text-muted relative opacity-70" />
+            </div>
+            <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
+              {language === 'zh' ? '全局搜索' : 'Search across files'}
+            </p>
+            <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
+              {language === 'zh' ? '输入关键字在工作区的所有文件中进行流式查找。' : 'Type a keyword or regular expression to search files in the workspace.'}
+            </p>
           </div>
         )}
       </div>

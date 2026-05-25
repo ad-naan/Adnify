@@ -172,12 +172,13 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
 
   if (messageCheckpoints.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-6 text-center opacity-60">
-        <div className="w-12 h-12 bg-surface/50 rounded-full flex items-center justify-center mb-3 border border-border shadow-sm">
-          <History className="w-6 h-6 text-text-muted" />
+      <div className="flex flex-col items-center justify-center h-full px-6 text-center select-none animate-fade-in">
+        <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
+          <History className="w-6 h-6 text-text-muted relative opacity-70" />
         </div>
-        <p className="text-xs font-medium text-text-secondary">{t('checkpoint.noCheckpoints', language)}</p>
-        <p className="text-[10px] text-text-muted mt-1 max-w-[200px]">
+        <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">{t('checkpoint.noCheckpoints', language)}</p>
+        <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
           {t('checkpoint.noCheckpointsDesc', language)}
         </p>
       </div>
@@ -190,19 +191,19 @@ export default function CheckpointPanel({ onClose }: CheckpointPanelProps) {
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Header */}
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border bg-background-secondary/95 backdrop-blur-md sticky top-0 z-10">
+      <div className="h-11 px-4 flex items-center justify-between border-b border-border/30 bg-transparent sticky top-0 z-10">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider opacity-80">
+          <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
             {t('checkpoint.title', language)}
           </span>
-          <span className="px-1.5 py-0.5 rounded-full bg-surface-active text-[10px] font-mono text-text-muted">
+          <span className="px-1.5 py-0.5 rounded-md bg-accent/15 text-[10px] font-mono font-bold text-accent">
             {messageCheckpoints.length}
           </span>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-surface-active transition-colors text-text-muted hover:text-text-primary"
+            className="p-1 rounded-lg hover:bg-white/5 transition-all text-text-muted hover:text-text-primary"
           >
             <X className="w-3.5 h-3.5" />
           </button>
