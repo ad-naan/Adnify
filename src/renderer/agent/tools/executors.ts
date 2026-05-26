@@ -2837,7 +2837,7 @@ export const toolExecutors = Object.fromEntries(
     Object.entries(rawToolExecutors).map(([name, executor]) => [
         name,
         async (args: Record<string, unknown>, ctx: ToolExecutionContext): Promise<ToolExecutionResult> => {
-            const timeoutMs = ['generate_tests', 'run_command', 'edit_file', 'web_search'].includes(name) ? 120000 : 60000
+            const timeoutMs = getAgentConfig().toolTimeoutMs
             let timer: ReturnType<typeof setTimeout>
 
             try {
