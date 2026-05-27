@@ -8,6 +8,7 @@ import { toAppError } from '@shared/utils/errorHandler'
 import { mcpService } from '@services/mcpService'
 import { logger } from '@utils/Logger'
 import { getFileName } from '@shared/utils/pathUtils'
+import { getAgentConfig } from '../../utils/AgentConfig'
 import type { ToolProvider } from './types'
 import type {
   ToolDefinition,
@@ -199,7 +200,7 @@ export class McpToolProvider implements ToolProvider {
         serverId,
         toolName: actualToolName,
         arguments: args,
-      })
+      }, getAgentConfig().toolTimeoutMs)
 
       if (!result.success) {
         return {
