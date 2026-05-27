@@ -31,6 +31,7 @@ const CommandPalette = lazy(() => import('./components/dialogs/CommandPalette'))
 const KeyboardShortcuts = lazy(() => import('./components/dialogs/KeyboardShortcuts'))
 const QuickOpen = lazy(() => import('./components/dialogs/QuickOpen'))
 const AboutDialog = lazy(() => import('./components/dialogs/AboutDialog'))
+const UserAvatarDialog = lazy(() => import('./components/dialogs/UserAvatarDialog'))
 const WelcomePage = lazy(() => import('./components/welcome/WelcomePage'))
 
 function ToastInitializer() {
@@ -59,6 +60,7 @@ function AppContent() {
   const setShowQuickOpen = useStore((state) => state.setShowQuickOpen)
   const showAbout = useStore((state) => state.showAbout)
   const setShowAbout = useStore((state) => state.setShowAbout)
+  const showAvatarDialog = useStore((state) => state.showAvatarDialog)
   const showCommandPalette = useStore((state) => state.showCommandPalette)
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
   const terminalVisible = useStore((state) => state.terminalVisible)
@@ -235,6 +237,11 @@ function AppContent() {
       {showAbout && (
         <Suspense fallback={null}>
           <AboutDialog onClose={() => setShowAbout(false)} />
+        </Suspense>
+      )}
+      {showAvatarDialog && (
+        <Suspense fallback={null}>
+          <UserAvatarDialog />
         </Suspense>
       )}
 

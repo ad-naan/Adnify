@@ -14,6 +14,9 @@ export interface LayoutSlice {
   sidebarWidth: number
   chatWidth: number
   terminalLayout: 'tabs' | 'split'
+  userAvatarStyle: string
+  userAvatarSeed: string
+  userDisplayName: string
 
   setActiveSidePanel: (panel: SidePanel) => void
   setTerminalVisible: (visible: boolean) => void
@@ -24,6 +27,8 @@ export interface LayoutSlice {
   setTerminalLayout: (layout: 'tabs' | 'split') => void
   toggleTerminal: () => void
   toggleDebug: () => void
+  setUserAvatar: (style: string, seed: string) => void
+  setUserDisplayName: (name: string) => void
 }
 
 export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> = (set) => ({
@@ -34,6 +39,9 @@ export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> =
   sidebarWidth: 260,
   chatWidth: 450,
   terminalLayout: 'tabs',
+  userAvatarStyle: localStorage.getItem('userAvatarStyle') || 'adventurer',
+  userAvatarSeed: localStorage.getItem('userAvatarSeed') || 'Felix',
+  userDisplayName: localStorage.getItem('userDisplayName') || 'You',
 
   setActiveSidePanel: (panel) => set({ activeSidePanel: panel }),
   setTerminalVisible: (visible) => set({ terminalVisible: visible }),
@@ -44,4 +52,13 @@ export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> =
   setTerminalLayout: (layout) => set({ terminalLayout: layout }),
   toggleTerminal: () => set((state) => ({ terminalVisible: !state.terminalVisible })),
   toggleDebug: () => set((state) => ({ debugVisible: !state.debugVisible })),
+  setUserAvatar: (style, seed) => {
+    localStorage.setItem('userAvatarStyle', style)
+    localStorage.setItem('userAvatarSeed', seed)
+    set({ userAvatarStyle: style, userAvatarSeed: seed })
+  },
+  setUserDisplayName: (name) => {
+    localStorage.setItem('userDisplayName', name)
+    set({ userDisplayName: name })
+  },
 })

@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react'
-import { User, Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2, Server } from 'lucide-react'
+import { Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2, Server } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -1001,10 +1001,14 @@ const ChatMessage = React.memo(({
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
   const wasStreamingRef = React.useRef(false)
   const [isProcessSettling, setIsProcessSettling] = useState(false)
-  const { editorConfig, language, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
+  const { editorConfig, language, expandAgentBlocksByDefault, userAvatarStyle, userAvatarSeed, userDisplayName, setShowAvatarDialog } = useStore(useShallow(s => ({
     editorConfig: s.editorConfig,
     language: s.language,
     expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
+    userAvatarStyle: s.userAvatarStyle,
+    userAvatarSeed: s.userAvatarSeed,
+    userDisplayName: s.userDisplayName,
+    setShowAvatarDialog: s.setShowAvatarDialog,
   })))
   const fontSize = editorConfig.chatFontSize ?? editorConfig.fontSize
 
@@ -1171,10 +1175,26 @@ const ChatMessage = React.memo(({
           <div className="w-full flex flex-col items-end gap-1.5">
             {/* Header Row */}
             <div className="flex items-center gap-2.5 px-1 select-none">
-              <span className="text-[11px] font-bold text-text-muted/60 uppercase tracking-tight">You</span>
-              <div className="w-7 h-7 rounded-full bg-surface/60 border border-text-primary/10 flex items-center justify-center text-text-muted shadow-sm flex-shrink-0">
-                <User className="w-3.5 h-3.5" />
-              </div>
+              <span className="text-[11px] font-bold text-text-muted/60 tracking-tight">{userDisplayName}</span>
+              <Tooltip content={language === 'zh' ? '点击定制我的头像与昵称' : 'Click to customize my avatar & name'}>
+                <div
+                  onClick={() => setShowAvatarDialog(true)}
+                  className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 hover:border-accent/50 transition-all duration-200 group/avatar"
+                >
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 z-10">
+                    <Edit2 className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
+                  <img
+                    src={`https://api.dicebear.com/7.x/${userAvatarStyle}/svg?seed=${encodeURIComponent(userAvatarSeed)}`}
+                    alt="User Avatar"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                </div>
+              </Tooltip>
             </div>
 
             {/* Bubble / Editing */}
