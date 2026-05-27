@@ -14,6 +14,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { api } from '@/renderer/services/electronAPI'
 import { toast } from '@components/common/ToastProvider'
 import { isCreateActionLabel, resolveFileChangeActionLabel } from '@renderer/agent/utils/fileWriteDisplay'
+import { RollingNumber } from '@components/ui'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -54,21 +55,25 @@ function FileChangeCard({
 
     // Local streamed content used by the diff preview.
     const [streamingContent, setStreamingContent] = useState<string | null>(null)
+    const [streamingOriginalContent, setStreamingOriginalContent] = useState<string | null>(null)
 
     // Subscribe only to this file path instead of all active edits.
     useEffect(() => {
         if (!isRunning && !isStreaming) {
             setStreamingContent(null)
+            setStreamingOriginalContent(null)
             return
         }
 
         const editState = streamingEditService.getEditByFilePath(resolvedStreamingFilePath)
         if (editState) {
             setStreamingContent(editState.currentContent)
+            setStreamingOriginalContent(editState.originalContent)
         }
 
         const unsubscribe = streamingEditService.subscribeByFilePath(resolvedStreamingFilePath, state => {
             setStreamingContent(state?.currentContent ?? null)
+            setStreamingOriginalContent(state?.originalContent ?? null)
         })
 
         return unsubscribe
@@ -78,6 +83,11 @@ function FileChangeCard({
     const oldContent = useMemo(() => {
         if (meta?.oldContent !== undefined) {
             return meta.oldContent as string
+        }
+
+        // Prefer live streamed original content while the tool is active.
+        if (streamingOriginalContent && (isRunning || isStreaming)) {
+            return streamingOriginalContent
         }
 
         // For streamed edits, old_string is the best local base.
@@ -92,7 +102,7 @@ function FileChangeCard({
         }
 
         return ''
-    }, [meta, args.old_string, isRunning, isStreaming, toolCall.name])
+    }, [meta, args.old_string, isRunning, isStreaming, toolCall.name, streamingOriginalContent])
 
     const newContent = useMemo(() => {
         // Prefer live streamed content while the tool is active.
@@ -294,15 +304,21 @@ function FileChangeCard({
 
                     <div className="flex items-center gap-2">
                         {(isSuccess || newContent) && (
-                            <span className="text-[10px] font-mono opacity-60 flex items-center gap-1.5 px-1.5 py-0.5 bg-text-primary/[0.05] rounded border border-border">
+                            <span className="text-[10px] font-mono opacity-80 flex items-center gap-2 px-1.5 py-0.5 bg-text-primary/[0.03] rounded border border-border/50 backdrop-blur-sm shadow-sm select-none">
                                 {diffStats.added > 0 && (
-                                    <span className="text-green-400">+{diffStats.added}</span>
+                                    <span className="flex items-center gap-0.5 text-green-400 font-semibold">
+                                        <span>+</span>
+                                        <RollingNumber value={diffStats.added} className="text-green-400" />
+                                    </span>
                                 )}
                                 {diffStats.removed > 0 && (
-                                    <span className="text-red-400">-{diffStats.removed}</span>
+                                    <span className="flex items-center gap-0.5 text-red-400 font-semibold">
+                                        <span>-</span>
+                                        <RollingNumber value={diffStats.removed} className="text-red-400" />
+                                    </span>
                                 )}
                                 {isCreateAction && diffStats.added === 0 && (
-                                    <span className="text-blue-400">new</span>
+                                    <span className="text-blue-400 font-semibold">new</span>
                                 )}
                             </span>
                         )}
