@@ -17,12 +17,9 @@ import {
   Wrench,
   FileText,
   MessageSquare,
-  ExternalLink,
   FolderOpen,
   Plus,
   Trash2,
-  Settings,
-  ChevronDown,
   Globe,
   Key,
   LogIn,
@@ -728,54 +725,158 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
         )}
       </div>
 
-      {/* Config Paths (Collapsed) */}
+      {/* Tips */}
+      <div className="p-4 rounded-xl bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-2">
+        <p className="font-bold text-sm text-accent/90 flex items-center gap-1.5">
+          <Lightbulb className="w-4 h-4 text-accent animate-pulse" />
+          {language === 'zh' ? '💡 使用提示' : '💡 Tips'}
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed pl-1">
+          <li>
+            {language === 'zh'
+              ? '工具自动接入：启用的 MCP 服务器在连接成功后，其工具将自动接入 AI 助手，在聊天或任务执行时可直接调用。'
+              : 'Auto-connection: Tools of enabled MCP servers will automatically be registered to the AI assistant once successfully connected.'}
+          </li>
+          <li>
+            {language === 'zh'
+              ? '快速状态排查：卡片左侧指示灯代表当前状态，若遇到错误，点击展开卡片即可查看详细的服务器 stderr 日志。'
+              : 'Status monitoring: The left dot indicates connection status. Click the card to expand details and view stderr logs if errors occur.'}
+          </li>
+          <li>
+            {language === 'zh'
+              ? '配置合并生效：用户级（全局）与项目级（工作区）服务器配置将合并生效。若有同名冲突，以项目级配置为先。'
+              : 'Config merging: Global and workspace server configs are merged. Workspace configs take precedence in case of duplicate names.'}
+          </li>
+        </ul>
+      </div>
+
+      {/* Local MCP Config Directories */}
       {configPaths && (
-        <details className="group">
-          <summary className="flex items-center gap-2 cursor-pointer text-sm text-text-muted hover:text-text-secondary">
-            <Settings className="w-4 h-4" />
-            {language === 'zh' ? '配置文件位置' : 'Configuration Files'}
-            <ChevronDown className="w-4 h-4 group-open:rotate-180 transition-transform" />
-          </summary>
-          <div className="mt-3 space-y-2 pl-6">
-            <div
-              className="flex items-center justify-between p-3 bg-surface/30 rounded-lg cursor-pointer hover:bg-surface/50 transition-colors"
-              onClick={() => openConfigFile(configPaths.user)}
-            >
-              <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-text-muted" />
-                <span className="text-sm text-text-secondary">
-                  {language === 'zh' ? '用户配置' : 'User Config'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-text-muted font-mono truncate max-w-[250px]">
-                  {configPaths.user}
-                </span>
-                <ExternalLink className="w-3 h-3 text-text-muted" />
-              </div>
-            </div>
-            {configPaths.workspace.map((path, index) => (
-              <div
-                key={path}
-                className="flex items-center justify-between p-3 bg-surface/30 rounded-lg cursor-pointer hover:bg-surface/50 transition-colors"
-                onClick={() => openConfigFile(path)}
-              >
-                <div className="flex items-center gap-2">
-                  <FolderOpen className="w-4 h-4 text-text-muted" />
-                  <span className="text-sm text-text-secondary">
-                    {language === 'zh' ? `工作区配置 ${index + 1}` : `Workspace Config ${index + 1}`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted font-mono truncate max-w-[250px]">
-                    {path}
-                  </span>
-                  <ExternalLink className="w-3 h-3 text-text-muted" />
-                </div>
-              </div>
-            ))}
+        <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+          <div className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4 text-accent" />
+            <h5 className="text-sm font-medium text-text-primary">
+              {language === 'zh' ? '本地 MCP 配置文件' : 'Local MCP Configuration Files'}
+            </h5>
           </div>
-        </details>
+
+          <p className="text-xs text-text-muted leading-relaxed">
+            {language === 'zh'
+              ? '已有 MCP 配置文件存储在本地 JSON 目录中。你可以点击下方卡片，定位并手动编辑这些文件以进行高级参数微调。'
+              : 'MCP server configurations are stored in local JSON files. Click the cards below to locate and manually edit these files for advanced tuning.'}
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {/* User (Global) Config Card */}
+            <div className="rounded-lg border border-border bg-surface p-4 space-y-4 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-text-primary">
+                    {language === 'zh' ? '用户配置文件' : 'User Configuration File'}
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">
+                    {language === 'zh' ? '全局' : 'GLOBAL'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-text-muted break-all font-mono opacity-80 leading-relaxed bg-black/10 p-2 rounded border border-border/30">
+                  {configPaths.user}
+                </p>
+              </div>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openConfigFile(configPaths.user)}
+                className="w-full text-xs justify-center gap-1.5"
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                {language === 'zh' ? '在文件夹中定位用户配置' : 'Locate User Config'}
+              </Button>
+            </div>
+
+            {/* Workspace (Project) Config Cards */}
+            {configPaths.workspace.length > 0 ? (
+              configPaths.workspace.map((path, index) => (
+                <div key={path} className="rounded-lg border border-border bg-surface p-4 space-y-4 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-text-primary">
+                        {language === 'zh' ? `项目配置文件 ${index + 1}` : `Project Config File ${index + 1}`}
+                      </span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">
+                        {language === 'zh' ? '项目' : 'PROJECT'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-text-muted break-all font-mono opacity-80 leading-relaxed bg-black/10 p-2 rounded border border-border/30">
+                      {path}
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => openConfigFile(path)}
+                    className="w-full text-xs justify-center gap-1.5"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    {language === 'zh' ? '在文件夹中定位项目配置' : 'Locate Project Config'}
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-border bg-surface/10 p-4 flex flex-col items-center justify-center text-center space-y-2 min-h-[140px]">
+                <FolderOpen className="w-8 h-8 text-text-muted opacity-40 animate-pulse" />
+                <div className="text-xs font-medium text-text-muted">
+                  {language === 'zh' ? '暂未检测到项目级 MCP 配置' : 'No workspace MCP config detected'}
+                </div>
+                <p className="text-[10px] text-text-muted max-w-[200px] leading-relaxed">
+                  {language === 'zh'
+                    ? '在项目根目录下创建 .adnify/settings/mcp.json 可启用项目级配置。'
+                    : 'Create .adnify/settings/mcp.json in your workspace root to enable project-level config.'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* MCP Standard & Spec Info */}
+          <div className="rounded-lg border border-border bg-background/50 p-4 space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-text-primary">
+                {language === 'zh' ? '可识别的 MCP 服务器类型与协议规范' : 'Recognized MCP Server Types & Spec'}
+              </p>
+              <p className="text-[11px] text-text-muted leading-relaxed">
+                {language === 'zh'
+                  ? 'Model Context Protocol (MCP) 是 Anthropic 推出的一项全新开放标准，旨在使 AI 助手通过安全、统一的协议与本地开发环境、专有数据源及第三方 API 进行无缝的数据和工具交互。'
+                  : 'Model Context Protocol (MCP) is an open standard proposed by Anthropic that enables AI assistants to seamlessly interface with local development environments, proprietary data sources, and third-party APIs via a unified protocol.'}
+              </p>
+              <p className="text-[11px] text-text-muted leading-relaxed">
+                {language === 'zh'
+                  ? 'Adnify 完全兼容 MCP 规范，既支持通过 stdio 执行本地服务器指令（支持 Node/Python 运行环境与环境变量 env 注入），也支持基于 SSE (Server-Sent Events) 的远程 HTTP 连接，并具备自动 OAuth2 授权接入能力。'
+                  : 'Adnify is fully compliant with the MCP spec. It supports running local command-based servers via stdio (with Node/Python env & env var injections) as well as remote SSE (Server-Sent Events) connections equipped with automated OAuth2 authentication flows.'}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-border/30">
+              <div className="space-y-1 text-[11px] text-text-muted">
+                <p>
+                  {language === 'zh'
+                    ? '如果你添加或修改了本地配置文件中的内容，点击右侧的“重新加载”即可立即同步。'
+                    : 'If you modified configuration files manually, click "Reload Config" to immediately sync your changes.'}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleReloadConfig}
+                disabled={actionLoading === 'reload'}
+                className="text-xs shrink-0 gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${actionLoading === 'reload' ? 'animate-spin' : ''}`} />
+                {language === 'zh' ? '重新加载并同步' : 'Reload & Sync'}
+              </Button>
+            </div>
+          </div>
+        </section>
       )}
 
       {/* Add Server Modal */}
