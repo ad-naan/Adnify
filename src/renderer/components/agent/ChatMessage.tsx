@@ -1172,167 +1172,151 @@ const ChatMessage = React.memo(({
 
         {/* User Layout */}
         {isUser && (
-          <div className="w-full flex flex-col items-end gap-1.5">
-            {/* Header Row */}
-            <div className="flex items-center gap-2.5 px-1 select-none">
-              <span className="text-[11px] font-bold text-text-muted/60 tracking-tight">{userDisplayName}</span>
-              <Tooltip content={language === 'zh' ? '点击定制我的头像与昵称' : 'Click to customize my avatar & name'}>
-                <div
-                  onClick={() => setShowAvatarDialog(true)}
-                  className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 hover:border-accent/50 transition-all duration-200 group/avatar"
-                >
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 z-10">
-                    <Edit2 className="w-3.5 h-3.5 text-white" />
-                  </div>
-                  <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
-                  <img
-                    src={`https://api.dicebear.com/7.x/${userAvatarStyle}/svg?seed=${encodeURIComponent(userAvatarSeed)}`}
-                    alt="User Avatar"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none'
-                    }}
-                  />
-                </div>
-              </Tooltip>
-            </div>
+          <div className="w-full flex items-start justify-end gap-3">
+            {/* Left Content Area (Name + Bubble + Actions) */}
+            <div className="flex flex-col items-end gap-1.5 min-w-0 max-w-[85%] sm:max-w-[75%]">
+              {/* User Name */}
+              <span className="text-[13px] font-bold tracking-tight text-text-primary select-none pr-1">
+                {userDisplayName}
+              </span>
 
-            {/* Bubble / Editing */}
-            <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%] min-w-0 mr-8 sm:mr-12 w-full">
-              {isEditing ? (
-                <div className="w-full relative group/edit">
-                  <div className="absolute inset-0 -m-1 rounded-[20px] bg-accent/5 opacity-0 group-focus-within/edit:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                  <div className="relative bg-surface/80 backdrop-blur-xl border border-accent/30 rounded-[18px] shadow-lg overflow-hidden animate-scale-in origin-right transition-all duration-200 group-focus-within/edit:border-accent group-focus-within/edit:ring-1 group-focus-within/edit:ring-accent/50">
-                    <textarea
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          handleSaveEdit()
-                        }
-                        if (e.key === 'Escape') {
-                          setIsEditing(false)
-                        }
-                      }}
-                      className="w-full bg-transparent border-none outline-none px-4 py-3 text-text-primary resize-none focus:ring-0 focus:outline-none transition-all custom-scrollbar font-mono text-sm leading-relaxed placeholder:text-text-muted/30"
-                      rows={Math.max(2, Math.min(15, editContent.split('\n').length))}
-                      autoFocus
-                      style={{ fontSize: `${fontSize}px` }}
-                      placeholder="Type your message..."
-                    />
-                    <div className="flex items-center justify-between px-2 py-1.5 bg-black/5 border-t border-black/5">
-                      <span className="text-[10px] text-text-muted/50 ml-2 font-medium">
-                        Esc to cancel • Enter to save
-                      </span>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => setIsEditing(false)}
-                          className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-black/10 transition-colors"
-                          title={tt.cancel}
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={handleSaveEdit}
-                          className="p-1.5 rounded-lg text-accent hover:text-white hover:bg-accent transition-all shadow-sm"
-                          title={tt.save}
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
+              {/* Bubble / Editing */}
+              <div className="w-full flex flex-col items-end min-w-0">
+                {isEditing ? (
+                  <div className="w-full relative group/edit">
+                    <div className="absolute inset-0 -m-1 rounded-[20px] bg-accent/5 opacity-0 group-focus-within/edit:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                    <div className="relative bg-surface/80 backdrop-blur-xl border border-accent/30 rounded-[18px] shadow-lg overflow-hidden animate-scale-in origin-right transition-all duration-200 group-focus-within/edit:border-accent group-focus-within/edit:ring-1 group-focus-within/edit:ring-accent/50">
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleSaveEdit()
+                          }
+                          if (e.key === 'Escape') {
+                            setIsEditing(false)
+                          }
+                        }}
+                        className="w-full bg-transparent border-none outline-none px-4 py-3 text-text-primary resize-none focus:ring-0 focus:outline-none transition-all custom-scrollbar font-mono text-sm leading-relaxed placeholder:text-text-muted/30"
+                        rows={Math.max(2, Math.min(15, editContent.split('\n').length))}
+                        autoFocus
+                        style={{ fontSize: `${fontSize}px` }}
+                        placeholder="Type your message..."
+                      />
+                      <div className="flex items-center justify-between px-2 py-1.5 bg-black/5 border-t border-black/5">
+                        <span className="text-[10px] text-text-muted/50 ml-2 font-medium">
+                          Esc to cancel • Enter to save
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => setIsEditing(false)}
+                            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-black/10 transition-colors"
+                            title={tt.cancel}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={handleSaveEdit}
+                            className="p-1.5 rounded-lg text-accent hover:text-white hover:bg-accent transition-all shadow-sm"
+                            title={tt.save}
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="relative bg-surface/60 backdrop-blur-sm text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-sm w-fit max-w-full border border-border/50">
-                  {/* Context Items */}
-                  {message.contextItems && message.contextItems.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-2 -mt-1 pt-1 justify-end">
-                      {message.contextItems.map((item: any, i: number) => {
-                        const getContextStyle = (type: string) => {
-                          switch (type) {
-                            case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
-                            case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
-                            case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
-                            case 'Skill': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', Icon: Wrench }
-                            case 'ShellServer': return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', Icon: Server }
-                            default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
+                ) : (
+                  <div className="relative bg-surface/75 backdrop-blur-md text-text-primary/95 px-4 py-3 rounded-[20px] rounded-tr-[4px] shadow-[0_4px_16px_rgba(0,0,0,0.02),_0_2px_4px_rgba(0,0,0,0.01)] w-fit max-w-full border border-border/60">
+                    {/* Context Items */}
+                    {message.contextItems && message.contextItems.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2 -mt-1 pt-1 justify-end">
+                        {message.contextItems.map((item: any, i: number) => {
+                          const getContextStyle = (type: string) => {
+                            switch (type) {
+                              case 'File': return { bg: 'bg-text-primary/[0.04]', text: 'text-text-secondary', border: 'border-transparent', Icon: FileText }
+                              case 'CodeSelection': return { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-transparent', Icon: Code }
+                              case 'Folder': return { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-transparent', Icon: Folder }
+                              case 'Skill': return { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', Icon: Wrench }
+                              case 'ShellServer': return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', Icon: Server }
+                              default: return { bg: 'bg-text-primary/[0.04]', text: 'text-text-muted', border: 'border-transparent', Icon: FileText }
+                            }
                           }
-                        }
-                        const style = getContextStyle(item.type)
-                        const label = (() => {
-                          switch (item.type) {
-                            case 'File':
-                            case 'Folder': {
-                              const uri = item.uri || ''
-                              return getFileName(uri) || uri
+                          const style = getContextStyle(item.type)
+                          const label = (() => {
+                            switch (item.type) {
+                              case 'File':
+                              case 'Folder': {
+                                const uri = item.uri || ''
+                                return getFileName(uri) || uri
+                              }
+                              case 'CodeSelection': {
+                                const uri = item.uri || ''
+                                const range = item.range as [number, number] | undefined
+                                const name = getFileName(uri) || uri
+                                return range ? `${name}:${range[0]}-${range[1]}` : name
+                              }
+                              case 'Skill': {
+                                return `@${item.skillId || 'skill'}`
+                              }
+                              case 'ShellServer': {
+                                return `#${item.serverName || 'server'}#`
+                              }
+                              default: return 'Context'
                             }
-                            case 'CodeSelection': {
-                              const uri = item.uri || ''
-                              const range = item.range as [number, number] | undefined
-                              const name = getFileName(uri) || uri
-                              return range ? `${name}:${range[0]}-${range[1]}` : name
-                            }
-                            case 'Skill': {
-                              return `@${item.skillId || 'skill'}`
-                            }
-                            case 'ShellServer': {
-                              return `#${item.serverName || 'server'}#`
-                            }
-                            default: return 'Context'
-                          }
-                        })()
-                        const IconComponent = style.Icon
+                          })()
+                          const IconComponent = style.Icon
 
-                        return (
-                          <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 ${style.bg} ${style.text} text-[10px] font-medium rounded-md border ${style.border} select-none opacity-80 hover:opacity-100 transition-opacity`}>
-                            <IconComponent className="w-3 h-3 opacity-70" />
-                            <span className="max-w-[150px] truncate">{label}</span>
-                          </span>
-                        )
-                      })}
+                          return (
+                            <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 ${style.bg} ${style.text} text-[10px] font-medium rounded-md border ${style.border} select-none opacity-80 hover:opacity-100 transition-opacity`}>
+                              <IconComponent className="w-3 h-3 opacity-70" />
+                              <span className="max-w-[150px] truncate">{label}</span>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Images */}
+                    {images.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                        {images.map((img, i) => {
+                          const imgSrc = `data:${img.source.media_type};base64,${img.source.data}`
+                          return (
+                            <div
+                              key={`img-${img.source.media_type}-${i}`}
+                              onClick={() => setPreviewImageIndex(i)}
+                              className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
+                            >
+                              <LazyImage
+                                src={imgSrc}
+                                alt="Upload"
+                                className="h-full w-auto object-cover"
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <ImageLightbox
+                      isOpen={previewImageIndex !== null}
+                      images={images.map((img) => ({
+                        src: `data:${img.source.media_type};base64,${img.source.data}`,
+                        alt: 'Preview',
+                      }))}
+                      initialIndex={previewImageIndex ?? 0}
+                      alt="Preview"
+                      onClose={() => setPreviewImageIndex(null)}
+                    />
+
+                    <div className="text-[14px] leading-relaxed">
+                      <MarkdownContent content={textContent} fontSize={fontSize} />
                     </div>
-                  )}
-
-                  {/* Images */}
-                  {images.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2 justify-end">
-                      {images.map((img, i) => {
-                        const imgSrc = `data:${img.source.media_type};base64,${img.source.data}`
-                        return (
-                          <div
-                            key={`img-${img.source.media_type}-${i}`}
-                            onClick={() => setPreviewImageIndex(i)}
-                            className="rounded-lg overflow-hidden border border-text-inverted/10 shadow-md h-28 max-w-[200px] group/img relative cursor-zoom-in hover:opacity-90 transition-opacity"
-                          >
-                            <LazyImage
-                              src={imgSrc}
-                              alt="Upload"
-                              className="h-full w-auto object-cover"
-                            />
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  <ImageLightbox
-                    isOpen={previewImageIndex !== null}
-                    images={images.map((img) => ({
-                      src: `data:${img.source.media_type};base64,${img.source.data}`,
-                      alt: 'Preview',
-                    }))}
-                    initialIndex={previewImageIndex ?? 0}
-                    alt="Preview"
-                    onClose={() => setPreviewImageIndex(null)}
-                  />
-
-                  <div className="text-[14px] leading-relaxed">
-                    <MarkdownContent content={textContent} fontSize={fontSize} />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Actions */}
               {!isEditing && (
@@ -1359,6 +1343,27 @@ const ChatMessage = React.memo(({
                 </div>
               )}
             </div>
+
+            {/* Right Avatar Area */}
+            <Tooltip content={language === 'zh' ? '点击定制我的头像与昵称' : 'Click to customize my avatar & name'}>
+              <div
+                onClick={() => setShowAvatarDialog(true)}
+                className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 hover:border-accent/50 transition-all duration-200 group/avatar mt-0.5"
+              >
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity duration-200 z-10">
+                  <Edit2 className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
+                <img
+                  src={`https://api.dicebear.com/7.x/${userAvatarStyle}/svg?seed=${encodeURIComponent(userAvatarSeed)}`}
+                  alt="User Avatar"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              </div>
+            </Tooltip>
           </div>
         )}
 
