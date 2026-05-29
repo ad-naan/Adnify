@@ -503,9 +503,9 @@ export default function SettingsModal() {
     }
 
     return (
-        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden bg-background/80 backdrop-blur-2xl border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
+        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
             <div className="flex h-[75vh] max-h-[800px]">
-                <div className="w-64 bg-surface/30 backdrop-blur-xl border-r border-border/50 flex flex-col pt-8 pb-6">
+                <div className="w-64 bg-surface/30 border-r border-border/50 flex flex-col pt-8 pb-6">
                     <div className="px-6 mb-6">
                         <h2 className="text-lg font-semibold text-text-primary tracking-tight flex items-center gap-2.5">
                             <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">

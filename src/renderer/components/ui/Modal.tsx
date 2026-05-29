@@ -1,7 +1,6 @@
 import React, { memo, useMemo } from 'react'
 import { X } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
 import { useEscapeKey } from '@/renderer/hooks/usePerformance'
 import { useElevatedToastLayer } from '@/renderer/components/common/toastLayerStore'
 
@@ -15,6 +14,8 @@ interface ModalProps {
     className?: string
     showCloseButton?: boolean
     disableGlassEffect?: boolean
+    enableGlassEffect?: boolean
+    scrollable?: boolean
 }
 
 const sizes = {
@@ -30,49 +31,47 @@ const sizes = {
 }
 
 export const Modal: React.FC<ModalProps> = memo(function Modal({
-    isOpen, onClose, title, children, size = 'md', noPadding = false, className = '', showCloseButton = true, disableGlassEffect = false
+    isOpen,
+    onClose,
+    title,
+    children,
+    size = 'md',
+    noPadding = false,
+    className = '',
+    showCloseButton = true,
+    disableGlassEffect = false,
+    enableGlassEffect = false,
+    scrollable = true,
 }) {
     useEscapeKey(onClose, isOpen)
     useElevatedToastLayer(isOpen)
 
     const sizeClass = useMemo(() => sizes[size], [size])
+    const useGlassEffect = enableGlassEffect && !disableGlassEffect
 
     if (!isOpen) return null
 
     return createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             {/* Backdrop */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3 }}
-                className={`absolute inset-0 ${disableGlassEffect ? 'bg-text-inverted/60' : 'overlay-scrim'}`}
+            <div
+                className="absolute inset-0 overlay-scrim modal-backdrop-enter"
                 onClick={onClose}
             />
 
             {/* Modal Content */}
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
+            <div
                 className={`
                     relative w-full ${sizeClass} 
-                    ${disableGlassEffect ? 'bg-background/95' : 'floating-surface'}
+                    ${useGlassEffect ? 'floating-surface' : 'modal-surface'}
                     border border-border/50 
                     rounded-3xl
                     overflow-hidden 
-                    flex flex-col ${className}
+                    flex flex-col modal-panel-enter ${className}
                 `}
             >
-                {!disableGlassEffect && (
-                    <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
-                        <div className="modal-orb-glow absolute top-[-20%] right-[-10%] w-[50%] h-[50%] bg-accent/5 rounded-full blur-[100px]" />
-                        <div className="modal-orb-glow absolute bottom-[-20%] left-[-10%] w-[40%] h-[40%] bg-accent/3 rounded-full blur-[80px]" />
-                    </div>
-                )}
-
                 {title && (
-                    <div className="floating-surface-header relative flex items-center justify-between px-6 py-5 border-b border-border/50 z-10 shrink-0">
+                    <div className={`${useGlassEffect ? 'floating-surface-header' : 'modal-surface-header'} relative flex items-center justify-between px-6 py-5 border-b border-border/50 z-10 shrink-0`}>
                         <h3 className="text-lg font-bold text-text-primary tracking-tight">{title}</h3>
                         {showCloseButton && (
                             <button onClick={onClose} className="p-2 rounded-xl hover:bg-text-primary/[0.05] text-text-muted hover:text-text-primary transition-all duration-200 group">
@@ -82,10 +81,10 @@ export const Modal: React.FC<ModalProps> = memo(function Modal({
                     </div>
                 )}
 
-                <div className={`relative z-10 custom-scrollbar ${noPadding ? '' : 'p-6'} flex-1 overflow-auto`}>
+                <div className={`relative z-10 ${scrollable ? 'custom-scrollbar overflow-auto' : 'overflow-hidden'} ${noPadding ? '' : 'p-6'} flex-1`}>
                     {children}
                 </div>
-            </motion.div>
+            </div>
         </div>,
         document.body
     )

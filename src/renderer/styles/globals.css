@@ -253,8 +253,77 @@ textarea,
 
 .overlay-scrim {
   background: rgb(var(--overlay-scrim-rgb) / var(--overlay-scrim-alpha));
-  backdrop-filter: blur(6px) saturate(108%);
-  -webkit-backdrop-filter: blur(6px) saturate(108%);
+}
+
+.modal-surface {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--surface) / 0.985) 0%,
+      rgb(var(--background-secondary) / 0.985) 100%
+    );
+  border-color: rgb(var(--border) / 0.82);
+  box-shadow:
+    0 24px 64px -32px rgb(0 0 0 / 0.58),
+    0 10px 28px -22px rgb(0 0 0 / 0.5);
+}
+
+.modal-surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--text-primary) / 0.035) 0%,
+      transparent 22%,
+      transparent 100%
+    );
+}
+
+.modal-surface-header {
+  background:
+    linear-gradient(
+      180deg,
+      rgb(var(--background-secondary) / 0.98) 0%,
+      rgb(var(--surface) / 0.96) 100%
+    );
+}
+
+@keyframes modal-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-panel-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.modal-backdrop-enter {
+  animation: modal-backdrop-enter 120ms ease-out both;
+}
+
+.modal-panel-enter {
+  animation: modal-panel-enter 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop-enter,
+  .modal-panel-enter {
+    animation: none;
+  }
 }
 
 .floating-surface {

@@ -59,6 +59,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
       noPadding
       size="4xl"
       showCloseButton={false}
+      scrollable={false}
       className="adnify-about-modal bg-transparent border-0 shadow-none rounded-[24px]"
     >
       <AboutStyles />
