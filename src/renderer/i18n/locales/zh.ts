@@ -148,24 +148,6 @@ export const zh = {
   'rawArguments': '原始参数',
   'proposedChanges': '建议的更改',
 
-  // Composer
-  'composer': '编排器',
-  'multiFileEdit': '多文件编辑',
-  'filesToEdit': '要编辑的文件',
-  'addFile': '添加文件',
-  'noFilesSelected': '未选择文件',
-  'noOpenFiles': '没有打开的文件',
-  'describeChanges': '描述你想要的更改...',
-  'filesSelected': '已选择 {count} 个文件',
-  'ctrlEnterGenerate': 'Ctrl+Enter 生成',
-  'generating': '生成中...',
-  'generateEdits': '生成编辑',
-  'filesModified': '已修改 {count} 个文件',
-  'applyAll': '全部应用',
-  'apply': '应用',
-  'applied': '已应用',
-  'rejected': '已拒绝',
-
   // Context Menu
   'codebaseSearch': '语义搜索代码库',
   'currentFileSymbols': '当前文件的函数和类',
@@ -581,7 +563,6 @@ export const zh = {
   'cmd.workbench.action.quickOpen': '转到文件',
   'cmd.workbench.action.openSettings': '打开设置',
   'cmd.workbench.action.showShortcuts': '键盘快捷键',
-  'cmd.workbench.action.toggleComposer': '切换 Composer',
   'cmd.workbench.action.toggleDevTools': '切换开发者工具',
   'cmd.workbench.action.closePanel': '关闭面板',
   'cmd.explorer.revealActiveFile': '在资源管理器中显示',

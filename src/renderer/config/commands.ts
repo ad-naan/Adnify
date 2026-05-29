@@ -23,7 +23,6 @@ export const registerCoreCommands = () => {
         { id: 'workbench.action.showCommands',          title: 'Show Command Palette',          category: 'View',       defaultKey: 'Ctrl+Shift+P' },
         { id: 'workbench.action.quickOpen',             title: 'Go to File',                    category: 'File',       defaultKey: 'Ctrl+P' },
         { id: 'workbench.action.openSettings',          title: 'Open Settings',                 category: 'File',       defaultKey: 'Ctrl+,' },
-        { id: 'workbench.action.toggleComposer',        title: 'Toggle Composer',               category: 'View',       defaultKey: 'Ctrl+Shift+I' },
         { id: 'workbench.action.showShortcuts',         title: 'Keyboard Shortcuts',            category: 'Help',       defaultKey: '?' },
         { id: 'workbench.action.closePanel',            title: 'Close Panel',                   category: 'View',       defaultKey: 'Escape' },
         // DevTools 快捷键：Windows/Linux 用 F12，macOS 用 Cmd+Option+I

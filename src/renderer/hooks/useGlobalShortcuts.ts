@@ -20,7 +20,6 @@ export function useGlobalShortcuts() {
   // setter 函数引用稳定，直接从 store 获取
   const setShowSettings = useStore((state) => state.setShowSettings)
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
-  const setShowComposer = useStore((state) => state.setShowComposer)
   const setShowQuickOpen = useStore((state) => state.setShowQuickOpen)
   const setShowAbout = useStore((state) => state.setShowAbout)
   const setTerminalVisible = useStore((state) => state.setTerminalVisible)
@@ -34,7 +33,6 @@ export function useGlobalShortcuts() {
     debugVisible: false,
     chatVisible: true,
     showCommandPalette: false,
-    showComposer: false,
     showQuickOpen: false,
     showAbout: false,
     activeFilePath: null as string | null,
@@ -45,7 +43,6 @@ export function useGlobalShortcuts() {
   const debugVisible = useStore((state) => state.debugVisible)
   const chatVisible = useStore((state) => state.chatVisible)
   const showCommandPalette = useStore((state) => state.showCommandPalette)
-  const showComposer = useStore((state) => state.showComposer)
   const showQuickOpen = useStore((state) => state.showQuickOpen)
   const showAbout = useStore((state) => state.showAbout)
   const activeFilePath = useStore((state) => state.activeFilePath)
@@ -55,7 +52,6 @@ export function useGlobalShortcuts() {
     debugVisible,
     chatVisible,
     showCommandPalette,
-    showComposer,
     showQuickOpen,
     showAbout,
     activeFilePath,
@@ -140,17 +136,9 @@ export function useGlobalShortcuts() {
       return
     }
 
-    // Composer: workbench.action.toggleComposer (Ctrl+Shift+I)
-    if (kb.matches(e, 'workbench.action.toggleComposer')) {
-      e.preventDefault()
-      setShowComposer(true)
-      return
-    }
-
     // Close panels: Escape（直接判断键名，无需绑定到命令 ID）
     if (e.key === 'Escape') {
       if (s.showCommandPalette) setShowCommandPalette(false)
-      if (s.showComposer) setShowComposer(false)
       if (s.showQuickOpen) setShowQuickOpen(false)
       if (s.showAbout) setShowAbout(false)
       return

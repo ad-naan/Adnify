@@ -166,7 +166,7 @@ function getSessionTabContent(session: TerminalManagerState['terminals'][number]
 }
 
 export default function ShellStudio() {
-  const { workspace, workspacePath, currentTheme, language, setShowComposer } = useStore(useShallow(s => ({ workspace: s.workspace, workspacePath: s.workspacePath, currentTheme: s.currentTheme, language: s.language, setShowComposer: s.setShowComposer })))
+  const { workspace, workspacePath, currentTheme, language, setChatVisible } = useStore(useShallow(s => ({ workspace: s.workspace, workspacePath: s.workspacePath, currentTheme: s.currentTheme, language: s.language, setChatVisible: s.setChatVisible })))
   const setInputPrompt = useAgentStore((state) => state.setInputPrompt)
   const [query, setQuery] = useState('')
   const [availableShells, setAvailableShells] = useState<AvailableShell[]>([])
@@ -387,8 +387,8 @@ export default function ShellStudio() {
   const sendTerminalOutputToAi = useCallback(() => {
     if (!terminalPreview) return
     setInputPrompt(`${language === 'zh' ? '请分析下面的终端输出并给出排查建议：' : 'Please analyze the following terminal output and suggest next steps:'}\n\n\`\`\`\n${terminalPreview}\n\`\`\``)
-    setShowComposer(true)
-  }, [language, setInputPrompt, setShowComposer, terminalPreview])
+    setChatVisible(true)
+  }, [language, setChatVisible, setInputPrompt, terminalPreview])
 
   const fitActiveTerminalIfVisible = useCallback(() => {
     if (activeSession?.id && terminalContainerRef.current && terminalContainerRef.current.clientWidth > 0 && terminalContainerRef.current.clientHeight > 0) {

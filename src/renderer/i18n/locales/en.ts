@@ -149,23 +149,6 @@ export const en = {
   'proposedChanges': 'Proposed Changes',
 
   // Composer
-  'composer': 'Composer',
-  'multiFileEdit': 'Multi-file Edit',
-  'filesToEdit': 'Files to edit',
-  'addFile': 'Add File',
-  'noFilesSelected': 'No files selected',
-  'noOpenFiles': 'No open files',
-  'describeChanges': 'Describe the changes you want to make...',
-  'filesSelected': '{count} file(s) selected',
-  'ctrlEnterGenerate': 'Ctrl+Enter to generate',
-  'generating': 'Generating...',
-  'generateEdits': 'Generate Edits',
-  'filesModified': '{count} file(s) modified',
-  'applyAll': 'Apply All',
-  'apply': 'Apply',
-  'applied': 'Applied',
-  'rejected': 'Rejected',
-
   // Context Menu
   'codebaseSearch': 'Semantic search codebase',
   'currentFileSymbols': 'Functions and classes in current file',
@@ -581,7 +564,6 @@ export const en = {
   'cmd.workbench.action.quickOpen': 'Go to File',
   'cmd.workbench.action.openSettings': 'Open Settings',
   'cmd.workbench.action.showShortcuts': 'Keyboard Shortcuts',
-  'cmd.workbench.action.toggleComposer': 'Toggle Composer',
   'cmd.workbench.action.toggleDevTools': 'Toggle Developer Tools',
   'cmd.workbench.action.closePanel': 'Close Panel',
   'cmd.explorer.revealActiveFile': 'Reveal Active File in Explorer',

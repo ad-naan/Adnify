@@ -23,7 +23,6 @@ const ShellStudio = lazy(() => import('./shell/components/ShellStudio'))
 
 const TerminalPanel = lazy(() => import('./components/panels/TerminalPanel'))
 const DebugPanel = lazy(() => import('./components/panels/DebugPanel'))
-const ComposerPanel = lazy(() => import('./components/panels/ComposerPanel'))
 
 const OnboardingWizard = lazy(() => import('./components/dialogs/OnboardingWizard'))
 const SettingsModal = lazy(() => import('./components/settings/SettingsModal'))
@@ -50,8 +49,6 @@ function AppContent() {
   const workspace = useStore((state) => state.workspace)
   const showSettings = useStore((state) => state.showSettings)
   const activeSidePanel = useStore((state) => state.activeSidePanel)
-  const showComposer = useStore((state) => state.showComposer)
-  const setShowComposer = useStore((state) => state.setShowComposer)
   const sidebarWidth = useStore((state) => state.sidebarWidth)
   const setSidebarWidth = useStore((state) => state.setSidebarWidth)
   const chatWidth = useStore((state) => state.chatWidth)
@@ -222,11 +219,6 @@ function AppContent() {
       {showQuickOpen && (
         <Suspense fallback={null}>
           <QuickOpen onClose={() => setShowQuickOpen(false)} />
-        </Suspense>
-      )}
-      {showComposer && (
-        <Suspense fallback={null}>
-          <ComposerPanel onClose={() => setShowComposer(false)} />
         </Suspense>
       )}
       {showOnboarding && isInitialized && (
