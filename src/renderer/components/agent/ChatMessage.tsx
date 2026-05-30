@@ -316,13 +316,19 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0 }}
+            initial={false}
             animate={{ height: 'auto' }}
             exit={{ height: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="pb-1.5 pl-[38px] pr-3 space-y-0.5">
+            <motion.div
+              initial={{ opacity: 0, y: -3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -2 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
+              className="pb-1.5 pl-[38px] pr-3 space-y-0.5"
+            >
               {/* Skill Referenced */}
               {hasSkills && (
                 <div className="flex items-center gap-1.5 text-[11px]">
@@ -356,7 +362,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
                   )}
                 </div>
               )}
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -445,7 +451,7 @@ const ProcessFold = React.memo(({ children, language, summary, settleExpanded = 
   }, [settleExpanded])
 
   return (
-    <motion.div layout className="my-3 w-full">
+    <div className="my-3 w-full">
       <button
         type="button"
         aria-expanded={isExpanded}
@@ -461,22 +467,12 @@ const ProcessFold = React.memo(({ children, language, summary, settleExpanded = 
         <ProcessFoldDivider side="right" />
       </button>
 
-      <AnimatePresence initial={false}>
-        {isExpanded && (
-          <motion.div
-            initial={settleExpanded ? false : { height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <div className="mt-2 w-full space-y-1 text-[11px] text-text-secondary [&>*]:my-0.5">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {isExpanded && (
+        <div className="mt-2 w-full space-y-1 text-[11px] text-text-secondary [&>*]:my-0.5">
+          {children}
+        </div>
+      )}
+    </div>
   )
 })
 ProcessFold.displayName = 'ProcessFold'
