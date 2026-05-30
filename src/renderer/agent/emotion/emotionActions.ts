@@ -23,7 +23,7 @@ const actions: Record<EmotionActionType, () => EmotionActionDef> = {
   ai_fix: () => ({
     type: 'ai_fix',
     label: 'AI 修复',
-    asset: 'tool',
+    asset: 'modalDanger',
     execute: () => {
       const activeFile = useStore.getState().activeFilePath
       const diagState = useDiagnosticsStore.getState()
@@ -73,7 +73,7 @@ const actions: Record<EmotionActionType, () => EmotionActionDef> = {
   focus_mode: () => ({
     type: 'focus_mode',
     label: '专注模式',
-    asset: 'goal',
+    asset: 'emotionFocusRing',
     execute: () => {
       const store = useStore.getState()
       store.setActiveSidePanel(null)

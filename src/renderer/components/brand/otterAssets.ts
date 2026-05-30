@@ -24,6 +24,27 @@ export type OtterAssetKey =
   | 'break'
   | 'goal'
   | 'creative'
+  | 'plans'
+  | 'snippets'
+  | 'outline'
+  | 'shell'
+  | 'logs'
+  | 'searchEmpty'
+  | 'workspace'
+  | 'idea'
+  | 'toastSuccess'
+  | 'toastError'
+  | 'toastWarning'
+  | 'toastInfo'
+  | 'modalDanger'
+  | 'modalWarning'
+  | 'modalInfo'
+  | 'emotionSurprised'
+  | 'emotionAngry'
+  | 'emotionFocusRing'
+  | 'emotionEnergy'
+  | 'emotionSparkles'
+  | 'emotionSleep'
 
 export const OTTER_ASSET_PATHS: Record<OtterAssetKey, string> = {
   assistant: 'brand/ip/ai-avatar.gif',
@@ -48,6 +69,27 @@ export const OTTER_ASSET_PATHS: Record<OtterAssetKey, string> = {
   break: 'brand/ip/otter/actions/holding_coffee.png',
   goal: 'brand/ip/otter/props/git_stamp.png',
   creative: 'brand/ip/otter/actions/holding_pen.png',
+  plans: 'brand/ip/otter/props/notebook.png',
+  snippets: 'brand/ip/otter/props/pencil.png',
+  outline: 'brand/ip/otter/props/notebook.png',
+  shell: 'brand/ip/otter/props/terminal.png',
+  logs: 'brand/ip/otter/props/terminal.png',
+  searchEmpty: 'brand/ip/otter/faces/curious.png',
+  workspace: 'brand/ip/otter/props/desk_lamp.png',
+  idea: 'brand/ip/otter/fx/question_bubble.png',
+  toastSuccess: 'brand/ip/otter/fx/success_stamp.png',
+  toastError: 'brand/ip/otter/fx/warning.png',
+  toastWarning: 'brand/ip/otter/fx/warning.png',
+  toastInfo: 'brand/ip/otter/fx/sparkles.png',
+  modalDanger: 'brand/ip/otter/actions/holding_bug.png',
+  modalWarning: 'brand/ip/otter/fx/warning.png',
+  modalInfo: 'brand/ip/otter/faces/surprised.png',
+  emotionSurprised: 'brand/ip/otter/faces/surprised.png',
+  emotionAngry: 'brand/ip/otter/fx/angry_mark.png',
+  emotionFocusRing: 'brand/ip/otter/fx/focus_ring.png',
+  emotionEnergy: 'brand/ip/otter/fx/energy_glow.png',
+  emotionSparkles: 'brand/ip/otter/fx/sparkles.png',
+  emotionSleep: 'brand/ip/otter/fx/sleep_zzz.png',
 }
 
 export const EMOTION_OTTER_ASSETS: Record<EmotionState, OtterAssetKey> = {

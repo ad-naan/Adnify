@@ -9,6 +9,7 @@ import { terminalManager } from '@/renderer/services/TerminalManager'
 import { Button } from '../../ui'
 import { toast } from '../../common/ToastProvider'
 import { ShellManagerDialog } from '@/renderer/shell'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 type CollapsedState = Record<string, boolean>
 
@@ -249,7 +250,10 @@ export function ShellView() {
                 {shellState.defaultShell === shell.path && <ChevronRight className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
               </button>
             )) : (
-              <div className="px-3 py-2 text-xs text-text-muted">{language === 'zh' ? '未检测到可用 Shell' : 'No shells detected'}</div>
+              <div className="px-3 py-6 text-xs text-text-muted flex flex-col items-center gap-2 text-center">
+                <OtterAsset asset="shell" className="h-12 w-12 object-contain opacity-70" />
+                <span>{language === 'zh' ? '未检测到可用 Shell' : 'No shells detected'}</span>
+              </div>
             )}
           </div>
         </section>

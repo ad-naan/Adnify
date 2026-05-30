@@ -23,6 +23,7 @@ import { useStore } from '@/renderer/store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useShallow } from 'zustand/react/shallow'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface ToolCallLogContentProps {
   language?: 'en' | 'zh'
@@ -153,7 +154,12 @@ function LogsView({ logs, expandedIds, toggleExpand, handleCopy, copiedId, langu
   const t = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   if (logs.length === 0) {
-    return <div className="flex items-center justify-center h-full text-text-muted text-xs">{t('暂无日志', 'No logs')}</div>
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-text-muted text-xs gap-2">
+        <OtterAsset asset="logs" className="w-12 h-12 object-contain opacity-70" />
+        <span>{t('暂无日志', 'No logs')}</span>
+      </div>
+    )
   }
 
   return (
@@ -197,7 +203,12 @@ function StatsView({ stats, insights, language }: {
   const t = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
   if (stats.length === 0) {
-    return <div className="flex items-center justify-center h-full text-text-muted text-xs">{t('暂无统计数据', 'No statistics')}</div>
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-text-muted text-xs gap-2">
+        <OtterAsset asset="logs" className="w-12 h-12 object-contain opacity-70" />
+        <span>{t('暂无统计数据', 'No statistics')}</span>
+      </div>
+    )
   }
 
   return (

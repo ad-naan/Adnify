@@ -179,7 +179,7 @@ export default function UserAvatarDialog() {
           <div className="grid grid-cols-2 gap-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-1">
             {avatarStyles.map((item) => {
               const isActive = style === item.id
-              const previewImgUrl = `https://api.dicebear.com/7.x/${item.id}/svg?seed=Felix`
+              const previewImgUrl = `https://api.dicebear.com/7.x/${item.id}/svg?seed=Adnify`
               
               return (
                 <div

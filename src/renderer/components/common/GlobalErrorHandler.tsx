@@ -56,6 +56,16 @@ export function GlobalErrorHandler({ children }: GlobalErrorHandlerProps) {
 
     // 处理未捕获的同步错误
     const handleError = (event: ErrorEvent) => {
+      if (isKnownXtermDimensionsError(event)) {
+        event.preventDefault()
+        logger.system.warn('[GlobalErrorHandler] Ignored transient xterm dimensions error', {
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+        })
+        return
+      }
+
       // 忽略 ResizeObserver 错误（常见的无害错误）
       if (event.message?.includes('ResizeObserver')) {
         return
@@ -125,6 +135,13 @@ function shouldShowToast(error: AppError): boolean {
   }
 
   return true
+}
+
+function isKnownXtermDimensionsError(event: ErrorEvent): boolean {
+  return (
+    event.message?.includes("Cannot read properties of undefined (reading 'dimensions')") &&
+    event.filename?.includes('@xterm_xterm')
+  )
 }
 
 /**

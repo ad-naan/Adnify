@@ -10,6 +10,7 @@ import type { LspDocumentSymbol } from '@shared/types'
 import { getFileName } from '@shared/utils/pathUtils'
 import { logger } from '@utils/Logger'
 import { getDocumentSymbols } from '@services/lspService'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 export function OutlineView() {
   const { activeFilePath, language, isLspReady } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language, isLspReady: s.isLspReady })))
@@ -167,7 +168,7 @@ export function OutlineView() {
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
             <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
-              <FileText className="w-6 h-6 text-text-muted relative opacity-70" />
+              <OtterAsset asset="outline" className="w-9 h-9 object-contain relative opacity-80" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
               {language === 'zh' ? '无活动编辑器' : 'No active file'}
@@ -180,7 +181,7 @@ export function OutlineView() {
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
             <div className="w-14 h-14 rounded-2xl bg-surface/40 border border-border/50 flex items-center justify-center mb-4 text-text-muted relative group">
               <div className="absolute -inset-0.5 bg-gradient-to-r from-accent/20 to-accent-subtle/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
-              <Code className="w-6 h-6 text-text-muted relative opacity-70" />
+              <OtterAsset asset="searchEmpty" className="w-9 h-9 object-contain relative opacity-80" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
               {language === 'zh' ? '没有找到任何符号' : 'No symbols found'}

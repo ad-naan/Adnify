@@ -604,7 +604,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
                       key={`example-${example.slice(0, 30)}`}
                       className="p-2.5 bg-yellow-500/5 border border-yellow-500/20 rounded-lg text-sm text-text-secondary"
                     >
-                      <span className="text-yellow-500/70 mr-2">💡</span>
+                      <OtterAsset asset="idea" className="inline-block h-4 w-4 object-contain mr-2 align-[-3px] opacity-80" />
                       {example}
                     </div>
                   ))}
@@ -826,7 +826,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-surface/10 p-4 flex flex-col items-center justify-center text-center space-y-2 min-h-[140px]">
-                <FolderOpen className="w-8 h-8 text-text-muted opacity-40 animate-pulse" />
+                <OtterAsset asset="workspace" className="w-12 h-12 object-contain opacity-70" />
                 <div className="text-xs font-medium text-text-muted">
                   {language === 'zh' ? '暂未检测到项目级 MCP 配置' : 'No workspace MCP config detected'}
                 </div>

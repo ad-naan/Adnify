@@ -13,9 +13,9 @@ import {
     Pause,
     XCircle,
     ChevronRight,
-    FileText,
 } from 'lucide-react'
 import type { TaskPlan, PlanStatus } from '@renderer/agent/plan/types'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface PlanListContentProps {
     language?: 'en' | 'zh'
@@ -207,7 +207,7 @@ export default memo(function PlanListContent({
     if (plans.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-text-muted py-8">
-                <FileText className="w-10 h-10 mb-3 opacity-20" />
+                <OtterAsset asset="plans" className="w-14 h-14 mb-3 object-contain opacity-75" />
                 <p className="text-sm font-medium">
                     {language === 'zh' ? '暂无计划' : 'No Plans Yet'}
                 </p>

@@ -40,7 +40,7 @@ export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> =
   chatWidth: 450,
   terminalLayout: 'tabs',
   userAvatarStyle: localStorage.getItem('userAvatarStyle') || 'adventurer',
-  userAvatarSeed: localStorage.getItem('userAvatarSeed') || 'Felix',
+  userAvatarSeed: localStorage.getItem('userAvatarSeed') || 'Adnify',
   userDisplayName: localStorage.getItem('userDisplayName') || 'You',
 
   setActiveSidePanel: (panel) => set({ activeSidePanel: panel }),

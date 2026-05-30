@@ -4,12 +4,13 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Code, Download, Upload, Search } from 'lucide-react'
+import { Plus, Trash2, Download, Upload, Search } from 'lucide-react'
 import { Button, Input, Select } from '@components/ui'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { snippetService, type CodeSnippet } from '@services/snippetService'
 import { Language } from '@renderer/i18n'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface SnippetSettingsProps {
   language: Language
@@ -331,7 +332,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredSnippets.length === 0 ? (
           <div className="col-span-full text-center py-16 text-text-muted border border-dashed border-border/50 rounded-xl bg-surface/5">
-            <Code className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            <OtterAsset asset="snippets" className="w-16 h-16 mx-auto mb-3 object-contain opacity-75" />
             <p className="text-sm font-medium opacity-60">{language === 'zh' ? '没有找到片段' : 'No snippets found'}</p>
           </div>
         ) : (

@@ -1,9 +1,19 @@
 import { useStore } from '@/renderer/store'
 import { useInlineToast } from './InlineToast'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowUpRight, Terminal, Volume2, X } from 'lucide-react'
+import { ArrowUpRight, Terminal, X } from 'lucide-react'
 import { useHasElevatedToastLayer } from './toastLayerStore'
 import { Button } from '../ui'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import type { ToastType } from './InlineToast'
+import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
+
+const toastAssetByType: Record<ToastType, OtterAssetKey> = {
+  success: 'toastSuccess',
+  error: 'toastError',
+  warning: 'toastWarning',
+  info: 'toastInfo',
+}
 
 export default function GlobalToastContainer() {
   const { toasts, visibleIds, dismissToast } = useInlineToast()
@@ -32,17 +42,7 @@ export default function GlobalToastContainer() {
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               className="flex items-center gap-2 px-3 py-1.5 bg-background-secondary/80 backdrop-blur-md border border-border/50 rounded-full shadow-lg pointer-events-auto cursor-pointer max-w-[400px]"
             >
-              <Volume2
-                className={`w-3.5 h-3.5 animate-pulse shrink-0 ${
-                  activeInlineToast.type === 'success'
-                    ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.6)]'
-                    : activeInlineToast.type === 'error'
-                    ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.6)]'
-                    : activeInlineToast.type === 'warning'
-                    ? 'text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]'
-                    : 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.6)]'
-                }`}
-              />
+              <OtterAsset asset={toastAssetByType[activeInlineToast.type]} className="h-5 w-5 shrink-0 object-contain" />
               <span className="text-xs text-text-primary font-medium truncate">
                 {activeInlineToast.message}
               </span>
@@ -72,7 +72,7 @@ export default function GlobalToastContainer() {
 
                 <div className="flex items-start gap-2.5">
                   <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-surface text-text-muted">
-                    <Volume2 className="h-3.5 w-3.5" />
+                    <OtterAsset asset={toastAssetByType[activeCardToast.type]} className="h-6 w-6 object-contain" />
                   </div>
 
                   <div className="min-w-0 flex-1">

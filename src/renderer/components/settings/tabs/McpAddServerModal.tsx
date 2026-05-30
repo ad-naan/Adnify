@@ -44,6 +44,7 @@ import {
   type McpEnvConfig,
 } from '@shared/types/mcp'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface McpAddServerModalProps {
   isOpen: boolean
@@ -568,7 +569,7 @@ export default function McpAddServerModal({
             <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
               {filteredPresets.length === 0 ? (
                 <div className="text-center py-8 text-text-muted">
-                  <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <OtterAsset asset="searchEmpty" className="w-14 h-14 mx-auto mb-3 object-contain opacity-75" />
                   <p>{language === 'zh' ? '没有找到匹配的服务器' : 'No matching servers found'}</p>
                 </div>
               ) : filteredPresets.map(renderPresetCard)}
@@ -597,7 +598,7 @@ export default function McpAddServerModal({
             <div className="grid grid-cols-1 gap-3 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
               {registryServers.length === 0 ? (
                 <div className="text-center py-12 text-text-muted bg-surface/10 rounded-xl border border-dashed border-border">
-                  <Globe className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <OtterAsset asset="tool" className="w-14 h-14 mx-auto mb-3 object-contain opacity-70" />
                   <p className="text-sm">{language === 'zh' ? '输入关键词搜索全球 MCP 服务器' : 'Search the world for MCP servers'}</p>
                 </div>
               ) : registryServers.map(server => (
