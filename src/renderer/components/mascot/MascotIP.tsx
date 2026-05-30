@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { publicAsset } from '@utils/publicAsset'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 export function MascotIP() {
   const { chatVisible, setChatVisible, language } = useStore(useShallow(s => ({
@@ -17,8 +17,6 @@ export function MascotIP() {
     setChatVisible(!chatVisible)
   }
 
-  const mascotSrc = publicAsset('brand/ip/ai-avatar.gif')
-
   return (
     <div className="relative no-drag flex items-center justify-center w-8 h-8">
       <motion.button
@@ -29,11 +27,10 @@ export function MascotIP() {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
-        <img
-          src={mascotSrc}
+        <OtterAsset
+          asset={chatVisible ? 'assistantFace' : 'assistant'}
           alt="Adnify Mascot"
-          className="w-full object-contain"
-          draggable={false}
+          className="h-full w-full object-cover"
         />
 
         {/* 鼠标悬浮气泡提示 */}

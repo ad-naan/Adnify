@@ -1,5 +1,6 @@
-import { Trash2, Bell, CheckCircle2, XCircle, AlertTriangle, Info, CheckCheck } from 'lucide-react'
+import { Trash2, Bell, CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react'
 import { useInlineToast } from '../common/InlineToast'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface NotificationCenterContentProps {
   language?: 'en' | 'zh'
@@ -51,8 +52,10 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
       {/* 内容区域 */}
       <div className="flex-1 overflow-auto custom-scrollbar p-2">
         {toasts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3 opacity-60">
-            <CheckCheck className="w-8 h-8 opacity-40" />
+          <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3 opacity-70">
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03]">
+              <OtterAsset asset="rest" className="h-16 w-16 object-contain" />
+            </div>
             <span className="text-[11px] font-medium tracking-wide">{t('暂无消息', 'No records')}</span>
           </div>
         ) : (

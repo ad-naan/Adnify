@@ -51,9 +51,9 @@ import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
 import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import type { ToolStreamingPreview } from '@shared/types'
-import { publicAsset } from '@utils/publicAsset'
 import { ImageLightbox } from './ImageLightbox'
 import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -1373,7 +1373,7 @@ const ChatMessage = React.memo(({
             <div className="flex items-center gap-3 px-1">
               <div className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0">
                 <div className="absolute inset-0 bg-accent/5 pointer-events-none" />
-                <img src={publicAsset('brand/ip/ai-avatar.gif')} alt="AI" className="w-full h-full object-cover" />
+                <OtterAsset asset={isStreaming ? 'assistant' : 'assistantFace'} alt="AI" className="h-full w-full object-cover" />
               </div>
               <div className="flex items-center gap-2 select-none overflow-hidden pr-2">
                 <span className="text-[13px] font-bold tracking-tight text-text-primary">Adnify</span>

@@ -416,7 +416,7 @@ class EmotionAdapter {
     return getRecommendedActions(detection).map((action) => ({
       id: `${action.type}-${detection.state}`,
       label: action.label,
-      emoji: action.emoji,
+      asset: action.asset,
       actionType: action.type,
     }))
   }

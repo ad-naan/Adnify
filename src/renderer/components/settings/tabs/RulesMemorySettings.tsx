@@ -13,6 +13,7 @@ import {
   FileText, Brain, Plus, Trash2, Edit2, Check, X,
   RefreshCw, AlertCircle, ToggleLeft, ToggleRight
 } from 'lucide-react'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface RulesMemorySettingsProps {
   language: string
@@ -312,7 +313,10 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
 
           {/* Tips */}
           <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">
-            <p className="font-medium text-accent/80">{t('💡 使用提示', '💡 Tips')}</p>
+            <p className="font-medium text-accent/80 flex items-center gap-1.5">
+              <OtterAsset asset="question" className="h-5 w-5 object-contain" />
+              {t('使用提示', 'Tips')}
+            </p>
             <ul className="list-disc list-inside space-y-0.5 text-[11px]">
               <li>{t('记忆会全量注入到 AI 上下文中', 'Memories are fully injected into AI context')}</li>
               <li>{t('建议保持简洁，避免过多记忆影响性能', 'Keep it concise to avoid performance impact')}</li>

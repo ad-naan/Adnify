@@ -19,6 +19,7 @@ import { keybindingService, formatShortcut, isMac } from '@/renderer/services/ke
 import { adnifyDir } from '@/renderer/services/adnifyDirService'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { useElevatedToastLayer } from '@/renderer/components/common/toastLayerStore'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface Command {
   id: string
@@ -467,7 +468,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
           {flatCommands.length === 0 && (
             <div className="px-4 py-16 text-center text-text-muted flex flex-col items-center gap-4 opacity-60">
               <div className="w-16 h-16 rounded-full bg-surface/50 flex items-center justify-center border border-border shadow-inner">
-                <Sparkles className="w-8 h-8 opacity-50 text-accent" />
+                <OtterAsset asset="question" className="h-12 w-12 object-contain" />
               </div>
               <p className="text-sm font-medium">{t('noCommandsFound', language)}</p>
             </div>

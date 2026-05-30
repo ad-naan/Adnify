@@ -11,11 +11,12 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { Eye, Edit, FileQuestion, Image as ImageIcon, AlertTriangle, Columns } from 'lucide-react'
+import { Eye, Edit, Image as ImageIcon, AlertTriangle, Columns } from 'lucide-react'
 import { Button } from '../ui'
 import { getFileName } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 // 文件类型分类
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico']
@@ -353,9 +354,9 @@ export function UnsupportedFile({ path, fileType }: UnsupportedFileProps) {
             <div className="text-center p-8 max-w-md">
                 <div className="w-16 h-16 rounded-2xl bg-surface/50 border border-border flex items-center justify-center mx-auto mb-6">
                     {fileType === 'binary' ? (
-                        <FileQuestion className="w-8 h-8 text-text-muted" />
+                        <OtterAsset asset="question" className="h-12 w-12 object-contain" />
                     ) : (
-                        <AlertTriangle className="w-8 h-8 text-warning" />
+                        <OtterAsset asset="warning" className="h-12 w-12 object-contain" />
                     )}
                 </div>
 

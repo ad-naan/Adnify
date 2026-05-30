@@ -1,53 +1,48 @@
-import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
-const KAOMOJI_FACES = [
-    "(￣▽￣)", "(≧∇≦)ﾉ", "(oﾟvﾟ)ノ", "o(*￣▽￣*)o", "( ´ ▽ ` )", "(●'◡'●)",
-    "(*/ω＼*)", "(*^▽^*)", "(T_T)", "(;-;)", "(=・ω・=)", "(~_~;)",
-    "( *︾▽︾)", "(´;ω;`)", "(。・∀・)ノ", "(￣y▽￣)╭", "\\(￣︶￣*\\))",
-    "(*^_^*)", "(p≧w≦q)", "(✿◡‿◡)", "♪(^∇^*)"
-]
-
-const PET_MESSAGES: Record<string, string[]> = {
-    en: [
-        "I'm sleepy...", "Need more code!", "Feed me tokens!", "Looking good!",
-        "No bugs today?", "Pondering the universe...", "Waiting for input...",
-        "Bored...", "Ready to help!", "Just chilling...", "Thinking..."
-    ],
-    zh: [
-        "想睡觉觉...", "赐予我代码吧！", "好饿，喂点 token！", "今天也很帅气！",
-        "今天没有 Bug 吧？", "思考宇宙的起源...", "敲点什么吧...",
-        "好无聊...", "时刻准备帮忙！", "发呆中...", "脑暴中..."
-    ]
+interface KaomojiPetProps {
+  language?: string
+  isStreaming?: boolean
+  hasInput?: boolean
 }
 
-export function KaomojiPet({ language = 'en' }: { language?: string }) {
-    const [face, setFace] = useState(KAOMOJI_FACES[0])
-    const [message, setMessage] = useState(PET_MESSAGES[language]?.[0] || PET_MESSAGES.en[0])
+export function KaomojiPet({ language = 'en', isStreaming = false, hasInput = false }: KaomojiPetProps) {
+  const label = isStreaming
+    ? (language === 'zh' ? '正在回复' : 'Responding')
+    : hasInput
+      ? (language === 'zh' ? '准备发送' : 'Ready')
+      : (language === 'zh' ? '待命中' : 'Standing by')
 
-    useEffect(() => {
-        const list = PET_MESSAGES[language] || PET_MESSAGES.en
-        setFace(KAOMOJI_FACES[Math.floor(Math.random() * KAOMOJI_FACES.length)])
-        setMessage(list[Math.floor(Math.random() * list.length)])
+  const detail = isStreaming
+    ? (language === 'zh' ? '可继续排队' : 'Queue is available')
+    : hasInput
+      ? (language === 'zh' ? 'Enter 发送' : 'Enter to send')
+      : (language === 'zh' ? '输入想法或添加图片' : 'Type or attach an image')
 
-        const interval = setInterval(() => {
-            const currentList = PET_MESSAGES[language] || PET_MESSAGES.en
-            const idxFace = Math.floor(Math.random() * KAOMOJI_FACES.length)
-            const idxMsg = Math.floor(Math.random() * currentList.length)
-
-            setFace(KAOMOJI_FACES[idxFace])
-            setMessage(currentList[idxMsg])
-        }, Math.floor(Math.random() * 3000) + 4000)
-
-        return () => clearInterval(interval)
-    }, [language])
-
-    return (
-        <div
-            className="text-[11px] font-mono text-accent animate-pulse font-bold select-none tracking-widest opacity-80 hover:opacity-100 transition-opacity drop-shadow-sm cursor-help flex items-center gap-2"
-            title="Your dynamic pet!"
-        >
-            <span>{face}</span>
-            <span className="font-sans font-bold text-[10px] tracking-wide bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent animate-gradient drop-shadow-sm">{message}</span>
-        </div>
-    )
+  return (
+    <div
+      className="group flex min-w-0 items-center gap-2.5 select-none"
+      title={language === 'zh' ? 'Adnify 小助手状态' : 'Adnify companion status'}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ y: -1, scale: 1.06 }}
+        transition={{ duration: 0.18 }}
+        className="relative h-8 w-8 shrink-0 rounded-full bg-surface/40 p-[2px] ring-1 ring-white/10 shadow-sm"
+      >
+        <OtterAsset asset={isStreaming ? 'assistant' : 'assistantFace'} className="h-full w-full rounded-full object-cover" />
+        <span
+          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-background ${
+            isStreaming ? 'animate-pulse bg-accent shadow-[0_0_10px_rgba(var(--accent),0.7)]' : 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]'
+          }`}
+        />
+      </motion.div>
+      <div className="hidden min-w-0 flex-col sm:flex">
+        <span className="truncate text-[11px] font-medium leading-4 text-text-secondary">{label}</span>
+        <span className="truncate text-[10px] leading-3 text-text-muted/55">{detail}</span>
+      </div>
+    </div>
+  )
 }

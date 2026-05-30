@@ -15,6 +15,7 @@ import {
     Zap, Plus, Trash2, RefreshCw, Download, Search,
     ToggleLeft, ToggleRight, ExternalLink, Github, FolderOpen
 } from 'lucide-react'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface SkillSettingsProps {
     language: string
@@ -502,7 +503,10 @@ export function SkillSettings({ language }: SkillSettingsProps) {
 
             {/* Tips */}
             <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">
-                <p className="font-medium text-accent/80">{t('💡 使用提示', '💡 Tips')}</p>
+                <p className="font-medium text-accent/80 flex items-center gap-1.5">
+                    <OtterAsset asset="question" className="h-5 w-5 object-contain" />
+                    {t('使用提示', 'Tips')}
+                </p>
                 <ul className="list-disc list-inside space-y-0.5 text-[11px]">
                     <li>{t('自动模式：Skill 名称和描述对 AI 可见，AI 判断相关时自动加载完整内容（零额外延迟）', 'Auto mode: Skill name & description visible to AI, full content loaded on-demand when relevant (zero extra latency)')}</li>
                     <li>{t('手动模式：需要在聊天中 @skill-name 引用才生效', 'Manual mode: Requires @skill-name mention in chat to activate')}</li>

@@ -396,18 +396,18 @@ const ChatInput = memo(function ChatInput({
       </div>
 
       {/* Bottom Footer Area */}
-      <div className="mt-3.5 mb-1 flex items-center justify-between px-4 pb-1">
+      <div className="mt-3 mb-1 flex min-h-9 items-center justify-between gap-4 px-4 pb-1">
 
         {/* Left Side: Dynamic Pet */}
-        <div className="hidden sm:flex items-center">
-          <KaomojiPet language={language} />
+        <div className="hidden min-w-0 flex-1 sm:flex items-center">
+          <KaomojiPet language={language} isStreaming={isStreaming} hasInput={isSendable} />
         </div>
 
         {/* Right Side: Key Shortcuts */}
-        <div className="hidden sm:flex items-center gap-2 text-[10px] text-text-muted/40 font-medium tracking-wide whitespace-nowrap overflow-hidden shrink-0">
-          <span>{isStreaming ? '⏎ Queue' : '⏎ Send'}</span>
+        <div className="hidden sm:flex items-center gap-2 text-[10px] text-text-muted/45 font-medium tracking-wide whitespace-nowrap overflow-hidden shrink-0">
+          <span>{isStreaming ? 'Enter Queue' : 'Enter Send'}</span>
           <span className="w-1 h-1 rounded-full bg-current opacity-30" />
-          <span>⇧⏎ New Line</span>
+          <span>Shift Enter New Line</span>
         </div>
       </div>
     </div>

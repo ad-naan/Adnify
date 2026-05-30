@@ -59,7 +59,7 @@ export async function renderWorkPoster(ctx: CanvasRenderingContext2D, poster: Wo
   drawScene(ctx, assets.scenes[layout.sceneId], layout)
   drawBadge(ctx, assets.badge, layout)
   drawQuote(ctx, poster.quote, layout.quote, assets.sheets.notes)
-  drawPosterSprites(ctx, rng, assets.sheets, layout)
+  drawPosterSprites(ctx, assets.sheets, layout)
   drawOtter(ctx, assets.otter, layout)
   drawMetricsFromSheet(ctx, poster.metrics, layout.metrics, assets.sheets.metrics)
   drawFooter(ctx, poster, layout.footer.x, layout.footer.y)
@@ -78,7 +78,7 @@ function createRandomLayout(rng: () => number): PosterLayout {
   const sceneH = Math.round(sceneW / SCENE_ASPECT_RATIOS[sceneId])
 
   return {
-    title: base.title,
+    title: { x: base.title.x, y: base.title.y, w: 548, h: 112 },
     date: {
       x: Math.round(rand(rng, 744, 770)),
       y: Math.round(rand(rng, 52, 66)),
@@ -281,7 +281,7 @@ function measureQuoteCard(ctx: CanvasRenderingContext2D, quote: string, base: Re
   }
 }
 
-function drawMetrics(ctx: CanvasRenderingContext2D, metrics: WorkPosterData['metrics'], area: Rect) {
+export function drawMetrics(ctx: CanvasRenderingContext2D, metrics: WorkPosterData['metrics'], area: Rect) {
   const gapX = 24
   const gapY = 22
   const cardW = (area.w - gapX * 2) / 3
@@ -364,20 +364,19 @@ function drawFooter(ctx: CanvasRenderingContext2D, poster: WorkPosterData, x: nu
 
 function drawPosterSprites(
   ctx: CanvasRenderingContext2D,
-  rng: () => number,
   sheets: PosterSheets,
   layout: PosterLayout,
 ) {
   ctx.save()
 
   getSpritePlacements(layout).forEach((placement) => {
-    drawSprite(ctx, rng, sheets, placement)
+    drawSprite(ctx, sheets, placement)
   })
 
   ctx.restore()
 }
 
-function drawSprite(ctx: CanvasRenderingContext2D, rng: () => number, sheets: PosterSheets, placement: SpritePlacement) {
+function drawSprite(ctx: CanvasRenderingContext2D, sheets: PosterSheets, placement: SpritePlacement) {
   const crop = WORK_POSTER_SPRITES[placement.id]
   const sheet = sheets[crop.sheet]
   if (!sheet) return

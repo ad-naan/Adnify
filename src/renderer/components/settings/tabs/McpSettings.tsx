@@ -33,6 +33,7 @@ import type { McpServerState, McpServerStatus } from '@shared/types/mcp'
 import { isRemoteConfig, isLocalConfig } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
@@ -728,8 +729,8 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
       {/* Tips */}
       <div className="p-4 rounded-xl bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-2">
         <p className="font-bold text-sm text-accent/90 flex items-center gap-1.5">
-          <Lightbulb className="w-4 h-4 text-accent animate-pulse" />
-          {language === 'zh' ? '💡 使用提示' : '💡 Tips'}
+          <OtterAsset asset="question" className="h-6 w-6 object-contain" />
+          {language === 'zh' ? '使用提示' : 'Tips'}
         </p>
         <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed pl-1">
           <li>

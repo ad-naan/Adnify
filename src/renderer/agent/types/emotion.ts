@@ -92,7 +92,7 @@ export interface EnvironmentAdaptation {
 export interface EmotionFeedbackAction {
   id: string
   label: string
-  emoji?: string
+  asset?: import('@/renderer/components/brand/otterAssets').OtterAssetKey
   actionType?: string
 }
 

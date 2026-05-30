@@ -15,6 +15,7 @@ import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META, EMOTION_STATUS_MESSAGE_KEYS } from '@/renderer/agent/emotion'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 const EMOTION_MESSAGES = EMOTION_STATUS_MESSAGE_KEYS
 
@@ -175,7 +176,7 @@ export const EmotionStatusIndicator: React.FC = () => {
               className="overflow-hidden whitespace-nowrap pl-0.5 pr-1 text-[10px] font-medium relative z-10"
               style={{ color: activeFeedback ? 'var(--text-primary)' : meta.color }}
             >
-              {activeFeedback ? activeFeedback.shortMessage || activeFeedback.message : `${meta.emoji} ${label}`}
+              {activeFeedback ? activeFeedback.shortMessage || activeFeedback.message : label}
             </motion.div>
           )}
         </AnimatePresence>
@@ -213,7 +214,8 @@ export const EmotionStatusIndicator: React.FC = () => {
             <div className="bg-background-secondary/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl min-w-[220px]">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: meta.color }} />
-                <span className="text-sm font-medium text-text-primary">{meta.emoji} {label}</span>
+                <OtterAsset asset={meta.asset} className="h-7 w-7 object-contain rounded-md bg-white/5 p-0.5" />
+                <span className="text-sm font-medium text-text-primary">{label}</span>
                 <span
                   className="text-xs px-1.5 py-0.5 rounded-full ml-auto"
                   style={{ backgroundColor: `${meta.color}20`, color: meta.color }}
@@ -244,7 +246,7 @@ export const EmotionStatusIndicator: React.FC = () => {
                       onClick={() => handleAction(action.actionType)}
                       className="flex items-center gap-1 px-2 py-1.5 rounded bg-white/5 hover:bg-white/10 text-[10px] text-text-secondary hover:text-text-primary transition-colors border border-white/5"
                     >
-                      {action.emoji && <span>{action.emoji}</span>}
+                      {action.asset && <OtterAsset asset={action.asset} className="h-4 w-4 object-contain" />}
                       {action.label}
                     </button>
                   ))}

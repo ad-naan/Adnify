@@ -5,7 +5,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
 import { EventBus } from '@/renderer/agent/core/EventBus'
@@ -14,6 +13,7 @@ import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META } from '@/renderer/agent/emotion'
 import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 export const EmotionEditorBar: React.FC = () => {
   const language = useStore(s => s.language)
@@ -83,9 +83,9 @@ export const EmotionEditorBar: React.FC = () => {
                 <motion.div
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="text-lg"
+                  className="h-8 w-8 overflow-hidden rounded-lg bg-white/5 p-0.5"
                 >
-                  {meta.emoji}
+                  <OtterAsset asset={meta.asset} className="h-full w-full object-contain" />
                 </motion.div>
                 <div className="flex flex-col">
                   <span className="text-xs font-medium leading-none" style={{ color: meta.color }}>
@@ -118,7 +118,7 @@ export const EmotionEditorBar: React.FC = () => {
                       style={{ color: meta.color, backgroundColor: hovered ? `${meta.color}18` : `${meta.color}10` }}
                       onClick={() => handleAction(action.actionType)}
                     >
-                      {action.emoji ? <span>{action.emoji}</span> : <Sparkles className="w-3.5 h-3.5" />}
+                      {action.asset && <OtterAsset asset={action.asset} className="h-4 w-4 object-contain" />}
                       <span>{action.label}</span>
                     </motion.button>
                   ))}

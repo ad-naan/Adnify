@@ -20,6 +20,7 @@ import { Button } from '../ui'
 import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { getRelativeTime } from '@shared/utils'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 type Tab = 'history' | 'branches'
 
@@ -511,11 +512,11 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
   )
 }
 
-function EmptyState({ icon: Icon, text, subText }: { icon: any, text: string, subText?: string }) {
+function EmptyState({ text, subText }: { icon: any, text: string, subText?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-50 select-none">
-      <div className="w-16 h-16 rounded-full bg-surface/50 flex items-center justify-center mb-4">
-        <Icon className="w-8 h-8 stroke-[1.5]" />
+    <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-70 select-none">
+      <div className="w-16 h-16 rounded-2xl bg-surface/50 flex items-center justify-center mb-4 border border-white/8">
+        <OtterAsset asset="chat" className="h-12 w-12 object-contain" />
       </div>
       <p className="text-sm font-medium">{text}</p>
       {subText && <p className="text-xs mt-1.5 text-center max-w-[200px] leading-relaxed opacity-70">{subText}</p>}

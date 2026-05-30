@@ -4,12 +4,13 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useMemo } from 'react'
-import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info, CheckCircle2 } from 'lucide-react'
+import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import type { LspDiagnostic } from '@shared/types'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getFileName } from '@shared/utils/pathUtils'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 export function ProblemsView() {
   const { openFile, setActiveFile, language } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, language: s.language })))
@@ -125,9 +126,9 @@ export function ProblemsView() {
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {filteredDiagnostics.size === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center select-none animate-fade-in">
-            <div className="w-14 h-14 rounded-2xl bg-status-success/5 border border-status-success/15 flex items-center justify-center mb-4 text-status-success relative group">
+            <div className="w-16 h-16 rounded-2xl bg-status-success/5 border border-status-success/15 flex items-center justify-center mb-4 text-status-success relative group">
               <div className="absolute -inset-0.5 bg-status-success/10 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-500" />
-              <CheckCircle2 className="w-6 h-6 text-status-success relative animate-pulse" />
+              <OtterAsset asset="success" className="relative h-12 w-12 object-contain" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
               {language === 'zh' ? '未发现任何问题' : 'No problems detected'}

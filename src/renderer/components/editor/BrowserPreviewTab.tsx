@@ -5,6 +5,7 @@ import type { OpenFile } from '@store'
 import { Button } from '../ui'
 import { previewSessionService } from '@/renderer/preview/previewSessionService'
 import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface BrowserPreviewTabProps {
   file: OpenFile
@@ -159,7 +160,9 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
       <div className="flex-1 min-h-0 relative">
         {!activeSession ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6 text-text-muted">
-            <Globe className="w-10 h-10 mb-4 opacity-60" />
+            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-white/10 bg-surface/35">
+              <OtterAsset asset="tool" className="h-14 w-14 object-contain opacity-90" />
+            </div>
             <p className="text-sm font-medium text-text-primary">
               {language === 'zh' ? '还没有可用的预览会话' : 'No preview session yet'}
             </p>
@@ -217,4 +220,3 @@ export default function BrowserPreviewTab({ file }: BrowserPreviewTabProps) {
     </div>
   )
 }
-

@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion'
 import { Sparkles, Code, FileText, Bug, ArrowRight, GitBranch, FolderOpen, FileCode, Clock, RefreshCw, Zap, Box, AlertCircle, Layers, Wand2 } from 'lucide-react'
 import { useStore } from '@store'
-import { publicAsset } from '@utils/publicAsset'
 import { getFileName } from '@shared/utils/pathUtils'
 import { ScrollShadow } from '../ui/ScrollShadow'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface EmptyChatSuggestionsProps {
     onSelectSuggestion: (text: string) => void
@@ -32,7 +32,7 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
             >
                 {/* 1. Header Card */}
                 <div className="flex items-center gap-4 bg-gradient-to-r from-[rgb(var(--accent)/0.08)] to-[rgb(var(--accent)/0.02)] p-5 rounded-2xl mb-8 border border-[rgb(var(--accent)/0.1)]">
-                    <img src={publicAsset('brand/ip/ai-avatar.gif')} alt="AI" className="w-16 h-16 object-contain drop-shadow-md" draggable={false} />
+                    <OtterAsset asset="working" alt="AI" className="h-16 w-16 object-contain drop-shadow-md" />
                     <div>
                         <h2 className="text-[15px] font-semibold text-[rgb(var(--text-primary))] mb-1.5 tracking-tight">
                             {language === 'zh' ? '今天准备推进哪一块？' : 'What are we pushing forward today?'}
