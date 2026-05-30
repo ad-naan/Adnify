@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adnify 海报素材排版工具</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --blue: #164a9b;
+      --green: #2f7f39;
+      --paper: #fff8ec;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d7deea;
+      --gold: #f2b705;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #eef2f7;
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(740px, 1fr) 430px;
+      gap: 18px;
+      padding: 18px;
+    }
+
+    .stage-shell {
+      overflow: auto;
+      height: calc(100vh - 36px);
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: #f7f9fc;
+    }
+
+    .stage-scale {
+      width: 648px;
+      height: 864px;
+      transform-origin: top left;
+    }
+
+    .stage {
+      position: relative;
+      width: 1080px;
+      height: 1440px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow: 0 18px 60px rgba(20, 40, 80, .18);
+      transform: scale(.6);
+      transform-origin: top left;
+      user-select: none;
+    }
+
+    .background {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+    }
+
+    .guide {
+      position: absolute;
+      inset: 30px;
+      z-index: 30;
+      border: 2px dashed rgba(22, 74, 155, .18);
+      border-radius: 34px;
+      pointer-events: none;
+    }
+
+    .scene {
+      position: absolute;
+      overflow: hidden;
+      border-radius: 28px;
+      box-shadow: 0 8px 18px rgba(25, 40, 70, .18);
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    .scene img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .mock-card {
+      position: absolute;
+      z-index: 8;
+      border: 3px dashed var(--blue);
+      border-radius: 20px;
+      background: var(--paper);
+      box-shadow: 0 6px 14px rgba(30, 45, 70, .11);
+      pointer-events: none;
+    }
+
+    .title-mark {
+      position: absolute;
+      left: 78px;
+      top: 82px;
+      z-index: 8;
+      width: 600px;
+      height: 100px;
+      border-top: 3px dashed var(--blue);
+      border-bottom: 3px dashed var(--blue);
+      color: var(--blue);
+      font: 900 76px Georgia, "Microsoft YaHei", serif;
+      line-height: 98px;
+      pointer-events: none;
+    }
+
+    .metrics-mark {
+      position: absolute;
+      z-index: 8;
+      border: 2px dashed rgba(47, 127, 57, .5);
+      border-radius: 18px;
+      pointer-events: none;
+    }
+
+    .footer-mark {
+      position: absolute;
+      z-index: 8;
+      color: var(--blue);
+      font: 800 30px Georgia, "Microsoft YaHei", serif;
+      pointer-events: none;
+    }
+
+    .item {
+      position: absolute;
+      z-index: 20;
+      transform-origin: center center;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .item canvas,
+    .item img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      filter: drop-shadow(0 7px 10px rgba(24, 38, 64, .22));
+    }
+
+    .item.selected {
+      outline: 3px solid var(--gold);
+      outline-offset: 5px;
+    }
+
+    .item-label {
+      position: absolute;
+      left: 0;
+      top: -30px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(23, 32, 51, .88);
+      color: #fff;
+      font-size: 16px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .otter-preview {
+      position: absolute;
+      z-index: 24;
+      pointer-events: none;
+      filter: drop-shadow(0 8px 12px rgba(24, 38, 64, .18));
+    }
+
+    .panel {
+      height: calc(100vh - 36px);
+      overflow: auto;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 20px;
+    }
+
+    h2 {
+      margin: 20px 0 10px;
+      font-size: 15px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      width: 100%;
+      border: 1px solid #cdd6e5;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    input,
+    select {
+      height: 34px;
+      padding: 0 10px;
+    }
+
+    textarea {
+      min-height: 220px;
+      padding: 10px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    button {
+      height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: white;
+    }
+
+    .danger {
+      border-color: #ef4444;
+      color: #b42318;
+    }
+
+    .buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .hint {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .sprite-wrap {
+      position: relative;
+      overflow: auto;
+      height: 260px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background:
+        linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
+        linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
+        linear-gradient(-45deg, transparent 75%, #f3f4f6 75%);
+      background-color: #fff;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+      background-size: 16px 16px;
+    }
+
+    .sprite-canvas {
+      display: block;
+      transform-origin: top left;
+      cursor: crosshair;
+    }
+
+    .asset-list {
+      display: grid;
+      gap: 6px;
+      max-height: 160px;
+      overflow: auto;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fafc;
+    }
+
+    .asset-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      min-height: 30px;
+      padding: 5px 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .asset-row.active {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px rgba(242, 183, 5, .18);
+    }
+
+    .asset-row span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tiny {
+      height: 28px;
+      padding: 0 8px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <main class="stage-shell">
+      <div class="stage-scale">
+        <div id="stage" class="stage">
+          <img class="background" src="./backgrounds/paper.png" alt="" />
+          <div class="guide"></div>
+          <div class="title-mark">今日工坊记录</div>
+          <div id="dateCard" class="mock-card"></div>
+          <div id="quoteCard" class="mock-card"></div>
+          <div id="scene" class="scene"><img id="sceneImage" src="./backgrounds/paper_desk.png" alt="" /></div>
+          <img id="otterPreview" class="otter-preview" src="./otter_mascot.png" alt="" />
+          <div id="metrics" class="metrics-mark"></div>
+          <div id="footer" class="footer-mark">Created with Adnify&nbsp;&nbsp;&nbsp;&nbsp;签名: adnaan</div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="panel">
+      <h1>海报素材排版工具</h1>
+      <div class="row">
+        <label for="variant">版式</label>
+        <select id="variant"></select>
+      </div>
+      <div class="buttons">
+        <button id="copy" class="primary">复制坐标</button>
+        <button id="reset">重置当前</button>
+      </div>
+      <p class="hint">拖动画面上的元素调整位置。选中后可用方向键微调，按 Shift 每次移动 10px。</p>
+
+      <h2>添加素材</h2>
+      <div class="row">
+        <label for="sheet">Sheet</label>
+        <select id="sheet"></select>
+      </div>
+      <div class="row">
+        <label for="assetPreset">预设</label>
+        <select id="assetPreset"></select>
+      </div>
+      <div class="buttons">
+        <button id="addPreset" class="primary">添加预设</button>
+        <button id="addCrop">添加裁剪框</button>
+      </div>
+      <p class="hint">下面可以查看整张 sheet。点“添加裁剪框”后会新增一个默认框，你再改 sx/sy/sw/sh 精确框住素材。</p>
+      <div class="sprite-wrap"><canvas id="spriteCanvas" class="sprite-canvas"></canvas></div>
+
+      <h2>版式元素</h2>
+      <div id="assetList" class="asset-list"></div>
+
+      <h2>选中元素</h2>
+      <div class="row"><label>名称</label><input id="activeName" /></div>
+      <div class="row"><label>sheet</label><select id="activeSheet"></select></div>
+      <div class="row"><label for="x">x</label><input id="x" type="number" step="1" /></div>
+      <div class="row"><label for="y">y</label><input id="y" type="number" step="1" /></div>
+      <div class="row"><label for="h">h</label><input id="h" type="number" step="1" /></div>
+      <div class="row"><label for="rotate">rotate</label><input id="rotate" type="number" step="1" /></div>
+      <div class="row"><label for="alpha">alpha</label><input id="alpha" type="number" min="0" max="1" step="0.01" /></div>
+      <div class="row"><label for="sx">sx</label><input id="sx" type="number" step="1" /></div>
+      <div class="row"><label for="sy">sy</label><input id="sy" type="number" step="1" /></div>
+      <div class="row"><label for="sw">sw</label><input id="sw" type="number" step="1" /></div>
+      <div class="row"><label for="sh">sh</label><input id="sh" type="number" step="1" /></div>
+      <div class="buttons">
+        <button id="duplicate">复制元素</button>
+        <button id="remove" class="danger">删除元素</button>
+      </div>
+
+      <h2>导出 JSON</h2>
+      <textarea id="output" spellcheck="false"></textarea>
+    </aside>
+  </div>
+
+  <script>
+    const SCALE = 0.6
+    const SPRITE_SCALE = 0.25
+    const stage = document.getElementById('stage')
+    const sceneImage = document.getElementById('sceneImage')
+    const otterPreview = document.getElementById('otterPreview')
+    const variantSelect = document.getElementById('variant')
+    const sheetSelect = document.getElementById('sheet')
+    const activeSheetSelect = document.getElementById('activeSheet')
+    const presetSelect = document.getElementById('assetPreset')
+    const assetList = document.getElementById('assetList')
+    const output = document.getElementById('output')
+    const spriteCanvas = document.getElementById('spriteCanvas')
+    const spriteCtx = spriteCanvas.getContext('2d')
+    const fields = {
+      activeName: document.getElementById('activeName'),
+      activeSheet: activeSheetSelect,
+      x: document.getElementById('x'),
+      y: document.getElementById('y'),
+      h: document.getElementById('h'),
+      rotate: document.getElementById('rotate'),
+      alpha: document.getElementById('alpha'),
+      sx: document.getElementById('sx'),
+      sy: document.getElementById('sy'),
+      sw: document.getElementById('sw'),
+      sh: document.getElementById('sh'),
+    }
+
+    const sheets = {
+      props: './sheets/props_sheet.png',
+      stickers: './sheets/sticker_sheet.png',
+      notes: './sheets/notes_sheet.png',
+      metrics: './sheets/metric_cards_sheet.png',
+    }
+
+    const sceneByVariant = {
+      'desk-left': './backgrounds/paper_desk.png',
+      'studio-shelf': './backgrounds/sunny_workshop.png',
+      'balanced-desk': './backgrounds/blue_lab.png',
+      'badge-wall': './backgrounds/night_focus.png',
+    }
+
+    const propIdMap = {
+      'plan-note': 'note',
+      'flow-card': 'card',
+    }
+
+    const sheetImages = {}
+
+    const presets = [
+      { id: 'laptop', sheet: 'props', sx: 21, sy: 66, sw: 658, sh: 457, h: 128 },
+      { id: 'mug', sheet: 'props', sx: 1022, sy: 103, sw: 394, sh: 465, h: 86 },
+      { id: 'plan-note', sheet: 'props', sx: 687, sy: 164, sw: 349, sh: 350, h: 74 },
+      { id: 'flow-card', sheet: 'props', sx: 8, sy: 539, sw: 523, sh: 493, h: 122 },
+      { id: 'git-cube', sheet: 'props', sx: 570, sy: 585, sw: 305, sh: 412, h: 106 },
+      { id: 'energy-crystal', sheet: 'props', sx: 972, sy: 640, sw: 245, sh: 356, h: 100 },
+      { id: 'heart-card', sheet: 'props', sx: 1224, sy: 706, sw: 270, sh: 205, h: 68 },
+      { id: 'otter-sticker', sheet: 'stickers', sx: 36, sy: 44, sw: 285, sh: 363, h: 118 },
+      { id: 'planet', sheet: 'stickers', sx: 365, sy: 47, sw: 225, sh: 105, h: 48 },
+      { id: 'workshop-stamp', sheet: 'stickers', sx: 950, sy: 260, sw: 250, sh: 130, h: 76 },
+      { id: 'blue-tape-wide', sheet: 'stickers', sx: 952, sy: 43, sw: 258, sh: 58, h: 28 },
+      { id: 'blue-tape-short', sheet: 'stickers', sx: 1232, sy: 42, sw: 188, sh: 62, h: 26 },
+      { id: 'star-blue', sheet: 'stickers', sx: 833, sy: 49, sw: 58, sh: 70, h: 30 },
+      { id: 'star-yellow', sheet: 'stickers', sx: 740, sy: 175, sw: 75, sh: 75, h: 34 },
+      { id: 'icon-ai', sheet: 'stickers', sx: 1054, sy: 446, sw: 68, sh: 68, h: 32 },
+      { id: 'icon-code', sheet: 'stickers', sx: 1130, sy: 446, sw: 68, sh: 68, h: 32 },
+      { id: 'rocket-badge', sheet: 'stickers', sx: 38, sy: 883, sw: 162, sh: 128, h: 72 },
+      { id: 'small-laptop', sheet: 'stickers', sx: 344, sy: 879, sw: 160, sh: 130, h: 64 },
+      { id: 'small-git', sheet: 'stickers', sx: 526, sy: 877, sw: 154, sh: 133, h: 62 },
+      { id: 'small-robot', sheet: 'stickers', sx: 864, sy: 876, sw: 117, sh: 134, h: 58 },
+      { id: 'note-wide', sheet: 'notes', sx: 50, sy: 52, sw: 720, sh: 405, h: 145 },
+      { id: 'note-grid', sheet: 'notes', sx: 844, sy: 88, sw: 520, sh: 364, h: 132 },
+      { id: 'note-paper', sheet: 'notes', sx: 54, sy: 531, sw: 416, sh: 486, h: 140 },
+      { id: 'note-tag', sheet: 'notes', sx: 900, sy: 543, sw: 462, sh: 174, h: 62 },
+      { id: 'note-ticket', sheet: 'notes', sx: 820, sy: 792, sw: 560, sh: 226, h: 82 },
+      { id: 'metric-folder', sheet: 'metrics', sx: 125, sy: 116, sw: 540, sh: 250, h: 88 },
+      { id: 'metric-branch', sheet: 'metrics', sx: 746, sy: 108, sw: 610, sh: 250, h: 88 },
+      { id: 'metric-chat', sheet: 'metrics', sx: 124, sy: 415, sw: 544, sh: 250, h: 88 },
+      { id: 'metric-clock', sheet: 'metrics', sx: 742, sy: 415, sw: 612, sh: 250, h: 88 },
+      { id: 'metric-bot', sheet: 'metrics', sx: 126, sy: 724, sw: 544, sh: 250, h: 88 },
+      { id: 'metric-star', sheet: 'metrics', sx: 742, sy: 724, sw: 612, sh: 250, h: 88 },
+    ]
+
+    const fixed = {
+      date: { x: 760, y: 54, w: 246, h: 174 },
+      quote: { x: 112, y: 258, w: 408, h: 116 },
+      scene: { x: 132, y: 386, w: 816, h: 544 },
+      metrics: { x: 104, y: 890, w: 872, h: 268 },
+      footer: { x: 154, y: 1290 },
+    }
+
+    const defaults = {
+      'desk-left': {
+        items: [
+          { id: 'badge', sheet: 'image', src: './otter_workshop_badge.png', x: 786, y: 246, h: 122, rotate: 0, alpha: 0.94 },
+          { id: 'laptop', sheet: 'props', sx: 21, sy: 66, sw: 658, sh: 457, x: 302, y: 602, h: 128, rotate: -2, alpha: 1 },
+          { id: 'plan-note', sheet: 'props', sx: 687, sy: 164, sw: 349, sh: 350, x: 531, y: 710, h: 74, rotate: 4, alpha: 1 },
+          { id: 'mug', sheet: 'props', sx: 1022, sy: 103, sw: 394, sh: 465, x: 696, y: 411, h: 86, rotate: -5, alpha: 1 },
+        ],
+      },
+      'studio-shelf': {
+        items: [
+          { id: 'badge', sheet: 'image', src: './otter_workshop_badge.png', x: 800, y: 240, h: 126, rotate: 0, alpha: 0.94 },
+          { id: 'flow-card', sheet: 'props', sx: 8, sy: 539, sw: 523, sh: 493, x: 760, y: 562, h: 114, rotate: 3, alpha: 0.96 },
+          { id: 'mug', sheet: 'props', sx: 1022, sy: 103, sw: 394, sh: 465, x: 696, y: 421, h: 92, rotate: -6, alpha: 1 },
+          { id: 'plan-note', sheet: 'props', sx: 687, sy: 164, sw: 349, sh: 350, x: 517, y: 659, h: 72, rotate: -3, alpha: 1 },
+        ],
+      },
+      'balanced-desk': {
+        items: [
+          { id: 'badge', sheet: 'image', src: './otter_workshop_badge.png', x: 804, y: 246, h: 118, rotate: 0, alpha: 0.94 },
+          { id: 'laptop', sheet: 'props', sx: 21, sy: 66, sw: 658, sh: 457, x: 315, y: 612, h: 118, rotate: 1, alpha: 1 },
+          { id: 'flow-card', sheet: 'props', sx: 8, sy: 539, sw: 523, sh: 493, x: 413, y: 477, h: 104, rotate: -4, alpha: 1 },
+          { id: 'mug', sheet: 'props', sx: 1022, sy: 103, sw: 394, sh: 465, x: 693, y: 581, h: 84, rotate: 5, alpha: 1 },
+        ],
+      },
+      'badge-wall': {
+        items: [
+          { id: 'badge', sheet: 'image', src: './otter_workshop_badge.png', x: 792, y: 238, h: 126, rotate: 0, alpha: 0.94 },
+          { id: 'flow-card', sheet: 'props', sx: 8, sy: 539, sw: 523, sh: 493, x: 380, y: 462, h: 122, rotate: -3, alpha: 0.94 },
+          { id: 'laptop', sheet: 'props', sx: 21, sy: 66, sw: 658, sh: 457, x: 410, y: 630, h: 122, rotate: -2, alpha: 1 },
+          { id: 'plan-note', sheet: 'props', sx: 687, sy: 164, sw: 349, sh: 350, x: 328, y: 647, h: 70, rotate: 5, alpha: 1 },
+        ],
+      },
+    }
+
+    let layouts = structuredClone(defaults)
+    let currentVariant = 'desk-left'
+    let selectedKey = null
+    let currentSheet = 'props'
+    const elements = new Map()
+    const renderToken = { value: 0 }
+
+    init()
+
+    async function init() {
+      Object.entries(sheets).forEach(([key]) => {
+        sheetSelect.add(new Option(key, key))
+        activeSheetSelect.add(new Option(key, key))
+      })
+      Object.keys(layouts).forEach((name) => variantSelect.add(new Option(name, name)))
+      presets.forEach((preset) => presetSelect.add(new Option(`${preset.sheet} / ${preset.id}`, preset.id)))
+
+      placeFixed()
+      syncSceneChrome()
+      await loadSheets()
+      drawSprite()
+      bindEvents()
+      render()
+    }
+
+    function bindEvents() {
+      variantSelect.addEventListener('change', () => {
+        currentVariant = variantSelect.value
+        selectedKey = null
+        syncSceneChrome()
+        render()
+      })
+      sheetSelect.addEventListener('change', () => {
+        currentSheet = sheetSelect.value
+        drawSprite()
+      })
+      document.getElementById('addPreset').addEventListener('click', addPreset)
+      document.getElementById('addCrop').addEventListener('click', addCrop)
+      document.getElementById('copy').addEventListener('click', copyJson)
+      document.getElementById('reset').addEventListener('click', () => {
+        layouts[currentVariant] = structuredClone(defaults[currentVariant])
+        selectedKey = null
+        render()
+      })
+      document.getElementById('duplicate').addEventListener('click', duplicateSelected)
+      document.getElementById('remove').addEventListener('click', removeSelected)
+      Object.values(fields).forEach((field) => field.addEventListener('input', updateSelectedFromFields))
+      window.addEventListener('keydown', handleKeys)
+    }
+
+    function placeFixed() {
+      setBox(document.getElementById('dateCard'), fixed.date)
+      setBox(document.getElementById('quoteCard'), fixed.quote)
+      setBox(document.getElementById('scene'), fixed.scene)
+      setBox(document.getElementById('metrics'), fixed.metrics)
+      const footer = document.getElementById('footer')
+      footer.style.left = `${fixed.footer.x}px`
+      footer.style.top = `${fixed.footer.y}px`
+    }
+
+    function syncSceneChrome() {
+      sceneImage.src = sceneByVariant[currentVariant]
+      const scene = fixed.scene
+      const otterH = 332
+      const otterW = Math.round(otterH * 0.8)
+      otterPreview.style.left = `${Math.round(scene.x + scene.w * 0.56)}px`
+      otterPreview.style.top = `${Math.round(scene.y + scene.h - otterH + 18)}px`
+      otterPreview.style.width = `${otterW}px`
+      otterPreview.style.height = `${otterH}px`
+    }
+
+    function setBox(el, rect) {
+      el.style.left = `${rect.x}px`
+      el.style.top = `${rect.y}px`
+      el.style.width = `${rect.w}px`
+      el.style.height = `${rect.h}px`
+    }
+
+    async function loadSheets() {
+      await Promise.all(Object.entries(sheets).map(([key, src]) => new Promise((resolve, reject) => {
+        const image = new Image()
+        image.onload = () => {
+          sheetImages[key] = image
+          resolve()
+        }
+        image.onerror = reject
+        image.src = src
+      })))
+    }
+
+    function drawSprite() {
+      const image = sheetImages[currentSheet]
+      if (!image) return
+      spriteCanvas.width = Math.round(image.width * SPRITE_SCALE)
+      spriteCanvas.height = Math.round(image.height * SPRITE_SCALE)
+      spriteCanvas.style.width = `${spriteCanvas.width}px`
+      spriteCanvas.style.height = `${spriteCanvas.height}px`
+      spriteCtx.clearRect(0, 0, spriteCanvas.width, spriteCanvas.height)
+      spriteCtx.drawImage(image, 0, 0, spriteCanvas.width, spriteCanvas.height)
+
+      const selected = getSelectedItem()
+      if (selected?.sheet === currentSheet) {
+        spriteCtx.save()
+        spriteCtx.strokeStyle = '#f2b705'
+        spriteCtx.lineWidth = 3
+        spriteCtx.strokeRect(
+          selected.sx * SPRITE_SCALE,
+          selected.sy * SPRITE_SCALE,
+          selected.sw * SPRITE_SCALE,
+          selected.sh * SPRITE_SCALE
+        )
+        spriteCtx.restore()
+      }
+    }
+
+    function getCurrentItems() {
+      return layouts[currentVariant].items
+    }
+
+    function getSelectedItem() {
+      return selectedKey ? getCurrentItems().find((item) => item.key === selectedKey) : null
+    }
+
+    function ensureKeys() {
+      getCurrentItems().forEach((item, index) => {
+        if (!item.key) item.key = `${item.id}-${index}-${Math.random().toString(36).slice(2, 7)}`
+      })
+    }
+
+    function render() {
+      ensureKeys()
+      const token = ++renderToken.value
+      const liveKeys = new Set()
+      getCurrentItems().forEach((item) => {
+        liveKeys.add(item.key)
+        let el = elements.get(item.key)
+        if (!el) {
+          el = createItemElement(item)
+          elements.set(item.key, el)
+        }
+        drawItem(el, item, token)
+      })
+
+      for (const [key, el] of elements) {
+        if (!liveKeys.has(key)) {
+          el.remove()
+          elements.delete(key)
+        }
+      }
+
+      renderAssetList()
+      syncFields()
+      syncOutput()
+      drawSprite()
+    }
+
+    function createItemElement(item) {
+      const el = document.createElement('div')
+      el.className = 'item'
+      el.dataset.key = item.key
+      el.innerHTML = `<span class="item-label"></span><canvas></canvas>`
+      stage.appendChild(el)
+      wireDrag(el)
+      return el
+    }
+
+    function drawItem(el, item, token) {
+      const ratio = getRatio(item)
+      const w = item.h * ratio
+      el.dataset.key = item.key
+      el.style.left = `${item.x}px`
+      el.style.top = `${item.y}px`
+      el.style.width = `${w}px`
+      el.style.height = `${item.h}px`
+      el.style.opacity = item.alpha ?? 1
+      el.style.transform = `rotate(${item.rotate || 0}deg)`
+      el.classList.toggle('selected', selectedKey === item.key)
+      el.querySelector('.item-label').textContent = item.id
+
+      const canvas = el.querySelector('canvas')
+      const ctx = canvas.getContext('2d')
+      canvas.width = Math.max(1, Math.round(item.sw || w))
+      canvas.height = Math.max(1, Math.round(item.sh || item.h))
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      if (item.sheet === 'image') {
+        const image = new Image()
+        image.onload = () => {
+          if (token !== renderToken.value) return
+          canvas.width = image.width
+          canvas.height = image.height
+          ctx.drawImage(image, 0, 0)
+        }
+        image.src = item.src
+        return
+      }
+
+      const image = sheetImages[item.sheet]
+      if (image) {
+        ctx.drawImage(image, item.sx, item.sy, item.sw, item.sh, 0, 0, canvas.width, canvas.height)
+      }
+    }
+
+    function getRatio(item) {
+      if (item.sheet === 'image') return 1
+      return item.sw / item.sh
+    }
+
+    function wireDrag(el) {
+      el.addEventListener('pointerdown', (event) => {
+        event.preventDefault()
+        selectedKey = el.dataset.key
+        const item = getSelectedItem()
+        const start = { x: event.clientX, y: event.clientY, itemX: item.x, itemY: item.y }
+        el.setPointerCapture(event.pointerId)
+        render()
+
+        const move = (moveEvent) => {
+          item.x = Math.round(start.itemX + (moveEvent.clientX - start.x) / SCALE)
+          item.y = Math.round(start.itemY + (moveEvent.clientY - start.y) / SCALE)
+          render()
+        }
+        const up = () => {
+          el.removeEventListener('pointermove', move)
+          el.removeEventListener('pointerup', up)
+        }
+        el.addEventListener('pointermove', move)
+        el.addEventListener('pointerup', up)
+      })
+    }
+
+    function renderAssetList() {
+      assetList.innerHTML = ''
+      getCurrentItems().forEach((item) => {
+        const row = document.createElement('div')
+        row.className = `asset-row${selectedKey === item.key ? ' active' : ''}`
+        row.innerHTML = `<span>${item.id} · ${item.sheet}</span><button class="tiny" type="button">选中</button>`
+        row.addEventListener('click', () => {
+          selectedKey = item.key
+          if (item.sheet !== 'image') {
+            currentSheet = item.sheet
+            sheetSelect.value = currentSheet
+          }
+          render()
+        })
+        assetList.appendChild(row)
+      })
+    }
+
+    function syncFields() {
+      const item = getSelectedItem()
+      const disabled = !item
+      Object.values(fields).forEach((field) => { field.disabled = disabled })
+      if (!item) {
+        Object.values(fields).forEach((field) => { field.value = '' })
+        return
+      }
+      fields.activeName.value = item.id
+      fields.activeSheet.value = item.sheet === 'image' ? 'props' : item.sheet
+      fields.x.value = item.x
+      fields.y.value = item.y
+      fields.h.value = item.h
+      fields.rotate.value = item.rotate || 0
+      fields.alpha.value = item.alpha ?? 1
+      fields.sx.value = item.sx ?? 0
+      fields.sy.value = item.sy ?? 0
+      fields.sw.value = item.sw ?? 0
+      fields.sh.value = item.sh ?? 0
+      fields.activeSheet.disabled = disabled || item.sheet === 'image'
+      ;['sx', 'sy', 'sw', 'sh'].forEach((key) => {
+        fields[key].disabled = disabled || item.sheet === 'image'
+      })
+    }
+
+    function updateSelectedFromFields() {
+      const item = getSelectedItem()
+      if (!item) return
+      item.id = fields.activeName.value || item.id
+      if (item.sheet !== 'image') item.sheet = fields.activeSheet.value
+      item.x = Number(fields.x.value)
+      item.y = Number(fields.y.value)
+      item.h = Number(fields.h.value)
+      item.rotate = Number(fields.rotate.value)
+      item.alpha = Number(fields.alpha.value)
+      if (item.sheet !== 'image') {
+        item.sx = Number(fields.sx.value)
+        item.sy = Number(fields.sy.value)
+        item.sw = Number(fields.sw.value)
+        item.sh = Number(fields.sh.value)
+      }
+      render()
+    }
+
+    function addPreset() {
+      const preset = presets.find((item) => item.id === presetSelect.value)
+      if (!preset) return
+      const item = {
+        ...structuredClone(preset),
+        key: `${preset.id}-${Date.now()}`,
+        x: 520,
+        y: 520,
+        rotate: 0,
+        alpha: 1,
+      }
+      getCurrentItems().push(item)
+      selectedKey = item.key
+      currentSheet = item.sheet
+      sheetSelect.value = currentSheet
+      render()
+    }
+
+    function addCrop() {
+      const item = {
+        id: `${currentSheet}-custom`,
+        key: `custom-${Date.now()}`,
+        sheet: currentSheet,
+        sx: 0,
+        sy: 0,
+        sw: 200,
+        sh: 160,
+        x: 520,
+        y: 520,
+        h: 80,
+        rotate: 0,
+        alpha: 1,
+      }
+      getCurrentItems().push(item)
+      selectedKey = item.key
+      render()
+    }
+
+    function duplicateSelected() {
+      const item = getSelectedItem()
+      if (!item) return
+      const copy = structuredClone(item)
+      copy.key = `${item.id}-${Date.now()}`
+      copy.id = `${item.id}-copy`
+      copy.x += 24
+      copy.y += 24
+      getCurrentItems().push(copy)
+      selectedKey = copy.key
+      render()
+    }
+
+    function removeSelected() {
+      if (!selectedKey) return
+      layouts[currentVariant].items = getCurrentItems().filter((item) => item.key !== selectedKey)
+      selectedKey = null
+      render()
+    }
+
+    function handleKeys(event) {
+      if (!selectedKey || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return
+      const item = getSelectedItem()
+      const step = event.shiftKey ? 10 : 1
+      if (event.key === 'ArrowLeft') item.x -= step
+      else if (event.key === 'ArrowRight') item.x += step
+      else if (event.key === 'ArrowUp') item.y -= step
+      else if (event.key === 'ArrowDown') item.y += step
+      else return
+      event.preventDefault()
+      render()
+    }
+
+    function syncOutput() {
+      const exportData = {}
+      Object.entries(layouts).forEach(([variant, layout]) => {
+        const items = layout.items.map((item) => ({
+          id: propIdMap[item.id] || item.id,
+          x: Math.round(item.x),
+          y: Math.round(item.y),
+          h: Math.round(item.h),
+          rotate: Number(item.rotate || 0),
+          alpha: Number(item.alpha ?? 1),
+        }))
+        const badge = items.find((item) => item.id === 'badge')
+        exportData[variant] = {
+          badge: badge
+            ? {
+                x: badge.x,
+                y: badge.y,
+                h: badge.h,
+                rotate: badge.rotate,
+                alpha: badge.alpha,
+              }
+            : null,
+          props: items.filter((item) => item.id !== 'badge'),
+        }
+      })
+      output.value = JSON.stringify(exportData, null, 2)
+    }
+
+    async function copyJson() {
+      syncOutput()
+      await navigator.clipboard.writeText(output.value)
+      const button = document.getElementById('copy')
+      button.textContent = '已复制'
+      setTimeout(() => { button.textContent = '复制坐标' }, 1200)
+    }
+  </script>
+</body>
+</html>

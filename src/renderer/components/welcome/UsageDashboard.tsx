@@ -6,6 +6,8 @@ import { DatePicker } from '../ui/DatePicker'
 import { useWorkspaceAnalytics } from '@renderer/hooks/useWorkspaceAnalytics'
 import { Modal } from '../ui/Modal'
 import { getRelativeTime } from '@shared/utils/dateUtils'
+import { WorkPosterModal } from './poster/WorkPosterModal'
+import { buildWorkPosterData } from './poster/workPosterData'
 
 const MODEL_COLORS = ['rgb(var(--accent))', 'rgb(var(--accent-subtle))', '#10b981', '#f59e0b', '#9ca3af']
 
@@ -15,6 +17,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
   const [selectedModel, setSelectedModel] = useState<string>('__all__')
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false)
   const [isAiModalOpen, setIsAiModalOpen] = useState(false)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
   const [sidebarPage, setSidebarPage] = useState<'stats' | 'ai'>('stats')
   const { data } = useWorkspaceAnalytics(timeRange, selectedDate)
   const modelMenuRef = useRef<HTMLDivElement | null>(null)
@@ -159,6 +162,15 @@ export default function UsageDashboard({ language }: { language: Language }) {
       }
   }, [aiHasData, aiOverview.aiAssistedShare, aiOverview.aiModifiedLines, aiOverview.pureAiLines, data.ai.available, data.ai.hook.installed, language])
 
+  const reportPoster = useMemo(() => buildWorkPosterData({
+    language,
+    timeRange,
+    selectedDate,
+    data,
+    overviewCopy,
+    aiStatusCopy,
+  }), [aiStatusCopy, data, language, overviewCopy, selectedDate, timeRange])
+
   useEffect(() => {
     if (selectedModel !== '__all__' && !data.models.some(model => model.name === selectedModel)) {
       setSelectedModel('__all__')
@@ -240,7 +252,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
             <strong>{overviewCopy.title}</strong>
             <p>{overviewCopy.body}</p>
           </div>
-          <button className="view-report hover:underline">
+          <button className="view-report hover:underline" onClick={() => setIsReportModalOpen(true)}>
             {language === 'zh' ? '查看详细报告' : 'View Detailed Report'} <ChevronRight className="w-3 h-3 ml-1" />
           </button>
         </div>
@@ -565,6 +577,11 @@ export default function UsageDashboard({ language }: { language: Language }) {
           )}
         </div>
       </Modal>
+      <WorkPosterModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        poster={reportPoster}
+      />
     </div>
   )
 }
