@@ -21,8 +21,9 @@ export interface CacheStrategy {
   prepare(config: LLMConfig, messages: ModelMessage[]): Promise<RequestCacheResult>
 }
 
-const MIN_OPENAI_CACHE_TOKENS = 1024
-const MIN_GOOGLE_EXPLICIT_CACHE_TOKENS = 1024
+const MIN_OPENAI_CACHE_TOKENS = 0
+const MIN_GOOGLE_IMPLICIT_CACHE_TOKENS = 0
+const MIN_GOOGLE_EXPLICIT_CACHE_TOKENS = 32768
 const DEFAULT_GOOGLE_CACHE_TTL_SECONDS = 3600
 
 export function createCacheStrategy(config: LLMConfig): CacheStrategy {
@@ -142,7 +143,7 @@ function buildGoogleImplicitCacheResult(
   messages: ModelMessage[],
 ): RequestCacheResult {
   const analysis = analyzeStablePrefix(messages)
-  if (!analysis || analysis.tokenCount < MIN_GOOGLE_EXPLICIT_CACHE_TOKENS) {
+  if (!analysis || analysis.tokenCount < MIN_GOOGLE_IMPLICIT_CACHE_TOKENS) {
     return { messages }
   }
 

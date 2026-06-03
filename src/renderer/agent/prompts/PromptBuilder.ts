@@ -82,7 +82,8 @@ export interface PromptContext {
 function buildTools(mode: WorkMode, templateId?: string, planPhase?: 'planning' | 'executing'): string {
   const excludeCategories: ToolCategory[] = []
   const allowedTools = getToolsForContext({ mode, templateId, planPhase })
-  const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, allowedTools)
+  const sortedAllowedTools = allowedTools ? [...allowedTools].sort() : undefined
+  const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, sortedAllowedTools)
 
   return `## Available Tools
 
@@ -152,13 +153,13 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     CODE_CONVENTIONS,
     WORKFLOW_GUIDELINES,
     OUTPUT_FORMAT,
-    buildEnvironment(ctx),
-    buildRemoteServerSection(ctx.remoteServerSection || null),
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
     ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
+    buildRemoteServerSection(ctx.remoteServerSection || null),
     buildCustomInstructions(ctx.customInstructions),
+    buildEnvironment(ctx), // <--- 最动态的部分，移至底部以保证缓存命中率 (99%)
   ]
 
   return sections.filter(Boolean).join('\n\n')
@@ -172,13 +173,13 @@ export function buildChatPrompt(ctx: PromptContext): string {
     SECURITY_RULES,
     CODE_CONVENTIONS,
     OUTPUT_FORMAT,
-    buildEnvironment(ctx),
-    buildRemoteServerSection(ctx.remoteServerSection || null),
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
     ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
+    buildRemoteServerSection(ctx.remoteServerSection || null),
     buildCustomInstructions(ctx.customInstructions),
+    buildEnvironment(ctx), // <--- 移至底部
   ]
 
   return sections.filter(Boolean).join('\n\n')
@@ -227,10 +228,10 @@ export async function buildAgentSystemPrompt(
   const autoSkills = allSkills.filter(skill => skill.type === 'auto' && skill.enabled)
   const mentionedManualSkills = mentionedSkills?.length
     ? allSkills.filter(skill =>
-        skill.type === 'manual' &&
-        skill.enabled &&
-        mentionedSkills.includes(skill.name.toLowerCase())
-      )
+      skill.type === 'manual' &&
+      skill.enabled &&
+      mentionedSkills.includes(skill.name.toLowerCase())
+    )
     : []
 
   const activeSkillNames = new Set<string>()
