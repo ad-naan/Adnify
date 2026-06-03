@@ -17,11 +17,20 @@ interface WorkPosterModalProps {
 export function WorkPosterModal({ isOpen, onClose, poster }: WorkPosterModalProps) {
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
   const [quote, setQuote] = useState<string | null>(null)
+  const [signature, setSignature] = useState(() => poster.signature || 'adnaan')
   const isZh = poster.language === 'zh'
+
+  useEffect(() => {
+    if (isOpen) {
+      setSignature(poster.signature || 'adnaan')
+    }
+  }, [isOpen, poster.signature])
+
   const posterWithQuote = useMemo(() => ({
     ...poster,
     quote: quote ?? '',
-  }), [poster, quote])
+    signature: signature,
+  }), [poster, quote, signature])
 
   useEffect(() => {
     if (!isOpen) return
@@ -68,6 +77,19 @@ export function WorkPosterModal({ isOpen, onClose, poster }: WorkPosterModalProp
             <span>{isZh ? '节奏评分' : 'Rhythm Score'} <strong>{poster.score}</strong></span>
             <span>{isZh ? '最高峰值' : 'Peak'} <strong>{poster.peak}</strong></span>
             <span>AI <strong>{poster.aiShare}</strong></span>
+          </div>
+          <div className="report-signature-wrap">
+            <label className="report-signature-label">
+              {isZh ? '自定义签名' : 'Signature'}
+            </label>
+            <input
+              type="text"
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              placeholder="adnaan"
+              maxLength={20}
+              className="report-signature-input"
+            />
           </div>
           <div className="report-actions">
             <button onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>
