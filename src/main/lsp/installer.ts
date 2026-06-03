@@ -209,6 +209,7 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
       cwd: targetDir,
       stdio: 'pipe',
       env,
+      shell: process.platform === 'win32',
     })
 
     let stdout = ''
