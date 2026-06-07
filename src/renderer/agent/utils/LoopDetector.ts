@@ -380,12 +380,16 @@ export class LoopDetector {
   }
 
   private simpleHash(value: string): string {
-    let hash = 0
+    // FNV-1a inspired 64-bit hash (two 32-bit halves) to reduce collision risk
+    let h1 = 0x811c9dc5
+    let h2 = 0x01000193
     for (let i = 0; i < value.length; i++) {
       const char = value.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash |= 0
+      h1 ^= char
+      h1 = Math.imul(h1, 0x01000193)
+      h2 ^= char
+      h2 = Math.imul(h2, 0x811c9dc5)
     }
-    return hash.toString(36)
+    return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36)
   }
 }
