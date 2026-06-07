@@ -1201,14 +1201,15 @@ export function registerSecureTerminalHandlers(
       return { success: false, output: '', exitCode: 1, error: dangerousCheck.reason }
     }
 
-    // 安全检查：检测 shell 注入
-    if (containsShellInjection(command)) {
-      const reason = `命令包含危险字符: "${command}"`
+    // 安全检查：白名单验证（提取命令的基础命令名）
+    const baseCommand = command.trim().split(/\s+/)[0].toLowerCase()
+    const whitelistCheck = SecureCommandParser.validateCommand(baseCommand, 'shell')
+    if (!whitelistCheck.safe) {
       securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
-        reason,
+        reason: whitelistCheck.reason,
         source: 'executeBackground',
       })
-      return { success: false, output: '', exitCode: 1, error: reason }
+      return { success: false, output: '', exitCode: 1, error: whitelistCheck.reason }
     }
 
     return new Promise((resolve) => {
