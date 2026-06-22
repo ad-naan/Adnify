@@ -9,7 +9,7 @@
  */
 
 import { app } from 'electron'
-import { spawn, execSync } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'
@@ -385,12 +385,21 @@ async function extractTarXz(archivePath: string, destDir: string): Promise<boole
       // Windows: 使用 tar 命令（Windows 10 1803+ 内置）
       logger.lsp.debug('[LSP Installer] Using Windows tar command')
       try {
-        const output = execSync(`tar -xf "${archivePath}"`, {
+        const result = spawnSync('tar', ['-xf', archivePath], {
           cwd: destDir,
           stdio: 'pipe',
           encoding: 'utf-8',
         })
-        logger.lsp.debug(`[LSP Installer] tar output: ${output}`)
+        if (result.error || result.status !== 0) {
+          logger.lsp.error('[LSP Installer] tar command failed on Windows', {
+            status: result.status,
+            error: result.error?.message,
+            stderr: result.stderr,
+          })
+          logger.lsp.warn('[LSP Installer] Please ensure tar is available (Windows 10 1803+ or install 7-Zip)')
+          return false
+        }
+        logger.lsp.debug(`[LSP Installer] tar output: ${result.stdout || ''}`)
         logger.lsp.info('[LSP Installer] tar.xz extracted successfully (Windows)')
         return true
       } catch (err) {
@@ -410,12 +419,20 @@ async function extractTarXz(archivePath: string, destDir: string): Promise<boole
       }
 
       try {
-        const output = execSync(`tar -xf "${archivePath}"`, {
+        const result = spawnSync('tar', ['-xf', archivePath], {
           cwd: destDir,
           stdio: 'pipe',
           encoding: 'utf-8',
         })
-        logger.lsp.debug(`[LSP Installer] tar output: ${output}`)
+        if (result.error || result.status !== 0) {
+          logger.lsp.error('[LSP Installer] tar command failed on Unix', {
+            status: result.status,
+            error: result.error?.message,
+            stderr: result.stderr,
+          })
+          return false
+        }
+        logger.lsp.debug(`[LSP Installer] tar output: ${result.stdout || ''}`)
         logger.lsp.info('[LSP Installer] tar.xz extracted successfully (Unix)')
         return true
       } catch (err) {
