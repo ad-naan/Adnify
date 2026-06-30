@@ -9,7 +9,6 @@ import { SearchView } from './panels/SearchView'
 import { GitView } from './panels/GitView'
 import { ProblemsView } from './panels/ProblemsView'
 import { OutlineView } from './panels/OutlineView'
-import { HistoryView } from './panels/HistoryView'
 import { ShellView } from './panels/ShellView'
 import { EmotionAwarenessPanel } from '../agent/EmotionAwarenessPanel'
 
@@ -26,7 +25,6 @@ export default function Sidebar() {
             {activeSidePanel === 'emotion' && <EmotionAwarenessPanel />}
             {activeSidePanel === 'problems' && <ProblemsView />}
             {activeSidePanel === 'outline' && <OutlineView />}
-            {activeSidePanel === 'history' && <HistoryView />}
             {activeSidePanel === 'shell' && <ShellView />}
         </div>
     )

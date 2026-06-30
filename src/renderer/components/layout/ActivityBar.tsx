@@ -1,4 +1,4 @@
-import { Files, Search, GitBranch, Settings, AlertCircle, ListTree, History, Brain, Terminal } from 'lucide-react'
+import { Files, Search, GitBranch, Settings, AlertCircle, ListTree, Brain, Terminal } from 'lucide-react'
 import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -14,7 +14,6 @@ export default function ActivityBar() {
     { id: 'emotion', icon: Brain, label: language === 'zh' ? '情绪感知' : 'Mood' },
     { id: 'problems', icon: AlertCircle, label: language === 'zh' ? '问题' : 'Problems' },
     { id: 'outline', icon: ListTree, label: language === 'zh' ? '大纲' : 'Outline' },
-    { id: 'history', icon: History, label: language === 'zh' ? '历史' : 'History' },
     { id: 'shell', icon: Terminal, label: 'Shell' },
   ] as const
 
