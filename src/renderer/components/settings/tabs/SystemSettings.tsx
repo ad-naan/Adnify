@@ -10,6 +10,7 @@ import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
+import { SETTINGS_PAGE, SETTINGS_DESC } from '../types'
 import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { Agent } from '@/renderer/agent/core'
@@ -247,7 +248,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
     }
 
     return (
-        <div className="space-y-8 animate-fade-in pb-10">
+        <div className={SETTINGS_PAGE}>
             <section>
                 <div className="flex items-center gap-2 mb-5 ml-1">
                     <ExternalLink className="w-4 h-4 text-accent" />
@@ -261,7 +262,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                             <div className="text-sm font-bold text-text-primary">
                                 {language === 'zh' ? 'GitHub Token' : 'GitHub Token'}
                             </div>
-                            <div className="text-xs text-text-muted mt-1 opacity-70">
+                            <div className={SETTINGS_DESC}>
                                 {language === 'zh'
                                     ? '用于 GitHub Releases 请求，减少速率限制，供 LSP 安装和更新检查复用'
                                     : 'Used for GitHub Releases requests to reduce rate limiting across LSP installs and update checks'}
@@ -302,7 +303,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '配置存储路径' : 'Config Storage Path'}</div>
-                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                <div className={SETTINGS_DESC}>
                                     {language === 'zh'
                                         ? '所有配置文件（config.json、mcp.json 等）的存储位置'
                                         : 'Storage location for all config files (config.json, mcp.json, etc.)'}
@@ -342,7 +343,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     <div className="flex items-center justify-between p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
                         <div>
                             <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '清除缓存' : 'Clear Cache'}</div>
-                            <div className="text-xs text-text-muted mt-1 opacity-70">{language === 'zh' ? '清除业务缓存、索引数据和临时文件' : 'Clear app caches, index data, and temporary files'}</div>
+                            <div className={SETTINGS_DESC}>{language === 'zh' ? '清除业务缓存、索引数据和临时文件' : 'Clear app caches, index data, and temporary files'}</div>
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" size="sm" onClick={handleClearCache} disabled={isClearing} className="rounded-xl px-6">
@@ -381,7 +382,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                                 <div className="text-sm font-bold text-text-primary">
                                     {language === 'zh' ? '启用文件日志' : 'Enable File Logging'}
                                 </div>
-                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                <div className={SETTINGS_DESC}>
                                     {language === 'zh'
                                         ? '将应用日志保存到文件，用于调试和问题排查'
                                         : 'Save application logs to file for debugging and troubleshooting'}
@@ -470,7 +471,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导出配置' : 'Export Settings'}</div>
-                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                <div className={SETTINGS_DESC}>
                                     {language === 'zh'
                                         ? '将当前配置导出为 JSON 文件，方便备份或迁移'
                                         : 'Export current settings to JSON file for backup or migration'}
@@ -503,7 +504,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     <div className="flex items-center justify-between p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
                         <div>
                             <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导入配置' : 'Import Settings'}</div>
-                            <div className="text-xs text-text-muted mt-1 opacity-70">
+                            <div className={SETTINGS_DESC}>
                                 {language === 'zh' ? '从 JSON 文件导入配置' : 'Import settings from JSON file'}
                             </div>
                         </div>

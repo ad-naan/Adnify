@@ -10,6 +10,7 @@ import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { snippetService, type CodeSnippet } from '@services/snippetService'
 import { Language } from '@renderer/i18n'
+import { SETTINGS_PAGE } from '../types'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface SnippetSettingsProps {
@@ -192,7 +193,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
+    <div className={SETTINGS_PAGE}>
       {/* Header Actions */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-1">

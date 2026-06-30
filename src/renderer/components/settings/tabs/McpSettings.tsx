@@ -34,6 +34,7 @@ import { isRemoteConfig, isLocalConfig } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { SETTINGS_PAGE } from '../types'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
@@ -625,7 +626,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
   const existingServerIds = mcpServers.map(s => s.id)
 
   return (
-    <div className="space-y-6">
+    <div className={SETTINGS_PAGE}>
       {/* Auto Connect Setting */}
       <div className="p-4 bg-surface/20 rounded-xl border border-border">
         <div className="flex items-center justify-between">

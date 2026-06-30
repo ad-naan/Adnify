@@ -9,6 +9,7 @@ import { Eye, EyeOff, AlertTriangle, Database, Settings2, Zap, Brain } from 'luc
 import { useStore } from '@store'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
+import { SETTINGS_PAGE, SETTINGS_SECTION, SETTINGS_LABEL, SETTINGS_INPUT } from '../types'
 import { Language } from '@renderer/i18n'
 import type { EmbeddingConfigInput, IndexStatus } from '@renderer/types/electron'
 
@@ -171,7 +172,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className={SETTINGS_PAGE}>
       {/* 索引模式选择 */}
       <section>
         <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">

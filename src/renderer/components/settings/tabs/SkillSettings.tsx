@@ -16,6 +16,7 @@ import {
     ToggleLeft, ToggleRight, ExternalLink, Github, FolderOpen
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { SETTINGS_PAGE } from '../types'
 
 interface SkillSettingsProps {
     language: string
@@ -199,7 +200,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
         )
 
     return (
-        <div className="space-y-6 animate-fade-in pb-10">
+        <div className={SETTINGS_PAGE}>
             {/* Header */}
             <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
                 <div className="flex items-center justify-between">

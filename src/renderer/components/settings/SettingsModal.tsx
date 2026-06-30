@@ -405,20 +405,53 @@ export default function SettingsModal() {
         providers.find(provider => provider.id === localConfig.provider),
         [localConfig.provider, providers])
 
-    const tabs = useMemo(() => [
-        { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
-        { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
-        { id: 'snippets', label: language === 'zh' ? '代码片段' : 'Snippets', icon: <FileCode className="w-4 h-4" /> },
-        { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
-        { id: 'rules', label: language === 'zh' ? '规则与记忆' : 'Rules & Memory', icon: <Brain className="w-4 h-4" /> },
-        { id: 'skills', label: 'Skills', icon: <Zap className="w-4 h-4" /> },
-        { id: 'mcp', label: 'MCP', icon: <Plug className="w-4 h-4" /> },
-        { id: 'lsp', label: language === 'zh' ? '语言服务' : 'LSP', icon: <Braces className="w-4 h-4" /> },
-        { id: 'keybindings', label: language === 'zh' ? '快捷键' : 'Keybindings', icon: <Keyboard className="w-4 h-4" /> },
-        { id: 'indexing', label: language === 'zh' ? '代码索引' : 'Indexing', icon: <Database className="w-4 h-4" /> },
-        { id: 'security', label: language === 'zh' ? '安全设置' : 'Security', icon: <Shield className="w-4 h-4" /> },
-        { id: 'system', label: language === 'zh' ? '系统' : 'System', icon: <Monitor className="w-4 h-4" /> },
-    ] as const, [language])
+    // Sidebar groups — provides visual hierarchy
+    type SidebarItem = { id: SettingsTab; label: { zh: string; en: string }; icon: React.ReactNode }
+    type SidebarGroup = { label: { zh: string; en: string }; items: readonly SidebarItem[] }
+
+    const sidebarGroups = useMemo<readonly SidebarGroup[]>(() => [
+        {
+            label: { zh: 'AI', en: 'AI' },
+            items: [
+                { id: 'provider', label: { zh: '模型提供商', en: 'Providers' }, icon: <Cpu className="w-4 h-4" /> },
+                { id: 'agent', label: { zh: '智能体', en: 'Agent' }, icon: <Settings2 className="w-4 h-4" /> },
+                { id: 'mcp', label: { zh: 'MCP', en: 'MCP' }, icon: <Plug className="w-4 h-4" /> },
+                { id: 'skills', label: { zh: 'Skills', en: 'Skills' }, icon: <Zap className="w-4 h-4" /> },
+            ],
+        },
+        {
+            label: { zh: '编辑器', en: 'Editor' },
+            items: [
+                { id: 'editor', label: { zh: '编辑器', en: 'Editor' }, icon: <Code className="w-4 h-4" /> },
+                { id: 'snippets', label: { zh: '代码片段', en: 'Snippets' }, icon: <FileCode className="w-4 h-4" /> },
+                { id: 'lsp', label: { zh: '语言服务', en: 'LSP' }, icon: <Braces className="w-4 h-4" /> },
+                { id: 'keybindings', label: { zh: '快捷键', en: 'Keybindings' }, icon: <Keyboard className="w-4 h-4" /> },
+            ],
+        },
+        {
+            label: { zh: '项目', en: 'Project' },
+            items: [
+                { id: 'rules', label: { zh: '规则与记忆', en: 'Rules & Memory' }, icon: <Brain className="w-4 h-4" /> },
+                { id: 'indexing', label: { zh: '代码索引', en: 'Indexing' }, icon: <Database className="w-4 h-4" /> },
+            ],
+        },
+        {
+            label: { zh: '系统', en: 'System' },
+            items: [
+                { id: 'security', label: { zh: '安全设置', en: 'Security' }, icon: <Shield className="w-4 h-4" /> },
+                { id: 'system', label: { zh: '系统', en: 'System' }, icon: <Monitor className="w-4 h-4" /> },
+            ],
+        },
+    ] as const, [])
+
+    // Flat lookup for the active page title
+    const activeTabLabel = useMemo(() => {
+        for (const group of sidebarGroups) {
+            const found = (group.items as SidebarItem[]).find(item => item.id === activeTab)
+            if (found) return language === 'zh' ? found.label.zh : found.label.en
+        }
+        return ''
+    }, [activeTab, language])
 
     const renderActiveTab = () => {
         switch (activeTab) {
@@ -515,18 +548,33 @@ export default function SettingsModal() {
                         </h2>
                     </div>
 
-                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${activeTab === tab.id ? 'bg-accent/10 text-text-primary border border-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'}`}
-                            >
-                                <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
-                                    {tab.icon}
-                                </span>
-                                <span>{tab.label}</span>
-                            </button>
+                    <nav className="flex-1 px-3 py-2 overflow-y-auto no-scrollbar space-y-4">
+                        {sidebarGroups.map((group, gi) => (
+                            <div key={gi}>
+                                <div className="mx-4 mt-2 mb-1 text-[10px] font-bold text-text-muted uppercase tracking-widest">
+                                    {language === 'zh' ? group.label.zh : group.label.en}
+                                </div>
+                                <div className="space-y-0.5">
+                                    {(group.items as SidebarItem[]).map(tab => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${
+                                                activeTab === tab.id
+                                                    ? 'bg-accent/10 text-text-primary border border-accent/20'
+                                                    : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'
+                                            }`}
+                                        >
+                                            <span className={`transition-colors duration-200 ${
+                                                activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'
+                                            }`}>
+                                                {tab.icon}
+                                            </span>
+                                            <span>{language === 'zh' ? tab.label.zh : tab.label.en}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         ))}
                     </nav>
 
@@ -548,7 +596,7 @@ export default function SettingsModal() {
                     <div className="settings-scroll-region flex-1 overflow-y-auto px-8 py-8 custom-scrollbar pb-28">
                         <div className="mb-6 pb-5 border-b border-border/40">
                             <h3 className="text-2xl font-semibold text-text-primary tracking-tight">
-                                {tabs.find(tab => tab.id === activeTab)?.label}
+                                {activeTabLabel}
                             </h3>
                             <p className="text-sm text-text-muted mt-1.5 opacity-80">
                                 {t('settings.managePreferences', language as Language)}

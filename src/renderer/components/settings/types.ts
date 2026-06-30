@@ -92,6 +92,33 @@ export interface PromptPreviewModalProps {
     onClose: () => void
 }
 
+// ========== 共享样式常量 ==========
+// 所有设置 Tab 统一使用这些常量，确保排版一致性
+
+/** 页面外层容器 */
+export const SETTINGS_PAGE = "space-y-8 animate-fade-in pb-10"
+
+/** Section 卡片容器 */
+export const SETTINGS_SECTION = "p-6 bg-surface/30 backdrop-blur-sm rounded-xl border border-border/50 space-y-5 shadow-sm hover:border-border transition-colors duration-300"
+
+/** Section 标签文字 */
+export const SETTINGS_LABEL = "text-xs font-semibold text-text-secondary uppercase tracking-wider ml-1 mb-2 block"
+
+/** 输入框/下拉框统一样式 */
+export const SETTINGS_INPUT = "bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
+
+/** Section 标题行（带图标） */
+export const SETTINGS_SECTION_HEADER = "flex items-center gap-2 mb-1"
+
+/** Section 标题文字 */
+export const SETTINGS_SECTION_TITLE = "text-sm font-bold text-text-primary"
+
+/** 外层 Group 标题 */
+export const SETTINGS_GROUP_TITLE = "text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]"
+
+/** 次级描述文字 */
+export const SETTINGS_DESC = "text-xs text-text-muted mt-1 opacity-70"
+
 export const LANGUAGES: { id: Language; name: string }[] = [
     { id: 'en', name: 'English' },
     { id: 'zh', name: '中文' },

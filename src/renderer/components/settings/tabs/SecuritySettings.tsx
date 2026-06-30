@@ -1,6 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import { AlertTriangle, Plus, X, RotateCcw } from 'lucide-react'
 import { Switch } from '@components/ui'
+import { SETTINGS_PAGE, SETTINGS_SECTION } from '../types'
 import { toast } from '@components/common/ToastProvider'
 import { type Language } from '@renderer/i18n'
 import { api } from '@renderer/services/electronAPI'
@@ -65,7 +66,7 @@ export function SecuritySettings({ language, securitySettings, setSecuritySettin
     }
 
     return (
-        <div className="space-y-8 animate-fade-in pb-10">
+        <div className={SETTINGS_PAGE}>
             <div className="p-5 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl flex items-start gap-4 shadow-sm">
                 <div className="p-2 bg-yellow-500/10 rounded-lg shrink-0">
                     <AlertTriangle className="w-5 h-5 text-yellow-500" />
@@ -82,7 +83,7 @@ export function SecuritySettings({ language, securitySettings, setSecuritySettin
                 </div>
             </div>
 
-            <section className="space-y-5 p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
+            <section className={SETTINGS_SECTION}>
                 <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60 ml-1">
                     {language === 'zh' ? '安全选项' : 'Security Options'}
                 </h4>
@@ -108,7 +109,7 @@ export function SecuritySettings({ language, securitySettings, setSecuritySettin
                 </div>
             </section>
 
-            <section className="space-y-4 p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
+            <section className={SETTINGS_SECTION}>
                 <div className="flex items-center justify-between">
                     <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60">
                         {language === 'zh' ? 'Shell 命令白名单' : 'Shell Command Whitelist'}
@@ -154,7 +155,7 @@ export function SecuritySettings({ language, securitySettings, setSecuritySettin
                 </div>
             </section>
 
-            <section className="space-y-4 p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
+            <section className={SETTINGS_SECTION}>
                 <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60">
                     {language === 'zh' ? 'Git 子命令白名单' : 'Git Subcommand Whitelist'}
                 </h4>

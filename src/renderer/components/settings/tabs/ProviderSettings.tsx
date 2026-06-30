@@ -21,7 +21,7 @@ import { LLM_DEFAULTS } from '@/shared/config/defaults'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select, Switch } from '@components/ui'
-import { ProviderSettingsProps } from '../types'
+import { ProviderSettingsProps, SETTINGS_PAGE } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 
 // 内置厂商 ID
@@ -1222,7 +1222,7 @@ export function ProviderSettings({
   }, [collectProviderModels, selectedMultimodalProviderId])
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
+    <div className={SETTINGS_PAGE}>
       {/* Provider 选择器 */}
       <section className="space-y-4">
         <div className="mb-4">

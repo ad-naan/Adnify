@@ -14,6 +14,7 @@ import {
   RefreshCw, AlertCircle, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { SETTINGS_PAGE } from '../types'
 
 interface RulesMemorySettingsProps {
   language: string
@@ -117,7 +118,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
+    <div className={SETTINGS_PAGE}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Project Rules */}
         <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">

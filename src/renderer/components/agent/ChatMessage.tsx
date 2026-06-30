@@ -374,38 +374,17 @@ MessageMetaGroup.displayName = 'MessageMetaGroup'
 function buildProcessSummaryText(summary: AssistantProcessSummary, language: 'zh' | 'en'): string {
   const items: string[] = []
 
+  // 固定开头为 Work
+  items.push(language === 'zh' ? '工作' : 'Work')
+
+  // 工具数量：Tool × N
   if (summary.toolCallCount > 0) {
-    items.push(language === 'zh'
-      ? `${summary.toolCallCount} 个工具`
-      : `${summary.toolCallCount} tool${summary.toolCallCount > 1 ? 's' : ''}`)
+    items.push(`工具·${summary.toolCallCount}`)
   }
 
+  // 有思考时才追加
   if (summary.hasReasoning) {
     items.push(language === 'zh' ? '思考' : 'Thinking')
-  }
-
-  if (summary.hasSearch) {
-    items.push(language === 'zh' ? '搜索' : 'Search')
-  }
-
-  if (summary.hasContext) {
-    items.push(language === 'zh' ? '上下文' : 'Context')
-  }
-
-  if (summary.hasSources) {
-    items.push(language === 'zh' ? '来源' : 'Sources')
-  }
-
-  if (summary.hasLintCheck) {
-    items.push(language === 'zh' ? '检查' : 'Checks')
-  }
-
-  if (summary.hasSystemAlert) {
-    items.push(language === 'zh' ? '提示' : 'Alerts')
-  }
-
-  if (summary.hasProcessText) {
-    items.push(language === 'zh' ? '说明' : 'Notes')
   }
 
   return items.join(' · ')

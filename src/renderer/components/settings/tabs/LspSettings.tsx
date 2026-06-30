@@ -20,6 +20,7 @@ import {
 import { Language } from '@renderer/i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { Button, Input } from '@components/ui'
+import { SETTINGS_PAGE } from '../types'
 import { LSP_SERVER_DEFINITIONS } from '@shared/languages'
 
 interface LspSettingsProps {
@@ -178,7 +179,7 @@ export function LspSettings({ language }: LspSettingsProps) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className={SETTINGS_PAGE}>
       {/* 错误提示 */}
       {error && (
         <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">

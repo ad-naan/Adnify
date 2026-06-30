@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { getPromptTemplates } from '@renderer/agent/prompts/promptTemplates'
 import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { Button, Input, Select, Switch } from '@components/ui'
-import { AgentSettingsProps } from '../types'
+import { AgentSettingsProps, SETTINGS_PAGE, SETTINGS_SECTION, SETTINGS_LABEL } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
 import { Bot, FileText, Zap, BrainCircuit, AlertOctagon, Terminal, Search, Eye, EyeOff, RefreshCw } from 'lucide-react'
 
@@ -47,12 +47,12 @@ export function AgentSettings({
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
 
     return (
-        <div className="space-y-8 animate-fade-in pb-10">
+        <div className={SETTINGS_PAGE}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column */}
                 <div className="space-y-6">
                     {/* 自动化权限 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                    <section className={SETTINGS_SECTION}>
                         <div className="flex items-center gap-2 mb-1">
                             <Zap className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('自动化权限', 'Automation Permissions')}</h5>
@@ -86,14 +86,14 @@ export function AgentSettings({
                     </section>
 
                     {/* Prompt 模板 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                    <section className={SETTINGS_SECTION}>
                         <div className="flex items-center gap-2 mb-1">
                             <Bot className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('Prompt 模板', 'Prompt Template')}</h5>
                         </div>
                         <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('选择模板', 'Select Template')}</label>
+                                <label className={SETTINGS_LABEL}>{t('选择模板', 'Select Template')}</label>
                                 <Select
                                     value={promptTemplateId}
                                     onChange={(value) => setPromptTemplateId(value)}
@@ -137,7 +137,7 @@ export function AgentSettings({
                     </section>
 
                     {/* 自定义系统指令 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                    <section className={SETTINGS_SECTION}>
                         <div className="flex items-center gap-2 mb-1">
                             <Terminal className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('自定义系统指令', 'Custom Instructions')}</h5>
@@ -154,7 +154,7 @@ export function AgentSettings({
                     </section>
 
                     {/* 网络搜索配置 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                    <section className={SETTINGS_SECTION}>
                         <div className="flex items-center gap-2 mb-1">
                             <Search className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('网络搜索', 'Web Search')}</h5>
@@ -167,7 +167,7 @@ export function AgentSettings({
                         </p>
                         <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">Google API Key</label>
+                                <label className={SETTINGS_LABEL}>Google API Key</label>
                                 <div className="relative">
                                     <Input
                                         type={showGoogleApiKey ? 'text' : 'password'}
@@ -186,7 +186,7 @@ export function AgentSettings({
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('搜索引擎 ID (CX)', 'Search Engine ID (CX)')}</label>
+                                <label className={SETTINGS_LABEL}>{t('搜索引擎 ID (CX)', 'Search Engine ID (CX)')}</label>
                                 <Input
                                     type="text"
                                     value={webSearchConfig.googleCx || ''}
@@ -211,14 +211,14 @@ export function AgentSettings({
                 {/* Right Column */}
                 <div className="space-y-6">
                     {/* 基础配置 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                    <section className={SETTINGS_SECTION}>
                         <div className="flex items-center gap-2 mb-1">
                             <BrainCircuit className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('基础配置', 'Basic Configuration')}</h5>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('最大循环', 'Max Loops')}</label>
+                                <label className={SETTINGS_LABEL}>{t('最大循环', 'Max Loops')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxToolLoops}
@@ -229,7 +229,7 @@ export function AgentSettings({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('最大历史消息', 'Max History')}</label>
+                                <label className={SETTINGS_LABEL}>{t('最大历史消息', 'Max History')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxHistoryMessages}
@@ -243,7 +243,7 @@ export function AgentSettings({
                     </section>
 
                     {/* 上下文限制 */}
-                    <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+                    <section className={SETTINGS_SECTION}>
                         <div className="flex items-center gap-2 mb-1">
                             <FileText className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-medium text-text-primary">{t('上下文限制', 'Context Limits')}</h5>
@@ -251,7 +251,7 @@ export function AgentSettings({
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('工具结果限制', 'Tool Result Limit')}</label>
+                                <label className={SETTINGS_LABEL}>{t('工具结果限制', 'Tool Result Limit')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxToolResultChars}
@@ -261,7 +261,7 @@ export function AgentSettings({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('上下文 Token 限制', 'Context Token Limit')}</label>
+                                <label className={SETTINGS_LABEL}>{t('上下文 Token 限制', 'Context Token Limit')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxContextTokens ?? 128000}
@@ -271,7 +271,7 @@ export function AgentSettings({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('单文件内容限制', 'File Content Limit')}</label>
+                                <label className={SETTINGS_LABEL}>{t('单文件内容限制', 'File Content Limit')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxFileContentChars ?? 15000}
@@ -281,7 +281,7 @@ export function AgentSettings({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('最大文件数', 'Max Files')}</label>
+                                <label className={SETTINGS_LABEL}>{t('最大文件数', 'Max Files')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxContextFiles ?? 6}
@@ -292,7 +292,7 @@ export function AgentSettings({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('语义搜索结果数', 'Semantic Results')}</label>
+                                <label className={SETTINGS_LABEL}>{t('语义搜索结果数', 'Semantic Results')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxSemanticResults ?? 5}
@@ -303,7 +303,7 @@ export function AgentSettings({
                                 />
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('终端输出限制', 'Terminal Limit')}</label>
+                                <label className={SETTINGS_LABEL}>{t('终端输出限制', 'Terminal Limit')}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxTerminalChars ?? 3000}
@@ -330,7 +330,7 @@ export function AgentSettings({
                                 {/* 重试 & 超时 */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('最大重试', 'Max Retries')}</label>
+                                        <label className={SETTINGS_LABEL}>{t('最大重试', 'Max Retries')}</label>
                                         <Input
                                             type="number"
                                             value={agentConfig.maxRetries ?? 3}
@@ -341,7 +341,7 @@ export function AgentSettings({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('重试延迟 (ms)', 'Retry Delay')}</label>
+                                        <label className={SETTINGS_LABEL}>{t('重试延迟 (ms)', 'Retry Delay')}</label>
                                         <Input
                                             type="number"
                                             value={agentConfig.retryDelayMs ?? 1000}
@@ -351,7 +351,7 @@ export function AgentSettings({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('工具超时 (ms)', 'Tool Timeout')}</label>
+                                        <label className={SETTINGS_LABEL}>{t('工具超时 (ms)', 'Tool Timeout')}</label>
                                         <Input
                                             type="number"
                                             value={agentConfig.toolTimeoutMs ?? 60000}
@@ -363,7 +363,7 @@ export function AgentSettings({
                                 </div>
 
                                 {/* 上下文压缩 */}
-                                <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-4">
+                                <div className={SETTINGS_SECTION}>
                                     <div className="flex items-center gap-2 mb-1">
                                         <div className="w-1.5 h-1.5 rounded-full bg-accent" />
                                         <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{t('上下文压缩', 'Context Compression')}</label>
@@ -433,7 +433,7 @@ export function AgentSettings({
                                 </div>
 
                                 {/* 循环检测 */}
-                                <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-4">
+                                <div className={SETTINGS_SECTION}>
                                     <div className="flex items-center justify-between mb-1">
                                         <div className="flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-accent" />
@@ -498,7 +498,7 @@ export function AgentSettings({
                                 </div>
 
                                 {/* 忽略目录 */}
-                                <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-3">
+                                <div className={SETTINGS_SECTION}>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-accent" />
