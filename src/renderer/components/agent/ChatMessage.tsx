@@ -255,6 +255,23 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
     expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
   })))
   const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
+  const wasSearchStreamingRef = React.useRef(false)
+  const manuallyToggledMetaRef = React.useRef(false)
+
+  // auto-expand/auto-collapse 基于 isSearchStreaming 状态
+  useEffect(() => {
+    if (expandAgentBlocksByDefault) return
+
+    if (isSearchStreaming && !wasSearchStreamingRef.current) {
+      manuallyToggledMetaRef.current = false
+      setIsExpanded(true)
+    }
+    if (!isSearchStreaming && wasSearchStreamingRef.current && !manuallyToggledMetaRef.current) {
+      setIsExpanded(false)
+    }
+
+    wasSearchStreamingRef.current = isSearchStreaming
+  }, [isSearchStreaming, expandAgentBlocksByDefault])
 
   const hasAutoSkills = autoSkills && autoSkills.length > 0
   const hasManualSkills = manualSkills && manualSkills.length > 0
@@ -283,7 +300,10 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
     <div className="overflow-hidden w-full my-0.5 animate-fade-in relative z-10">
       {/* 标题行 */}
       <div
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          manuallyToggledMetaRef.current = true
+          setIsExpanded(!isExpanded)
+        }}
         className="flex w-full items-center gap-2 py-1.5 cursor-pointer select-none group rounded-md hover:bg-text-primary/[0.03] transition-colors"
       >
         <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 group-hover:text-text-muted transition-colors">
@@ -484,6 +504,25 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
   const lastElapsed = React.useRef<number>(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [shadowClass, setShadowClass] = useState('')
+  const wasStreamingRef = React.useRef(false)
+  const manuallyToggledRef = React.useRef(false)
+
+  // auto-expand/auto-collapse 基于 isStreaming 状态
+  useEffect(() => {
+    if (expandAgentBlocksByDefault) return // 用户明确开启始终展开，不干预
+
+    if (isStreaming && !wasStreamingRef.current) {
+      // false→true：思考开始时自动展开
+      manuallyToggledRef.current = false
+      setIsExpanded(true)
+    }
+    if (!isStreaming && wasStreamingRef.current && !manuallyToggledRef.current) {
+      // true→false：思考结束时自动折叠（仅当用户未手动操作过）
+      setIsExpanded(false)
+    }
+
+    wasStreamingRef.current = isStreaming
+  }, [isStreaming, expandAgentBlocksByDefault])
 
   useEffect(() => {
     if (!startTime || !isStreaming) return
@@ -526,7 +565,10 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
   return (
     <div className="my-3 group/think overflow-hidden">
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          manuallyToggledRef.current = true
+          setIsExpanded(!isExpanded)
+        }}
         className="flex w-full items-center gap-2 py-1.5 text-text-muted/50 hover:text-text-muted rounded-md hover:bg-text-primary/[0.03] transition-colors select-none"
       >
         <div className={`transition-transform duration-200 ${isExpanded ? 'rotate-0' : '-rotate-90'}`}>
