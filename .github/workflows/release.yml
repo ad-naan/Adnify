@@ -54,6 +54,9 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
+      - name: Prune development dependencies
+        run: node scripts/prune-dev-deps.js
+
       - name: Package Windows ${{ matrix.arch }}
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
@@ -139,6 +142,9 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
+      - name: Prune development dependencies
+        run: node scripts/prune-dev-deps.js
+
       - name: Package macOS ${{ matrix.arch }}
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
@@ -214,6 +220,9 @@ jobs:
         run: npm run build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+
+      - name: Prune development dependencies
+        run: node scripts/prune-dev-deps.js
 
       - name: Package Linux ${{ matrix.arch }}
         run: npx electron-builder --linux --${{ matrix.arch }} -p never

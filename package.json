@@ -129,6 +129,7 @@
       "output": "release"
     },
     "asar": true,
+    "prune": false,
     "asarUnpack": [
       "node_modules/node-pty/**",
       "node_modules/@vscode/ripgrep/**",
