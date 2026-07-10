@@ -106,7 +106,7 @@ jobs:
 
       - name: Prune development dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: node scripts/prune-dev-deps.js
+        run: npm prune --production && npm install --no-save electron-builder @electron/rebuild
 
       - name: Package Windows ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -193,7 +193,7 @@ jobs:
 
       - name: Prune development dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: node scripts/prune-dev-deps.js
+        run: npm prune --production && npm install --no-save electron-builder @electron/rebuild
 
       - name: Package macOS ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -273,7 +273,7 @@ jobs:
 
       - name: Prune development dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: node scripts/prune-dev-deps.js
+        run: npm prune --production && npm install --no-save electron-builder @electron/rebuild
 
       - name: Package Linux ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
