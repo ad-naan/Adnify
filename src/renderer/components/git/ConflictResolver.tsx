@@ -131,7 +131,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
           setConflicts(parseConflicts(fileContent))
         }
       } catch (e) {
-        toast.error('Failed to load file')
+        toast.error(tt('git.failedToLoadFile'))
       } finally {
         setIsLoading(false)
       }
@@ -221,7 +221,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
       toast.success(tt('git.conflictResolved'))
       onResolved()
     } catch (e) {
-      toast.error('Failed to save file')
+      toast.error(tt('git.failedToSaveFile'))
     }
   }, [conflicts, filePath, resolvedContent, tt, onResolved])
 

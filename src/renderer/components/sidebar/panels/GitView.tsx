@@ -952,25 +952,25 @@ Commit message:`
 
     const handleStage = async (path: string, rootPath?: string) => {
         const success = await gitService.stageFile(path, rootPath)
-        if (!success) toast.error("Failed to stage file")
+        if (!success) toast.error(tt('git.stageFailed'))
         await refreshAfterRepoMutation(rootPath)
     }
 
     const handleStageAll = async (rootPath?: string) => {
         const success = await gitService.stageAll(rootPath)
-        if (!success) toast.error("Failed to stage all files")
+        if (!success) toast.error(tt('git.stageAllFailed'))
         await refreshAfterRepoMutation(rootPath)
     }
 
     const handleUnstage = async (path: string, rootPath?: string) => {
         const success = await gitService.unstageFile(path, rootPath)
-        if (!success) toast.error("Failed to unstage file")
+        if (!success) toast.error(tt('git.unstageFailed'))
         await refreshAfterRepoMutation(rootPath)
     }
 
     const handleUnstageAll = async (rootPath?: string) => {
         const success = await gitService.unstageAll(rootPath)
-        if (!success) toast.error("Failed to unstage all files")
+        if (!success) toast.error(tt('git.unstageAllFailed'))
         await refreshAfterRepoMutation(rootPath)
     }
 
