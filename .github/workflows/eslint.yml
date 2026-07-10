@@ -30,10 +30,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ESLint
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install ESLint and TypeScript Parser
         run: |
-          npm install eslint@8.10.0
-          npm install @microsoft/eslint-formatter-sarif@3.1.0
+          npm install eslint@8.57.0 @typescript-eslint/parser@6.21.0 @typescript-eslint/eslint-plugin@6.21.0 typescript@5.3.3 @microsoft/eslint-formatter-sarif@3.1.0
+
+      - name: Create temporary ESLint config
+        run: |
+          echo "module.exports = {
+            root: true,
+            parser: '@typescript-eslint/parser',
+            plugins: ['@typescript-eslint'],
+            extends: [
+              'eslint:recommended',
+              'plugin:@typescript-eslint/recommended'
+            ],
+            parserOptions: {
+              ecmaVersion: 2022,
+              sourceType: 'module'
+            },
+            rules: {
+              '@typescript-eslint/no-explicit-any': 'off',
+              '@typescript-eslint/no-unused-vars': 'off',
+              'no-undef': 'off',
+              'no-case-declarations': 'off'
+            }
+          };" > .eslintrc.js
 
       - name: Run ESLint
         env:
