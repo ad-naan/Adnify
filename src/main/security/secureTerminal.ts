@@ -477,8 +477,8 @@ export function registerSecureTerminalHandlers(
 
     try {
       // 使用 dugite（安全）
-      const { GitProcess } = require('dugite')
-      const result = await GitProcess.exec(args, cwd)
+      const dugite = require('dugite')
+      const result = await dugite.exec(args, cwd)
 
       securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
         exitCode: result.exitCode,
@@ -490,7 +490,7 @@ export function registerSecureTerminalHandlers(
         if (isQueryCommand) {
           logger.security.debug('[Git] dugite query returned non-zero:', args)
         } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
-          logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
+          logger.security.info('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
         } else {
           logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
         }
@@ -503,7 +503,7 @@ export function registerSecureTerminalHandlers(
         exitCode: result.exitCode,
       }
     } catch (error) {
-      logger.security.warn('[Git] dugite 不可用，尝试安全的 spawn 方式')
+      logger.security.warn(`[Git] dugite 不可用: ${error instanceof Error ? error.stack : error}，尝试安全的 spawn 方式`)
 
       try {
         // 6. 安全回退：使用 spawn 而非 exec
