@@ -5,9 +5,6 @@
 
 import { logger } from '@shared/utils/Logger'
 import { safeIpcHandle } from './safeHandle'
-import * as https from 'https'
-import * as http from 'http'
-import { URL } from 'url'
 
 // ===== 读取 URL 内容 =====
 
@@ -26,195 +23,113 @@ interface ReadUrlResult {
  * 免费无限制使用
  */
 async function fetchWithJinaReader(url: string, timeout = 60000): Promise<ReadUrlResult> {
-    return new Promise((resolve) => {
-        const options = {
-            hostname: 'r.jina.ai',
-            port: 443,
-            path: `/${url}`,
-            method: 'GET',
+    try {
+        const controller = new AbortController()
+        const id = setTimeout(() => controller.abort(), timeout)
+
+        const response = await fetch(`https://r.jina.ai/${url}`, {
             headers: {
                 'Accept': 'text/plain',
                 'User-Agent': 'Adnify/1.0 (AI Code Editor)',
             },
-            timeout,
+            signal: controller.signal,
+        })
+        clearTimeout(id)
+
+        if (!response.ok) {
+            return {
+                success: false,
+                error: `Jina Reader returned status ${response.status}`,
+                statusCode: response.status,
+            }
         }
 
-        const req = https.request(options, (res) => {
-            let data = ''
-            res.setEncoding('utf8')
+        const data = await response.text()
 
-            res.on('data', (chunk) => {
-                data += chunk
-                // 限制响应大小
-                if (data.length > 500000) {
-                    req.destroy()
-                    resolve({
-                        success: true,
-                        content: data.slice(0, 500000) + '\n\n...(truncated, content too large)',
-                        statusCode: res.statusCode,
-                        contentType: 'text/plain',
-                    })
-                }
-            })
+        // 限制响应大小
+        let content = data
+        if (data.length > 500000) {
+            content = data.slice(0, 500000) + '\n\n...(truncated, content too large)'
+        }
 
-            res.on('end', () => {
-                if (res.statusCode && res.statusCode >= 400) {
-                    resolve({
-                        success: false,
-                        error: `Jina Reader returned status ${res.statusCode}`,
-                        statusCode: res.statusCode,
-                    })
-                    return
-                }
+        let title = ''
+        const titleMatch = content.match(/^#\s+(.+)$/m)
+        if (titleMatch) {
+            title = titleMatch[1].trim()
+        }
 
-                // 从 Jina 返回的 Markdown 中提取标题
-                let title = ''
-                const titleMatch = data.match(/^#\s+(.+)$/m)
-                if (titleMatch) {
-                    title = titleMatch[1].trim()
-                }
-
-                resolve({
-                    success: true,
-                    content: data,
-                    title,
-                    statusCode: res.statusCode,
-                    contentType: 'text/markdown',
-                })
-            })
-        })
-
-        req.on('error', (error) => {
-            resolve({
-                success: false,
-                error: `Jina Reader request failed: ${error.message}`,
-            })
-        })
-
-        req.on('timeout', () => {
-            req.destroy()
-            resolve({
-                success: false,
-                error: 'Jina Reader request timed out',
-            })
-        })
-
-        req.end()
-    })
+        return {
+            success: true,
+            content,
+            title,
+            statusCode: response.status,
+            contentType: 'text/markdown',
+        }
+    } catch (error: any) {
+        return {
+            success: false,
+            error: `Jina Reader request failed: ${error.message || error}`,
+        }
+    }
 }
 
-/**
- * 直接抓取 URL 内容（备用方案）
- */
 async function fetchUrlDirect(url: string, timeout = 60000): Promise<ReadUrlResult> {
-    return new Promise((resolve) => {
-        try {
-            const parsedUrl = new URL(url)
-            const protocol = parsedUrl.protocol === 'https:' ? https : http
+    try {
+        const controller = new AbortController()
+        const id = setTimeout(() => controller.abort(), timeout)
 
-            const options = {
-                hostname: parsedUrl.hostname,
-                port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
-                path: parsedUrl.pathname + parsedUrl.search,
-                method: 'GET',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
-                    'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
-                },
-                timeout,
-            }
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+            },
+            signal: controller.signal,
+        })
+        clearTimeout(id)
 
-            const req = protocol.request(options, (res) => {
-                // 处理重定向
-                if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                    const redirectUrl = res.headers.location.startsWith('http')
-                        ? res.headers.location
-                        : `${parsedUrl.protocol}//${parsedUrl.host}${res.headers.location}`
-                    fetchUrlDirect(redirectUrl, timeout).then(resolve)
-                    return
-                }
-
-                let data = ''
-                const contentType = res.headers['content-type'] || ''
-
-                // 检查是否是文本内容
-                if (!contentType.includes('text') &&
-                    !contentType.includes('json') &&
-                    !contentType.includes('xml') &&
-                    !contentType.includes('javascript')) {
-                    resolve({
-                        success: false,
-                        error: `Unsupported content type: ${contentType}`,
-                        statusCode: res.statusCode,
-                        contentType,
-                    })
-                    req.destroy()
-                    return
-                }
-
-                res.setEncoding('utf8')
-                res.on('data', (chunk) => {
-                    data += chunk
-                    // 限制响应大小
-                    if (data.length > 500000) {
-                        req.destroy()
-                        resolve({
-                            success: true,
-                            content: data.slice(0, 500000) + '\n\n...(truncated, content too large)',
-                            statusCode: res.statusCode,
-                            contentType,
-                        })
-                    }
-                })
-
-                res.on('end', () => {
-                    // 提取 HTML 标题
-                    let title = ''
-                    const titleMatch = data.match(/<title[^>]*>([^<]+)<\/title>/i)
-                    if (titleMatch) {
-                        title = titleMatch[1].trim()
-                    }
-
-                    // HTML 到文本转换
-                    let content = data
-                    if (contentType.includes('html')) {
-                        content = htmlToText(data)
-                    }
-
-                    resolve({
-                        success: true,
-                        content,
-                        title,
-                        statusCode: res.statusCode,
-                        contentType,
-                    })
-                })
-            })
-
-            req.on('error', (error) => {
-                resolve({
-                    success: false,
-                    error: `Request failed: ${error.message}`,
-                })
-            })
-
-            req.on('timeout', () => {
-                req.destroy()
-                resolve({
-                    success: false,
-                    error: 'Request timed out',
-                })
-            })
-
-            req.end()
-        } catch (error) {
-            resolve({
+        const contentType = response.headers.get('content-type') || ''
+        if (!contentType.includes('text') &&
+            !contentType.includes('json') &&
+            !contentType.includes('xml') &&
+            !contentType.includes('javascript')) {
+            return {
                 success: false,
-                error: `Invalid URL: ${error}`,
-            })
+                error: `Unsupported content type: ${contentType}`,
+                statusCode: response.status,
+                contentType,
+            }
         }
-    })
+
+        const data = await response.text()
+        let content = data
+        if (data.length > 500000) {
+            content = data.slice(0, 500000) + '\n\n...(truncated, content too large)'
+        }
+
+        let title = ''
+        const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i)
+        if (titleMatch) {
+            title = titleMatch[1].trim()
+        }
+
+        if (contentType.includes('html')) {
+            content = htmlToText(content)
+        }
+
+        return {
+            success: true,
+            content,
+            title,
+            statusCode: response.status,
+            contentType,
+        }
+    } catch (error: any) {
+        return {
+            success: false,
+            error: `Request failed: ${error.message || error}`,
+        }
+    }
 }
 
 /**
@@ -360,111 +275,70 @@ async function webSearch(query: string, maxResults = 5, timeout?: number): Promi
 
 // Google Programmable Search Engine API
 async function searchWithGoogle(query: string, apiKey: string, cx: string, maxResults: number, timeout = 15000): Promise<WebSearchResult> {
-    return new Promise((resolve) => {
+    try {
         const encodedQuery = encodeURIComponent(query)
-        const url = `/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodedQuery}&num=${Math.min(maxResults, 10)}`
+        const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodedQuery}&num=${Math.min(maxResults, 10)}`
 
-        const options = {
-            hostname: 'www.googleapis.com',
-            port: 443,
-            path: url,
-            method: 'GET',
+        const controller = new AbortController()
+        const id = setTimeout(() => controller.abort(), timeout)
+
+        const response = await fetch(url, {
             headers: {
                 'Accept': 'application/json',
             },
+            signal: controller.signal,
+        })
+        clearTimeout(id)
+
+        const json = await response.json() as any
+        if (json.error) {
+            return {
+                success: false,
+                error: `Google API error: ${json.error.message || json.error.code}`
+            }
         }
 
-        const req = https.request(options, (res) => {
-            let data = ''
-            res.on('data', (chunk) => data += chunk)
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data)
+        const results: SearchResult[] = []
+        if (json.items) {
+            for (const item of json.items.slice(0, maxResults)) {
+                results.push({
+                    title: item.title || '',
+                    url: item.link || '',
+                    snippet: item.snippet || '',
+                })
+            }
+        }
 
-                    // 检查 API 错误
-                    if (json.error) {
-                        resolve({
-                            success: false,
-                            error: `Google API error: ${json.error.message || json.error.code}`
-                        })
-                        return
-                    }
-
-                    const results: SearchResult[] = []
-                    if (json.items) {
-                        for (const item of json.items.slice(0, maxResults)) {
-                            results.push({
-                                title: item.title || '',
-                                url: item.link || '',
-                                snippet: item.snippet || '',
-                            })
-                        }
-                    }
-
-                    resolve({ success: true, results })
-                } catch {
-                    resolve({ success: false, error: 'Failed to parse Google response' })
-                }
-            })
-        })
-
-        req.on('error', (error) => {
-            resolve({ success: false, error: `Google request failed: ${error.message}` })
-        })
-
-        req.setTimeout(timeout, () => {
-            req.destroy()
-            resolve({ success: false, error: 'Google request timed out' })
-        })
-
-        req.end()
-    })
+        return { success: true, results }
+    } catch (error: any) {
+        return { success: false, error: `Google request failed: ${error.message || error}` }
+    }
 }
 
-// DuckDuckGo HTML 抓取
 async function searchWithDuckDuckGo(query: string, maxResults: number, timeout = 25000): Promise<WebSearchResult> {
-    return new Promise((resolve) => {
+    try {
         const encodedQuery = encodeURIComponent(query)
-        // 使用 DuckDuckGo 的 HTML 版本，更容易抓取
-        const url = `/html/?q=${encodedQuery}`
+        const url = `https://html.duckduckgo.com/html/?q=${encodedQuery}`
 
-        const options = {
-            hostname: 'html.duckduckgo.com',
-            port: 443,
-            path: url,
-            method: 'GET',
+        const controller = new AbortController()
+        const id = setTimeout(() => controller.abort(), timeout)
+
+        const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-        }
-
-        const req = https.request(options, (res) => {
-            let data = ''
-            res.setEncoding('utf8')
-            res.on('data', (chunk) => data += chunk)
-            res.on('end', () => {
-                try {
-                    const results = parseDuckDuckGoHtml(data, maxResults)
-                    resolve({ success: true, results })
-                } catch (error) {
-                    resolve({ success: false, error: `Failed to parse DuckDuckGo response: ${error}` })
-                }
-            })
+            signal: controller.signal,
         })
+        clearTimeout(id)
 
-        req.on('error', (error) => {
-            resolve({ success: false, error: `DuckDuckGo request failed: ${error.message}` })
-        })
-
-        req.setTimeout(timeout, () => {
-            req.destroy()
-            resolve({ success: false, error: 'DuckDuckGo request timed out' })
-        })
-
-        req.end()
-    })
+        const data = await response.text()
+        const results = parseDuckDuckGoHtml(data, maxResults)
+        return { success: true, results }
+    } catch (error: any) {
+        return { success: false, error: `DuckDuckGo request failed: ${error.message || error}` }
+    }
 }
 
 // 解析 DuckDuckGo HTML 响应

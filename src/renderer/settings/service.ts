@@ -178,6 +178,7 @@ function buildPersistedSettingsPayload(
     mcpConfig: settings.mcpConfig,
     githubToken: settings.githubToken,
     enableFileLogging: settings.enableFileLogging,
+    proxySettings: settings.proxySettings,
   }
 }
 
@@ -309,6 +310,9 @@ class SettingsService {
       enableFileLogging: typeof saved.enableFileLogging === 'boolean'
         ? saved.enableFileLogging
         : defaults.enableFileLogging,
+      proxySettings: saved.proxySettings
+        ? deepMerge(defaults.proxySettings, saved.proxySettings as object)
+        : defaults.proxySettings,
     }
   }
 

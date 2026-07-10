@@ -180,6 +180,7 @@ export const createSettingsSlice: StateCreator<SettingsSlice, [], [], SettingsSl
         aiInstructions: state.aiInstructions,
         onboardingCompleted: state.onboardingCompleted,
         enableFileLogging: state.enableFileLogging,
+        proxySettings: state.proxySettings,
       })
       logger.settings.info('[Settings] Saved')
     } catch (e) {

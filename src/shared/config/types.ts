@@ -190,7 +190,6 @@ export interface SecuritySettings {
   allowedGitSubcommands: string[]
   showSecurityWarnings: boolean
 }
-
 export interface WebSearchConfig {
   googleApiKey?: string
   googleCx?: string
@@ -198,6 +197,12 @@ export interface WebSearchConfig {
 
 export interface McpConfig {
   autoConnect?: boolean
+}
+
+export interface ProxyConfig {
+  enabled: boolean
+  rules: string
+  bypassRules?: string
 }
 
 export interface PersistedLLMConfig {
@@ -235,4 +240,5 @@ export interface AppSettings {
   webSearchConfig?: WebSearchConfig
   mcpConfig?: McpConfig
   githubToken?: string
+  proxySettings?: ProxyConfig
 }

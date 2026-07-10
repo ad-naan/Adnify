@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink } from 'lucide-react'
+import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
@@ -17,6 +17,7 @@ import { memoryService } from '@/renderer/agent/services/memoryService'
 import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
 import { resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
+import type { ProxyConfig } from '@shared/config/types'
 
 interface SystemSettingsProps {
     language: Language
@@ -24,6 +25,8 @@ interface SystemSettingsProps {
     setEnableFileLogging: (enabled: boolean) => void
     githubToken: string
     setGithubToken: (token: string) => void
+    proxySettings?: ProxyConfig
+    setProxySettings: (settings: ProxyConfig) => void
 }
 
 function DataPathDisplay() {
@@ -35,12 +38,41 @@ function DataPathDisplay() {
     return <span>{path || '...'}</span>
 }
 
-export function SystemSettings({ language, enableFileLogging, setEnableFileLogging, githubToken, setGithubToken }: SystemSettingsProps) {
+export function SystemSettings({
+    language,
+    enableFileLogging,
+    setEnableFileLogging,
+    githubToken,
+    setGithubToken,
+    proxySettings = { enabled: false, rules: '', bypassRules: '' },
+    setProxySettings,
+}: SystemSettingsProps) {
     const [isClearing, setIsClearing] = useState(false)
     const [includeApiKeys, setIncludeApiKeys] = useState(false)
     const [logPath, setLogPath] = useState('')
     const fileInputRef = useRef<HTMLInputElement>(null)
     const getStore = () => useStore.getState()
+
+    const handleToggleProxy = (enabled: boolean) => {
+        setProxySettings({
+            ...proxySettings,
+            enabled,
+        })
+    }
+
+    const handleProxyRulesChange = (rules: string) => {
+        setProxySettings({
+            ...proxySettings,
+            rules,
+        })
+    }
+
+    const handleProxyBypassChange = (bypassRules: string) => {
+        setProxySettings({
+            ...proxySettings,
+            bypassRules,
+        })
+    }
 
     // 获取日志文件路径
     useEffect(() => {
@@ -83,6 +115,7 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
             aiInstructions: getStore().aiInstructions,
             onboardingCompleted: getStore().onboardingCompleted,
             enableFileLogging: getStore().enableFileLogging,
+            proxySettings: getStore().proxySettings,
         }
     }
 
@@ -144,6 +177,10 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                     model: currentLlmConfig.model,
                 })
                 getStore().set('modelRouting', routing)
+            }
+
+            if (settings.proxySettings) {
+                getStore().set('proxySettings', settings.proxySettings)
             }
 
             // 保存设置到持久化存储
@@ -286,6 +323,79 @@ export function SystemSettings({ language, enableFileLogging, setEnableFileLoggi
                                     : 'The token is stored locally and is excluded from exports unless you explicitly include API keys.'}
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <Globe className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? '网络代理' : 'Network Proxy'}
+                    </h4>
+                </div>
+                <div className="space-y-4">
+                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm font-bold text-text-primary">
+                                    {language === 'zh' ? '启用代理' : 'Enable Proxy'}
+                                </div>
+                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                    {language === 'zh'
+                                        ? '启用全局网络代理，用于 AI 模型、网页检索、网页抓取等所有网络连接'
+                                        : 'Enable global network proxy for AI models, web searches, web reads, etc.'}
+                                </div>
+                            </div>
+                            <Switch
+                                checked={proxySettings.enabled}
+                                onChange={(e) => handleToggleProxy(e.target.checked)}
+                            />
+                        </div>
+
+                        {proxySettings.enabled && (
+                            <div className="space-y-5 border-t border-border/40 pt-5 animate-fade-in">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-text-secondary">
+                                        {language === 'zh' ? '代理服务器规则' : 'Proxy Server Rules'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={proxySettings.rules}
+                                        onChange={(e) => handleProxyRulesChange(e.target.value)}
+                                        placeholder={language === 'zh' ? '例如: http://127.0.0.1:7890 或 socks5://127.0.0.1:1080' : 'e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:1080'}
+                                        className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                    />
+                                    <div className="text-[10px] text-text-muted opacity-75">
+                                        {language === 'zh'
+                                            ? '指定代理服务器的 URL，支持 http、https 和 socks5 协议。'
+                                            : 'Specify proxy server URL, supporting http, https, and socks5 protocols.'}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-text-secondary">
+                                        {language === 'zh' ? '不代理的地址 (Bypass Rules)' : 'Bypass Proxy Rules'}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={proxySettings.bypassRules}
+                                        onChange={(e) => handleProxyBypassChange(e.target.value)}
+                                        placeholder={language === 'zh' ? '例如: localhost, 127.0.0.1, <local>' : 'e.g. localhost, 127.0.0.1, <local>'}
+                                        className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
+                                        autoComplete="off"
+                                        spellCheck={false}
+                                    />
+                                    <div className="text-[10px] text-text-muted opacity-75">
+                                        {language === 'zh'
+                                            ? '逗号分隔的规则列表。如果 URL 匹配任一规则，将直连而不走代理。'
+                                            : 'Comma-separated list of rules. If a URL matches any rule, it will bypass the proxy.'}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>

@@ -35,6 +35,7 @@ import type {
   McpConfig,
   ProviderConfig,
   ResolvedModelRoutingConfig,
+  ProxyConfig,
 } from './types'
 import {
   BUILTIN_PROVIDERS,
@@ -182,6 +183,12 @@ const defaultMcpConfig: McpConfig = {
   autoConnect: true,
 }
 
+const defaultProxyConfig: ProxyConfig = {
+  enabled: false,
+  rules: '',
+  bypassRules: '',
+}
+
 function generateDefaultProviderConfigs(): Record<string, ProviderModelConfig> {
   const configs: Record<string, ProviderModelConfig> = {}
   for (const [id, provider] of Object.entries(BUILTIN_PROVIDERS)) {
@@ -253,6 +260,9 @@ export const SETTINGS = {
   enableFileLogging: {
     default: false as boolean,
   },
+  proxySettings: {
+    default: defaultProxyConfig,
+  },
 }
 
 // ============================================
@@ -282,6 +292,7 @@ export type SettingsState = {
   aiInstructions: string
   onboardingCompleted: boolean
   enableFileLogging: boolean
+  proxySettings: ProxyConfig
 }
 
 // ============================================
@@ -317,6 +328,7 @@ export function getAllDefaults(): SettingsState {
     aiInstructions: SETTINGS.aiInstructions.default,
     onboardingCompleted: SETTINGS.onboardingCompleted.default,
     enableFileLogging: SETTINGS.enableFileLogging.default,
+    proxySettings: SETTINGS.proxySettings.default,
   }
 }
 
@@ -339,4 +351,5 @@ export {
   defaultAutoApprove,
   defaultWebSearchConfig,
   defaultMcpConfig,
+  defaultProxyConfig,
 }

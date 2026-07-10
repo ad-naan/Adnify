@@ -9,7 +9,7 @@
  */
 
 import { app } from 'electron'
-import { spawn, spawnSync } from 'child_process'
+import { spawn, spawnSync, execSync } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'

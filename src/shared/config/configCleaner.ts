@@ -300,6 +300,11 @@ export interface AppSettingsSchema {
     autoConnect?: boolean
   }
   githubToken?: string
+  proxySettings?: {
+    enabled?: boolean
+    rules?: string
+    bypassRules?: string
+  }
 }
 
 export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSchema {
@@ -356,6 +361,16 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
   }
 
   if (typeof config.githubToken === 'string') cleaned.githubToken = config.githubToken
+
+  // proxySettings
+  if (config.proxySettings && typeof config.proxySettings === 'object') {
+    const ps = config.proxySettings as Record<string, unknown>
+    cleaned.proxySettings = {
+      enabled: typeof ps.enabled === 'boolean' ? ps.enabled : false,
+      rules: typeof ps.rules === 'string' ? ps.rules : '',
+      bypassRules: typeof ps.bypassRules === 'string' ? ps.bypassRules : '',
+    }
+  }
 
   return cleaned
 }

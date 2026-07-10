@@ -111,6 +111,7 @@ export default function SettingsModal() {
         mcpConfig,
         githubToken,
         enableFileLogging,
+        proxySettings,
         editorConfig,
         securitySettings,
         set,
@@ -130,6 +131,7 @@ export default function SettingsModal() {
         mcpConfig: s.mcpConfig,
         githubToken: s.githubToken,
         enableFileLogging: s.enableFileLogging,
+        proxySettings: s.proxySettings,
         editorConfig: s.editorConfig,
         securitySettings: s.securitySettings,
         set: s.set,
@@ -154,6 +156,7 @@ export default function SettingsModal() {
     const [localMcpConfig, setLocalMcpConfig] = useState(mcpConfig)
     const [localGithubToken, setLocalGithubToken] = useState(githubToken)
     const [localEnableFileLogging, setLocalEnableFileLogging] = useState(enableFileLogging)
+    const [localProxySettings, setLocalProxySettings] = useState(proxySettings)
     const [localSecuritySettings, setLocalSecuritySettings] = useState(securitySettings)
     const [editorSettings, setEditorSettings] = useState<EditorSettingsState>(() => toEditorSettingsState(editorConfig))
     const [advancedEditorConfig, setAdvancedEditorConfig] = useState(editorConfig)
@@ -172,6 +175,7 @@ export default function SettingsModal() {
         setLocalMcpConfig(mcpConfig)
         setLocalGithubToken(githubToken)
         setLocalEnableFileLogging(enableFileLogging)
+        setLocalProxySettings(proxySettings)
         setLocalSecuritySettings(securitySettings)
         setEditorSettings(toEditorSettingsState(editorConfig))
         setAdvancedEditorConfig(editorConfig)
@@ -181,6 +185,7 @@ export default function SettingsModal() {
         autoApprove,
         editorConfig,
         enableFileLogging,
+        proxySettings,
         language,
         llmConfig,
         modelRouting,
@@ -245,8 +250,9 @@ export default function SettingsModal() {
         githubToken: serializeComparable(githubToken),
         providerConfigs: serializeComparable(providerConfigs),
         securitySettings: serializeComparable(securitySettings),
+        proxySettings: serializeComparable(proxySettings),
         editorConfig: serializeComparable(editorConfig),
-    }), [agentConfig, editorConfig, githubToken, llmConfig, mcpConfig, modelRouting, providerConfigs, securitySettings, webSearchConfig])
+    }), [agentConfig, editorConfig, githubToken, llmConfig, mcpConfig, modelRouting, providerConfigs, securitySettings, webSearchConfig, proxySettings])
 
     const localSnapshots = useMemo(() => ({
         llmConfig: serializeComparable(localConfig),
@@ -257,8 +263,9 @@ export default function SettingsModal() {
         githubToken: serializeComparable(localGithubToken),
         providerConfigs: serializeComparable(localProviderConfigs),
         securitySettings: serializeComparable(localSecuritySettings),
+        proxySettings: serializeComparable(localProxySettings),
         editorConfig: serializeComparable(finalEditorConfig),
-    }), [finalEditorConfig, localAgentConfig, localConfig, localGithubToken, localMcpConfig, localModelRouting, localProviderConfigs, localSecuritySettings, localWebSearchConfig])
+    }), [finalEditorConfig, localAgentConfig, localConfig, localGithubToken, localMcpConfig, localModelRouting, localProviderConfigs, localSecuritySettings, localWebSearchConfig, localProxySettings])
 
     const isDirty = useMemo(() => {
         return localSnapshots.llmConfig !== sourceSnapshots.llmConfig ||
@@ -272,6 +279,7 @@ export default function SettingsModal() {
             localSnapshots.mcpConfig !== sourceSnapshots.mcpConfig ||
             localSnapshots.githubToken !== sourceSnapshots.githubToken ||
             localEnableFileLogging !== enableFileLogging ||
+            localSnapshots.proxySettings !== sourceSnapshots.proxySettings ||
             localSnapshots.providerConfigs !== sourceSnapshots.providerConfigs ||
             localSnapshots.securitySettings !== sourceSnapshots.securitySettings ||
             localSnapshots.editorConfig !== sourceSnapshots.editorConfig
@@ -319,6 +327,7 @@ export default function SettingsModal() {
             set('mcpConfig', localMcpConfig)
             set('githubToken', localGithubToken)
             set('enableFileLogging', localEnableFileLogging)
+            set('proxySettings', localProxySettings)
             set('securitySettings', localSecuritySettings)
             set('providerConfigs', finalProviderConfigs)
             set('editorConfig', finalEditorConfig)
@@ -352,6 +361,7 @@ export default function SettingsModal() {
         localAutoApprove,
         localConfig,
         localEnableFileLogging,
+        localProxySettings,
         localGithubToken,
         localLanguage,
         localMcpConfig,
@@ -495,6 +505,8 @@ export default function SettingsModal() {
                         setEnableFileLogging={setLocalEnableFileLogging}
                         githubToken={localGithubToken}
                         setGithubToken={setLocalGithubToken}
+                        proxySettings={localProxySettings}
+                        setProxySettings={setLocalProxySettings}
                     />
                 )
             default:

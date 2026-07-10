@@ -57,6 +57,38 @@ async function readRecentLogTail(filePath: string, maxBytes = RECENT_LOG_MAX_BYT
   }
 }
 
+export function applyProxy(proxySettings: any) {
+  if (proxySettings && proxySettings.enabled && proxySettings.rules) {
+    logger.ipc.info('[Proxy] Applying proxy rules:', proxySettings.rules)
+    session.defaultSession.setProxy({
+      proxyRules: proxySettings.rules,
+      proxyBypassRules: proxySettings.bypassRules || '',
+    }).catch(err => {
+      logger.ipc.error('[Proxy] Failed to apply proxy:', err)
+    })
+    
+    // Set environment variables for subprocesses (like git, language servers, terminal tools)
+    process.env.HTTP_PROXY = proxySettings.rules
+    process.env.HTTPS_PROXY = proxySettings.rules
+    if (proxySettings.bypassRules) {
+      process.env.NO_PROXY = proxySettings.bypassRules
+    } else {
+      delete process.env.NO_PROXY
+    }
+  } else {
+    logger.ipc.info('[Proxy] Disabling proxy (direct connection)')
+    session.defaultSession.setProxy({
+      mode: 'direct',
+    }).catch(err => {
+      logger.ipc.error('[Proxy] Failed to disable proxy:', err)
+    })
+    
+    delete process.env.HTTP_PROXY
+    delete process.env.HTTPS_PROXY
+    delete process.env.NO_PROXY
+  }
+}
+
 let securityRef: SecurityModuleRef | null = null
 
 export function registerSettingsHandlers(
@@ -111,6 +143,13 @@ export function registerSettingsHandlers(
           securitySettings.allowedShellCommands,
           securitySettings.allowedGitSubcommands,
         )
+      }
+
+      if (key === 'app-settings') {
+        const appSettings = (cleanedValue || value) as any
+        if (appSettings && appSettings.proxySettings) {
+          applyProxy(appSettings.proxySettings)
+        }
       }
 
       return true

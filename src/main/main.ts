@@ -6,7 +6,7 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, net } from 'electron'
 // 补充 Language 类型（与渲染端对齐）
 export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
@@ -752,11 +752,27 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
 // ==========================================
 
 app.whenReady().then(async () => {
+  // Override global fetch with Electron's net.fetch to route all Node fetches through Chromium network stack
+  const boundFetch = net.fetch.bind(net) as any
+  global.fetch = boundFetch
+  globalThis.fetch = boundFetch
+
   // 1. 初始化 Store（必须在模块加载前完成）
   await initStores()
 
-  // 2. 检查是否启用文件日志
+  // Apply initial proxy settings if configured
   const appSettings = configStore.get('app-settings') as any
+  const proxySettings = appSettings?.proxySettings
+  if (proxySettings) {
+    try {
+      const { applyProxy } = await import('./ipc/settings')
+      applyProxy(proxySettings)
+    } catch (err) {
+      logger.system.error('[Main] Failed to import/apply proxy:', err)
+    }
+  }
+
+  // 2. 检查是否启用文件日志
   const enableFileLogging = appSettings?.enableFileLogging ?? false
   logger.system.info('[Main] File logging setting loaded:', { enableFileLogging, type: typeof enableFileLogging })
 
