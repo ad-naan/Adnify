@@ -109,6 +109,7 @@ jobs:
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -191,6 +192,7 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -266,6 +268,7 @@ jobs:
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}

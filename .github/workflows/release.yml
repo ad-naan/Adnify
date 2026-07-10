@@ -58,6 +58,7 @@ jobs:
         run: npx electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Smoke test packaged app
         if: matrix.arch == 'x64'
@@ -142,6 +143,7 @@ jobs:
         run: npx electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Smoke test packaged app
         shell: bash
@@ -217,6 +219,7 @@ jobs:
         run: npx electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: '--max-old-space-size=6144'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
