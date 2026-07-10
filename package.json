@@ -61,6 +61,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@electron/notarize": "^2.5.0",
     "@electron/rebuild": "^4.0.4",
+    "@emnapi/core": "^1.11.2",
+    "@emnapi/runtime": "^1.11.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@monaco-editor/react": "^4.6.0",
     "@types/adm-zip": "^0.5.7",
