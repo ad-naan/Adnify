@@ -1,49 +1,38 @@
 const fs = require('fs');
 const path = require('path');
 
-// 声明打包及原生构建所需的 devDependencies 白名单，这些包在打包前不能被删除
-const keepList = [
-  'electron-builder',
-  'electron',
-  '@electron/rebuild',
-  'builder-util',
-  'builder-util-runtime',
-  'app-builder-lib',
-  'dmg-builder',
-  'esbuild',
-  'mime-types',
-  'lazy-val',
-  'read-config-file',
-  'dotenv',
-  'dotenv-expand',
-  'semver',
-  'js-yaml',
-  'ajv',
-  'sanitize-filename',
-  'stat-mode',
-  'minimist',
-  'fs-extra'
+// 精准修剪的庞大开发依赖黑名单。只有这些确定无用且极其臃肿的开发包会被删除。
+// 其他所有包（如 debug, builder-util-runtime 依赖的基础包）均会被安全保留。
+const pruneBlacklist = [
+  'monaco-editor',
+  'typescript',
+  'tailwindcss',
+  'postcss',
+  'vite',
+  'vitest',
+  '@vitest',
+  '@types',
+  'lucide-react',
+  'autoprefixer',
+  'concurrently',
+  'framer-motion',
+  'katex',
+  'rehype-katex',
+  'remark-gfm',
+  'remark-math',
+  'fast-check',
+  'png2icons'
 ];
 
 const nodeModulesPath = path.join(__dirname, '../node_modules');
-const packageJsonPath = path.join(__dirname, '../package.json');
 
-if (!fs.existsSync(packageJsonPath)) {
-  console.error('package.json not found!');
-  process.exit(1);
-}
-
-const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-const prodDeps = Object.keys(packageJson.dependencies || {});
-
-console.log('Starting pruning of unnecessary devDependencies from node_modules before packaging...');
+console.log('Starting precise pruning of large devDependencies from node_modules...');
 
 if (fs.existsSync(nodeModulesPath)) {
   const dirs = fs.readdirSync(nodeModulesPath);
   let pruneCount = 0;
 
   for (const dir of dirs) {
-    // 忽略点开头的缓存和二进制可执行目录
     if (dir.startsWith('.')) continue;
 
     // 处理作用域包
@@ -52,12 +41,12 @@ if (fs.existsSync(nodeModulesPath)) {
       const subDirs = fs.readdirSync(scopePath);
       for (const subDir of subDirs) {
         const fullName = `${dir}/${subDir}`;
-        const isProd = prodDeps.some(dep => dep === fullName || dep.startsWith(fullName + '/'));
-        const isKeep = keepList.some(k => fullName === k || fullName.startsWith(k + '/'));
+        const shouldPrune = pruneBlacklist.some(item => fullName === item || fullName.startsWith(item + '/'));
 
-        if (!isProd && !isKeep) {
+        if (shouldPrune) {
           try {
             fs.rmSync(path.join(scopePath, subDir), { recursive: true, force: true });
+            console.log(`Pruned: ${fullName}`);
             pruneCount++;
           } catch (e) {
             console.warn(`[Warning] Failed to prune ${fullName}:`, e.message);
@@ -74,19 +63,19 @@ if (fs.existsSync(nodeModulesPath)) {
     }
 
     // 处理普通包
-    const isProd = prodDeps.some(dep => dep === dir || dep.startsWith(dir + '/'));
-    const isKeep = keepList.some(k => dir === k || dir.startsWith(k + '/'));
+    const shouldPrune = pruneBlacklist.some(item => dir === item || dir.startsWith(item + '/'));
 
-    if (!isProd && !isKeep) {
+    if (shouldPrune) {
       try {
         fs.rmSync(path.join(nodeModulesPath, dir), { recursive: true, force: true });
+        console.log(`Pruned: ${dir}`);
         pruneCount++;
       } catch (e) {
         console.warn(`[Warning] Failed to prune ${dir}:`, e.message);
       }
     }
   }
-  console.log(`Successfully pruned ${pruneCount} unnecessary devDependency directories from node_modules.`);
+  console.log(`Successfully pruned ${pruneCount} massive devDependency directories from node_modules.`);
 } else {
   console.log('node_modules directory not found.');
 }
