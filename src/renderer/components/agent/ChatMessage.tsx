@@ -1307,8 +1307,11 @@ const ChatMessage = React.memo(({
                       onClose={() => setPreviewImageIndex(null)}
                     />
 
-                    <div className="text-[14px] leading-relaxed">
-                      <MarkdownContent content={textContent} fontSize={fontSize} />
+                    <div
+                      className="text-[14px] leading-relaxed whitespace-pre-wrap break-words font-sans"
+                      style={{ fontSize: `${fontSize}px` }}
+                    >
+                      {textContent}
                     </div>
                   </div>
                 )}

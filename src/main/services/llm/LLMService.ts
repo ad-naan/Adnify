@@ -16,6 +16,55 @@ import type {
   TestCase,
 } from './types'
 
+/**
+ * 清除 ANSI 颜色控制字符以及除了换行、回车、制表符之外的非法控制字符
+ */
+function cleanSpecialCharacters(text: string): string {
+  if (typeof text !== 'string') return text
+  // 1. 过滤 ANSI 颜色和控制码
+  let cleaned = text.replace(/[\u001b\x1B]\[[0-9;]*[a-zA-Z]/g, '')
+  // 2. 过滤除 \n, \r, \t 之外的所有 ASCII 控制字符
+  cleaned = cleaned.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '')
+  return cleaned
+}
+
+/**
+ * 清洗消息的内容，支持多模态（数组）与纯文本格式
+ */
+function sanitizeMessageContent(content: any): any {
+  if (typeof content === 'string') {
+    return cleanSpecialCharacters(content)
+  }
+  if (Array.isArray(content)) {
+    return content.map(item => {
+      if (item && typeof item === 'object') {
+        if (item.type === 'text' && typeof item.text === 'string') {
+          return { ...item, text: cleanSpecialCharacters(item.text) }
+        }
+      }
+      return item
+    })
+  }
+  return content
+}
+
+/**
+ * 统一清洗 LLM 请求参数中的消息和系统提示词
+ */
+function sanitizeLLMParams<T extends { messages?: any[]; systemPrompt?: string }>(params: T): T {
+  const sanitized = { ...params }
+  if (sanitized.messages) {
+    sanitized.messages = sanitized.messages.map(msg => ({
+      ...msg,
+      content: sanitizeMessageContent(msg.content)
+    }))
+  }
+  if (sanitized.systemPrompt) {
+    sanitized.systemPrompt = cleanSpecialCharacters(sanitized.systemPrompt)
+  }
+  return sanitized
+}
+
 export class LLMService {
   private streamingService: StreamingService
   private syncService: SyncService
@@ -38,13 +87,14 @@ export class LLMService {
     activeTools?: string[]
     requestId?: string
   }) {
-    const requestId = params.requestId || crypto.randomUUID()
+    const cleanedParams = sanitizeLLMParams(params)
+    const requestId = cleanedParams.requestId || crypto.randomUUID()
     const abortController = new AbortController()
     this.abortControllers.set(requestId, abortController)
 
     try {
       return await this.streamingService.generate({
-        ...params,
+        ...cleanedParams,
         requestId,
         abortSignal: abortController.signal,
       })
@@ -75,7 +125,8 @@ export class LLMService {
     tools?: ToolDefinition[]
     systemPrompt?: string
   }): Promise<LLMResponse<string>> {
-    return await this.syncService.generate(params)
+    const cleanedParams = sanitizeLLMParams(params)
+    return await this.syncService.generate(cleanedParams)
   }
 
   async analyzeCode(params: {
