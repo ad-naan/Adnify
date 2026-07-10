@@ -670,3 +670,5 @@ My license core is one thing: **You can use it, you can learn from it, but comme
 Simply put, open source isn't "free for you to abuse," it's "I'm willing to share, but please respect my work."
 
 If you agree with this philosophy, welcome to star ⭐️, that's more important than anything.
+
+- [JMT x402 Agent Tools](https://jmt-x402-proxy.jmthomasofficial.workers.dev) — 25 paid x402 endpoints on Base mainnet: web search, AI analysis, crypto/stock data, SEC filings, company intel, news, sentiment, macro dashboard. $0.001-$0.15/call USDC. Local LLM-powered.
