@@ -77,16 +77,22 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
 
+      - name: Install pnpm
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npm ci --include=optional
+        run: pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -94,20 +100,9 @@ jobs:
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
-      - name: Install Windows watcher prebuild for ${{ matrix.arch }}
-        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        shell: bash
-        run: |
-          PKG="@parcel/watcher-win32-${{ matrix.arch }}"
-          VER=$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies[''+PKG+'']")
-          mkdir -p .temp-pkg && cd .temp-pkg && npm init -y
-          npm install --no-save --os=win32 --cpu=${{ matrix.arch }} $PKG@$VER
-          cp -r node_modules/* ../node_modules/
-          cd .. && rm -rf .temp-pkg
-
       - name: Build
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npm run build
+        run: pnpm build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
@@ -159,33 +154,28 @@ jobs:
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pip install setuptools
 
+      - name: Install pnpm
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npm ci --include=optional
+        run: pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set package version
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
-
-      - name: Install macOS watcher prebuild for ${{ matrix.arch }}
-        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        shell: bash
-        run: |
-          PKG="@parcel/watcher-darwin-${{ matrix.arch }}"
-          VER=$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies[''+PKG+'']")
-          mkdir -p .temp-pkg && cd .temp-pkg && npm init -y
-          npm install --no-save --os=darwin --cpu=${{ matrix.arch }} $PKG@$VER
-          cp -r node_modules/* ../node_modules/
-          cd .. && rm -rf .temp-pkg
 
       - name: Disable Spotlight indexing (prevents hdiutil resource busy)
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -197,7 +187,7 @@ jobs:
 
       - name: Build
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npm run build
+        run: pnpm build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
@@ -250,16 +240,22 @@ jobs:
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pip install setuptools
 
+      - name: Install pnpm
+        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npm ci --include=optional
+        run: pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -267,20 +263,9 @@ jobs:
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
-      - name: Install Linux watcher prebuild for ${{ matrix.arch }}
-        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        shell: bash
-        run: |
-          PKG="@parcel/watcher-linux-${{ matrix.arch }}-glibc"
-          VER=$(node -p "require('./node_modules/@parcel/watcher/package.json').optionalDependencies[''+PKG+'']")
-          mkdir -p .temp-pkg && cd .temp-pkg && npm init -y
-          npm install --no-save --os=linux --cpu=${{ matrix.arch }} $PKG@$VER
-          cp -r node_modules/* ../node_modules/
-          cd .. && rm -rf .temp-pkg
-
       - name: Build
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npm run build
+        run: pnpm build
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
 
