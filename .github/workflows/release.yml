@@ -47,7 +47,10 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: |
+          pnpm config set supported-architectures x64,arm64
+          pnpm config set supported-os win32,darwin,linux
+          pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -126,7 +129,10 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: |
+          pnpm config set supported-architectures x64,arm64
+          pnpm config set supported-os win32,darwin,linux
+          pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -212,7 +218,10 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
+        run: |
+          pnpm config set supported-architectures x64,arm64
+          pnpm config set supported-os win32,darwin,linux
+          pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
