@@ -88,7 +88,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'pnpm'
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -168,7 +167,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'pnpm'
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -257,7 +255,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '22'
-          cache: 'pnpm'
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
