@@ -462,6 +462,7 @@ export class VectorStoreService {
    */
   private sanitizeKeyword(keyword: string): string {
     return keyword
+      .replace(/\\/g, '\\\\')
       .replace(/'/g, "''")
       .replace(/%/g, '\\%')
       .replace(/_/g, '\\_')
