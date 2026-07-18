@@ -80,7 +80,7 @@
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/addon-webgl": "^0.18.0",
     "@xterm/xterm": "^5.5.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "ai": "^6.0.49",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.0",
