@@ -3,9 +3,11 @@ import * as fs from 'fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { logger } from '@shared/utils/Logger'
 
-const handlers = new Map<string, Function>()
-const childSpawnMock = vi.fn()
-const dugiteExecMock = vi.fn()
+const { handlers, childSpawnMock, dugiteExecMock } = vi.hoisted(() => ({
+  handlers: new Map<string, Function>(),
+  childSpawnMock: vi.fn(),
+  dugiteExecMock: vi.fn(),
+}))
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => true),
@@ -25,9 +27,7 @@ vi.mock('child_process', () => ({
 }))
 
 vi.mock('dugite', () => ({
-  GitProcess: {
-    exec: dugiteExecMock,
-  },
+  exec: dugiteExecMock,
 }))
 
 vi.mock('@shared/utils/Logger', () => ({
@@ -124,6 +124,7 @@ describe('secureTerminal', () => {
     expect(result).toEqual({ success: true })
     expect(childSpawnMock).toHaveBeenCalledTimes(1)
   })
+
   it('logs git notes show misses as warnings instead of errors', async () => {
     const workspaceRoot = process.cwd()
     dugiteExecMock.mockResolvedValue({
@@ -149,10 +150,12 @@ describe('secureTerminal', () => {
       '86436c51be5491ea46e883bc59b96a9786f0e525',
     ], workspaceRoot)
 
+    expect(dugiteExecMock).toHaveBeenCalled()
     expect(result).toMatchObject({
       success: false,
       exitCode: 1,
     })
+    expect(dugiteExecMock).toHaveBeenCalled()
     expect(logger.security.warn).toHaveBeenCalledWith(
       '[Git] dugite returned expected non-zero result:',
       ['notes', '--ref', 'adnify-ai', 'show', '86436c51be5491ea46e883bc59b96a9786f0e525'],
