@@ -30,9 +30,6 @@ import { toolRegistry } from './registry'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import pLimit from 'p-limit'
 import { skillService } from '../services/skillService'
-import type { TranslationKey } from '@/renderer/i18n'
-import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
-import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { guardWriteFile } from './fileWriteStrategy'
 import { analyzeImageSource, getReadImageUnavailableMessage, getReadRichContentOptions } from '../services/imageReadService'
 import {
@@ -45,45 +42,11 @@ import type {
     RemoteShellServer,
 } from '@/renderer/types/electron'
 import { detectTerminalShellFamily } from '@/renderer/services/terminalShell'
+import { RICH_DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, getFileExtension } from './executors/constants'
+import { getCurrentLanguage, getLocalizedText, getReplaceErrorMessage, translate } from './executors/i18n'
+import { formatRecommendation, formatUiuxResults } from './executors/uiuxFormat'
 
 // ===== 辅助函数 =====
-
-function getLocalizedText(language: string, zh: string, en: string): string {
-    return pickLocalizedText(zh, en, language as 'en' | 'zh')
-}
-
-function getCurrentLanguage(): string {
-    return getAgentLanguage()
-}
-
-function translate(key: TranslationKey, params?: Record<string, string | number>): string {
-    return translateAgentText(key, params)
-}
-
-function getReplaceErrorMessage(errorCode?: ReplaceErrorCode): string {
-    switch (errorCode) {
-        case 'IDENTICAL_STRINGS':
-            return translate('agent.tool.edit.identicalStrings')
-        case 'MISSING_OLD_STRING':
-            return translate('agent.tool.edit.missingOldString')
-        case 'MULTIPLE_MATCHES':
-            return translate('agent.tool.edit.multipleMatches')
-        case 'OLD_STRING_NOT_FOUND':
-            return translate('agent.tool.edit.oldStringNotFound')
-        default:
-            return translate('agent.tool.edit.replaceFailed')
-    }
-}
-
-const RICH_DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'])
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'])
-
-function getFileExtension(targetPath: string): string {
-    const normalized = targetPath.replace(/\\/g, '/')
-    const fileName = normalized.split('/').pop() || ''
-    const match = fileName.match(/\.([^.]+)$/)
-    return match?.[1]?.toLowerCase() || ''
-}
 
 async function getTerminalManager() {
     return (await import('@/renderer/services/TerminalManager')).terminalManager
@@ -2718,120 +2681,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 }
 
-
-/**
- * 格式化 UI/UX 搜索结果为可读文本
- */
-function formatUiuxResults(result: { domain: string; query: string; count: number; results: Record<string, unknown>[]; stack?: string }): string {
-    const lines: string[] = []
-
-    if (result.stack) {
-        lines.push(`## ${result.stack} Guidelines for "${result.query}"`)
-    } else {
-        lines.push(`## UI/UX ${result.domain} results for "${result.query}"`)
-    }
-    lines.push(`Found ${result.count} result(s)\n`)
-
-    for (let i = 0; i < result.results.length; i++) {
-        const item = result.results[i]
-        lines.push(`### Result ${i + 1}`)
-
-        for (const [key, value] of Object.entries(item)) {
-            if (value && String(value).trim()) {
-                lines.push(`- **${key}**: ${value}`)
-            }
-        }
-        lines.push('')
-    }
-
-    return lines.join('\n')
-}
-
-/**
- * 格式化设计推荐结果
- */
-function formatRecommendation(
-    productType: string,
-    rec: {
-        product: Record<string, unknown> | null
-        style: Record<string, unknown> | null
-        prompt: Record<string, unknown> | null
-        color: Record<string, unknown> | null
-        typography: Record<string, unknown> | null
-        landing: Record<string, unknown> | null
-    }
-): string {
-    const lines: string[] = []
-
-    lines.push(`# Design Recommendation for "${productType}"`)
-    lines.push('')
-
-    // Product Overview
-    if (rec.product) {
-        lines.push('## Product Analysis')
-        lines.push(`- **Type**: ${rec.product['Product Type'] || productType}`)
-        lines.push(`- **Recommended Style**: ${rec.product['Primary Style Recommendation'] || 'N/A'}`)
-        lines.push(`- **Secondary Styles**: ${rec.product['Secondary Styles'] || 'N/A'}`)
-        lines.push(`- **Color Focus**: ${rec.product['Color Palette Focus'] || 'N/A'}`)
-        lines.push(`- **Key Considerations**: ${rec.product['Key Considerations'] || 'N/A'}`)
-        lines.push('')
-    }
-
-    // Style Details
-    if (rec.style) {
-        lines.push('## UI Style')
-        lines.push(`- **Style**: ${rec.style['Style Category'] || 'N/A'}`)
-        lines.push(`- **Keywords**: ${rec.style['Keywords'] || 'N/A'}`)
-        lines.push(`- **Primary Colors**: ${rec.style['Primary Colors'] || 'N/A'}`)
-        lines.push(`- **Effects**: ${rec.style['Effects & Animation'] || 'N/A'}`)
-        lines.push(`- **Best For**: ${rec.style['Best For'] || 'N/A'}`)
-        lines.push('')
-    }
-
-    // CSS/Tailwind Keywords
-    if (rec.prompt) {
-        lines.push('## Implementation Keywords')
-        lines.push(`- **AI Prompt**: ${rec.prompt['AI Prompt Keywords (Copy-Paste Ready)'] || 'N/A'}`)
-        lines.push(`- **CSS/Technical**: ${rec.prompt['CSS/Technical Keywords'] || 'N/A'}`)
-        lines.push(`- **Design Variables**: ${rec.prompt['Design System Variables'] || 'N/A'}`)
-        lines.push('')
-    }
-
-    // Color Palette
-    if (rec.color) {
-        lines.push('## Color Palette')
-        lines.push(`- **Product Type**: ${rec.color['Product Type'] || 'N/A'}`)
-        lines.push(`- **Primary**: ${rec.color['Primary Color'] || rec.color['Primary Colors'] || 'N/A'}`)
-        lines.push(`- **Secondary**: ${rec.color['Secondary Color'] || rec.color['Secondary Colors'] || 'N/A'}`)
-        lines.push(`- **Accent**: ${rec.color['Accent Color'] || rec.color['Accent Colors'] || 'N/A'}`)
-        lines.push(`- **Background**: ${rec.color['Background'] || 'N/A'}`)
-        lines.push('')
-    }
-
-    // Typography
-    if (rec.typography) {
-        lines.push('## Typography')
-        lines.push(`- **Pairing**: ${rec.typography['Pairing Name'] || rec.typography['Font Pairing'] || 'N/A'}`)
-        lines.push(`- **Heading Font**: ${rec.typography['Heading Font'] || 'N/A'}`)
-        lines.push(`- **Body Font**: ${rec.typography['Body Font'] || 'N/A'}`)
-        lines.push(`- **Google Fonts**: ${rec.typography['Google Fonts Import'] || 'N/A'}`)
-        lines.push(`- **Tailwind Config**: ${rec.typography['Tailwind Config'] || 'N/A'}`)
-        lines.push('')
-    }
-
-    // Landing Page Pattern
-    if (rec.landing) {
-        lines.push('## Landing Page Pattern')
-        lines.push(`- **Pattern**: ${rec.landing['Pattern Name'] || 'N/A'}`)
-        lines.push(`- **Section Order**: ${rec.landing['Section Order'] || 'N/A'}`)
-        lines.push(`- **CTA Placement**: ${rec.landing['Primary CTA Placement'] || 'N/A'}`)
-        lines.push(`- **Color Strategy**: ${rec.landing['Color Strategy'] || 'N/A'}`)
-        lines.push(`- **Effects**: ${rec.landing['Recommended Effects'] || 'N/A'}`)
-        lines.push('')
-    }
-
-    return lines.join('\n')
-}
 
 export const toolExecutors = Object.fromEntries(
     Object.entries(rawToolExecutors).map(([name, executor]) => [

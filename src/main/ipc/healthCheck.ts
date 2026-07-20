@@ -3,12 +3,13 @@
  * 在主进程中执行网络请求以避免 CORS 问题
  */
 
-import { ipcMain } from 'electron'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { BUILTIN_PROVIDERS, isBuiltinProvider } from '@shared/config/providers'
+import type { LLMConfig } from '@shared/types/llm'
 import { createModel, resolveHeaderPlaceholders } from '../services/llm/modelFactory'
 import { generateText } from 'ai'
+import { safeIpcHandle } from './safeHandle'
 
 export interface HealthCheckResult {
   provider: string
@@ -62,7 +63,7 @@ function extractResponsesOutputText(payload: unknown): string {
   return parts.join('\n').trim()
 }
 
-async function testOpenAIResponsesModel(config: any): Promise<string> {
+async function testOpenAIResponsesModel(config: LLMConfig): Promise<string> {
   const builtinProvider = isBuiltinProvider(config.provider)
     ? BUILTIN_PROVIDERS[config.provider]
     : undefined
@@ -131,7 +132,7 @@ async function testOpenAIResponsesModel(config: any): Promise<string> {
  * 注册健康检查 IPC handlers
  */
 export function registerHealthCheckHandlers() {
-  ipcMain.handle('healthCheck:check', async (_, provider: string, apiKey: string, baseUrl?: string, timeout = 10000, protocol?: string) => {
+  safeIpcHandle('healthCheck:check', async (_, provider: string, apiKey: string, baseUrl?: string, timeout = 10000, protocol?: string) => {
     const startTime = Date.now()
 
     const defaultUrls: Record<string, string> = {
@@ -209,9 +210,9 @@ export function registerHealthCheckHandlers() {
     } finally {
       clearTimeout(timeoutId)
     }
-  })
+  }, 'ipc')
 
-  ipcMain.handle('healthCheck:testModel', async (_, config: any) => {
+  safeIpcHandle('healthCheck:testModel', async (_, config: LLMConfig) => {
     const startTime = Date.now()
     try {
       if (!config || !config.provider || !config.model) {
@@ -265,9 +266,9 @@ export function registerHealthCheckHandlers() {
         latency,
       }
     }
-  })
+  }, 'ipc')
 
-  ipcMain.handle('healthCheck:fetchModels', async (_, provider: string, apiKey: string, baseUrl?: string, protocol?: string) => {
+  safeIpcHandle('healthCheck:fetchModels', async (_, provider: string, apiKey: string, baseUrl?: string, protocol?: string) => {
     try {
       logger.ipc.info(`[HealthCheck] Fetching models for ${provider} (protocol: ${protocol})`)
 
@@ -363,7 +364,7 @@ export function registerHealthCheckHandlers() {
       logger.ipc.error(`[HealthCheck] Fetch models failed:`, error.message)
       return { success: false, error: error.message }
     }
-  })
+  }, 'ipc')
 
   logger.ipc.info('[HealthCheck] Health check handlers registered')
 }

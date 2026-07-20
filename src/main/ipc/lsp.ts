@@ -54,6 +54,10 @@ async function getServerForUri(uri: string, workspacePath: string): Promise<stri
   return lspManager.ensureServerForFile(filePath, languageId, effectiveWorkspacePath)
 }
 
+function logLspRequestFailure(method: string, err: unknown): void {
+  logger.lsp.debug(`[LSP IPC] ${method} failed:`, toAppError(err).message)
+}
+
 // preferencesStore 引用，用于保存 LSP 配置
 let _preferencesStore: any = null
 
@@ -173,7 +177,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
           })
         }
         return result
-      } catch {
+      } catch (err) {
+        logLspRequestFailure(method, err)
         return null
       }
     }
@@ -198,7 +203,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
         position: { line: params.line, character: params.character },
         context: { includeDeclaration: true },
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/references', err)
       return null
     }
   })
@@ -209,7 +215,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
     try {
       return await lspManager.sendRequest(running[0], 'completionItem/resolve', item)
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('completionItem/resolve', err)
       return item
     }
   })
@@ -222,7 +229,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
       return await lspManager.sendRequest(serverName, 'textDocument/documentSymbol', {
         textDocument: { uri: params.uri },
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/documentSymbol', err)
       return null
     }
   })
@@ -235,7 +243,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
       running.map(async (serverName) => {
         try {
           return await lspManager.sendRequest(serverName, 'workspace/symbol', { query: params.query })
-        } catch {
+        } catch (err) {
+          logLspRequestFailure('workspace/symbol', err)
           return []
         }
       })
@@ -253,7 +262,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
         position: { line: params.line, character: params.character },
         newName: params.newName,
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/rename', err)
       return null
     }
   })
@@ -268,7 +278,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
         range: params.range,
         context: { diagnostics: params.diagnostics || [], only: ['quickfix', 'refactor', 'source'] },
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/codeAction', err)
       return null
     }
   })
@@ -282,7 +293,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
         textDocument: { uri: params.uri },
         options: params.options || { tabSize: 2, insertSpaces: true },
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/formatting', err)
       return null
     }
   })
@@ -297,7 +309,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
         range: params.range,
         options: params.options || { tabSize: 2, insertSpaces: true },
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/rangeFormatting', err)
       return null
     }
   })
@@ -310,7 +323,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
       return await lspManager.sendRequest(serverName, 'textDocument/foldingRange', {
         textDocument: { uri: params.uri },
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/foldingRange', err)
       return null
     }
   })
@@ -324,7 +338,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
         textDocument: { uri: params.uri },
         range: params.range,
       })
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/inlayHint', err)
       return null
     }
   })
@@ -345,7 +360,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
     try {
       return await lspManager.prepareCallHierarchy(serverName, params.uri, params.line, params.character)
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('textDocument/prepareCallHierarchy', err)
       return null
     }
   })
@@ -361,7 +377,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
       // 获取 incoming calls
       return await lspManager.getIncomingCalls(serverName, items[0])
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('callHierarchy/incomingCalls', err)
       return null
     }
   })
@@ -377,7 +394,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
       // 获取 outgoing calls
       return await lspManager.getOutgoingCalls(serverName, items[0])
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('callHierarchy/outgoingCalls', err)
       return null
     }
   })
@@ -388,7 +406,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
     try {
       await lspManager.waitForDiagnostics(params.uri)
       return { success: true }
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('waitForDiagnostics', err)
       return { success: false }
     }
   })
@@ -398,7 +417,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
   ipcMain.handle('lsp:findBestRoot', async (_, params: { filePath: string; languageId: LanguageId; workspacePath: string }) => {
     try {
       return await lspManager.findBestRoot(params.filePath, params.languageId, params.workspacePath)
-    } catch {
+    } catch (err) {
+      logLspRequestFailure('findBestRoot', err)
       return params.workspacePath
     }
   })
