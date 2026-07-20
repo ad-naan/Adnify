@@ -60,6 +60,11 @@ export function getWhitelist() {
 const terminals = new Map<string, any>() // IPty instances
 const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
 
+// In dev mode, dugite may fail to execute (e.g. missing bundled git),
+// and we can end up spamming the full stack for every git invocation.
+// Deduplicate the "dugite unavailable" warning to keep logs usable.
+let dugiteUnavailableWarned = false
+
 /**
  * 可靠地终止 PTY 进程树
  *
@@ -502,7 +507,13 @@ export function registerSecureTerminalHandlers(
         exitCode: result.exitCode,
       }
     } catch (error) {
-      logger.security.warn(`[Git] dugite 不可用: ${error instanceof Error ? error.stack : error}，尝试安全的 spawn 方式`)
+      if (!dugiteUnavailableWarned) {
+        dugiteUnavailableWarned = true
+        logger.security.warn(`[Git] dugite 不可用: ${error instanceof Error ? error.stack : error}，尝试安全的 spawn 方式`)
+      } else {
+        const msg = error instanceof Error ? error.message : String(error)
+        logger.security.debug('[Git] dugite still unavailable (deduped):', msg)
+      }
 
       try {
         // 6. 安全回退：使用 spawn 而非 exec

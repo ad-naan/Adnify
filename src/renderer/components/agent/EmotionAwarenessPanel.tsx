@@ -15,7 +15,7 @@
 import React, { useState, useMemo } from 'react'
 import {
   Zap, Activity, Frown, Sun, Eye, EyeOff,
-  Volume2, VolumeX, Palette, Clock, TrendingUp, Play, ChevronDown, ChevronRight
+  Volume2, VolumeX, Palette, Clock, TrendingUp, Play, ChevronDown, ChevronRight, Shield
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
@@ -196,6 +196,13 @@ export const EmotionAwarenessPanel: React.FC = () => {
                     enabled={settings.autoAdapt}
                     onToggle={() => toggleSetting('autoAdapt')}
                   />
+                  <SettingToggle
+                    icon={<Shield className="w-3.5 h-3.5" />}
+                    label={t('emotion.privacyMode', language)}
+                    description={t('emotion.privacyModeDesc', language)}
+                    enabled={settings.privacyMode}
+                    onToggle={() => toggleSetting('privacyMode')}
+                  />
 
                   {/* 灵敏度 */}
                   <div className="flex items-center justify-between py-1">
@@ -302,6 +309,13 @@ export const EmotionAwarenessPanel: React.FC = () => {
                   description={t('emotion.autoAdaptDesc', language)}
                   enabled={settings.autoAdapt}
                   onToggle={() => toggleSetting('autoAdapt')}
+                />
+                <SettingToggle
+                  icon={<Shield className="w-3.5 h-3.5" />}
+                  label={t('emotion.privacyMode', language)}
+                  description={t('emotion.privacyModeDesc', language)}
+                  enabled={settings.privacyMode}
+                  onToggle={() => toggleSetting('privacyMode')}
                 />
                 <div className="flex items-center justify-between py-1">
                   <span className="text-xs text-text-secondary">{t('emotion.sensitivity', language)}</span>

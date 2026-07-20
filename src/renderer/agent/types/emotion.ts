@@ -119,7 +119,7 @@ export interface EmotionFeedbackPayload {
   cooldownKey?: string
   sourceRule?: string
   dismissible?: boolean
-  channelHints?: Array<'statusBar' | 'editorBar' | 'panelLog'>
+  channelHints?: Array<'statusBar' | 'editorBar'>
   showFeedback?: boolean
 }
 

@@ -281,6 +281,11 @@ const FEEDBACK_EXPIRES: Record<EmotionFeedbackType, number> = {
   celebration: 15_000,
 }
 
+const DEFAULT_SNOOZE_MS = 30 * 60 * 1000
+const MAX_DISMISSED_IDS = 100
+
+type AmbientSoundType = 'focus' | 'relax' | 'energize'
+
 class EmotionAdapter {
   private currentAdaptation: EnvironmentAdaptation | null = null
   private breakTimer: NodeJS.Timeout | null = null
@@ -304,6 +309,10 @@ class EmotionAdapter {
   private currentAudioSource: AudioBufferSourceNode | HTMLAudioElement | null = null
   /** 当前音频的增益节点 */
   private currentGainNode: GainNode | null = null
+  /** 当前环境音类型（避免重复重启） */
+  private currentSoundType: AmbientSoundType | 'none' | null = null
+  /** 按 cooldownKey 记录上次展示时间 */
+  private lastShownAtByCooldownKey: Record<string, number> = {}
 
   initialize(): void {
     if (this.initialized) return
@@ -396,20 +405,57 @@ class EmotionAdapter {
     return this.settings
   }
 
+  /** 用户关闭某条反馈，并在 cooldown 窗口内不再展示同 key */
+  dismissFeedback(feedbackId: string, cooldownKey?: string): void {
+    if (!this.companionState.dismissedIds.includes(feedbackId)) {
+      this.companionState.dismissedIds.push(feedbackId)
+      if (this.companionState.dismissedIds.length > MAX_DISMISSED_IDS) {
+        this.companionState.dismissedIds = this.companionState.dismissedIds.slice(-MAX_DISMISSED_IDS)
+      }
+    }
+    const key = cooldownKey || feedbackId
+    this.lastShownAtByCooldownKey[key] = Date.now()
+    if (this.companionState.currentFeedback?.id === feedbackId) {
+      this.companionState.currentFeedback = null
+    }
+  }
+
+  /** 稍后提醒：暂停 companion 一段时间 */
+  snoozeCompanion(durationMs = DEFAULT_SNOOZE_MS): void {
+    this.companionState.snoozedUntil = Date.now() + durationMs
+    this.companionState.currentFeedback = null
+    this.companionState.queue = []
+  }
+
+  /** 本会话静音 companion */
+  setSessionMuted(muted: boolean): void {
+    this.companionState.sessionMuted = muted
+    if (muted) {
+      this.companionState.currentFeedback = null
+      this.companionState.queue = []
+    }
+  }
+
+  getCompanionState(): Readonly<EmotionCompanionState> {
+    return this.companionState
+  }
+
   private emitFeedback(feedback: EmotionFeedbackPayload): void {
     if (!this.settings.companionEnabled || this.companionState.sessionMuted) return
+    if (this.companionState.snoozedUntil && Date.now() < this.companionState.snoozedUntil) return
 
     const cooldownKey = feedback.cooldownKey || feedback.type
-    const lastShown = this.companionState.lastShownAtByType[feedback.type] || 0
+    const lastShown = this.lastShownAtByCooldownKey[cooldownKey]
+      ?? this.companionState.lastShownAtByType[feedback.type]
+      ?? 0
     const cooldown = FEEDBACK_COOLDOWNS[feedback.type]
     if (Date.now() - lastShown < cooldown) return
     if (this.companionState.dismissedIds.includes(feedback.id)) return
 
     this.companionState.currentFeedback = feedback
     this.companionState.lastShownAtByType[feedback.type] = Date.now()
+    this.lastShownAtByCooldownKey[cooldownKey] = Date.now()
     EventBus.emit({ type: 'emotion:feedback', feedback })
-
-    void cooldownKey
   }
 
   private buildFeedbackActions(detection: EmotionDetection) {
@@ -427,7 +473,7 @@ class EmotionAdapter {
     message: string,
     sourceRule: string,
     priority: number,
-    channelHints: Array<'statusBar' | 'editorBar' | 'panelLog'>,
+    channelHints: Array<'statusBar' | 'editorBar'>,
     showFeedback = true,
   ): EmotionFeedbackPayload {
     const now = Date.now()
@@ -492,7 +538,7 @@ class EmotionAdapter {
                 : 'encouragement'
 
       this.emitFeedback(
-        this.buildFeedback(type, detection, message, sourceRule, state === 'frustrated' ? 6 : 4, ['statusBar', 'editorBar', 'panelLog'])
+        this.buildFeedback(type, detection, message, sourceRule, state === 'frustrated' ? 6 : 4, ['statusBar', 'editorBar'])
       )
     }
 
@@ -515,12 +561,57 @@ class EmotionAdapter {
     }
   }
 
-  private applySoundAdaptation(_sound: EnvironmentAdaptation['sound']): void {
-    if (!this.settings.soundEnabled) {
+  private applySoundAdaptation(sound: EnvironmentAdaptation['sound']): void {
+    if (!this.settings.soundEnabled || !sound.enabled || !sound.type || sound.type === 'none') {
       this.stopAmbientSound()
+      this.currentSoundType = null
       return
     }
+
+    if (this.currentSoundType === sound.type && this.currentAudioSource) return
+
     this.stopAmbientSound()
+    this.currentSoundType = sound.type
+    void this.startAmbientSound(sound.type, sound.volume)
+  }
+
+  private async startAmbientSound(type: AmbientSoundType, volume: number): Promise<void> {
+    try {
+      const ctx = new AudioContext()
+      this.audioContext = ctx
+
+      const bufferSize = ctx.sampleRate * 2
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
+      const data = buffer.getChannelData(0)
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.25
+      }
+
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.loop = true
+
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'lowpass'
+      filter.frequency.value = type === 'focus' ? 450 : type === 'relax' ? 220 : 750
+      filter.Q.value = 0.7
+
+      const gainNode = ctx.createGain()
+      gainNode.gain.value = 0
+      source.connect(filter)
+      filter.connect(gainNode)
+      gainNode.connect(ctx.destination)
+
+      source.start()
+      this.currentAudioSource = source
+      this.currentGainNode = gainNode
+
+      const targetVolume = Math.min(Math.max(volume, 0), 1) * 0.12
+      gainNode.gain.linearRampToValueAtTime(targetVolume, ctx.currentTime + 2)
+    } catch (error) {
+      logger.agent.warn('[EmotionAdapter] Failed to start ambient sound:', error)
+      this.currentSoundType = null
+    }
   }
 
   private setupBreakReminders(
@@ -573,7 +664,7 @@ class EmotionAdapter {
         triggeredAt: Date.now(),
         duration: 0,
         factors: [],
-      }, message, 'break_timer', 7, ['statusBar', 'editorBar', 'panelLog']))
+      }, message, 'break_timer', 7, ['statusBar', 'editorBar']))
     }, breakConfig.breakInterval)
   }
 
@@ -581,9 +672,16 @@ class EmotionAdapter {
   }
 
   private stopAmbientSound(): void {
-    if (this.currentAudioSource instanceof HTMLAudioElement) {
+    const source = this.currentAudioSource
+    if (!source) {
+      this.closeAudioContextIfIdle()
+      this.currentSoundType = null
+      return
+    }
+
+    if ('pause' in source && typeof source.pause === 'function') {
       try {
-        const audio = this.currentAudioSource
+        const audio = source as HTMLAudioElement
         const fadeOutDuration = 1000
         const startVolume = audio.volume
         const startTime = Date.now()
@@ -596,40 +694,54 @@ class EmotionAdapter {
             audio.src = ''
             clearInterval(fadeInterval)
             this.currentAudioSource = null
+            this.closeAudioContextIfIdle()
           } else {
             audio.volume = startVolume * (1 - elapsed / fadeOutDuration)
           }
         }, 50)
       } catch {
         this.currentAudioSource = null
+        this.closeAudioContextIfIdle()
       }
-    } else if (this.currentAudioSource instanceof AudioBufferSourceNode) {
+      this.currentSoundType = null
+      return
+    }
+
+    if ('stop' in source && typeof source.stop === 'function') {
       try {
+        const bufferSource = source as AudioBufferSourceNode
         if (this.currentGainNode && this.audioContext) {
           this.currentGainNode.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 1)
           setTimeout(() => {
             try {
-              if (this.currentAudioSource instanceof AudioBufferSourceNode) {
-                this.currentAudioSource.stop()
-              }
+              bufferSource.stop()
             } catch {}
             this.currentAudioSource = null
             this.currentGainNode = null
+            this.closeAudioContextIfIdle()
           }, 1100)
         } else {
           try {
-            if (this.currentAudioSource instanceof AudioBufferSourceNode) {
-              this.currentAudioSource.stop()
-            }
+            bufferSource.stop()
           } catch {}
           this.currentAudioSource = null
+          this.closeAudioContextIfIdle()
         }
       } catch {
         this.currentAudioSource = null
         this.currentGainNode = null
+        this.closeAudioContextIfIdle()
       }
+      this.currentSoundType = null
+      return
     }
 
+    this.currentAudioSource = null
+    this.closeAudioContextIfIdle()
+    this.currentSoundType = null
+  }
+
+  private closeAudioContextIfIdle(): void {
     if (this.audioContext && !this.currentAudioSource) {
       try {
         this.audioContext.close().catch(() => { })

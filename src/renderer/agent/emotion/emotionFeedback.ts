@@ -8,6 +8,7 @@
  */
 
 import type { EmotionState } from '../types/emotion'
+import { isEmotionPrivacyMode } from './panelSettings'
 
 export interface FeedbackRecord {
   timestamp: number
@@ -35,6 +36,8 @@ class EmotionFeedbackStore {
     feedback: 'accurate' | 'inaccurate',
     correctedState?: EmotionState,
   ): void {
+    if (isEmotionPrivacyMode()) return
+
     this.records.push({
       timestamp: Date.now(),
       detectedState,
@@ -94,6 +97,7 @@ class EmotionFeedbackStore {
   // ===== 持久化 =====
 
   private save(): void {
+    if (isEmotionPrivacyMode()) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.records))
     } catch {

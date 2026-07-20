@@ -11,6 +11,8 @@
  * 引擎用 getRelativeMetrics() 将绝对值转换为相对于个人基线的偏差。
  */
 
+import { isEmotionPrivacyMode } from './panelSettings'
+
 const STORAGE_KEY = 'adnify_emotion_baseline'
 const LEARNING_SAMPLES = 50   // 至少 50 个样本后基线才生效
 const MAX_SAMPLES = 500       // 最多保留 500 个样本
@@ -62,7 +64,9 @@ class EmotionBaseline {
 
     // 更新统计
     this.recalculate()
-    this.save()
+    if (!isEmotionPrivacyMode()) {
+      this.save()
+    }
   }
 
   /**
@@ -191,6 +195,7 @@ class EmotionBaseline {
   // ===== 持久化 =====
 
   private save(): void {
+    if (isEmotionPrivacyMode()) return
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data))
     } catch {

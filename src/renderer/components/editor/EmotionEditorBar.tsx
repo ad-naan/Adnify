@@ -11,6 +11,7 @@ import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META } from '@/renderer/agent/emotion'
+import { emotionAdapter } from '@/renderer/agent/emotion/emotionAdapter'
 import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
@@ -51,14 +52,26 @@ export const EmotionEditorBar: React.FC = () => {
     return feedback.shortMessage || feedback.message
   }, [feedback])
 
+  const dismissFeedback = () => {
+    if (feedback) {
+      emotionAdapter.dismissFeedback(feedback.id, feedback.cooldownKey)
+    }
+    setFeedback(null)
+  }
+
   const handleAction = (actionType?: string) => {
     if (!actionType || !emotion) {
-      setFeedback(null)
+      dismissFeedback()
       return
     }
     const action = getRecommendedActions(emotion).find(item => item.type === actionType)
     action?.execute()
-    setFeedback(null)
+    dismissFeedback()
+  }
+
+  const snoozeCompanion = () => {
+    emotionAdapter.snoozeCompanion()
+    dismissFeedback()
   }
 
   return (
@@ -122,6 +135,16 @@ export const EmotionEditorBar: React.FC = () => {
                       <span>{action.label}</span>
                     </motion.button>
                   ))}
+                  {feedback.dismissible && (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="px-2 py-1 rounded-md text-[10px] font-medium transition-colors border border-white/10 hover:border-white/20 text-text-muted"
+                      onClick={snoozeCompanion}
+                    >
+                      {t('emotion.companion.later', language)}
+                    </motion.button>
+                  )}
                 </div>
               )}
             </div>
