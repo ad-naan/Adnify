@@ -9,6 +9,8 @@ export interface EmotionPanelSettings {
   soundEnabled: boolean
   companionEnabled: boolean
   autoAdapt: boolean
+  /** 开启后仅内存检测，不写入 baseline / feedback 等 localStorage */
+  privacyMode: boolean
   sensitivity: EmotionPanelSensitivity
 }
 
@@ -17,7 +19,12 @@ export const DEFAULT_EMOTION_PANEL_SETTINGS: EmotionPanelSettings = {
   soundEnabled: false,
   companionEnabled: true,
   autoAdapt: true,
+  privacyMode: false,
   sensitivity: 'medium',
+}
+
+export function isEmotionPrivacyMode(): boolean {
+  return loadEmotionPanelSettings().privacyMode
 }
 
 const EMOTION_SETTINGS_KEY = 'adnify-emotion-panel-settings'

@@ -10,6 +10,7 @@ import { useStore } from '@store'
 import { t } from '@/renderer/i18n'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import { emotionFeedback } from '@/renderer/agent/emotion/emotionFeedback'
+import { emotionAdapter } from '@/renderer/agent/emotion/emotionAdapter'
 import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
@@ -88,12 +89,20 @@ export const EmotionStatusIndicator: React.FC = () => {
   const currentMessageKey = messages[messageIndex]
 
   const dismissFeedback = () => {
+    if (activeFeedback) {
+      emotionAdapter.dismissFeedback(activeFeedback.id, activeFeedback.cooldownKey)
+    }
     setActiveFeedback(null)
     setFeedbackGiven(false)
     if (dismissTimerRef.current) {
       clearTimeout(dismissTimerRef.current)
       dismissTimerRef.current = null
     }
+  }
+
+  const snoozeCompanion = () => {
+    emotionAdapter.snoozeCompanion()
+    dismissFeedback()
   }
 
   const handleFeedback = (accurate: boolean) => {
@@ -250,6 +259,14 @@ export const EmotionStatusIndicator: React.FC = () => {
                       {action.label}
                     </button>
                   ))}
+                  {activeFeedback.dismissible && (
+                    <button
+                      onClick={snoozeCompanion}
+                      className="px-2 py-1.5 rounded bg-white/5 hover:bg-white/10 text-[10px] text-text-muted hover:text-text-primary transition-colors border border-white/5"
+                    >
+                      {t('emotion.companion.later', language)}
+                    </button>
+                  )}
                 </div>
               )}
 

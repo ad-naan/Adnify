@@ -437,6 +437,8 @@ export const en = {
   'emotion.soundEffectsDesc': 'Background white noise',
   'emotion.autoAdapt': 'Auto Adapt',
   'emotion.autoAdaptDesc': 'Adjust UI based on emotions',
+  'emotion.privacyMode': 'Privacy Mode',
+  'emotion.privacyModeDesc': 'Detect locally only; do not persist behavior or learning data',
   'emotion.sensitivity': 'Detection Sensitivity',
   'emotion.sensitivityLow': 'Low',
   'emotion.sensitivityMedium': 'Medium',
