@@ -20,6 +20,7 @@ import { registerDebugHandlers } from './debug' // 调试
 import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
 import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
 import { registerSkillsHandlers } from './skills' // Skills
+import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
 import {
@@ -59,18 +60,12 @@ export function registerAllHandlers(context: IPCContext) {
   registerWindowHandlers(createWindow)
 
   // 文件操作（安全版）
-  registerSecureFileHandlers(getMainWindow, workspaceMetaStore, (event) => {
-    // 优先使用请求来源窗口的工作区（支持多窗口隔离）
-    if (event && context.getWindowWorkspace) {
-      const windowId = event.sender.id
-      const windowRoots = context.getWindowWorkspace(windowId)
-      if (windowRoots && windowRoots.length > 0) {
-        return { roots: windowRoots }
-      }
-    }
-    // 回退到全局存储
-    return workspaceMetaStore.get('lastWorkspaceSession') as { roots: string[] } | null
-  }, {
+  registerSecureFileHandlers(getMainWindow, workspaceMetaStore, (event) =>
+    resolveWorkspaceFromEvent(event, {
+      getWindowWorkspace: context.getWindowWorkspace,
+      workspaceMetaStore,
+    }),
+  {
     findWindowByWorkspace: context.findWindowByWorkspace,
     setWindowWorkspace: context.setWindowWorkspace,
   })
@@ -83,18 +78,12 @@ export function registerAllHandlers(context: IPCContext) {
   })
 
   // 终端（安全版）- 传入窗口工作区获取函数实现多窗口隔离
-  registerSecureTerminalHandlers(getMainWindow, (event) => {
-    // 优先使用请求来源窗口的工作区（支持多窗口隔离）
-    if (event && context.getWindowWorkspace) {
-      const windowId = event.sender.id
-      const windowRoots = context.getWindowWorkspace(windowId)
-      if (windowRoots && windowRoots.length > 0) {
-        return { roots: windowRoots }
-      }
-    }
-    // 回退到全局存储
-    return workspaceMetaStore.get('lastWorkspaceSession') as { roots: string[] } | null
-  }, context.getWindowWorkspace)
+  registerSecureTerminalHandlers(getMainWindow, (event) =>
+    resolveWorkspaceFromEvent(event, {
+      getWindowWorkspace: context.getWindowWorkspace,
+      workspaceMetaStore,
+    }),
+  context.getWindowWorkspace)
 
   // 搜索
   registerSearchHandlers()
