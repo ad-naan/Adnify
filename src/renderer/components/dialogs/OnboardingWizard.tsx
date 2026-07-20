@@ -113,6 +113,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
       defaultMcpConfig,
     } = await import('@renderer/settings')
     const { createDefaultModelRoutingConfig } = await import('@shared/config/modelRouting')
+    const { getAllDefaults } = await import('@renderer/settings')
 
     set('language', selectedLanguage)
     set('llmConfig', providerConfig)
@@ -138,6 +139,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
         githubToken: '',
         promptTemplateId: 'default',
         enableFileLogging: false,
+        proxySettings: getAllDefaults().proxySettings,
       })
 
       useStore.getState().set('onboardingCompleted', true)

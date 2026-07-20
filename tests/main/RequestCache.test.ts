@@ -16,6 +16,12 @@ function longText(label: string, repeat = 500): string {
   return `${label} `.repeat(repeat).trim()
 }
 
+/** Generate text large enough to exceed Google explicit cache token threshold (32768). */
+function longTextForCache(label: string): string {
+  // ~8 chars per token; 20000 repeats ≈ 40k+ tokens without expensive counting loops
+  return `${label} `.repeat(20000).trim()
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
 })
@@ -73,8 +79,8 @@ describe('prepareRequestCache', () => {
     }))
 
     const messages: ModelMessage[] = [
-      { role: 'system', content: longText('system', 200) },
-      { role: 'user', content: longText('codebase', 400) },
+      { role: 'system', content: longTextForCache('system') },
+      { role: 'user', content: longTextForCache('codebase') },
       { role: 'assistant', content: 'Indexed.' },
       { role: 'user', content: 'Answer the current question.' },
     ]

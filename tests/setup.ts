@@ -36,7 +36,7 @@ Object.defineProperty(globalThis, 'self', {
 })
 
 // Mock window.electronAPI
-const mockElectronAPI = {
+const mockElectronAPI: Record<string, unknown> = {
   file: {
     read: vi.fn(),
     readBinary: vi.fn(),

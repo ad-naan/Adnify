@@ -148,11 +148,11 @@ export function registerHealthCheckHandlers() {
     const url = (baseUrl || defaultUrls[provider] || defaultUrls.openai).replace(/\/$/, '')
     const activeProtocol = protocol || (provider === 'gemini' ? 'google' : provider === 'anthropic' ? 'anthropic' : 'openai')
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
     try {
       logger.ipc.info(`[HealthCheck] Checking ${provider} at ${url} (protocol: ${activeProtocol})`)
-
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), timeout)
 
       let fetchUrl: string
       let headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -193,7 +193,6 @@ export function registerHealthCheckHandlers() {
         signal: controller.signal,
       })
 
-      clearTimeout(timeoutId)
       const latency = Date.now() - startTime
 
       if (response.ok) {
@@ -207,6 +206,8 @@ export function registerHealthCheckHandlers() {
       const error = toAppError(err)
       logger.ipc.error(`[HealthCheck] ${provider} check failed:`, error.message)
       return { provider, status: 'unhealthy', error: error.message || 'Connection failed', checkedAt: new Date() } as HealthCheckResult
+    } finally {
+      clearTimeout(timeoutId)
     }
   })
 

@@ -15,6 +15,7 @@ import { securityManager, OperationType } from './securityModule'
 import { SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
+import { exec as gitExec } from 'dugite'
 import { remoteHostTrustService } from '../services/remoteHostTrustService'
 
 
@@ -476,9 +477,7 @@ export function registerSecureTerminalHandlers(
     }
 
     try {
-      // 使用 dugite（安全）
-      const dugite = require('dugite')
-      const result = await dugite.exec(args, cwd)
+      const result = await gitExec(args, cwd)
 
       securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
         exitCode: result.exitCode,
@@ -490,7 +489,7 @@ export function registerSecureTerminalHandlers(
         if (isQueryCommand) {
           logger.security.debug('[Git] dugite query returned non-zero:', args)
         } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
-          logger.security.info('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
+          logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
         } else {
           logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
         }
@@ -517,6 +516,8 @@ export function registerSecureTerminalHandlers(
           const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
           if (isQueryCommand) {
             logger.security.debug('[Git] spawn query returned non-zero:', args)
+          } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
+            logger.security.warn('[Git] spawn returned expected non-zero result:', args, result.stderr || result.stdout)
           } else {
             logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
           }
