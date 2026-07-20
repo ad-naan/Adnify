@@ -1,0 +1,34 @@
+# pnpm 工作区配置
+#
+# minimumReleaseAge 策略说明：
+# pnpm v11+ 默认要求包发布后至少等待 1440 分钟（24小时）才能安装，
+# 以防范供应链攻击（如包被恶意篡改后立即推送）。
+#
+# 将其设置为 0 可以绕过此限制，适用于需要使用最新包的开发场景。
+# 受影响的包：@parcel/watcher@2.6.0, lightningcss@1.33.0
+minimumReleaseAge: 0
+
+# pnpm v11+ 默认会忽略某些包的构建脚本，在此明确批准
+allowBuilds:
+  '0': '@parcel/watcher'
+  '1': core-js
+  '2': cpu-features
+  '3': dugite
+  '4': electron
+  '5': electron-winstaller
+  '6': esbuild
+  '7': node-pty
+  '8': protobufjs
+  '9': sharp
+  '10': ssh2
+  '@parcel/watcher': set this to true or false
+  core-js: set this to true or false
+  cpu-features: set this to true or false
+  dugite: set this to true or false
+  electron: set this to true or false
+  electron-winstaller: set this to true or false
+  esbuild: set this to true or false
+  node-pty: set this to true or false
+  protobufjs: set this to true or false
+  sharp: set this to true or false
+  ssh2: set this to true or false
