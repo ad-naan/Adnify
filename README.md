@@ -40,6 +40,8 @@ A huge thank you to our generous supporters. Your coffee, milk tea, and energy d
 | :--- | :--- | :--- | :--- | :--- |
 | okay. | 🧋 Milk Tea | **Joy Source Injector** | 2026-03-07 | A cup of joy for bug-free code! ✨ |
 | Mr. Tang | ☕ Coffee | **Focus Fuel Sponsor** | 2026-04-17 | A fresh cup for the next build. |
+| . | 🥤 Cola | **Summer Ice Coke** | 2026-07-21 | An iced coke to fuel the next build. |
+| *Han | ☕ Coffee | **Coffee Power Sponsor** | 2026-07-27 | An Americano to keep the code flowing! ✨ |
 
 ---
 
