@@ -35,6 +35,7 @@ Adnify is more than just an editor—it's your **intelligent programming compani
 > "Behind every line of code in Adnify, there's a spark of energy from our community!" ⚡️
 
 A huge thank you to our generous supporters. Your coffee, milk tea, and energy drinks are what keep Adnify evolving!
+Names are in no particular order. If there are any errors or omissions, please contact the author.
 
 | Supporter | Method | Honorary Title | Date | Message |
 | :--- | :--- | :--- | :--- | :--- |

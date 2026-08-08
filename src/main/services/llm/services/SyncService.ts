@@ -1,6 +1,6 @@
-import { generateText } from 'ai'
+import { streamText } from 'ai'
 import { logger } from '@shared/utils/Logger'
-import { createModel } from '../modelFactory'
+import { createModel, resolveAuthForConfig } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { executePreparedRequest } from '../core/RequestExecution'
@@ -41,19 +41,23 @@ export class SyncService {
     })
 
     try {
-      const model = createModel(config)
-      const baseMessages = this.messageConverter.convert(messages, systemPrompt, config)
+      const resolvedConfig = await resolveAuthForConfig(config)
+      const model = createModel(resolvedConfig)
+      const baseMessages = this.messageConverter.convert(messages, systemPrompt, resolvedConfig)
       const coreTools = tools ? this.toolConverter.convert(tools) : undefined
 
       const result = await executePreparedRequest({
-        config,
+        config: resolvedConfig,
         operation: 'sync',
         originalMessages: messages,
         baseMessages,
         systemPrompt,
         abortSignal,
-        execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
-          await generateText({
+        execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) => {
+          // `streamText`, not `generateText`: the ChatGPT OAuth backend rejects
+          // non-streaming requests ("Stream must be set to true"). The stream is
+          // consumed to completion here, so this stays a synchronous API.
+          const stream = streamText({
             model,
             system: systemPrompt,
             messages: this.stripSystemMessages(preparedMessages),
@@ -63,7 +67,19 @@ export class SyncService {
             providerOptions,
             abortSignal,
             timeout: timeout ?? callOptions.timeout ?? 120_000,
-          }),
+          })
+
+          // Surface provider failures here rather than as an unhandled rejection.
+          const [text, usage, finishReason, response, warnings] = await Promise.all([
+            stream.text,
+            stream.usage,
+            stream.finishReason,
+            stream.response,
+            stream.warnings,
+          ])
+
+          return { text, usage, finishReason, response, warnings, providerMetadata: await stream.providerMetadata }
+        },
       })
 
       if (result.warnings && result.warnings.length > 0) {

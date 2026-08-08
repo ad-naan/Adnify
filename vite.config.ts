@@ -167,6 +167,7 @@ export default defineConfig({
     sourcemap: false,
   },
   optimizeDeps: {
+    entries: ['index.html'],
     include: ['monaco-editor']
   }
 })

@@ -2,7 +2,7 @@
  * Central provider definitions and protocol helpers.
  */
 
-export type AuthType = 'bearer' | 'api-key' | 'header' | 'query' | 'none'
+export type AuthType = 'bearer' | 'api-key' | 'header' | 'query' | 'none' | 'oauth'
 export type ApiProtocol = 'openai' | 'openai-responses' | 'anthropic' | 'google' | 'custom'
 export type OpenAICompatibilityProfile = 'compatible' | 'full'
 
@@ -162,9 +162,23 @@ export const BUILTIN_PROVIDERS: Record<string, BuiltinProviderDef> = {
     auth: { type: 'bearer', placeholder: 'sk-proj-...', helpUrl: 'https://platform.openai.com/api-keys' },
     isBuiltin: true,
   },
+  'openai-oauth': {
+    id: 'openai-oauth',
+    displayName: 'ChatGPT (Pro/Plus)',
+    description: 'Sign in with your ChatGPT subscription — no API key needed',
+    // OAuth tokens are only valid against the ChatGPT backend, not api.openai.com.
+    // This path is exact: the endpoint is `<baseUrl>/responses`, with no /v1 segment.
+    baseUrl: 'https://chatgpt.com/backend-api/codex',
+    models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark'],
+    defaultModel: 'gpt-5.5',
+    protocol: 'openai-responses',
+    features: { streaming: true, tools: true, vision: true, reasoning: true },
+    defaults: { maxTokens: 8192, temperature: 0.7, topP: 1, timeout: 120000 },
+    auth: { type: 'oauth', helpUrl: 'https://chatgpt.com' },
+    isBuiltin: true,
+  },
   anthropic: {
-    id: 'anthropic',
-    displayName: 'Anthropic',
+    id: 'anthropic',    displayName: 'Anthropic',
     description: 'Claude 3.5 and Claude 4 models',
     baseUrl: 'https://api.anthropic.com',
     models: [
