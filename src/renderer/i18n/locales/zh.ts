@@ -30,6 +30,7 @@ export const zh = {
   'askAnything': '问我任何问题...',
   'configureApiKey': '请先配置 API 密钥...',
   'apiKeyWarning': '请在设置中配置 API 密钥以开始对话',
+  'oauthSignInWarning': '请在"设置 > 服务商"中登录 ChatGPT 账号以开始对话',
   'chatModeHint': '💬 对话模式：仅对话',
   'agentModeHint': '⚡ 代理模式：可执行工具',
 

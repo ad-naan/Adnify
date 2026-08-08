@@ -619,6 +619,22 @@ export interface ElectronAPI {
   mcpReadResource: (request: McpResourceReadRequest) => Promise<McpResourceReadResult>
   mcpGetPrompt: (request: McpPromptGetRequest) => Promise<McpPromptGetResult>
   mcpRefreshCapabilities: (serverId: string) => Promise<{ success: boolean; error?: string }>
+
+  // OpenAI OAuth
+  openaiAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
+  openaiAuthLogout: () => Promise<{ success: boolean; error?: string }>
+  openaiAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }>
+  openaiAuthToken: () => Promise<{ token: string | null }>
+  openaiAuthUsage: (options?: { refresh?: boolean }) => Promise<{
+    usage: {
+      planType?: string
+      activeLimit?: string
+      primary?: { usedPercent: number; windowMinutes?: number; resetAt?: number }
+      secondary?: { usedPercent: number; windowMinutes?: number; resetAt?: number }
+      credits?: { balance?: number; hasCredits: boolean; unlimited: boolean }
+      capturedAt: number
+    } | null
+  }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
   mcpAddServer: (config: {

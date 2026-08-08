@@ -20,6 +20,7 @@ import { registerDebugHandlers } from './debug' // 调试
 import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
 import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
 import { registerSkillsHandlers } from './skills' // Skills
+import { registerOpenAIAuthHandlers } from './openaiAuth' // OpenAI OAuth
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -117,6 +118,9 @@ export function registerAllHandlers(context: IPCContext) {
 
   // Skills
   registerSkillsHandlers()
+
+  // OpenAI OAuth
+  registerOpenAIAuthHandlers()
 
   logger.ipc.info('[Security] 所有安全IPC处理器已注册')
 }

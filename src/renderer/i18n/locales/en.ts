@@ -30,6 +30,7 @@ export const en = {
   'askAnything': 'Ask me anything...',
   'configureApiKey': 'Configure API key first...',
   'apiKeyWarning': 'Please configure your API key in Settings to start chatting',
+  'oauthSignInWarning': 'Please sign in with your ChatGPT account in Settings > Provider to start chatting',
   'chatModeHint': '💬 Chat mode: Conversation only',
   'agentModeHint': '⚡ Agent mode: Can execute tools',
 

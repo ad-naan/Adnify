@@ -482,6 +482,12 @@ export interface ElectronAPI {
     error?: string
   }>
   mcpRefreshCapabilities: (serverId: string) => Promise<{ success: boolean; error?: string }>
+
+  // OpenAI OAuth
+  openaiAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
+  openaiAuthLogout: () => Promise<{ success: boolean; error?: string }>
+  openaiAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string }>
+  openaiAuthToken: () => Promise<{ token: string | null }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
   mcpAddServer: (config: {
@@ -809,6 +815,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mcpGetPrompt: (request: { serverId: string; promptName: string; arguments?: Record<string, string> }) =>
     ipcRenderer.invoke('mcp:getPrompt', request),
   mcpRefreshCapabilities: (serverId: string) => ipcRenderer.invoke('mcp:refreshCapabilities', serverId),
+
+  // OpenAI OAuth
+  openaiAuthLogin: () => ipcRenderer.invoke('openai:auth:login'),
+  openaiAuthLogout: () => ipcRenderer.invoke('openai:auth:logout'),
+  openaiAuthStatus: () => ipcRenderer.invoke('openai:auth:status'),
+  openaiAuthToken: () => ipcRenderer.invoke('openai:auth:token'),
+  openaiAuthUsage: (options?: { refresh?: boolean }) =>
+    ipcRenderer.invoke('openai:auth:usage', options),
   mcpGetConfigPaths: () => ipcRenderer.invoke('mcp:getConfigPaths'),
   mcpReloadConfig: () => ipcRenderer.invoke('mcp:reloadConfig'),
   mcpAddServer: (config: {

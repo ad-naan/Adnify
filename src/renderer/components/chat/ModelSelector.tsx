@@ -30,11 +30,20 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
   const dropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  // OAuth providers have no API key — availability depends on sign-in state.
+  const [oauthSignedIn, setOauthSignedIn] = useState(false)
+  useEffect(() => {
+    window.electronAPI.openaiAuthStatus()
+      .then(s => setOauthSignedIn(s.loggedIn))
+      .catch(() => setOauthSignedIn(false))
+  }, [isOpen])
+
   const hasApiKey = useCallback((providerId: string) => {
+    if (getBuiltinProvider(providerId)?.auth.type === 'oauth') return oauthSignedIn
     const config = providerConfigs[providerId]
     if (config?.apiKey) return true
     return llmConfig.provider === providerId && !!llmConfig.apiKey
-  }, [llmConfig, providerConfigs])
+  }, [llmConfig, providerConfigs, oauthSignedIn])
 
   const groupedModels = useMemo<ModelGroup[]>(() => {
     const groups: ModelGroup[] = []

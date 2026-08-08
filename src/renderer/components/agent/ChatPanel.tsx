@@ -19,6 +19,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
 import { t } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
+import { getBuiltinProvider } from '@shared/config/providers'
 import {
   ChatMessage as ChatMessageType,
   isUserMessage,
@@ -904,7 +905,15 @@ export default function ChatPanel() {
     }
   }, [showFileMention, handleSubmit])
 
-  const hasApiKey = !!llmConfig.apiKey
+  const [oauthSignedIn, setOauthSignedIn] = useState(false)
+  useEffect(() => {
+    window.electronAPI?.openaiAuthStatus?.()
+      .then(s => setOauthSignedIn(s?.loggedIn ?? false))
+      .catch(() => setOauthSignedIn(false))
+  }, [])
+
+  const isOAuth = getBuiltinProvider(llmConfig.provider)?.auth.type === 'oauth'
+  const hasApiKey = isOAuth ? oauthSignedIn : !!llmConfig.apiKey
 
   // 处理回退到检查点
   const handleRestore = useCallback(async (messageId: string) => {

@@ -5,9 +5,11 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
-import { BUILTIN_PROVIDERS, isBuiltinProvider } from '@shared/config/providers'
+import { BUILTIN_PROVIDERS, getBuiltinProvider, isBuiltinProvider } from '@shared/config/providers'
 import type { LLMConfig } from '@shared/types/llm'
-import { createModel, resolveHeaderPlaceholders } from '../services/llm/modelFactory'
+import { createModel, resolveAuthForConfig, resolveHeaderPlaceholders } from '../services/llm/modelFactory'
+import { OpenAIAuthService } from '../services/openai/OpenAIAuthService'
+import { OpenAIUsageStore } from '../services/openai/OpenAIUsageStore'
 import { generateText } from 'ai'
 import { safeIpcHandle } from './safeHandle'
 
@@ -63,11 +65,61 @@ function extractResponsesOutputText(payload: unknown): string {
   return parts.join('\n').trim()
 }
 
+/**
+ * Collect text from a Responses API SSE stream.
+ *
+ * The ChatGPT backend only speaks streaming, so the test request gets back a
+ * `text/event-stream` of `response.*` events rather than a single JSON body.
+ * Deltas are accumulated; the terminal `response.completed` event carries the
+ * full response object, which is preferred when present.
+ */
+function extractResponsesOutputTextFromSSE(raw: string): string {
+  const deltas: string[] = []
+  let terminal = ''
+
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.startsWith('data:')) continue
+    const data = line.slice(5).trim()
+    if (!data || data === '[DONE]') continue
+
+    let event: { type?: string; delta?: unknown; response?: unknown }
+    try {
+      event = JSON.parse(data)
+    } catch {
+      continue
+    }
+
+    if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
+      deltas.push(event.delta)
+      continue
+    }
+    if (
+      (event.type === 'response.completed' || event.type === 'response.incomplete') &&
+      event.response
+    ) {
+      terminal = extractResponsesOutputText(event.response)
+      continue
+    }
+    if (event.type === 'response.failed' || event.type === 'error') {
+      const message =
+        (event.response as { error?: { message?: string } } | undefined)?.error?.message
+        ?? (event as { message?: string }).message
+      throw new Error(message || 'Model stream failed')
+    }
+  }
+
+  return (terminal || deltas.join('')).trim()
+}
+
 async function testOpenAIResponsesModel(config: LLMConfig): Promise<string> {
   const builtinProvider = isBuiltinProvider(config.provider)
     ? BUILTIN_PROVIDERS[config.provider]
     : undefined
-  const baseUrl = normalizeResponsesBaseUrl(config.baseUrl || builtinProvider?.baseUrl)
+  // The ChatGPT backend path is exact — appending /v1 gives a 404.
+  const rawBaseUrl = config.baseUrl || builtinProvider?.baseUrl
+  const baseUrl = builtinProvider?.auth.type === 'oauth'
+    ? rawBaseUrl?.replace(/\/$/, '')
+    : normalizeResponsesBaseUrl(rawBaseUrl)
   if (!baseUrl) {
     throw new Error('OpenAI Responses provider requires baseUrl')
   }
@@ -95,19 +147,57 @@ async function testOpenAIResponsesModel(config: LLMConfig): Promise<string> {
       signal: controller.signal,
       body: JSON.stringify({
         model: config.model,
-        input: 'hi,Please tell me directly what model you are?',
-        ...(config.capabilities?.openAIResponsesSupportsMaxOutputTokens !== false
+        // The ChatGPT backend only accepts the structured array form of `input`;
+        // a bare string is rejected with "Input must be a list".
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'hi,Please tell me directly what model you are?' },
+            ],
+          },
+        ],
+        // The ChatGPT backend rejects `max_output_tokens` outright.
+        ...(builtinProvider?.auth.type !== 'oauth'
+          && config.capabilities?.openAIResponsesSupportsMaxOutputTokens !== false
           ? { max_output_tokens: 10 }
           : {}),
-        text: {
-          format: { type: 'text' },
-        },
+        // The ChatGPT backend rejects server-side storage; api.openai.com accepts false too.
+        ...(builtinProvider?.auth.type === 'oauth' ? { store: false } : {}),
+        // Codex CLI never sends `text.format` to the ChatGPT backend — keep the
+        // payload minimal there and only set it for standard Responses endpoints.
+        ...(builtinProvider?.auth.type === 'oauth'
+          ? {}
+          : { text: { format: { type: 'text' } } }),
+        // The ChatGPT backend refuses non-streaming requests outright
+        // ("Stream must be set to true"), so this path must read SSE back.
+        ...(builtinProvider?.auth.type === 'oauth' ? { stream: true } : {}),
       }),
     })
 
     const responseText = await response.text()
+    // Snapshot subscription usage — these headers ride along on every
+    // ChatGPT backend response, including failures.
+    if (builtinProvider?.auth.type === 'oauth') {
+      OpenAIUsageStore.captureFromHeaders(response.headers)
+    }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${responseText}`)
+    }
+
+    // Streamed responses come back as SSE, not a single JSON object. Detect by
+    // content type and fall back to the framing itself for lenient upstreams.
+    const isEventStream =
+      (response.headers.get('content-type') || '').includes('text/event-stream') ||
+      responseText.startsWith('event:') ||
+      responseText.startsWith('data:')
+
+    if (isEventStream) {
+      const streamedText = extractResponsesOutputTextFromSSE(responseText)
+      if (!streamedText) {
+        throw new Error('Model returned no text output')
+      }
+      return streamedText
     }
 
     let payload: unknown
@@ -135,8 +225,30 @@ export function registerHealthCheckHandlers() {
   safeIpcHandle('healthCheck:check', async (_, provider: string, apiKey: string, baseUrl?: string, timeout = 10000, protocol?: string) => {
     const startTime = Date.now()
 
+    // OAuth providers carry no API key — resolve the access token from the auth store.
+    let accountID: string | undefined
+    if (getBuiltinProvider(provider)?.auth.type === 'oauth') {
+      const token = await OpenAIAuthService.getValidToken()
+      if (!token) {
+        return {
+          provider,
+          status: 'unhealthy' as const,
+          error: 'Not signed in to ChatGPT. Please sign in first.',
+          checkedAt: new Date(),
+        }
+      }
+      // The ChatGPT backend has no /models endpoint; a valid token is the health signal.
+      return {
+        provider,
+        status: 'healthy' as const,
+        latency: Date.now() - startTime,
+        checkedAt: new Date(),
+      }
+    }
+
     const defaultUrls: Record<string, string> = {
       openai: 'https://api.openai.com/v1',
+      'openai-oauth': 'https://chatgpt.com/backend-api/codex',
       anthropic: 'https://api.anthropic.com',
       gemini: 'https://generativelanguage.googleapis.com',
       deepseek: 'https://api.deepseek.com/v1',
@@ -186,6 +298,9 @@ export function registerHealthCheckHandlers() {
           fetchUrl = `${url}/v1/models`
         }
         headers['Authorization'] = `Bearer ${apiKey}`
+        if (accountID) {
+          headers['chatgpt-account-id'] = accountID
+        }
       }
 
       const response = await fetch(fetchUrl, {
@@ -229,10 +344,11 @@ export function registerHealthCheckHandlers() {
       })
 
       let text: string
-      if (config.protocol === 'openai-responses') {
-        text = await testOpenAIResponsesModel(config)
+      const resolvedConfig = await resolveAuthForConfig(config)
+      if (resolvedConfig.protocol === 'openai-responses') {
+        text = await testOpenAIResponsesModel(resolvedConfig)
       } else {
-        const model = createModel(config)
+        const model = createModel(resolvedConfig)
         const result = await generateText({
           model,
           messages: [{ role: 'user', content: 'hi,Please tell me directly what model you are?' }],
@@ -272,8 +388,20 @@ export function registerHealthCheckHandlers() {
     try {
       logger.ipc.info(`[HealthCheck] Fetching models for ${provider} (protocol: ${protocol})`)
 
+      // OAuth providers carry no API key — resolve the access token from the auth store.
+      let accountID: string | undefined
+      if (getBuiltinProvider(provider)?.auth.type === 'oauth') {
+        const token = await OpenAIAuthService.getValidToken()
+        if (!token) {
+          throw new Error('Not signed in to ChatGPT. Please sign in first.')
+        }
+        // The ChatGPT backend exposes no /models endpoint; the catalog is fixed.
+        return { success: true, models: [...getBuiltinProvider(provider)!.models] }
+      }
+
       const defaultUrls: Record<string, string> = {
         openai: 'https://api.openai.com/v1',
+        'openai-oauth': 'https://chatgpt.com/backend-api/codex',
         anthropic: 'https://api.anthropic.com',
         gemini: 'https://generativelanguage.googleapis.com',
         deepseek: 'https://api.deepseek.com/v1',
@@ -323,6 +451,9 @@ export function registerHealthCheckHandlers() {
           fetchUrl = `${url}/v1/models`
         }
         headers['Authorization'] = `Bearer ${apiKey}`
+        if (accountID) {
+          headers['chatgpt-account-id'] = accountID
+        }
       }
 
       logger.ipc.info(`[HealthCheck] Requesting models from: ${fetchUrl}`)

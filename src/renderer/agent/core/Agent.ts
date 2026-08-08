@@ -39,6 +39,7 @@ import type { LLMConfig, ExecutionContext } from './types'
 import { agentExecutor } from '../application/AgentExecutor'
 import type { ExecutionConfig } from '../application/AgentExecutor'
 import { translateAgentText } from '../utils/agentText'
+import { getBuiltinProvider } from '@shared/config/providers'
 
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
@@ -95,8 +96,15 @@ export class AgentClass {
       throw new Error(`Thread ${threadId} is already running`)
     }
 
-    // 验证 API Key
-    if (!config.apiKey) {
+    // 验证凭证：OAuth provider 没有 API Key，其 access token 由主进程
+    // resolveAuthForConfig() 解析，这里只校验是否已登录。
+    if (getBuiltinProvider(config.provider)?.auth.type === 'oauth') {
+      const status = await window.electronAPI?.openaiAuthStatus?.().catch(() => null)
+      if (!status?.loggedIn) {
+        this.showError(translateAgentText('oauthSignInWarning'))
+        throw new Error('Not signed in to ChatGPT')
+      }
+    } else if (!config.apiKey) {
       this.showError(translateAgentText('apiKeyWarning'))
       throw new Error('Missing API key')
     }

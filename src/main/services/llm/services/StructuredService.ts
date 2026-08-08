@@ -1,12 +1,12 @@
 /**
- * Structured-output service built on AI SDK generateObject.
+ * Structured-output service built on AI SDK streamObject.
  */
 
-import { generateObject } from 'ai'
+import { streamObject } from 'ai'
 import type { ModelMessage } from '@ai-sdk/provider-utils'
 import { z } from 'zod'
 import { logger } from '@shared/utils/Logger'
-import { createModel } from '../modelFactory'
+import { createModel, resolveAuthForConfig } from '../modelFactory'
 import { executePreparedRequest } from '../core/RequestExecution'
 import { LLMError, convertUsage } from '../types'
 import type { LLMResponse, CodeAnalysis, Refactoring, CodeFix, TestCase } from '../types'
@@ -149,17 +149,21 @@ export class StructuredService {
     onData?: (data: T) => void
   }): Promise<LLMResponse<T>> {
     const { config, operation, originalMessages, messages, schema, onData } = options
-    const model = createModel(config)
+    const resolvedConfig = await resolveAuthForConfig(config)
+    const model = createModel(resolvedConfig)
     const systemPrompt = this.extractSystemPrompt(messages)
 
     const result = await executePreparedRequest({
-      config,
+      config: resolvedConfig,
       operation,
       originalMessages,
       baseMessages: messages,
       systemPrompt,
-      execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
-        await generateObject({
+      execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) => {
+        // `streamObject`, not `generateObject`: the ChatGPT OAuth backend refuses
+        // non-streaming requests. Awaiting every promise collapses it back into a
+        // single result, so callers see no behavioural change.
+        const stream = streamObject({
           model,
           system: systemPrompt,
           messages: this.stripSystemMessages(preparedMessages),
@@ -167,7 +171,24 @@ export class StructuredService {
           ...settings,
           ...callOptions,
           providerOptions,
-        }),
+        })
+
+        const [object, usage, response, warnings] = await Promise.all([
+          stream.object,
+          stream.usage,
+          stream.response,
+          stream.warnings,
+        ])
+
+        return {
+          object,
+          usage,
+          response,
+          warnings,
+          finishReason: await stream.finishReason,
+          providerMetadata: await stream.providerMetadata,
+        }
+      },
     })
 
     if (result.warnings && result.warnings.length > 0) {
@@ -192,17 +213,19 @@ export class StructuredService {
     schema: z.ZodTypeAny
   }): Promise<LLMResponse<T>> {
     const { config, operation, originalMessages, messages, schema } = options
-    const model = createModel(config)
+    const resolvedConfig = await resolveAuthForConfig(config)
+    const model = createModel(resolvedConfig)
     const systemPrompt = this.extractSystemPrompt(messages)
 
     const result = await executePreparedRequest({
-      config,
+      config: resolvedConfig,
       operation,
       originalMessages,
       baseMessages: messages,
       systemPrompt,
-      execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) =>
-        await generateObject({
+      execute: async ({ messages: preparedMessages, settings, callOptions, providerOptions }) => {
+        // See executeStructuredText — streaming is mandatory for the OAuth backend.
+        const stream = streamObject({
           model,
           schema: schema as any,
           system: systemPrompt,
@@ -210,7 +233,24 @@ export class StructuredService {
           ...settings,
           ...callOptions,
           providerOptions,
-        }),
+        })
+
+        const [object, usage, response, warnings] = await Promise.all([
+          stream.object,
+          stream.usage,
+          stream.response,
+          stream.warnings,
+        ])
+
+        return {
+          object,
+          usage,
+          response,
+          warnings,
+          finishReason: await stream.finishReason,
+          providerMetadata: await stream.providerMetadata,
+        }
+      },
     })
 
     if (result.warnings && result.warnings.length > 0) {

@@ -25,7 +25,7 @@ import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 
 // 内置厂商 ID
-const BUILTIN_PROVIDER_IDS = ['openai', 'anthropic', 'gemini', 'deepseek', 'groq']
+const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
 
 // 协议类型选项
 const PROTOCOL_OPTIONS = [
@@ -192,13 +192,295 @@ function reconcileCustomHeaderDrafts(
     : syncedHeaders
 }
 
+type ChatGPTUsage = Awaited<
+  ReturnType<typeof window.electronAPI.openaiAuthUsage>
+>['usage']
+
+/** Human-readable label for a rolling quota window, e.g. 43800 min -> "30 天". */
+function formatUsageWindow(minutes: number | undefined, language: 'en' | 'zh'): string {
+  if (!minutes) return ''
+  if (minutes % (60 * 24) === 0) {
+    const days = minutes / (60 * 24)
+    return language === 'zh' ? `${days} 天` : `${days}d`
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60
+    return language === 'zh' ? `${hours} 小时` : `${hours}h`
+  }
+  return language === 'zh' ? `${minutes} 分钟` : `${minutes}m`
+}
+
+/** Relative time until a reset instant given as epoch seconds. */
+function formatResetIn(resetAt: number | undefined, language: 'en' | 'zh'): string {
+  if (!resetAt) return ''
+  const seconds = resetAt - Math.floor(Date.now() / 1000)
+  if (seconds <= 0) return language === 'zh' ? '即将重置' : 'resetting soon'
+  const days = Math.floor(seconds / 86400)
+  if (days >= 1) return language === 'zh' ? `${days} 天后重置` : `resets in ${days}d`
+  const hours = Math.floor(seconds / 3600)
+  if (hours >= 1) return language === 'zh' ? `${hours} 小时后重置` : `resets in ${hours}h`
+  const mins = Math.max(1, Math.floor(seconds / 60))
+  return language === 'zh' ? `${mins} 分钟后重置` : `resets in ${mins}m`
+}
+
+const UsageBar = memo(function UsageBar({
+  label,
+  window: quotaWindow,
+  language,
+}: {
+  label: string
+  window: NonNullable<NonNullable<ChatGPTUsage>['primary']>
+  language: 'en' | 'zh'
+}) {
+  const used = Math.max(0, Math.min(100, quotaWindow.usedPercent))
+  // Exhausted quota should read as a problem, not as a full progress bar.
+  const tone = used >= 100 ? 'bg-red-400' : used >= 80 ? 'bg-amber-400' : 'bg-emerald-400'
+  const windowLabel = formatUsageWindow(quotaWindow.windowMinutes, language)
+  const resetLabel = formatResetIn(quotaWindow.resetAt, language)
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between gap-2 text-[11px]">
+        <span className="text-text-secondary">
+          {label}
+          {windowLabel ? <span className="opacity-60"> · {windowLabel}</span> : null}
+        </span>
+        <span className={used >= 100 ? 'font-medium text-red-400' : 'text-text-secondary'}>
+          {language === 'zh' ? `已用 ${used}%` : `${used}% used`}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${used}%` }} />
+      </div>
+      {resetLabel ? (
+        <div className="text-[10px] text-text-secondary opacity-60">{resetLabel}</div>
+      ) : null}
+    </div>
+  )
+})
+
+const UsagePanel = memo(function UsagePanel({
+  usage,
+  busy,
+  language,
+  onRefresh,
+}: {
+  usage: ChatGPTUsage
+  busy: boolean
+  language: 'en' | 'zh'
+  onRefresh: () => void
+}) {
+  const hasWindows = Boolean(usage?.primary || usage?.secondary)
+
+  return (
+    <div className="space-y-2 rounded-md border border-white/10 bg-white/[0.02] p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
+          {language === 'zh' ? '套餐用量' : 'Usage'}
+        </span>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={busy}
+          className="cursor-pointer text-[10px] text-text-secondary underline-offset-2 hover:underline disabled:opacity-50"
+        >
+          {busy
+            ? (language === 'zh' ? '刷新中…' : 'Refreshing…')
+            : (language === 'zh' ? '刷新' : 'Refresh')}
+        </button>
+      </div>
+
+      {hasWindows ? (
+        <div className="space-y-2.5">
+          {usage?.primary ? (
+            <UsageBar
+              label={language === 'zh' ? '主额度' : 'Primary'}
+              window={usage.primary}
+              language={language}
+            />
+          ) : null}
+          {/* A zero-length secondary window means the plan has no burst quota. */}
+          {usage?.secondary && usage.secondary.windowMinutes ? (
+            <UsageBar
+              label={language === 'zh' ? '次级额度' : 'Secondary'}
+              window={usage.secondary}
+              language={language}
+            />
+          ) : null}
+          {usage?.credits?.unlimited ? (
+            <div className="text-[10px] text-emerald-400">
+              {language === 'zh' ? '积分：无限' : 'Credits: unlimited'}
+            </div>
+          ) : usage?.credits?.hasCredits ? (
+            <div className="text-[10px] text-text-secondary">
+              {language === 'zh' ? '额外积分' : 'Credits'}
+              {typeof usage.credits.balance === 'number' ? `: ${usage.credits.balance}` : ''}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="text-[11px] text-text-secondary opacity-70">
+          {language === 'zh'
+            ? '暂无用量数据，发起一次对话或点击刷新后显示。'
+            : 'No usage data yet — send a message or hit refresh.'}
+        </div>
+      )}
+
+      <div className="text-[10px] text-text-secondary opacity-50">
+        {language === 'zh'
+          ? 'ChatGPT 未提供额度查询接口，数据取自请求响应头，可能存在延迟。'
+          : 'ChatGPT exposes no quota API; these values come from response headers and may lag.'}
+      </div>
+    </div>
+  )
+})
+
+const OAuthSignInPanel = memo(function OAuthSignInPanel({
+  language,
+  onStatusChange,
+}: {
+  language: 'en' | 'zh'
+  onStatusChange?: () => void
+}) {
+  const [status, setStatus] = useState<{
+    loggedIn: boolean
+    accountID?: string
+    email?: string
+    planType?: string
+    expiresAt?: number
+  } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [usage, setUsage] = useState<
+    Awaited<ReturnType<typeof window.electronAPI.openaiAuthUsage>>['usage']
+  >(null)
+  const [usageBusy, setUsageBusy] = useState(false)
+
+  const loadUsage = useCallback(async (refreshFromServer = false) => {
+    setUsageBusy(true)
+    try {
+      const result = await window.electronAPI.openaiAuthUsage({ refresh: refreshFromServer })
+      setUsage(result?.usage ?? null)
+    } catch {
+      setUsage(null)
+    } finally {
+      setUsageBusy(false)
+    }
+  }, [])
+
+  const refresh = useCallback(async () => {
+    try {
+      const next = await window.electronAPI.openaiAuthStatus()
+      setStatus(next)
+      if (next?.loggedIn) void loadUsage()
+      else setUsage(null)
+    } catch {
+      setStatus({ loggedIn: false })
+      setUsage(null)
+    }
+    onStatusChange?.()
+  }, [onStatusChange, loadUsage])
+
+  useEffect(() => { void refresh() }, [refresh])
+
+  const handleLogin = async () => {
+    setBusy(true)
+    try {
+      const result = await window.electronAPI.openaiAuthLogin()
+      if (result.success) {
+        toast.success(language === 'zh' ? 'ChatGPT 登录成功' : 'Signed in to ChatGPT')
+        await refresh()
+      } else {
+        toast.error(result.error || (language === 'zh' ? '登录失败' : 'Sign-in failed'))
+      }
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'zh' ? '登录失败' : 'Sign-in failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    setBusy(true)
+    try {
+      await window.electronAPI.openaiAuthLogout()
+      toast.success(language === 'zh' ? '已退出登录' : 'Signed out')
+      await refresh()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+        {language === 'zh' ? 'ChatGPT 账号' : 'ChatGPT Account'}
+      </label>
+      {status?.loggedIn ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
+              {language === 'zh' ? '已登录' : 'Signed in'}
+              {status.planType ? ` · ${status.planType.toUpperCase()}` : ''}
+            </span>
+            <Button variant="secondary" size="sm" onClick={handleLogout} disabled={busy} className="h-9 px-3 text-xs font-medium">
+              {language === 'zh' ? '退出登录' : 'Sign out'}
+            </Button>
+          </div>
+          <div className="space-y-0.5 px-0.5 text-[11px] text-text-secondary">
+            {status.email ? (
+              <div>{language === 'zh' ? '邮箱' : 'Email'}: {status.email}</div>
+            ) : null}
+            {status.accountID ? (
+              <div>{language === 'zh' ? '账号 ID' : 'Account ID'}: {status.accountID}</div>
+            ) : null}
+            {status.expiresAt ? (
+              <div>
+                {language === 'zh' ? '凭证有效期至' : 'Token expires'}:{' '}
+                {new Date(status.expiresAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
+                <span className="opacity-60">
+                  {language === 'zh' ? '（到期自动刷新）' : ' (auto-refreshed)'}
+                </span>
+              </div>
+            ) : null}
+          </div>
+          <UsagePanel
+            usage={usage}
+            busy={usageBusy}
+            language={language}
+            onRefresh={() => void loadUsage(true)}
+          />
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Button variant="primary" size="sm" onClick={handleLogin} disabled={busy} className="h-9 px-3 text-xs font-medium">
+            {busy ? (
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                {language === 'zh' ? '等待浏览器授权...' : 'Waiting for browser...'}
+              </span>
+            ) : (
+              language === 'zh' ? '使用 ChatGPT 登录' : 'Sign in with ChatGPT'
+            )}
+          </Button>
+          <p className="text-[10px] text-text-muted px-0.5">
+            {language === 'zh'
+              ? '使用 ChatGPT Pro/Plus 订阅，无需 API Key。会在浏览器中完成授权。'
+              : 'Uses your ChatGPT Pro/Plus subscription — no API key needed. Opens your browser.'}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+})
+
 const TestConnectionButton = memo(function TestConnectionButton({ localConfig, language }: { localConfig: any; language: 'en' | 'zh' }) {
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
   const handleTest = async () => {
-    if (!localConfig.apiKey && localConfig.provider !== 'ollama') {
+    const usesOAuth = PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
+    if (!localConfig.apiKey && !usesOAuth && localConfig.provider !== 'ollama') {
       setStatus('error')
       setErrorMsg(language === 'zh' ? '请先输入 API Key' : 'Please enter API Key first')
       return
@@ -255,7 +537,8 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
   const [testing, setTesting] = useState(false)
 
   const handleTest = async () => {
-    if (!localConfig.apiKey && localConfig.provider !== 'ollama') {
+    const usesOAuth = PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
+    if (!localConfig.apiKey && !usesOAuth && localConfig.provider !== 'ollama') {
       toast.error(language === 'zh' ? '请先输入 API Key' : 'Please enter API Key first')
       return
     }
@@ -329,7 +612,9 @@ const FetchModelsButton = memo(function FetchModelsButton({
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleFetch = async () => {
-    if (!apiKey && provider !== 'ollama') {
+    // OAuth providers have no API key — the main process resolves their token.
+    const usesOAuth = PROVIDERS[provider]?.auth.type === 'oauth'
+    if (!apiKey && !usesOAuth && provider !== 'ollama') {
       toast.error(language === 'zh' ? '请先输入 API Key' : 'Please enter API Key first')
       return
     }
@@ -722,6 +1007,19 @@ export function ProviderSettings({
   // Headers 状态
   const [customHeaders, setCustomHeaders] = useState<EditableHeader[]>([])
 
+  // OAuth 登录状态（OAuth provider 没有 API Key，可用性取决于是否已登录）
+  const [oauthSignedIn, setOauthSignedIn] = useState(false)
+  const refreshOAuthStatus = useCallback(async () => {
+    try {
+      const status = await window.electronAPI.openaiAuthStatus()
+      setOauthSignedIn(status.loggedIn)
+    } catch {
+      setOauthSignedIn(false)
+    }
+  }, [])
+
+  useEffect(() => { void refreshOAuthStatus() }, [refreshOAuthStatus])
+
   // 从 localProviderConfigs 获取自定义厂商列表
   const customProviders = useMemo(() => {
     return Object.entries(localProviderConfigs)
@@ -896,13 +1194,18 @@ export function ProviderSettings({
   }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
 
   const providerHasApiKey = useCallback((providerId: string) => {
+    // OAuth providers never carry an API key; OAuthSignInPanel owns their state.
+    if (PROVIDERS[providerId]?.auth.type === 'oauth') {
+      return oauthSignedIn
+    }
+
     const providerConfig = localProviderConfigs[providerId]
     if (providerConfig?.apiKey) {
       return true
     }
 
     return localConfig.provider === providerId && Boolean(localConfig.apiKey)
-  }, [localConfig.apiKey, localConfig.provider, localProviderConfigs])
+  }, [localConfig.apiKey, localConfig.provider, localProviderConfigs, oauthSignedIn])
 
   const allProviderOptions = useMemo(
     () => [
@@ -1473,24 +1776,27 @@ export function ProviderSettings({
               </div>
 
               <div className="grid grid-cols-1 gap-5 mb-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                    API Key
-                  </label>
-                  <Input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={localConfig.apiKey}
-                    onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
-                    placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
-                    className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 font-mono text-xs h-10 transition-all"
-                    rightIcon={
-                      <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary p-1.5 hover:bg-surface/50 rounded-md transition-colors">
-                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    }
-                  />
-                </div>
-
+                {PROVIDERS[localConfig.provider]?.auth.type === 'oauth' ? (
+                  <OAuthSignInPanel language={language} onStatusChange={refreshOAuthStatus} />
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
+                      API Key
+                    </label>
+                    <Input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={localConfig.apiKey}
+                      onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
+                      placeholder={PROVIDERS[localConfig.provider]?.auth.placeholder || 'sk-...'}
+                      className="bg-background/40 border-border/60 focus:border-accent/50 focus:ring-accent/20 font-mono text-xs h-10 transition-all"
+                      rightIcon={
+                        <button onClick={() => setShowApiKey(!showApiKey)} className="text-text-muted hover:text-text-primary p-1.5 hover:bg-surface/50 rounded-md transition-colors">
+                          {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      }
+                    />
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
                     {language === 'zh' ? 'API 端点' : 'API Endpoint'}

@@ -8,7 +8,7 @@ import type { StreamTextResult } from 'ai'
 import { BrowserWindow } from 'electron'
 import { logger } from '@shared/utils/Logger'
 import { ErrorCode } from '@shared/utils/errorHandler'
-import { createModel } from '../modelFactory'
+import { createModel, resolveAuthForConfig } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { prepareExecutionRequest } from '../core/RequestExecution'
@@ -380,14 +380,15 @@ export class StreamingService {
     })
 
     try {
-      // 创建模型
-      const model = createModel(config)
+      // 创建模型（OAuth provider 需先解析 access token）
+      const resolvedConfig = await resolveAuthForConfig(config)
+      const model = createModel(resolvedConfig)
 
       // 转换消息
-      let coreMessages = this.messageConverter.convert(messages, systemPrompt, config)
+      let coreMessages = this.messageConverter.convert(messages, systemPrompt, resolvedConfig)
 
       const preparedRequest = await prepareExecutionRequest({
-        config,
+        config: resolvedConfig,
         baseMessages: coreMessages,
         originalMessages: messages,
         systemPrompt,
