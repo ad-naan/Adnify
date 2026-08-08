@@ -5,14 +5,13 @@
  * - 解决大文件卡顿和无语法高亮的遗留问题
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import { X, Check, ChevronDown, ChevronUp, Copy, FileEdit, Columns, AlignJustify, Loader2 } from 'lucide-react'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getLanguage } from './utils/languageMap'
-import { getEditorConfig } from '@renderer/settings'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface DiffViewerProps {
@@ -41,7 +40,9 @@ export default function DiffViewer({
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('unified')
 
   const fileName = getFileName(filePath) || filePath
-  const editorConfig = useMemo(() => getEditorConfig(), [])
+  // Subscribe to the store rather than snapshotting at mount, so font changes
+  // apply to an already-open diff.
+  const editorConfig = useStore((state) => state.editorConfig)
 
   const copyToClipboard = useCallback(async () => {
     await writeClipboardText(modifiedContent)
@@ -60,6 +61,7 @@ export default function DiffViewer({
           scrollBeyondLastLine: false,
           fontSize: editorConfig.fontSize,
           fontFamily: editorConfig.fontFamily,
+          lineHeight: Math.round(editorConfig.fontSize * editorConfig.lineHeight),
           lineNumbers: 'on',
           glyphMargin: false,
           folding: true,

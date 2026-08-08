@@ -551,6 +551,37 @@ class TerminalManagerClass {
     });
   }
 
+  /**
+   * Apply the current terminal typography settings to already-open terminals.
+   *
+   * xterm reads font options at construction, so without this a font change
+   * would only affect terminals opened afterwards. Changing the font alters
+   * cell metrics, so each terminal is refit and the PTY told its new size.
+   */
+  applyFontSettings(): void {
+    const { fontFamily, fontSize, lineHeight } = getEditorConfig().terminal;
+
+    this.xtermInstances.forEach((instance, id) => {
+      const { terminal } = instance;
+      if (
+        terminal.options.fontFamily === fontFamily &&
+        terminal.options.fontSize === fontSize &&
+        terminal.options.lineHeight === lineHeight
+      ) {
+        return;
+      }
+
+      try {
+        terminal.options.fontFamily = fontFamily;
+        terminal.options.fontSize = fontSize;
+        terminal.options.lineHeight = lineHeight;
+        this.resizeTerminalIfReady(id, instance);
+      } catch (error) {
+        logger.system.warn(`[TerminalManager] Failed to apply font settings to ${id}`, error);
+      }
+    });
+  }
+
   // ===== 终端生命周期 =====
 
   async createTerminal(options: {
