@@ -46,10 +46,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: |
-          pnpm config set supported-architectures x64,arm64
-          pnpm config set supported-os win32,darwin,linux
-          pnpm install
+        run: pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -127,10 +124,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: |
-          pnpm config set supported-architectures x64,arm64
-          pnpm config set supported-os win32,darwin,linux
-          pnpm install
+        run: pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -215,10 +209,7 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: |
-          pnpm config set supported-architectures x64,arm64
-          pnpm config set supported-os win32,darwin,linux
-          pnpm install
+        run: pnpm install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
