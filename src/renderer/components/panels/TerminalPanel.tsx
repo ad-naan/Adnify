@@ -96,6 +96,19 @@ const TerminalPanel = memo(function TerminalPanel() {
         terminalManager.setTheme(theme)
     }, [currentTheme])
 
+    // ===== 字体同步 =====
+    // xterm captures font options at construction, so push changes to any
+    // terminals that are already open.
+    const terminalFont = useStore(useShallow((state) => ({
+        fontFamily: state.editorConfig.terminal.fontFamily,
+        fontSize: state.editorConfig.terminal.fontSize,
+        lineHeight: state.editorConfig.terminal.lineHeight,
+    })))
+
+    useEffect(() => {
+        terminalManager.applyFontSettings()
+    }, [terminalFont])
+
     // ===== 挂载/卸载 xterm 到/从 容器 =====
 
     useEffect(() => {

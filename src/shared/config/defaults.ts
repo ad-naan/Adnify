@@ -223,3 +223,23 @@ export const AUTO_APPROVE_DEFAULTS = {
   dangerous: false,
 } as const
 
+/**
+ * Selectable monospace font stacks for the editor and terminal.
+ *
+ * Each entry keeps generic fallbacks so an unavailable first choice still
+ * resolves to something monospaced. `value` is stored verbatim as a CSS
+ * font-family list; the settings UI treats anything not listed here as a
+ * user-provided custom stack.
+ */
+export const CODE_FONT_PRESETS = [
+  { label: 'JetBrains Mono', value: "'JetBrains Mono', 'JetBrainsMono', Consolas, Monaco, monospace" },
+  { label: 'Fira Code', value: "'Fira Code', 'FiraCode-Retina', Consolas, Monaco, monospace" },
+  { label: 'Cascadia Code', value: "'Cascadia Code', 'Cascadia Mono', Consolas, monospace" },
+  { label: 'Source Code Pro', value: "'Source Code Pro', Consolas, Monaco, monospace" },
+  { label: 'IBM Plex Mono', value: "'IBM Plex Mono', Consolas, Monaco, monospace" },
+  { label: 'Consolas', value: 'Consolas, Monaco, monospace' },
+  { label: 'Menlo / Monaco', value: 'Menlo, Monaco, Consolas, monospace' },
+  { label: 'SF Mono', value: "'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace" },
+] as const
+
+

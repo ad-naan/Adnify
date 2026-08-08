@@ -6,6 +6,7 @@ import { X, Check, Columns, AlignJustify, ChevronDown, ChevronUp, Settings2 } fr
 import { t } from '@renderer/i18n'
 import type { editor } from 'monaco-editor'
 import { SafeDiffEditor } from './SafeDiffEditor'
+import { useStore } from '@store'
 import { getLanguage } from './utils/languageMap'
 
 export interface DiffView {
@@ -38,6 +39,7 @@ export const DiffPreview = memo(function DiffPreview({
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('split')
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false)
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null)
+  const editorConfig = useStore((state) => state.editorConfig)
 
   const handleClose = useCallback(() => {
     setTimeout(() => onClose(), 0)
@@ -206,7 +208,9 @@ export const DiffPreview = memo(function DiffPreview({
             renderMarginRevertIcon: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
-            fontSize: 13,
+            fontSize: editorConfig.fontSize,
+            fontFamily: editorConfig.fontFamily,
+            lineHeight: Math.round(editorConfig.fontSize * editorConfig.lineHeight),
             lineNumbers: 'on',
             glyphMargin: true,
             folding: true,

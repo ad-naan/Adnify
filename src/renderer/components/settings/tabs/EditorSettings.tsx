@@ -9,7 +9,74 @@ import { useShallow } from 'zustand/react/shallow'
 import { themeManager } from '@/renderer/config/themeConfig'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
+import { CODE_FONT_PRESETS } from '@shared/config/defaults'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
+
+const CUSTOM_FONT_VALUE = '__custom__'
+
+/**
+ * Font-family picker: a preset dropdown that falls back to a free-text field
+ * for stacks we don't ship. A stored value that matches no preset is treated
+ * as custom, so hand-edited settings survive a round trip through the UI.
+ */
+function FontFamilyPicker({
+    label,
+    value,
+    onChange,
+    language,
+    inputClass,
+    labelClass,
+}: {
+    label: string
+    value: string
+    onChange: (next: string) => void
+    language: 'en' | 'zh'
+    inputClass: string
+    labelClass: string
+}) {
+    const matchedPreset = CODE_FONT_PRESETS.find(preset => preset.value === value)
+    // Keep the custom editor open while the field is empty, otherwise clearing
+    // the text would snap the control back to a preset mid-edit.
+    const isCustom = !matchedPreset
+
+    return (
+        <div className="space-y-2">
+            <label className={labelClass}>{label}</label>
+            <Select
+                value={matchedPreset ? matchedPreset.value : CUSTOM_FONT_VALUE}
+                onChange={(next) => {
+                    if (next === CUSTOM_FONT_VALUE) {
+                        // Seed the text box with the current stack so the user edits
+                        // rather than retypes it.
+                        onChange(value)
+                        return
+                    }
+                    onChange(next)
+                }}
+                options={[
+                    ...CODE_FONT_PRESETS.map(preset => ({ value: preset.value, label: preset.label })),
+                    { value: CUSTOM_FONT_VALUE, label: language === 'zh' ? '自定义…' : 'Custom…' },
+                ]}
+                className={`w-full ${inputClass}`}
+            />
+            {isCustom ? (
+                <Input
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder="'Fira Code', Consolas, monospace"
+                    className={inputClass}
+                />
+            ) : null}
+            <div
+                className="rounded-lg border border-border/40 bg-background/40 px-3 py-2 text-xs text-text-secondary"
+                style={{ fontFamily: value || 'monospace' }}
+            >
+                const preview = () =&gt; 42;
+            </div>
+        </div>
+    )
+}
 
 // 预定义的触发字符选项
 const TRIGGER_CHAR_OPTIONS = [
@@ -130,6 +197,18 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
+                                <label className={labelClass}>{language === 'zh' ? '行高' : 'Line Height'}</label>
+                                <Input
+                                    type="number"
+                                    value={advancedConfig.lineHeight}
+                                    onChange={(e) => setAdvancedConfig({ ...advancedConfig, lineHeight: parseFloat(e.target.value) || 1.5 })}
+                                    min={1}
+                                    max={3}
+                                    step={0.1}
+                                    className={inputClass}
+                                />
+                            </div>
+                            <div>
                                 <label className={labelClass}>{language === 'zh' ? '行号' : 'Line Numbers'}</label>
                                 <Select
                                     value={settings.lineNumbers}
@@ -139,6 +218,15 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                         </div>
+
+                        <FontFamilyPicker
+                            label={language === 'zh' ? '代码字体' : 'Code Font'}
+                            value={advancedConfig.fontFamily}
+                            onChange={(fontFamily) => setAdvancedConfig({ ...advancedConfig, fontFamily })}
+                            language={language}
+                            inputClass={inputClass}
+                            labelClass={labelClass}
+                        />
                     </section>
 
                     <section className={sectionClass}>
@@ -182,6 +270,15 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <div className="pt-2">
                             <Switch label={language === 'zh' ? '光标闪烁' : 'Cursor Blink'} checked={advancedConfig.terminal.cursorBlink} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, cursorBlink: e.target.checked } })} />
                         </div>
+
+                        <FontFamilyPicker
+                            label={language === 'zh' ? '终端字体' : 'Terminal Font'}
+                            value={advancedConfig.terminal.fontFamily}
+                            onChange={(fontFamily) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, fontFamily } })}
+                            language={language}
+                            inputClass={inputClass}
+                            labelClass={labelClass}
+                        />
                     </section>
 
                     {/* Features Switches */}
