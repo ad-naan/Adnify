@@ -5,6 +5,7 @@
   "productName": "Adnify",
   "author": "adnaan <adnaan.worker@gmail.com>",
   "license": "SEE LICENSE IN LICENSE",
+  "packageManager": "pnpm@9.15.9",
   "homepage": "https://github.com/ad-naan/adnify",
   "repository": {
     "type": "git",
