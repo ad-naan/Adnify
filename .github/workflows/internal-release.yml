@@ -80,8 +80,6 @@ jobs:
       - name: Install pnpm
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -162,8 +160,6 @@ jobs:
       - name: Install pnpm
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -253,8 +249,7 @@ jobs:
       - name: Install pnpm
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+
 
       - name: Setup Node.js
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
