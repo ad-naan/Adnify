@@ -111,10 +111,10 @@ jobs:
 
       - name: Package Windows ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npx electron-builder --win --${{ matrix.arch }} -p never
+        run: pnpm exec electron-builder --win --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=16384'
+          NODE_OPTIONS: '--max-old-space-size=8192'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -199,10 +199,10 @@ jobs:
 
       - name: Package macOS ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npx electron-builder --mac --${{ matrix.arch }} -p never
+        run: pnpm exec electron-builder --mac --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=16384'
+          NODE_OPTIONS: '--max-old-space-size=8192'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -281,10 +281,10 @@ jobs:
 
       - name: Package Linux ${{ matrix.arch }}
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: npx electron-builder --linux --${{ matrix.arch }} -p never
+        run: pnpm exec electron-builder --linux --${{ matrix.arch }} -p never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_OPTIONS: '--max-old-space-size=16384'
+          NODE_OPTIONS: '--max-old-space-size=8192'
 
       - name: Upload artifacts
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
