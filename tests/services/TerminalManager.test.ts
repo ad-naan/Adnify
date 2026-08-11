@@ -210,7 +210,10 @@ describe('TerminalManager command sessions', () => {
       const wrapped = writeMock.mock.calls[0]?.[1] as string
 
       expect(wrapped).toContain("printf '\\033]9001;ADNIFY_CMD_START_")
-      expect(wrapped).toContain('(cd "/home" && ps -ef)')
+      expect(wrapped).toContain('( cd "/home" && ps -ef )')
+      // 退出码必须紧跟命令捕获，否则会被 sentinel 自身的 printf 覆盖
+      expect(wrapped).toContain('__adnify_ec=$?')
+      expect(wrapped).toMatch(/ADNIFY_CMD_END_[a-z0-9]+_%s\\007' "\$__adnify_ec"/)
       expect(wrapped).not.toContain('Write-Host -NoNewline')
     } finally {
       terminalManager.cleanup()

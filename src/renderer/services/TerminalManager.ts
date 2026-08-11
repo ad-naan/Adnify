@@ -22,6 +22,11 @@ import { getInteractiveTerminalBackend } from "@/renderer/agent/tools/commandRun
 import { readClipboardText, writeClipboardText } from "@/renderer/services/clipboardService";
 import { detectTerminalShellFamily } from "@/renderer/services/terminalShell";
 import { shellRegistryService } from "@/renderer/shell/services/shellRegistryService";
+import {
+  createAnsiStripper,
+  renderTerminalText,
+  stripAnsi,
+} from "@/renderer/services/terminalTextExtraction";
 
 // ===== 类型定义 =====
 
@@ -243,18 +248,8 @@ class RingBuffer {
   }
 }
 
-/** 剥离 ANSI 转义序列（用于 sentinel 输出提取） */
-function stripAnsi(str: string): string {
-  return str
-    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
-    .replace(/\x1b\][^\x07]*\x07/g, '')
-    .replace(/\x1b[()][AB012B]/g, '')
-    .replace(/\x1b[=><]/g, '')
-    .replace(/\r/g, '')
-}
-
 function looksLikeShellPrompt(str: string): boolean {
-  const text = stripAnsi(str).replace(/\r/g, '').trimEnd()
+  const text = renderTerminalText(stripAnsi(str)).trimEnd()
   if (!text) return false
 
   const tail = text.split('\n').slice(-3).join('\n')
@@ -1232,7 +1227,8 @@ class TerminalManagerClass {
 
     return new Promise<CommandResult>((resolve) => {
       let rawAccumulator = ''   // 原始 PTY 数据，用于检测 OSC sentinel
-      let textAccumulator = ''  // stripAnsi 后的纯文本，用于返回给 AI
+      let textAccumulator = ''  // 剥离转义后的文本（仍含 \r，渲染在 getVisibleOutput 里做）
+      const stripper = createAnsiStripper()  // 有状态：跨 PTY 块的转义序列不会漏半截
       let textAtStart = -1      // 检测到 START sentinel 时 textAccumulator 的长度
       let settled = false
       let sentinelMatched = false
@@ -1242,7 +1238,9 @@ class TerminalManagerClass {
         const output = textAtStart !== -1
           ? textAccumulator.slice(textAtStart)
           : textAccumulator
-        return output.trim()
+        // CR 覆写在这里才折叠：累加阶段必须保留 \r，否则进度条的最后一帧
+        // 无法与之前的帧区分。
+        return renderTerminalText(output).trim()
       }
 
       const updatePartialOutput = (partialOutput: string, captureStartSeq?: number) => {
@@ -1345,7 +1343,7 @@ class TerminalManagerClass {
       const unsubRaw = this.onRawData((event) => {
         if (event.id !== termId || settled) return
         rawAccumulator = trimRetainedText(rawAccumulator + event.data, MAX_RAW_SENTINEL_BUFFER_CHARS)
-        textAccumulator = trimRetainedText(textAccumulator + stripAnsi(event.data), MAX_COMMAND_OUTPUT_CHARS)
+        textAccumulator = trimRetainedText(textAccumulator + stripper.push(event.data), MAX_COMMAND_OUTPUT_CHARS)
 
         if (textAtStart === -1 && rawAccumulator.includes(`${OSC}${START_PAYLOAD}${BEL}`)) {
           textAtStart = textAccumulator.length
@@ -1363,10 +1361,22 @@ class TerminalManagerClass {
         const endIdx = rawAccumulator.indexOf(RAW_END_MARKER)
         if (endIdx !== -1) {
           const afterMarker = rawAccumulator.slice(endIdx + RAW_END_MARKER.length)
-          const codeMatch = afterMarker.match(/^(\d+)\x07/)
+          // payload 容错：正常是数字退出码，但 shell 状态异常时可能是空串或
+          // 非数字（例如变量未展开）。只要 sentinel 本身到达，命令就是结束了，
+          // 不能因为 payload 解析失败而退回 idle fallback 并报成 interrupted。
+          const codeMatch = afterMarker.match(/^([^\x07]*)\x07/)
           if (codeMatch) {
             sentinelMatched = true
-            const exitCode = parseInt(codeMatch[1], 10)
+            const rawCode = codeMatch[1].trim()
+            const parsedCode = /^\d+$/.test(rawCode) ? parseInt(rawCode, 10) : null
+            if (parsedCode === null) {
+              logger.system.warn(
+                `[TerminalManager] Sentinel exit code payload was not numeric: ${JSON.stringify(rawCode)}`,
+              )
+            }
+            // payload 不可解析时按成功处理：sentinel 已到达说明命令正常跑完，
+            // 报成失败会让上层 Agent 误判。
+            const exitCode = parsedCode ?? 0
             this.updateCurrentCommandSession(termId, (session) => ({
               ...session,
               captureEndSeq: event.seq,
@@ -1404,43 +1414,45 @@ class TerminalManagerClass {
           .replace(/\bcd\s+\/[dD]\s+(['"]?)([^;|&\n'"]+)\1/g, 'Push-Location "$2"')
         : command
 
-      // cwd 参数：Agent 终端复用，需临时切换目录
-      const cmdWithCwd = cwd
-        ? (usesPosixSyntax
-          ? `(cd "${cwd}" && ${sanitizedCommand})`
-          : `Push-Location "${cwd}"; ${sanitizedCommand}; Pop-Location`)
-        : sanitizedCommand
+      // cwd 由下方 mainCommand 按 shell 分别处理（需保证退出码不被覆盖）
 
       // OSC sentinel 命令（Windows/Unix/macOS 三平台）
       const sentinelStart = isPowerShell
         ? `Write-Host -NoNewline "$([char]27)]9001;${START_PAYLOAD}$([char]7)"`
         : `printf '\\033]9001;${START_PAYLOAD}\\007'`
-      const sentinelEnd = isPowerShell
-        ? `Write-Host -NoNewline "$([char]27)]9001;${END_PAYLOAD_PREFIX}$LASTEXITCODE$([char]7)"`
-        : `printf '\\033]9001;${END_PAYLOAD_PREFIX}'"$?"'\\007'`
 
-      const mainCommand = `${sentinelStart}; ${cmdWithCwd}; ${sentinelEnd}`
-
-      // ── 回显清除策略 ──
-      // PTY 行规程在内核层将发送的命令回显到终端（包装代码对用户可见），应用层无法阻止。
-      // 解决方案：命令开始执行时立刻输出 ANSI "上移+清除行" 序列，将回显抹掉。
-      //   \033[1A = 光标上移1行；\033[2K = 清除当前行。重复 N 次，N 为回显占用的行数。
-      // 这与 VS Code/Cursor Shell Integration 使用 PROMPT_COMMAND 钩子的终态效果相同
-      // （用户只看到命令输出，不看到包装代码），只是实现层级不同。
+      // 退出码求值必须在紧跟命令的那一步完成，且不能被后续语句覆盖。
       //
-      // N 的计算：ceil((提示符估算长度 + 完整命令长度) / 终端列数) + 1
-      const xtermInst = this.xtermInstances.get(termId)
-      const cols = xtermInst?.fitAddon?.proposeDimensions?.()?.cols ?? 80
-      const promptLen = isPowerShell ? 60 : 35
-      // 每个清除单元的字面长度（PS 使用 $([char]N) 表达式，Unix 使用 octal 转义）
-      const clearUnit = isPowerShell ? '$([char]27)[1A$([char]27)[2K' : '\\033[1A\\033[2K'
-      const clearWrapLen = isPowerShell ? 22 : 10  // "Write-Host -NoNewline \"\"; " 或 "printf ''; "
-      // 两次迭代逼近（消除循环依赖）
-      const roughLines = Math.ceil((promptLen + mainCommand.length) / cols)
-      const clearOverhead = clearWrapLen + clearUnit.length * roughLines
-      const echoLines = Math.ceil((promptLen + mainCommand.length + clearOverhead) / cols) + 1
+      // PowerShell 有两个独立的状态：
+      //   $LASTEXITCODE —— 只有原生 exe 会设置；纯 cmdlet 执行后是 $null，
+      //                    或者更糟：上一条原生命令残留的旧值。
+      //   $?            —— 布尔值，cmdlet 和原生命令都会设置，但只反映
+      //                    「上一条语句」，任何后续语句都会覆盖它。
+      // 只读 $LASTEXITCODE 会让 `Test-Path` / `Set-Content` 这类纯 cmdlet
+      // 渲染出空 payload（sentinel 变成 `..._END_xxx_` + BEL），renderer 侧
+      // 的 /^(\d+)\x07/ 匹配失败 → sentinelMatched 永远 false → 命令掉进
+      // idle fallback 并被报成 interrupted/失败。
+      //
+      // 因此必须在命令结束的「下一条语句」里同时抓取两个值，之后再做判断：
+      // 原生命令用真实退出码，cmdlet 成功记 0、失败记 1。
+      const PS_CAPTURE = '$__adnify_ok = $?; $__adnify_lec = $LASTEXITCODE'
+      const PS_RESOLVE = '$__adnify_ec = if ($__adnify_ok) { if ($null -ne $__adnify_lec) { $__adnify_lec } else { 0 } } else { if ($__adnify_lec) { $__adnify_lec } else { 1 } }'
+      const psEmitEnd = `Write-Host -NoNewline "$([char]27)]9001;${END_PAYLOAD_PREFIX}$__adnify_ec$([char]7)"`
+      const sentinelEnd = isPowerShell
+        ? `${PS_RESOLVE}; ${psEmitEnd}`
+        : `printf '\\033]9001;${END_PAYLOAD_PREFIX}%s\\007' "$__adnify_ec"`
 
-      const clearSeq = clearUnit.repeat(echoLines)
+      // cwd 处理不能包在命令外层：Pop-Location / 子 shell 退出会覆盖
+      // $? 和 $LASTEXITCODE，导致带 cwd 的命令退出码必然失真。
+      // 顺序固定为「切目录 → 执行 → 立刻捕获状态 → 还原目录 → 输出 sentinel」。
+      // 注：sentinelStart 不在这里——它由 wrapped 在 fakeEchoCmd 之后单独发出。
+      const mainCommand = isPowerShell
+        ? (cwd
+          ? `Push-Location "${cwd}"; ${sanitizedCommand}; ${PS_CAPTURE}; Pop-Location; ${sentinelEnd}`
+          : `${sanitizedCommand}; ${PS_CAPTURE}; ${sentinelEnd}`)
+        : (cwd
+          ? `( cd "${cwd}" && ${sanitizedCommand} ); __adnify_ec=$?; ${sentinelEnd}`
+          : `${sanitizedCommand}; __adnify_ec=$?; ${sentinelEnd}`)
 
       // 清除回显后，补打一行"伪提示符 + 原始命令"，让终端看起来像用户手动输入
       // Windows PS double-quoted string 转义：` → ``，" → `"，$ → `$
@@ -1449,12 +1461,26 @@ class TerminalManagerClass {
         ? command.replace(/`/g, '``').replace(/"/g, '`"').replace(/\$/g, '`$')
         : command.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
 
+      // ── 回显清除策略 ──
+      // PTY 行规程在内核层将发送的命令回显到终端（包装代码对用户可见），应用层无法阻止。
+      // 但包装宽度随 shell 状态（提示符长度、CWD 路径、命令内容）变化，无法精确计算
+      // 需要抹多少行——算少了一行就残留回显碎片，算多了一行吞掉命令输出首行。
+      //
+      // 解决方案：不再猜测行数，而是把 START sentinel 移到 fakeEchoCmd 里发出。
+      // 效果：（1）wrapper 泄漏的任何文本都落在 capture window 之前，不影响模型输入；
+      //       （2）完全不需要计算回显行数，因为回显残留不再危害结果。
+      // 对比旧方案：旧方案通过 ANSI 上移+清除序列物理擦除回显，但计算不稳定；
+      // 新方案承认回显在用户终端里可见，但保证它不出现在 AI 看到的输出里。
+      // 这与 VS Code 的 "shell integration" 思路一致——用 OSC 序列标记边界，
+      // 而不是靠清除来隔离。
+
       // 提示符路径：有 cwd 时直接嵌入，否则运行时动态获取当前目录
       const fakeEchoCmd = isPowerShell
-        ? `Write-Host -NoNewline "${clearSeq}"; Write-Host "PS ${cwd ?? '$(Get-Location)'}> ${displayCmd}"`
-        : `printf '${clearSeq}'; printf '%s\\n' "${cwd ? cwd.replace(/\\/g, '/') : '$(pwd)'}\\$ ${displayCmd}"`
+        ? `Write-Host "PS ${cwd ?? '$(Get-Location)'}> ${displayCmd}"`
+        : `printf '%s\\n' "${cwd ? cwd.replace(/\\/g, '/') : '$(pwd)'}\\$ ${displayCmd}"`
 
-      const wrapped = `${fakeEchoCmd}; ${mainCommand}\r`
+      // 把 START sentinel 放在 fakeEchoCmd 之后——capture 从这里开始，wrapper 的任何文本都在窗口之外
+      const wrapped = `${fakeEchoCmd}; ${sentinelStart}; ${mainCommand}\r`
 
       this.updateCurrentCommandSession(termId, (session) => ({
         ...session,
