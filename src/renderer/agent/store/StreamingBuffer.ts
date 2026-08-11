@@ -7,14 +7,68 @@
 
 type FlushCallback = (messageId: string, content: string, threadId?: string) => void
 
+type ReasoningFlushCallback = (
+    messageId: string,
+    partId: string,
+    content: string,
+    isStreaming: boolean,
+    threadId?: string
+) => void
+
+interface ReasoningEntry {
+    messageId: string
+    partId: string
+    content: string
+    isStreaming: boolean
+    threadId?: string
+}
+
 class StreamingBuffer {
     private buffer: Map<string, { content: string; threadId?: string }> = new Map()
+    private reasoningBuffer: Map<string, Map<string, ReasoningEntry>> = new Map()
     private timerId: ReturnType<typeof setTimeout> | null = null
     private flushCallback: FlushCallback | null = null
+    private reasoningFlushCallback: ReasoningFlushCallback | null = null
     private readonly flushIntervalMs = 33
 
     setFlushCallback(callback: FlushCallback) {
         this.flushCallback = callback
+    }
+
+    setReasoningFlushCallback(callback: ReasoningFlushCallback) {
+        this.reasoningFlushCallback = callback
+    }
+
+    /**
+     * 缓冲推理内容。与文本通道共享同一节流时钟，但各自独立累积，
+     * 避免推理 token 绕过节流直接触发 store 更新。
+     */
+    appendReasoning(
+        messageId: string,
+        partId: string,
+        content: string,
+        isStreaming: boolean,
+        threadId?: string
+    ): void {
+        if (!content) return
+
+        // 两级 Map（messageId -> partId -> entry），避免拼接键在 id 含分隔符时串号
+        let byPart = this.reasoningBuffer.get(messageId)
+        if (!byPart) {
+            byPart = new Map()
+            this.reasoningBuffer.set(messageId, byPart)
+        }
+
+        const existing = byPart.get(partId)
+        if (existing) {
+            existing.content += content
+            existing.isStreaming = isStreaming
+            existing.threadId = threadId ?? existing.threadId
+        } else {
+            byPart.set(partId, { messageId, partId, content, isStreaming, threadId })
+        }
+
+        this.scheduleFlush()
     }
 
     append(messageId: string, content: string, threadId?: string): void {
@@ -38,8 +92,8 @@ class StreamingBuffer {
     private scheduleFlush(): void {
         if (this.timerId !== null) return
 
-        // 优化：降频到约 10fps (100ms) 进一步减轻渲染压力
-        // 流式输出时用户感知不到 50ms vs 100ms 的差异，但性能提升明显
+        // 节流到约 30fps（flushIntervalMs）；已排定的 flush 不会被后续 append 推迟，
+        // 因此持续的 token 流不会让缓冲无界增长。
         this.timerId = setTimeout(() => {
             this.timerId = null
             this.flush()
@@ -47,6 +101,11 @@ class StreamingBuffer {
     }
 
     private flush(): void {
+        this.flushText()
+        this.flushReasoning()
+    }
+
+    private flushText(): void {
         if (!this.flushCallback || this.buffer.size === 0) return
 
         const updates = new Map(this.buffer)
@@ -56,6 +115,21 @@ class StreamingBuffer {
             if (content) {
                 this.flushCallback!(messageId, content, threadId)
             }
+        })
+    }
+
+    private flushReasoning(): void {
+        if (!this.reasoningFlushCallback || this.reasoningBuffer.size === 0) return
+
+        const updates = this.reasoningBuffer
+        this.reasoningBuffer = new Map()
+
+        updates.forEach(byPart => {
+            byPart.forEach(({ messageId, partId, content, isStreaming, threadId }) => {
+                if (content) {
+                    this.reasoningFlushCallback!(messageId, partId, content, isStreaming, threadId)
+                }
+            })
         })
     }
 
@@ -73,6 +147,7 @@ class StreamingBuffer {
             this.timerId = null
         }
         this.buffer.clear()
+        this.reasoningBuffer.clear()
     }
 }
 

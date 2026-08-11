@@ -251,6 +251,11 @@ export const useAgentStore = create<AgentStore>()(
                 messageSlice._doAppendToAssistant(messageId, content, threadId)
             })
 
+            // 推理内容同样经节流后写入（避免每个 reasoning token 触发一次 store 更新）
+            streamingBuffer.setReasoningFlushCallback((messageId, partId, content, isStreaming, threadId) => {
+                messageSlice._doUpdateReasoningPart(messageId, partId, content, isStreaming, threadId)
+            })
+
             // UI 状态（全局）
             const uiState: UIState = {
                 inputPrompt: '',
@@ -407,6 +412,13 @@ export const useAgentStore = create<AgentStore>()(
             messageSlice.finalizeAssistant = (messageId: string, targetThreadId?: string) => {
                 streamingBuffer.flushNow()
                 originalFinalizeAssistant(messageId, targetThreadId)
+            }
+
+            // 同理：推理段结束前先刷新缓冲，否则最后一批推理 token 会丢失
+            const originalFinalizeReasoningPart = messageSlice.finalizeReasoningPart
+            messageSlice.finalizeReasoningPart = (messageId: string, partId: string, targetThreadId?: string) => {
+                streamingBuffer.flushNow()
+                originalFinalizeReasoningPart(messageId, partId, targetThreadId)
             }
 
             // 内部方法：刷新文本缓冲区
