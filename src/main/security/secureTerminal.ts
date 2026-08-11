@@ -223,15 +223,22 @@ class SecureCommandParser {
       let stdout = ''
       let stderr = ''
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString()
+      // 必须用 StringDecoder：一个 UTF-8 字符可能被 spawn 切在两个 chunk 之间，
+      // 直接 data.toString() 会把半个字符解成 U+FFFD，中文输出必然出现乱码。
+      const stdoutDecoder = new StringDecoder('utf8')
+      const stderrDecoder = new StringDecoder('utf8')
+
+      child.stdout.on('data', (data: Buffer) => {
+        stdout += stdoutDecoder.write(data)
       })
 
-      child.stderr.on('data', (data) => {
-        stderr += data.toString()
+      child.stderr.on('data', (data: Buffer) => {
+        stderr += stderrDecoder.write(data)
       })
 
       child.on('close', (code) => {
+        stdout += stdoutDecoder.end()
+        stderr += stderrDecoder.end()
         resolve({ stdout, stderr, exitCode: code || 0 })
       })
 
@@ -1100,6 +1107,30 @@ export function registerSecureTerminalHandlers(
       }
 
       bindTerminalProcess(id, terminalProcess, mainWindow)
+
+      // PTY 输出统一按 UTF-8 解码（bindTerminalProcess 里的 StringDecoder），
+      // 但 Windows 控制台默认代码页是本地化的（简中为 GBK/936），PowerShell
+      // 会按该代码页输出字节 → 被当成 UTF-8 解码就是乱码。
+      // 这里在任何命令执行前把会话切到 UTF-8，让两端一致。
+      // 注意：只对本地 Windows PTY 生效；SSH/pipe 会话不适用。
+      if (!remote?.host && process.platform === 'win32' && effectiveBackend === 'pty') {
+        const isPowerShellShell = /powershell|pwsh/i.test(shellPath)
+        if (isPowerShellShell) {
+          try {
+            // chcp 保证原生 exe（git/npm 等）也走 UTF-8；
+            // OutputEncoding/InputEncoding 覆盖 PowerShell 自身的管道编码。
+            terminalProcess.write(
+              '$null = chcp 65001; ' +
+              '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' +
+              '[Console]::InputEncoding = [System.Text.Encoding]::UTF8; ' +
+              '$OutputEncoding = [System.Text.Encoding]::UTF8; ' +
+              'Clear-Host\r'
+            )
+          } catch (err) {
+            logger.security.warn('[Terminal] Failed to set UTF-8 code page:', err)
+          }
+        }
+      }
 
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
         id,
