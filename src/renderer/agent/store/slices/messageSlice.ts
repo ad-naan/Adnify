@@ -93,6 +93,7 @@ export interface MessageActions {
 
     // 内部方法
     _doAppendToAssistant: (messageId: string, content: string, targetThreadId?: string) => void
+    _doUpdateReasoningPart: (messageId: string, partId: string, content: string, isStreaming: boolean, targetThreadId?: string) => void
 }
 
 export type MessageSlice = MessageActions
@@ -879,9 +880,19 @@ export const createMessageSlice: StateCreator<
         return partId
     },
 
-    // 更新推理部分
-    updateReasoningPart: (messageId, partId, content, isStreaming = true) => {
-        const threadId = get().currentThreadId
+    /**
+     * 更新推理部分
+     *
+     * 与 appendToAssistant 一样经 StreamingBuffer 节流：推理 token 与文本
+     * 同速率到达，若直接 set 会绕过节流，每个 token 触发一次全量 store 更新。
+     */
+    updateReasoningPart: (messageId, partId, content, isStreaming = true, targetThreadId) => {
+        streamingBuffer.appendReasoning(messageId, partId, content, isStreaming, targetThreadId)
+    },
+
+    // 内部方法：实际执行推理内容追加（由 StreamingBuffer 调用）
+    _doUpdateReasoningPart: (messageId: string, partId: string, content: string, isStreaming: boolean, targetThreadId?: string) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {
