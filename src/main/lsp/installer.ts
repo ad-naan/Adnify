@@ -9,7 +9,7 @@
  */
 
 import { app } from 'electron'
-import { spawn, spawnSync, execSync } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'
@@ -359,6 +359,32 @@ async function extractZip(zipPath: string, destDir: string): Promise<boolean> {
 /**
  * 解压 tar.xz 文件（跨平台）
  */
+/**
+ * 异步执行命令并收集输出。
+ *
+ * 解压归档可能持续数秒，spawnSync 会在此期间完全阻塞主线程
+ * （窗口无响应）。改用 spawn + Promise 让事件循环继续运转。
+ */
+function spawnAsync(
+  command: string,
+  args: string[],
+  options: { cwd?: string }
+): Promise<{ status: number | null; stdout: string; stderr: string; error?: Error }> {
+  return new Promise(resolve => {
+    let stdout = ''
+    let stderr = ''
+    try {
+      const child = spawn(command, args, { cwd: options.cwd, stdio: 'pipe' })
+      child.stdout?.on('data', (d: Buffer) => { stdout += d.toString('utf-8') })
+      child.stderr?.on('data', (d: Buffer) => { stderr += d.toString('utf-8') })
+      child.on('error', (error: Error) => resolve({ status: null, stdout, stderr, error }))
+      child.on('close', (code: number | null) => resolve({ status: code, stdout, stderr }))
+    } catch (err) {
+      resolve({ status: null, stdout, stderr, error: toAppError(err) as unknown as Error })
+    }
+  })
+}
+
 async function extractTarXz(archivePath: string, destDir: string): Promise<boolean> {
   try {
     logger.lsp.info(`[LSP Installer] Extracting tar.xz: ${archivePath}`)
@@ -385,11 +411,7 @@ async function extractTarXz(archivePath: string, destDir: string): Promise<boole
       // Windows: 使用 tar 命令（Windows 10 1803+ 内置）
       logger.lsp.debug('[LSP Installer] Using Windows tar command')
       try {
-        const result = spawnSync('tar', ['-xf', archivePath], {
-          cwd: destDir,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-        })
+        const result = await spawnAsync('tar', ['-xf', archivePath], { cwd: destDir })
         if (result.error || result.status !== 0) {
           logger.lsp.error('[LSP Installer] tar command failed on Windows', {
             status: result.status,
@@ -419,11 +441,7 @@ async function extractTarXz(archivePath: string, destDir: string): Promise<boole
       }
 
       try {
-        const result = spawnSync('tar', ['-xf', archivePath], {
-          cwd: destDir,
-          stdio: 'pipe',
-          encoding: 'utf-8',
-        })
+        const result = await spawnAsync('tar', ['-xf', archivePath], { cwd: destDir })
         if (result.error || result.status !== 0) {
           logger.lsp.error('[LSP Installer] tar command failed on Unix', {
             status: result.status,

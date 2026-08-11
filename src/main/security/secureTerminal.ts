@@ -223,15 +223,22 @@ class SecureCommandParser {
       let stdout = ''
       let stderr = ''
 
-      child.stdout.on('data', (data) => {
-        stdout += data.toString()
+      // 必须用 StringDecoder：一个 UTF-8 字符可能被 spawn 切在两个 chunk 之间，
+      // 直接 data.toString() 会把半个字符解成 U+FFFD，中文输出必然出现乱码。
+      const stdoutDecoder = new StringDecoder('utf8')
+      const stderrDecoder = new StringDecoder('utf8')
+
+      child.stdout.on('data', (data: Buffer) => {
+        stdout += stdoutDecoder.write(data)
       })
 
-      child.stderr.on('data', (data) => {
-        stderr += data.toString()
+      child.stderr.on('data', (data: Buffer) => {
+        stderr += stderrDecoder.write(data)
       })
 
       child.on('close', (code) => {
+        stdout += stdoutDecoder.end()
+        stderr += stderrDecoder.end()
         resolve({ stdout, stderr, exitCode: code || 0 })
       })
 
@@ -871,18 +878,50 @@ export function registerSecureTerminalHandlers(
       occurredAt: Date.now(),
     })
 
+    /**
+     * PTY 输出批处理。
+     *
+     * 构建/安装类命令会以极高频率吐数据，逐块 webContents.send 会让
+     * 每个 chunk 都付一次 IPC + 结构化克隆 + renderer 渲染的代价。
+     * 这里按 ~16ms 合并为一次发送。
+     *
+     * 用节流而非防抖：持续输出的命令（如 npm install）在防抖下会被
+     * 一直推迟，直到输出停顿才刷新，表现为终端长时间空白后突然刷屏。
+     * 节流保证首块立即送达，之后稳定按帧率输出。
+     */
+    let pending = ''
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    const FLUSH_INTERVAL_MS = 16
+
+    const flushPtyData = () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      if (pending.length === 0) return
+      const data = pending
+      pending = ''
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:data', { id, data, ...nextMeta() })
+      }
+    }
+
     terminalProcess.onData((data: string | Buffer) => {
       const text = typeof data === 'string' ? data : ptyUtf8.write(data)
       if (text.length === 0) {
         return
       }
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data: text, ...nextMeta() })
+      pending += text
+      // 已排定的 flush 不被后续数据推迟，因此持续输出不会无限延后
+      if (flushTimer === null) {
+        flushTimer = setTimeout(flushPtyData, FLUSH_INTERVAL_MS)
       }
     })
 
     terminalProcess.on('error', (err: any) => {
       logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
+      // 先刷出已缓冲的输出，错误信息才不会跑到它前面
+      flushPtyData()
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:error', {
           id,
@@ -897,11 +936,10 @@ export function registerSecureTerminalHandlers(
     terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
       terminals.delete(id)
-      const tail = ptyUtf8.end()
+      // 解码残留字节并入缓冲，再整体刷出，保证退出前不丢输出且顺序正确
+      pending += ptyUtf8.end()
+      flushPtyData()
       if (mainWindow && !mainWindow.isDestroyed()) {
-        if (tail.length > 0) {
-          mainWindow.webContents.send('terminal:data', { id, data: tail, ...nextMeta() })
-        }
         mainWindow.webContents.send('terminal:exit', {
           id,
           exitCode,
@@ -1069,6 +1107,30 @@ export function registerSecureTerminalHandlers(
       }
 
       bindTerminalProcess(id, terminalProcess, mainWindow)
+
+      // PTY 输出统一按 UTF-8 解码（bindTerminalProcess 里的 StringDecoder），
+      // 但 Windows 控制台默认代码页是本地化的（简中为 GBK/936），PowerShell
+      // 会按该代码页输出字节 → 被当成 UTF-8 解码就是乱码。
+      // 这里在任何命令执行前把会话切到 UTF-8，让两端一致。
+      // 注意：只对本地 Windows PTY 生效；SSH/pipe 会话不适用。
+      if (!remote?.host && process.platform === 'win32' && effectiveBackend === 'pty') {
+        const isPowerShellShell = /powershell|pwsh/i.test(shellPath)
+        if (isPowerShellShell) {
+          try {
+            // chcp 保证原生 exe（git/npm 等）也走 UTF-8；
+            // OutputEncoding/InputEncoding 覆盖 PowerShell 自身的管道编码。
+            terminalProcess.write(
+              '$null = chcp 65001; ' +
+              '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' +
+              '[Console]::InputEncoding = [System.Text.Encoding]::UTF8; ' +
+              '$OutputEncoding = [System.Text.Encoding]::UTF8; ' +
+              'Clear-Host\r'
+            )
+          } catch (err) {
+            logger.security.warn('[Terminal] Failed to set UTF-8 code page:', err)
+          }
+        }
+      }
 
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
         id,

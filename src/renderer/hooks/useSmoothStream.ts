@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 
 /**
- * Smooth text stream interpolator with exponential ease-out.
+ * Text stream reveal helper.
  *
- * Each frame closes ~15% of the gap between displayed and target length.
- * When streaming ends, a final catch-up animation runs to smoothly reveal
+ * While streaming, text is revealed as it arrives — StreamingBuffer already
+ * batches arrivals to ~30 fps, so no per-frame loop is needed. Avoiding one
+ * matters: each state update re-parses the whole markdown body, so a constant
+ * requestAnimationFrame loop would do that ~60×/sec per streaming message.
+ *
+ * When streaming ends, a catch-up animation with exponential ease-out reveals
  * any remaining buffered text instead of snapping.
  */
 export function useSmoothStream(content: string, isStreaming: boolean, speedMultiplier = 1) {
@@ -23,7 +27,15 @@ export function useSmoothStream(content: string, isStreaming: boolean, speedMult
       return
     }
 
-    if (!isStreaming) {
+    if (isStreaming) {
+      // Content-driven reveal: advance to the newly arrived content directly.
+      // StreamingBuffer already throttles arrivals to ~30 fps, so this gives a
+      // natural chunked reveal without a per-frame animation loop.
+      if (displayedLenRef.current < content.length) {
+        displayedLenRef.current = content.length
+        setDisplayedContent(content)
+      }
+    } else {
       // Streaming ended — animate remaining text instead of snapping
       if (displayedLenRef.current < content.length && catchUpRafRef.current === null) {
         const factor = 0.25 * speedMultiplier
@@ -48,36 +60,15 @@ export function useSmoothStream(content: string, isStreaming: boolean, speedMult
     }
   }, [content, isStreaming, speedMultiplier])
 
-  // Main streaming animation loop
+  // Stream start: cancel any lingering catch-up from a previous stream.
+  // No per-frame loop here — reveal is driven by content arrivals above.
   useEffect(() => {
     if (!isStreaming) return
-
-    // Cancel any lingering catch-up from a previous stream
     if (catchUpRafRef.current !== null) {
       cancelAnimationFrame(catchUpRafRef.current)
       catchUpRafRef.current = null
     }
-
-    let rafId: number
-    const factor = 0.15 * speedMultiplier
-
-    const tick = () => {
-      const targetLen = contentRef.current.length
-      const currentLen = displayedLenRef.current
-
-      if (currentLen < targetLen) {
-        const gap = targetLen - currentLen
-        const step = gap <= 3 ? gap : Math.max(1, Math.ceil(gap * factor))
-        displayedLenRef.current = Math.min(targetLen, currentLen + step)
-        setDisplayedContent(contentRef.current.slice(0, displayedLenRef.current))
-      }
-
-      rafId = requestAnimationFrame(tick)
-    }
-
-    rafId = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafId)
-  }, [isStreaming, speedMultiplier])
+  }, [isStreaming])
 
   // Cleanup on unmount
   useEffect(() => {
