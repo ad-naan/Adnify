@@ -69,6 +69,19 @@ export class CodebaseIndexService {
   private lastProgressEmit = 0
   private readonly PROGRESS_THROTTLE_MS = 100
 
+  /**
+   * 结构化索引落盘节流。
+   *
+   * saveStructuralIndex 会对整个索引做 JSON.stringify（大仓库可达数十 MB），
+   * 在主线程上是阻塞的。文件监听在连续保存时会高频触发 updateFiles，
+   * 因此这里合并写入：内存索引立即更新（搜索结果始终是最新的），
+   * 磁盘缓存延迟写。缓存只是启动加速，丢失最后一次写入不影响正确性。
+   */
+  private savePendingTimer: ReturnType<typeof setTimeout> | null = null
+  private savingPromise: Promise<void> | null = null
+  private saveAgainWhenDone = false
+  private readonly SAVE_DEBOUNCE_MS = 2000
+
   constructor(workspacePath: string, config?: Partial<IndexConfig>) {
     this.workspacePath = workspacePath
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
@@ -141,6 +154,82 @@ export class CodebaseIndexService {
     }
   }
 
+  /**
+   * 请求落盘（去抖）。多次连续保存只产生一次写入。
+   */
+  private scheduleSaveStructuralIndex(): void {
+    if (this.savePendingTimer !== null) {
+      clearTimeout(this.savePendingTimer)
+    }
+    this.savePendingTimer = setTimeout(() => {
+      this.savePendingTimer = null
+      void this.runSaveStructuralIndex()
+    }, this.SAVE_DEBOUNCE_MS)
+    // 定时器不应阻止进程退出
+    this.savePendingTimer.unref?.()
+  }
+
+  /**
+   * 串行执行落盘：若已有写入在进行，标记稍后补一次，
+   * 避免并发 stringify/write 互相覆盖或叠加主线程开销。
+   */
+  private async runSaveStructuralIndex(): Promise<void> {
+    if (this.savingPromise) {
+      this.saveAgainWhenDone = true
+      return this.savingPromise
+    }
+
+    this.savingPromise = (async () => {
+      try {
+        await this.saveStructuralIndex()
+      } finally {
+        this.savingPromise = null
+      }
+    })()
+
+    await this.savingPromise
+
+    if (this.saveAgainWhenDone) {
+      this.saveAgainWhenDone = false
+      await this.runSaveStructuralIndex()
+    }
+  }
+
+  /**
+   * 立即落盘并取消待执行的去抖写入（退出/切换工作区前调用）。
+   */
+  async flushPendingSave(): Promise<void> {
+    if (this.savePendingTimer !== null) {
+      clearTimeout(this.savePendingTimer)
+      this.savePendingTimer = null
+    }
+    await this.runSaveStructuralIndex()
+  }
+
+  /** 结构化索引缓存的序列化内容 */
+  private serializeStructuralIndex(): string {
+    return JSON.stringify({
+      bm25: this.bm25Index.toJSON(),
+      symbols: this.symbolIndex.toJSON(),
+      totalFiles: this.status.totalFiles,
+      savedAt: Date.now(),
+    })
+  }
+
+  /** 同步保存（仅用于 destroy 等无法 await 的场景） */
+  private saveStructuralIndexSync(): void {
+    try {
+      const dir = path.dirname(this.structuralIndexPath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+      fs.writeFileSync(this.structuralIndexPath, this.serializeStructuralIndex())
+      logger.index.info('[IndexService] Saved structural index (sync)')
+    } catch (e) {
+      logger.index.warn('[IndexService] Failed to save structural index (sync):', e)
+    }
+  }
+
   /** 保存结构化索引缓存 */
   private async saveStructuralIndex(): Promise<void> {
     try {
@@ -148,13 +237,7 @@ export class CodebaseIndexService {
       if (!fs.existsSync(dir)) {
         await fs.promises.mkdir(dir, { recursive: true })
       }
-      const data = {
-        bm25: this.bm25Index.toJSON(),
-        symbols: this.symbolIndex.toJSON(),
-        totalFiles: this.status.totalFiles,
-        savedAt: Date.now(),
-      }
-      await fs.promises.writeFile(this.structuralIndexPath, JSON.stringify(data))
+      await fs.promises.writeFile(this.structuralIndexPath, this.serializeStructuralIndex())
       logger.index.info('[IndexService] Saved structural index')
     } catch (e) {
       logger.index.warn('[IndexService] Failed to save structural index:', e)
@@ -164,6 +247,11 @@ export class CodebaseIndexService {
   private async saveIndex(): Promise<void> {
     try {
       if (this.config.mode === 'structural') {
+        // 显式保存：取消待执行的去抖写入，避免随后再写一次旧内容
+        if (this.savePendingTimer !== null) {
+          clearTimeout(this.savePendingTimer)
+          this.savePendingTimer = null
+        }
         await this.saveStructuralIndex()
       }
 
@@ -435,8 +523,8 @@ export class CodebaseIndexService {
       if (updated > 0) {
         // 重建 BM25 索引（必须调用以更新 IDF）
         this.bm25Index.build()
-        // 保存到缓存
-        await this.saveStructuralIndex()
+        // 落盘走去抖：内存索引已是最新，磁盘缓存无需与每次保存同步
+        this.scheduleSaveStructuralIndex()
         logger.index.info(`[IndexService] Updated ${updated} files in structural index`)
       }
       return
@@ -472,7 +560,7 @@ export class CodebaseIndexService {
     if (this.config.mode === 'structural') {
       await this.deleteFileFromStructuralIndex(filePath)
       this.bm25Index.build()
-      await this.saveStructuralIndex()
+      this.scheduleSaveStructuralIndex()
       logger.index.info(`[IndexService] Deleted structural index for: ${relativePath} `)
       return
     }
@@ -501,6 +589,13 @@ export class CodebaseIndexService {
   }
 
   destroy(): void {
+    // 若有待执行的去抖落盘，同步写完再退出，否则最后一批索引更新会丢失。
+    // destroy() 是同步的且调用方不 await，因此这里只能用同步写。
+    if (this.savePendingTimer !== null) {
+      clearTimeout(this.savePendingTimer)
+      this.savePendingTimer = null
+      this.saveStructuralIndexSync()
+    }
     this.worker?.terminate()
     this.worker = null
   }

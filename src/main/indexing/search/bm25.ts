@@ -46,7 +46,14 @@ export class BM25Index {
 
   /** 构建索引（计算 IDF） */
   build(): void {
-    if (this.documents.length === 0) return
+    // 先清空：增量更新会让部分词彻底离开语料库，
+    // 若保留旧条目，这些词的 IDF 会一直参与评分，且 Map 无界增长。
+    this.idf.clear()
+
+    if (this.documents.length === 0) {
+      this.avgDocLength = 0
+      return
+    }
 
     // 平均文档长度
     const totalLength = this.documents.reduce((sum, doc) => sum + doc.docLength, 0)
@@ -126,16 +133,16 @@ export class BM25Index {
     this.avgDocLength = 0
   }
 
-  /** 删除文件的所有文档 */
-  deleteFile(relativePath: string): void {
+  /**
+   * 删除文件的所有文档
+   *
+   * 返回是否真的删除了内容，供调用者判断能否跳过 build()。
+   * 注意：文档数变化后 IDF 已失效，调用者需在批量删除结束后调用 build()。
+   */
+  deleteFile(relativePath: string): boolean {
     const before = this.documents.length
     this.documents = this.documents.filter(doc => doc.relativePath !== relativePath)
-    const after = this.documents.length
-    
-    if (before !== after) {
-      // 文档数量变化，需要重建 IDF
-      // 注意：调用者需要在批量删除后手动调用 build()
-    }
+    return this.documents.length !== before
   }
 
   /** 获取文档数量 */
