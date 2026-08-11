@@ -673,8 +673,29 @@ export function registerSecureFileHandlers(
       const win = getMainWindowFn()
       const workspace = getWorkspaceSessionFn()
       if (win && workspace?.roots?.[0]) {
+        // 批量转发：git checkout / 依赖安装会一次产生上千个事件，
+        // 逐个 send 会让渲染进程被 IPC 淹没。这里按 ~30fps 聚合，
+        // 同一路径只保留最后一次事件（Map 保序，先到先发），
+        // 因为下游 handler 关心的是文件的最终状态。
+        const pending = new Map<string, FileWatcherEvent>()
+        let flushTimer: NodeJS.Timeout | null = null
+
+        const flush = () => {
+          flushTimer = null
+          if (pending.size === 0) return
+          const batch = Array.from(pending.values())
+          pending.clear()
+          if (win.isDestroyed()) return
+          for (const item of batch) {
+            win.webContents.send('file:changed', item)
+          }
+        }
+
         void setupFileWatcher(`window-${win.webContents.id}`, workspace.roots[0], (data: FileWatcherEvent) => {
-          win.webContents.send('file:changed', data)
+          pending.set(data.path, data)
+          if (flushTimer === null) {
+            flushTimer = setTimeout(flush, 33)
+          }
         })
       }
     } else if (action === 'stop') {

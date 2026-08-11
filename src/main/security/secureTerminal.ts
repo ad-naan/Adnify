@@ -871,18 +871,50 @@ export function registerSecureTerminalHandlers(
       occurredAt: Date.now(),
     })
 
+    /**
+     * PTY 输出批处理。
+     *
+     * 构建/安装类命令会以极高频率吐数据，逐块 webContents.send 会让
+     * 每个 chunk 都付一次 IPC + 结构化克隆 + renderer 渲染的代价。
+     * 这里按 ~16ms 合并为一次发送。
+     *
+     * 用节流而非防抖：持续输出的命令（如 npm install）在防抖下会被
+     * 一直推迟，直到输出停顿才刷新，表现为终端长时间空白后突然刷屏。
+     * 节流保证首块立即送达，之后稳定按帧率输出。
+     */
+    let pending = ''
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    const FLUSH_INTERVAL_MS = 16
+
+    const flushPtyData = () => {
+      if (flushTimer !== null) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      if (pending.length === 0) return
+      const data = pending
+      pending = ''
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:data', { id, data, ...nextMeta() })
+      }
+    }
+
     terminalProcess.onData((data: string | Buffer) => {
       const text = typeof data === 'string' ? data : ptyUtf8.write(data)
       if (text.length === 0) {
         return
       }
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data: text, ...nextMeta() })
+      pending += text
+      // 已排定的 flush 不被后续数据推迟，因此持续输出不会无限延后
+      if (flushTimer === null) {
+        flushTimer = setTimeout(flushPtyData, FLUSH_INTERVAL_MS)
       }
     })
 
     terminalProcess.on('error', (err: any) => {
       logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
+      // 先刷出已缓冲的输出，错误信息才不会跑到它前面
+      flushPtyData()
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:error', {
           id,
@@ -897,11 +929,10 @@ export function registerSecureTerminalHandlers(
     terminalProcess.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
       terminals.delete(id)
-      const tail = ptyUtf8.end()
+      // 解码残留字节并入缓冲，再整体刷出，保证退出前不丢输出且顺序正确
+      pending += ptyUtf8.end()
+      flushPtyData()
       if (mainWindow && !mainWindow.isDestroyed()) {
-        if (tail.length > 0) {
-          mainWindow.webContents.send('terminal:data', { id, data: tail, ...nextMeta() })
-        }
         mainWindow.webContents.send('terminal:exit', {
           id,
           exitCode,

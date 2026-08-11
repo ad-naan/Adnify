@@ -69,12 +69,23 @@ async function findNearestRoot(
 ): Promise<string | undefined> {
   let currentDir = startDir
 
+  // 该函数在打开文件的交互路径上被调用，且每层目录都要做多次 fs 调用。
+  // 使用异步 fs，避免深层目录下同步 IO 阻塞主线程。
+  const exists = async (p: string): Promise<boolean> => {
+    try {
+      await fs.promises.access(p)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   while (currentDir.length >= stopDir.length) {
     // 检查排除模式
     if (excludePatterns) {
       for (const pattern of excludePatterns) {
         const excludePath = path.join(currentDir, pattern)
-        if (fs.existsSync(excludePath)) {
+        if (await exists(excludePath)) {
           return undefined // 被排除
         }
       }
@@ -84,7 +95,7 @@ async function findNearestRoot(
     for (const pattern of patterns) {
       if (pattern.includes('*')) {
         try {
-          const entries = fs.readdirSync(currentDir)
+          const entries = await fs.promises.readdir(currentDir)
           const re = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$')
           if (entries.some(entry => re.test(entry))) {
             return currentDir
@@ -94,7 +105,7 @@ async function findNearestRoot(
         }
       } else {
         const targetPath = path.join(currentDir, pattern)
-        if (fs.existsSync(targetPath)) {
+        if (await exists(targetPath)) {
           return currentDir
         }
       }
