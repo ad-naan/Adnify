@@ -2,6 +2,22 @@
 packages:
   - '.'
 
+# 安全 override：把传递依赖顶到已修复的补丁版本。
+#
+# 必须与 package.json 的 pnpm.overrides 保持一致 —— 两份不是冗余：
+# pnpm 9 只读 package.json 的 pnpm.overrides，pnpm 11 只读这里。
+# 本仓库用 packageManager 钉在 9.15.9，但全局 pnpm 已是 11；
+# 哪天钉子松了，只写一处会被静默忽略，15 个漏洞悄悄回来且不报错。
+overrides:
+  brace-expansion@<1.1.18: ^1.1.18
+  brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
+  brace-expansion@>=4.0.0 <5.0.9: ^5.0.9
+  fast-uri@>=3.0.0 <3.1.5: ^3.1.5
+  ip-address@<=10.3.0: ^10.3.1
+  js-yaml@>=4.0.0 <4.3.1: ^4.3.1
+  tar@<7.5.22: ^7.5.22
+  undici@<6.28.0: ^6.28.0
+
 # minimumReleaseAge 策略说明：
 # pnpm v11+ 默认要求包发布后至少等待 1440 分钟（24小时）才能安装，
 # 以防范供应链攻击（如包被恶意篡改后立即推送）。

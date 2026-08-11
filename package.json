@@ -32,6 +32,18 @@
     "rebuild": "npx electron-rebuild -f -w node-pty",
     "rebuild:all": "npx electron-rebuild -f -w"
   },
+  "pnpm": {
+    "overrides": {
+      "brace-expansion@<1.1.18": "^1.1.18",
+      "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4",
+      "brace-expansion@>=4.0.0 <5.0.9": "^5.0.9",
+      "fast-uri@>=3.0.0 <3.1.5": "^3.1.5",
+      "ip-address@<=10.3.0": "^10.3.1",
+      "js-yaml@>=4.0.0 <4.3.1": "^4.3.1",
+      "tar@<7.5.22": "^7.5.22",
+      "undici@<6.28.0": "^6.28.0"
+    }
+  },
   "dependencies": {
     "@lancedb/lancedb": "^0.23.0",
     "@parcel/watcher": "^2.4.1",
