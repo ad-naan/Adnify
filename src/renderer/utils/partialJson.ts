@@ -197,8 +197,10 @@ export function truncateToolResult(
   const omitted = result.length - headSize - tailSize
 
   // 尝试在行边界截断（更友好的输出）
-  const head = truncateAtLineEnd(result.slice(0, headSize + 200), headSize)
-  const tail = truncateAtLineStart(result.slice(-tailSize - 200), tailSize)
+  // 注意用 sliceHead/sliceTailFrom 而不是裸 slice：非 BMP 字符（emoji、CJK 扩展区）
+  // 在 JS 里占两个 code unit，切在中间会留下半个字符。
+  const head = truncateAtLineEnd(sliceHead(result, headSize + 200), headSize)
+  const tail = truncateAtLineStart(sliceTailFrom(result, result.length - tailSize - 200), tailSize)
 
   const truncatedMsg = `\n\n... [truncated: ${omitted.toLocaleString()} chars omitted] ...\n\n`
 
@@ -261,6 +263,39 @@ function detectContentStrategy(
 /**
  * 在行尾截断（向前找换行符）
  */
+/**
+ * 代理对安全的切片工具
+ *
+ * JS 字符串按 UTF-16 code unit 索引，非 BMP 字符（emoji、CJK 扩展区如 U+20000）
+ * 占两个 unit。裸 slice 切在这两个 unit 中间就会留下一个孤立代理，渲染成 U+FFFD，
+ * 并原样进到发给模型的 tool 消息里 —— 表现就是「工具结果里出现一坨乱码」。
+ *
+ * 这两个函数只做一件事：把边界从代理对中间挪开一格。宁可少一个字符，
+ * 也不要吐出半个字符。
+ */
+
+/** 判断该位置是否是一个代理对的低位（即前一个 unit 是高位代理） */
+function splitsSurrogatePair(text: string, index: number): boolean {
+  if (index <= 0 || index >= text.length) return false
+  const prev = text.charCodeAt(index - 1)
+  const curr = text.charCodeAt(index)
+  return prev >= 0xd800 && prev <= 0xdbff && curr >= 0xdc00 && curr <= 0xdfff
+}
+
+/** 取前 end 个 code unit；若 end 落在代理对中间则往前退一格 */
+function sliceHead(text: string, end: number): string {
+  if (end >= text.length) return text
+  const safeEnd = splitsSurrogatePair(text, end) ? end - 1 : end
+  return text.slice(0, Math.max(0, safeEnd))
+}
+
+/** 从 start 取到末尾；若 start 落在代理对中间则往后进一格 */
+function sliceTailFrom(text: string, start: number): string {
+  if (start <= 0) return text
+  const safeStart = splitsSurrogatePair(text, start) ? start + 1 : start
+  return text.slice(Math.min(safeStart, text.length))
+}
+
 function truncateAtLineEnd(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text
 
@@ -272,7 +307,7 @@ function truncateAtLineEnd(text: string, maxLen: number): string {
     return text.slice(0, lastNewline)
   }
 
-  return text.slice(0, maxLen)
+  return sliceHead(text, maxLen)
 }
 
 /**
@@ -286,8 +321,9 @@ function truncateAtLineStart(text: string, maxLen: number): string {
   const firstNewline = text.indexOf('\n', startPos)
 
   if (firstNewline !== -1 && firstNewline < searchEnd) {
+    // 换行符本身不可能是代理对的一半，所以这个边界天然安全
     return text.slice(firstNewline + 1)
   }
 
-  return text.slice(-maxLen)
+  return sliceTailFrom(text, startPos)
 }
