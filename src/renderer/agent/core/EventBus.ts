@@ -14,6 +14,54 @@ import type { TokenUsage } from '../types'
 
 // ===== 事件类型 =====
 
+/**
+ * runLoop 结束的原因。
+ *
+ * 必须是闭集：以前这里是裸 `string`，于是消费方可以拿一个从来不会被 emit 的值
+ * 去比较而编译器毫无反应。实际踩到两次：
+ *   - planExecutor.ts 检查 'loop_detected' / 'max_iterations'
+ *   - SubAgentManager.ts 检查 'failed'
+ * 三个值都没有任何 emit 点，对应的分支是死代码，而真正会出现的 reason
+ * （handoff_required / no_messages / waiting_for_user）落到了 else 里被当成成功。
+ *
+ * 新增 reason 时同步改这里，让所有 switch/比较点重新过一遍编译器。
+ */
+export type LoopEndReason =
+  | 'complete'              // 正常跑完
+  | 'error'                 // 循环内部报错
+  | 'aborted'               // 被 abort（用户点停止 / 超时）
+  | 'no_messages'           // 没有可发送的消息
+  | 'handoff_required'      // 需要交接（上下文满 / 换模型）
+  | 'tool_requested_stop'   // 工具显式要求停止
+  | 'user_rejected'         // 用户拒绝了工具
+  | 'waiting_for_user'      // 等用户回话（interactive 工具）
+
+/**
+ * 只有这些 reason 算「这一轮真的把活干完了」。
+ *
+ * 反过来列（而不是列失败项）是故意的：新增 reason 时默认落到「非成功」，
+ * 而不是默默被当成成功回传给上层。以前 SubAgentManager / planExecutor 各自
+ * 列举失败项，结果 handoff_required、no_messages、waiting_for_user 三种
+ * 「没干完」的情况都被判成了成功。
+ *
+ * 注意 waiting_for_user 和 handoff_required 不在里面：前者是在等人回话，
+ * 后者是需要交接，两者都没有可回传的最终结果。
+ */
+const SUCCESSFUL_LOOP_END_REASONS: ReadonlySet<LoopEndReason> = new Set<LoopEndReason>([
+  'complete',
+  'tool_requested_stop',
+])
+
+/** 这一轮是否算成功结束 */
+export function isSuccessfulLoopEnd(reason: LoopEndReason): boolean {
+  return SUCCESSFUL_LOOP_END_REASONS.has(reason)
+}
+
+/** 是否属于「被中止」——用户主动停、拒绝工具、或 abort 信号 */
+export function isAbortedLoopEnd(reason: LoopEndReason): boolean {
+  return reason === 'aborted' || reason === 'user_rejected'
+}
+
 export type AgentEvent =
   // 流式事件
   | { type: 'stream:text'; text: string }
@@ -44,7 +92,7 @@ export type AgentEvent =
   // 循环事件
   | { type: 'loop:start'; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
   | { type: 'loop:iteration'; count: number; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
-  | { type: 'loop:end'; reason: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
+  | { type: 'loop:end'; reason: LoopEndReason; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
   | { type: 'loop:warning'; message: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
 
   // 情绪感知事件
