@@ -27,6 +27,12 @@ export interface ExecutionContext {
   requestId?: string
   planTaskId?: string
   checkpointId?: string
+  /**
+   * 本次循环是否运行在子代理的隐藏线程里。
+   * 用于把 task / ask_user / 计划类工具从子代理的工具集里剔掉，见
+   * SUB_AGENT_EXCLUDED_TOOLS。
+   */
+  isSubAgent?: boolean
 }
 
 // ===== 工具执行上下文（重新导出 shared 定义） =====
