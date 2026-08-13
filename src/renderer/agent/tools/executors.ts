@@ -2679,6 +2679,34 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
               (inProgress ? `. Currently: ${inProgress.activeForm}` : '')
         return { success: true, result: summary }
     },
+
+    async task(args, ctx) {
+        const { SubAgentManager } = await import('@/renderer/agent/orchestration')
+        const llmConfig = useStore.getState().llmConfig
+        if (!llmConfig) {
+            return { success: false, result: '', error: 'No LLM config available to spawn sub-agent' }
+        }
+        const result = await SubAgentManager.spawn(
+            {
+                description: args.description as string,
+                context: args.prompt as string,
+                constraints: args.enable_write_tools
+                    ? undefined
+                    : ['Read-only mode: do NOT modify any files or run commands that change state.'],
+            },
+            llmConfig,
+            ctx.workspacePath,
+            ctx.chatMode,
+            ctx.threadId,
+        )
+        return {
+            success: result.success,
+            result: result.success
+                ? result.output ?? 'Sub-agent completed with no output.'
+                : result.error ?? 'Sub-agent failed.',
+            meta: { subAgentId: result.subAgentId, threadId: result.threadId },
+        }
+    },
 }
 
 

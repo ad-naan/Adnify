@@ -1030,6 +1030,60 @@ This will trigger the task executor to run through the plan.`,
         },
     },
 
+    // ===== Sub-agent 编排工具 =====
+    task: {
+        name: 'task',
+        displayName: 'Sub-agent Task',
+        description: `Launch a sub-agent with isolated context to handle a focused sub-task, then return a concise summary result. Use this to break up complex work: the sub-agent runs its own agent loop (with read/write/search/terminal tools) and reports back a distilled result, keeping the main conversation clean.
+
+WHEN TO USE:
+- A sub-task needs deep multi-step exploration or implementation that would clutter the main context
+- You want to parallelize independent investigations or implementations
+- A focused scope of work has clear inputs and a clear deliverable
+
+WHEN NOT TO USE:
+- Simple lookups: use read_file / search_files / codebase_search directly
+- Trivial single-step actions that do not warrant spawning a separate agent
+- Highly interdependent work that must stay in one context
+
+The sub-agent gets a FRESH context (no conversation history). Provide everything it needs in the "prompt" parameter. Allowed tools default to read-only research tools unless you explicitly enable write tools.`,
+        detailedDescription: `Sub-agent orchestration tool (Claude Code style "Task" tool).
+
+Each sub-agent:
+- Runs an independent agent loop with its own budget, loop-detection, and context compression
+- Has an isolated hidden thread so its tool calls do not pollute the main conversation
+- Inherits workspace access and can use read/write/search/terminal/LSP tools
+- Returns ONLY a summary result, not its full message history
+
+Best practices:
+- Give each sub-agent a single, well-scoped objective
+- Include all necessary context in the prompt (file paths, requirements, constraints)
+- Prefer multiple focused sub-agents over one giant sub-agent
+- Sub-agents run sequentially by default; set parallel=true to run independent tasks concurrently`,
+        examples: [
+            'task description="Investigate auth module" prompt="Read src/auth/ and summarize the authentication flow, listing all exported functions and their responsibilities."',
+            'task description="Implement validator" prompt="Add input validation to src/api/users.ts. Check existing patterns in src/api/products.ts first." enable_write_tools=true',
+        ],
+        criticalRules: [
+            'Sub-agents start with NO conversation history — include all needed context in the prompt',
+            'Prefer focused, single-objective sub-tasks over broad ones',
+            'The result is a summary, not the full sub-agent transcript',
+            'Do not use task for trivial lookups — use read_file or search_files instead',
+        ],
+        category: 'plan',
+        approvalType: 'none',
+        parallel: false,
+        concurrencyMode: 'serialized',
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            description: { type: 'string', description: 'A short (3-5 word) label for the sub-task, e.g. "Investigate auth module"', required: true },
+            prompt: { type: 'string', description: 'The full, self-contained task instruction for the sub-agent. Include all context: file paths, requirements, constraints, and the expected deliverable format.', required: true },
+            enable_write_tools: { type: 'boolean', description: 'If true, allow the sub-agent to use write/edit/terminal tools. Default false (read-only research mode).', default: false },
+            parallel: { type: 'boolean', description: 'If true, allow this sub-agent to run concurrently with other independent sub-agents. Default false (sequential).', default: false },
+        },
+    },
+
     // ===== UI/UX 设计工具 =====
     uiux_search: {
         name: 'uiux_search',

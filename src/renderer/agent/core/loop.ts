@@ -393,6 +393,7 @@ export async function runLoop(
     mode: context.chatMode,
     templateId: useStore.getState().promptTemplateId,
     planPhase: context.chatMode === 'plan' ? context.planPhase : undefined,
+    isSubAgent: context.isSubAgent,
   })
 
   const agentTools = context.chatMode === 'chat' ? [] : toolRuntime.toolManager.getAllToolDefinitions()
