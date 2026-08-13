@@ -17,7 +17,7 @@
 import { useAgentStore } from '../store/AgentStore'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { EventBus } from '../core/EventBus'
+import { EventBus, isSuccessfulLoopEnd } from '../core/EventBus'
 import { Agent } from '../core/Agent'
 import { gitService } from '@/renderer/services/gitService'
 import { ExecutionScheduler } from './PlanScheduler'
@@ -155,7 +155,10 @@ function waitForAgentCompletion(
             const output = assistantId
                 ? getTaskOutput(identity.threadId, assistantId) || 'Task execution completed'
                 : 'Task execution completed'
-            if (event.reason === 'error' || event.reason === 'aborted' || event.reason === 'loop_detected' || event.reason === 'max_iterations') {
+            // 以前这里列举失败项，且 'loop_detected' / 'max_iterations' 两个值
+            // 从来没有任何 emit 点 —— 分支是死的，而 handoff_required /
+            // no_messages / waiting_for_user 被当成成功。改成共享的正向判定。
+            if (!isSuccessfulLoopEnd(event.reason)) {
                 settle({ success: false, output: '', error: event.reason, assistantId })
                 return
             }
