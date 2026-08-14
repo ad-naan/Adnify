@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useStore } from './store'
-import { useWindowTitle, useAppInit, useOpenFilesFromSystem, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState, usePreviewDiscoveryToasts } from './hooks'
+import { useWindowTitle, useAppInit, useOpenFilesFromSystem, useGlobalShortcuts, useFileWatcher, useSidebarResize, useChatResize, useAppShutdownState, usePreviewDiscoveryToasts, useVersionNotice } from './hooks'
 import TitleBar from './components/layout/TitleBar'
 import ActivityBar from './components/layout/ActivityBar'
 import StatusBar from './components/layout/StatusBar'
@@ -30,6 +30,7 @@ const CommandPalette = lazy(() => import('./components/dialogs/CommandPalette'))
 const KeyboardShortcuts = lazy(() => import('./components/dialogs/KeyboardShortcuts'))
 const QuickOpen = lazy(() => import('./components/dialogs/QuickOpen'))
 const AboutDialog = lazy(() => import('./components/dialogs/AboutDialog'))
+const ChangelogDialog = lazy(() => import('./components/dialogs/ChangelogDialog'))
 const UserAvatarDialog = lazy(() => import('./components/dialogs/UserAvatarDialog'))
 const WelcomePage = lazy(() => import('./components/welcome/WelcomePage'))
 
@@ -57,6 +58,9 @@ function AppContent() {
   const setShowQuickOpen = useStore((state) => state.setShowQuickOpen)
   const showAbout = useStore((state) => state.showAbout)
   const setShowAbout = useStore((state) => state.setShowAbout)
+  const showChangelog = useStore((state) => state.showChangelog)
+  const setShowChangelog = useStore((state) => state.setShowChangelog)
+  const selectedChangelogVersion = useStore((state) => state.selectedChangelogVersion)
   const showAvatarDialog = useStore((state) => state.showAvatarDialog)
   const showCommandPalette = useStore((state) => state.showCommandPalette)
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
@@ -86,6 +90,7 @@ function AppContent() {
   useOpenFilesFromSystem()
   useGlobalShortcuts()
   usePreviewDiscoveryToasts(hasWorkspace && isInitialized)
+  useVersionNotice(isInitialized)
 
   useAppInit({
     onInitialized: (result) => {
@@ -229,6 +234,14 @@ function AppContent() {
       {showAbout && (
         <Suspense fallback={null}>
           <AboutDialog onClose={() => setShowAbout(false)} />
+        </Suspense>
+      )}
+      {showChangelog && (
+        <Suspense fallback={null}>
+          <ChangelogDialog
+            onClose={() => setShowChangelog(false)}
+            initialVersion={selectedChangelogVersion}
+          />
         </Suspense>
       )}
       {showAvatarDialog && (

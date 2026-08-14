@@ -47,6 +47,17 @@ export interface SubAgentResult {
   durationMs?: number
 }
 
+export interface SubAgentStartedInfo {
+  subAgentId: string
+  threadId: string
+  requestId: string
+  startedAt: number
+}
+
+export interface SubAgentLifecycleCallbacks {
+  onStarted?: (info: SubAgentStartedInfo) => void
+}
+
 /**
  * 子 agent 运行状态
  */

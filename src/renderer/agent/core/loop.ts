@@ -21,6 +21,7 @@ import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
 import { injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromLatestUserMessage } from '../services/multimodalRoutingService'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
+import { derivePlanPlanningState, getPlanContinuationReminder } from '../plan/planWorkflowGuard'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
@@ -660,7 +661,7 @@ Try again with the corrected tool call.`,
     }
 
     if (!result.toolCalls || result.toolCalls.length === 0) {
-      const hookResult = executeModePostProcessHook(context.chatMode, {
+      const modeHookContext = {
         mode: context.chatMode,
         messages: requestMessages,
         hasWriteOps: requestMessages.some(m => {
@@ -672,9 +673,25 @@ Try again with the corrected tool call.`,
         ),
         iteration,
         maxIterations,
-      })
+      }
+      const planReminder = context.chatMode === 'plan' && context.planPhase !== 'executing'
+        ? getPlanContinuationReminder(derivePlanPlanningState(requestMessages))
+        : null
+      const hookResult = planReminder
+        ? { shouldContinue: true, reminderMessage: planReminder }
+        : executeModePostProcessHook(context.chatMode, modeHookContext)
 
       if (hookResult?.shouldContinue && hookResult.reminderMessage) {
+        if (planReminder && assistantId) {
+          const assistantMessage = threadStore.getMessages().find(message => message.id === assistantId)
+          if (assistantMessage?.role === 'assistant') {
+            threadStore.updateMessage(assistantId, {
+              content: '',
+              displayContent: undefined,
+              parts: assistantMessage.parts.filter(part => part.type !== 'text'),
+            })
+          }
+        }
         requestMessages.push({ role: 'user', content: hookResult.reminderMessage })
         shouldContinue = true
         continue

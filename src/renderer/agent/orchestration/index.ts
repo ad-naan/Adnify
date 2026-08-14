@@ -6,4 +6,4 @@
  */
 
 export { SubAgentManager } from './SubAgentManager'
-export type { SubAgentRequest, SubAgentResult, SubAgentStatus } from './types'
+export type { SubAgentLifecycleCallbacks, SubAgentRequest, SubAgentResult, SubAgentStartedInfo, SubAgentStatus } from './types'

@@ -31,7 +31,8 @@ const EXTERNAL_DEPS = [
   'apache-arrow',
   '@xenova/transformers',
   'onnxruntime-node',
-  'onnxruntime-web'
+  'onnxruntime-web',
+  'web-tree-sitter'
 ]
 
 // 路径别名配置

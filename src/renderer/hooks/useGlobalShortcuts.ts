@@ -22,6 +22,7 @@ export function useGlobalShortcuts() {
   const setShowCommandPalette = useStore((state) => state.setShowCommandPalette)
   const setShowQuickOpen = useStore((state) => state.setShowQuickOpen)
   const setShowAbout = useStore((state) => state.setShowAbout)
+  const setShowChangelog = useStore((state) => state.setShowChangelog)
   const setTerminalVisible = useStore((state) => state.setTerminalVisible)
   const setDebugVisible = useStore((state) => state.setDebugVisible)
   const setChatVisible = useStore((state) => state.setChatVisible)
@@ -35,6 +36,7 @@ export function useGlobalShortcuts() {
     showCommandPalette: false,
     showQuickOpen: false,
     showAbout: false,
+    showChangelog: false,
     activeFilePath: null as string | null,
   })
 
@@ -45,6 +47,7 @@ export function useGlobalShortcuts() {
   const showCommandPalette = useStore((state) => state.showCommandPalette)
   const showQuickOpen = useStore((state) => state.showQuickOpen)
   const showAbout = useStore((state) => state.showAbout)
+  const showChangelog = useStore((state) => state.showChangelog)
   const activeFilePath = useStore((state) => state.activeFilePath)
 
   stateRef.current = {
@@ -141,6 +144,7 @@ export function useGlobalShortcuts() {
       if (s.showCommandPalette) setShowCommandPalette(false)
       if (s.showQuickOpen) setShowQuickOpen(false)
       if (s.showAbout) setShowAbout(false)
+      if (s.showChangelog) setShowChangelog(false)
       return
     }
 

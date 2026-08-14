@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe } from 'lucide-react'
+import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe, BookOpen } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
@@ -629,6 +629,37 @@ export function SystemSettings({
                             className="hidden"
                         />
                     </div>
+                </div>
+            </section>
+
+            {/* 版本与更新日志 */}
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <BookOpen className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? '版本记录' : 'Version History'}
+                    </h4>
+                </div>
+                <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border flex items-center justify-between shadow-sm">
+                    <div>
+                        <div className="text-sm font-bold text-text-primary">
+                            {language === 'zh' ? '软件更新日志' : 'Release Notes & Changelog'}
+                        </div>
+                        <div className="text-xs text-text-muted mt-1 opacity-70">
+                            {language === 'zh'
+                                ? '查看所有历史版本更新明细与新功能特性'
+                                : 'Explore complete release history and new features across all versions'}
+                        </div>
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => getStore().setShowChangelog(true)}
+                        className="rounded-xl px-4 !bg-accent/15 !border-accent/30 !text-accent hover:!bg-accent/25"
+                    >
+                        <BookOpen className="w-3.5 h-3.5 mr-1.5" />
+                        {language === 'zh' ? '查看更新日志' : 'View Changelog'}
+                    </Button>
                 </div>
             </section>
         </div>

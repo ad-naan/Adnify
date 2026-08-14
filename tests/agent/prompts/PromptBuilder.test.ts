@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { buildSystemPrompt, type PromptContext } from '@renderer/agent/prompts/PromptBuilder'
+import { buildSystemPrompt, resolvePromptTemplateForMode, type PromptContext } from '@renderer/agent/prompts/PromptBuilder'
 
 describe('PromptBuilder', () => {
+  it('forces the planner template for user-facing Plan mode', () => {
+    expect(resolvePromptTemplateForMode('plan', 'coder', false)?.id).toBe('plan')
+    expect(resolvePromptTemplateForMode('plan', 'concise', true)?.id).toBe('concise')
+  })
+
   it('keeps task-list state out of the stable system prompt', () => {
     const prompt = buildSystemPrompt({
       os: 'Windows',

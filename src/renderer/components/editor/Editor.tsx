@@ -5,7 +5,7 @@ import { useRef, useCallback, useEffect, useState, lazy, Suspense } from 'react'
 import MonacoEditor, { OnMount, BeforeMount, loader } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
-import { useStore } from '@store'
+import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { useAgentChangeState } from '@hooks/useAgent'
@@ -41,6 +41,7 @@ import { SafeDiffEditor } from './SafeDiffEditor'
 import { getFileType, MarkdownPreview, ImagePreview, UnsupportedFile } from './FilePreview'
 import { CodeSkeleton } from '../ui/Loading'
 import { TaskBoard } from '../plan/TaskBoard'
+import { PlanWorkspace } from '../plan/PlanWorkspace'
 const BrowserPreviewTab = lazy(() => import('./BrowserPreviewTab'))
 
 function isPlanJsonFile(filePath: string): boolean {
@@ -57,6 +58,7 @@ import { useEditorActions, useAICompletion, useEditorEvents, useComposerInlineDi
 import { getLanguage } from './utils/languageMap'
 import { defineMonacoTheme } from './utils/monacoTheme'
 import { isPreviewDocumentPath } from '@shared/types/preview'
+import { PLAN_BOARD_PATH, isPlanBoardPath } from '@shared/types/planBoard'
 import type { EditorConfig as SharedEditorConfig } from '@shared/config/types'
 
 loader.config({ monaco })
@@ -70,9 +72,12 @@ function clampEditorFontSize(fontSize: number) {
 }
 
 export default function Editor() {
+  const workMode = useModeStore(state => state.currentMode)
   const activeFilePath = useStore((state) => state.activeFilePath)
   const activeFile = useStore(useShallow(state => state.openFiles.find(f => f.path === state.activeFilePath)))
   const openFileCount = useStore((state) => state.openFiles.length)
+  const legacyPlanFiles = useStore(useShallow(state => state.openFiles.filter(file => isPlanJsonFile(file.path)).map(file => file.path)))
+  const isPlanBoardOpen = useStore(state => state.openFiles.some(file => isPlanBoardPath(file.path)))
 
   // 状态
   const [streamingEdit, setStreamingEdit] = useState<StreamingEditState | null>(null)
@@ -86,6 +91,7 @@ export default function Editor() {
 
   const isContextMenuFileDirty = useStore(state => tabContextMenu ? state.openFiles.find(f => f.path === tabContextMenu.filePath)?.isDirty : false)
   const setActiveFile = useStore((state) => state.setActiveFile)
+  const openFile = useStore((state) => state.openFile)
   const updateFileContent = useStore((state) => state.updateFileContent)
   const updateFileDirtyState = useStore((state) => state.updateFileDirtyState)
   const markFileSaved = useStore((state) => state.markFileSaved)
@@ -108,21 +114,22 @@ export default function Editor() {
   const { setupCursorTracking } = useEditorEvents(editorRef)
 
   const isPreviewDocument = Boolean(activeFile && (activeFile.kind === 'preview' || isPreviewDocumentPath(activeFile.path)))
+  const isPlanBoardDocument = isPlanBoardPath(activeFile?.path)
 
-  useComposerInlineDiff(isPreviewDocument ? null : activeFilePath, editorRef.current, monacoRef.current)
+  useComposerInlineDiff(isPreviewDocument || isPlanBoardDocument ? null : activeFilePath, editorRef.current, monacoRef.current)
 
   const { registerActions } = useEditorActions(setInlineEditState)
-  const { registerProvider: registerAIProvider } = useAICompletion(isPreviewDocument ? null : activeFilePath)
+  const { registerProvider: registerAIProvider } = useAICompletion(isPreviewDocument || isPlanBoardDocument ? null : activeFilePath)
 
-  const activeLanguage = activeFile && !isPreviewDocument ? getLanguage(activeFile.path) : 'plaintext'
-  const activeFileType = activeFile && !isPreviewDocument ? getFileType(activeFile.path) : 'text'
-  const activeFileInfo = (activeFile && activeFile.content != null) ? getFileInfo(activeFile.path, activeFile.content) : null
+  const activeLanguage = activeFile && !isPreviewDocument && !isPlanBoardDocument ? getLanguage(activeFile.path) : 'plaintext'
+  const activeFileType = activeFile && !isPreviewDocument && !isPlanBoardDocument ? getFileType(activeFile.path) : 'text'
+  const activeFileInfo = (activeFile && activeFile.content != null && !isPlanBoardDocument) ? getFileInfo(activeFile.path, activeFile.content) : null
   const currentTheme = useStore((state) => state.currentTheme) as ThemeName
   const fontZoomRafRef = useRef<number | null>(null)
   const fontZoomSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 断点管理
-  useEditorBreakpoints(editorRef.current, isPreviewDocument ? null : activeFilePath)
+  useEditorBreakpoints(editorRef.current, isPreviewDocument || isPlanBoardDocument ? null : activeFilePath)
 
   // 主题变化
   useEffect(() => {
@@ -206,7 +213,7 @@ export default function Editor() {
   // 同时检查是否有跨文件 Go-to-Definition 待处理的跳转定位
   useEffect(() => {
     clearLintErrors()
-    if (activeFile && activeFile.content != null && !isPreviewDocument) {
+    if (activeFile && activeFile.content != null && !isPreviewDocument && !isPlanBoardDocument) {
       notifyFileOpened(activeFile.path, activeFile.content)
       // 检查是否有跨文件跳转定义的待定位请求
       const nav = consumePendingNavigation(activeFile.path)
@@ -218,7 +225,7 @@ export default function Editor() {
         }, 80)
       }
     }
-  }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened, isPreviewDocument])
+  }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened, isPlanBoardDocument, isPreviewDocument])
 
   // 清理不再打开的文件的 Monaco Models，防止内存泄漏
   useEffect(() => {
@@ -245,7 +252,7 @@ export default function Editor() {
 
   // 流式编辑监听
   useEffect(() => {
-    if (!activeFilePath || isPreviewDocument) return
+    if (!activeFilePath || isPreviewDocument || isPlanBoardDocument) return
 
     const activeEdit = streamingEditService.getActiveEditForFile(activeFilePath)
     if (activeEdit) {
@@ -263,7 +270,7 @@ export default function Editor() {
       setStreamingEdit(null)
       setShowDiffPreview(false)
     }
-  }, [activeFilePath, isPreviewDocument])
+  }, [activeFilePath, isPlanBoardDocument, isPreviewDocument])
 
 
   const handleBeforeMount: BeforeMount = (monacoInstance) => {
@@ -373,6 +380,7 @@ export default function Editor() {
   }
 
   const handleSave = useCallback(async () => {
+    if (isPlanBoardDocument) return
     if (activeFile && editorRef.current) {
       const config = getEditorConfig()
       if (config.formatOnSave) {
@@ -394,7 +402,7 @@ export default function Editor() {
         toast.error(language === 'zh' ? '保存失败' : 'Save Failed', language === 'zh' ? '无法写入文件' : 'Could not write to file')
       }
     }
-  }, [activeFile, markFileSaved, language, updateFileContent])
+  }, [activeFile, isPlanBoardDocument, markFileSaved, language, updateFileContent])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (keybindingService.matches(e.nativeEvent, 'editor.save')) {
@@ -404,10 +412,21 @@ export default function Editor() {
   }, [handleSave])
 
   const handleRunLint = useCallback(() => {
-    if (activeFilePath && !isPreviewDocument) {
+    if (activeFilePath && !isPreviewDocument && !isPlanBoardDocument) {
       runLintCheck(activeFilePath, editorRef.current, monacoRef.current)
     }
-  }, [activeFilePath, runLintCheck, isPreviewDocument])
+  }, [activeFilePath, runLintCheck, isPlanBoardDocument, isPreviewDocument])
+
+  // Plan 模式维护一个固定编辑器标签。它只在进入模式时自动激活一次，
+  // 此后用户可以自由切换到其他文件；离开模式时强制移除固定标签。
+  useEffect(() => {
+    legacyPlanFiles.forEach(path => closeFile(path, { force: true }))
+    if (workMode === 'plan') {
+      if (!isPlanBoardOpen) openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+      return
+    }
+    if (isPlanBoardOpen) closeFile(PLAN_BOARD_PATH, { force: true })
+  }, [closeFile, isPlanBoardOpen, legacyPlanFiles, openFile, workMode])
 
   if (openFileCount === 0) {
     return <EditorWelcome />
@@ -427,7 +446,7 @@ export default function Editor() {
         activeFileKind={activeFile?.kind}
       />
 
-      {activeFile && !isPreviewDocument && (
+      {activeFile && !isPreviewDocument && !isPlanBoardDocument && (
         <EditorBreadcrumbs
           filePath={activeFile.path}
           largeFileInfo={activeFileInfo}
@@ -470,7 +489,9 @@ export default function Editor() {
 
       {/* 编辑器主体 */}
       <div className="flex-1 relative min-h-0 overflow-visible flex flex-col">
-        {activeFile?.path.startsWith('diff://') || activeFile?.path.startsWith('git-diff://') ? (
+        {isPlanBoardDocument ? (
+          <PlanWorkspace />
+        ) : activeFile?.path.startsWith('diff://') || activeFile?.path.startsWith('git-diff://') ? (
           <DiffPreview
             diff={{
               original: activeFile.originalContent || '',

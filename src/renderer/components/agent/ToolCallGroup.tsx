@@ -15,6 +15,7 @@ import FileChangeCard from './FileChangeCard'
 import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
+import SubAgentTaskCard from './SubAgentTaskCard'
 
 /**
  * 渲染单个工具调用卡片的统一入口。
@@ -71,6 +72,10 @@ export function renderToolCallCard(
   // todo_write 通过底部 TodoListPanel 展示，不在聊天流中渲染卡片
   if (tc.name === 'todo_write') {
     return null
+  }
+
+  if (tc.name === 'task') {
+    return <SubAgentTaskCard key={tc.id} toolCall={tc} />
   }
 
   // 其他工具使用 ToolCallCard

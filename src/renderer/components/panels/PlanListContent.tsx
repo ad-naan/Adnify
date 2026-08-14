@@ -5,7 +5,8 @@
 
 import { memo, useMemo } from 'react'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
-import { useStore } from '@store'
+import { useModeStore, useStore } from '@store'
+import { PLAN_BOARD_PATH, isPlanBoardPath } from '@shared/types/planBoard'
 import {
     PlayCircle,
     CheckCircle2,
@@ -166,8 +167,7 @@ export default memo(function PlanListContent({
     const plans = useAgentStore(state => state.plans)
     const activePlanId = useAgentStore(state => state.activePlanId)
     const setActivePlan = useAgentStore(state => state.setActivePlan)
-    const openFile = useStore(state => state.openFile)
-    const workspacePath = useStore(state => state.workspacePath)
+    const setMode = useModeStore(state => state.setMode)
 
     // 按状态和时间排序：执行中 > 暂停 > 草稿/就绪 > 完成/失败
     const sortedPlans = useMemo(() => {
@@ -193,11 +193,11 @@ export default memo(function PlanListContent({
     const handlePlanClick = (plan: TaskPlan) => {
         // 设置为活跃计划
         setActivePlan(plan.id)
-
-        // 打开计划的 JSON 文件（触发 TaskBoard 渲染）
-        if (workspacePath) {
-            const jsonPath = `${workspacePath}/.adnify/plan/${plan.id}.json`
-            openFile(jsonPath, JSON.stringify(plan, null, 2))
+        // 计划看板是 Plan 模式的常驻工作区，不再通过可关闭文件标签打开。
+        setMode('plan')
+        const editorStore = useStore.getState()
+        if (editorStore.openFiles.some(file => isPlanBoardPath(file.path))) {
+            editorStore.setActiveFile(PLAN_BOARD_PATH)
         }
 
         // 关闭弹框

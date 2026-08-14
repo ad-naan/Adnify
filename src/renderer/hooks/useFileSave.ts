@@ -26,7 +26,7 @@ export function useFileSave() {
   // 保存单个文件
   const saveFile = useCallback(async (filePath: string): Promise<boolean> => {
     const file = openFiles.find(f => f.path === filePath)
-    if (!file) return false
+    if (!file || file.pinned) return false
 
     try {
       const success = await api.file.write(file.path, file.content, file.encoding)
@@ -62,6 +62,7 @@ export function useFileSave() {
   // 关闭文件（带保存提示）
   const closeFileWithConfirm = useCallback(async (filePath: string) => {
     const file = openFiles.find(f => f.path === filePath)
+    if (file?.pinned) return
     if (file?.isDirty) {
       const fileName = getFileName(filePath)
       const result = await globalConfirm({

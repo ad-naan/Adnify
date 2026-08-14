@@ -16,6 +16,15 @@ export interface ToolExecutionBatch {
   parallel: boolean
 }
 
+export function canToolCallRunInParallel(toolCall: ToolCall): boolean {
+  // `task` is opt-in parallel: the model must explicitly mark independent
+  // sub-agents. The static tool config remains serialized for safe default use.
+  if (toolCall.name === 'task') {
+    return toolCall.arguments.parallel === true
+  }
+  return isParallelTool(toolCall.name)
+}
+
 /**
  * 把工具调用列表切成执行批次。
  *
@@ -36,7 +45,7 @@ export function buildExecutionBatches(toolCalls: ToolCall[]): ToolExecutionBatch
 
   for (const toolCall of toolCalls) {
     // 可并行工具：继续累积到当前并行批次里。
-    if (isParallelTool(toolCall.name)) {
+    if (canToolCallRunInParallel(toolCall)) {
       currentParallelBatch.push(toolCall)
       continue
     }

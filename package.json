@@ -28,6 +28,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
     "assets:icons": "node scripts/generate-platform-icons.js",
+    "changelog:sync": "node scripts/sync-changelog.js",
     "postinstall": "node scripts/postinstall.js",
     "rebuild": "npx electron-rebuild -f -w node-pty",
     "rebuild:all": "npx electron-rebuild -f -w"

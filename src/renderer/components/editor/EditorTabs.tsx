@@ -2,12 +2,13 @@
  * 编辑器标签栏组件
  */
 import { memo } from 'react'
-import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff, Globe } from 'lucide-react'
+import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff, Globe, ListChecks } from 'lucide-react'
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { t } from '@renderer/i18n'
 import { isPreviewDocumentPath } from '@shared/types/preview'
+import { isPlanBoardPath } from '@shared/types/planBoard'
 
 interface EditorTabsProps {
   activeFilePath: string | null
@@ -60,9 +61,10 @@ export const EditorTabs = memo(function EditorTabs({
     >
       {openFiles.map((file) => {
         const isActive = file.path === activeFilePath
+        const isPlanBoard = isPlanBoardPath(file.path)
 
         // 计算显示名称
-        let fileName = getTabDisplayName(file.path)
+        let fileName = isPlanBoard ? (language === 'zh' ? '计划看板' : 'Plan board') : getTabDisplayName(file.path)
 
         // 如果是计划文件，尝试显示计划名称
         if (isPlanJsonFile(file.path)) {
@@ -96,7 +98,7 @@ export const EditorTabs = memo(function EditorTabs({
             onClick={() => onSelectFile(file.path)}
             onContextMenu={(e) => {
               e.preventDefault()
-              onContextMenu(e, file.path)
+              if (!file.pinned) onContextMenu(e, file.path)
             }}
           >
 
@@ -109,10 +111,12 @@ export const EditorTabs = memo(function EditorTabs({
 
             {isDiff && <FileDiff className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
             {isPreview && <Globe className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />}
+            {isPlanBoard && <ListChecks className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
 
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>
+            {file.pinned && <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[8px] font-medium text-accent">{language === 'zh' ? '常驻' : 'Pinned'}</span>}
 
-            <div
+            {!file.pinned && <div
               className="flex items-center justify-center w-5 h-5 rounded-lg hover:bg-surface-hover transition-colors"
               onClick={(e) => {
                 e.stopPropagation()
@@ -123,13 +127,13 @@ export const EditorTabs = memo(function EditorTabs({
                 <div className="w-2 h-2 rounded-full bg-accent group-hover:hidden" />
               ) : null}
               <X className={`w-3.5 h-3.5 ${file.isDirty ? 'hidden group-hover:block' : 'opacity-0 group-hover:opacity-100'} transition-opacity`} />
-            </div>
+            </div>}
           </div>
         )
       })}
 
       {/* Lint 状态 */}
-      {activeFilePath && activeFileKind !== 'preview' && (
+      {activeFilePath && activeFileKind !== 'preview' && !isPlanBoardPath(activeFilePath) && (
         <div className="ml-auto flex items-center gap-2 px-3 flex-shrink-0 h-full border-l border-border bg-transparent">
           {(lintErrorCount > 0 || lintWarningCount > 0) && (
             <div className="flex items-center gap-2 text-xs mr-2">
