@@ -53,3 +53,9 @@ export function getPlanContinuationReminder(state: PlanPlanningState): string | 
   }
   return null
 }
+
+/** After clarification, the next model turn must converge on a structured plan. */
+export function selectPlanPlanningTools<T extends { name: string }>(state: PlanPlanningState, tools: readonly T[]): T[] {
+  if (state !== 'ready_to_create') return [...tools]
+  return tools.filter(tool => tool.name === 'create_task_plan')
+}

@@ -36,6 +36,22 @@ describe('projectPlanWorkbench', () => {
     expect(result.focus?.progress).toBe(30)
   })
 
+  it('projects live tool calls without waiting for an AI activity report', () => {
+    const root = thread('root')
+    root.streamState = {
+      phase: 'tool_running',
+      currentToolCall: { id: 'read-1', name: 'read_file', arguments: { path: 'src/main.ts' }, status: 'running' },
+    }
+    root.messages = [{
+      id: 'assistant-1', role: 'assistant', content: '', timestamp: 10, parts: [],
+      toolCalls: [{ id: 'read-1', name: 'read_file', arguments: { path: 'src/main.ts' }, status: 'running' }],
+    }]
+
+    const result = projectPlanWorkbench({ currentThreadId: root.id, threads: { root } })
+    expect(result.isProcessing).toBe(true)
+    expect(result.focus).toMatchObject({ title: '读取文件', detail: 'src/main.ts', tone: 'active' })
+  })
+
   it('aggregates task threads by plan ownership and exposes approvals', () => {
     const root = thread('root')
     const worker = thread('worker')
