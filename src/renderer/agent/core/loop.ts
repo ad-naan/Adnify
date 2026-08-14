@@ -21,7 +21,7 @@ import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
 import { injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromLatestUserMessage } from '../services/multimodalRoutingService'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
-import { derivePlanPlanningState, getPlanContinuationReminder } from '../plan/planWorkflowGuard'
+import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
@@ -534,6 +534,13 @@ export async function runLoop(
       break
     }
 
+    const planningState = context.chatMode === 'plan' && context.planPhase !== 'executing'
+      ? derivePlanPlanningState(requestMessages)
+      : null
+    const iterationTools = planningState
+      ? selectPlanPlanningTools(planningState, agentTools)
+      : agentTools
+
     const result = await callLLMWithRetry(
       primaryConfig,
       requestMessages,
@@ -542,7 +549,7 @@ export async function runLoop(
       threadStore,
       context.abortSignal,
       requestId,
-      agentTools
+      iterationTools
     )
 
     if (context.abortSignal?.aborted) {

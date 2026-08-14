@@ -14,7 +14,7 @@ export function PlanWorkbenchApproval({ items, language, onApprove, onReject }: 
   return <section className="mt-4 space-y-2">
     {items.map(item => <article key={item.task.id} className="overflow-hidden rounded-xl border border-amber-400/25 bg-amber-400/[0.045]">
       <div className="flex items-start gap-3 px-3.5 py-3">
-        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+        <span className="relative mt-0.5 shrink-0"><ShieldAlert className="h-4 w-4 text-amber-400" /><span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" /></span>
         <div className="min-w-0 flex-1">
           <div className="text-[11px] font-semibold leading-4 text-text-primary">{item.task.title}</div>
           <div className="mt-1 font-mono text-[10px] text-text-muted">{item.currentToolName}</div>

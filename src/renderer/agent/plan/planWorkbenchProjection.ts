@@ -17,6 +17,7 @@ export interface PlanActivityItem {
   taskId?: string
   progress?: number
   timestamp: number
+  source: 'ai' | 'tool'
 }
 
 export interface PlanTaskRuntimeItem {
@@ -49,6 +50,7 @@ export interface PlanWorkbenchProjection {
   focus: PlanWorkbenchFocus | null
   requestText?: string
   requestTimestamp?: number
+  answeredClarification?: { question: string, answers: string[] }
   clarification?: PlanClarificationItem
   activities: PlanActivityItem[]
   tasks: PlanTaskRuntimeItem[]
@@ -59,6 +61,7 @@ export interface PlanWorkbenchProjection {
   completedCount: number
   progress: number
   canStart: boolean
+  isProcessing: boolean
 }
 
 const ACTIVITY_STAGES = new Set<PlanWorkbenchStage>(PLAN_ACTIVITY_STAGES)
@@ -77,7 +80,37 @@ function toActivity(args: Record<string, unknown>, id: string, timestamp: number
     taskId: typeof args.taskId === 'string' ? args.taskId : undefined,
     progress: typeof args.progress === 'number' ? Math.max(0, Math.min(100, Math.round(args.progress))) : undefined,
     timestamp,
+    source: 'ai',
   }
+}
+
+const TOOL_TITLES: Record<string, string> = {
+  ask_user: '确认需求',
+  create_task_plan: '生成结构化计划',
+  read_file: '读取文件',
+  read_files: '读取文件',
+  search_files: '搜索项目',
+  list_directory: '浏览目录',
+  run_command: '运行命令',
+  task: '调度子任务',
+}
+
+function toolDetail(args: Record<string, unknown>): string | undefined {
+  for (const key of ['description', 'question', 'path', 'filePath', 'command', 'prompt']) {
+    const value = args[key]
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 180)
+  }
+  for (const key of ['paths', 'files']) {
+    const value = args[key]
+    if (Array.isArray(value)) return value.filter(item => typeof item === 'string').slice(0, 4).join('、')
+  }
+  return undefined
+}
+
+function toolStatus(status: string): PlanActivityStatus {
+  if (status === 'success') return 'completed'
+  if (status === 'error' || status === 'rejected') return 'blocked'
+  return 'active'
 }
 
 function getRelevantThreads(plan: TaskPlan | undefined, currentThreadId: string | null, threads: Record<string, ChatThread>): ChatThread[] {
@@ -114,7 +147,7 @@ export function projectPlanWorkbench(input: {
   const planningState = derivePlanPlanningState(planningMessages)
   const relevantThreads = getRelevantThreads(plan, currentThreadId, threads)
 
-  const activities = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
+  const reportedActivities = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
     if (!isAssistantMessage(message)) return []
     return (message.toolCalls || []).flatMap((toolCall, index) => {
       if (toolCall.name !== 'report_plan_activity') return []
@@ -143,6 +176,17 @@ export function projectPlanWorkbench(input: {
   const clarification = clarificationMessage && isAssistantMessage(clarificationMessage) && clarificationMessage.interactive
     ? { messageId: clarificationMessage.id, content: clarificationMessage.interactive }
     : undefined
+  const answeredMessage = [...planningMessages].reverse().find(message =>
+    isAssistantMessage(message) && message.interactive?.selectedIds?.length
+  )
+  const answeredClarification = answeredMessage && isAssistantMessage(answeredMessage) && answeredMessage.interactive
+    ? {
+        question: answeredMessage.interactive.question,
+        answers: answeredMessage.interactive.options
+          .filter(option => answeredMessage.interactive?.selectedIds?.includes(option.id))
+          .map(option => option.label),
+      }
+    : undefined
   const latestCompletedPlanIndex = planningMessages.reduce((latest, message, index) => (
     isAssistantMessage(message) && message.toolCalls?.some(toolCall => toolCall.name === 'create_task_plan') ? index : latest
   ), -1)
@@ -156,6 +200,22 @@ export function projectPlanWorkbench(input: {
   const completedCount = tasks.filter(item => item.task.status === 'completed').length
   const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0
   const stage = deriveStage(plan, planningState, tasks)
+  const toolActivities = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
+    if (!isAssistantMessage(message)) return []
+    return (message.toolCalls || []).flatMap((toolCall, index) => {
+      if (toolCall.name === 'report_plan_activity') return []
+      return [{
+        id: `${thread.id}:tool:${toolCall.id}`,
+        stage,
+        title: TOOL_TITLES[toolCall.name] || toolCall.name.replaceAll('_', ' '),
+        detail: toolDetail(toolCall.arguments),
+        status: toolStatus(toolCall.status),
+        timestamp: message.timestamp + index,
+        source: 'tool',
+      } satisfies PlanActivityItem]
+    })
+  }))
+  const activities = [...reportedActivities, ...toolActivities].sort((a, b) => a.timestamp - b.timestamp)
   const latestActivity = activities.at(-1)
 
   let focus: PlanWorkbenchFocus | null = latestActivity ? {
@@ -180,14 +240,16 @@ export function projectPlanWorkbench(input: {
   }
 
   const hasLiveThread = relevantThreads.some(thread => ['streaming', 'tool_pending', 'tool_running'].includes(thread.streamState.phase))
+  const isProcessing = hasLiveThread || Boolean(planningThread?.executionMeta?.loopState === 'running')
 
   return {
     stage,
     planningState,
-    hasSession: Boolean(plan || requestText || clarification || activities.length || hasLiveThread),
+    hasSession: Boolean(plan || requestText || clarification || answeredClarification || activities.length || isProcessing),
     focus,
     requestText,
     requestTimestamp: requestMessage?.timestamp,
+    answeredClarification,
     clarification,
     activities,
     tasks,
@@ -198,5 +260,6 @@ export function projectPlanWorkbench(input: {
     completedCount,
     progress,
     canStart: Boolean(plan && ['draft', 'approved', 'stopped', 'failed'].includes(plan.status) && queuedTasks.length > 0),
+    isProcessing,
   }
 }
