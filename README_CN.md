@@ -11,6 +11,9 @@
   <p>一个拥有极致视觉体验、深度集成 AI Agent 的下一代代码编辑器。</p>
 
   <p>
+    <a href="https://github.com/ad-naan/adnify"><img src="https://img.shields.io/github/stars/ad-naan/adnify?logo=github&color=181717" alt="GitHub" /></a>
+    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-150%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
+    <a href="https://atomgit.com/adnaan/adnify"><img src="https://img.shields.io/badge/AtomGit-Star-DA203E?logo=git&logoColor=white" alt="AtomGit" /></a>
     <a href="https://deepwiki.com/ad-naan/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
     <img src="https://img.shields.io/badge/license-Custom%20License-blue.svg" alt="License" />
     <img src="https://img.shields.io/badge/Electron-39.0-blueviolet" alt="Electron 39.0" />
