@@ -18,7 +18,7 @@ export interface SlashCommandContext {
 
 export interface SlashCommandResult {
     prompt: string
-    mode?: 'chat' | 'agent'
+    mode?: 'agent'
 }
 
 // 内置斜杠命令
@@ -38,7 +38,7 @@ const commands: SlashCommand[] = [
         description: 'Explain the selected code or file',
         handler: (args, ctx) => ({
             prompt: buildPrompt('Explain this code in detail', args, ctx),
-            mode: 'chat',
+            mode: 'agent',
         }),
     },
     {

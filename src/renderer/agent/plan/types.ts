@@ -7,22 +7,6 @@
  */
 
 // ============================================
-// 状态机类型
-// ============================================
-
-/** Plan 状态 */
-export type PlanState =
-    | 'idle'        // 空闲，等待用户输入
-    | 'gathering'   // 收集需求（多轮对话）
-    | 'planning'    // 生成任务计划
-    | 'reviewing'   // 等待用户审批
-    | 'ready'       // 计划已批准，待执行
-    | 'executing'   // 执行中
-    | 'paused'      // 已暂停
-    | 'completed'   // 已完成
-    | 'failed'      // 失败
-
-// ============================================
 // 任务类型
 // ============================================
 
@@ -116,6 +100,8 @@ export interface TaskPlan {
     tasks: PlanTask[]
     /** 用户原始请求 */
     userRequest?: string
+    /** 创建该计划的规划线程，用于聚合规划阶段的动态活动 */
+    originThreadId?: string
 }
 
 // ============================================
@@ -183,7 +169,6 @@ export interface ExecutionSession {
 
 /** Plan 事件 */
 export type PlanEvent =
-    | { type: 'state:change'; from: PlanState; to: PlanState }
     | { type: 'task:start'; taskId: string; planId: string; threadId?: string; assistantId?: string; requestId?: string }
     | { type: 'task:progress'; taskId: string; message: string }
     | { type: 'task:complete'; taskId: string; output: string; duration: number; threadId?: string; assistantId?: string; requestId?: string }

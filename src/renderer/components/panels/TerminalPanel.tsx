@@ -347,7 +347,7 @@ const TerminalPanel = memo(function TerminalPanel() {
             .slice(-2000)
             .trim()
         if (!content) return
-        setMode('chat')
+        setMode('agent')
         setInputPrompt(`I'm getting this error in the terminal. Please analyze it and fix the code:\n\n\`\`\`\n${content}\n\`\`\``)
     }, [managerState.activeId, setMode, setInputPrompt])
 

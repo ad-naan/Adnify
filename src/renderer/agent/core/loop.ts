@@ -397,7 +397,7 @@ export async function runLoop(
     isSubAgent: context.isSubAgent,
   })
 
-  const agentTools = context.chatMode === 'chat' ? [] : toolRuntime.toolManager.getAllToolDefinitions()
+  const agentTools = toolRuntime.toolManager.getAllToolDefinitions()
   const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
   let requestMessages = llmMessages

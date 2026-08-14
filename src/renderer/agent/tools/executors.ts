@@ -24,6 +24,7 @@ import { useStore } from '@/renderer/store'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 import { derivePlanPlanningState } from '../plan/planWorkflowGuard'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { getMessageText } from '@/renderer/agent/types'
 import { composerService } from '../services/composerService'
 import { agentStorePlanBridge, agentStoreTodoBridge } from '../store/agentStoreBridge'
 import { buildFileChangeDescriptor } from '../utils/fileChangeUtils'
@@ -729,6 +730,25 @@ async function guardedWriteFile(opts: {
 
 
 const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: ToolExecutionContext) => Promise<ToolExecutionResult>> = {
+    async report_plan_activity(args) {
+        const stage = args.stage as string
+        const title = String(args.title || '').trim()
+        const detail = String(args.detail || '').trim()
+        const progressValue = typeof args.progress === 'number'
+            ? Math.max(0, Math.min(100, Math.round(args.progress)))
+            : undefined
+
+        if (!title) {
+            return { success: false, result: 'Activity title is required.' }
+        }
+
+        return {
+            success: true,
+            result: `Plan activity published: [${stage}] ${title}${detail ? ` — ${detail}` : ''}`,
+            meta: { presentationOnly: true, progress: progressValue },
+        }
+    },
+
     async read_file(args, ctx) {
         const resolution = resolveReadFileRequest(args)
         if (!resolution.ok) {
@@ -2198,6 +2218,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const messagesBeforeCurrentCall = currentAssistantId
             ? threadMessages.filter(message => message.id !== currentAssistantId)
             : threadMessages
+        const latestPreviousPlanIndex = messagesBeforeCurrentCall.reduce((latest, message, index) => (
+            message.role === 'assistant' && message.toolCalls?.some(toolCall => toolCall.name === 'create_task_plan') ? index : latest
+        ), -1)
+        const requestMessage = messagesBeforeCurrentCall.slice(latestPreviousPlanIndex + 1).find(message => message.role === 'user')
         if (derivePlanPlanningState(messagesBeforeCurrentCall) !== 'ready_to_create') {
             return {
                 success: false,
@@ -2252,6 +2276,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 executionMode,
                 status: 'draft' as const,
                 tasks: planTasks,
+                originThreadId: ctx.threadId || undefined,
+                userRequest: requestMessage?.role === 'user' ? getMessageText(requestMessage.content).trim() : undefined,
             }
 
             // 保存规划文件 (json)

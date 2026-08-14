@@ -11,6 +11,7 @@ import { z } from 'zod'
 import type { ToolApprovalType } from '@/shared/types/llm'
 import { normalizeEditFileArgs, resolveEditFileRequest } from '@/shared/utils/editFile'
 import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
+import { PLAN_ACTIVITY_STAGES, PLAN_ACTIVITY_STATUSES } from '@/shared/types/planActivity'
 
 // ============================================
 // 类型定义
@@ -841,6 +842,35 @@ TIPS:
         parameters: {
             url: { type: 'string', description: 'Full URL to fetch (must start with http:// or https://)', required: true },
             timeout: { type: 'number', description: 'Timeout in seconds (default: 60, minimum: 30). Use higher values for complex pages.', default: 60 },
+        },
+    },
+
+    report_plan_activity: {
+        name: 'report_plan_activity',
+        displayName: 'Report Plan Activity',
+        description: 'Publish a concise, AI-generated Plan workflow activity for the orchestration console.',
+        detailedDescription: `Report a meaningful Plan-mode milestone to the orchestration console.
+- The four stages are stable containers; you choose the specific title and detail dynamically
+- Report only meaningful changes: current investigation, finding, decision, blocker, handoff, artifact, or validation
+- Keep titles short and details concrete; do not emit one event for every trivial file read
+- This is presentation metadata only. It cannot approve tools or mark runtime tasks complete`,
+        criticalRules: [
+            'Choose the fine-grained title and detail from the actual work being performed',
+            'Never claim completion unless the underlying runtime task or validation has actually completed',
+            'Use blocked or warning only when there is a concrete reason',
+        ],
+        category: 'plan',
+        approvalType: 'none',
+        parallel: false,
+        requiresWorkspace: false,
+        enabled: true,
+        parameters: {
+            stage: { type: 'string', description: 'Macro workflow container', required: true, enum: [...PLAN_ACTIVITY_STAGES] },
+            title: { type: 'string', description: 'Short activity title generated from the current work', required: true },
+            detail: { type: 'string', description: 'Concrete finding, action, blocker, or output summary' },
+            status: { type: 'string', description: 'Presentation status for this activity', enum: [...PLAN_ACTIVITY_STATUSES], default: 'active' },
+            taskId: { type: 'string', description: 'Associated plan task ID when applicable' },
+            progress: { type: 'number', description: 'Optional estimated progress from 0 to 100' },
         },
     },
 

@@ -7,7 +7,7 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { WorkMode } from './types'
+import { normalizeMode, type WorkMode } from './types'
 import { api } from '@/renderer/services/electronAPI'
 
 const STORE_KEY = 'modeStore'
@@ -62,7 +62,8 @@ export const useModeStore = create<ModeStore>()(
             currentMode: 'agent', // 默认 Agent 模式
             previousMode: null,
 
-            setMode: (mode) => {
+            setMode: (requestedMode) => {
+                const mode = normalizeMode(requestedMode)
                 const current = get().currentMode
                 if (current !== mode) {
                     set({
@@ -87,6 +88,11 @@ export const useModeStore = create<ModeStore>()(
         {
             name: 'adnify-mode-store',
             storage: createJSONStorage(() => electronStoreStorage),
+            version: 2,
+            migrate: (persisted) => {
+                const state = (persisted || {}) as Partial<ModeState>
+                return { ...state, currentMode: normalizeMode(state.currentMode), previousMode: null }
+            },
             partialize: (state) => ({
                 currentMode: state.currentMode
             })
