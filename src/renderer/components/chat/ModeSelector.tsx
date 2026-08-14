@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Check, MessageSquare, Wrench, Workflow } from 'lucide-react'
+import { ChevronDown, Check, Wrench, Workflow } from 'lucide-react'
 import { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
 
@@ -12,20 +12,12 @@ interface ModeSelectorProps {
 
 const MODES: Array<{
   id: WorkMode
-  icon: typeof MessageSquare
+  icon: typeof Wrench
   labelKey: string
   descZh: string
   descEn: string
   color: string
 }> = [
-    {
-      id: 'chat',
-      icon: MessageSquare,
-      labelKey: 'Chat',
-      descZh: '普通对话，不执行工具',
-      descEn: 'Chat only, no tool execution',
-      color: 'text-blue-400',
-    },
     {
       id: 'agent',
       icon: Wrench,
@@ -40,7 +32,7 @@ const MODES: Array<{
       labelKey: 'Plan',
       descZh: '多轮需求收集与任务规划',
       descEn: 'Requirement gathering & task planning',
-      color: 'text-purple-400',
+      color: 'text-accent',
     },
   ]
 

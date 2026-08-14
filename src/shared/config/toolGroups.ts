@@ -110,6 +110,7 @@ const UIUX_TOOLS: string[] = [
 
 /** Plan 规划工具 - 仅用于需求收集、计划创建与计划修订 */
 const PLAN_PLANNING_TOOLS: string[] = [
+  'report_plan_activity',
   'ask_user',
   'create_task_plan',
   'update_task_plan',
@@ -196,9 +197,8 @@ export function getToolGroup(id: string): string[] | undefined {
  * 根据上下文获取工具列表
  *
  * 加载规则：
- * - chat: 空（无工具）
  * - agent: core 工具组
- * - plan: plan 规划工具组（ask_user, create_task_plan, update_task_plan）
+ * - plan: plan 规划工具组（动态活动、需求确认、计划创建与修订）
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
@@ -208,11 +208,6 @@ export function getToolsForContext(context: ToolLoadingContext): string[] {
 }
 
 function collectToolsForContext(context: ToolLoadingContext): string[] {
-  // chat 模式无工具
-  if (context.mode === 'chat') {
-    return []
-  }
-
   // 收集工具（使用 Set 去重）
   const tools = new Set<string>()
 

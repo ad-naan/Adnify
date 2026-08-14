@@ -102,9 +102,15 @@ async function validatePlanTaskModels(plan: TaskPlan): Promise<string | null> {
     return null
 }
 
-function createTaskThreadBinding(_task: PlanTask) {
+function createTaskThreadBinding(planId: string, task: PlanTask) {
     const store = useAgentStore.getState()
-    const threadId = store.createThread({ activate: false })
+    const threadId = store.createThread({
+        activate: false,
+        mode: 'plan',
+        origin: 'plan-task',
+        planId,
+        taskId: task.id,
+    })
     const requestId = crypto.randomUUID()
     return { threadId, requestId }
 }
@@ -412,7 +418,7 @@ async function executeTask(
 ): Promise<void> {
     const store = useAgentStore.getState()
     const existingTask = store.getPlan(plan.id)?.tasks.find(candidate => candidate.id === task.id) || task
-    const { threadId, requestId } = createTaskThreadBinding(existingTask)
+    const { threadId, requestId } = createTaskThreadBinding(plan.id, existingTask)
     bindTaskRun(session, existingTask.id, {
         planId: plan.id,
         taskId: existingTask.id,

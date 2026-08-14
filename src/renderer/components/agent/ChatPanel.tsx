@@ -9,8 +9,6 @@ import {
   Trash2,
   Upload,
   ChevronDown,
-  ListTree,
-  GitBranch,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
@@ -55,7 +53,8 @@ import {
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
-import PlanConversationWorkspace from './PlanConversationWorkspace'
+import PlanWorkbench from '@/renderer/components/plan/workbench/PlanWorkbench'
+import { isPlanBoardPath } from '@/shared/types/planBoard'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -116,7 +115,7 @@ export default function ChatPanel() {
 
   const chatMode = useModeStore(s => s.currentMode)
   const setChatMode = useModeStore(s => s.setMode)
-  const activePlan = useAgentStore(state => state.plans.find(plan => plan.id === state.activePlanId))
+  const contextFilePath = activeFilePath && !isPlanBoardPath(activeFilePath) ? activeFilePath : null
 
   const toast = useToast()
 
@@ -134,6 +133,9 @@ export default function ChatPanel() {
     currentThreadId,
     messageListVersion,
   } = useAgentViewState()
+  const visibleContextItems = useMemo(() => contextItems.filter(item => !(
+    item.type === 'File' && isPlanBoardPath((item as FileContext).uri)
+  )), [contextItems])
   const { sendMessage, abort, approveCurrentTool, rejectCurrentTool } = useAgentCommands()
   const {
     createThread,
@@ -758,7 +760,7 @@ export default function ChatPanel() {
     // 检查是否是斜杠命令
     if (input.startsWith('/')) {
       const result = slashCommandService.parse(input, {
-        activeFilePath: activeFilePath || undefined,
+        activeFilePath: contextFilePath || undefined,
         selectedCode: selectedCode || undefined,
         workspacePath: workspacePath || undefined,
       })
@@ -775,10 +777,10 @@ export default function ChatPanel() {
 
     const contextItemsForSend = explicitServer.contextItem
       ? [
-        ...contextItems.filter(item => item.type !== 'ShellServer'),
+        ...visibleContextItems.filter(item => item.type !== 'ShellServer'),
         explicitServer.contextItem,
       ]
-      : contextItems.filter(item => item.type !== 'ShellServer')
+      : visibleContextItems.filter(item => item.type !== 'ShellServer')
 
     let targetThreadId = currentThreadId
     if (!targetThreadId && (contextItemsForSend.length > 0 || explicitServer.lastActiveServer)) {
@@ -815,7 +817,7 @@ export default function ChatPanel() {
     // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
     scrollToBottom('smooth')
     await sendMessage(userMessage)
-  }, [input, images, isStreaming, sendMessage, activeFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, contextItems, chatMode, toast, language, currentThreadId, createThread])
+  }, [input, images, isStreaming, sendMessage, contextFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, visibleContextItems, chatMode, toast, language, currentThreadId, createThread])
 
   // 编辑消息
   const handleEditMessage = useCallback(async (messageId: string, content: string) => {
@@ -862,16 +864,16 @@ export default function ChatPanel() {
 
   // 添加当前文件
   const handleAddCurrentFile = useCallback(() => {
-    if (!activeFilePath) return
-    const exists = contextItems.some((s: ContextItem) => s.type === 'File' && (s as FileContext).uri === activeFilePath)
+    if (!contextFilePath) return
+    const exists = visibleContextItems.some((s: ContextItem) => s.type === 'File' && (s as FileContext).uri === contextFilePath)
     if (exists) return
-    addContextItem({ type: 'File', uri: activeFilePath })
-  }, [activeFilePath, contextItems, addContextItem])
+    addContextItem({ type: 'File', uri: contextFilePath })
+  }, [contextFilePath, visibleContextItems, addContextItem])
 
   // 处理斜杠命令选择
   const handleSlashCommand = useCallback((cmd: SlashCommand) => {
     const result = slashCommandService.parse('/' + cmd.name, {
-      activeFilePath: activeFilePath || undefined,
+      activeFilePath: contextFilePath || undefined,
       selectedCode: selectedCode || undefined,
       workspacePath: workspacePath || undefined,
     })
@@ -884,7 +886,7 @@ export default function ChatPanel() {
     setShowSlashCommand(false)
     setSlashCommandQuery('')
     textareaRef.current?.focus()
-  }, [activeFilePath, selectedCode, workspacePath, setChatMode])
+  }, [contextFilePath, selectedCode, workspacePath, setChatMode])
 
   // 键盘处理
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -1164,17 +1166,7 @@ export default function ChatPanel() {
       <div className="flex flex-col h-full">
 
         {/* Header - 简洁版 */}
-        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
-          {chatMode === 'plan' ? <>
-            <div className="flex min-w-0 items-center gap-2">
-              <ListTree className="h-4 w-4 shrink-0 text-accent" />
-              <div className="min-w-0">
-                <div className="truncate text-[11px] font-semibold text-text-primary">{language === 'zh' ? '计划编排' : 'Plan orchestration'}</div>
-                <div className="truncate text-[9px] text-text-muted">{activePlan?.name || (language === 'zh' ? '等待生成计划' : 'Waiting for plan')}</div>
-              </div>
-            </div>
-            {activePlan?.executionMode === 'parallel' && <div className="flex items-center gap-1 rounded bg-accent/10 px-1.5 py-1 text-[9px] font-medium text-accent"><GitBranch className="h-3 w-3" />{language === 'zh' ? '并行编排' : 'Parallel'}</div>}
-          </> : <>
+        {chatMode !== 'plan' && <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
           <div className="flex items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
             <BranchSelector
@@ -1239,8 +1231,7 @@ export default function ChatPanel() {
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
-          </>}
-        </div>
+        </div>}
 
         <ConversationSidebar
           isOpen={sidebarOpen}
@@ -1276,7 +1267,7 @@ export default function ChatPanel() {
         </AnimatePresence>
 
         {/* Messages Area */}
-        <div className="flex-1 min-h-0 relative z-0 flex flex-col pt-12">
+        <div className={`flex-1 min-h-0 relative z-0 flex flex-col ${chatMode === 'plan' ? '' : 'pt-12'}`}>
           {/* API Key Warning */}
           {!hasApiKey && (
             <div className="m-4 p-4 border border-warning/20 bg-warning/5 rounded-xl flex gap-3 backdrop-blur-sm relative z-10">
@@ -1304,24 +1295,7 @@ export default function ChatPanel() {
               )}
             </AnimatePresence>
 
-            {chatMode === 'plan' ? <PlanConversationWorkspace conversation={<Virtuoso
-                key={currentThreadId ?? 'no-thread'}
-                ref={virtuosoRef}
-                data={timelineItems}
-                computeItemKey={(_, item) => item.key}
-                atBottomStateChange={handleBottomStateChange}
-                rangeChanged={handleTimelineRangeChanged}
-                initialTopMostItemIndex={initialIndexRef.current}
-                followOutput={followOutput}
-                itemContent={(_, item) => renderTimelineItem(item)}
-                className="custom-scrollbar h-full w-full"
-                style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
-                overscan={12}
-                atBottomThreshold={100}
-                totalListHeightChanged={handleTotalListHeightChanged}
-                skipAnimationFrameInResizeObserver
-                components={virtuosoComponents}
-              />} /> : <Virtuoso
+            {chatMode === 'plan' ? <PlanWorkbench /> : <Virtuoso
                 key={currentThreadId ?? 'no-thread'}
                 ref={virtuosoRef}
                 data={timelineItems}
@@ -1408,14 +1382,14 @@ export default function ChatPanel() {
                 onPaste={handlePaste}
                 textareaRef={textareaRef}
                 inputContainerRef={inputContainerRef}
-                contextItems={contextItems}
+                contextItems={visibleContextItems}
                 onRemoveContextItem={(item) => {
                   const index = contextItems.indexOf(item)
                   if (index !== -1) {
                     removeContextItem(index)
                   }
                 }}
-                activeFilePath={activeFilePath}
+                activeFilePath={contextFilePath}
                 onAddFile={handleAddCurrentFile}
               />
             </div>

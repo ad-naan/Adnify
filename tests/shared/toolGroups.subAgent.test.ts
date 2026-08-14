@@ -29,6 +29,11 @@ describe('getToolsForContext - isSubAgent', () => {
     }
   })
 
+  it('Plan 主代理和执行子代理都可以动态上报细粒度活动', () => {
+    expect(getToolsForContext({ mode: 'plan', planPhase: 'planning' })).toContain('report_plan_activity')
+    expect(getToolsForContext({ mode: 'plan', planPhase: 'executing', isSubAgent: true })).toContain('report_plan_activity')
+  })
+
   it('只裁剪被排除的工具，其余照常保留', () => {
     const main = getToolsForContext({ mode: 'agent' })
     const sub = getToolsForContext({ mode: 'agent', isSubAgent: true })
@@ -51,7 +56,4 @@ describe('getToolsForContext - isSubAgent', () => {
     expect(isToolAvailable('task', { mode: 'agent', isSubAgent: true })).toBe(false)
   })
 
-  it('chat 模式无工具，加不加 isSubAgent 都是空', () => {
-    expect(getToolsForContext({ mode: 'chat', isSubAgent: true })).toEqual([])
-  })
 })

@@ -14,6 +14,7 @@ export * from './preview'
 
 // Result 类型
 export * from './result'
+export * from './planActivity'
 
 // 文档 / 图片读取类型
 export * from './documentReader'

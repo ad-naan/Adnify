@@ -8,9 +8,9 @@
 
 import { logger } from '@utils/Logger'
 import type { WorkMode } from '@/shared/types/workMode'
+import { normalizeMode } from '@/shared/types/workMode'
 import type { ModeDescriptor } from './ModeDescriptor'
 import {
-  CHAT_MODE_DESCRIPTOR,
   AGENT_MODE_DESCRIPTOR,
   PLAN_MODE_DESCRIPTOR,
   PLAN_TASK_WORKER_DESCRIPTOR,
@@ -21,11 +21,10 @@ export class ModeRegistry {
 
   constructor() {
     // Register default descriptors
-    this.register(CHAT_MODE_DESCRIPTOR)
     this.register(AGENT_MODE_DESCRIPTOR)
     this.register(PLAN_MODE_DESCRIPTOR)
 
-    logger.agent.info('[ModeRegistry] Initialized with 3 modes')
+    logger.agent.info('[ModeRegistry] Initialized with Agent and Plan modes')
   }
 
   /**
@@ -81,7 +80,7 @@ export class ModeRegistry {
    * 当前 registry 只接受正式模式名，不再维护历史别名映射。
    */
   normalize(mode: WorkMode | string): WorkMode {
-    return mode as WorkMode
+    return normalizeMode(mode)
   }
 
   /**

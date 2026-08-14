@@ -4,7 +4,6 @@
 
 // 类型
 export type {
-    PlanState,
     PlanConfig,
     PlanEvent,
     TaskPlan,

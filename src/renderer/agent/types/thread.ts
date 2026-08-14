@@ -3,6 +3,7 @@
  */
 
 import type { ToolCall, ToolStreamingPreview } from '@/shared/types'
+import { normalizeMode } from '@/shared/types/workMode'
 import type { ChatMessage } from './messages'
 import { getMessageText } from './messages'
 import type { MessageCheckpoint } from './checkpoint'
@@ -185,7 +186,7 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
     pendingObjective: thread.pendingObjective,
     pendingSteps: thread.pendingSteps,
     lastActiveServer: thread.lastActiveServer,
-    mode: thread.mode,
+    mode: normalizeMode(thread.mode),
     origin: thread.origin,
     planId: thread.planId,
     taskId: thread.taskId,
@@ -203,6 +204,7 @@ export function fromPersistedChatThread(thread: PersistedChatThread): ChatThread
 
   return {
     ...thread,
+    mode: normalizeMode(thread.mode),
     messages,
     messagesHydrated,
     contextItems: thread.contextItems || [],

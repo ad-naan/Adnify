@@ -20,11 +20,18 @@ export interface ThreadStoreState {
 }
 
 export interface ThreadActions {
-    createThread: (options?: { activate?: boolean }) => string
+    createThread: (options?: {
+        activate?: boolean
+        mode?: ChatThread['mode']
+        origin?: ChatThread['origin']
+        planId?: string
+        taskId?: string
+    }) => string
     renameThread: (threadId: string, title: string) => boolean
     switchThread: (threadId: string) => void
     deleteThread: (threadId: string) => void
     getCurrentThread: () => ChatThread | null
+    setThreadMetadata: (threadId: string, metadata: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId'>) => void
 
     setStreamState: (state: Partial<StreamState>, threadId?: string) => void
     setStreamPhase: (phase: StreamState['phase'], threadId?: string) => void
@@ -53,7 +60,7 @@ export type ThreadSlice = ThreadStoreState & ThreadActions
 
 const generateId = () => crypto.randomUUID()
 
-export const createEmptyThread = (): ChatThread => ({
+export const createEmptyThread = (metadata?: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId'>): ChatThread => ({
     id: generateId(),
     createdAt: Date.now(),
     lastModified: Date.now(),
@@ -62,6 +69,7 @@ export const createEmptyThread = (): ChatThread => ({
     contextItems: [],
     messageCheckpoints: [],
     contextSummary: null,
+    ...metadata,
     ...createRuntimeThreadState(),
 })
 
@@ -124,7 +132,12 @@ export const createThreadSlice: StateCreator<
     threadMessageVersions: {},
 
     createThread: (options) => {
-        const thread = createEmptyThread()
+        const thread = createEmptyThread({
+            mode: options?.mode,
+            origin: options?.origin,
+            planId: options?.planId,
+            taskId: options?.taskId,
+        })
         const activate = options?.activate ?? true
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
@@ -186,6 +199,12 @@ export const createThreadSlice: StateCreator<
         })
 
         return renamed
+    },
+
+    setThreadMetadata: (threadId, metadata) => {
+        set(state => ({
+            threads: updateThread(state.threads, threadId, metadata),
+        }))
     },
 
     switchThread: (threadId) => {

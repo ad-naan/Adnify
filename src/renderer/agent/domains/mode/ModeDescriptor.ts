@@ -114,46 +114,6 @@ export interface ModeDescriptor {
 
 // ===== Default Descriptors =====
 
-export const CHAT_MODE_DESCRIPTOR: ModeDescriptor = {
-  id: 'chat',
-  displayName: 'Chat',
-  description: 'Quick Q&A without tool execution',
-  toolPolicy: {
-    enabled: false,
-  },
-  promptProfile: {
-    includeWorkspaceContext: false,
-    includeOpenFiles: false,
-    includeActiveFile: false,
-    includeCustomInstructions: true,
-  },
-  contextProfile: {
-    includeFullHistory: true,
-    includeToolHistory: false,
-    includeSummaryContext: false,
-    includePlanContext: false,
-    maxContextItems: 5,
-    contextPriority: ['history'],
-  },
-  budgetProfile: {
-    targetRatio: 0.7,
-    reservedOutputTokens: 4096,
-    reservedSafetyTokens: 2048,
-    initialCompressionLevel: 0,
-    enableAutoCompression: true,
-    enableSummaryGeneration: false,
-    enableHandoffGeneration: false,
-  },
-  persistenceProfile: {
-    persistThread: true,
-    persistMessages: true,
-    persistContextItems: true,
-    persistCompressionStats: true,
-    persistSummary: false,
-    restoreOnStartup: true,
-  },
-}
-
 export const AGENT_MODE_DESCRIPTOR: ModeDescriptor = {
   id: 'agent',
   displayName: 'Agent',

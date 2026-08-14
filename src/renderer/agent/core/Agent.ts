@@ -132,6 +132,14 @@ export class AgentClass {
         throw new Error('No thread ID after prepareExecution')
       }
 
+      const preparedThread = useAgentStore.getState().threads[threadId]
+      store.setThreadMetadata(threadId, {
+        mode: chatMode,
+        origin: preparedThread?.origin || (executionOptions?.isSubAgent ? 'plan-task' : 'user'),
+        planId: preparedThread?.planId,
+        taskId: preparedThread?.taskId,
+      })
+
       const threadStore = useAgentStore.getState().forThread(threadId)
       threadStore.setExecutionMeta({
         requestId,

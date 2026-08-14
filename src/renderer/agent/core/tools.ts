@@ -21,55 +21,12 @@ import { truncateToolResult } from '@/renderer/utils/partialJson'
 import { getAgentConfig } from '../utils/AgentConfig'
 import type { ToolCall } from '@/shared/types'
 import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
-import { approvalService as sharedApprovalService } from './approvalService'
+import { approvalService } from './approvalService'
 import { useAgentStore } from '../store/AgentStore'
 import { buildExecutionBatches } from './toolExecutionPlan'
 import { streamingEditService } from '../services/streamingEditService'
 import { resolveStreamingEditFilePath } from '../services/streamingEditPreview'
 import { shellServerRoutingService } from '../services/shellServerRoutingService'
-
-// ===== 审批服务 =====
-
-class ApprovalServiceClass {
-  private pendingResolves = new Map<string, (approved: boolean) => void>()
-
-  async waitForApproval(requestId?: string): Promise<boolean> {
-    const id = requestId || crypto.randomUUID()
-    return new Promise((resolve) => {
-      this.pendingResolves.set(id, resolve)
-    })
-  }
-
-  approve(requestId?: string): void {
-    if (requestId) {
-      this.pendingResolves.get(requestId)?.(true)
-      this.pendingResolves.delete(requestId)
-    } else {
-      // 向后兼容：如果没有 requestId，批准最后一个
-      const lastKey = Array.from(this.pendingResolves.keys()).pop()
-      if (lastKey) {
-        this.pendingResolves.get(lastKey)?.(true)
-        this.pendingResolves.delete(lastKey)
-      }
-    }
-  }
-
-  reject(requestId?: string): void {
-    if (requestId) {
-      this.pendingResolves.get(requestId)?.(false)
-      this.pendingResolves.delete(requestId)
-    } else {
-      // 向后兼容：如果没有 requestId，拒绝最后一个
-      const lastKey = Array.from(this.pendingResolves.keys()).pop()
-      if (lastKey) {
-        this.pendingResolves.get(lastKey)?.(false)
-        this.pendingResolves.delete(lastKey)
-      }
-    }
-  }
-}
-
-export const approvalService = new ApprovalServiceClass()
 
 // ===== 文件快照 =====
 
@@ -741,7 +698,7 @@ export async function executeTools(
     })
 
     // 等待用户审批
-    const approved = await sharedApprovalService.waitForApproval(context.requestId)
+    const approved = await approvalService.waitForApproval(context.requestId)
 
     if (!approved || abortSignal?.aborted) {
       // 用户拒绝了这个工具

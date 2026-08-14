@@ -4,34 +4,4 @@
 
 // 从 shared 导入共享类型
 export type { WorkMode } from '@shared/types/workMode'
-import type { WorkMode } from '@shared/types/workMode'
-
-/** 模式配置 */
-export interface ModeConfig {
-    id: WorkMode
-    label: string
-    icon: string
-    description: string
-}
-
-/** 所有模式配置 */
-export const MODE_CONFIGS: Record<WorkMode, ModeConfig> = {
-    chat: {
-        id: 'chat',
-        label: 'Chat',
-        icon: 'MessageSquare',
-        description: '快速问答，无工具调用'
-    },
-    agent: {
-        id: 'agent',
-        label: 'Agent',
-        icon: 'Wrench',
-        description: '单次任务，工具调用'
-    },
-    plan: {
-        id: 'plan',
-        label: 'Plan',
-        icon: 'Workflow',
-        description: '多步规划，任务编排'
-    }
-}
+export { USER_WORK_MODES, normalizeMode } from '@shared/types/workMode'

@@ -141,7 +141,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       category: 'AI',
       action: () => {
         setChatVisible(true)
-        setMode('chat')
+        setMode('agent')
         if (query) setInputPrompt(query)
       }
     },
@@ -154,7 +154,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
-          setMode('chat')
+          setMode('agent')
           setInputPrompt(`Explain the file ${activeFilePath} in detail.`)
         }
       }
@@ -168,7 +168,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
-          setMode('chat')
+          setMode('agent')
           setInputPrompt(`Analyze ${activeFilePath} and suggest refactoring improvements for readability and performance.`)
         }
       }
@@ -182,7 +182,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
-          setMode('chat')
+          setMode('agent')
           setInputPrompt(`Find potential bugs in ${activeFilePath} and provide fixes.`)
         }
       }
