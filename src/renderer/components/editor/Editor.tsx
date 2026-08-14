@@ -529,7 +529,7 @@ export default function Editor() {
             ) : isPlanJsonFile(activeFile.path) ? (
               <TaskBoard planId={getPlanIdFromPlanFilePath(activeFile.path)} />
             ) : activeFileType === 'markdown' && markdownMode === 'preview' ? (
-              <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
+              <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} sourcePath={activeFile.path} />
             ) : activeFileType === 'markdown' && markdownMode === 'split' ? (
               <div className="flex h-full">
                 <div className="flex-1 border-r border-border">
@@ -557,7 +557,7 @@ export default function Editor() {
                   />
                 </div>
                 <div className="flex-1 relative overflow-hidden">
-                  <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} />
+                  <MarkdownPreview content={activeFile.content} fontSize={getEditorConfig().fontSize} sourcePath={activeFile.path} />
                 </div>
               </div>
             ) : activeFile.originalContent !== undefined ? (

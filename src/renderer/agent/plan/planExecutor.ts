@@ -128,11 +128,13 @@ function waitForAgentCompletion(
 ): Promise<{ success: boolean; output: string; error?: string; assistantId?: string }> {
     return new Promise((resolve) => {
         let settled = false
-        let timer: ReturnType<typeof setTimeout> | null = null
+        let timer: ReturnType<typeof setInterval> | null = null
+        let activeElapsedMs = 0
+        let lastTickAt = Date.now()
 
         const cleanup = () => {
             if (timer) {
-                clearTimeout(timer)
+                clearInterval(timer)
                 timer = null
             }
             unsubscribe()
@@ -166,9 +168,23 @@ function waitForAgentCompletion(
             settle({ success: true, output, assistantId })
         })
 
-        timer = setTimeout(() => {
-            settle({ success: false, output: '', error: `Agent execution timed out after ${timeoutMs}ms` })
-        }, timeoutMs)
+        // Waiting for an explicit user decision is not execution time. Keeping a
+        // wall-clock timeout here made hidden Plan threads fail while the approval
+        // card was sitting in another conversation.
+        timer = setInterval(() => {
+            const now = Date.now()
+            const thread = useAgentStore.getState().threads[identity.threadId]
+            const isWaitingForApproval = thread?.streamState?.phase === 'tool_pending'
+
+            if (!isWaitingForApproval) {
+                activeElapsedMs += now - lastTickAt
+            }
+            lastTickAt = now
+
+            if (activeElapsedMs >= timeoutMs) {
+                settle({ success: false, output: '', error: `Agent execution timed out after ${timeoutMs}ms of active work` })
+            }
+        }, 1000)
     })
 }
 
@@ -341,14 +357,8 @@ async function runExecutionLoop(session: ExecutionSession): Promise<void> {
         }
 
         if (plan.executionMode === 'parallel') {
-            const batch = session.scheduler.getParallelBatch(plan)
-            if (batch.length === 0) {
-                if (session.scheduler.isComplete(plan) || !session.scheduler.hasRunningTasks()) {
-                    await completeExecution(session, plan)
-                }
-                break
-            }
-            await Promise.all(batch.map(task => executeTask(session, task, plan)))
+            await runParallelTasks(session)
+            break
         } else {
             const task = session.scheduler.getNextTask(plan)
             if (!task) {
@@ -360,6 +370,39 @@ async function runExecutionLoop(session: ExecutionSession): Promise<void> {
             await executeTask(session, task, plan)
         }
     }
+}
+
+async function runParallelTasks(session: ExecutionSession): Promise<void> {
+    const inFlight = new Map<string, Promise<void>>()
+
+    while (session.status === 'running' && !session.scheduler.isAborted) {
+        const store = useAgentStore.getState()
+        const plan = store.getPlan(session.planId)
+        if (!plan) throw new Error(`Plan ${session.planId} not found during parallel execution`)
+
+        const batch = session.scheduler.getParallelBatch(plan)
+        for (const task of batch) {
+            if (inFlight.has(task.id)) continue
+            const execution = executeTask(session, task, plan).finally(() => {
+                inFlight.delete(task.id)
+            })
+            inFlight.set(task.id, execution)
+        }
+
+        if (inFlight.size === 0) {
+            const latestPlan = store.getPlan(session.planId)
+            if (latestPlan && (session.scheduler.isComplete(latestPlan) || !session.scheduler.hasRunningTasks())) {
+                await completeExecution(session, latestPlan)
+            }
+            return
+        }
+
+        // Refill a free slot as soon as any task completes. A task waiting for
+        // approval remains visible and bound, but no longer blocks the whole batch.
+        await Promise.race(inFlight.values())
+    }
+
+    await Promise.allSettled(inFlight.values())
 }
 
 async function executeTask(

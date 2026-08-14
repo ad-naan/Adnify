@@ -25,7 +25,7 @@ export const MODE_CONFIGS: Record<WorkMode, ModeConfig> = {
     agent: {
         id: 'agent',
         label: 'Agent',
-        icon: 'Sparkles',
+        icon: 'Wrench',
         description: '单次任务，工具调用'
     },
     plan: {

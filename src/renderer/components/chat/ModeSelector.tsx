@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Check, MessageSquare, Sparkles, Workflow } from 'lucide-react'
+import { ChevronDown, Check, MessageSquare, Wrench, Workflow } from 'lucide-react'
 import { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
 
@@ -28,10 +28,10 @@ const MODES: Array<{
     },
     {
       id: 'agent',
-      icon: Sparkles,
+      icon: Wrench,
       labelKey: 'Agent',
-      descZh: 'AI 代理，可执行工具',
-      descEn: 'AI agent with tool execution',
+      descZh: '使用工具完成单次任务',
+      descEn: 'Complete a task with tools',
       color: 'text-accent',
     },
     {

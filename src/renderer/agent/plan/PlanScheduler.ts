@@ -44,7 +44,10 @@ const hasConflict = (task: PlanTask, selected: PlanTask[]): boolean => {
     const taskWrites = new Set(task.producesFiles || [])
     const taskReads = new Set(task.consumesFiles || [])
 
-    if (normalizeExecutionClass(task) === 'write-heavy') {
+    if (
+        normalizeExecutionClass(task) === 'write-heavy'
+        || selected.some(candidate => normalizeExecutionClass(candidate) === 'write-heavy')
+    ) {
         return selected.length > 0
     }
 
@@ -72,6 +75,7 @@ const hasConflict = (task: PlanTask, selected: PlanTask[]): boolean => {
 export class ExecutionScheduler {
     private config: PlanConfig
     private runningTasks: Set<string> = new Set()
+    private runningTaskSnapshots: Map<string, PlanTask> = new Map()
     private paused = false
     private stopped = false
 
@@ -157,12 +161,14 @@ export class ExecutionScheduler {
         this.paused = false
         this.stopped = false
         this.runningTasks.clear()
+        this.runningTaskSnapshots.clear()
     }
 
     stop(): void {
         this.stopped = true
         this.paused = false
         this.runningTasks.clear()
+        this.runningTaskSnapshots.clear()
     }
 
     pause(): void {
@@ -184,6 +190,7 @@ export class ExecutionScheduler {
         task.attempt = (task.attempt || 0) + 1
         task.executionClass = normalizeExecutionClass(task)
         this.runningTasks.add(task.id)
+        this.runningTaskSnapshots.set(task.id, { ...task })
     }
 
     markTaskCompleted(task: PlanTask, output: string): TaskExecutionResult {
@@ -193,6 +200,7 @@ export class ExecutionScheduler {
         task.error = undefined
         task.completedAt = Date.now()
         this.runningTasks.delete(task.id)
+        this.runningTaskSnapshots.delete(task.id)
 
         return { taskId: task.id, success: true, output, duration }
     }
@@ -203,6 +211,7 @@ export class ExecutionScheduler {
         task.error = error
         task.completedAt = Date.now()
         this.runningTasks.delete(task.id)
+        this.runningTaskSnapshots.delete(task.id)
 
         return { taskId: task.id, success: false, output: '', error, duration }
     }
@@ -213,6 +222,7 @@ export class ExecutionScheduler {
         task.startedAt = undefined
         task.completedAt = undefined
         this.runningTasks.delete(task.id)
+        this.runningTaskSnapshots.delete(task.id)
     }
 
     isComplete(plan: TaskPlan): boolean {
@@ -223,6 +233,10 @@ export class ExecutionScheduler {
 
     hasRunningTasks(): boolean {
         return this.runningTasks.size > 0
+    }
+
+    get availableSlots(): number {
+        return Math.max(0, this.config.maxConcurrency - this.runningTasks.size)
     }
 
     calculateStats(plan: TaskPlan, startedAt: number): ExecutionStats {
@@ -242,14 +256,20 @@ export class ExecutionScheduler {
         const ranked = this.rankTasks(this.getExecutableTasks(plan))
         const selected: PlanTask[] = []
         const resourceKeys = new Set<string>()
+        const running = Array.from(this.runningTaskSnapshots.values())
+
+        for (const task of running) {
+            for (const key of collectResourceKeys(task)) resourceKeys.add(key)
+        }
 
         for (const task of ranked) {
-            if (selected.length >= this.config.maxConcurrency) break
-            if (hasConflict(task, selected)) continue
+            if (selected.length >= this.availableSlots) break
+            if (hasConflict(task, [...running, ...selected])) continue
 
             const nextKeys = collectResourceKeys(task)
-            const writeHeavyCount = selected.filter(candidate => normalizeExecutionClass(candidate) === 'write-heavy').length
-            const approvalHeavyCount = selected.filter(candidate => normalizeExecutionClass(candidate) === 'approval-heavy').length
+            const activeTasks = [...running, ...selected]
+            const writeHeavyCount = activeTasks.filter(candidate => normalizeExecutionClass(candidate) === 'write-heavy').length
+            const approvalHeavyCount = activeTasks.filter(candidate => normalizeExecutionClass(candidate) === 'approval-heavy').length
 
             if (normalizeExecutionClass(task) === 'write-heavy' && writeHeavyCount >= 1) continue
             if (normalizeExecutionClass(task) === 'approval-heavy' && approvalHeavyCount >= 1) continue
