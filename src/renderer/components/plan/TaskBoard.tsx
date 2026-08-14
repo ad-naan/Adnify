@@ -1,543 +1,290 @@
-/**
- * TaskBoard - 任务规划看板
- * 显示需求文档和任务列表，支持模型/角色选择
- */
-
-import { memo, useState, useMemo, useCallback, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import {
-    Play,
-    Pause,
-    Square,
+    AlertTriangle,
+    Check,
     CheckCircle2,
     Circle,
-    AlertCircle,
-    Clock,
-    ChevronDown,
-    ChevronRight,
+    ExternalLink,
     FileText,
-    ListTodo,
+    GitBranch,
+    ListChecks,
+    LoaderCircle,
+    Pause,
+    Play,
+    Rows3,
     Settings2,
-    Sparkles,
+    ShieldAlert,
+    Square,
+    TerminalSquare,
+    Timer,
+    X,
 } from 'lucide-react'
 import { Button, Select } from '@/renderer/components/ui'
 import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { Agent } from '@/renderer/agent/core/Agent'
+import { getMessageText } from '@/renderer/agent/types'
 import { useStore } from '@/renderer/store'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { api } from '@/renderer/services/electronAPI'
 import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
-import {
-    getPromptTemplateSummary,
-} from '@/renderer/agent/prompts/promptTemplates'
-import type { PlanTask, ExecutionMode } from '@/renderer/agent/store/slices/planSlice'
+import { getPromptTemplateSummary } from '@/renderer/agent/prompts/promptTemplates'
+import type { ExecutionMode, PlanTask } from '@/renderer/agent/store/slices/planSlice'
 
-interface TaskBoardProps {
-    planId: string
-}
+interface TaskBoardProps { planId: string }
 
-function getLocalizedText(language: string, zh: string, en: string): string {
-    return language === 'zh' ? zh : en
-}
+const copy = (language: string, zh: string, en: string) => language === 'zh' ? zh : en
 
-// ============================================
-// 子组件
-// ============================================
-
-/** 任务状态图标 */
-const TaskStatusIcon = memo(function TaskStatusIcon({ status }: { status: PlanTask['status'] }) {
-    switch (status) {
-        case 'completed':
-            return <CheckCircle2 className="w-4 h-4 text-green-500" />
-        case 'running':
-            return <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                <Sparkles className="w-4 h-4 text-blue-500" />
-            </motion.div>
-        case 'failed':
-            return <AlertCircle className="w-4 h-4 text-red-500" />
-        case 'skipped':
-            return <Circle className="w-4 h-4 text-muted-foreground" />
-        default:
-            return <Clock className="w-4 h-4 text-muted-foreground" />
+function statusMeta(task: PlanTask, waitingApproval: boolean, language: string) {
+    if (waitingApproval) return { label: copy(language, '等待批准', 'Needs approval'), tone: 'text-amber-400', bg: 'bg-amber-400/10', icon: ShieldAlert }
+    switch (task.status) {
+        case 'completed': return { label: copy(language, '已完成', 'Completed'), tone: 'text-emerald-400', bg: 'bg-emerald-400/10', icon: CheckCircle2 }
+        case 'running': return { label: copy(language, '执行中', 'Running'), tone: 'text-sky-400', bg: 'bg-sky-400/10', icon: LoaderCircle }
+        case 'failed': return { label: copy(language, '失败', 'Failed'), tone: 'text-red-400', bg: 'bg-red-400/10', icon: AlertTriangle }
+        case 'skipped': return { label: copy(language, '已跳过', 'Skipped'), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: Circle }
+        case 'cancelled': return { label: copy(language, '已取消', 'Cancelled'), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: X }
+        default: return { label: copy(language, '待执行', 'Queued'), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: Timer }
     }
-})
+}
 
-/** 模型选择器 */
-const ModelSelector = memo(function ModelSelector({
-    provider,
-    model,
-    onChange,
-    disabled,
-}: {
+const ModelSelector = memo(function ModelSelector({ provider, model, onChange, disabled }: {
     provider: string
     model: string
     onChange: (provider: string, model: string) => void
     disabled?: boolean
 }) {
-    // 从 store 获取用户配置的厂商
-    const providerConfigs = useStore((s) => s.providerConfigs)
-
-    // 合并内置厂商和用户配置的厂商
-    const allProviders = useMemo(() => {
+    const providerConfigs = useStore(s => s.providerConfigs)
+    const providers = useMemo(() => {
         const result: { id: string; displayName: string; models: string[] }[] = []
-
-        // 添加内置厂商
         for (const [id, config] of Object.entries(BUILTIN_PROVIDERS)) {
-            const userConfig = providerConfigs[id]
-            const models = [...config.models, ...(userConfig?.customModels || [])]
-            result.push({ id, displayName: config.displayName, models })
+            result.push({ id, displayName: config.displayName, models: [...config.models, ...(providerConfigs[id]?.customModels || [])] })
         }
-
-        // 添加自定义厂商
         for (const [id, config] of Object.entries(providerConfigs)) {
-            if (id.startsWith('custom-')) {
-                result.push({
-                    id,
-                    displayName: config.displayName || id,
-                    models: config.customModels || [],
-                })
-            }
+            if (id.startsWith('custom-')) result.push({ id, displayName: config.displayName || id, models: config.customModels || [] })
         }
-
         return result
     }, [providerConfigs])
 
+    const providerOptions = useMemo(() => providers.map(item => ({ value: item.id, label: item.displayName })), [providers])
+    const modelOptions = useMemo(() => Array.from(new Set(providers.find(item => item.id === provider)?.models || [])).map(value => ({ value, label: value })), [provider, providers])
 
-
-    // 转换厂商列表为 Select 选项
-    const providerOptions = useMemo(() => {
-        return allProviders.map(p => ({
-            value: p.id,
-            label: p.displayName
-        }))
-    }, [allProviders])
-
-    // 获取当前厂商的模型列表（去重）并转换为 Select 选项
-    const modelOptions = useMemo(() => {
-        const providerConfig = allProviders.find(p => p.id === provider)
-        const models = providerConfig?.models || []
-        // 使用 Set 去重
-        const uniqueModels = Array.from(new Set(models))
-
-        return uniqueModels.map(m => ({
-            value: m,
-            label: m
-        }))
-    }, [allProviders, provider])
-
-    return (
-        <div className="flex gap-2 items-center">
-            <div className="w-32">
-                <Select
-                    options={providerOptions}
-                    value={provider}
-                    onChange={(val) => {
-                        const newProviderConfig = allProviders.find(p => p.id === val)
-                        const defaultModel = newProviderConfig?.models[0] || ''
-                        onChange(val, defaultModel)
-                    }}
-                    disabled={disabled}
-                    className="text-xs"
-                />
-            </div>
-            <div className="w-48">
-                <Select
-                    options={modelOptions}
-                    value={model}
-                    onChange={(val) => onChange(provider, val)}
-                    disabled={disabled}
-                    className="text-xs"
-                />
-            </div>
-        </div>
-    )
+    return <div className="grid grid-cols-[minmax(120px,0.7fr)_minmax(180px,1.3fr)] gap-2">
+        <Select options={providerOptions} value={provider} disabled={disabled} onChange={next => onChange(next, providers.find(item => item.id === next)?.models[0] || '')} />
+        <Select options={modelOptions} value={model} disabled={disabled} onChange={next => onChange(provider, next)} />
+    </div>
 })
 
-/** 角色选择器 */
-const RoleSelector = memo(function RoleSelector({
-    role,
-    onChange,
-    disabled,
-}: {
-    role: string
-    onChange: (role: string) => void
-    disabled?: boolean
-}) {
-    const templates = useMemo(() => getPromptTemplateSummary(), [])
-    const options = useMemo(() => {
-        return templates.map(t => ({
-            value: t.id,
-            label: t.nameZh || t.name
-        }))
-    }, [templates])
-
-    return (
-        <div className="flex gap-2 items-center">
-            <div className="w-48">
-                <Select
-                    options={options}
-                    value={role}
-                    onChange={onChange}
-                    disabled={disabled}
-                    className="text-xs"
-                />
-            </div>
-        </div>
-    )
-})
-
-/** 单个任务卡片 */
-const TaskCard = memo(function TaskCard({
-    task,
-    planId,
-    isExecuting,
-}: {
-    task: PlanTask
-    planId: string
-    isExecuting: boolean
-}) {
-    const [expanded, setExpanded] = useState(false)
-    const updateTask = useAgentStore((s) => s.updateTask)
-
-    const handleModelChange = useCallback(
-        (provider: string, model: string) => {
-            updateTask(planId, task.id, { provider, model })
-        },
-        [planId, task.id, updateTask]
-    )
-
-    const isActive = task.status === 'running'
-
-    return (
-        <motion.div
-            layout
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`
-        relative rounded-lg border transition-all duration-200 overflow-hidden
-        ${isActive
-                    ? 'border-blue-500/50 bg-blue-500/5 shadow-lg shadow-blue-500/10'
-                    : 'border-border bg-surface/50 hover:bg-surface/80'}
-      `}
-        >
-            {/* 进度条 */}
-            {isActive && (
-                <motion.div
-                    className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-t-lg"
-                    initial={{ width: '0%' }}
-                    animate={{ width: '100%' }}
-                    transition={{ duration: 30, ease: 'linear' }}
-                />
-            )}
-
-            {/* 头部 */}
-            <div
-                className="flex items-center gap-3 p-3 cursor-pointer"
-                onClick={() => setExpanded((e) => !e)}
-            >
-                <TaskStatusIcon status={task.status} />
-                <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-text-primary truncate">{task.title}</div>
-                    <div className="text-xs text-muted-foreground truncate">{task.description}</div>
-                </div>
-                <motion.div animate={{ rotate: expanded ? 90 : 0 }}>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </motion.div>
-            </div>
-
-            {/* 展开详情 */}
-            <AnimatePresence>
-                {expanded && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden"
-                    >
-                        <div className="px-3 pb-3 pt-0 border-t border-border/50">
-                            <div className="flex items-center gap-2 mt-2">
-                                <Settings2 className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">模型配置</span>
-                            </div>
-                            <div className="mt-2">
-                                <ModelSelector
-                                    provider={task.provider}
-                                    model={task.model}
-                                    onChange={handleModelChange}
-                                    disabled={isExecuting}
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2 mt-3">
-                                <Sparkles className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">角色配置</span>
-                            </div>
-                            <div className="mt-2">
-                                <RoleSelector
-                                    role={task.role}
-                                    onChange={(newRole) => updateTask(planId, task.id, { role: newRole })}
-                                    disabled={isExecuting}
-                                />
-                            </div>
-
-                            {task.output && (
-                                <div className="mt-3 p-2 rounded bg-background/50 border border-border/50">
-                                    <div className="text-xs text-muted-foreground mb-1">输出</div>
-                                    <div className="text-xs text-text-primary whitespace-pre-wrap max-h-32 overflow-auto">
-                                        {task.output}
-                                    </div>
-                                </div>
-                            )}
-
-                            {task.error && (
-                                <div className="mt-3 p-2 rounded bg-red-500/10 border border-red-500/30">
-                                    <div className="text-xs text-red-500">{task.error}</div>
-                                </div>
-                            )}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </motion.div>
-    )
-})
-
-/** 执行模式切换 */
-const ExecutionModeToggle = memo(function ExecutionModeToggle({
-    mode,
-    onChange,
-    disabled,
-}: {
+const ModeToggle = memo(function ModeToggle({ mode, disabled, onChange, language }: {
     mode: ExecutionMode
+    disabled: boolean
     onChange: (mode: ExecutionMode) => void
-    disabled?: boolean
+    language: string
 }) {
-    const optionClass = (value: ExecutionMode) => [
-        'h-8 px-3 text-xs font-medium rounded-md transition-all border',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40',
-        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-        mode === value
-            ? 'bg-accent text-accent-foreground border-accent shadow-sm shadow-accent/20'
-            : 'bg-transparent text-text-secondary border-transparent hover:bg-surface-hover hover:text-text-primary',
-    ].join(' ')
-
-    return (
-        <div
-            className="flex items-center gap-1 p-1 rounded-lg bg-surface/50 border border-border"
-            title="顺序执行一次运行一个任务；并行执行会同时运行互不依赖且资源不冲突的任务。"
+    return <div className="inline-flex rounded-lg border border-border/70 bg-background/60 p-0.5">
+        {([
+            ['sequential', Rows3, copy(language, '顺序', 'Serial')],
+            ['parallel', GitBranch, copy(language, '并行', 'Parallel')],
+        ] as const).map(([value, Icon, label]) => <button
+            key={value}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(value)}
+            className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${mode === value ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
         >
-            <button
-                type="button"
-                className={optionClass('sequential')}
-                onClick={() => onChange('sequential')}
-                disabled={disabled}
-                aria-pressed={mode === 'sequential'}
-                title="顺序执行：一次只运行一个任务，最稳妥。"
-            >
-                顺序执行
-            </button>
-            <button
-                type="button"
-                className={optionClass('parallel')}
-                onClick={() => onChange('parallel')}
-                disabled={disabled}
-                aria-pressed={mode === 'parallel'}
-                title="并行执行：同时运行可并发的任务，依赖未满足或文件冲突的任务仍会等待。"
-            >
-                并行执行
-            </button>
-        </div>
-    )
+            <Icon className="h-3.5 w-3.5" />{label}
+        </button>)}
+    </div>
 })
-
-// ============================================
-// 主组件
-// ============================================
 
 export const TaskBoard = memo(function TaskBoard({ planId }: TaskBoardProps) {
-    const [showRequirements, setShowRequirements] = useState(true)
-    const [requirementsContent, setRequirementsContent] = useState<string>('')
-    const plan = useAgentStore((s) => s.plans.find((p) => p.id === planId))
-    const updatePlan = useAgentStore((s) => s.updatePlan)
-    const workspacePath = useStore((s) => s.workspacePath)
-    const language = useStore((s) => s.language)
+    const language = useStore(s => s.language)
+    const workspacePath = useStore(s => s.workspacePath)
+    const plan = useAgentStore(s => s.plans.find(item => item.id === planId))
+    const threads = useAgentStore(s => s.threads)
+    const updatePlan = useAgentStore(s => s.updatePlan)
+    const updateTask = useAgentStore(s => s.updateTask)
+    const switchThread = useAgentStore(s => s.switchThread)
+    const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+    const [requirementsContent, setRequirementsContent] = useState('')
+    const [showRequirements, setShowRequirements] = useState(false)
+
+    const runtimeByTask = useMemo(() => new Map((plan?.tasks || []).map(task => {
+        const thread = task.threadId ? threads[task.threadId] : undefined
+        const waitingApproval = thread?.streamState?.phase === 'tool_pending'
+        const latestAssistant = thread ? [...thread.messages].reverse().find(message => message.role === 'assistant') : undefined
+        return [task.id, {
+            thread,
+            waitingApproval,
+            tool: waitingApproval ? thread?.streamState?.currentToolCall : undefined,
+            latestText: latestAssistant?.role === 'assistant' ? getMessageText(latestAssistant.content).trim() : '',
+        }] as const
+    })), [plan?.tasks, threads])
+
+    const selectedTask = plan?.tasks.find(task => task.id === selectedTaskId) || plan?.tasks[0]
+    const selectedRuntime = selectedTask ? runtimeByTask.get(selectedTask.id) : undefined
     const isExecuting = plan?.status === 'executing' || plan?.status === 'pausing' || plan?.status === 'stopping'
     const isPaused = plan?.status === 'paused'
 
-    // 加载需求文档内容
+    useEffect(() => {
+        if (!plan?.tasks.length) return
+        const approvalTask = plan.tasks.find(task => runtimeByTask.get(task.id)?.waitingApproval)
+        if (approvalTask) setSelectedTaskId(approvalTask.id)
+        else if (!selectedTaskId || !plan.tasks.some(task => task.id === selectedTaskId)) setSelectedTaskId(plan.tasks[0].id)
+    }, [plan?.tasks, runtimeByTask, selectedTaskId])
+
     useEffect(() => {
         if (!plan?.requirementsDoc || !workspacePath) return
-        const loadRequirements = async () => {
-            try {
-                const mdPath = `${workspacePath}/.adnify/plan/${plan.requirementsDoc}`
-                const content = await api.file.read(mdPath)
-                if (content) {
-                    setRequirementsContent(content)
-                }
-            } catch (err) {
-                console.error('Failed to load requirements doc:', err)
-            }
-        }
-        loadRequirements()
+        api.file.read(`${workspacePath}/.adnify/plan/${plan.requirementsDoc}`)
+            .then(content => setRequirementsContent(content || ''))
+            .catch(() => setRequirementsContent(''))
     }, [plan?.requirementsDoc, workspacePath])
 
-    // 统计
     const stats = useMemo(() => {
-        if (!plan) return { total: 0, completed: 0, failed: 0 }
-        return {
-            total: plan.tasks.length,
-            completed: plan.tasks.filter((t) => t.status === 'completed').length,
-            failed: plan.tasks.filter((t) => t.status === 'failed').length,
-        }
-    }, [plan])
+        const tasks = plan?.tasks || []
+        const completed = tasks.filter(task => task.status === 'completed').length
+        const failed = tasks.filter(task => task.status === 'failed').length
+        const running = tasks.filter(task => task.status === 'running').length
+        const approvals = tasks.filter(task => runtimeByTask.get(task.id)?.waitingApproval).length
+        return { total: tasks.length, completed, failed, running, approvals, percent: tasks.length ? Math.round((completed / tasks.length) * 100) : 0 }
+    }, [plan?.tasks, runtimeByTask])
 
-    const handleExecutionModeChange = useCallback(
-        (mode: ExecutionMode) => {
-            if (plan) {
-                updatePlan(plan.id, { executionMode: mode })
-            }
-        },
-        [plan, updatePlan]
-    )
-
-    const handleStart = useCallback(async () => {
-        if (plan) {
-            // 使用 planExecutor 启动执行
-            const { startPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
-            const result = await startPlanExecution(plan.id)
-            if (!result.success) {
-                toast.error(
-                    getLocalizedText(language, '启动执行失败', 'Failed to start execution'),
-                    result.message
-                )
-            }
-        }
+    const start = useCallback(async () => {
+        if (!plan) return
+        const { startPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
+        const result = await startPlanExecution(plan.id)
+        if (!result.success) toast.error(copy(language, '启动执行失败', 'Failed to start'), result.message)
     }, [language, plan])
+    const pause = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).pausePlanExecution(planId), [planId])
+    const stop = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).stopPlanExecution(planId), [planId])
+    const resume = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).resumePlanExecution(planId), [planId])
 
-    const handleStop = useCallback(async () => {
-        // 使用 planExecutor 停止执行
-        const { stopPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
-        stopPlanExecution(planId)
-    }, [planId])
+    if (!plan) return <div className="flex h-full items-center justify-center text-sm text-text-muted">{copy(language, '计划不存在', 'Plan not found')}</div>
 
-    const handlePause = useCallback(async () => {
-        const { pausePlanExecution } = await import('@/renderer/agent/plan/planExecutor')
-        pausePlanExecution(planId)
-    }, [planId])
-
-    const handleResume = useCallback(async () => {
-        const { resumePlanExecution } = await import('@/renderer/agent/plan/planExecutor')
-        await resumePlanExecution(planId)
-    }, [planId])
-
-    if (!plan) {
-        return (
-            <div className="flex items-center justify-center h-full text-muted-foreground">
-                规划不存在
-            </div>
-        )
-    }
-
-    return (
-        <div className="h-full flex flex-col bg-background">
-            {/* 头部 */}
-            <div className="flex-shrink-0 p-4 border-b border-border bg-surface/30 backdrop-blur-sm">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-lg font-semibold text-text-primary">{plan.name}</h1>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                            <span>{stats.total} 个任务</span>
-                            <span className="text-green-500">{stats.completed} 完成</span>
-                            {stats.failed > 0 && <span className="text-red-500">{stats.failed} 失败</span>}
-                        </div>
+    return <div className="flex h-full min-h-0 flex-col bg-background">
+        <header className="shrink-0 border-b border-border/60 bg-surface/20 px-5 py-4">
+            <div className="flex items-start justify-between gap-5">
+                <div className="min-w-0">
+                    <div className="mb-1 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-text-muted">
+                        <ListChecks className="h-3.5 w-3.5" />{copy(language, '执行控制台', 'Execution console')}
                     </div>
-                    <div className="flex items-center gap-3">
-                        <ExecutionModeToggle
-                            mode={plan.executionMode}
-                            onChange={handleExecutionModeChange}
-                            disabled={isExecuting}
-                        />
-                        {isExecuting ? (
-                            <>
-                                <Button variant="secondary" size="sm" onClick={handlePause} disabled={plan.status === 'pausing' || plan.status === 'stopping'}>
-                                    <Pause className="w-4 h-4 mr-1" />
-                                    暂停
-                                </Button>
-                                <Button variant="danger" size="sm" onClick={handleStop} disabled={plan.status === 'stopping'}>
-                                    <Square className="w-4 h-4 mr-1" />
-                                    停止
-                                </Button>
-                            </>
-                        ) : isPaused ? (
-                            <>
-                                <Button variant="primary" size="sm" onClick={handleResume}>
-                                    <Play className="w-4 h-4 mr-1" />
-                                    继续
-                                </Button>
-                                <Button variant="danger" size="sm" onClick={handleStop}>
-                                    <Square className="w-4 h-4 mr-1" />
-                                    停止
-                                </Button>
-                            </>
-                        ) : (
-                            <Button variant="primary" size="sm" onClick={handleStart}>
-                                <Play className="w-4 h-4 mr-1" />
-                                开始执行
-                            </Button>
-                        )}
+                    <h1 className="truncate text-lg font-semibold text-text-primary">{plan.name}</h1>
+                    <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
+                        <span>{stats.completed}/{stats.total} {copy(language, '已完成', 'complete')}</span>
+                        {stats.running > 0 && <span className="text-sky-400">{stats.running} {copy(language, '运行中', 'running')}</span>}
+                        {stats.approvals > 0 && <span className="text-amber-400">{stats.approvals} {copy(language, '待批准', 'need approval')}</span>}
+                        {stats.failed > 0 && <span className="text-red-400">{stats.failed} {copy(language, '失败', 'failed')}</span>}
                     </div>
                 </div>
+                <div className="flex shrink-0 items-center gap-2">
+                    <ModeToggle language={language} mode={plan.executionMode} disabled={Boolean(isExecuting)} onChange={mode => updatePlan(plan.id, { executionMode: mode })} />
+                    <Button variant="ghost" size="sm" onClick={() => setShowRequirements(value => !value)} leftIcon={<FileText className="h-4 w-4" />}>
+                        {copy(language, '需求', 'Brief')}
+                    </Button>
+                    {isExecuting ? <>
+                        <Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-4 w-4" />}>{copy(language, '暂停', 'Pause')}</Button>
+                        <Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3.5 w-3.5" />}>{copy(language, '停止', 'Stop')}</Button>
+                    </> : isPaused ? <>
+                        <Button size="sm" onClick={resume} leftIcon={<Play className="h-4 w-4" />}>{copy(language, '继续', 'Resume')}</Button>
+                        <Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3.5 w-3.5" />}>{copy(language, '停止', 'Stop')}</Button>
+                    </> : <Button size="sm" onClick={start} leftIcon={<Play className="h-4 w-4" />}>{copy(language, '开始执行', 'Run plan')}</Button>}
+                </div>
             </div>
+            <div className="mt-4 h-1 overflow-hidden rounded-full bg-text-primary/[0.06]">
+                <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${stats.percent}%` }} />
+            </div>
+        </header>
 
-            {/* 内容区 */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* 需求文档 */}
-                <div className={`${showRequirements ? 'w-1/2' : 'w-0'} flex flex-col transition-all duration-300 overflow-hidden border-r border-border bg-background`}>
-                    <div className="flex-shrink-0 flex items-center gap-2 p-3 border-b border-border bg-surface/30">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-text-primary">需求文档</span>
-                    </div>
-                    <div className="flex-1 relative">
-                        {requirementsContent ? (
-                            <MarkdownPreview content={requirementsContent} fontSize={13} />
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-muted-foreground italic">
-                                加载中...
+        {stats.approvals > 0 && <div className="flex shrink-0 items-center gap-3 border-b border-amber-400/20 bg-amber-400/[0.07] px-5 py-2.5 text-xs text-amber-200">
+            <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400" />
+            <span className="font-medium">{copy(language, '计划正在等待你的决定。所有批准请求已集中到这里，无需切换任务线程。', 'The plan needs your decision. Approval requests are collected here; no thread switching required.')}</span>
+        </div>}
+
+        <div className="flex min-h-0 flex-1">
+            <aside className="w-[330px] shrink-0 overflow-y-auto border-r border-border/60 bg-surface/[0.12] p-3">
+                <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-[0.12em] text-text-muted">{copy(language, '任务队列', 'Task queue')}</div>
+                <div className="space-y-1.5">
+                    {plan.tasks.map((task, index) => {
+                        const runtime = runtimeByTask.get(task.id)
+                        const meta = statusMeta(task, Boolean(runtime?.waitingApproval), language)
+                        const Icon = meta.icon
+                        const active = selectedTask?.id === task.id
+                        return <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className={`w-full rounded-xl border p-3 text-left transition-colors ${active ? 'border-accent/35 bg-accent/[0.07]' : 'border-transparent hover:border-border/70 hover:bg-surface/50'}`}>
+                            <div className="flex items-start gap-3">
+                                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${meta.bg} ${meta.tone}`}>
+                                    <Icon className={`h-4 w-4 ${task.status === 'running' && !runtime?.waitingApproval ? 'animate-spin' : ''}`} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="truncate text-sm font-medium text-text-primary">{index + 1}. {task.title}</span>
+                                        <span className={`shrink-0 text-[10px] font-medium ${meta.tone}`}>{meta.label}</span>
+                                    </div>
+                                    <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-muted">{runtime?.tool ? copy(language, `请求执行 ${runtime.tool.name}`, `Requests ${runtime.tool.name}`) : task.description}</p>
+                                </div>
                             </div>
-                        )}
-                    </div>
+                        </button>
+                    })}
                 </div>
+            </aside>
 
-                {/* 折叠按钮 */}
-                <button
-                    className="flex-shrink-0 w-6 flex items-center justify-center border-r border-border hover:bg-surface/50 transition-colors"
-                    onClick={() => setShowRequirements((s) => !s)}
-                >
-                    <motion.div animate={{ rotate: showRequirements ? 0 : 180 }}>
-                        <ChevronDown className="w-4 h-4 text-muted-foreground rotate-90" />
-                    </motion.div>
-                </button>
+            <main className="min-w-0 flex-1 overflow-y-auto p-5">
+                {selectedTask && <div className="mx-auto max-w-4xl space-y-4">
+                    <section className="rounded-2xl border border-border/60 bg-surface/25 p-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <div className="mb-2 flex items-center gap-2">
+                                    {(() => { const meta = statusMeta(selectedTask, Boolean(selectedRuntime?.waitingApproval), language); const Icon = meta.icon; return <><Icon className={`h-4 w-4 ${meta.tone} ${selectedTask.status === 'running' && !selectedRuntime?.waitingApproval ? 'animate-spin' : ''}`} /><span className={`text-xs font-medium ${meta.tone}`}>{meta.label}</span></> })()}
+                                </div>
+                                <h2 className="text-xl font-semibold text-text-primary">{selectedTask.title}</h2>
+                                <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">{selectedTask.description}</p>
+                            </div>
+                            {selectedTask.threadId && <Button variant="ghost" size="sm" onClick={() => switchThread(selectedTask.threadId!)} leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>{copy(language, '完整记录', 'Full log')}</Button>}
+                        </div>
+                    </section>
 
-                {/* 任务列表 */}
-                <div className="flex-1 overflow-auto p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                        <ListTodo className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-text-primary">任务列表</span>
-                    </div>
-                    <div className="space-y-2">
-                        {plan.tasks.map((task) => (
-                            <TaskCard
-                                key={task.id}
-                                task={task}
-                                planId={plan.id}
-                                isExecuting={isExecuting}
-                            />
-                        ))}
-                    </div>
-                </div>
-            </div>
+                    {selectedRuntime?.waitingApproval && selectedRuntime.tool && <section className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.06] p-5 shadow-[0_12px_40px_-28px_rgba(251,191,36,0.7)]">
+                        <div className="flex items-start gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-400"><ShieldAlert className="h-5 w-5" /></div>
+                            <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold text-text-primary">{copy(language, '需要批准才能继续', 'Approval required')}</div>
+                                <p className="mt-1 text-xs leading-5 text-text-muted">{copy(language, '该任务已暂停计时，其他可并行任务会继续调度。', 'This task timeout is paused while other independent work continues.')}</p>
+                                <div className="mt-4 rounded-xl border border-border/60 bg-background/60 p-3">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-text-primary"><TerminalSquare className="h-4 w-4 text-text-muted" />{selectedRuntime.tool.name}</div>
+                                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all text-[11px] leading-5 text-text-muted">{JSON.stringify(selectedRuntime.tool.arguments, null, 2)}</pre>
+                                </div>
+                                <div className="mt-4 flex gap-2">
+                                    <Button variant="success" size="sm" onClick={() => Agent.approve(selectedTask.requestId || selectedRuntime.thread?.streamState?.requestId)} leftIcon={<Check className="h-4 w-4" />}>{copy(language, '批准并继续', 'Approve')}</Button>
+                                    <Button variant="danger" size="sm" onClick={() => Agent.reject(selectedTask.requestId || selectedRuntime.thread?.streamState?.requestId)} leftIcon={<X className="h-4 w-4" />}>{copy(language, '拒绝', 'Reject')}</Button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>}
+
+                    <section className="rounded-2xl border border-border/60 bg-surface/20 p-5">
+                        <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-text-muted"><Settings2 className="h-4 w-4" />{copy(language, '任务配置', 'Task configuration')}</div>
+                        <ModelSelector provider={selectedTask.provider} model={selectedTask.model} disabled={Boolean(isExecuting)} onChange={(provider, model) => updateTask(plan.id, selectedTask.id, { provider, model })} />
+                        <div className="mt-2">
+                            <Select className="w-full" options={getPromptTemplateSummary().map(item => ({ value: item.id, label: item.nameZh || item.name }))} value={selectedTask.role} disabled={Boolean(isExecuting)} onChange={role => updateTask(plan.id, selectedTask.id, { role })} />
+                        </div>
+                    </section>
+
+                    {(selectedRuntime?.latestText || selectedTask.output || selectedTask.error) && <section className="rounded-2xl border border-border/60 bg-background/40 p-5">
+                        <div className="mb-3 text-xs font-semibold uppercase tracking-[0.1em] text-text-muted">{selectedTask.error ? copy(language, '错误', 'Error') : copy(language, '最新进展', 'Latest progress')}</div>
+                        <div className={`whitespace-pre-wrap text-sm leading-6 ${selectedTask.error ? 'text-red-300' : 'text-text-secondary'}`}>{selectedTask.error || selectedRuntime?.latestText || selectedTask.output}</div>
+                    </section>}
+                </div>}
+            </main>
         </div>
-    )
+
+        {showRequirements && <div className="absolute inset-0 z-40 flex justify-end bg-black/35 backdrop-blur-[2px]" onClick={() => setShowRequirements(false)}>
+            <section className="flex h-full w-[min(720px,70vw)] flex-col border-l border-border bg-background shadow-2xl" onClick={event => event.stopPropagation()}>
+                <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-text-primary"><FileText className="h-4 w-4 text-text-muted" />{copy(language, '需求文档', 'Plan brief')}</div>
+                    <Button variant="icon" size="icon" onClick={() => setShowRequirements(false)} aria-label={copy(language, '关闭', 'Close')}><X className="h-4 w-4" /></Button>
+                </div>
+                <div className="relative min-h-0 flex-1 overflow-auto">{requirementsContent ? <MarkdownPreview content={requirementsContent} fontSize={13} sourcePath={workspacePath ? `${workspacePath}/.adnify/plan/${plan.requirementsDoc}` : undefined} /> : <div className="flex h-full items-center justify-center text-sm text-text-muted">{copy(language, '暂无需求内容', 'No brief content')}</div>}</div>
+            </section>
+        </div>}
+    </div>
 })
 
 export default TaskBoard

@@ -9,11 +9,13 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Eye, Edit, Image as ImageIcon, AlertTriangle, Columns } from 'lucide-react'
 import { Button } from '../ui'
-import { getFileName } from '@shared/utils/pathUtils'
+import { getDirname, getFileName, joinPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { t } from '@renderer/i18n'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
@@ -49,26 +51,86 @@ export function isBinaryFile(path: string): boolean {
 interface MarkdownPreviewProps {
     content: string
     fontSize?: number
+    sourcePath?: string
 }
 
-export function MarkdownPreview({ content, fontSize = 14 }: MarkdownPreviewProps) {
+const MARKDOWN_REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, defaultSchema], rehypeKatex] as const
+
+function getImageMimeType(path: string): string {
+    const cleanPath = path.split(/[?#]/)[0]
+    const extension = cleanPath.split('.').pop()?.toLowerCase()
+    const mimeTypes: Record<string, string> = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+        webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', ico: 'image/x-icon',
+    }
+    return mimeTypes[extension || ''] || 'image/png'
+}
+
+function MarkdownImage({ src, alt, sourcePath, width, height }: {
+    src?: string
+    alt?: string
+    sourcePath?: string
+    width?: number | string
+    height?: number | string
+}) {
+    const [resolvedSrc, setResolvedSrc] = useState(src || '')
+    const [failed, setFailed] = useState(false)
+
+    useEffect(() => {
+        let cancelled = false
+        setFailed(false)
+
+        if (!src || /^(?:https?:|data:|blob:|file:)/i.test(src) || !sourcePath) {
+            setResolvedSrc(src || '')
+            return () => { cancelled = true }
+        }
+
+        const imagePath = /^[a-zA-Z]:[/\\]/.test(src) || src.startsWith('/')
+            ? src
+            : joinPath(getDirname(sourcePath), decodeURIComponent(src.split(/[?#]/)[0]))
+
+        api.file.readBinary(imagePath).then(base64 => {
+            if (!cancelled && base64) setResolvedSrc(`data:${getImageMimeType(imagePath)};base64,${base64}`)
+        }).catch(() => {
+            if (!cancelled) setFailed(true)
+        })
+
+        return () => { cancelled = true }
+    }, [sourcePath, src])
+
+    if (!resolvedSrc || failed) {
+        return <span className="inline-flex items-center rounded-md border border-border/70 bg-surface/40 px-2 py-1 text-xs text-text-muted">{alt || src || 'image'}</span>
+    }
+
+    return <img
+        src={resolvedSrc}
+        alt={alt || ''}
+        width={width}
+        height={height}
+        loading="lazy"
+        className="my-3 inline-block max-w-full rounded-lg object-contain align-middle"
+        onError={() => setFailed(true)}
+    />
+}
+
+export function MarkdownPreview({ content, fontSize = 14, sourcePath }: MarkdownPreviewProps) {
     return (
         <div
-            className="absolute inset-0 overflow-y-auto p-6 bg-background custom-scrollbar"
+            className="absolute inset-0 overflow-y-auto bg-background px-6 py-8 custom-scrollbar"
             style={{ fontSize: `${fontSize}px` }}
         >
-            <div className="max-w-3xl mx-auto prose prose-invert">
+            <article className="mx-auto max-w-[920px] text-text-secondary">
                 <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={MARKDOWN_REHYPE_PLUGINS as any}
                     components={{
-                        code({ className, children, node, ...props }) {
+                        code({ className, children, node: _node, ...props }) {
                             const match = /language-(\w+)/.exec(className || '')
                             const codeContent = String(children)
                             const isInline = !match && !codeContent.includes('\n')
 
                             return isInline ? (
-                                <code className="bg-white/10 px-1.5 py-0.5 rounded text-accent-light font-mono text-[0.9em]" {...props}>
+                                <code className="rounded-md border border-border/60 bg-surface px-1.5 py-0.5 font-mono text-[0.88em] font-medium text-accent" {...props}>
                                     {children}
                                 </code>
                             ) : (
@@ -76,49 +138,62 @@ export function MarkdownPreview({ content, fontSize = 14 }: MarkdownPreviewProps
                                     style={vscDarkPlus}
                                     language={match?.[1] || 'text'}
                                     PreTag="div"
-                                    className="!bg-surface/50 !rounded-lg !border !border-border !my-4"
-                                    customStyle={{ fontSize: `${fontSize}px` }}
+                                    className="!my-5 !rounded-xl !border !border-white/10 !shadow-[0_12px_32px_-24px_rgba(0,0,0,0.8)]"
+                                    customStyle={{
+                                        background: '#0d1117',
+                                        color: '#e6edf3',
+                                        fontSize: `${Math.max(12, fontSize - 1)}px`,
+                                        lineHeight: 1.65,
+                                        padding: '18px 20px',
+                                        margin: 0,
+                                    }}
+                                    codeTagProps={{ style: { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace)' } }}
+                                    wrapLongLines
                                 >
                                     {String(children).replace(/\n$/, '')}
                                 </SyntaxHighlighter>
                             )
                         },
-                        h1: ({ children }) => <h1 className="text-2xl font-bold mt-8 mb-4 text-text-primary border-b border-border pb-2">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-xl font-bold mt-6 mb-3 text-text-primary">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-lg font-semibold mt-4 mb-2 text-text-primary">{children}</h3>,
-                        p: ({ children }) => <p className="mb-4 text-text-secondary leading-relaxed">{children}</p>,
-                        ul: ({ children }) => <ul className="list-disc pl-6 mb-4 space-y-1 text-text-secondary">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal pl-6 mb-4 space-y-1 text-text-secondary">{children}</ol>,
-                        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                        h1: ({ children }) => <h1 className="mb-5 mt-2 border-b border-border/70 pb-3 text-[2em] font-bold leading-tight tracking-[-0.025em] text-text-primary first:mt-0">{children}</h1>,
+                        h2: ({ children }) => <h2 className="mb-3 mt-10 border-b border-border/50 pb-2 text-[1.5em] font-semibold leading-tight tracking-[-0.015em] text-text-primary">{children}</h2>,
+                        h3: ({ children }) => <h3 className="mb-3 mt-7 text-[1.22em] font-semibold leading-snug text-text-primary">{children}</h3>,
+                        h4: ({ children }) => <h4 className="mb-2 mt-6 text-[1.05em] font-semibold text-text-primary">{children}</h4>,
+                        p: ({ children }) => <p className="mb-4 leading-7 text-text-secondary">{children}</p>,
+                        strong: ({ children }) => <strong className="font-semibold text-text-primary">{children}</strong>,
+                        ul: ({ children }) => <ul className="mb-5 list-disc space-y-1.5 pl-6 text-text-secondary marker:text-text-muted">{children}</ul>,
+                        ol: ({ children }) => <ol className="mb-5 list-decimal space-y-1.5 pl-6 text-text-secondary marker:font-medium marker:text-text-muted">{children}</ol>,
+                        li: ({ children }) => <li className="pl-1 leading-7">{children}</li>,
                         a: ({ href, children }) => (
-                            <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                            <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline decoration-accent/30 underline-offset-2 transition-colors hover:decoration-accent">
                                 {children}
                             </a>
                         ),
                         blockquote: ({ children }) => (
-                            <blockquote className="border-l-4 border-accent/50 pl-4 my-4 text-text-muted italic bg-white/5 py-2 rounded-r">
+                            <blockquote className="my-5 rounded-r-lg border-l-[3px] border-accent/60 bg-accent/[0.05] px-4 py-3 text-text-muted [&>p:last-child]:mb-0">
                                 {children}
                             </blockquote>
                         ),
                         table: ({ children }) => (
-                            <div className="overflow-x-auto my-4">
-                                <table className="min-w-full border-collapse border border-border">{children}</table>
+                            <div className="my-6 overflow-x-auto rounded-xl border border-border/70">
+                                <table className="min-w-full border-collapse text-left text-[0.94em]">{children}</table>
                             </div>
                         ),
-                        thead: ({ children }) => <thead className="bg-surface/50">{children}</thead>,
-                        tbody: ({ children }) => <tbody>{children}</tbody>,
-                        tr: ({ children }) => <tr className="border-b border-border hover:bg-white/5 transition-colors">{children}</tr>,
-                        th: ({ children }) => <th className="border border-border px-4 py-2 bg-surface/50 text-left font-semibold">{children}</th>,
-                        td: ({ children }) => <td className="border border-border px-4 py-2">{children}</td>,
-                        img: ({ src, alt }) => (
-                            <img src={src} alt={alt} className="max-w-full rounded-lg border border-border my-4" />
-                        ),
-                        hr: () => <hr className="border-border my-6" />,
+                        thead: ({ children }) => <thead className="bg-surface/70 text-text-primary">{children}</thead>,
+                        tbody: ({ children }) => <tbody className="divide-y divide-border/50">{children}</tbody>,
+                        tr: ({ children }) => <tr className="transition-colors hover:bg-surface/35">{children}</tr>,
+                        th: ({ children }) => <th className="border-r border-border/50 px-4 py-2.5 font-semibold last:border-r-0">{children}</th>,
+                        td: ({ children }) => <td className="border-r border-border/40 px-4 py-2.5 text-text-secondary last:border-r-0">{children}</td>,
+                        img: ({ src, alt, width, height }) => <MarkdownImage src={src} alt={alt} width={width} height={height} sourcePath={sourcePath} />,
+                        details: ({ children }) => <details className="my-5 rounded-xl border border-border/70 bg-surface/25 px-4 py-3">{children}</details>,
+                        summary: ({ children }) => <summary className="cursor-pointer font-medium text-text-primary">{children}</summary>,
+                        kbd: ({ children }) => <kbd className="rounded-md border border-border bg-surface px-1.5 py-0.5 font-mono text-[0.82em] text-text-primary shadow-[inset_0_-1px_0_rgba(0,0,0,0.15)]">{children}</kbd>,
+                        input: ({ type, checked }) => type === 'checkbox' ? <input type="checkbox" checked={checked} readOnly className="mr-2 align-middle accent-accent" /> : null,
+                        hr: () => <hr className="my-8 border-0 border-t border-border/70" />,
                     }}
                 >
                     {content}
                 </ReactMarkdown>
-            </div>
+            </article>
         </div>
     )
 }
