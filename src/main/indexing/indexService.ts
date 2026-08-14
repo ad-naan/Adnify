@@ -14,7 +14,7 @@ import { TreeSitterChunker } from './treeSitterChunker'
 import { ChunkerService } from './chunker'
 import { EmbeddingService } from './embedder'
 import { VectorStoreService } from './vectorStore'
-import { BM25Index, SymbolIndex } from './search'
+import { BM25Index, SymbolIndex, rerankCandidates } from './search'
 import { ProjectSummaryGenerator } from './summary'
 import {
   IndexConfig, IndexStatus, IndexMode, SearchResult,
@@ -388,14 +388,16 @@ export class CodebaseIndexService {
   /** 混合搜索 */
   async hybridSearch(query: string, topK: number = 10): Promise<SearchResult[]> {
     if (this.config.mode === 'structural') {
-      // 结构化模式：BM25 + 符号搜索融合
-      const bm25Results = this.bm25Index.search(query, topK * 2)
+      // 结构化模式:BM25 + 符号搜索融合
+      // 扩大召回(topK*3),给 rerank 留足候选池
+      const bm25Results = this.bm25Index.search(query, topK * 3)
       const symbolResults = this.symbolIndex.search(query, topK)
 
-      return this.fuseResults(bm25Results, symbolResults, topK)
+      const fused = this.fuseResults(bm25Results, symbolResults, topK * 3)
+      return rerankCandidates(query, fused, { topK })
     }
 
-    // 语义模式：向量 + 关键词搜索融合
+    // 语义模式:向量 + 关键词搜索融合
     if (!this.vectorStore?.isInitialized() || !this.embedder) {
       await this.initSemanticComponents()
       if (!this.vectorStore?.isInitialized() || !this.embedder) {
@@ -406,15 +408,21 @@ export class CodebaseIndexService {
     const keywords = this.extractKeywords(query)
     logger.index.info(`[IndexService] Hybrid search for "${query}", keywords: ${keywords.join(', ')}`)
 
+    // 扩大召回,给 rerank 留足候选池
     const [semanticResults, keywordResults] = await Promise.all([
-      this.search(query, topK * 2),
-      keywords.length > 0 ? this.vectorStore.keywordSearch(keywords, topK * 2) : Promise.resolve([])
+      this.search(query, topK * 3),
+      keywords.length > 0 ? this.vectorStore.keywordSearch(keywords, topK * 3) : Promise.resolve([])
     ])
 
     logger.index.info(`[IndexService] Hybrid results - Semantic: ${semanticResults.length}, Keyword: ${keywordResults.length}`)
 
-    if (keywordResults.length === 0) return semanticResults.slice(0, topK)
-    return this.fuseResultsRRF(semanticResults, keywordResults, topK)
+    let fused: SearchResult[]
+    if (keywordResults.length === 0) {
+      fused = semanticResults.slice(0, topK * 3)
+    } else {
+      fused = this.fuseResultsRRF(semanticResults, keywordResults, topK * 3)
+    }
+    return rerankCandidates(query, fused, { topK })
   }
 
   /** 符号搜索 */

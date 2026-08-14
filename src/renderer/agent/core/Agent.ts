@@ -83,6 +83,8 @@ export class AgentClass {
       threadId?: string
       requestId?: string
       planTaskId?: string
+      /** 该次执行是否为子代理（隐藏线程）。会剔除 task/ask_user 等工具。 */
+      isSubAgent?: boolean
     }
   ): Promise<{ threadId: string; assistantId: string; requestId: string }> {
     const store = useAgentStore.getState()
@@ -161,6 +163,7 @@ export class AgentClass {
       const { prompt: systemPrompt, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
         ...promptOptions,
         threadId,
+        isSubAgent: executionOptions?.isSubAgent,
         mentionedSkills: mentionedSkills.length > 0 ? mentionedSkills : undefined,
       })
 
@@ -213,6 +216,7 @@ export class AgentClass {
         requestId,
         planTaskId: executionOptions?.planTaskId,
         checkpointId,
+        isSubAgent: executionOptions?.isSubAgent,
       }
       await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
 

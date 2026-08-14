@@ -157,6 +157,8 @@ function buildDependencyErrorResult(
     toolCall,
     result: {
       content: reason,
+      // 依赖没满足属于「跳过」，不是这个工具自己失败了
+      status: 'skipped',
       meta: {
         outcome: 'dependency_failed',
         skippedDueToDependency: true,
@@ -165,8 +167,16 @@ function buildDependencyErrorResult(
   }
 }
 
-function hasDependencyFailure(content: string): boolean {
-  return content.startsWith('Skipped: dependency') || content.startsWith('Error: dependency')
+/**
+ * 依赖是否算「没成功」。
+ *
+ * 以前是 `content.startsWith('Skipped: dependency') || content.startsWith('Error: dependency')`
+ * —— 只认这两种文案，别的失败形态（工具自身报错、被用户拒绝）得靠调用点额外
+ * 查 failed/rejected 两个 Set 兜底，而那两个 Set 的写入时机和这里的读取时机是
+ * 并发的。现在直接看声明出来的 status，不依赖文案也不依赖写入顺序。
+ */
+function isUnsuccessful(result: AgentToolExecutionResult): boolean {
+  return result.result.status !== 'success'
 }
 
 const REMOTE_ROUTE_META_TOOL_NAMES = new Set([
@@ -486,7 +496,7 @@ async function executeSingle(
       })
     }
 
-    return { toolCall, result: { content, meta, richContent } }
+    return { toolCall, result: { content, status: result.success ? 'success' : 'error', meta, richContent } }
   } catch (error) {
     const duration = Date.now() - startTime
     const errorMsg = error instanceof Error ? error.message : String(error)
@@ -518,7 +528,7 @@ async function executeSingle(
     }
     emitToolEvent({ type: 'tool:error', id: toolCall.id, error: errorMsg, ...identity })
 
-    return { toolCall, result: { content: `Error: ${errorMsg}` } }
+    return { toolCall, result: { content: `Error: ${errorMsg}`, status: 'error' } }
   }
 }
 
@@ -593,7 +603,7 @@ export async function executeTools(
 
         if (depPromises.length > 0) {
           const depResults = await Promise.all(depPromises)
-          const blocked = depResults.some(depResult => hasDependencyFailure(depResult.result.content) || rejected.has(depResult.toolCall.id) || failed.has(depResult.toolCall.id))
+          const blocked = depResults.some(depResult => isUnsuccessful(depResult) || rejected.has(depResult.toolCall.id) || failed.has(depResult.toolCall.id))
           if (blocked) {
             const skipped = buildDependencyErrorResult(tc, 'Skipped: dependency failed')
             if (context.currentAssistantId) {
@@ -621,10 +631,10 @@ export async function executeTools(
             const result = await executeSingle(tc, context, store)
             results.push(result)
             pending.delete(result.toolCall.id)
-            if (result.result.content.startsWith('Error:')) {
-              failed.add(result.toolCall.id)
-            } else {
+            if (result.result.status === 'success') {
               completed.add(result.toolCall.id)
+            } else {
+              failed.add(result.toolCall.id)
             }
             return result
           } catch (error) {
@@ -641,7 +651,10 @@ export async function executeTools(
 
             failed.add(tc.id)
             pending.delete(tc.id)
-            const errorResult = { toolCall: tc, result: { content: `Error: ${errorMsg}` } }
+            const errorResult: AgentToolExecutionResult = {
+              toolCall: tc,
+              result: { content: `Error: ${errorMsg}`, status: 'error' },
+            }
             results.push(errorResult)
             emitToolEvent({
               type: 'tool:error',
@@ -741,7 +754,7 @@ export async function executeTools(
         })
       }
       emitToolEvent({ type: 'tool:rejected', id: tc.id, ...buildToolExecutionIdentity(tc, context) })
-      results.push({ toolCall: tc, result: { content: 'Rejected by user' } })
+      results.push({ toolCall: tc, result: { content: 'Rejected by user', status: 'rejected' } })
       pending.delete(tc.id)
 
       // 继续处理下一个工具，而不是中断整个流程
@@ -759,10 +772,10 @@ export async function executeTools(
     const result = await executeSingle(tc, context, store)
     results.push(result)
     pending.delete(tc.id)
-    if (result.result.content.startsWith('Error:')) {
-      failed.add(tc.id)
-    } else {
+    if (result.result.status === 'success') {
       completed.add(tc.id)
+    } else {
+      failed.add(tc.id)
     }
   }
 

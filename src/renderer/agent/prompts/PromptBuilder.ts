@@ -77,11 +77,18 @@ export interface PromptContext {
   projectSummary?: string | null
   planPhase?: 'planning' | 'executing'
   remoteServerSection?: string | null
+  /** 该提示词是否用于子代理（隐藏线程）。会剔除 task / ask_user / 计划类工具。 */
+  isSubAgent?: boolean
 }
 
-function buildTools(mode: WorkMode, templateId?: string, planPhase?: 'planning' | 'executing'): string {
+function buildTools(
+  mode: WorkMode,
+  templateId?: string,
+  planPhase?: 'planning' | 'executing',
+  isSubAgent?: boolean
+): string {
   const excludeCategories: ToolCategory[] = []
-  const allowedTools = getToolsForContext({ mode, templateId, planPhase })
+  const allowedTools = getToolsForContext({ mode, templateId, planPhase, isSubAgent })
   const sortedAllowedTools = allowedTools ? [...allowedTools].sort() : undefined
   const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, sortedAllowedTools)
 
@@ -149,7 +156,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     APP_IDENTITY,
     PROFESSIONAL_OBJECTIVITY,
     SECURITY_RULES,
-    buildTools(ctx.mode, ctx.templateId, ctx.planPhase),
+    buildTools(ctx.mode, ctx.templateId, ctx.planPhase, ctx.isSubAgent),
     CODE_CONVENTIONS,
     WORKFLOW_GUIDELINES,
     OUTPUT_FORMAT,
@@ -196,6 +203,7 @@ export async function buildAgentSystemPrompt(
     planPhase?: 'planning' | 'executing'
     mentionedSkills?: string[]
     threadId?: string
+    isSubAgent?: boolean
   }
 ): Promise<{ prompt: string; activeSkills: { name: string; description: string }[] }> {
   const {
@@ -206,6 +214,7 @@ export async function buildAgentSystemPrompt(
     planPhase,
     mentionedSkills,
     threadId,
+    isSubAgent,
   } = options || {}
 
   let template = promptTemplateId
@@ -260,6 +269,7 @@ export async function buildAgentSystemPrompt(
     templateId: template.id,
     projectSummary,
     planPhase,
+    isSubAgent,
     remoteServerSection,
   }
 

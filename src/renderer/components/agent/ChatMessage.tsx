@@ -49,8 +49,8 @@ import { api } from '@/renderer/services/electronAPI'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
+import { selectLiveState, type LiveSelectorState } from './chatMessageLiveSelector'
 import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
-import type { ToolStreamingPreview } from '@shared/types'
 import { ImageLightbox } from './ImageLightbox'
 import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
@@ -81,10 +81,8 @@ interface RenderPartProps {
   messageId: string
 }
 
-const EMPTY_PREVIEWS: Record<string, ToolStreamingPreview> = {}
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
-const ACTIVE_STREAM_PHASES = new Set(['streaming', 'tool_running', 'tool_pending'])
 const STREAMING_TAIL_LENGTH = 40
 
 // 代码块组件 - 更加精致的玻璃质感
@@ -1044,36 +1042,18 @@ const ChatMessage = React.memo(({
   }
 
   const [typingIndex, setTypingIndex] = useState(0)
-  const { isStreaming, previewMap, liveParts, liveInteractive } = useAgentStore(useShallow(state => {
-    if (!isAssistantMessage(message)) {
-      return {
-        isStreaming: false,
-        previewMap: EMPTY_PREVIEWS,
-        liveParts: undefined,
-        liveInteractive: undefined,
-      }
-    }
-
-    const threadId = state.currentThreadId
-    const threadStreamState = threadId ? state.threads[threadId]?.streamState : undefined
-    const liveMessage = threadId
-      ? state.threads[threadId]?.messages.find(msg => msg.id === message.id && msg.role === 'assistant')
-      : undefined
-    const isActiveAssistant =
-      Boolean(message.isStreaming) &&
-      !!threadId &&
-      threadStreamState?.assistantId === message.id &&
-      ACTIVE_STREAM_PHASES.has(threadStreamState?.phase ?? 'idle')
-
-    return {
-      isStreaming: isActiveAssistant,
-      liveParts: liveMessage && isAssistantMessage(liveMessage) ? liveMessage.parts : undefined,
-      liveInteractive: liveMessage && isAssistantMessage(liveMessage) ? liveMessage.interactive : undefined,
-      previewMap: isActiveAssistant
-        ? state.threads[threadId!]?.toolStreamingPreviews || EMPTY_PREVIEWS
-        : EMPTY_PREVIEWS,
-    }
-  }))
+  // selector 提到了 chatMessageLiveSelector.ts —— 它有引用稳定性要求需要被测试
+  // 覆盖（静态消息必须返回恒等引用，否则 overscan 内的每条消息都会跟着流式重渲染）
+  const { isStreaming, previewMap, liveParts, liveInteractive } = useAgentStore(
+    useShallow(state =>
+      selectLiveState(
+        state as unknown as LiveSelectorState,
+        message.id,
+        isAssistantMessage(message),
+        Boolean(isAssistantMessage(message) && message.isStreaming),
+      ),
+    ),
+  )
 
   const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
   const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined

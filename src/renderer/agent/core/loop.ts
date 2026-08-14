@@ -393,6 +393,7 @@ export async function runLoop(
     mode: context.chatMode,
     templateId: useStore.getState().promptTemplateId,
     planPhase: context.chatMode === 'plan' ? context.planPhase : undefined,
+    isSubAgent: context.isSubAgent,
   })
 
   const agentTools = context.chatMode === 'chat' ? [] : toolRuntime.toolManager.getAllToolDefinitions()
@@ -798,7 +799,11 @@ Try again with the corrected tool call.`,
         content: toolResult.content,
       })
 
-      const success = !toolResult.content.startsWith('Error:')
+      // 用工具声明出来的 status，而不是从 content 猜。以前是
+      // `!content.startsWith('Error:')`：命令输出以 "Error:" 开头的成功调用会
+      // 被记成失败，而 'Rejected by user' 会被记成成功 —— 两种错判都会污染
+      // loopDetector 的 failureRate。
+      const success = toolResult.status === 'success'
       loopDetector.recordExecutedTool({
         name: toolCall.name,
         arguments: toolCall.arguments,

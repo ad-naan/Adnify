@@ -33,6 +33,18 @@ export interface ToolLoadingContext {
   templateId?: string
   /** Plan 阶段：planning = 只有编排工具, executing = 所有工具 */
   planPhase?: 'planning' | 'executing'
+  /**
+   * 当前循环是否运行在子代理（隐藏线程）里。
+   *
+   * 子代理跑的是同一个 agent 模式，因此默认会拿到整个 CORE_TOOLS —— 其中包含
+   * `task` 本身，也就是子代理可以再派生子代理，无限递归。置为 true 时
+   * SUB_AGENT_EXCLUDED_TOOLS 会被剔除。
+   *
+   * 注意：这只负责「不把工具喂给模型」。真正的硬拦截在
+   * SubAgentManager.spawn（按父线程 ID 判定），因为工具加载上下文是模块级单例，
+   * 并发线程会互相覆盖，不能作为唯一防线。
+   */
+  isSubAgent?: boolean
 }
 
 /** 角色工具配置 */
@@ -86,6 +98,8 @@ const CORE_TOOLS: string[] = [
   'apply_skill',
   // 任务列表
   'todo_write',
+  // Sub-agent 编排
+  'task',
 ]
 
 /** UI/UX 工具 - uiux-designer 角色专用 */
@@ -119,6 +133,22 @@ const PLAN_EXPLORATION_TOOLS: string[] = [
   'get_hover_info',
   'get_document_symbols',
   'get_file_info',
+]
+
+/**
+ * 子代理不允许持有的工具。
+ *
+ * - `task`：子代理再派生子代理 = 无限递归。
+ * - `ask_user`：子代理跑在隐藏线程上，提问没有 UI 可以承接，只会挂到超时。
+ * - `create_task_plan` / `update_task_plan` / `start_task_execution`：
+ *   规划是全局单例状态，子代理改它会踩到主 agent 正在执行的计划。
+ */
+const SUB_AGENT_EXCLUDED_TOOLS: readonly string[] = [
+  'task',
+  'ask_user',
+  'create_task_plan',
+  'update_task_plan',
+  'start_task_execution',
 ]
 
 /** 工具组注册表 */
@@ -172,6 +202,12 @@ export function getToolGroup(id: string): string[] | undefined {
  * - 角色: 在模式基础上 + 角色专属工具组
  */
 export function getToolsForContext(context: ToolLoadingContext): string[] {
+  const tools = collectToolsForContext(context)
+  if (!context.isSubAgent) return tools
+  return tools.filter(tool => !SUB_AGENT_EXCLUDED_TOOLS.includes(tool))
+}
+
+function collectToolsForContext(context: ToolLoadingContext): string[] {
   // chat 模式无工具
   if (context.mode === 'chat') {
     return []
