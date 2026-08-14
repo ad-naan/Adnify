@@ -5,7 +5,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Code2, ExternalLink, Github, Sparkles, X, Zap } from 'lucide-react'
+import { Code2, ExternalLink, Github, Sparkles, X, Zap, BookOpen } from 'lucide-react'
 import { CONTRIBUTORS, getCoreContributor, getOrbitContributors } from '@shared/config/contributors'
 import { useStore } from '@store'
 import { logger } from '@utils/Logger'
@@ -35,6 +35,7 @@ interface RingAssignment<T> {
 
 export default function AboutDialog({ onClose }: AboutDialogProps) {
   const language = useStore(s => s.language)
+  const setShowChangelog = useStore(s => s.setShowChangelog)
   const isZh = language === 'zh'
   const [version, setVersion] = useState('1.0.0')
   const core = getCoreContributor()
@@ -90,7 +91,17 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                 <Logo className="adnify-about-logo" glow />
               </span>
               <div className="adnify-about-brand-meta">
-                <span className="adnify-about-version">v{version}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose()
+                    setShowChangelog(true, version)
+                  }}
+                  className="adnify-about-version hover:ring-1 hover:ring-accent/50 cursor-pointer transition-all"
+                  title={isZh ? '查看此版本更新日志' : 'View changelog for this version'}
+                >
+                  v{version}
+                </button>
                 <p className="adnify-about-eyebrow">{isZh ? 'AI 原生编辑器' : 'AI-native editor'}</p>
               </div>
             </div>
@@ -111,6 +122,17 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
             </div>
 
             <div className="adnify-about-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  setShowChangelog(true, version)
+                }}
+                className="adnify-about-link !bg-accent/15 !border-accent/30 !text-accent hover:!bg-accent/25 transition-all"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>{isZh ? '更新日志' : 'Release Notes'}</span>
+              </button>
               <SocialButton href="https://github.com/ad-naan/adnify" icon={Github} label="GitHub" />
               <SocialButton href="https://gitee.com/adnaan/adnify" icon={ExternalLink} label="Gitee" />
             </div>

@@ -144,6 +144,25 @@ function buildRemoteServerSection(section: string | null): string | null {
   return section.trim()
 }
 
+function buildModeRuntimeContract(ctx: PromptContext): string | null {
+  if (ctx.mode !== 'plan' || ctx.isSubAgent) return null
+
+  if (ctx.planPhase === 'executing') {
+    return `## Plan Mode Runtime Contract — Execution Phase
+- A reviewed plan already exists. Work through that plan and keep its task state accurate.
+- Do not replace the approved plan with an unrelated ad-hoc todo list.
+- Surface approval requests and blockers through the Plan execution UI.`
+  }
+
+  return `## Plan Mode Runtime Contract — Planning Phase (OVERRIDES generic autonomy rules)
+- You are planning, not implementing. Do not behave like ordinary Agent mode.
+- For every non-trivial request, first inspect the workspace, then explicitly check whether scope, acceptance criteria, UX behavior, constraints, and execution preferences are sufficiently clear.
+- If any important decision is missing, you MUST call ask_user with one concise grouped question before creating the plan. Do not silently guess product decisions.
+- When requirements are clear, you MUST call create_task_plan. Describing a plan only in prose is not completion.
+- create_task_plan opens the TaskBoard automatically. After it succeeds, stop the loop so the user can review the board.
+- Do not implement files or launch sub-agents during this phase.`
+}
+
 function buildSkillsSections(autoSkills: SkillItem[], mentionedSkills: SkillItem[]): (string | null)[] {
   const index = skillService.buildSkillsIndex(autoSkills) || null
   const fullContent = skillService.buildSkillsPrompt(mentionedSkills) || null
@@ -159,6 +178,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     buildTools(ctx.mode, ctx.templateId, ctx.planPhase, ctx.isSubAgent),
     CODE_CONVENTIONS,
     WORKFLOW_GUIDELINES,
+    buildModeRuntimeContract(ctx),
     OUTPUT_FORMAT,
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
@@ -217,9 +237,10 @@ export async function buildAgentSystemPrompt(
     isSubAgent,
   } = options || {}
 
-  let template = promptTemplateId
-    ? getPromptTemplateById(promptTemplateId)
-    : getDefaultPromptTemplate()
+  // Plan is a behavioral mode, not merely a tool filter. It must always use
+  // the dedicated two-phase planner prompt; otherwise a selected coder/default
+  // template receives plan tools but continues behaving like ordinary Agent mode.
+  let template = resolvePromptTemplateForMode(mode, promptTemplateId, isSubAgent)
 
   if (!template) {
     logger.agent.warn(`[PromptBuilder] Template not found: ${promptTemplateId}, falling back to default.`)
@@ -282,6 +303,15 @@ export async function buildAgentSystemPrompt(
       description: skill.description,
     })),
   }
+}
+
+export function resolvePromptTemplateForMode(mode: WorkMode, promptTemplateId?: string, isSubAgent?: boolean) {
+  if (mode === 'plan' && !isSubAgent) {
+    return getPromptTemplateById('plan') || getDefaultPromptTemplate()
+  }
+  return promptTemplateId
+    ? getPromptTemplateById(promptTemplateId)
+    : getDefaultPromptTemplate()
 }
 
 function getOS(): string {

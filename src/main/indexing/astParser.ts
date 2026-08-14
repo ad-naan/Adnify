@@ -1,7 +1,10 @@
 import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as fs from 'fs'
-import Parser from 'web-tree-sitter'
+// web-tree-sitter@0.20 uses `export = Parser` and CommonJS returns the
+// constructor directly. A synthetic default import is unstable across the
+// Electron/Vite CJS boundary and can become `{ default: ... }` twice.
+import Parser = require('web-tree-sitter')
 
 const LANGUAGE_MAP: Record<string, string> = {
     ts: 'typescript', tsx: 'tsx',

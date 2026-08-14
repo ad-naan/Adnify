@@ -21,6 +21,9 @@ import { fileCacheService } from '../services/fileCacheService'
 import { lintService } from '../services/lintService'
 import { memoryService, normalizeMemoryContentInput } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
+import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
+import { derivePlanPlanningState } from '../plan/planWorkflowGuard'
+import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { composerService } from '../services/composerService'
 import { agentStorePlanBridge, agentStoreTodoBridge } from '../store/agentStoreBridge'
 import { buildFileChangeDescriptor } from '../utils/fileChangeUtils'
@@ -2188,6 +2191,24 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             return { success: false, result: 'No workspace path available' }
         }
 
+        const currentAssistantId = ctx.currentAssistantId ?? ctx.assistantId
+        const threadMessages = ctx.threadId
+            ? useAgentStore.getState().threads[ctx.threadId]?.messages || []
+            : []
+        const messagesBeforeCurrentCall = currentAssistantId
+            ? threadMessages.filter(message => message.id !== currentAssistantId)
+            : threadMessages
+        if (derivePlanPlanningState(messagesBeforeCurrentCall) !== 'ready_to_create') {
+            return {
+                success: false,
+                result: getLocalizedText(
+                    getCurrentLanguage(),
+                    '创建计划前必须先使用 ask_user 向用户确认需求，并等待用户回答。请先完成澄清，不要直接创建计划。',
+                    'You must call ask_user and wait for the user response before creating a plan. Clarify the request first.',
+                ),
+            }
+        }
+
         try {
             // 生成唯一 ID
             const timestamp = Date.now()
@@ -2238,18 +2259,21 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             internalWriteTracker.mark(jsonPath)
             await api.file.write(jsonPath, JSON.stringify(plan, null, 2))
 
-            // 添加到 store 并打开 TaskBoard
+            // 添加到 store。PlanWorkspace 订阅 activePlanId，会立即展示新计划。
             agentStorePlanBridge.addPlan(plan)
-
-            // 打开 plan 文件（触发 TaskBoard 渲染）
-            useStore.getState().openFile(jsonPath, JSON.stringify(plan, null, 2))
+            const editorStore = useStore.getState()
+            if (editorStore.openFiles.some(file => isPlanBoardPath(file.path))) {
+                editorStore.setActiveFile(PLAN_BOARD_PATH)
+            } else {
+                editorStore.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+            }
 
             return {
                 success: true,
                 result: getLocalizedText(
                     getCurrentLanguage(),
-                    `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n规划文件：${jsonPath}\n需求文档：${mdPath}\n\nTaskBoard 已打开，请先审核规划，再点击“开始执行”。`,
-                    `Created task plan "${name}" with ${tasks.length} tasks.\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe TaskBoard has been opened for user review. Please review the plan and click "Start Execution" to proceed.`,
+                    `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n规划文件：${jsonPath}\n需求文档：${mdPath}\n\n计划已显示在常驻看板中，请先审核，再点击“开始执行”。`,
+                    `Created task plan "${name}" with ${tasks.length} tasks.\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe plan is now shown in the persistent board. Review it, then click "Start Execution".`,
                 ),
                 meta: { planId, planPath: jsonPath, stopLoop: true },
             }
@@ -2686,6 +2710,26 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         if (!llmConfig) {
             return { success: false, result: '', error: 'No LLM config available to spawn sub-agent' }
         }
+        const parentAssistantId = ctx.currentAssistantId ?? ctx.assistantId
+        const bindSubAgent = (info: { subAgentId: string; threadId: string; requestId: string; startedAt: number }) => {
+            if (!parentAssistantId || !ctx.toolCallId || !ctx.threadId) return
+            const currentMeta = args._meta && typeof args._meta === 'object'
+                ? args._meta as Record<string, unknown>
+                : {}
+            useAgentStore.getState().updateToolCall(parentAssistantId, ctx.toolCallId, {
+                arguments: {
+                    ...args,
+                    _meta: {
+                        ...currentMeta,
+                        subAgentId: info.subAgentId,
+                        subAgentThreadId: info.threadId,
+                        subAgentRequestId: info.requestId,
+                        subAgentStartedAt: info.startedAt,
+                    },
+                },
+            }, ctx.threadId)
+        }
+
         const result = await SubAgentManager.spawn(
             {
                 description: args.description as string,
@@ -2698,13 +2742,19 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             ctx.workspacePath,
             ctx.chatMode,
             ctx.threadId,
+            { onStarted: bindSubAgent },
         )
         return {
             success: result.success,
             result: result.success
                 ? result.output ?? 'Sub-agent completed with no output.'
                 : result.error ?? 'Sub-agent failed.',
-            meta: { subAgentId: result.subAgentId, threadId: result.threadId },
+            meta: {
+                subAgentId: result.subAgentId,
+                subAgentThreadId: result.threadId,
+                subAgentStatus: result.success ? 'completed' : 'failed',
+                subAgentDurationMs: result.durationMs,
+            },
         }
     },
 }

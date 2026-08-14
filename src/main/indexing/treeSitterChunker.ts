@@ -1,7 +1,7 @@
 import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as crypto from 'crypto'
-import Parser from 'web-tree-sitter'
+import Parser = require('web-tree-sitter')
 import * as fs from 'fs'
 import { CodeChunk, IndexConfig, DEFAULT_INDEX_CONFIG } from './types'
 

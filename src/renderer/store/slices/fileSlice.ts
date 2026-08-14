@@ -48,6 +48,8 @@ export interface OpenFile {
   lastAccessed?: number
   /** Preview 文档元数据 */
   preview?: OpenPreviewMetadata
+  /** 固定标签不能被普通关闭操作移除。 */
+  pinned?: boolean
   /** 编辑器视图状态 (Monaco saveViewState) */
   scrollPosition?: unknown
 }
@@ -76,6 +78,7 @@ export interface FileSlice {
     remote?: OpenFile['remote']
     kind?: OpenFile['kind']
     preview?: OpenFile['preview']
+    pinned?: boolean
   }) => void
   openPreview: (preview: OpenPreviewMetadata, options?: { activate?: boolean }) => void
   restoreOpenFiles: (files: Array<{
@@ -91,7 +94,7 @@ export interface FileSlice {
         preview?: OpenFile['preview']
     }
   }>, activeFilePath?: string | null) => void
-  closeFile: (path: string) => void
+  closeFile: (path: string, options?: { force?: boolean }) => void
   setActiveFile: (path: string | null) => void
   updateFileContent: (path: string, content: string) => void
   /** 更新文件的 dirty 状态（基于版本号比较） */
@@ -200,6 +203,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         eol: options?.eol,
         remote: options?.remote,
         preview: options?.preview,
+        pinned: options?.pinned,
         lastAccessed: Date.now(),
       })
 
@@ -268,8 +272,10 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
       }
     }),
 
-  closeFile: (path) =>
+  closeFile: (path, options) =>
     set((state) => {
+      const target = state.openFiles.find((file) => file.path === path)
+      if (target?.pinned && !options?.force) return state
       const newOpenFiles = state.openFiles.filter((f) => f.path !== path)
       const newActivePath =
         state.activeFilePath === path

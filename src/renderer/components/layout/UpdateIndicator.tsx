@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowUpCircle, CheckCircle, Download, ExternalLink, Loader2, RefreshCw, X } from 'lucide-react'
+import { AlertCircle, ArrowUpCircle, CheckCircle, Download, ExternalLink, Loader2, RefreshCw, X, BookOpen } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { updaterService, type UpdateStatus } from '@services/updaterService'
 import { useStore } from '@store'
@@ -11,6 +11,7 @@ import { api } from '@/renderer/services/electronAPI'
 
 export default function UpdateIndicator() {
   const language = useStore(state => state.language)
+  const setShowChangelog = useStore(state => state.setShowChangelog)
   const [status, setStatus] = useState<UpdateStatus | null>(null)
   const [showPopover, setShowPopover] = useState(false)
   const [currentVersion, setCurrentVersion] = useState('')
@@ -234,6 +235,18 @@ export default function UpdateIndicator() {
                     </button>
                   )
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPopover(false)
+                    setShowChangelog(true, status?.version || currentVersion)
+                  }}
+                  className="w-full py-2 text-xs font-medium text-text-muted hover:text-accent flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>{language === 'zh' ? '查看更新日志' : 'View Changelog'}</span>
+                </button>
               </div>
             </div>
           </motion.div>

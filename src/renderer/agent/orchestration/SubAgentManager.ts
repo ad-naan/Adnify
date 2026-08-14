@@ -23,7 +23,7 @@ import { EventBus, isSuccessfulLoopEnd, isAbortedLoopEnd } from '../core/EventBu
 import { Agent } from '../core/Agent'
 import type { LLMConfig } from '../core/types'
 import type { WorkMode } from '@/renderer/modes/types'
-import type { SubAgentRequest, SubAgentResult, SubAgentStatus } from './types'
+import type { SubAgentLifecycleCallbacks, SubAgentRequest, SubAgentResult, SubAgentStatus } from './types'
 
 /** 单个子代理的运行句柄 */
 interface SubAgentHandle {
@@ -85,6 +85,7 @@ class SubAgentManagerClass {
     workspacePath: string | null,
     chatMode: WorkMode = 'agent',
     parentThreadId?: string | null,
+    lifecycle?: SubAgentLifecycleCallbacks,
   ): Promise<SubAgentResult> {
     const id = crypto.randomUUID()
     const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -131,6 +132,13 @@ class SubAgentManagerClass {
       abortController,
     }
     this.activeHandles.set(id, handle)
+    store.renameThread(threadId, `↳ ${request.description.slice(0, 72)}`)
+    lifecycle?.onStarted?.({
+      subAgentId: id,
+      threadId,
+      requestId,
+      startedAt: handle.startedAt,
+    })
 
     // 2. 设置完成监听（通过 EventBus 的 loop:end 事件）
     const completionPromise = this.setupCompletionListener(handle, timeoutMs)

@@ -191,45 +191,107 @@ textarea,
   flex-direction: column;
 }
 
-/* --- Premium Scrollbars (MacOS Style) --- */
+/* --- Premium Slim Scrollbars (VS Code / macOS Style: Slim, subtle, instant hover, no arrow buttons) --- */
 ::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
+  width: 6px;
+  height: 6px;
   background-color: transparent;
+}
+
+/* 彻底隐藏所有上下/左右三角箭头按键 */
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 ::-webkit-scrollbar-track {
-  background-color: transparent;
+  background-color: transparent !important;
+}
+
+::-webkit-scrollbar-track:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme='light'] ::-webkit-scrollbar-track:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(150, 150, 150, 0);
-  border: 4px solid transparent;
-  background-clip: padding-box;
+  background-color: rgba(255, 255, 255, 0.12);
   border-radius: 9999px;
-  min-height: 40px;
-  transition: background-color 0.3s ease;
+  min-height: 28px;
+  min-width: 28px;
+  transition: background-color 0.15s ease-in-out;
 }
 
-/* Show thumb gently on hover of any scrollable container */
-*:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(150, 150, 150, 0.25);
+[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.12);
 }
 
-/* Darker thumb when directly hovering the scrollbar itself */
+/* 鼠标悬停在滚动条滑块上即刻高亮 */
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(150, 150, 150, 0.45);
-  border-width: 3px;
+  background-color: rgba(255, 255, 255, 0.45) !important;
 }
 
-/* Even darker when actively dragging */
+[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.45) !important;
+}
+
+/* 拖拽激活状态 */
 ::-webkit-scrollbar-thumb:active {
-  background-color: rgba(150, 150, 150, 0.6);
-  border-width: 3px;
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+[data-theme='light'] ::-webkit-scrollbar-thumb:active {
+  background-color: rgba(0, 0, 0, 0.72) !important;
 }
 
 ::-webkit-scrollbar-corner {
-  background: transparent;
+  background: transparent !important;
+}
+
+/* 针对 .custom-scrollbar 的即时响应 */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background-color: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  transition: background-color 0.15s ease-in-out;
+}
+
+[data-theme='light'] .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.45) !important;
+}
+
+[data-theme='light'] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.45) !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+[data-theme='light'] .custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background-color: rgba(0, 0, 0, 0.72) !important;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent !important;
 }
 
 /* Hide scrollbar utility */
@@ -240,6 +302,37 @@ textarea,
 
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* --- Monaco Editor Scrollbar Floating Style --- */
+.monaco-editor .scrollbar .slider {
+  background: transparent !important;
+  border-radius: 9999px !important;
+  transition: background 0.15s ease-in-out !important;
+}
+
+.monaco-editor:hover .scrollbar .slider {
+  background: rgba(255, 255, 255, 0.25) !important;
+}
+
+[data-theme='light'] .monaco-editor:hover .scrollbar .slider {
+  background: rgba(0, 0, 0, 0.25) !important;
+}
+
+.monaco-editor .scrollbar .slider:hover {
+  background: rgba(255, 255, 255, 0.52) !important;
+}
+
+[data-theme='light'] .monaco-editor .scrollbar .slider:hover {
+  background: rgba(0, 0, 0, 0.52) !important;
+}
+
+.monaco-editor .scrollbar .slider.active {
+  background: rgba(255, 255, 255, 0.78) !important;
+}
+
+[data-theme='light'] .monaco-editor .scrollbar .slider.active {
+  background: rgba(0, 0, 0, 0.78) !important;
 }
 
 /* --- Utilities --- */

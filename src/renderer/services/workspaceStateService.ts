@@ -40,6 +40,7 @@ async function readFilesWithConcurrency(
 }
 
 function toPersistedOpenFile(file: OpenFile): WorkspaceStateData['openFiles'][number] | null {
+  if (file.pinned) return null
   if (file.kind === 'preview' && file.preview) {
     return {
       path: file.path,

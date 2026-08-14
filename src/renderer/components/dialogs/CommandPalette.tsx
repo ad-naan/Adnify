@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import {
   Search, FolderOpen, Settings, Terminal,
   MessageSquare, History, Trash2, RefreshCw, Save,
-  X, Zap, Keyboard, Sparkles, Plus, FolderPlus, PanelRight
+  X, Zap, Keyboard, Sparkles, Plus, FolderPlus, PanelRight, BookOpen
 } from 'lucide-react'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -101,6 +101,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     language,
     setShowQuickOpen,
     setShowAbout,
+    setShowChangelog,
     chatVisible,
     setChatVisible,
   } = useStore(useShallow(s => ({
@@ -112,6 +113,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     language: s.language,
     setShowQuickOpen: s.setShowQuickOpen,
     setShowAbout: s.setShowAbout,
+    setShowChangelog: s.setShowChangelog,
     chatVisible: s.chatVisible,
     setChatVisible: s.setChatVisible,
   })))
@@ -320,6 +322,14 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
       icon: MessageSquare,
       category: 'Help',
       action: () => setShowAbout(true),
+    },
+    {
+      id: 'view-changelog',
+      label: language === 'zh' ? '更新日志 (版本记录)' : 'View Changelog / Release Notes',
+      description: language === 'zh' ? '查看所有历史版本与新功能更新记录' : 'View release history and new features',
+      icon: BookOpen,
+      category: 'Help',
+      action: () => setShowChangelog(true),
     },
 
     // AI Tools

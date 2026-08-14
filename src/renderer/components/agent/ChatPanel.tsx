@@ -9,6 +9,8 @@ import {
   Trash2,
   Upload,
   ChevronDown,
+  ListTree,
+  GitBranch,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
@@ -53,6 +55,7 @@ import {
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
+import PlanConversationWorkspace from './PlanConversationWorkspace'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -113,6 +116,7 @@ export default function ChatPanel() {
 
   const chatMode = useModeStore(s => s.currentMode)
   const setChatMode = useModeStore(s => s.setMode)
+  const activePlan = useAgentStore(state => state.plans.find(plan => plan.id === state.activePlanId))
 
   const toast = useToast()
 
@@ -1161,6 +1165,16 @@ export default function ChatPanel() {
 
         {/* Header - 简洁版 */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
+          {chatMode === 'plan' ? <>
+            <div className="flex min-w-0 items-center gap-2">
+              <ListTree className="h-4 w-4 shrink-0 text-accent" />
+              <div className="min-w-0">
+                <div className="truncate text-[11px] font-semibold text-text-primary">{language === 'zh' ? '计划编排' : 'Plan orchestration'}</div>
+                <div className="truncate text-[9px] text-text-muted">{activePlan?.name || (language === 'zh' ? '等待生成计划' : 'Waiting for plan')}</div>
+              </div>
+            </div>
+            {activePlan?.executionMode === 'parallel' && <div className="flex items-center gap-1 rounded bg-accent/10 px-1.5 py-1 text-[9px] font-medium text-accent"><GitBranch className="h-3 w-3" />{language === 'zh' ? '并行编排' : 'Parallel'}</div>}
+          </> : <>
           <div className="flex items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
             <BranchSelector
@@ -1225,6 +1239,7 @@ export default function ChatPanel() {
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
+          </>}
         </div>
 
         <ConversationSidebar
@@ -1289,24 +1304,41 @@ export default function ChatPanel() {
               )}
             </AnimatePresence>
 
-            <Virtuoso
-              key={currentThreadId ?? 'no-thread'}
-              ref={virtuosoRef}
-              data={timelineItems}
-              computeItemKey={(_, item) => item.key}
-              atBottomStateChange={handleBottomStateChange}
-              rangeChanged={handleTimelineRangeChanged}
-              initialTopMostItemIndex={initialIndexRef.current}
-              followOutput={followOutput}
-              itemContent={(_, item) => renderTimelineItem(item)}
-              className="flex-1 custom-scrollbar w-full h-full"
-              style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
-              overscan={12}
-              atBottomThreshold={100}
-              totalListHeightChanged={handleTotalListHeightChanged}
-              skipAnimationFrameInResizeObserver
-              components={virtuosoComponents}
-            />
+            {chatMode === 'plan' ? <PlanConversationWorkspace conversation={<Virtuoso
+                key={currentThreadId ?? 'no-thread'}
+                ref={virtuosoRef}
+                data={timelineItems}
+                computeItemKey={(_, item) => item.key}
+                atBottomStateChange={handleBottomStateChange}
+                rangeChanged={handleTimelineRangeChanged}
+                initialTopMostItemIndex={initialIndexRef.current}
+                followOutput={followOutput}
+                itemContent={(_, item) => renderTimelineItem(item)}
+                className="custom-scrollbar h-full w-full"
+                style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
+                overscan={12}
+                atBottomThreshold={100}
+                totalListHeightChanged={handleTotalListHeightChanged}
+                skipAnimationFrameInResizeObserver
+                components={virtuosoComponents}
+              />} /> : <Virtuoso
+                key={currentThreadId ?? 'no-thread'}
+                ref={virtuosoRef}
+                data={timelineItems}
+                computeItemKey={(_, item) => item.key}
+                atBottomStateChange={handleBottomStateChange}
+                rangeChanged={handleTimelineRangeChanged}
+                initialTopMostItemIndex={initialIndexRef.current}
+                followOutput={followOutput}
+                itemContent={(_, item) => renderTimelineItem(item)}
+                className="flex-1 custom-scrollbar w-full h-full"
+                style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
+                overscan={12}
+                atBottomThreshold={100}
+                totalListHeightChanged={handleTotalListHeightChanged}
+                skipAnimationFrameInResizeObserver
+                components={virtuosoComponents}
+              />}
           </div>
 
           {/* File Mention Popup */}
@@ -1339,7 +1371,7 @@ export default function ChatPanel() {
           <div className="shrink-0 z-20 flex flex-col">
             <div className="mx-4 mb-4 flex flex-col">
               {/* Unified Status Tray: Files + Tasks + Queue */}
-              <UnifiedStatusTray
+              {chatMode !== 'plan' && <UnifiedStatusTray
                 pendingChanges={pendingChanges}
                 todos={todos}
                 isStreaming={isStreaming}
@@ -1356,7 +1388,7 @@ export default function ChatPanel() {
                   useMessageQueueStore.getState().promote(id)
                   abort()
                 }}
-              />
+              />}
 
               {/* Input Component */}
               <ChatInput
