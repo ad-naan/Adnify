@@ -655,9 +655,40 @@ class GitService {
         }
     }
 
-    async fetch(rootPath?: string): Promise<{ success: boolean; error?: string }> {
+    /**
+     * 添加远程仓库，如: addRemote('gitee', 'https://gitee.com/user/repo.git')
+     */
+    async addRemote(name: string, url: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
-            const result = await this.exec(['fetch', '--all', '--prune'], rootPath)
+            const result = await this.exec(['remote', 'add', name, url], rootPath)
+            return {
+                success: result.exitCode === 0,
+                error: result.exitCode !== 0 ? result.stderr : undefined,
+            }
+        } catch (err) {
+            return { success: false, error: handleGitError(err) }
+        }
+    }
+
+    /**
+     * 推送指定分支到指定远程，如: pushTo('gitee', 'main')
+     */
+    async pushTo(remote: string, branch: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const result = await this.exec(['push', remote, branch], rootPath)
+            return {
+                success: result.exitCode === 0,
+                error: result.exitCode !== 0 ? result.stderr : undefined,
+            }
+        } catch (err) {
+            return { success: false, error: handleGitError(err) }
+        }
+    }
+
+    async fetch(rootPath?: string, remote?: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const args = remote ? ['fetch', remote, '--prune'] : ['fetch', '--all', '--prune']
+            const result = await this.exec(args, rootPath)
             return {
                 success: result.exitCode === 0,
                 error: result.exitCode !== 0 ? result.stderr : undefined,
