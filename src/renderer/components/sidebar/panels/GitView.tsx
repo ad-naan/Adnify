@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import {
     GitBranch, GitCommit as GitCommitIcon, GitMerge, GitPullRequest,
     ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Trash2,
-    ArrowUp, ArrowDown, Check, X, MoreHorizontal, FolderGit2,
+    ArrowUp, ArrowDown, ArrowRight, Check, X, MoreHorizontal, FolderGit2, Upload,
     FolderOpen, Download, Undo2, RotateCcw, Copy, Archive, AlertTriangle,
     Play, SkipForward, Loader2, Sparkles, List, Maximize
 } from 'lucide-react'
@@ -21,7 +21,7 @@ import { getEditorConfig } from '@renderer/settings'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { keybindingService } from '@services/keybindingService'
-import { Input, Button, Modal, Select } from '@components/ui'
+import { Input, Button, Modal, Select, ContextMenu, useContextMenu, type ContextMenuItem } from '@components/ui'
 import { getFileName, joinPath, normalizePath, toFullPath } from '@shared/utils/pathUtils'
 import { ConflictResolver } from '@components/git/ConflictResolver'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
@@ -133,34 +133,100 @@ const FileItem = memo(function FileItem({
     )
 })
 
+// 从远程 URL 提取主机名（支持 https 与 git@host:path 两种形式）
+const hostOfRemoteUrl = (url: string): string => {
+    if (!url) return ''
+    if (url.startsWith('http')) {
+        try {
+            return new URL(url).host
+        } catch {
+            return url
+        }
+    }
+    const sshMatch = url.match(/^[\w.-]+@([\w.-]+):/)
+    return sshMatch ? sshMatch[1] : url
+}
+
 // 分支项组件
 const BranchItem = memo(function BranchItem({
     branch,
     onCheckout,
     onDelete,
     onMerge,
+    onMergeInto,
+    onPushTo,
     onRebase,
+    onPull,
 }: {
     branch: GitBranchType
     onCheckout: () => void
     onDelete: () => void
     onMerge: () => void
+    onMergeInto?: () => void
+    onPushTo?: () => void
     onRebase: () => void
+    onPull?: () => void
 }) {
-    const [showMenu, setShowMenu] = useState(false)
-    const menuRef = useRef<HTMLDivElement>(null)
-    const buttonRef = useRef<HTMLButtonElement>(null)
     const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
+    const { menu, show, hide } = useContextMenu<GitBranchType>()
 
-    // 使用性能 hook 处理点击外部关闭
-    useClickOutside(() => setShowMenu(false), showMenu, [menuRef, buttonRef])
+    // 当前分支仅提供"合并到..."；其他分支提供完整菜单
+    const menuItems: ContextMenuItem[] = branch.current
+        ? (onMergeInto ? [{
+            id: 'mergeInto',
+            label: tt('git.mergeInto'),
+            icon: ArrowRight,
+            onClick: onMergeInto,
+        }] : [])
+        : [
+            ...(branch.remote ? [{
+                id: 'checkout',
+                label: tt('git.checkout'),
+                icon: GitBranch,
+                onClick: onCheckout,
+            }] : []),
+            ...(onPull ? [{
+                id: 'pull',
+                label: tt('git.pullIntoCurrent'),
+                icon: ArrowDown,
+                onClick: onPull,
+            }] : []),
+            // "合并到当前分支"仅限本地分支；远程分支用"拉取到当前分支"
+            ...(!branch.remote ? [{
+                id: 'merge',
+                label: tt('git.mergeIntoCurrent'),
+                icon: GitMerge,
+                onClick: onMerge,
+            }] : []),
+            ...(onMergeInto ? [{
+                id: 'mergeInto',
+                label: tt('git.mergeInto'),
+                icon: ArrowRight,
+                onClick: onMergeInto,
+            }] : []),
+            // "推送到..."仅限本地分支，支持多远程同步（如 GitHub + Gitee）
+            ...(onPushTo ? [{
+                id: 'pushTo',
+                label: tt('git.pushTo'),
+                icon: Upload,
+                onClick: onPushTo,
+            }] : []),
+            { id: 'rebase', label: tt('git.rebase'), icon: RotateCcw, onClick: onRebase },
+            { id: 'separator', label: '', separator: true },
+            { id: 'delete', label: tt('delete'), icon: Trash2, danger: true, onClick: onDelete },
+        ]
 
     return (
         <div
             className={`group flex items-center px-3 py-1.5 hover:bg-surface-hover cursor-pointer transition-colors ${branch.current ? 'bg-accent/10' : ''
                 }`}
-            onClick={() => !branch.current && onCheckout()}
+            onClick={() => !branch.current && !branch.remote && onCheckout()}
+            onContextMenu={(e) => {
+                // 当前分支仅在提供"合并到..."时弹菜单
+                if (branch.current && !onMergeInto) return
+                show(e, branch)
+            }}
         >
             {branch.current ? (
                 <Check className="w-3 h-3 text-accent mr-2 flex-shrink-0" />
@@ -169,7 +235,8 @@ const BranchItem = memo(function BranchItem({
             )}
             <GitBranch className={`w-3 h-3 mr-2 flex-shrink-0 ${branch.remote ? 'text-purple-400' : 'text-accent'}`} />
             <span className={`text-xs flex-1 truncate ${branch.current ? 'text-accent font-medium' : 'text-text-secondary'}`}>
-                {branch.name}
+                {/* 远程分支在分组内展示，去掉远程前缀只显示分支名 */}
+                {branch.remote ? branch.name.slice(branch.name.indexOf('/') + 1) : branch.name}
             </span>
             {(branch.ahead && branch.ahead > 0) || (branch.behind && branch.behind > 0) ? (
                 <div className="flex items-center gap-1 mr-2">
@@ -185,40 +252,15 @@ const BranchItem = memo(function BranchItem({
                     ) : null}
                 </div>
             ) : null}
-            {!branch.current && (
-                <div className="relative" ref={menuRef}>
-                    <button
-                        ref={buttonRef}
-                        onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-                        className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <MoreHorizontal className="w-3 h-3 text-text-muted" />
-                    </button>
-                    {showMenu && (
-                        <div className="absolute right-0 top-full mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onMerge(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <GitMerge className="w-3 h-3" /> {tt('git.merge')}
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onRebase(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <RotateCcw className="w-3 h-3" /> {tt('git.rebase')}
-                            </button>
-                            <div className="border-t border-border-subtle my-1" />
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover text-red-400 flex items-center gap-2"
-                            >
-                                <Trash2 className="w-3 h-3" /> {tt('delete')}
-                            </button>
-                        </div>
-                    )}
-                </div>
+            {(!branch.current || onMergeInto) && (
+                <button
+                    onClick={(e) => show(e, branch)}
+                    className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                    <MoreHorizontal className="w-3 h-3 text-text-muted" />
+                </button>
             )}
+            {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={hide} />}
         </div>
     )
 })
@@ -700,12 +742,13 @@ export function GitView() {
                 logger.ui.warn('AI attribution reconcile failed during Git refresh:', { root: targetRepoRoot, error })
             })
 
-            const [s, c, b, st, op] = await Promise.all([
+            const [s, c, b, st, op, rm] = await Promise.all([
                 gitService.getStatus(targetRepoRoot),
                 gitService.getRecentCommits(30, targetRepoRoot),
                 gitService.getBranches(targetRepoRoot),
                 gitService.getStashList(targetRepoRoot),
                 gitService.getOperationState(targetRepoRoot),
+                gitService.getRemotes(targetRepoRoot),
             ])
 
             if (runId !== refreshRunRef.current) {
@@ -717,6 +760,8 @@ export function GitView() {
             setBranches(b)
             setStashList(st)
             setOperationState(op)
+            // 仅保留 fetch 行，避免 fetch/push 两条重复
+            setRemotes(rm.filter(r => r.type === 'fetch').map(r => ({ name: r.name, url: r.url })))
         } catch (e: unknown) {
             logger.ui.error('Git status error:', e)
             if (runId === refreshRunRef.current) {
@@ -1064,6 +1109,122 @@ Commit message:`
         }
     }
 
+    // 检出远程分支：落到本地分支，避免 detached HEAD
+    const handleCheckoutRemoteBranch = async (name: string) => {
+        const result = await gitService.checkoutRemoteBranch(name)
+        if (result.success) {
+            refreshStatus()
+            toast.success(tt('git.branchSwitched'), result.branch || name)
+        } else {
+            toast.error(tt('git.mergeFailed'), result.error)
+        }
+    }
+
+    // 合并到指定分支对话框
+    const [mergeIntoSource, setMergeIntoSource] = useState<string | null>(null)
+    const [mergeIntoTarget, setMergeIntoTarget] = useState('')
+    const [isMergingInto, setIsMergingInto] = useState(false)
+
+    // 远程仓库管理（多远程同步，如 GitHub + Gitee）
+    const [remotes, setRemotes] = useState<{ name: string; url: string }[]>([])
+    const [showAddRemote, setShowAddRemote] = useState(false)
+    const [newRemoteName, setNewRemoteName] = useState('')
+    const [newRemoteUrl, setNewRemoteUrl] = useState('')
+    const [isAddingRemote, setIsAddingRemote] = useState(false)
+
+    // 推送到指定远程
+    const [pushBranch, setPushBranch] = useState<string | null>(null)
+    const [pushTargetRemote, setPushTargetRemote] = useState('')
+    const [isPushingTo, setIsPushingTo] = useState(false)
+
+    const openMergeIntoDialog = (source: string) => {
+        setMergeIntoSource(source)
+        setMergeIntoTarget(localBranches.find(b => b.name !== source)?.name || '')
+    }
+
+    // 把源分支合并到目标分支：切到目标分支 → 合并 → 切回原分支
+    const handleMergeIntoTarget = async () => {
+        if (!mergeIntoSource || !mergeIntoTarget || isMergingInto) return
+        const source = mergeIntoSource
+        const target = mergeIntoTarget
+        const originalBranch = localBranches.find(b => b.current)?.name || ''
+        setIsMergingInto(true)
+        const checkoutResult = await gitService.checkoutBranch(target)
+        if (!checkoutResult.success) {
+            setIsMergingInto(false)
+            toast.error(tt('git.mergeFailed'), checkoutResult.error)
+            return
+        }
+        const mergeResult = await gitService.mergeBranch(source)
+        if (mergeResult.success) {
+            // 合并成功后切回原分支
+            if (originalBranch && originalBranch !== target) {
+                await gitService.checkoutBranch(originalBranch)
+            }
+            setIsMergingInto(false)
+            setMergeIntoSource(null)
+            refreshStatus()
+            toast.success(tt('git.mergeSuccess'), `${source} → ${target}`)
+        } else if (mergeResult.conflicts) {
+            // 有冲突：停留在目标分支，由用户解决
+            setIsMergingInto(false)
+            setMergeIntoSource(null)
+            refreshStatus()
+            toast.warning(tt('git.mergeConflicts'), `${mergeResult.conflicts.length} files`)
+        } else {
+            // 无冲突的失败：中止合并并切回原分支
+            await gitService.abortMerge()
+            if (originalBranch && originalBranch !== target) {
+                await gitService.checkoutBranch(originalBranch)
+            }
+            setIsMergingInto(false)
+            setMergeIntoSource(null)
+            refreshStatus()
+            toast.error(tt('git.mergeFailed'), mergeResult.error)
+        }
+    }
+
+    // 添加远程仓库，成功后拉取该远程以刷新远程分支列表
+    const handleAddRemote = async () => {
+        if (!newRemoteName.trim() || !newRemoteUrl.trim() || isAddingRemote) return
+        const name = newRemoteName.trim()
+        setIsAddingRemote(true)
+        const result = await gitService.addRemote(name, newRemoteUrl.trim())
+        if (result.success) {
+            await gitService.fetch(undefined, name).catch(() => undefined)
+            setIsAddingRemote(false)
+            setShowAddRemote(false)
+            setNewRemoteName('')
+            setNewRemoteUrl('')
+            refreshStatus()
+            toast.success(tt('git.addRemoteSuccess'), name)
+        } else {
+            setIsAddingRemote(false)
+            toast.error(tt('git.addRemoteFailed'), result.error)
+        }
+    }
+
+    // 推送分支到指定远程（'*' 表示所有远程逐一推送）
+    const handlePushToRemote = async () => {
+        if (!pushBranch || !pushTargetRemote || isPushingTo) return
+        const branch = pushBranch
+        const targets = pushTargetRemote === '*' ? remotes.map(r => r.name) : [pushTargetRemote]
+        setIsPushingTo(true)
+        const failed: string[] = []
+        for (const remote of targets) {
+            const result = await gitService.pushTo(remote, branch)
+            if (!result.success) failed.push(`${remote}: ${result.error || ''}`)
+        }
+        setIsPushingTo(false)
+        setPushBranch(null)
+        refreshStatus()
+        if (failed.length === 0) {
+            toast.success(tt('git.pushSuccess'), targets.join(', '))
+        } else {
+            toast.error(tt('git.pushFailed'), failed.join('\n'))
+        }
+    }
+
     const handleCreateBranch = async () => {
         if (!newBranchName.trim()) return
         const result = await gitService.createBranch(newBranchName)
@@ -1092,6 +1253,23 @@ Commit message:`
             } else {
                 toast.error(tt('git.mergeFailed'), result.error)
             }
+        }
+    }
+
+    // 从远程分支拉取到当前分支（右键远程分支）
+    const handlePullRemoteBranch = async (name: string) => {
+        const slashIndex = name.indexOf('/')
+        if (slashIndex === -1) return
+        const remote = name.slice(0, slashIndex)
+        const branchName = name.slice(slashIndex + 1)
+        setIsPulling(true)
+        const result = await gitService.pullFrom(remote, branchName)
+        setIsPulling(false)
+        if (result.success) {
+            refreshStatus()
+            toast.success(tt('git.pullSuccess'), name)
+        } else {
+            toast.error(tt('git.pullFailed'), result.error)
         }
     }
 
@@ -1364,6 +1542,40 @@ Commit message:`
 
     const localBranches = useMemo(() => branches.filter(b => !b.remote), [branches])
     const remoteBranches = useMemo(() => branches.filter(b => b.remote), [branches])
+
+    // 远程分支按远程名分组（过滤 "*/HEAD" 符号引用），组内只展示纯分支名
+    const remoteBranchGroups = useMemo(() => {
+        const byRemote = new Map<string, GitBranchType[]>()
+        for (const b of remoteBranches) {
+            if (b.name.endsWith('/HEAD')) continue
+            const remote = b.name.slice(0, b.name.indexOf('/'))
+            if (!byRemote.has(remote)) byRemote.set(remote, [])
+            byRemote.get(remote)!.push(b)
+        }
+        // 以 remotes 声明顺序为主，未知远程排后
+        const order = [
+            ...remotes.map(r => r.name),
+            ...[...byRemote.keys()].filter(n => !remotes.some(r => r.name === n)),
+        ]
+        const groups: { remote: string; host: string; branches: GitBranchType[] }[] = []
+        for (const remote of order) {
+            const list = byRemote.get(remote)
+            if (!list?.length) continue
+            groups.push({
+                remote,
+                host: hostOfRemoteUrl(remotes.find(r => r.name === remote)?.url || ''),
+                branches: list,
+            })
+        }
+        return groups
+    }, [remoteBranches, remotes])
+
+    // 远程分组的展开/收起（默认展开）
+    const [collapsedRemoteGroups, setCollapsedRemoteGroups] = useState<Record<string, boolean>>({})
+    const toggleRemoteGroup = (remote: string) => {
+        setCollapsedRemoteGroups(prev => ({ ...prev, [remote]: !prev[remote] }))
+    }
+
     const tabLabels = useMemo(() => ({
         changes: tt('git.changes'),
         branches: tt('git.branches'),
@@ -2093,6 +2305,8 @@ Commit message:`
                                     onCheckout={() => handleCheckoutBranch(branch.name)}
                                     onDelete={() => handleDeleteBranch(branch.name)}
                                     onMerge={() => handleMergeBranch(branch.name)}
+                                    onMergeInto={() => openMergeIntoDialog(branch.name)}
+                                    onPushTo={() => { setPushBranch(branch.name); setPushTargetRemote(remotes[0]?.name || '') }}
                                     onRebase={() => handleRebaseBranch(branch.name)}
                                 />
                             ))}
@@ -2107,17 +2321,41 @@ Commit message:`
                                 >
                                     {expandedSections.remoteBranches ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                     <span className="flex-1">{tt('git.remote')}</span>
-                                    <span className="text-[10px] text-text-muted">{remoteBranches.length}</span>
+                                    <span className="text-[10px] text-text-muted">{remoteBranchGroups.reduce((n, g) => n + g.branches.length, 0)}</span>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowAddRemote(true) }}
+                                        className="p-0.5 rounded hover:bg-surface-hover"
+                                        title={tt('git.addRemoteTitle')}
+                                    >
+                                        <Plus className="w-3 h-3 text-text-muted" />
+                                    </button>
                                 </div>
-                                {expandedSections.remoteBranches && remoteBranches.map(branch => (
-                                    <BranchItem
-                                        key={branch.name}
-                                        branch={branch}
-                                        onCheckout={() => handleCheckoutBranch(branch.name)}
-                                        onDelete={() => handleDeleteRemoteBranch(branch.name)}
-                                        onMerge={() => handleMergeBranch(branch.name)}
-                                        onRebase={() => handleRebaseBranch(branch.name)}
-                                    />
+                                {expandedSections.remoteBranches && remoteBranchGroups.map(group => (
+                                    <div key={group.remote}>
+                                        {/* 远程分组头：远程名 + 仓库主机，一眼区分 GitHub / Gitee */}
+                                        <div
+                                            className="px-3 py-1 pl-5 text-[10px] text-text-muted flex items-center gap-1.5 cursor-pointer hover:bg-surface-hover border-t border-border-subtle/50"
+                                            onClick={() => toggleRemoteGroup(group.remote)}
+                                        >
+                                            {collapsedRemoteGroups[group.remote]
+                                                ? <ChevronRight className="w-2.5 h-2.5 flex-shrink-0" />
+                                                : <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" />}
+                                            <span className="font-semibold text-text-secondary">{group.remote}</span>
+                                            <span className="flex-1 truncate opacity-70">{group.host}</span>
+                                            <span>{group.branches.length}</span>
+                                        </div>
+                                        {!collapsedRemoteGroups[group.remote] && group.branches.map(branch => (
+                                            <BranchItem
+                                                key={branch.name}
+                                                branch={branch}
+                                                onCheckout={() => handleCheckoutRemoteBranch(branch.name)}
+                                                onDelete={() => handleDeleteRemoteBranch(branch.name)}
+                                                onMerge={() => handleMergeBranch(branch.name)}
+                                                onRebase={() => handleRebaseBranch(branch.name)}
+                                                onPull={() => handlePullRemoteBranch(branch.name)}
+                                            />
+                                        ))}
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -2227,6 +2465,119 @@ Commit message:`
                     </div>
                 )}
             </div>
+
+            {/* Merge Into Branch Modal */}
+            {mergeIntoSource && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => { if (!isMergingInto) setMergeIntoSource(null) }}
+                    title={tt('git.mergeIntoTitle')}
+                    size="sm"
+                >
+                    <div className="flex flex-col gap-4">
+                        <p className="text-xs text-text-secondary">
+                            {t('git.mergeIntoSelectTarget', language, { source: mergeIntoSource })}
+                        </p>
+                        <Select
+                            value={mergeIntoTarget}
+                            onChange={setMergeIntoTarget}
+                            options={localBranches
+                                .filter(b => b.name !== mergeIntoSource)
+                                .map(b => ({ value: b.name, label: b.name }))}
+                            disabled={isMergingInto}
+                        />
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setMergeIntoSource(null)} disabled={isMergingInto}>
+                                {tt('cancel')}
+                            </Button>
+                            <Button
+                                onClick={() => void handleMergeIntoTarget()}
+                                disabled={!mergeIntoTarget || isMergingInto}
+                                isLoading={isMergingInto}
+                                leftIcon={<GitMerge className="w-3 h-3" />}
+                            >
+                                {tt('git.merge')}
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Add Remote Modal */}
+            <Modal
+                isOpen={showAddRemote}
+                onClose={() => { if (!isAddingRemote) setShowAddRemote(false) }}
+                title={tt('git.addRemoteTitle')}
+                size="sm"
+            >
+                <div className="flex flex-col gap-4">
+                    <p className="text-xs text-text-secondary">{tt('git.addRemoteHint')}</p>
+                    <div className="flex flex-col gap-2">
+                        <Input
+                            value={newRemoteName}
+                            onChange={(e) => setNewRemoteName(e.target.value)}
+                            placeholder={`${tt('git.remoteName')} (gitee)`}
+                            disabled={isAddingRemote}
+                        />
+                        <Input
+                            value={newRemoteUrl}
+                            onChange={(e) => setNewRemoteUrl(e.target.value)}
+                            placeholder={`${tt('git.remoteUrl')} (https://gitee.com/user/repo.git)`}
+                            disabled={isAddingRemote}
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setShowAddRemote(false)} disabled={isAddingRemote}>
+                            {tt('cancel')}
+                        </Button>
+                        <Button
+                            onClick={() => void handleAddRemote()}
+                            disabled={!newRemoteName.trim() || !newRemoteUrl.trim() || isAddingRemote}
+                            isLoading={isAddingRemote}
+                        >
+                            {tt('git.add')}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Push to Remote Modal */}
+            {pushBranch && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => { if (!isPushingTo) setPushBranch(null) }}
+                    title={tt('git.pushToTitle')}
+                    size="sm"
+                >
+                    <div className="flex flex-col gap-4">
+                        <p className="text-xs text-text-secondary">
+                            {t('git.pushToSelect', language, { branch: pushBranch })}
+                        </p>
+                        <Select
+                            value={pushTargetRemote}
+                            onChange={setPushTargetRemote}
+                            options={[
+                                ...remotes.map(r => ({ value: r.name, label: r.name })),
+                                ...(remotes.length > 1 ? [{ value: '*', label: tt('git.allRemotes') }] : []),
+                            ]}
+                            disabled={isPushingTo}
+                        />
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setPushBranch(null)} disabled={isPushingTo}>
+                                {tt('cancel')}
+                            </Button>
+                            <Button
+                                onClick={() => void handlePushToRemote()}
+                                disabled={!pushTargetRemote || isPushingTo}
+                                isLoading={isPushingTo}
+                                leftIcon={<Upload className="w-3 h-3" />}
+                            >
+                                {tt('git.push')}
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
 
             {/* Conflict Resolver Modal */}
             {conflictFile && (
