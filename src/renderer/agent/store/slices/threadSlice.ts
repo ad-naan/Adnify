@@ -141,10 +141,15 @@ export const createThreadSlice: StateCreator<
             taskId: options?.taskId,
         })
         const activate = options?.activate ?? true
+        const evictedThreadIds: string[] = []
         set(state => {
             const newThreads = { ...state.threads, [thread.id]: thread }
             let newBranches = state.branches
             let newActiveBranch = state.activeBranchId
+            let newMessageVersions = {
+                ...state.threadMessageVersions,
+                [thread.id]: 0,
+            }
 
             const MAX_THREADS = 50
             const threadIds = Object.keys(newThreads)
@@ -157,25 +162,34 @@ export const createThreadSlice: StateCreator<
                 const toDelete = sorted.slice(0, threadIds.length - MAX_THREADS)
                 newBranches = { ...newBranches }
                 newActiveBranch = { ...newActiveBranch }
+                newMessageVersions = { ...newMessageVersions }
 
                 for (const { id } of toDelete) {
                     delete newThreads[id]
                     delete newBranches[id]
                     delete newActiveBranch[id]
+                    // Previously leaked: the version counter outlived its thread.
+                    delete newMessageVersions[id]
+                    evictedThreadIds.push(id)
                 }
             }
 
             return {
                 threads: newThreads,
                 currentThreadId: activate ? thread.id : state.currentThreadId,
-                threadMessageVersions: {
-                    ...state.threadMessageVersions,
-                    [thread.id]: 0,
-                },
+                threadMessageVersions: newMessageVersions,
                 branches: newBranches,
                 activeBranchId: newActiveBranch,
             }
         })
+
+        // FIFO eviction used to drop threads from the in-memory map only, leaving
+        // their `<id>.jsonl` and metadata orphaned on disk forever — a permanent
+        // leak that plan mode makes worse, since every plan task burns a slot.
+        // `deleteThread` has always cleaned up disk; eviction now does too.
+        for (const evictedId of evictedThreadIds) {
+            void agentSessionRepository.deleteThread(evictedId)
+        }
 
         return thread.id
     },
