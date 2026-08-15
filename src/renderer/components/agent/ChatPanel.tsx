@@ -311,11 +311,21 @@ export default function ChatPanel() {
       }
     }
 
+    // Plan mode hides the ChatPanel header, which is where the only triggers for
+    // ConversationSidebar live. The workbench raises this event so plan-mode
+    // users can still reach session history (and thread deletion).
+    const handleOpenSessions = () => {
+      setSidebarTab('history')
+      setSidebarOpen(true)
+    }
+
     window.addEventListener('chat-send-message', handleOptionSelect as EventListener)
     window.addEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
+    window.addEventListener('chat-open-sessions', handleOpenSessions)
     return () => {
       window.removeEventListener('chat-send-message', handleOptionSelect as EventListener)
       window.removeEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
+      window.removeEventListener('chat-open-sessions', handleOpenSessions)
     }
   }, [sendMessage])
 

@@ -15,6 +15,8 @@ export function usePlanWorkbenchController() {
   const switchThread = useAgentStore(state => state.switchThread)
   const setActivePlan = useAgentStore(state => state.setActivePlan)
   const createThread = useAgentStore(state => state.createThread)
+  const deletePlan = useAgentStore(state => state.deletePlan)
+  const deleteThread = useAgentStore(state => state.deleteThread)
   const [starting, setStarting] = useState(false)
 
   const model = useMemo(() => projectPlanWorkbench({ plan, currentThreadId, threads }), [currentThreadId, plan, threads])
@@ -45,6 +47,22 @@ export function usePlanWorkbenchController() {
     if (entry.threadId) switchThread(entry.threadId)
   }, [setActivePlan, switchThread])
 
+  /**
+   * History mixes two entity types with different lifecycles, so deletion has to
+   * branch: a plan owns its JSON, its requirements doc and every plan-task thread
+   * it spawned (handled by `deletePlan`), while a bare requirements conversation
+   * is just a thread.
+   *
+   * For a plan entry the linked thread IS the plan's origin conversation (see
+   * `projectPlanHistory`, which sets `threadId: plan.originThreadId`), so it is
+   * removed together with the plan — leaving it behind would resurface as a
+   * separate "conversation" entry for a plan that no longer exists.
+   */
+  const deleteHistoryEntry = useCallback((entry: PlanHistoryEntry) => {
+    if (entry.planId) deletePlan(entry.planId)
+    if (entry.threadId) deleteThread(entry.threadId)
+  }, [deletePlan, deleteThread])
+
   const createNewPlan = useCallback(() => {
     setActivePlan(null)
     createThread({ activate: true, mode: 'plan', origin: 'user' })
@@ -62,6 +80,7 @@ export function usePlanWorkbenchController() {
     reject: (requestId?: string) => Agent.reject(requestId),
     openThread: switchThread,
     openHistoryEntry,
+    deleteHistoryEntry,
     createNewPlan,
   }
 }
