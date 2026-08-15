@@ -117,6 +117,8 @@ export class LoopDetector {
     for (const tc of toolCalls) {
       const record = this.createRecord(tc, fileContents)
 
+      // All rules are advisory and surface via `warning`; `isLoop` is kept in the
+      // condition only so a future hard-stop rule would still be routed here.
       const exactResult = this.checkExactRepeat(record)
       if (exactResult.isLoop || exactResult.warning) {
         return exactResult
@@ -124,13 +126,13 @@ export class LoopDetector {
 
       if (WRITE_OPERATIONS.has(tc.name) && record.target) {
         const contentResult = this.checkContentChange(record)
-        if (contentResult.isLoop) {
+        if (contentResult.isLoop || contentResult.warning) {
           return contentResult
         }
       }
 
       const patternResult = this.checkPatternLoop(record)
-      if (patternResult.isLoop) {
+      if (patternResult.isLoop || patternResult.warning) {
         return patternResult
       }
     }
@@ -255,8 +257,8 @@ export class LoopDetector {
 
     if (exactMatches.length >= threshold) {
       return {
-        isLoop: true,
-        reason: `Detected exact repeat of ${record.name} (${exactMatches.length + 1} times with identical arguments).`,
+        isLoop: false,
+        warning: `Detected exact repeat of ${record.name} (${exactMatches.length + 1} times with identical arguments).`,
         suggestion: isReadOp
           ? 'The file content may not have changed. Consider a different approach.'
           : 'The same operation has been attempted multiple times. Please try a different approach.',
@@ -304,8 +306,8 @@ export class LoopDetector {
 
     if (recentHashes.length >= this.config.maxNoChangeEdits && uniqueHashes.size <= 2) {
       return {
-        isLoop: true,
-        reason: `File "${record.target}" content is cycling between ${uniqueHashes.size} state(s) after ${recentHashes.length} edits.`,
+        isLoop: false,
+        warning: `File "${record.target}" content is cycling between ${uniqueHashes.size} state(s) after ${recentHashes.length} edits.`,
         suggestion: 'The edits are not making progress. Consider reviewing the approach or asking for clarification.',
         details: {
           category: 'content_cycle',
@@ -339,9 +341,9 @@ export class LoopDetector {
       if (isExactPattern && !this.isPathExploration(firstHalf, secondHalf)) {
         const pattern = firstHalf.map(item => `${item.name}(${item.target || 'N/A'})`).join(' -> ')
         return {
-          isLoop: true,
-          reason: `Detected repeating pattern: ${pattern} (repeated 2 times).`,
-          suggestion: 'The agent is stuck in a loop. Consider breaking the pattern with a different approach.',
+          isLoop: false,
+          warning: `Detected repeating pattern: ${pattern} (repeated 2 times).`,
+          suggestion: 'The agent may be stuck in a loop. Consider breaking the pattern with a different approach.',
           details: {
             category: 'pattern_loop',
             pattern,
