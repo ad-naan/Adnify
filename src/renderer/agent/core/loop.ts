@@ -404,6 +404,14 @@ export async function runLoop(
   let iteration = 0
   let shouldContinue = true
 
+  // Auto-fix feeds lint errors back to the model and spends an iteration doing
+  // so. Errors the model cannot fix (generated files, vendored code, false
+  // positives) would otherwise consume every remaining iteration and push the
+  // turn into the tool-call limit. Stop re-reporting an identical error set after
+  // a couple of attempts and let the model get on with the task instead.
+  const AUTO_FIX_MAX_ATTEMPTS_PER_SIGNATURE = 2
+  const autoFixAttempts = new Map<string, number>()
+
   const messageRouting = resolveMessageRouting(
     requestMessages,
     routingConfig,
@@ -453,6 +461,15 @@ export async function runLoop(
     suggestion?: string,
     loopCheck?: LoopCheckResult
   ): Promise<void> => {
+    // The soft-limit recovery issues a fresh LLM request. If the user has
+    // already aborted, that request must not go out: emit the abort terminal
+    // event instead so callers awaiting `loop:end` still settle.
+    if (context.abortSignal?.aborted) {
+      threadStore.updateExecutionMeta({ loopState: 'aborted' })
+      EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      return
+    }
+
     const { language } = useStore.getState()
     const diagnosticText = formatLoopDiagnostic(language, loopCheck)
 
@@ -709,26 +726,15 @@ Try again with the corrected tool call.`,
       break
     }
 
+    // Loop detection is advisory only: it never terminates the turn.
+    //
+    // Every detector result now arrives as `warning`, handled below by feeding a
+    // corrective hint back to the model and continuing. Long-running tasks
+    // legitimately repeat tool patterns (edit -> lint -> edit ...), and killing
+    // the turn on that signal made long tasks unfinishable. `isLoop` is retained
+    // on the result type for callers that want to inspect it, but the loop does
+    // not branch on it.
     const loopCheck = loopDetector.checkLoop(result.toolCalls)
-    if (loopCheck.isLoop) {
-      const { language } = useStore.getState()
-      const loopTitle = getLocalizedText(language, '检测到循环执行', 'Loop Detected')
-      const loopMessage = getLoopCheckMessage(language, loopCheck)
-      const loopSuggestion = getLoopCheckSuggestion(language, loopCheck)
-
-      logger.agent.warn(`[Loop] Loop detected: ${loopCheck.reason}`)
-      clearUnexecutedToolCards(result.toolCalls)
-      threadStore.addSystemAlertPart(assistantId, {
-        alertType: 'warning',
-        title: loopTitle,
-        message: loopMessage,
-        suggestion: loopSuggestion,
-        compact: true,
-      })
-      EventBus.emit({ type: 'loop:warning', message: loopMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
-      await completeWithSoftLimitFeedback(loopTitle, loopMessage, loopSuggestion, loopCheck)
-      break
-    }
 
     if (loopCheck.warning) {
       const { language } = useStore.getState()
@@ -864,15 +870,32 @@ Try again with the corrected tool call.`,
     if (enableAutoFix && !userRejected && context.workspacePath) {
       const autoFixResult = await autoFix(result.toolCalls, context.workspacePath)
       if (autoFixResult) {
+        // Key on the error set itself: a changing signature means the model is
+        // making progress and keeps its budget, while an identical signature
+        // means it is stuck on the same errors and should stop being nagged.
+        const signature = autoFixResult.files
+          .map(file => `${file.filePath}:${file.errors.map(e => `${e.line}:${e.message}`).join('|')}`)
+          .sort()
+          .join('\n')
+        const attempts = (autoFixAttempts.get(signature) || 0) + 1
+        autoFixAttempts.set(signature, attempts)
+
         threadStore.addLintCheckPart(assistantId)
         threadStore.updateLintCheckPart(assistantId, {
           files: autoFixResult.files,
           status: 'failed',
         })
-        requestMessages.push({ role: 'user', content: autoFixResult.content })
-        shouldContinue = true
-        threadStore.setStreamPhase('streaming')
-        continue
+
+        if (attempts <= AUTO_FIX_MAX_ATTEMPTS_PER_SIGNATURE) {
+          requestMessages.push({ role: 'user', content: autoFixResult.content })
+          shouldContinue = true
+          threadStore.setStreamPhase('streaming')
+          continue
+        }
+
+        logger.agent.warn(
+          `[Loop] Auto-fix gave up after ${attempts - 1} attempts on an unchanged lint error set; continuing without re-reporting.`
+        )
       }
     }
 
@@ -886,10 +909,27 @@ Try again with the corrected tool call.`,
     threadStore.setStreamPhase('streaming')
   }
 
-  if (iteration >= maxIterations) {
+  // Only a genuine iteration-cap exhaustion gets the soft-limit treatment.
+  //
+  // This used to test `iteration >= maxIterations` alone, which is also true for
+  // a turn that simply finished on its final allowed iteration. Every `break`
+  // above (complete / error / aborted / user_rejected / handoff_required /
+  // waiting_for_user / tool_requested_stop) already emitted its own `loop:end`,
+  // so the old check appended a bogus "limit reached" alert, emitted a SECOND
+  // `loop:end`, and fired an extra LLM request — including right after the user
+  // pressed stop. `shouldContinue` is the discriminator: only the "run another
+  // iteration" path at the end of the loop body leaves it true, while every
+  // break path leaves it false.
+  const exhaustedIterations = shouldContinue && iteration >= maxIterations && !context.abortSignal?.aborted
+
+  if (exhaustedIterations) {
     const { language } = useStore.getState()
     const limitTitle = getLocalizedText(language, '达到工具调用上限', 'Tool Call Limit Reached')
-    const limitMessage = getLocalizedText(language, '当前轮次已达到最大工具调用次数。', 'The agent reached the maximum tool call limit for this turn.')
+    const limitMessage = getLocalizedText(
+      language,
+      `当前轮次已达到最大工具调用次数（${maxIterations} 次）。可在设置 → Agent → 最大循环中调高上限。`,
+      `The agent reached this turn's tool call limit (${maxIterations}). You can raise it in Settings → Agent → Max Loops.`
+    )
 
     logger.agent.warn('[Loop] Reached maximum iterations')
     threadStore.addSystemAlertPart(assistantId, {
@@ -903,7 +943,11 @@ Try again with the corrected tool call.`,
     await completeWithSoftLimitFeedback(
       limitTitle,
       limitMessage,
-      getLocalizedText(language, '请停止继续调工具，直接总结当前进展并调整策略。', 'Stop calling tools, summarize the current progress, and adjust the strategy.')
+      getLocalizedText(
+        language,
+        '请停止继续调工具，直接总结当前进展、说明还剩哪些未完成，以便用户决定是否继续。',
+        'Stop calling tools. Summarize what you accomplished and what remains, so the user can decide whether to continue.'
+      )
     )
   }
 }
