@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import {
     GitBranch, GitCommit as GitCommitIcon, GitMerge, GitPullRequest,
     ChevronDown, ChevronRight, Plus, Minus, RefreshCw, Trash2,
-    ArrowUp, ArrowDown, ArrowRight, Check, X, MoreHorizontal, FolderGit2,
+    ArrowUp, ArrowDown, ArrowRight, Check, X, MoreHorizontal, FolderGit2, Upload,
     FolderOpen, Download, Undo2, RotateCcw, Copy, Archive, AlertTriangle,
     Play, SkipForward, Loader2, Sparkles, List, Maximize
 } from 'lucide-react'
@@ -133,6 +133,20 @@ const FileItem = memo(function FileItem({
     )
 })
 
+// 从远程 URL 提取主机名（支持 https 与 git@host:path 两种形式）
+const hostOfRemoteUrl = (url: string): string => {
+    if (!url) return ''
+    if (url.startsWith('http')) {
+        try {
+            return new URL(url).host
+        } catch {
+            return url
+        }
+    }
+    const sshMatch = url.match(/^[\w.-]+@([\w.-]+):/)
+    return sshMatch ? sshMatch[1] : url
+}
+
 // 分支项组件
 const BranchItem = memo(function BranchItem({
     branch,
@@ -140,6 +154,7 @@ const BranchItem = memo(function BranchItem({
     onDelete,
     onMerge,
     onMergeInto,
+    onPushTo,
     onRebase,
     onPull,
 }: {
@@ -148,6 +163,7 @@ const BranchItem = memo(function BranchItem({
     onDelete: () => void
     onMerge: () => void
     onMergeInto?: () => void
+    onPushTo?: () => void
     onRebase: () => void
     onPull?: () => void
 }) {
@@ -189,6 +205,13 @@ const BranchItem = memo(function BranchItem({
                 icon: ArrowRight,
                 onClick: onMergeInto,
             }] : []),
+            // "推送到..."仅限本地分支，支持多远程同步（如 GitHub + Gitee）
+            ...(onPushTo ? [{
+                id: 'pushTo',
+                label: tt('git.pushTo'),
+                icon: Upload,
+                onClick: onPushTo,
+            }] : []),
             { id: 'rebase', label: tt('git.rebase'), icon: RotateCcw, onClick: onRebase },
             { id: 'separator', label: '', separator: true },
             { id: 'delete', label: tt('delete'), icon: Trash2, danger: true, onClick: onDelete },
@@ -212,7 +235,8 @@ const BranchItem = memo(function BranchItem({
             )}
             <GitBranch className={`w-3 h-3 mr-2 flex-shrink-0 ${branch.remote ? 'text-purple-400' : 'text-accent'}`} />
             <span className={`text-xs flex-1 truncate ${branch.current ? 'text-accent font-medium' : 'text-text-secondary'}`}>
-                {branch.name}
+                {/* 远程分支在分组内展示，去掉远程前缀只显示分支名 */}
+                {branch.remote ? branch.name.slice(branch.name.indexOf('/') + 1) : branch.name}
             </span>
             {(branch.ahead && branch.ahead > 0) || (branch.behind && branch.behind > 0) ? (
                 <div className="flex items-center gap-1 mr-2">
@@ -718,12 +742,13 @@ export function GitView() {
                 logger.ui.warn('AI attribution reconcile failed during Git refresh:', { root: targetRepoRoot, error })
             })
 
-            const [s, c, b, st, op] = await Promise.all([
+            const [s, c, b, st, op, rm] = await Promise.all([
                 gitService.getStatus(targetRepoRoot),
                 gitService.getRecentCommits(30, targetRepoRoot),
                 gitService.getBranches(targetRepoRoot),
                 gitService.getStashList(targetRepoRoot),
                 gitService.getOperationState(targetRepoRoot),
+                gitService.getRemotes(targetRepoRoot),
             ])
 
             if (runId !== refreshRunRef.current) {
@@ -735,6 +760,8 @@ export function GitView() {
             setBranches(b)
             setStashList(st)
             setOperationState(op)
+            // 仅保留 fetch 行，避免 fetch/push 两条重复
+            setRemotes(rm.filter(r => r.type === 'fetch').map(r => ({ name: r.name, url: r.url })))
         } catch (e: unknown) {
             logger.ui.error('Git status error:', e)
             if (runId === refreshRunRef.current) {
@@ -1098,6 +1125,18 @@ Commit message:`
     const [mergeIntoTarget, setMergeIntoTarget] = useState('')
     const [isMergingInto, setIsMergingInto] = useState(false)
 
+    // 远程仓库管理（多远程同步，如 GitHub + Gitee）
+    const [remotes, setRemotes] = useState<{ name: string; url: string }[]>([])
+    const [showAddRemote, setShowAddRemote] = useState(false)
+    const [newRemoteName, setNewRemoteName] = useState('')
+    const [newRemoteUrl, setNewRemoteUrl] = useState('')
+    const [isAddingRemote, setIsAddingRemote] = useState(false)
+
+    // 推送到指定远程
+    const [pushBranch, setPushBranch] = useState<string | null>(null)
+    const [pushTargetRemote, setPushTargetRemote] = useState('')
+    const [isPushingTo, setIsPushingTo] = useState(false)
+
     const openMergeIntoDialog = (source: string) => {
         setMergeIntoSource(source)
         setMergeIntoTarget(localBranches.find(b => b.name !== source)?.name || '')
@@ -1142,6 +1181,47 @@ Commit message:`
             setMergeIntoSource(null)
             refreshStatus()
             toast.error(tt('git.mergeFailed'), mergeResult.error)
+        }
+    }
+
+    // 添加远程仓库，成功后拉取该远程以刷新远程分支列表
+    const handleAddRemote = async () => {
+        if (!newRemoteName.trim() || !newRemoteUrl.trim() || isAddingRemote) return
+        const name = newRemoteName.trim()
+        setIsAddingRemote(true)
+        const result = await gitService.addRemote(name, newRemoteUrl.trim())
+        if (result.success) {
+            await gitService.fetch(undefined, name).catch(() => undefined)
+            setIsAddingRemote(false)
+            setShowAddRemote(false)
+            setNewRemoteName('')
+            setNewRemoteUrl('')
+            refreshStatus()
+            toast.success(tt('git.addRemoteSuccess'), name)
+        } else {
+            setIsAddingRemote(false)
+            toast.error(tt('git.addRemoteFailed'), result.error)
+        }
+    }
+
+    // 推送分支到指定远程（'*' 表示所有远程逐一推送）
+    const handlePushToRemote = async () => {
+        if (!pushBranch || !pushTargetRemote || isPushingTo) return
+        const branch = pushBranch
+        const targets = pushTargetRemote === '*' ? remotes.map(r => r.name) : [pushTargetRemote]
+        setIsPushingTo(true)
+        const failed: string[] = []
+        for (const remote of targets) {
+            const result = await gitService.pushTo(remote, branch)
+            if (!result.success) failed.push(`${remote}: ${result.error || ''}`)
+        }
+        setIsPushingTo(false)
+        setPushBranch(null)
+        refreshStatus()
+        if (failed.length === 0) {
+            toast.success(tt('git.pushSuccess'), targets.join(', '))
+        } else {
+            toast.error(tt('git.pushFailed'), failed.join('\n'))
         }
     }
 
@@ -1462,6 +1542,39 @@ Commit message:`
 
     const localBranches = useMemo(() => branches.filter(b => !b.remote), [branches])
     const remoteBranches = useMemo(() => branches.filter(b => b.remote), [branches])
+
+    // 远程分支按远程名分组（过滤 "*/HEAD" 符号引用），组内只展示纯分支名
+    const remoteBranchGroups = useMemo(() => {
+        const byRemote = new Map<string, GitBranchType[]>()
+        for (const b of remoteBranches) {
+            if (b.name.endsWith('/HEAD')) continue
+            const remote = b.name.slice(0, b.name.indexOf('/'))
+            if (!byRemote.has(remote)) byRemote.set(remote, [])
+            byRemote.get(remote)!.push(b)
+        }
+        // 以 remotes 声明顺序为主，未知远程排后
+        const order = [
+            ...remotes.map(r => r.name),
+            ...[...byRemote.keys()].filter(n => !remotes.some(r => r.name === n)),
+        ]
+        const groups: { remote: string; host: string; branches: GitBranchType[] }[] = []
+        for (const remote of order) {
+            const list = byRemote.get(remote)
+            if (!list?.length) continue
+            groups.push({
+                remote,
+                host: hostOfRemoteUrl(remotes.find(r => r.name === remote)?.url || ''),
+                branches: list,
+            })
+        }
+        return groups
+    }, [remoteBranches, remotes])
+
+    // 远程分组的展开/收起（默认展开）
+    const [collapsedRemoteGroups, setCollapsedRemoteGroups] = useState<Record<string, boolean>>({})
+    const toggleRemoteGroup = (remote: string) => {
+        setCollapsedRemoteGroups(prev => ({ ...prev, [remote]: !prev[remote] }))
+    }
 
     const tabLabels = useMemo(() => ({
         changes: tt('git.changes'),
@@ -2193,6 +2306,7 @@ Commit message:`
                                     onDelete={() => handleDeleteBranch(branch.name)}
                                     onMerge={() => handleMergeBranch(branch.name)}
                                     onMergeInto={() => openMergeIntoDialog(branch.name)}
+                                    onPushTo={() => { setPushBranch(branch.name); setPushTargetRemote(remotes[0]?.name || '') }}
                                     onRebase={() => handleRebaseBranch(branch.name)}
                                 />
                             ))}
@@ -2207,18 +2321,41 @@ Commit message:`
                                 >
                                     {expandedSections.remoteBranches ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                     <span className="flex-1">{tt('git.remote')}</span>
-                                    <span className="text-[10px] text-text-muted">{remoteBranches.length}</span>
+                                    <span className="text-[10px] text-text-muted">{remoteBranchGroups.reduce((n, g) => n + g.branches.length, 0)}</span>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setShowAddRemote(true) }}
+                                        className="p-0.5 rounded hover:bg-surface-hover"
+                                        title={tt('git.addRemoteTitle')}
+                                    >
+                                        <Plus className="w-3 h-3 text-text-muted" />
+                                    </button>
                                 </div>
-                                {expandedSections.remoteBranches && remoteBranches.map(branch => (
-                                    <BranchItem
-                                        key={branch.name}
-                                        branch={branch}
-                                        onCheckout={() => handleCheckoutRemoteBranch(branch.name)}
-                                        onDelete={() => handleDeleteRemoteBranch(branch.name)}
-                                        onMerge={() => handleMergeBranch(branch.name)}
-                                        onRebase={() => handleRebaseBranch(branch.name)}
-                                        onPull={() => handlePullRemoteBranch(branch.name)}
-                                    />
+                                {expandedSections.remoteBranches && remoteBranchGroups.map(group => (
+                                    <div key={group.remote}>
+                                        {/* 远程分组头：远程名 + 仓库主机，一眼区分 GitHub / Gitee */}
+                                        <div
+                                            className="px-3 py-1 pl-5 text-[10px] text-text-muted flex items-center gap-1.5 cursor-pointer hover:bg-surface-hover border-t border-border-subtle/50"
+                                            onClick={() => toggleRemoteGroup(group.remote)}
+                                        >
+                                            {collapsedRemoteGroups[group.remote]
+                                                ? <ChevronRight className="w-2.5 h-2.5 flex-shrink-0" />
+                                                : <ChevronDown className="w-2.5 h-2.5 flex-shrink-0" />}
+                                            <span className="font-semibold text-text-secondary">{group.remote}</span>
+                                            <span className="flex-1 truncate opacity-70">{group.host}</span>
+                                            <span>{group.branches.length}</span>
+                                        </div>
+                                        {!collapsedRemoteGroups[group.remote] && group.branches.map(branch => (
+                                            <BranchItem
+                                                key={branch.name}
+                                                branch={branch}
+                                                onCheckout={() => handleCheckoutRemoteBranch(branch.name)}
+                                                onDelete={() => handleDeleteRemoteBranch(branch.name)}
+                                                onMerge={() => handleMergeBranch(branch.name)}
+                                                onRebase={() => handleRebaseBranch(branch.name)}
+                                                onPull={() => handlePullRemoteBranch(branch.name)}
+                                            />
+                                        ))}
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -2360,6 +2497,82 @@ Commit message:`
                                 leftIcon={<GitMerge className="w-3 h-3" />}
                             >
                                 {tt('git.merge')}
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Add Remote Modal */}
+            <Modal
+                isOpen={showAddRemote}
+                onClose={() => { if (!isAddingRemote) setShowAddRemote(false) }}
+                title={tt('git.addRemoteTitle')}
+                size="sm"
+            >
+                <div className="flex flex-col gap-4">
+                    <p className="text-xs text-text-secondary">{tt('git.addRemoteHint')}</p>
+                    <div className="flex flex-col gap-2">
+                        <Input
+                            value={newRemoteName}
+                            onChange={(e) => setNewRemoteName(e.target.value)}
+                            placeholder={`${tt('git.remoteName')} (gitee)`}
+                            disabled={isAddingRemote}
+                        />
+                        <Input
+                            value={newRemoteUrl}
+                            onChange={(e) => setNewRemoteUrl(e.target.value)}
+                            placeholder={`${tt('git.remoteUrl')} (https://gitee.com/user/repo.git)`}
+                            disabled={isAddingRemote}
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" onClick={() => setShowAddRemote(false)} disabled={isAddingRemote}>
+                            {tt('cancel')}
+                        </Button>
+                        <Button
+                            onClick={() => void handleAddRemote()}
+                            disabled={!newRemoteName.trim() || !newRemoteUrl.trim() || isAddingRemote}
+                            isLoading={isAddingRemote}
+                        >
+                            {tt('git.add')}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Push to Remote Modal */}
+            {pushBranch && (
+                <Modal
+                    isOpen={true}
+                    onClose={() => { if (!isPushingTo) setPushBranch(null) }}
+                    title={tt('git.pushToTitle')}
+                    size="sm"
+                >
+                    <div className="flex flex-col gap-4">
+                        <p className="text-xs text-text-secondary">
+                            {t('git.pushToSelect', language, { branch: pushBranch })}
+                        </p>
+                        <Select
+                            value={pushTargetRemote}
+                            onChange={setPushTargetRemote}
+                            options={[
+                                ...remotes.map(r => ({ value: r.name, label: r.name })),
+                                ...(remotes.length > 1 ? [{ value: '*', label: tt('git.allRemotes') }] : []),
+                            ]}
+                            disabled={isPushingTo}
+                        />
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setPushBranch(null)} disabled={isPushingTo}>
+                                {tt('cancel')}
+                            </Button>
+                            <Button
+                                onClick={() => void handlePushToRemote()}
+                                disabled={!pushTargetRemote || isPushingTo}
+                                isLoading={isPushingTo}
+                                leftIcon={<Upload className="w-3 h-3" />}
+                            >
+                                {tt('git.push')}
                             </Button>
                         </div>
                     </div>
