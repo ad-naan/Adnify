@@ -262,9 +262,15 @@ export class AgentClass {
     const store = useAgentStore.getState()
     const targetThreadId = threadId || store.currentThreadId
 
+    // Captured BEFORE the runningTasks entry is removed below. Reading it after
+    // the delete always yielded undefined, silently falling through to the
+    // thread's stored requestId.
+    let runningRequestId: string | undefined
+
     // 中止当前线程的任务
     if (targetThreadId && this.runningTasks.has(targetThreadId)) {
       const task = this.runningTasks.get(targetThreadId)!
+      runningRequestId = task.requestId
       task.abortController.abort()
 
       const thread = store.threads[targetThreadId]
@@ -290,14 +296,19 @@ export class AgentClass {
 
     const thread = targetThreadId ? store.threads[targetThreadId] : store.getCurrentThread()
     const effectiveRequestId = targetThreadId
-      ? this.runningTasks.get(targetThreadId)?.requestId
+      ? runningRequestId
         || thread?.streamState?.requestId
         || thread?.executionMeta?.requestId
       : undefined
 
     api.llm.abort(effectiveRequestId)
     if (targetThreadId) {
-      approvalService.reject(thread?.executionMeta?.requestId)
+      // Must be the SAME id used to abort the LLM request. Passing a different
+      // one (previously executionMeta.requestId) could cancel one request while
+      // rejecting the approval of another — and approvalService.reject(undefined)
+      // falls back to the most recently registered key, which can belong to an
+      // unrelated thread.
+      approvalService.reject(effectiveRequestId)
     }
 
     if (thread) {

@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react'
-import { History } from 'lucide-react'
+import { History, MessagesSquare } from 'lucide-react'
 import type { PlanActivityStatus, PlanWorkbenchFocus, PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { PlanWorkbenchActivity } from './PlanWorkbenchActivity'
 import { PlanWorkbenchApproval } from './PlanWorkbenchApproval'
@@ -24,7 +24,7 @@ const focusDot = (tone: PlanActivityStatus) => {
 }
 
 export const PlanWorkbench = memo(function PlanWorkbench() {
-  const { language, plan, model, history, submitClarification, approve, reject, openThread, openHistoryEntry } = usePlanWorkbenchController()
+  const { language, plan, model, history, submitClarification, approve, reject, openThread, openHistoryEntry, deleteHistoryEntry } = usePlanWorkbenchController()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   useEffect(() => {
@@ -55,10 +55,26 @@ export const PlanWorkbench = memo(function PlanWorkbench() {
   } : null
   const visibleFocus = processingFocus || reviewFocus || model.focus
 
-  if (!model.hasSession) return <div className="relative h-full"><PlanWorkbenchEmpty language={language} recent={history} onOpenHistory={() => setHistoryOpen(true)} onSelectHistory={openHistoryEntry} /><PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} /></div>
+  // Plan mode hides the ChatPanel header, so the workbench owns the only route to
+  // session history — which is also the only place a thread can be deleted.
+  const openSessions = () => window.dispatchEvent(new CustomEvent('chat-open-sessions'))
+  const sessionsButton = <button
+    onClick={openSessions}
+    title={language === 'zh' ? '会话记录' : 'Session history'}
+    className="rounded-md border border-border/45 bg-background/80 p-1.5 text-text-muted shadow-sm backdrop-blur hover:bg-surface-hover hover:text-text-primary"
+  ><MessagesSquare className="h-3.5 w-3.5" /></button>
+
+  if (!model.hasSession) return <div className="relative h-full">
+    <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">{sessionsButton}</div>
+    <PlanWorkbenchEmpty language={language} recent={history} onOpenHistory={() => setHistoryOpen(true)} onSelectHistory={openHistoryEntry} />
+    <PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} />
+  </div>
 
   return <div className="relative h-full min-h-0">
-    {history.length > 0 && <button onClick={() => setHistoryOpen(true)} title={language === 'zh' ? '计划历史' : 'Plan history'} className="absolute right-3 top-3 z-10 rounded-md border border-border/45 bg-background/80 p-1.5 text-text-muted shadow-sm backdrop-blur hover:bg-surface-hover hover:text-text-primary"><History className="h-3.5 w-3.5" /></button>}
+    <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">
+      {sessionsButton}
+      {history.length > 0 && <button onClick={() => setHistoryOpen(true)} title={language === 'zh' ? '计划历史' : 'Plan history'} className="rounded-md border border-border/45 bg-background/80 p-1.5 text-text-muted shadow-sm backdrop-blur hover:bg-surface-hover hover:text-text-primary"><History className="h-3.5 w-3.5" /></button>}
+    </div>
     <div className="h-full overflow-y-auto custom-scrollbar">
     <div className="mx-auto w-full max-w-[560px] px-4 pb-5 pt-4">
       {visibleFocus && <section className="rounded-xl border border-border/55 bg-surface/[0.14] px-3.5 py-3">
@@ -92,7 +108,7 @@ export const PlanWorkbench = memo(function PlanWorkbench() {
       <PlanWorkbenchActivity activities={model.activities} language={language} />
     </div>
     </div>
-    <PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} />
+    <PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} />
   </div>
 })
 

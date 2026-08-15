@@ -738,24 +738,27 @@ export const selectTodos = (state: AgentStore) => {
 // ===== StreamingBuffer 初始化 =====
 // ===== Store 初始化 =====
 
+/**
+ * Persist session state whenever the durable slices change.
+ *
+ * This used to monkey-patch `useAgentStore.setState`, which silently never fired.
+ * In Zustand v5 `createStoreImpl` passes its *internal* `setState` closure to the
+ * slice initializer, and `Object.assign(useBoundStore, api)` only exposes a copy
+ * of that reference — so every `set(...)` inside a slice bypassed the patched
+ * function entirely. Verified against zustand/esm/vanilla.mjs: a slice action
+ * triggers the patch 0 times, while `subscribe` sees every transition.
+ *
+ * The practical effect was that the debounced write never ran: renaming or
+ * deleting a thread, switching threads, editing todos and every branch mutation
+ * stayed in memory until the next agent run or app shutdown happened to flush.
+ */
 function initializeAgentSessionSync(): void {
     if (hasInitializedAgentSessionSync) {
         return
     }
 
     hasInitializedAgentSessionSync = true
-    const rawSetState = useAgentStore.setState
-    useAgentStore.setState = ((partial: any, replace?: boolean) => {
-        const prevState = useAgentStore.getState()
-        if (replace === undefined) {
-            rawSetState(partial)
-        } else if (replace) {
-            rawSetState(partial, true)
-        } else {
-            rawSetState(partial, false)
-        }
-        const nextState = useAgentStore.getState()
-
+    useAgentStore.subscribe((nextState, prevState) => {
         if (
             prevState.currentThreadId !== nextState.currentThreadId ||
             prevState.threads !== nextState.threads ||
@@ -764,7 +767,7 @@ function initializeAgentSessionSync(): void {
         ) {
             scheduleAgentSessionPersistence()
         }
-    }) as typeof useAgentStore.setState
+    })
 }
 
 export async function initializeAgentStore(): Promise<void> {

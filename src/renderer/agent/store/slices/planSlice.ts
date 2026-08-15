@@ -122,10 +122,54 @@ export const createPlanSlice: StateCreator<
     },
 
     deletePlan: (planId) => {
+        const plan = get().plans.find(p => p.id === planId)
+
+        // Cascade to the hidden plan-task threads this plan spawned. They are
+        // excluded from the sidebar by `isTopLevelThreadForMode`, so if they are
+        // not removed here the user can never reach them again — they would only
+        // ever be reclaimed by the 50-thread FIFO eviction.
+        const orphanThreadIds = Object.values(get().threads)
+            .filter(thread => thread.origin === 'plan-task' && thread.planId === planId)
+            .map(thread => thread.id)
+
         set((state) => ({
             plans: state.plans.filter((p) => p.id !== planId),
             activePlanId: state.activePlanId === planId ? null : state.activePlanId,
+            currentTaskId: state.activePlanId === planId ? null : state.currentTaskId,
         }))
+
+        for (const threadId of orphanThreadIds) {
+            get().deleteThread(threadId)
+        }
+
+        // Cancel any queued save so a debounced write cannot recreate the file we
+        // are about to delete.
+        const pendingTimer = saveTimers.get(planId)
+        if (pendingTimer) {
+            clearTimeout(pendingTimer)
+            saveTimers.delete(planId)
+        }
+        latestQueuedRevision.delete(planId)
+
+        // Plans live on disk, and `loadPlansFromDisk` rebuilds the list from that
+        // directory on every workspace open. Dropping the in-memory entry alone
+        // would resurrect the plan on the next load.
+        void (async () => {
+            const workspacePath = useStore.getState().workspacePath
+            if (!workspacePath) return
+
+            const planDir = `${workspacePath}/.adnify/plan`
+            const targets = [`${planDir}/${planId}.json`]
+            if (plan?.requirementsDoc) targets.push(`${planDir}/${plan.requirementsDoc}`)
+
+            for (const target of targets) {
+                try {
+                    if (await api.file.exists(target)) await api.file.delete(target)
+                } catch (error) {
+                    console.warn(`[PlanSlice] Failed to delete plan file: ${target}`, error)
+                }
+            }
+        })()
     },
 
     setPlans: (plans) => {
