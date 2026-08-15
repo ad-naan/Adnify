@@ -12,6 +12,8 @@ import type { BranchSlice } from './branchSlice'
 import type { ToolStreamingPreview } from '@/shared/types'
 import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
 import { createIdleHandoffState, createRuntimeThreadState } from '../../types'
+import { findMostRecentThreadForMode } from '../../threads/threadModeProjection'
+import { normalizeMode } from '@/shared/types/workMode'
 
 export interface ThreadStoreState {
     threads: Record<string, ChatThread>
@@ -254,7 +256,7 @@ export const createThreadSlice: StateCreator<
             if (!state.threads[threadId]) return state
 
             const { [threadId]: _thread, ...remaining } = state.threads
-            const remainingIds = Object.keys(remaining)
+            const replacementThread = findMostRecentThreadForMode(Object.values(remaining), normalizeMode(_thread.mode))
             const { [threadId]: _messageVersion, ...remainingMessageVersions } = state.threadMessageVersions
             const { [threadId]: _branch, ...remainingBranches } = state.branches || {}
             const { [threadId]: _activeBranch, ...remainingActiveBranch } = state.activeBranchId || {}
@@ -263,7 +265,7 @@ export const createThreadSlice: StateCreator<
             return {
                 threads: remaining,
                 currentThreadId: state.currentThreadId === threadId
-                    ? (remainingIds[0] || null)
+                    ? (replacementThread?.id || null)
                     : state.currentThreadId,
                 threadMessageVersions: remainingMessageVersions,
                 branches: remainingBranches,

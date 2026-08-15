@@ -16,6 +16,8 @@ export interface QueuedMessage {
   contextItems: ContextItem[]
   /** 工作模式 */
   chatMode: WorkMode
+  /** 入队时绑定的顶层任务，防止切换模式后串线。 */
+  targetThreadId?: string
   /** 入队时间 */
   createdAt: number
   /** 状态 */
@@ -29,7 +31,7 @@ export interface MessageQueueState {
 
 export interface MessageQueueActions {
   /** 入队 */
-  enqueue: (msg: Pick<QueuedMessage, 'content' | 'contextItems' | 'chatMode'>) => string
+  enqueue: (msg: Pick<QueuedMessage, 'content' | 'contextItems' | 'chatMode' | 'targetThreadId'>) => string
   /** 出队（取第一条） */
   dequeue: () => QueuedMessage | undefined
   /** 查看队首（不移除） */

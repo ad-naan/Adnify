@@ -1,6 +1,7 @@
 import { logger } from '@utils/Logger'
 import { useStore } from '@/renderer/store'
 import { useModeStore } from '@/renderer/modes/modeStore'
+import { normalizeMode } from '@/shared/types/workMode'
 import { Agent } from '../core/Agent'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { useAgentStore, type HandoffSessionResult } from '../store/AgentStore'
@@ -76,6 +77,7 @@ function buildAutoResumeMessage(result: HandoffSessionResult, language: 'zh' | '
 async function continueAutoHandoff(result: HandoffSessionResult): Promise<void> {
   const appState = useStore.getState()
   const modeState = useModeStore.getState()
+  const sourceMode = normalizeMode(useAgentStore.getState().threads[result.threadId]?.mode || modeState.currentMode)
   const agentConfig = getAgentConfig()
   const language = (appState.language || 'zh') as 'zh' | 'en'
 
@@ -86,7 +88,7 @@ async function continueAutoHandoff(result: HandoffSessionResult): Promise<void> 
       contextLimit: agentConfig.maxContextTokens,
     },
     appState.workspacePath,
-    modeState.currentMode,
+    sourceMode,
     {
       openFiles: appState.openFiles.map(file => file.path),
       activeFile: appState.activeFilePath || undefined,

@@ -26,6 +26,7 @@ export const useMessageQueueStore = create<MessageQueueSlice>()(
           content: msg.content,
           contextItems: [...msg.contextItems],
           chatMode: msg.chatMode,
+          targetThreadId: msg.targetThreadId,
           createdAt: Date.now(),
           status: 'pending' as const,
         }

@@ -593,7 +593,7 @@ async function runTaskWithAgent(
                 feedbackMessage,
                 llmConfig,
                 session.workspacePath,
-                'agent',
+                'plan',
                 {
                     promptTemplateId: templateId,
                     planPhase: 'executing',
