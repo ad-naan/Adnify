@@ -639,6 +639,22 @@ class GitService {
         }
     }
 
+    /**
+     * 从指定远程（可选指定分支）拉取，如: pullFrom('origin', 'main')
+     */
+    async pullFrom(remote: string, branch?: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const args = branch ? ['pull', remote, branch] : ['pull', remote]
+            const result = await this.exec(args, rootPath)
+            return {
+                success: result.exitCode === 0,
+                error: result.exitCode !== 0 ? result.stderr : undefined,
+            }
+        } catch (err) {
+            return { success: false, error: handleGitError(err) }
+        }
+    }
+
     async fetch(rootPath?: string): Promise<{ success: boolean; error?: string }> {
         try {
             const result = await this.exec(['fetch', '--all', '--prune'], rootPath)
@@ -696,8 +712,8 @@ class GitService {
                 let name = parts[0]
                 const commitHash = parts[1] || ''
 
-                // 跳过 HEAD 指针
-                if (name === 'HEAD' || name.includes('->')) continue
+                // 跳过 HEAD 指针与 detached HEAD 伪行（"* (HEAD detached at xxx)"）
+                if (name === 'HEAD' || name.startsWith('(') || name.includes('->')) continue
 
                 const remote = name.startsWith('remotes/')
                 if (remote) {
@@ -741,6 +757,47 @@ class GitService {
             return {
                 success: result.exitCode === 0,
                 error: result.exitCode !== 0 ? result.stderr : undefined,
+            }
+        } catch (err) {
+            return { success: false, error: handleGitError(err) }
+        }
+    }
+
+    /**
+     * 检出远程分支（避免 detached HEAD）：
+     * - "origin/HEAD" 先解析为远程默认分支
+     * - 本地存在同名分支则直接切换，否则基于远程分支创建本地跟踪分支
+     */
+    async checkoutRemoteBranch(name: string, rootPath?: string): Promise<{ success: boolean; error?: string; branch?: string }> {
+        try {
+            const slashIndex = name.indexOf('/')
+            if (slashIndex === -1) {
+                return { success: false, error: 'Invalid remote branch name format' }
+            }
+            const remote = name.slice(0, slashIndex)
+            let branch = name.slice(slashIndex + 1)
+
+            // "origin/HEAD" 是符号引用，解析为实际默认分支（如 master）
+            if (branch === 'HEAD') {
+                const symRef = await this.exec(['symbolic-ref', `refs/remotes/${remote}/HEAD`], rootPath)
+                branch = symRef.exitCode === 0
+                    ? symRef.stdout.trim().replace(`refs/remotes/${remote}/`, '')
+                    : ''
+                if (!branch || branch.endsWith('/HEAD')) {
+                    return { success: false, error: 'Cannot resolve remote default branch' }
+                }
+            }
+
+            // 本地已有同名分支 → 直接切换；否则从远程分支创建跟踪分支
+            const localExists = await this.exec(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], rootPath)
+            const args = localExists.exitCode === 0
+                ? ['checkout', branch]
+                : ['checkout', '-b', branch, `${remote}/${branch}`]
+            const result = await this.exec(args, rootPath)
+            return {
+                success: result.exitCode === 0,
+                error: result.exitCode !== 0 ? result.stderr : undefined,
+                branch,
             }
         } catch (err) {
             return { success: false, error: handleGitError(err) }
