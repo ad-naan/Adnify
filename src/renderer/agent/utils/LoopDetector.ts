@@ -10,6 +10,7 @@
 import { logger } from '@utils/Logger'
 import type { LLMToolCall } from '@/shared/types'
 import { getAgentConfig } from './AgentConfig'
+import { normalizePath } from '@shared/utils/pathUtils'
 
 interface ToolCallRecord {
   name: string
@@ -91,6 +92,13 @@ const WRITE_OPERATIONS = new Set([
   'run_command',
 ])
 
+/**
+ * How many trailing path segments form a content-hash key. Two is enough to tell
+ * `src/a.ts` from `test/a.ts` while remaining independent of the absolute prefix
+ * that tool executors produce.
+ */
+const CONTENT_KEY_SEGMENTS = 2
+
 export class LoopDetector {
   private history: ToolCallRecord[] = []
   private contentHashes: Map<string, string[]> = new Map()
@@ -153,13 +161,37 @@ export class LoopDetector {
     this.pushContentHash(filePath, hash)
   }
 
+  /**
+   * Canonical key for the content-hash map.
+   *
+   * Writers and readers arrive from opposite directions:
+   *   - writers  (loop.ts) pass `meta.filePath`, an ABSOLUTE path produced by
+   *     `resolvePath()` in the tool executors.
+   *   - the reader (`checkContentChange`) uses `record.target`, which is the
+   *     RELATIVE path the model put in `args.path`.
+   *
+   * Keying on the raw string meant the two never matched, so `contentHashes`
+   * always looked empty to the reader (`hashes.length < 2`) and content-cycle
+   * detection — the "agent rewrites the same file back and forth" case — never
+   * fired at all. Normalizing separators and reducing to a workspace-agnostic
+   * suffix makes both sides converge without needing the workspace root here.
+   */
+  private contentHashKey(filePath: string): string {
+    const normalized = normalizePath(filePath).replace(/^\.\//, '').replace(/\/+$/, '')
+    // Keep the trailing path segments; enough to distinguish same-named files in
+    // different directories while staying independent of the absolute prefix.
+    const segments = normalized.split('/').filter(Boolean)
+    return segments.slice(-CONTENT_KEY_SEGMENTS).join('/').toLowerCase()
+  }
+
   private pushContentHash(filePath: string, hash: string): void {
-    const hashes = this.contentHashes.get(filePath) || []
+    const key = this.contentHashKey(filePath)
+    const hashes = this.contentHashes.get(key) || []
     hashes.push(hash)
     if (hashes.length > 10) {
       hashes.shift()
     }
-    this.contentHashes.set(filePath, hashes)
+    this.contentHashes.set(key, hashes)
   }
 
   reset(): void {
@@ -262,7 +294,7 @@ export class LoopDetector {
       return { isLoop: false }
     }
 
-    const hashes = this.contentHashes.get(record.target) || []
+    const hashes = this.contentHashes.get(this.contentHashKey(record.target)) || []
     if (hashes.length < 2) {
       return { isLoop: false }
     }
