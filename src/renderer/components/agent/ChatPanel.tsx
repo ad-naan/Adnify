@@ -55,6 +55,8 @@ import { useMessageQueueConsumer } from '@/renderer/hooks/useMessageQueue'
 import { shellServerRoutingService } from '@/renderer/agent/services/shellServerRoutingService'
 import PlanWorkbench from '@/renderer/components/plan/workbench/PlanWorkbench'
 import { isPlanBoardPath } from '@/shared/types/planBoard'
+import { findMostRecentThreadForMode, isTopLevelThreadForMode } from '@/renderer/agent/threads/threadModeProjection'
+import type { WorkMode } from '@/shared/types/workMode'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -150,7 +152,22 @@ export default function ChatPanel() {
     addContextItem,
     removeContextItem,
     regenerateFromMessage,
+    switchThread,
   } = useAgentActions()
+
+  const resolvedModeRef = useRef<WorkMode | null>(null)
+  useEffect(() => {
+    if (resolvedModeRef.current === chatMode) return
+    resolvedModeRef.current = chatMode
+
+    const state = useAgentStore.getState()
+    const current = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
+    if (isTopLevelThreadForMode(current, chatMode)) return
+
+    const recent = findMostRecentThreadForMode(Object.values(state.threads), chatMode)
+    if (recent) switchThread(recent.id)
+    else createThread({ mode: chatMode, origin: 'user' })
+  }, [chatMode, createThread, switchThread])
 
   const [inputState, setInputState] = useState('')
   const input = inputState ?? ''
@@ -739,6 +756,7 @@ export default function ChatPanel() {
     }
 
     let userMessage: string | Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = input.trim()
+    let effectiveMode = chatMode
 
     if (images.length > 0) {
       const readyImages = images.filter(img => img.base64)
@@ -767,6 +785,7 @@ export default function ChatPanel() {
       if (result) {
         userMessage = result.prompt
         if (result.mode) {
+          effectiveMode = result.mode
           setChatMode(result.mode)
         }
       }
@@ -782,9 +801,12 @@ export default function ChatPanel() {
       ]
       : visibleContextItems.filter(item => item.type !== 'ShellServer')
 
-    let targetThreadId = currentThreadId
-    if (!targetThreadId && (contextItemsForSend.length > 0 || explicitServer.lastActiveServer)) {
-      targetThreadId = createThread()
+    const threadState = useAgentStore.getState()
+    const currentTarget = currentThreadId ? threadState.threads[currentThreadId] : undefined
+    let targetThreadId = isTopLevelThreadForMode(currentTarget, effectiveMode) ? currentThreadId : null
+    if (!targetThreadId) {
+      targetThreadId = findMostRecentThreadForMode(Object.values(threadState.threads), effectiveMode)?.id
+        || createThread({ mode: effectiveMode, origin: 'user' })
     }
 
     if (targetThreadId) {
@@ -807,7 +829,8 @@ export default function ChatPanel() {
       enqueue({
         content: userMessage,
         contextItems: [...contextItemsForSend],
-        chatMode,
+        chatMode: effectiveMode,
+        targetThreadId,
       })
       toast.info(language === 'zh' ? '已加入发送队列' : 'Added to send queue')
       return
@@ -816,7 +839,7 @@ export default function ChatPanel() {
     // 发送消息后主动滚到底部，确保用户消息和即将出现的 AI 回复可见
     // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
     scrollToBottom('smooth')
-    await sendMessage(userMessage)
+    await sendMessage(userMessage, { mode: effectiveMode, threadId: targetThreadId })
   }, [input, images, isStreaming, sendMessage, contextFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, visibleContextItems, chatMode, toast, language, currentThreadId, createThread])
 
   // 编辑消息

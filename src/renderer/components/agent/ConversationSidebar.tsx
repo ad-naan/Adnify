@@ -21,6 +21,8 @@ import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { getRelativeTime } from '@shared/utils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { useModeStore } from '@/renderer/modes/modeStore'
+import { projectThreadsForMode } from '@/renderer/agent/threads/threadModeProjection'
 
 type Tab = 'history' | 'branches'
 
@@ -32,15 +34,16 @@ interface ConversationSidebarProps {
 
 export default function ConversationSidebar({ isOpen, onClose, initialTab = 'history' }: ConversationSidebarProps) {
   const language = useStore(s => s.language)
+  const currentMode = useModeStore(s => s.currentMode)
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [searchQuery, setSearchQuery] = useState('')
 
   React.useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab)
+      setActiveTab(currentMode === 'plan' ? 'history' : initialTab)
       setSearchQuery('')
     }
-  }, [isOpen, initialTab])
+  }, [currentMode, isOpen, initialTab])
 
   return (
     <AnimatePresence>
@@ -65,14 +68,16 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/30 select-none">
               <h2 className="text-base font-semibold text-text-primary tracking-tight">
-                {language === 'zh' ? '对话管理' : 'Conversation'}
+                {currentMode === 'plan'
+                  ? (language === 'zh' ? '计划记录' : 'Plan history')
+                  : (language === 'zh' ? 'Agent 任务' : 'Agent tasks')}
               </h2>
               <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full hover:bg-surface/80 text-text-muted hover:text-text-primary transition-colors">
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
-            <div className="px-5 pt-4 pb-2">
+            {currentMode !== 'plan' && <div className="px-5 pt-4 pb-2">
               <div className="flex p-1 bg-surface/50 rounded-lg select-none border border-border/20">
                 <button
                   onClick={() => setActiveTab('history')}
@@ -109,7 +114,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                   {language === 'zh' ? '分支' : 'Branches'}
                 </button>
               </div>
-            </div>
+            </div>}
 
             <div className="px-5 py-2">
               <div className="relative group">
@@ -134,7 +139,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
 
             <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-4 pt-2">
               {activeTab === 'history' ? (
-                <HistoryList searchQuery={searchQuery} onClose={onClose} language={language} />
+                <HistoryList searchQuery={searchQuery} onClose={onClose} language={language} mode={currentMode} />
               ) : (
                 <BranchList searchQuery={searchQuery} onClose={onClose} language={language} />
               )}
@@ -146,12 +151,14 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                   className="w-full justify-center gap-2 bg-accent hover:bg-accent-hover text-white shadow-lg shadow-accent/20 h-10 rounded-xl transition-transform active:scale-[0.98]"
                   onClick={() => {
                     const { createThread } = useAgentStore.getState()
-                    createThread()
+                    createThread({ mode: currentMode, origin: 'user' })
                     onClose()
                   }}
                 >
                   <Plus className="w-4 h-4" />
-                  {language === 'zh' ? '新对话' : 'New Chat'}
+                  {currentMode === 'plan'
+                    ? (language === 'zh' ? '新建计划任务' : 'New plan task')
+                    : (language === 'zh' ? '新建 Agent 任务' : 'New Agent task')}
                 </Button>
               </div>
             )}
@@ -162,7 +169,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
   )
 }
 
-function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, onClose: () => void, language: string }) {
+function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: string, onClose: () => void, language: string, mode: 'agent' | 'plan' }) {
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   const { switchThread, deleteThread, renameThread } = useAgentActions()
   const allThreads = useAllThreads()
@@ -182,7 +189,7 @@ function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, 
   }
 
   const filteredThreads = useMemo(() => {
-    return allThreads.filter(thread => {
+    return projectThreadsForMode(allThreads, mode).filter(thread => {
       if (!searchQuery) return true
       const title = getThreadDisplayTitle(thread).toLowerCase()
       const firstMsg = thread.messages.find(m => m.role === 'user')
@@ -190,7 +197,7 @@ function HistoryList({ searchQuery, onClose, language }: { searchQuery: string, 
       const normalizedQuery = searchQuery.toLowerCase()
       return title.includes(normalizedQuery) || text.includes(normalizedQuery)
     })
-  }, [allThreads, searchQuery])
+  }, [allThreads, mode, searchQuery])
 
   if (filteredThreads.length === 0) {
     return <EmptyState icon={History} text={language === 'zh' ? '无历史记录' : 'No history found'} />

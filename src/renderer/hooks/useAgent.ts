@@ -22,6 +22,7 @@ import {
 import { Agent } from '@/renderer/agent/core'
 import { getAgentConfig } from '@/renderer/agent/utils/AgentConfig'
 import { MessageContent, ChatThread, ToolCall } from '@/renderer/agent/types'
+import type { WorkMode } from '@/shared/types/workMode'
 
 let cachedThreadsRef: Record<string, ChatThread> | null = null
 let cachedSortedThreads: ChatThread[] = []
@@ -93,7 +94,7 @@ export function useAgentCommands() {
     planPhase,
   }
 
-  const sendMessage = useCallback(async (content: MessageContent) => {
+  const sendMessage = useCallback(async (content: MessageContent, options?: { mode?: WorkMode, threadId?: string }) => {
     const {
       llmConfig: config,
       workspacePath: currentWorkspacePath,
@@ -107,6 +108,7 @@ export function useAgentCommands() {
 
     const agentConfig = getAgentConfig()
 
+    const targetMode = options?.mode || currentChatMode
     await Agent.send(
       content,
       {
@@ -114,14 +116,15 @@ export function useAgentCommands() {
         contextLimit: agentConfig.maxContextTokens,
       },
       currentWorkspacePath,
-      currentChatMode,
+      targetMode,
       {
         openFiles: currentOpenFiles.map(file => file.path),
         activeFile: currentActiveFilePath || undefined,
         customInstructions: currentAiInstructions,
         promptTemplateId: currentPromptTemplateId,
-        planPhase: currentChatMode === 'plan' ? currentPlanPhase : undefined,
-      }
+        planPhase: targetMode === 'plan' ? currentPlanPhase : undefined,
+      },
+      { threadId: options?.threadId }
     )
   }, [])
 
