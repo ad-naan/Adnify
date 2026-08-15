@@ -1,7 +1,6 @@
 /**
  * 提示词模板系统
- * 参考：Claude Code, Codex CLI, Gemini CLI, GPT-5.1 等主流 AI Agent
- *
+ * 参考：Claude Code, Codex CLI, Gemini CLI
  * 设计原则：
  * 1. 通用部分（身份、工具、工作流）提取为共享常量
  * 2. 每个模板只定义差异化的人格和沟通风格
@@ -107,7 +106,7 @@ export const SECURITY_RULES = `## Security Rules
  */
 
 /**
- * 代码规范（参考 Claude Code, Gemini CLI）
+ * 代码规范
  */
 export const CODE_CONVENTIONS = `## Code Conventions
 
@@ -171,7 +170,7 @@ You are an AUTONOMOUS agent. This means:
 - Make parallel tool calls when operations are independent (but NOT for MCP tools)
 - Stop only when the task is fully completed
 - Verify changes with get_lint_errors after editing code
-- Batch similar operations: use read_multiple_files, combine search patterns with |
+- Batch similar operations: read several files in one \`read_file\` call with path=["a.ts","b.ts"], combine search patterns with |
 - For local PDF/Word/PowerPoint/Excel files, use read_file first instead of asking the user to convert them to plain text
 - For standalone screenshots or image files, use read_image instead of treating them like normal text files
 - For multi-document writing tasks (for example merging several .md/.txt plans), read all source documents first, then write once after the full context is available
@@ -247,7 +246,7 @@ export const TOOL_GUIDELINES = `## Tool Usage Guidelines
 ### Parallel Tool Calls
 
 When multiple independent operations are needed, batch them:
-- Reading multiple files → use read_multiple_files
+- Reading multiple files → one \`read_file\` call with path=["src/a.ts","src/b.ts"]
 - Reading local Office/PDF documents → use read_file
 - Reading screenshots or image files → use read_image
 - Searching different patterns → combine with |
@@ -260,9 +259,9 @@ DO NOT make parallel edits to the SAME file.
 - \`write_file\`: only for new files, near-total rewrites, or deliberate full regeneration
 - \`create_directory\`: only for creating folders/directories
 - \`edit_file\`: for any partial modification to an existing file
-- Small, unique local change 鈫?use \`edit_file\` string mode
-- Known line range or large file 鈫?use \`edit_file\` line mode
-- Multiple non-overlapping changes in one file 鈫?use \`edit_file\` batch mode
+- Small, unique local change → use \`edit_file\` string mode
+- Known line range or large file → use \`edit_file\` line mode
+- Multiple non-overlapping changes in one file → use \`edit_file\` batch mode
 - Never choose \`write_file\` as a shortcut for a difficult edit on an existing file
 - Never repeat large full-file rewrites when one targeted edit would solve the task
 
@@ -308,21 +307,12 @@ mcp_server__get_data items=["a", "b", "c"]  // If batch supported
 - Mark tasks \`completed\` IMMEDIATELY after finishing, not in batches
 - \`content\`: imperative ("Fix the login bug"), \`activeForm\`: continuous ("Fixing the login bug")`;
 
-// BASE_SYSTEM_INFO 不再需要，由 PromptBuilder 动态构建
-
-// ============================================
-// 模板定义：只包含差异化的人格部分
-// ============================================
-
-
-
 // ============================================
 // 模板定义：只包含差异化的人格部分
 // ============================================
 
 /**
  * 内置提示词模板
- * 人格定义参考 GPT-5.1 系列
  */
 export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {

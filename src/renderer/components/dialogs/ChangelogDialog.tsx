@@ -3,7 +3,7 @@
  * High-aesthetic in-app release history and what's new viewer.
  */
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
@@ -17,12 +17,10 @@ import {
   ChevronRight,
   ChevronDown,
   Calendar,
-  Layers,
   ArrowLeft,
   ArrowRight,
   Target,
   X,
-  Tag,
   Wrench,
   BookOpen,
 } from 'lucide-react'
@@ -38,7 +36,6 @@ import {
   searchChangelog,
   type ReleaseNote,
   type ReleaseCategory,
-  type ReleaseDetailItem,
 } from '@/shared/config/changelogData'
 import { api } from '@/renderer/services/electronAPI'
 

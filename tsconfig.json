@@ -25,4 +25,10 @@
     }
   },
   "include": ["src/**/*", "src/renderer/vite-env.d.ts","tests/**/*"],
+  // src/main is compiled by tsconfig.main.json (module: CommonJS). It is excluded
+  // here because main-process files legitimately use `import x = require(...)`,
+  // which is invalid under this config's module: ESNext and would report TS1202.
+  // tests/treeSitterTest.ts is a manual scratch script (not matched by vitest's
+  // *.{test,spec,property}.ts globs) that imports src/main directly.
+  "exclude": ["src/main/**/*", "tests/treeSitterTest.ts"],
 }

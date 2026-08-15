@@ -57,6 +57,7 @@ export function useGlobalShortcuts() {
     showCommandPalette,
     showQuickOpen,
     showAbout,
+    showChangelog,
     activeFilePath,
   }
 

@@ -330,7 +330,7 @@ async function processGitContext(workspacePath: string | null): Promise<string |
 async function processTerminalContext(workspacePath: string | null): Promise<string | null> {
   try {
     const config = getAgentConfig()
-    const terminalOutput = await toolRegistry.execute('get_terminal_output', {
+    const terminalOutput = await toolRegistry.execute('read_terminal_output', {
       terminal_id: 'default',
       lines: 50
     }, { workspacePath })
