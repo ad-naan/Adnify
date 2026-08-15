@@ -43,3 +43,6 @@ out/
 package-lock.json
 /CC-Source
 /tmp
+
+.pnpm-store/
+
