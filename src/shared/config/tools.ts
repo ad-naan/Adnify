@@ -1332,13 +1332,13 @@ export const SEARCH_DECISION_GUIDE = `
    → Example: search_files path="src/styles.css" pattern="button|card"
 
 4. Looking for FILES BY NAME/PATTERN?
-   → Use \`list_directory\` or \`get_dir_tree\`
+   → Use \`list_directory\` (set recursive=true to walk subdirectories)
 
 **NEVER use bash grep/find - use these tools instead.**
 
 **ANTI-FRAGMENTATION:**
 - Combine multiple patterns with | instead of making multiple calls
-- Use read_multiple_files instead of multiple read_file calls
+- Pass an array to \`read_file\` (path=["a.ts","b.ts"]) instead of multiple read_file calls
 `
 
 // ============================================

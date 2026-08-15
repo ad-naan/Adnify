@@ -200,7 +200,7 @@ export function projectPlanWorkbench(input: {
   const completedCount = tasks.filter(item => item.task.status === 'completed').length
   const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0
   const stage = deriveStage(plan, planningState, tasks)
-  const toolActivities = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
+  const toolActivities: PlanActivityItem[] = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
     if (!isAssistantMessage(message)) return []
     return (message.toolCalls || []).flatMap((toolCall, index) => {
       if (toolCall.name === 'report_plan_activity') return []

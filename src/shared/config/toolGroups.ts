@@ -63,9 +63,7 @@ const CORE_TOOLS: string[] = [
   'read_file',
   'read_image',
   'list_directory',
-  'get_dir_tree',
   'search_files',
-  'read_multiple_files',
   // 文件编辑
   'edit_file',
   'write_file',
@@ -124,16 +122,13 @@ const PLAN_EXECUTION_CONTROL_TOOLS: string[] = [
 const PLAN_EXPLORATION_TOOLS: string[] = [
   'read_file',
   'read_image',
-  'read_multiple_files',
   'list_directory',
-  'get_dir_tree',
   'search_files',
   'codebase_search',
   'find_references',
   'go_to_definition',
   'get_hover_info',
   'get_document_symbols',
-  'get_file_info',
 ]
 
 /**

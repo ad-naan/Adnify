@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from 'react'
 import { History } from 'lucide-react'
-import type { PlanActivityStatus, PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
+import type { PlanActivityStatus, PlanWorkbenchFocus, PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { PlanWorkbenchActivity } from './PlanWorkbenchActivity'
 import { PlanWorkbenchApproval } from './PlanWorkbenchApproval'
 import { PlanWorkbenchRuntime } from './PlanWorkbenchRuntime'
@@ -37,7 +37,7 @@ export const PlanWorkbench = memo(function PlanWorkbench() {
     const timer = window.setInterval(() => setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000)
     return () => window.clearInterval(timer)
   }, [model.isProcessing, model.planningState])
-  const processingFocus = model.isProcessing && model.focus?.tone !== 'active' ? {
+  const processingFocus: PlanWorkbenchFocus | null = model.isProcessing && model.focus?.tone !== 'active' ? {
     stage: model.stage,
     title: model.planningState === 'ready_to_create'
       ? (language === 'zh' ? '正在生成计划' : 'Creating the plan')
@@ -47,7 +47,7 @@ export const PlanWorkbench = memo(function PlanWorkbench() {
       : (language === 'zh' ? 'AI 正在处理下一步，执行动作会持续显示在这里' : 'The next action will appear here as it runs'),
     tone: 'active' as const,
   } : null
-  const reviewFocus = plan && model.canStart && !model.isProcessing ? {
+  const reviewFocus: PlanWorkbenchFocus | null = plan && model.canStart && !model.isProcessing ? {
     stage: 'plan' as const,
     title: language === 'zh' ? '计划已生成，等待审阅' : 'Plan ready for review',
     detail: `${model.tasks.length} ${language === 'zh' ? '项任务' : 'tasks'} · ${plan.executionMode === 'parallel' ? (language === 'zh' ? '并行调度' : 'parallel') : (language === 'zh' ? '顺序调度' : 'sequential')}`,
