@@ -25,8 +25,10 @@ import type { LLMStreamSource } from '@/shared/types/llm'
 import { createIdleHandoffState } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
+import type { BranchSlice } from './branchSlice'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
+import { buildPersistedAgentSessionState, persistCriticalAgentSessionState } from '../agentStorage'
 
 // ===== 类型定义 =====
 
@@ -149,7 +151,7 @@ function mergeSourceEntry(current: LLMStreamSource, incoming: LLMStreamSource): 
 // ===== Slice 创建器 =====
 
 export const createMessageSlice: StateCreator<
-    ThreadSlice & MessageSlice,
+    ThreadSlice & MessageSlice & BranchSlice,
     [],
     [],
     MessageSlice
@@ -615,6 +617,14 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
+            // Branches hold full copies of the conversation, including the
+            // synthetic `__mainline__` snapshot. Leaving them behind meant a user
+            // who cleared their history still had that content on disk (it is
+            // persisted to _extra.json) and could resurrect it by switching
+            // branches. Clearing history must clear the copies too.
+            const { [threadId]: _clearedBranches, ...remainingBranches } = state.branches || {}
+            const { [threadId]: _clearedActiveBranch, ...remainingActiveBranch } = state.activeBranchId || {}
+
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
@@ -632,6 +642,8 @@ export const createMessageSlice: StateCreator<
                         state: { currentCheckpointIdx: null, isStreaming: false },
                     },
                 },
+                branches: remainingBranches,
+                activeBranchId: remainingActiveBranch,
                 // 同时清理检查点和待确认更改
                 pendingChanges: [],
             }
@@ -639,8 +651,13 @@ export const createMessageSlice: StateCreator<
 
         get().clearToolStreamingPreviews(threadId)
 
-        // 清理工具调用日志（在 useStore 中）
-        // 注意：这里需要导入 useStore，但为了避免循环依赖，我们在调用处处理
+        // Persist immediately rather than relying on the debounce. Whether the
+        // on-disk `<id>.jsonl` actually got truncated used to depend on if a flush
+        // happened before the next restart, so "clear history" was
+        // nondeterministic: the messages could come back.
+        void persistCriticalAgentSessionState(
+            buildPersistedAgentSessionState(get())
+        )
     },
 
     // 删除指定消息之后的所有消息
