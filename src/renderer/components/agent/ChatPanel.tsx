@@ -175,6 +175,7 @@ export default function ChatPanel() {
     setInputState(value ?? '')
   }, [])
   const [images, setImages] = useState<PendingImage[]>([])
+  const [planOverlayOpen, setPlanOverlayOpen] = useState(false)
   const imagesRef = useRef(images)
   imagesRef.current = images
   const checkpointMessageIds = useMemo(() => {
@@ -397,8 +398,9 @@ export default function ChatPanel() {
     if (inputPrompt) {
       setInput(inputPrompt)
       setInputPrompt('')
+      requestAnimationFrame(() => textareaRef.current?.focus())
     }
-  }, [inputPrompt, setInputPrompt])
+  }, [inputPrompt, setInputPrompt, textareaRef])
 
 
   // 处理显示 diff
@@ -1328,7 +1330,7 @@ export default function ChatPanel() {
               )}
             </AnimatePresence>
 
-            {chatMode === 'plan' ? <PlanWorkbench /> : <Virtuoso
+            {chatMode === 'plan' ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} /> : <Virtuoso
                 key={currentThreadId ?? 'no-thread'}
                 ref={virtuosoRef}
                 data={timelineItems}
@@ -1375,7 +1377,7 @@ export default function ChatPanel() {
           }
 
           {/* Bottom Input Area - Unified Tray */}
-          <div className="shrink-0 z-20 flex flex-col">
+          <div className={`shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
             <div className="mx-4 mb-4 flex flex-col">
               {/* Unified Status Tray: Files + Tasks + Queue */}
               {chatMode !== 'plan' && <UnifiedStatusTray
@@ -1406,8 +1408,7 @@ export default function ChatPanel() {
                 isStreaming={isStreaming}
                 hasApiKey={hasApiKey}
                 hasPendingToolCall={!!pendingToolCall}
-                chatMode={chatMode}
-                setChatMode={setChatMode}
+                compact={chatMode === 'plan'}
                 onSubmit={handleSubmit}
                 onAbort={abort}
                 onInputChange={handleInputChange}

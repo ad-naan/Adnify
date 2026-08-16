@@ -561,6 +561,12 @@ CORRECT FORMAT:
 {
   "name": "Login Feature",
   "requirementsDoc": "# Requirements\n- User can login with email...",
+  "stageContent": {
+    "requirements": {"title":"Confirmed requirements","summary":"...","sections":[{"id":"scope","title":"Scope","kind":"checklist","items":[{"id":"email-login","title":"Email login","status":"confirmed"}]}]},
+    "plan": {"title":"Implementation plan","summary":"...","sections":[]},
+    "execution": {"title":"Execution workspace","summary":"...","sections":[]},
+    "validation": {"title":"Acceptance review","summary":"...","sections":[]}
+  },
   "tasks": [
     {
       "title": "Create login form UI",
@@ -589,7 +595,7 @@ tasks: [{title: "...", name: "...\"}]  // ❌ WRONG - missing required fields!
 suggestedProvider: "default"  // ❌ WRONG - use real provider name!
 \`\`\`
 
-**Available Providers:** anthropic, openai, gemini, deepseek
+**Available Providers:** Use only the runtime-generated "Configured Plan Task Providers" list. It excludes routes without usable authentication or complete model configuration.
 **Available Roles:** coder, architect, reviewer, analyst
 
 ## Using start_task_execution Tool

@@ -94,6 +94,8 @@ export interface PlanReviewRisk {
   severity: 'warning' | 'error'
   title: string
   detail: string
+  titleZh: string
+  detailZh: string
 }
 
 export interface PlanReviewProjection {
@@ -243,8 +245,8 @@ export function projectPlanReview(plan: TaskPlan): PlanReviewProjection {
   }
 
   const risks: PlanReviewRisk[] = []
-  if (graph.hasCycle) risks.push({ id: 'dependency-cycle', severity: 'error', title: 'Dependency cycle', detail: 'At least one task is part of a circular dependency and cannot be scheduled safely.' })
-  if (graph.missingDependencies.length) risks.push({ id: 'missing-dependency', severity: 'error', title: 'Missing dependency', detail: `${graph.missingDependencies.length} dependency references do not match a task in this plan.` })
+  if (graph.hasCycle) risks.push({ id: 'dependency-cycle', severity: 'error', title: 'Dependency cycle', detail: 'At least one task is part of a circular dependency and cannot be scheduled safely.', titleZh: '存在循环依赖', detailZh: '至少一个任务处于循环依赖中，调度器无法安全执行该计划。' })
+  if (graph.missingDependencies.length) risks.push({ id: 'missing-dependency', severity: 'error', title: 'Missing dependency', detail: `${graph.missingDependencies.length} dependency references do not match a task in this plan.`, titleZh: '依赖任务缺失', detailZh: `${graph.missingDependencies.length} 个依赖引用未匹配到当前计划中的任务。` })
 
   if (plan.executionMode === 'parallel') {
     const nodesByRank = new Map<number, PlanTask[]>()
@@ -254,7 +256,7 @@ export function projectPlanReview(plan: TaskPlan): PlanReviewProjection {
       for (const task of rankedTasks) for (const file of task.producesFiles || []) writers.set(file, [...(writers.get(file) || []), task.title])
       for (const [file, taskTitles] of writers) {
         if (taskTitles.length < 2) continue
-        risks.push({ id: `write-conflict:${rank}:${file}`, severity: 'warning', title: 'Parallel write conflict', detail: `${taskTitles.join(', ')} may write ${file} in the same scheduling layer.` })
+        risks.push({ id: `write-conflict:${rank}:${file}`, severity: 'warning', title: 'Parallel write conflict', detail: `${taskTitles.join(', ')} may write ${file} in the same scheduling layer.`, titleZh: '并行写入冲突', detailZh: `${taskTitles.join('、')} 可能在同一调度层写入 ${file}。` })
       }
     }
   }

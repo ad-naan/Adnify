@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { projectPlanWorkbench } from '@/renderer/agent/plan/planWorkbenchProjection'
+import { projectPlanReview, projectPlanWorkbench } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { createEmptyThread } from '@/renderer/agent/store/slices/threadSlice'
 import type { TaskPlan } from '@/renderer/agent/plan/types'
 
@@ -146,5 +146,24 @@ describe('projectPlanWorkbench', () => {
 
     const result = projectPlanWorkbench({ plan, currentThreadId: root.id, threads: { root } })
     expect(result.requestText).toBe('重新设计计划工作台')
+  })
+
+  it('derives review metrics, allocations, and write conflicts from plan data', () => {
+    const base = { provider: 'openai', model: 'gpt-test', role: 'engineer', status: 'pending' as const }
+    const plan: TaskPlan = {
+      id: 'review-plan', name: 'Review', createdAt: 1, updatedAt: 1, requirementsDoc: 'review.md', executionMode: 'parallel', status: 'draft',
+      tasks: [
+        { ...base, id: 'root', title: 'Root', description: 'Root', dependencies: [], estimatedTokens: 100 },
+        { ...base, id: 'left', title: 'Left', description: 'Left', dependencies: ['root'], producesFiles: ['shared.ts'], estimatedTokens: 200 },
+        { ...base, id: 'right', title: 'Right', description: 'Right', dependencies: ['root'], producesFiles: ['shared.ts'], estimatedTokens: 300 },
+      ],
+    }
+
+    const review = projectPlanReview(plan)
+    expect(review.taskCount).toBe(3)
+    expect(review.maxParallelism).toBe(2)
+    expect(review.estimatedTokens).toBe(600)
+    expect(review.allocations).toEqual([{ key: 'engineer\u0000openai\u0000gpt-test', role: 'engineer', provider: 'openai', model: 'gpt-test', taskCount: 3 }])
+    expect(review.risks.map(risk => risk.id)).toContain('write-conflict:1:shared.ts')
   })
 })

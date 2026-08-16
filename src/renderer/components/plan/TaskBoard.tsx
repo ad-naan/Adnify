@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  AlertTriangle, Check, CheckCircle2, Circle, ExternalLink, FileCode2, FileText,
+  AlertTriangle, Check, CheckCircle2, Circle, ExternalLink, FileCode2, FileOutput, FileText,
   GitBranch, History, LoaderCircle, Pause, Play, Rows3, Settings2, ShieldAlert,
-  Square, TerminalSquare, X,
+  Square, TerminalSquare, X, MessageSquareText,
 } from 'lucide-react'
 import { Button, Select } from '@/renderer/components/ui'
 import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
@@ -12,13 +12,19 @@ import { getMessageText } from '@/renderer/agent/types'
 import { useStore } from '@/renderer/store'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { api } from '@/renderer/services/electronAPI'
-import { BUILTIN_PROVIDERS } from '@/shared/config/providers'
 import { getPromptTemplateSummary } from '@/renderer/agent/prompts/promptTemplates'
 import type { ExecutionMode, PlanTask } from '@/renderer/agent/store/slices/planSlice'
 import type { PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { PlanStageTrace } from './PlanStageTrace'
 import { PlanDependencyGraph } from './PlanDependencyGraph'
 import { layoutPlanGraph } from '@/renderer/agent/plan/planGraphLayout'
+import { beginPlanRevision } from '@/renderer/agent/plan/planRevisionService'
+import { usePlanViewStore } from '@/renderer/agent/plan/planViewStore'
+import { PlanModelSelector } from './PlanModelSelector'
+import { PlanTaskInspector } from './PlanTaskInspector'
+import { PlanStageContentView } from './PlanStageContentView'
+import { legacyRequirementsToStageContent } from '@/renderer/agent/plan/planStageContent'
+import { getPlanProviderDisplayName } from '@/renderer/agent/plan/planProviderCatalog'
 
 interface TaskBoardProps {
   planId: string
@@ -52,6 +58,48 @@ function formatDuration(ms: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
+interface RequirementSection {
+  title: string
+  items: string[]
+}
+
+function parseRequirementDocument(content: string, fallbackTitle: string, language: string) {
+  const lines = content.split(/\r?\n/)
+  let title = fallbackTitle
+  const sections: RequirementSection[] = []
+  let current: RequirementSection | null = null
+
+  const ensureSection = () => {
+    if (!current) {
+      current = { title: language === 'zh' ? '已确认范围' : 'Confirmed scope', items: [] }
+      sections.push(current)
+    }
+    return current
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line || line === '---') continue
+    const heading = /^(#{1,4})\s+(.+)$/.exec(line)
+    if (heading) {
+      if (heading[1].length === 1 && title === fallbackTitle) {
+        title = heading[2].trim()
+      } else {
+        current = { title: heading[2].trim(), items: [] }
+        sections.push(current)
+      }
+      continue
+    }
+    const listItem = /^(?:[-*+]\s+|\d+[.)]\s+)(.+)$/.exec(line)
+    ensureSection().items.push((listItem?.[1] || line).replace(/^\*\*(.+)\*\*:?$/, '$1').trim())
+  }
+
+  return {
+    title,
+    sections: sections.filter(section => section.items.length > 0),
+  }
+}
+
 function useNow(running: boolean) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
@@ -73,27 +121,6 @@ function taskDepth(task: PlanTask, tasks: PlanTask[], cache: Map<string, number>
   cache.set(task.id, depth)
   return depth
 }
-
-const ModelSelector = memo(function ModelSelector({ provider, model, onChange, disabled }: {
-  provider: string
-  model: string
-  onChange: (provider: string, model: string) => void
-  disabled?: boolean
-}) {
-  const providerConfigs = useStore(state => state.providerConfigs)
-  const providers = useMemo(() => {
-    const result: { id: string, displayName: string, models: string[] }[] = []
-    for (const [id, config] of Object.entries(BUILTIN_PROVIDERS)) result.push({ id, displayName: config.displayName, models: [...config.models, ...(providerConfigs[id]?.customModels || [])] })
-    for (const [id, config] of Object.entries(providerConfigs)) if (id.startsWith('custom-')) result.push({ id, displayName: config.displayName || id, models: config.customModels || [] })
-    return result
-  }, [providerConfigs])
-  const providerOptions = useMemo(() => providers.map(item => ({ value: item.id, label: item.displayName })), [providers])
-  const modelOptions = useMemo(() => Array.from(new Set(providers.find(item => item.id === provider)?.models || [])).map(value => ({ value, label: value })), [provider, providers])
-  return <div className="grid grid-cols-[minmax(110px,0.7fr)_minmax(160px,1.3fr)] gap-2 max-sm:grid-cols-1">
-    <Select options={providerOptions} value={provider} disabled={disabled} onChange={next => onChange(next, providers.find(item => item.id === next)?.models[0] || '')} />
-    <Select options={modelOptions} value={model} disabled={disabled} onChange={next => onChange(provider, next)} />
-  </div>
-})
 
 const ModeToggle = memo(function ModeToggle({ mode, disabled, onChange, language }: {
   mode: ExecutionMode
@@ -120,11 +147,22 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [requirementsContent, setRequirementsContent] = useState('')
   const [showRequirements, setShowRequirements] = useState(false)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
+  const selectedViewStage = usePlanViewStore(state => state.selectedStageByPlanId[planId])
+  const selectViewStage = usePlanViewStore(state => state.selectStage)
 
   const runtimeByTask = useMemo(() => new Map((plan?.tasks || []).map(task => {
     const thread = task.threadId ? threads[task.threadId] : undefined
     const waitingApproval = thread?.streamState?.phase === 'tool_pending'
     const latestAssistant = thread ? [...thread.messages].reverse().find(message => message.role === 'assistant') : undefined
+    const events = thread ? thread.messages.flatMap(message => {
+      if (message.role !== 'assistant') return []
+      return (message.toolCalls || []).map(toolCall => ({
+        id: toolCall.id,
+        name: toolCall.name,
+        detail: toolCall.result ? String(toolCall.result) : (toolCall.arguments ? JSON.stringify(toolCall.arguments) : ''),
+      }))
+    }).slice(-12) : []
     return [task.id, {
       thread,
       waitingApproval,
@@ -132,6 +170,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
       currentTool: thread?.streamState?.currentToolCall,
       statusText: thread?.streamState?.statusText,
       latestText: latestAssistant?.role === 'assistant' ? getMessageText(latestAssistant.content).trim() : '',
+      events,
     }] as const
   })), [plan?.tasks, threads])
 
@@ -140,8 +179,13 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
   const isLive = Boolean(plan && ['executing', 'pausing', 'stopping'].includes(plan.status))
   const isPaused = plan?.status === 'paused'
   const canStart = Boolean(plan && ['draft', 'approved', 'stopped', 'failed'].includes(plan.status) && plan.tasks.some(task => task.status === 'pending'))
-  const stage = deriveStage(plan?.status || 'draft')
+  const actualStage = deriveStage(plan?.status || 'draft')
+  const stage = selectedViewStage || actualStage
   const now = useNow(isLive)
+
+  useEffect(() => {
+    if (plan?.id) selectViewStage(plan.id, actualStage)
+  }, [actualStage, plan?.id, selectViewStage])
 
   useEffect(() => {
     if (!plan?.tasks.length) return
@@ -186,6 +230,13 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
     }
   }, [plan?.tasks])
 
+  const requirementStageContent = useMemo(() => plan?.stageContent?.requirements
+    || legacyRequirementsToStageContent(requirementsContent, plan?.name || '', language), [language, plan?.name, plan?.stageContent?.requirements, requirementsContent])
+  const requirementDocument = useMemo(
+    () => parseRequirementDocument(requirementsContent, plan?.name || '', language),
+    [language, plan?.name, requirementsContent],
+  )
+
   const waitingApprovalTaskIds = useMemo(() => new Set(
     (plan?.tasks || []).filter(task => runtimeByTask.get(task.id)?.waitingApproval).map(task => task.id)
   ), [plan?.tasks, runtimeByTask])
@@ -205,39 +256,68 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
   const pause = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).pausePlanExecution(planId), [planId])
   const stop = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).stopPlanExecution(planId), [planId])
   const resume = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).resumePlanExecution(planId), [planId])
+  const requestChanges = useCallback(() => {
+    const result = beginPlanRevision(planId, 'validation', language)
+    if (result.success) toast.info(result.message)
+    else toast.error(copy(language, '无法继续调整', 'Unable to revise'), result.message)
+  }, [language, planId])
 
   if (!plan) return <div className="flex h-full items-center justify-center text-sm text-text-muted">{copy(language, '计划不存在', 'Plan not found')}</div>
 
   const promptOptions = getPromptTemplateSummary().map(item => ({ value: item.id, label: item.nameZh || item.name }))
 
-  return <div className="relative flex h-full min-h-0 flex-col bg-background">
-    <header className="shrink-0 border-b border-border/50 px-5 pb-3 pt-3.5">
-      <div className="flex items-start justify-between gap-5">
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 max-w-[360px]"><PlanStageTrace stage={stage} language={language} /></div>
-          <h1 className="truncate text-[17px] font-semibold leading-6 text-text-primary">{plan.name}</h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
-            <span>{stats.completed}/{stats.total} {copy(language, '已完成', 'complete')}</span>
-            {stats.running > 0 && <span className="text-accent">{stats.running} {copy(language, '运行中', 'running')}</span>}
-            {stats.approvals > 0 && <span className="text-amber-400">{stats.approvals} {copy(language, '待批准', 'need approval')}</span>}
-            {stats.failed > 0 && <span className="text-red-400">{stats.failed} {copy(language, '失败', 'failed')}</span>}
-            {stats.duration > 0 && <span className="tabular-nums">{formatDuration(stats.duration)}</span>}
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {planOptions.length > 1 && onPlanChange && <div className="flex min-w-0 items-center gap-1.5 rounded-md border border-border/55 bg-background/45 pl-2 text-text-muted"><History className="h-3 w-3 shrink-0" /><Select className="w-[220px] border-0 bg-transparent" options={planOptions} value={plan.id} onChange={onPlanChange} /></div>}
+  return <div className="plan-readable relative flex h-full min-h-0 flex-col bg-background">
+    <header className="shrink-0 border-b border-border/50 px-5 pb-3.5 pt-3">
+      <div className="flex h-8 items-center gap-3 border-b border-border/35 pb-3">
+        <History className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+        <span className="shrink-0 text-[10px] text-text-muted">{copy(language, '计划历史', 'Plan history')}</span>
+        {planOptions.length > 0 && onPlanChange
+          ? <Select className="w-[290px] border-0 bg-transparent font-semibold" options={planOptions} value={plan.id} onChange={onPlanChange} />
+          : <h1 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text-primary">{plan.name}</h1>}
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-5">
+        <div className="w-full max-w-[520px]"><PlanStageTrace stage={actualStage} selectedStage={stage} language={language} onStageChange={nextStage => selectViewStage(plan.id, nextStage)} /></div>
+        <div className="flex shrink-0 items-center gap-2">
           <ModeToggle language={language} mode={plan.executionMode} disabled={isLive || isPaused} onChange={mode => updatePlan(plan.id, { executionMode: mode })} />
           <Button variant="ghost" size="sm" onClick={() => setShowRequirements(true)} leftIcon={<FileText className="h-3.5 w-3.5" />}>{copy(language, '需求', 'Brief')}</Button>
-          {isLive ? <><Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-3.5 w-3.5" />}>{copy(language, '暂停', 'Pause')}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{copy(language, '停止', 'Stop')}</Button></> : isPaused ? <><Button size="sm" onClick={resume} leftIcon={<Play className="h-3.5 w-3.5" />}>{copy(language, '继续', 'Resume')}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{copy(language, '停止', 'Stop')}</Button></> : canStart ? <Button size="sm" onClick={start} leftIcon={<Play className="h-3.5 w-3.5" />}>{copy(language, '批准并执行', 'Approve and run')}</Button> : null}
+          {isLive ? <><Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-3.5 w-3.5" />}>{copy(language, '暂停计划', 'Pause')}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{copy(language, '停止', 'Stop')}</Button></> : isPaused ? <><Button size="sm" onClick={resume} leftIcon={<Play className="h-3.5 w-3.5" />}>{copy(language, '继续', 'Resume')}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{copy(language, '停止', 'Stop')}</Button></> : canStart ? <Button size="sm" onClick={start} leftIcon={<Play className="h-3.5 w-3.5" />}>{copy(language, '批准并执行', 'Approve and run')}</Button> : null}
         </div>
       </div>
-      <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-text-primary/[0.05]"><div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${stats.percent}%` }} /></div>
+      {(isLive || isPaused || actualStage === 'validation') && <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-text-primary/[0.05]"><div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${stats.percent}%` }} /></div>}
     </header>
 
-    {stage === 'validation' ? <main className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
+    {stage === 'requirements' ? <main className="min-h-0 flex-1 overflow-y-auto bg-background custom-scrollbar">
+      <div className="mx-auto min-h-full max-w-5xl px-6 py-5">
+        <div className="border-b border-border/45 pb-4">
+          <h2 className="text-[16px] font-semibold text-text-primary">{copy(language, '需求澄清简报', 'Requirement brief')}</h2>
+          <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{copy(language, '以下信息来自已确认的真实需求文档，可随时返回审阅；调整会产生新的计划修订。', 'This review is generated from the confirmed source brief. Revisions create an updated plan version.')}</p>
+        </div>
+        <div className="mt-5"><PlanStageContentView content={requirementStageContent} hideHeader /></div>
+        <section className="hidden mt-5 overflow-hidden rounded-xl border border-border/50 bg-surface/[0.06]">
+          <div className="flex items-center gap-3 border-b border-border/40 px-4 py-3.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"><FileText className="h-4 w-4" /></span>
+            <div className="min-w-0"><div className="text-[9px] font-medium text-text-muted">{copy(language, '本次目标', 'Objective')}</div><h3 className="mt-0.5 truncate text-[12px] font-semibold text-text-primary">{requirementDocument.title}</h3></div>
+          </div>
+          {requirementDocument.sections.length > 0 ? <div className="divide-y divide-border/40">
+            {requirementDocument.sections.map((section, sectionIndex) => <div key={`${section.title}:${sectionIndex}`} className="grid grid-cols-[150px_minmax(0,1fr)] gap-5 px-4 py-3.5 max-md:grid-cols-1 max-md:gap-2">
+              <div className="flex items-start gap-2 text-[10px] font-semibold text-text-secondary"><span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-500"><Check className="h-2.5 w-2.5" /></span><span>{section.title}</span></div>
+              <div className="space-y-2">{section.items.map((item, itemIndex) => <div key={`${item}:${itemIndex}`} className="flex items-start gap-2 text-[10px] leading-5 text-text-secondary"><span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-text-muted/55" /><span>{item}</span></div>)}</div>
+            </div>)}
+          </div> : <div className="flex min-h-48 items-center justify-center text-[10px] text-text-muted">{copy(language, '需求文档正在整理', 'The brief is being prepared')}</div>}
+        </section>
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-emerald-400/20 bg-emerald-400/[0.035] px-4 py-3">
+          <div className="flex items-center gap-2 text-[10px] font-medium text-emerald-500"><CheckCircle2 className="h-4 w-4" />{copy(language, '需求已确认并生成结构化计划', 'Requirements confirmed and structured')}</div>
+          <button type="button" onClick={requestChanges} className="text-[9px] font-medium text-text-muted hover:text-accent">{copy(language, '提出调整', 'Request revision')}</button>
+        </div>
+      </div>
+    </main> : stage === 'validation' && actualStage !== 'validation' ? <main className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
+      <div className="max-w-sm"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/[0.04] text-text-muted"><CheckCircle2 className="h-5 w-5" /></span><h2 className="mt-3 text-[12px] font-semibold text-text-primary">{copy(language, '尚未进入验收阶段', 'Validation has not started')}</h2><p className="mt-1.5 text-[9px] leading-4 text-text-muted">{copy(language, '任务执行完成后，交付结果、失败项和变更文件会显示在这里。', 'Delivery results, failures, and changed files will appear here after execution.')}</p></div>
+    </main> : stage === 'validation' ? <main className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
       <div className="mx-auto max-w-5xl">
         <section className="border-b border-border/45 pb-5">
-          <div className="flex items-start gap-3"><CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${stats.failed ? 'text-amber-400' : 'text-emerald-400'}`} /><div><h2 className="text-[15px] font-semibold text-text-primary">{stats.failed ? copy(language, '执行结束，存在失败任务', 'Execution finished with failures') : copy(language, '计划已完成，等待验收', 'Plan complete and ready for validation')}</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">{stats.completed}/{stats.total} {copy(language, '项任务完成', 'tasks completed')} · {stats.files.length} {copy(language, '个计划资源', 'planned resources')} · {formatDuration(stats.duration)}</p></div></div>
+          <div className="flex items-start justify-between gap-5"><div className="flex items-start gap-3"><CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${stats.failed ? 'text-amber-400' : 'text-emerald-400'}`} /><div><h2 className="text-[15px] font-semibold text-text-primary">{plan.validation?.status === 'accepted' ? copy(language, '结果已经验收', 'Results accepted') : stats.failed ? copy(language, '执行结束，存在失败任务', 'Execution finished with failures') : copy(language, '计划已完成，等待验收', 'Plan complete and ready for validation')}</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">{stats.completed}/{stats.total} {copy(language, '项任务完成', 'tasks completed')} · {stats.files.length} {copy(language, '个计划资源', 'planned resources')} · {formatDuration(stats.duration)}</p></div></div>
+            {plan.validation?.status === 'accepted' ? <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-emerald-400/25 bg-emerald-400/[0.04] px-3 text-[9px] font-medium text-emerald-500"><CheckCircle2 className="h-3.5 w-3.5" />{copy(language, '已确认完成', 'Accepted')}</span> : <div className="flex shrink-0 gap-2"><Button variant="secondary" size="sm" onClick={requestChanges} leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}>{copy(language, '继续调整', 'Request changes')}</Button><Button size="sm" disabled={stats.failed > 0} onClick={() => updatePlan(plan.id, { validation: { status: 'accepted', reviewedAt: Date.now() } })} leftIcon={<Check className="h-3.5 w-3.5" />}>{copy(language, '确认完成', 'Accept')}</Button></div>}
+          </div>
         </section>
         <div className="mt-5 grid grid-cols-[minmax(0,1.25fr)_minmax(280px,.75fr)] gap-6 max-lg:grid-cols-1">
           <section><div className="mb-2 text-[10px] font-medium text-text-muted">{copy(language, '验收结果', 'Validation results')}</div><div className="divide-y divide-border/40 border-y border-border/40">{plan.tasks.map(task => <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-start gap-3 py-3 text-left hover:bg-surface/[0.12]"><span className="mt-0.5">{task.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-red-400" />}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-secondary">{task.title}</strong><span className="mt-1 block line-clamp-2 text-[9px] leading-4 text-text-muted">{task.error || task.output || task.description}</span></span><time className="text-[8px] tabular-nums text-text-muted">{task.startedAt ? formatDuration((task.completedAt || now) - task.startedAt) : '—'}</time></button>)}</div></section>
@@ -269,15 +349,18 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
       <div className="mx-5 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background">
         <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/45 px-3.5 text-[9px] text-text-muted">
           <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{copy(language, '任务依赖图', 'Task dependency graph')}</span>
-          <span>{graphStats.models} {copy(language, '个模型配置', 'model configurations')} · {plan.executionMode === 'parallel' ? copy(language, '并行调度', 'Parallel scheduling') : copy(language, '顺序调度', 'Sequential scheduling')}</span>
+          <div className="flex items-center gap-3"><span>{graphStats.models} {copy(language, '个模型配置', 'model configurations')} · {plan.executionMode === 'parallel' ? copy(language, '并行调度', 'Parallel scheduling') : copy(language, '顺序调度', 'Sequential scheduling')}</span>{!inspectorOpen && selectedTask && <button type="button" onClick={() => setInspectorOpen(true)} className="inline-flex h-6 items-center gap-1 rounded-md border border-border/55 px-2 text-[8px] text-text-secondary hover:border-accent/30 hover:text-accent"><Settings2 className="h-3 w-3" />{copy(language, '配置任务', 'Configure')}</button>}</div>
         </div>
-        <PlanDependencyGraph
-          tasks={plan.tasks}
-          selectedTaskId={selectedTask?.id}
-          waitingApprovalTaskIds={waitingApprovalTaskIds}
-          language={language}
-          onSelectTask={setSelectedTaskId}
-        />
+        <div className="relative flex min-h-0 flex-1">
+          <PlanDependencyGraph
+            tasks={plan.tasks}
+            selectedTaskId={selectedTask?.id}
+            waitingApprovalTaskIds={waitingApprovalTaskIds}
+            language={language}
+            onSelectTask={taskId => { setSelectedTaskId(taskId); setInspectorOpen(true) }}
+          />
+          {inspectorOpen && selectedTask && <PlanTaskInspector task={selectedTask} tasks={plan.tasks} language={language} disabled={isLive || isPaused} onClose={() => setInspectorOpen(false)} onChange={updates => updateTask(plan.id, selectedTask.id, updates)} />}
+        </div>
       </div>
       <div className="h-4 shrink-0" />
     </main> : <div className="flex min-h-0 flex-1">
@@ -304,12 +387,33 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
         {selectedTask && <div className="mx-auto max-w-4xl">
           <section className="border-b border-border/45 pb-5">
             <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="mb-2 flex items-center gap-2">{(() => { const meta = statusMeta(selectedTask, Boolean(selectedRuntime?.waitingApproval), language); const Icon = meta.icon; return <><Icon className={`h-3.5 w-3.5 ${meta.tone} ${selectedTask.status === 'running' && !selectedRuntime?.waitingApproval ? 'animate-spin' : ''}`} /><span className={`text-[9px] font-medium ${meta.tone}`}>{meta.label}</span>{selectedTask.startedAt && <span className="text-[8px] tabular-nums text-text-muted">{formatDuration((selectedTask.completedAt || now) - selectedTask.startedAt)}</span>}</> })()}</div><h2 className="text-[18px] font-semibold text-text-primary">{selectedTask.title}</h2><p className="mt-2 max-w-3xl text-[11px] leading-5 text-text-secondary">{selectedTask.description}</p></div>{selectedTask.threadId && <Button variant="ghost" size="sm" onClick={() => switchThread(selectedTask.threadId!)} leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>{copy(language, '完整记录', 'Full log')}</Button>}</div>
-            <div className="mt-4 flex flex-wrap gap-2 text-[8px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.provider} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}</div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[8px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{getPlanProviderDisplayName(selectedTask.provider)} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}</div>
           </section>
+
+          {plan.stageContent?.execution && <section className="border-b border-border/45 py-5">
+            <PlanStageContentView content={plan.stageContent.execution} compact hideHeader />
+          </section>}
+
+          {(selectedTask.producesFiles?.length || selectedRuntime?.events.length) && <div className="grid grid-cols-2 gap-4 border-b border-border/45 py-5 max-xl:grid-cols-1">
+            <section>
+              <div className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"><FileOutput className="h-3.5 w-3.5 text-text-muted" />{copy(language, '产出物', 'Artifacts')}</div>
+              <div className="overflow-hidden rounded-xl border border-border/50">
+                {(selectedTask.producesFiles || []).map(file => <div key={file} className="flex items-center gap-2 border-b border-border/35 px-3 py-2.5 last:border-0"><FileCode2 className="h-3.5 w-3.5 text-text-muted" /><span className="min-w-0 flex-1 truncate text-[10px] text-text-secondary">{file}</span>{selectedTask.status === 'running' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" /> : selectedTask.status === 'completed' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Circle className="h-3.5 w-3.5 text-text-muted/45" />}</div>)}
+                {!selectedTask.producesFiles?.length && <div className="px-3 py-5 text-center text-[9px] text-text-muted">{copy(language, '此任务未声明文件产出', 'No declared file artifacts')}</div>}
+              </div>
+            </section>
+            <section>
+              <div className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"><TerminalSquare className="h-3.5 w-3.5 text-text-muted" />{copy(language, '执行日志', 'Execution log')}</div>
+              <div className="max-h-60 overflow-auto rounded-xl border border-border/50 bg-surface/[0.05] px-3 py-2 custom-scrollbar">
+                {selectedRuntime?.events.map(event => <div key={event.id} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-border/30 py-2 last:border-0"><span className="truncate font-mono text-[9px] text-text-secondary">{event.name}</span><span className="truncate text-[9px] text-text-muted">{event.detail || copy(language, '已调用', 'Invoked')}</span></div>)}
+                {!selectedRuntime?.events.length && <div className="py-3 text-center text-[9px] text-text-muted">{selectedTask.status === 'pending' ? copy(language, '任务开始后将在这里显示实时动作', 'Live actions appear when the task starts') : copy(language, '暂无工具动作', 'No tool activity yet')}</div>}
+              </div>
+            </section>
+          </div>}
 
           <section className="border-b border-border/45 py-4">
             <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-[9px] font-medium text-text-muted"><Settings2 className="h-3.5 w-3.5" />{copy(language, '执行配置', 'Execution setup')}</div>{(isLive || isPaused) && <span className="text-[8px] text-text-muted/60">{copy(language, '执行期间不可修改', 'Locked while running')}</span>}</div>
-            <ModelSelector provider={selectedTask.provider} model={selectedTask.model} disabled={isLive || isPaused} onChange={(provider, model) => updateTask(plan.id, selectedTask.id, { provider, model })} />
+            <PlanModelSelector provider={selectedTask.provider} model={selectedTask.model} disabled={isLive || isPaused} onChange={(provider, model) => updateTask(plan.id, selectedTask.id, { provider, model })} />
             <div className="mt-2"><Select className="w-full" options={promptOptions} value={selectedTask.role} disabled={isLive || isPaused} onChange={role => updateTask(plan.id, selectedTask.id, { role })} /></div>
           </section>
 

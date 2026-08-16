@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { layoutPlanGraph } from '../../../src/renderer/agent/plan/planGraphLayout'
+import { layoutPlanGraph, wouldCreateDependencyCycle } from '../../../src/renderer/agent/plan/planGraphLayout'
 import type { PlanTask } from '../../../src/renderer/agent/plan/types'
 
 function task(id: string, dependencies: string[] = []): PlanTask {
@@ -21,9 +21,16 @@ describe('layoutPlanGraph', () => {
     expect(nodes.get('right')?.rank).toBe(1)
     expect(nodes.get('merge')?.rank).toBe(2)
     expect(nodes.get('left')?.x).not.toBe(nodes.get('right')?.x)
+    expect(nodes.get('start')!.width).toBeGreaterThan(nodes.get('left')!.width)
+    expect(nodes.get('merge')!.width).toBeGreaterThan(nodes.get('right')!.width)
     expect(layout.edges.map(edge => `${edge.from}->${edge.to}`)).toEqual([
       'start->left', 'start->right', 'left->merge', 'right->merge',
     ])
+  })
+
+  it('uses a readable full lane for a purely sequential plan', () => {
+    const layout = layoutPlanGraph([task('one'), task('two', ['one']), task('three', ['two'])])
+    expect(layout.nodes.every(node => node.width >= 520)).toBe(true)
   })
 
   it('surfaces missing dependencies without dropping the task', () => {
@@ -37,5 +44,11 @@ describe('layoutPlanGraph', () => {
     expect(layout.hasCycle).toBe(true)
     expect(layout.nodes).toHaveLength(2)
     expect(new Set(layout.nodes.map(node => node.rank)).size).toBe(1)
+  })
+
+  it('rejects dependency edits that introduce a cycle', () => {
+    const tasks = [task('a'), task('b', ['a']), task('c', ['b'])]
+    expect(wouldCreateDependencyCycle(tasks, 'a', ['c'])).toBe(true)
+    expect(wouldCreateDependencyCycle(tasks, 'c', ['a'])).toBe(false)
   })
 })

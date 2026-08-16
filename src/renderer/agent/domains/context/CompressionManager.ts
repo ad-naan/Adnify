@@ -100,8 +100,25 @@ function getTruncateThreshold(level: CompressionLevel, config: ReturnType<typeof
 }
 
 /**
- * 截断工具调用参数
+ * Truncate the bulky string arguments of a write/edit call.
+ *
+ * Keeps a head excerpt and line count rather than only a character total. The
+ * agent frequently needs to recall what it wrote — and by L3 the matching
+ * `read_file` results have already been replaced with `[Cleared]`, so a bare
+ * `[Truncated: 8200 chars]` left it with no record of its own edits at all. It
+ * would then either waste a turn re-reading or, worse, re-derive the content and
+ * overwrite. An excerpt costs a few dozen tokens and preserves intent.
  */
+function summarizeTruncatedValue(key: string, value: string, maxChars: number): string {
+  const lineCount = value.split('\n').length
+  // Enough to identify the change without reproducing it; scaled to the budget so
+  // deeper levels stay cheaper.
+  const excerptChars = Math.max(80, Math.min(240, Math.floor(maxChars / 2)))
+  const excerpt = value.slice(0, excerptChars).replace(/\s+$/, '')
+  const label = key === 'old_string' ? 'replaced' : 'written'
+  return `[${lineCount} lines ${label}, ${value.length} chars — truncated to save context. Starts with:\n${excerpt}…]`
+}
+
 function truncateToolCallArgs(tc: ToolCall, maxChars: number): { tc: ToolCall; truncated: boolean } {
   if (!TRUNCATE_TOOLS.has(tc.name)) return { tc, truncated: false }
 
@@ -109,10 +126,14 @@ function truncateToolCallArgs(tc: ToolCall, maxChars: number): { tc: ToolCall; t
   let truncated = false
 
   for (const key of ['content', 'new_string', 'old_string']) {
-    if (typeof args[key] === 'string' && (args[key] as string).length > maxChars) {
-      args[key] = `[Truncated: ${(args[key] as string).length} chars]`
-      truncated = true
-    }
+    const value = args[key]
+    if (typeof value !== 'string' || value.length <= maxChars) continue
+
+    const summary = summarizeTruncatedValue(key, value, maxChars)
+    // Never let the placeholder cost more than the text it replaces — at L4 the
+    // threshold is only 200 chars, so a verbose summary could be counterproductive.
+    args[key] = summary.length < value.length ? summary : `[${value.length} chars truncated]`
+    truncated = true
   }
 
   return { tc: truncated ? { ...tc, arguments: args } : tc, truncated }
@@ -131,9 +152,30 @@ function truncateToolCallArgs(tc: ToolCall, maxChars: number): { tc: ToolCall; t
  * 
  * 优化：结合 AI SDK 的 pruneMessages 进行智能修剪
  */
+export interface PrepareOptions {
+  /**
+   * Whether a continuity artifact (working-memory summary or handoff document)
+   * exists for this thread.
+   *
+   * Aggressive message-count truncation is only safe when something carries the
+   * dropped history forward. Summary generation is REACTIVE — it runs after the
+   * response that crossed 85% — so a turn that jumps straight from 0.7 to 0.96
+   * (one large read_file will do it) reaches L4 with `contextSummary === null`.
+   * Truncating to 10 messages there silently destroys the entire session context.
+   * `PLAN_TASK_WORKER_DESCRIPTOR` makes it permanent: it sets
+   * `enableSummaryGeneration: false` yet still truncates.
+   *
+   * When false, the message limit is floored at the L2 limit so history survives
+   * until a summary exists. Token-level compression (arg truncation, tool-result
+   * clearing) still applies in full, so pressure is still relieved.
+   */
+  hasContinuityArtifact?: boolean
+}
+
 export function prepareMessages(
   messages: ChatMessage[],
-  lastLevel: CompressionLevel
+  lastLevel: CompressionLevel,
+  options: PrepareOptions = {}
 ): PrepareResult {
   const config = getAgentConfig()
   let result = [...messages]
@@ -243,7 +285,18 @@ export function prepareMessages(
   result = hasModifications ? modifiedMessages : result
 
   // 1. 限制消息数量
-  const messageLimit = getMessageLimit(lastLevel, config)
+  // Without a summary or handoff doc, refuse to truncate below the L2 limit —
+  // dropping to 10 messages with nothing carrying the history forward loses the
+  // session. See PrepareOptions.hasContinuityArtifact.
+  const requestedLimit = getMessageLimit(lastLevel, config)
+  const messageLimit = options.hasContinuityArtifact === false
+    ? Math.max(requestedLimit, getMessageLimit(2, config))
+    : requestedLimit
+  if (messageLimit !== requestedLimit) {
+    logger.agent.warn(
+      `[Compression] L${lastLevel} message limit held at ${messageLimit} (requested ${requestedLimit}): no summary or handoff document exists yet to carry dropped history.`
+    )
+  }
   if (result.length > messageLimit) {
     removedMessages = result.length - messageLimit
     result = result.slice(-messageLimit)

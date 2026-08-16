@@ -1,7 +1,8 @@
 import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as crypto from 'crypto'
-import Parser = require('web-tree-sitter')
+import type Parser = require('web-tree-sitter')
+import { initializeTreeSitter, type TreeSitterRuntime } from './treeSitterRuntime'
 import * as fs from 'fs'
 import { CodeChunk, IndexConfig, DEFAULT_INDEX_CONFIG } from './types'
 
@@ -120,6 +121,7 @@ export class TreeSitterChunker {
   private failedLanguages: Set<string> = new Set() // 记录加载失败的语言，避免重复警告
   private initialized = false
   private wasmDir: string
+  private runtime: TreeSitterRuntime | null = null
 
   constructor(config?: Partial<IndexConfig>) {
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
@@ -146,10 +148,10 @@ export class TreeSitterChunker {
       // Note: Parser.init() takes an object with locateFile in newer versions or just init()
       // But web-tree-sitter implementation details vary. 
       // Usually Parser.init() loads the wasm.
-      await Parser.init({
+      this.runtime = await initializeTreeSitter({
         locateFile: () => parserWasm
       })
-      this.parser = new Parser()
+      this.parser = new this.runtime.Parser()
       this.initialized = true
     } catch (e) {
       logger.index.error('[TreeSitterChunker] Failed to initialize parser:', e)
@@ -172,7 +174,8 @@ export class TreeSitterChunker {
 
     try {
       const wasmPath = path.join(this.wasmDir, `tree-sitter-${langName}.wasm`)
-      const lang = await Parser.Language.load(wasmPath)
+      if (!this.runtime) return false
+      const lang = await this.runtime.Language.load(wasmPath)
       this.languages.set(langName, lang)
       this.parser.setLanguage(lang)
       return true
