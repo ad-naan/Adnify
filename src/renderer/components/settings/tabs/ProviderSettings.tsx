@@ -51,6 +51,13 @@ const PREDEFINED_HEADER_OPTIONS = [
 const PREDEFINED_HEADER_KEYS = new Set(PREDEFINED_HEADER_OPTIONS.map(option => option.value).filter(Boolean))
 
 type ReasoningEffortValue = typeof REASONING_EFFORT_VALUES[number]
+type OpenAIResponsesProviderOption =
+  | 'promptCacheOptions'
+  | 'promptCacheRetention'
+  | 'reasoningContext'
+  | 'reasoningMode'
+  | 'serviceTier'
+  | 'textVerbosity'
 
 const OPENAI_COMPATIBILITY_PROFILE_OPTIONS: Array<{
   value: OpenAICompatibilityProfile
@@ -1106,6 +1113,37 @@ export function ProviderSettings({
       ? currentValue
       : preferredFallback ?? 'medium'
   }, [localConfig.reasoningEffort, reasoningEffortOptions])
+
+  const openAIResponsesOptions = localConfig.providerOptions?.openai ?? {}
+
+  const updateOpenAIResponsesOption = useCallback((
+    key: OpenAIResponsesProviderOption,
+    value: unknown,
+  ) => {
+    setLocalConfig(prev => {
+      const nextOpenAIOptions = { ...(prev.providerOptions?.openai ?? {}) }
+
+      if (value === undefined) {
+        delete nextOpenAIOptions[key]
+      } else {
+        nextOpenAIOptions[key] = value
+      }
+
+      const nextProviderOptions = { ...(prev.providerOptions ?? {}) }
+      if (Object.keys(nextOpenAIOptions).length > 0) {
+        nextProviderOptions.openai = nextOpenAIOptions
+      } else {
+        delete nextProviderOptions.openai
+      }
+
+      return {
+        ...prev,
+        providerOptions: Object.keys(nextProviderOptions).length > 0
+          ? nextProviderOptions
+          : undefined,
+      }
+    })
+  }, [setLocalConfig])
 
   const headerSelectOptions = useMemo(
     () => getHeaderSelectOptions(language),
@@ -2321,6 +2359,149 @@ export function ProviderSettings({
                               })}
                               className="flex-shrink-0"
                             />
+                          </div>
+                        )}
+
+                        {currentProtocol === 'openai-responses' && currentOpenAICompatibilityProfile === 'full' && (
+                          <div className="rounded-xl border border-accent/20 bg-accent/5 p-3 space-y-3">
+                            <div className="space-y-1">
+                              <div className="text-xs font-medium text-text-secondary">
+                                {language === 'zh' ? 'OpenAI Responses 新能力' : 'OpenAI Responses Capabilities'}
+                              </div>
+                              <p className="text-[10px] text-text-muted leading-relaxed">
+                                {language === 'zh'
+                                  ? '仅对完整 OpenAI Responses 请求生效。保持“跟随提供商默认”时不会发送额外字段。'
+                                  : 'Only applies to full OpenAI Responses requests. Provider default sends no extra field.'}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                              <div className="pr-4">
+                                <div className="text-xs text-text-secondary">
+                                  {language === 'zh' ? 'Pro 推理模式' : 'Pro Reasoning Mode'}
+                                </div>
+                                <p className="text-[10px] text-text-muted mt-0.5">
+                                  {language === 'zh'
+                                    ? '为支持的模型请求更深入的推理；可能增加延迟和费用。'
+                                    : 'Requests deeper reasoning on supported models; may increase latency and cost.'}
+                                </p>
+                              </div>
+                              <Switch
+                                checked={openAIResponsesOptions.reasoningMode === 'pro'}
+                                onChange={(e) => updateOpenAIResponsesOption(
+                                  'reasoningMode',
+                                  e.target.checked ? 'pro' : undefined,
+                                )}
+                                className="flex-shrink-0"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-text-secondary">
+                                  {language === 'zh' ? '推理上下文' : 'Reasoning Context'}
+                                </label>
+                                <Select
+                                  value={typeof openAIResponsesOptions.reasoningContext === 'string'
+                                    ? openAIResponsesOptions.reasoningContext
+                                    : ''}
+                                  onChange={(value) => updateOpenAIResponsesOption('reasoningContext', value || undefined)}
+                                  options={[
+                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
+                                    { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
+                                    { value: 'current_turn', label: language === 'zh' ? '仅当前轮' : 'Current turn' },
+                                    { value: 'all_turns', label: language === 'zh' ? '全部轮次' : 'All turns' },
+                                  ]}
+                                  className="bg-background/40 border-border/60 h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-text-secondary">
+                                  {language === 'zh' ? '回答详略' : 'Text Verbosity'}
+                                </label>
+                                <Select
+                                  value={typeof openAIResponsesOptions.textVerbosity === 'string'
+                                    ? openAIResponsesOptions.textVerbosity
+                                    : ''}
+                                  onChange={(value) => updateOpenAIResponsesOption('textVerbosity', value || undefined)}
+                                  options={[
+                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
+                                    { value: 'low', label: language === 'zh' ? '简洁' : 'Low' },
+                                    { value: 'medium', label: language === 'zh' ? '适中' : 'Medium' },
+                                    { value: 'high', label: language === 'zh' ? '详细' : 'High' },
+                                  ]}
+                                  className="bg-background/40 border-border/60 h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-text-secondary">
+                                  {language === 'zh' ? '提示缓存模式' : 'Prompt Cache Mode'}
+                                </label>
+                                <Select
+                                  value={typeof openAIResponsesOptions.promptCacheOptions === 'object'
+                                    && openAIResponsesOptions.promptCacheOptions
+                                    && 'mode' in openAIResponsesOptions.promptCacheOptions
+                                    ? String(openAIResponsesOptions.promptCacheOptions.mode)
+                                    : ''}
+                                  onChange={(value) => updateOpenAIResponsesOption(
+                                    'promptCacheOptions',
+                                    value ? { mode: value, ...(value === 'explicit' ? { ttl: '30m' } : {}) } : undefined,
+                                  )}
+                                  options={[
+                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
+                                    { value: 'implicit', label: language === 'zh' ? '隐式缓存（Agent 推荐）' : 'Implicit (recommended for Agent)' },
+                                    { value: 'explicit', label: language === 'zh' ? '显式缓存（30 分钟）' : 'Explicit (30 min)' },
+                                  ]}
+                                  className="bg-background/40 border-border/60 h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <label className="text-xs text-text-secondary">
+                                  {language === 'zh' ? '旧模型缓存保留' : 'Legacy Cache Retention'}
+                                </label>
+                                <Select
+                                  value={typeof openAIResponsesOptions.promptCacheRetention === 'string'
+                                    ? openAIResponsesOptions.promptCacheRetention
+                                    : ''}
+                                  onChange={(value) => updateOpenAIResponsesOption('promptCacheRetention', value || undefined)}
+                                  options={[
+                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
+                                    { value: 'in_memory', label: language === 'zh' ? '仅内存' : 'In memory' },
+                                    { value: '24h', label: language === 'zh' ? '保留 24 小时' : '24 hours' },
+                                  ]}
+                                  className="bg-background/40 border-border/60 h-9 text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1.5 md:col-span-2">
+                                <label className="text-xs text-text-secondary">
+                                  {language === 'zh' ? '服务层级' : 'Service Tier'}
+                                </label>
+                                <Select
+                                  value={typeof openAIResponsesOptions.serviceTier === 'string'
+                                    ? openAIResponsesOptions.serviceTier
+                                    : ''}
+                                  onChange={(value) => updateOpenAIResponsesOption('serviceTier', value || undefined)}
+                                  options={[
+                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
+                                    { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
+                                    { value: 'default', label: language === 'zh' ? '标准' : 'Default' },
+                                    { value: 'flex', label: 'Flex' },
+                                    { value: 'priority', label: language === 'zh' ? '优先' : 'Priority' },
+                                    { value: 'fast', label: language === 'zh' ? '快速' : 'Fast' },
+                                  ]}
+                                  className="bg-background/40 border-border/60 h-9 text-xs"
+                                />
+                                <p className="text-[10px] text-text-muted leading-relaxed">
+                                  {language === 'zh'
+                                    ? '非默认层级可能需要账号权限，并可能采用不同计费。'
+                                    : 'Non-default tiers may require account access and use different pricing.'}
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         )}
 

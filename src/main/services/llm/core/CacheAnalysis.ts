@@ -41,6 +41,23 @@ export function analyzeTextOnlyStablePrefix(messages: ModelMessage[]): TextOnlyP
   const base = analyzeStablePrefix(messages)
   if (!base) return null
 
+  return analyzeTextOnlyEntries(base.entries)
+}
+
+/** Analyze only the deliberately stable first prompt message. */
+export function analyzeTextOnlyInitialPrefix(messages: ModelMessage[]): TextOnlyPrefixAnalysis | null {
+  if (messages.length === 0) return null
+  return analyzeTextOnlyEntries([{ message: messages[0], index: 0 }])
+}
+
+function analyzeTextOnlyEntries(entries: StablePrefixEntry[]): TextOnlyPrefixAnalysis | null {
+  const serialized = JSON.stringify(entries.map(entry => entry.message))
+  const base: StablePrefixAnalysis = {
+    entries,
+    tokenCount: countTokens(serialized),
+    fingerprint: sha256(serialized),
+  }
+
   let systemInstruction = ''
   const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = []
   const textEntries: TextOnlyPrefixEntry[] = []

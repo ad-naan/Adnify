@@ -18,6 +18,8 @@ export interface ImageAnalysisResult {
   content?: string
   error?: string
   image?: DocumentReaderEmbeddedImage
+  /** False when the file was read successfully but the endpoint rejected visual input. */
+  analysisAvailable?: boolean
 }
 
 export interface ReadRichContentOptions {

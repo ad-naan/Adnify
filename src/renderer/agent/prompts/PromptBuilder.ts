@@ -173,7 +173,10 @@ function buildSkillsSections(autoSkills: SkillItem[], mentionedSkills: SkillItem
   return [index, fullContent]
 }
 
-export function buildSystemPrompt(ctx: PromptContext): string {
+export function buildSystemPrompt(
+  ctx: PromptContext,
+  options?: { includeRuntimeEnvironment?: boolean },
+): string {
   const sections: (string | null)[] = [
     ctx.personality,
     APP_IDENTITY,
@@ -191,7 +194,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
     buildRemoteServerSection(ctx.remoteServerSection || null),
     buildCustomInstructions(ctx.customInstructions),
-    buildEnvironment(ctx), // <--- 最动态的部分，移至底部以保证缓存命中率 (99%)
+    options?.includeRuntimeEnvironment === false ? null : buildEnvironment(ctx),
   ]
 
   return sections.filter(Boolean).join('\n\n')
@@ -210,7 +213,11 @@ export async function buildAgentSystemPrompt(
     threadId?: string
     isSubAgent?: boolean
   }
-): Promise<{ prompt: string; activeSkills: { name: string; description: string }[] }> {
+): Promise<{
+  prompt: string
+  runtimeEnvironment: string
+  activeSkills: { name: string; description: string }[]
+}> {
   const {
     openFiles = [],
     activeFile,
@@ -279,10 +286,12 @@ export async function buildAgentSystemPrompt(
     remoteServerSection,
   }
 
-  const prompt = buildSystemPrompt(ctx)
+  const prompt = buildSystemPrompt(ctx, { includeRuntimeEnvironment: false })
+  const runtimeEnvironment = buildEnvironment(ctx)
 
   return {
     prompt,
+    runtimeEnvironment,
     activeSkills: activeSkillsList.map(skill => ({
       name: skill.name,
       description: skill.description,

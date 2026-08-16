@@ -3,7 +3,7 @@ import type { LLMConfig } from '@shared/types'
 import { logger } from '@shared/utils/Logger'
 import { resolveHeaderPlaceholders } from '../modelFactory'
 import { resolveCacheProtocol } from './cacheProtocol'
-import { analyzeStablePrefix, analyzeTextOnlyStablePrefix, stripPrefixIndexes } from './CacheAnalysis'
+import { analyzeStablePrefix, analyzeTextOnlyInitialPrefix, stripPrefixIndexes } from './CacheAnalysis'
 import { isCacheFeatureUnsupported, markCacheFeatureUnsupported } from './CacheCompatibility'
 import {
   buildOpenAIStyleProviderOptions,
@@ -23,7 +23,7 @@ export interface CacheStrategy {
 
 const MIN_OPENAI_CACHE_TOKENS = 0
 const MIN_GOOGLE_IMPLICIT_CACHE_TOKENS = 0
-const MIN_GOOGLE_EXPLICIT_CACHE_TOKENS = 32768
+const MIN_GOOGLE_EXPLICIT_CACHE_TOKENS = 4096
 const DEFAULT_GOOGLE_CACHE_TTL_SECONDS = 3600
 
 export function createCacheStrategy(config: LLMConfig): CacheStrategy {
@@ -84,7 +84,7 @@ class OpenAICacheStrategy implements CacheStrategy {
       return { messages }
     }
 
-    const promptCacheKey = buildStablePromptCacheKey(config, analysis.fingerprint)
+    const promptCacheKey = buildStablePromptCacheKey(config)
     const cacheOptions: {
       promptCacheKey: string
     } = {
@@ -92,12 +92,14 @@ class OpenAICacheStrategy implements CacheStrategy {
     }
 
     const protocol = resolveCacheProtocol(config.protocol, config.provider)
+    const preparedMessages = shouldAddOpenAIExplicitBreakpoint(config)
+      ? withOpenAIExplicitBreakpoint(messages, analysis.entries[0]?.index ?? 0)
+      : messages
     if (protocol === 'openai' && config.provider !== 'openai') {
       return {
-        messages,
+        messages: preparedMessages,
         providerOptions: {
-          openaiCompatible: cacheOptions,
-          'custom-openai': {
+          customOpenai: {
             prompt_cache_key: promptCacheKey,
           },
         } as RequestProviderOptions,
@@ -105,7 +107,7 @@ class OpenAICacheStrategy implements CacheStrategy {
     }
 
     return {
-      messages,
+      messages: preparedMessages,
       providerOptions: buildOpenAIStyleProviderOptions(config, cacheOptions),
     }
   }
@@ -163,7 +165,7 @@ class GoogleExplicitCacheManager {
   private cache = new Map<string, { name: string; expiresAt: number; tokenCount: number }>()
 
   async prepare(config: LLMConfig, messages: ModelMessage[]): Promise<RequestCacheResult | null> {
-    const analysis = analyzeTextOnlyStablePrefix(messages)
+    const analysis = analyzeTextOnlyInitialPrefix(messages)
     if (!analysis || analysis.tokenCount < MIN_GOOGLE_EXPLICIT_CACHE_TOKENS) {
       return null
     }
@@ -208,7 +210,7 @@ class GoogleExplicitCacheManager {
 
   private async createCache(
     config: LLMConfig,
-    analysis: NonNullable<ReturnType<typeof analyzeTextOnlyStablePrefix>>,
+    analysis: NonNullable<ReturnType<typeof analyzeTextOnlyInitialPrefix>>,
   ): Promise<{ name: string; expiresAt: number; tokenCount: number } | null> {
     try {
       const headers: Record<string, string> = {
@@ -318,27 +320,45 @@ function selectAnthropicBreakpointIndexes(prefixIndexes: number[]): number[] {
     return []
   }
 
-  if (prefixIndexes.length <= 12) {
-    return [prefixIndexes[prefixIndexes.length - 1]]
-  }
-
-  const selected = new Set<number>()
-  const segmentCount = Math.min(4, Math.ceil(prefixIndexes.length / 8))
-  for (let segment = 1; segment <= segmentCount; segment += 1) {
-    const position = Math.min(
-      prefixIndexes.length - 1,
-      Math.floor((segment * prefixIndexes.length) / segmentCount) - 1,
-    )
-    selected.add(prefixIndexes[Math.max(0, position)])
-  }
+  // Fixed early breakpoints do not move as history grows. The final one tracks
+  // the append-only conversation so the next turn can reuse the longest prefix.
+  const selected = new Set<number>([prefixIndexes[0]])
+  if (prefixIndexes.length > 8) selected.add(prefixIndexes[7])
+  if (prefixIndexes.length > 16) selected.add(prefixIndexes[15])
+  selected.add(prefixIndexes[prefixIndexes.length - 1])
 
   return [...selected].sort((a, b) => a - b)
 }
 
-function buildStablePromptCacheKey(config: LLMConfig, prefixFingerprint: string): string {
+function buildStablePromptCacheKey(config: LLMConfig): string {
   const protocol = resolveCacheProtocol(config.protocol, config.provider)
-  const scope = `${config.provider}:${protocol}:${config.model}`
-  return `${scope}:${prefixFingerprint.slice(0, 24)}`
+  // prompt_cache_key controls routing. Exact prefix matching remains the
+  // provider's responsibility, so changing this key every turn only fragments
+  // otherwise reusable cache entries.
+  return `${config.provider}:${protocol}:${config.model}`.slice(0, 64)
+}
+
+function shouldAddOpenAIExplicitBreakpoint(config: LLMConfig): boolean {
+  if (resolveCacheProtocol(config.protocol, config.provider) !== 'openai-responses') {
+    return false
+  }
+  const cacheOptions = config.providerOptions?.openai?.promptCacheOptions
+  return Boolean(cacheOptions && typeof cacheOptions === 'object')
+}
+
+function withOpenAIExplicitBreakpoint(
+  messages: ModelMessage[],
+  messageIndex: number,
+): ModelMessage[] {
+  return messages.map((message, index) => index === messageIndex
+    ? {
+        ...message,
+        providerOptions: mergeProviderOptions(
+          message.providerOptions as RequestProviderOptions | undefined,
+          { openai: { promptCacheBreakpoint: { mode: 'explicit' } } },
+        ),
+      }
+    : message)
 }
 
 function normalizeGoogleModelName(model: string): string {

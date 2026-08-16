@@ -3,7 +3,11 @@ import {
   resolveRuntimeModelRoutingConfig,
   resolveMessageRouting,
 } from '@shared/config/modelRouting'
-import { injectVisualSummaryIntoMessages, stripImagesFromLatestUserMessage } from '@renderer/agent/services/multimodalRoutingService'
+import {
+  injectVisualSummaryIntoMessages,
+  stripImagesFromAllUserMessages,
+  stripImagesFromLatestUserMessage,
+} from '@renderer/agent/services/multimodalRoutingService'
 import type { LLMConfig, LLMMessage } from '@shared/types/llm'
 
 function createConfig(overrides: Partial<LLMConfig> = {}): LLMConfig {
@@ -239,5 +243,31 @@ describe('model routing', () => {
 
     expect(stripped[0]).toEqual(messages[0])
     expect(stripped[1].content).toBe('please inspect this image')
+  })
+
+  it('strips image parts from current and historical user messages for generic retry', () => {
+    const messages: LLMMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'first screenshot' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'first' } },
+        ],
+      },
+      { role: 'assistant', content: 'I can help.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'second screenshot' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'second' } },
+        ],
+      },
+    ]
+
+    const stripped = stripImagesFromAllUserMessages(messages)
+
+    expect(stripped[0].content).toBe('first screenshot')
+    expect(stripped[1].content).toBe('I can help.')
+    expect(stripped[2].content).toBe('second screenshot')
   })
 })

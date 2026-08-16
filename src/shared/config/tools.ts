@@ -112,12 +112,13 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     read_file: {
         name: 'read_file',
         displayName: 'Read File',
-        description: 'Read one or more local files. Supports code/text files plus PDF, Word, PowerPoint, and Excel documents. Rich documents are returned as readable extracted text and will analyze embedded images when a multimodal model is configured. MUST read before editing.',
+        description: 'Read one or more local files. Supports code/text, PDF/Office documents, and safely delegates image paths to visual analysis. Prefer read_image when the target is known to be an image. MUST read before editing.',
         detailedDescription: `Read file contents from the filesystem.
 - Single file: path="src/main.ts"
 - Multiple files: path=["src/a.ts", "src/b.ts"]
 - Code files default to line-numbered output for precise edits
 - PDF/Office files are parsed into readable extracted text
+- Standalone image paths are automatically delegated to visual analysis if this tool is selected by mistake
 - If a rich document contains embedded images and a multimodal model is configured, Adnify will append embedded-image analyses automatically
 - Large files will be truncated, use search_files to locate target first`,
         customSchema: z.object({
@@ -140,7 +141,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         approvalType: 'none',
         parallel: true,
         concurrencyMode: 'parallel-safe',
-        resourceScope: ['filesystem:read'],
+        resourceScope: ['filesystem:read', 'llm:generate'],
         resultSemantics: 'file-read',
         retryPolicy: { maxAttempts: 1 },
         validationLevel: 'strict',
@@ -160,12 +161,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     read_image: {
         name: 'read_image',
         displayName: 'Read Image',
-        description: 'Analyze a local image with the configured multimodal model. Use for screenshots, scanned pages, charts, tables, or standalone image files.',
+        description: 'Analyze a local image. Uses the dedicated multimodal route when configured, otherwise the active model. Use for screenshots, scanned pages, charts, tables, or standalone image files.',
         detailedDescription: `Analyze a local image file with the configured multimodal route.
 - Best for screenshots, diagrams, scans, charts, and tables
 - Returns structured visual analysis text
 - Rich document reads may reuse the same capability for embedded images
-- Requires a configured multimodal model route`,
+- Prefers a configured multimodal route and otherwise falls back to the active model`,
         category: 'read',
         approvalType: 'none',
         parallel: true,

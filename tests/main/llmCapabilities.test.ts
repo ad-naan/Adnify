@@ -34,6 +34,16 @@ describe('LLM capability-driven behavior', () => {
     expect(result.presencePenalty).toBeUndefined()
   })
 
+  it('omits unsupported sampling params for Responses reasoning requests', () => {
+    const result = buildGenerationSettings(createConfig({
+      protocol: 'openai-responses',
+      reasoningEffort: 'medium',
+    }))
+
+    expect(result.temperature).toBeUndefined()
+    expect(result.topP).toBeUndefined()
+  })
+
   it('uses Google level-based thinking config only when explicitly declared', () => {
     const options = buildThinkingProviderOptions(createConfig({
       provider: 'gemini',

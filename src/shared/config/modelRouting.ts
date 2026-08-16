@@ -125,7 +125,7 @@ export function resolveMessageRouting(
   const primaryConfig = resolveModelConfigForRole('primary', routingConfig, providerConfigs, activeConfig) || activeConfig
 
   // If the user has not explicitly enabled multimodal routing, skip entirely.
-  // The primary model will receive images as-is (works for models like gpt-4o, claude-sonnet, gemini).
+  // The request is attempted as-is and can fall back generically at runtime.
   if (!routingConfig.enabled) {
     return {
       primaryConfig,

@@ -4,7 +4,14 @@
  */
 
 import type { JSONValue } from '@ai-sdk/provider'
-import type { ModelMessage, UserModelMessage, AssistantModelMessage, ToolModelMessage } from '@ai-sdk/provider-utils'
+import type {
+  AssistantModelMessage,
+  FilePart,
+  ModelMessage,
+  TextPart,
+  ToolModelMessage,
+  UserModelMessage,
+} from '@ai-sdk/provider-utils'
 import type { LLMMessage, MessageContentPart } from '@shared/types'
 import type { LLMConfig } from '@shared/types/llm'
 import { getOpenAIProviderOptionKeys, usesOpenAIProtocol, usesAnthropicProtocol } from './ProviderCompatibility'
@@ -18,10 +25,7 @@ export class MessageConverter {
 
     // 添加 system prompt
     if (systemPrompt) {
-      result.push({
-        role: 'system',
-        content: systemPrompt,
-      })
+      result.push(...this.convertSystemPrompt(systemPrompt))
     }
 
     // 转换消息
@@ -33,6 +37,20 @@ export class MessageConverter {
     }
 
     return result
+  }
+
+  /** Separate the reusable policy prefix from the changing runtime tail. */
+  private convertSystemPrompt(systemPrompt: string): ModelMessage[] {
+    const environmentMarker = '\n\n## Environment\n'
+    const markerIndex = systemPrompt.lastIndexOf(environmentMarker)
+    if (markerIndex <= 0) {
+      return [{ role: 'system', content: systemPrompt }]
+    }
+
+    return [
+      { role: 'system', content: systemPrompt.slice(0, markerIndex) },
+      { role: 'system', content: systemPrompt.slice(markerIndex + 2) },
+    ]
   }
 
   /**
@@ -82,8 +100,8 @@ export class MessageConverter {
    */
   private convertUserContentParts(
     content: MessageContentPart[]
-  ): Array<{ type: 'text'; text: string } | { type: 'image'; image: string | URL; mediaType?: string }> {
-    const parts: Array<{ type: 'text'; text: string } | { type: 'image'; image: string | URL; mediaType?: string }> = []
+  ): Array<TextPart | FilePart> {
+    const parts: Array<TextPart | FilePart> = []
 
     for (const item of content) {
       if (item.type === 'text' && 'text' in item) {
@@ -94,9 +112,9 @@ export class MessageConverter {
         )
         if (result) {
           parts.push({
-            type: 'image',
-            image: result.image,
-            ...(result.mediaType && { mediaType: result.mediaType }),
+            type: 'file',
+            data: result.data,
+            mediaType: result.mediaType,
           })
         }
       }
@@ -114,20 +132,22 @@ export class MessageConverter {
     url?: string
     data?: string
     media_type?: string
-  }): { image: string | URL; mediaType?: string } | null {
-    if (source.type === 'url' && source.url) {
-      return {
-        image: source.url,
-        mediaType: source.media_type,
+  }): Pick<FilePart, 'data' | 'mediaType'> | null {
+    const sourceUrl = source.url || (source.type === 'url' ? source.data : undefined)
+    if (source.type === 'url' && sourceUrl) {
+      try {
+        return {
+          data: { type: 'url', url: new URL(sourceUrl) },
+          mediaType: source.media_type || 'image',
+        }
+      } catch {
+        return null
       }
     }
     if (source.type === 'base64' && source.data) {
       const mediaType = source.media_type || 'image/png' // 默认 PNG
-      // 直接传递纯 base64 字符串，不要拼成 data: URL
-      // AI SDK 内部的 downloadAssets 会将 data: URL 字符串解析为 URL 对象并用 fetch 下载
-      // 而 Electron 打包后 Node.js 原生 fetch 不支持 data: scheme，导致报错
       return {
-        image: source.data,
+        data: { type: 'data', data: source.data },
         mediaType,
       }
     }

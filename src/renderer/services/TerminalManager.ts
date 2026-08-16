@@ -261,6 +261,31 @@ function cloneCommandSession(session: TerminalCommandSession | null): TerminalCo
   return { ...session }
 }
 
+export interface CommandDisplayFilter {
+  startSequence: string
+  displayLine: string
+  pending: string
+  started: boolean
+}
+
+export function filterCommandDisplayChunk(filter: CommandDisplayFilter, data: string): string {
+  if (filter.started) return data
+
+  const combined = filter.pending + data
+  const markerIndex = combined.indexOf(filter.startSequence)
+  if (markerIndex < 0) {
+    // Discard shell input echo while retaining a possible marker prefix split
+    // across PTY chunks.
+    filter.pending = combined.slice(-Math.max(1, filter.startSequence.length - 1))
+    return ''
+  }
+
+  filter.started = true
+  filter.pending = ''
+  const afterMarker = combined.slice(markerIndex + filter.startSequence.length)
+  return `\r\x1b[2K${filter.displayLine}\r\n${afterMarker}`
+}
+
 class TerminalManagerClass {
   private static readonly MAX_IDLE_AGENT_TERMINALS = 2
   private state = {
@@ -283,6 +308,7 @@ class TerminalManagerClass {
   private currentCommandSessions = new Map<string, TerminalCommandSession>();
   private lastCommandSessions = new Map<string, TerminalCommandSession>();
   private activeExecutions = new Map<string, ActiveCommandExecution>();
+  private commandDisplayFilters = new Map<string, CommandDisplayFilter>();
 
   // PTY 状态
   private ptyReady = new Map<string, boolean>();
@@ -333,17 +359,25 @@ class TerminalManagerClass {
     const onData = api.terminal.onData(
       (event: TerminalDataEvent) => {
         const { id, data } = event;
+        const displayFilter = this.commandDisplayFilters.get(id)
+        const displayData = displayFilter
+          ? filterCommandDisplayChunk(displayFilter, data)
+          : data
         const xterm = this.xtermInstances.get(id);
-        if (xterm?.terminal) {
-          xterm.terminal.write(data);
+        if (xterm?.terminal && displayData) {
+          xterm.terminal.write(displayData);
         }
 
         // UI 展示缓冲（ring buffer）
-        this.appendToBuffer(id, data);
+        if (displayData) {
+          this.appendToBuffer(id, displayData);
+        }
 
         // 命令级缓冲由 active command session 单独维护
         this.rawDataListeners.forEach(listener => listener(event));
-        this.dataListeners.forEach(listener => listener(id, data));
+        if (displayData) {
+          this.dataListeners.forEach(listener => listener(id, displayData));
+        }
       },
     );
 
@@ -1269,6 +1303,7 @@ class TerminalManagerClass {
         clearTimeout(timer)
         clearIdleTimer()
         this.activeExecutions.delete(termId)
+        this.commandDisplayFilters.delete(termId)
 
         const partialOutput = trimRetainedText(
           override?.partialOutput ?? getVisibleOutput(),
@@ -1445,7 +1480,7 @@ class TerminalManagerClass {
       // cwd 处理不能包在命令外层：Pop-Location / 子 shell 退出会覆盖
       // $? 和 $LASTEXITCODE，导致带 cwd 的命令退出码必然失真。
       // 顺序固定为「切目录 → 执行 → 立刻捕获状态 → 还原目录 → 输出 sentinel」。
-      // 注：sentinelStart 不在这里——它由 wrapped 在 fakeEchoCmd 之后单独发出。
+      // 注：sentinelStart 不在这里——它由 wrapped 在主命令前单独发出。
       const mainCommand = isPowerShell
         ? (cwd
           ? `Push-Location "${cwd}"; ${sanitizedCommand}; ${PS_CAPTURE}; Pop-Location; ${sentinelEnd}`
@@ -1454,33 +1489,21 @@ class TerminalManagerClass {
           ? `( cd "${cwd}" && ${sanitizedCommand} ); __adnify_ec=$?; ${sentinelEnd}`
           : `${sanitizedCommand}; __adnify_ec=$?; ${sentinelEnd}`)
 
-      // 清除回显后，补打一行"伪提示符 + 原始命令"，让终端看起来像用户手动输入
-      // Windows PS double-quoted string 转义：` → ``，" → `"，$ → `$
-      // Unix double-quoted string 转义：\ → \\，" → \"，$ → \$，` → \`
-      const displayCmd = isPowerShell
-        ? command.replace(/`/g, '``').replace(/"/g, '`"').replace(/\$/g, '`$')
-        : command.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`')
+      // Renderer 展示一条干净的提示符和原始命令，不展示内部包装器。
+      const displayPath = cwd ?? (isPowerShell ? '$(Get-Location)' : '$(pwd)')
+      const displayLine = isPowerShell
+        ? `PS ${displayPath}> ${command}`
+        : `${displayPath.replace(/\\/g, '/')}\$ ${command}`
 
-      // ── 回显清除策略 ──
-      // PTY 行规程在内核层将发送的命令回显到终端（包装代码对用户可见），应用层无法阻止。
-      // 但包装宽度随 shell 状态（提示符长度、CWD 路径、命令内容）变化，无法精确计算
-      // 需要抹多少行——算少了一行就残留回显碎片，算多了一行吞掉命令输出首行。
-      //
-      // 解决方案：不再猜测行数，而是把 START sentinel 移到 fakeEchoCmd 里发出。
-      // 效果：（1）wrapper 泄漏的任何文本都落在 capture window 之前，不影响模型输入；
-      //       （2）完全不需要计算回显行数，因为回显残留不再危害结果。
-      // 对比旧方案：旧方案通过 ANSI 上移+清除序列物理擦除回显，但计算不稳定；
-      // 新方案承认回显在用户终端里可见，但保证它不出现在 AI 看到的输出里。
-      // 这与 VS Code 的 "shell integration" 思路一致——用 OSC 序列标记边界，
-      // 而不是靠清除来隔离。
+      // START 之前的 PTY 数据只可能是输入回显；捕获逻辑仍接收完整原始数据。
+      this.commandDisplayFilters.set(termId, {
+        startSequence: `${OSC}${START_PAYLOAD}${BEL}`,
+        displayLine,
+        pending: '',
+        started: false,
+      })
 
-      // 提示符路径：有 cwd 时直接嵌入，否则运行时动态获取当前目录
-      const fakeEchoCmd = isPowerShell
-        ? `Write-Host "PS ${cwd ?? '$(Get-Location)'}> ${displayCmd}"`
-        : `printf '%s\\n' "${cwd ? cwd.replace(/\\/g, '/') : '$(pwd)'}\\$ ${displayCmd}"`
-
-      // 把 START sentinel 放在 fakeEchoCmd 之后——capture 从这里开始，wrapper 的任何文本都在窗口之外
-      const wrapped = `${fakeEchoCmd}; ${sentinelStart}; ${mainCommand}\r`
+      const wrapped = `${sentinelStart}; ${mainCommand}\r`
 
       this.updateCurrentCommandSession(termId, (session) => ({
         ...session,
@@ -1513,6 +1536,7 @@ class TerminalManagerClass {
     this.currentCommandSessions.clear()
     this.lastCommandSessions.clear()
     this.activeExecutions.clear()
+    this.commandDisplayFilters.clear()
     this.state = {
       terminals: [],
       activeId: null,

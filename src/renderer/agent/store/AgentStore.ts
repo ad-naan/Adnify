@@ -759,7 +759,17 @@ function initializeAgentSessionSync(): void {
 
     hasInitializedAgentSessionSync = true
     useAgentStore.subscribe((nextState, prevState) => {
+        const nextIsStreaming = selectIsStreaming(nextState)
+        const prevIsStreaming = selectIsStreaming(prevState)
+        // A growing assistant message changes many times per second. Serializing the
+        // complete session during that hot path blocks the renderer; the final
+        // transition out of streaming schedules one complete snapshot instead.
+        if (nextIsStreaming) {
+            return
+        }
+
         if (
+            prevIsStreaming !== nextIsStreaming ||
             prevState.currentThreadId !== nextState.currentThreadId ||
             prevState.threads !== nextState.threads ||
             prevState.branches !== nextState.branches ||

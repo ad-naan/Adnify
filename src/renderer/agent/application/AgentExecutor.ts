@@ -51,6 +51,8 @@ export interface ExecutionConfig {
    * providers and compression can escalate too late.
    */
   model?: string
+  /** Volatile environment details placed after reusable conversation history. */
+  runtimeEnvironment?: string
   /** Plan 特定上下文 */
   planContext?: {
     planId?: string
@@ -166,6 +168,7 @@ export class AgentExecutor {
       const thread = useAgentStore.getState().threads[config.threadId]
       if (thread) {
         runtimeState = {
+          environment: config.runtimeEnvironment,
           handoffContext: thread.handoffContext,
           workingMemory: thread.contextSummary,
           todos: thread.todos,
@@ -176,6 +179,9 @@ export class AgentExecutor {
           logger.agent.info('[AgentExecutor] Injected runtime state context')
         }
       }
+    }
+    if (!runtimeState && config.runtimeEnvironment) {
+      runtimeState = { environment: config.runtimeEnvironment }
     }
 
     // 6. 计算各部分的 token

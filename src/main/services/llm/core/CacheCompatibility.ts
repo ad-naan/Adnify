@@ -1,10 +1,27 @@
 import type { LLMConfig } from '@shared/types'
 import { logger } from '@shared/utils/Logger'
+import { resolveCacheProtocol } from './cacheProtocol'
 
 export type CacheFeature =
   | 'anthropic-prompt-caching'
   | 'openai-prompt-cache-key'
   | 'google-explicit-cached-content'
+
+export function getCacheFeatureForConfig(
+  config: Pick<LLMConfig, 'provider' | 'protocol'>,
+): CacheFeature | null {
+  switch (resolveCacheProtocol(config.protocol, config.provider)) {
+    case 'openai':
+    case 'openai-responses':
+      return 'openai-prompt-cache-key'
+    case 'anthropic':
+      return 'anthropic-prompt-caching'
+    case 'google':
+      return 'google-explicit-cached-content'
+    default:
+      return null
+  }
+}
 
 const CACHE_FEATURE_DISABLE_TTL_MS = 10 * 60 * 1000
 const unsupportedCacheFeatures = new Map<string, Map<CacheFeature, number>>()

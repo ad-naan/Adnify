@@ -27,6 +27,7 @@ import { buildExecutionBatches } from './toolExecutionPlan'
 import { streamingEditService } from '../services/streamingEditService'
 import { resolveStreamingEditFilePath } from '../services/streamingEditPreview'
 import { shellServerRoutingService } from '../services/shellServerRoutingService'
+import { sanitizeToolRichContent, sanitizeToolTextOutput } from '../tools/toolOutputSanitizer'
 
 // ===== 文件快照 =====
 
@@ -435,9 +436,9 @@ async function executeSingle(
 
     const duration = Date.now() - startTime
 
-    const rawContent = result.success
+    const rawContent = sanitizeToolTextOutput(result.success
       ? (result.result !== undefined && result.result !== null ? result.result : 'Success')
-      : `Error: ${result.error || 'Unknown error'}`
+      : `Error: ${result.error || 'Unknown error'}`)
 
     // 截断过长的工具结果（防止单轮对话过长）
     const config = getAgentConfig()
@@ -459,7 +460,7 @@ async function executeSingle(
     })
 
     const meta = result.meta || {}
-    const richContent = result.richContent
+    const richContent = sanitizeToolRichContent(result.richContent)
     const previewPath = resolveStreamingEditFilePath(toolCall.arguments?.path, workspacePath)
 
     if (toolCall.name === 'edit_file' && previewPath) {
@@ -509,7 +510,7 @@ async function executeSingle(
     return { toolCall, result: { content, status: result.success ? 'success' : 'error', meta, richContent } }
   } catch (error) {
     const duration = Date.now() - startTime
-    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorMsg = sanitizeToolTextOutput(error instanceof Error ? error.message : String(error))
     logger.agent.error(`[Tools] Error in ${toolCall.name}:`, errorMsg)
 
     // 记录错误日志

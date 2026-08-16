@@ -767,15 +767,35 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const readOnePath = async (
             inputPath: string,
             allowLineRange: boolean,
-        ): Promise<{ success: boolean; result: string; meta?: Record<string, unknown>; error?: string }> => {
+        ): Promise<{
+            success: boolean
+            result: string
+            richContent?: ToolExecutionResult['richContent']
+            meta?: Record<string, unknown>
+            error?: string
+        }> => {
             const validPath = resolvePath(inputPath, ctx.workspacePath, true)
             const extension = getFileExtension(validPath)
 
             if (IMAGE_EXTENSIONS.has(extension)) {
+                const imageResult = await analyzeImageSource({ path: validPath })
+                if (imageResult.success) {
+                    return {
+                        success: true,
+                        result: imageResult.content,
+                        richContent: imageResult.richContent,
+                        meta: {
+                            ...imageResult.meta,
+                            filePath: validPath,
+                            routedFrom: 'read_file',
+                        },
+                    }
+                }
+
                 return {
                     success: false,
                     result: '',
-                    error: 'This file is an image. Use read_image instead.',
+                    error: imageResult.error || getReadImageUnavailableMessage(),
                     meta: {
                         filePath: validPath,
                         contentKind: 'image',
@@ -879,16 +899,31 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     try {
                         const fileResult = await readOnePath(p, false)
                         if (!fileResult.success) {
-                            return `\n--- File: ${p} ---\n[Error: ${fileResult.error || 'File not found'}]\n`
+                            return {
+                                text: `\n--- File: ${p} ---\n[Error: ${fileResult.error || 'File not found'}]\n`,
+                                richContent: undefined,
+                            }
                         }
-                        return `\n--- File: ${p} ---\n${fileResult.result}\n`
+                        return {
+                            text: `\n--- File: ${p} ---\n${fileResult.result}\n`,
+                            richContent: fileResult.richContent,
+                        }
                     } catch (e: unknown) {
-                        return `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`
+                        return {
+                            text: `\n--- File: ${p} ---\n[Error: ${(e as Error).message}]\n`,
+                            richContent: undefined,
+                        }
                     }
                 }))
             )
 
-            return { success: true, result: results.join('') }
+            const richContent = results.flatMap(item => item.richContent ?? [])
+
+            return {
+                success: true,
+                result: results.map(item => item.text).join(''),
+                richContent: richContent.length > 0 ? richContent : undefined,
+            }
         }
 
         const singleResult = await readOnePath(paths[0], true)
@@ -903,11 +938,12 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         return {
             success: true,
             result: singleResult.result,
+            richContent: singleResult.richContent,
             meta: singleResult.meta,
         }
     },
 
-    async read_image(args) {
+    async read_image(args, ctx) {
         const pathArg = typeof args.path === 'string' ? args.path : ''
         if (!pathArg.trim()) {
             return {
@@ -917,9 +953,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
         }
 
+        const validPath = resolvePath(pathArg, ctx.workspacePath, true)
         const prompt = typeof args.prompt === 'string' ? args.prompt : undefined
         const result = await analyzeImageSource({
-            path: pathArg,
+            path: validPath,
             prompt,
         })
 

@@ -22,6 +22,15 @@ const OPENAI_MANAGED_OPTION_KEYS = new Set([
   'reasoningSummary',
 ])
 
+const OPENAI_RESPONSES_FULL_ONLY_OPTION_KEYS = new Set([
+  'promptCacheOptions',
+  'promptCacheRetention',
+  'reasoningContext',
+  'reasoningMode',
+  'serviceTier',
+  'textVerbosity',
+])
+
 const ANTHROPIC_MANAGED_OPTION_KEYS = new Set([
   'thinking',
   'effort',
@@ -53,10 +62,11 @@ export function getOpenAIProviderOptionKeys(
   }
 
   if (protocol === 'openai') {
-    return ['openaiCompatible', 'custom-openai']
+    // AI SDK 7 camel-cases provider names for providerOptions keys.
+    return ['customOpenai']
   }
 
-  return ['openaiCompatible']
+  return ['customOpenai']
 }
 
 function usesOpenAIResponsesProtocol(config: LLMConfig): boolean {
@@ -179,10 +189,20 @@ function buildConfiguredProviderOptions(config: LLMConfig): RequestProviderOptio
   let providerOptions: RequestProviderOptions | undefined
 
   if (usesOpenAIProtocol(config)) {
-    const openAIOptions = omitManagedOptions(
+    let openAIOptions = omitManagedOptions(
       config.providerOptions?.openai,
       OPENAI_MANAGED_OPTION_KEYS,
     )
+
+    // These options use the native Responses schema. Never leak them into a
+    // Chat Completions request or a third-party compatibility profile merely
+    // because the user switched providers after configuring OpenAI.
+    if (!usesOpenAIResponsesProtocol(config) || !supportsFullOpenAIProfile(config)) {
+      openAIOptions = omitManagedOptions(
+        openAIOptions,
+        OPENAI_RESPONSES_FULL_ONLY_OPTION_KEYS,
+      )
+    }
 
     if (openAIOptions) {
       providerOptions = mergeProviderOptions(

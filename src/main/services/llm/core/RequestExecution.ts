@@ -14,7 +14,6 @@ import {
   mergeProviderOptions,
   resolveThinkingCompatibility,
 } from './ProviderCompatibility'
-import { resolveCacheProtocol } from './cacheProtocol'
 
 export interface PreparedRequest {
   messages: ModelMessage[]
@@ -88,7 +87,7 @@ interface PrepareExecutionRequestOptions {
 export async function prepareExecutionRequest(
   options: PrepareExecutionRequestOptions,
 ): Promise<PreparedRequest> {
-  const { config, baseMessages, originalMessages, systemPrompt, useCache } = options
+  const { config, baseMessages, originalMessages, useCache } = options
   const settings = buildGenerationSettings(config)
   const callOptions = buildRequestExecutionOptions(config)
 
@@ -98,7 +97,7 @@ export async function prepareExecutionRequest(
 
   let providerOptions = mergeProviderOptions(
     prepared.providerOptions,
-    buildProtocolProviderOptions(withSystemPromptInstructions(config, systemPrompt)),
+    buildProtocolProviderOptions(config),
   )
 
   const thinkingDecision = resolveThinkingCompatibility(config, originalMessages ?? [])
@@ -116,25 +115,5 @@ export async function prepareExecutionRequest(
     callOptions,
     providerOptions,
     cacheWriteTokens: prepared.cacheWriteTokens,
-  }
-}
-
-function withSystemPromptInstructions(
-  config: LLMConfig,
-  systemPrompt?: string,
-): LLMConfig {
-  if (!systemPrompt || resolveCacheProtocol(config.protocol, config.provider) !== 'openai-responses') {
-    return config
-  }
-
-  return {
-    ...config,
-    providerOptions: {
-      ...config.providerOptions,
-      openai: {
-        ...(config.providerOptions?.openai ?? {}),
-        instructions: systemPrompt,
-      },
-    },
   }
 }
