@@ -138,3 +138,17 @@ export function stripImagesFromLatestUserMessage(messages: LLMMessage[]): LLMMes
     return originalRequest || '(The user provided image input without additional text.)'
   })
 }
+
+export function stripImagesFromAllUserMessages(messages: LLMMessage[]): LLMMessage[] {
+  return messages.map(message => {
+    if (message.role !== 'user' || !Array.isArray(message.content)) {
+      return message
+    }
+
+    const text = extractUserRequestText(message).trim()
+    return {
+      ...message,
+      content: text || '(The user provided image input without additional text.)',
+    }
+  })
+}

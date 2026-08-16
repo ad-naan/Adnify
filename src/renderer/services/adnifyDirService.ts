@@ -34,6 +34,7 @@ import {
   toSessionIndexMeta,
   type AgentSessionSnapshot,
   type LegacyAgentStoreEnvelope,
+  type PersistedThreadSummary,
   type SessionCatalog,
   type SessionIndexMeta,
   type SessionMeta,
@@ -146,6 +147,7 @@ class AdnifyDirService {
   private threadHashes: Map<string, string> = new Map()
   private metaHash: string | null = null
   private metaWriteRevision = 0
+  private flushPromise: Promise<void> | null = null
 
   constructor() {
     this.sessionFiles = new SessionFileStore({
@@ -231,6 +233,29 @@ class AdnifyDirService {
     }
 
     if (!this.initialized || !this.primaryRoot) return
+    if (this.flushPromise) {
+      await this.flushPromise
+      if (this.hasDirtyData()) await this.flush()
+      return
+    }
+
+    const flush = this.flushOnce()
+    this.flushPromise = flush
+    try {
+      await flush
+    } finally {
+      if (this.flushPromise === flush) this.flushPromise = null
+    }
+
+    if (this.hasDirtyData()) await this.flush()
+  }
+
+  private hasDirtyData(): boolean {
+    return this.dirty.sessionMeta || this.dirty.dirtyThreads.size > 0 ||
+      this.dirty.workspaceState || this.dirty.settings
+  }
+
+  private async flushOnce(): Promise<void> {
 
     const metaToWrite = this.dirty.sessionMeta && this.cache.sessionMeta
       ? {
@@ -238,7 +263,7 @@ class AdnifyDirService {
         extra: serializeSessionExtraState(this.cache.sessionMeta.extra),
       }
       : null
-    const metaRevision = metaToWrite ? ++this.metaWriteRevision : 0
+    const metaRevision = metaToWrite ? this.metaWriteRevision : 0
 
     const promises: Promise<void>[] = []
 
@@ -251,21 +276,25 @@ class AdnifyDirService {
       }
     }
 
-    const flushedThreadIds = [...this.dirty.dirtyThreads]
-    for (const threadId of flushedThreadIds) {
-      const data = this.cache.threads.get(threadId)
+    const flushedThreads = [...this.dirty.dirtyThreads].map(threadId => ({
+      threadId,
+      data: this.cache.threads.get(threadId),
+      hash: this.threadHashes.get(threadId),
+    }))
+    for (const { threadId, data } of flushedThreads) {
       if (data !== undefined) {
         promises.push(this.sessionFiles.writeSessionFile(`${threadId}.json`, data))
-        this.threadHashes.set(threadId, stableStringify(data))
       }
     }
 
-    if (this.dirty.workspaceState && this.cache.workspaceState) {
-      promises.push(this.writeJsonFile(ADNIFY_FILES.WORKSPACE_STATE, this.cache.workspaceState))
+    const workspaceStateToWrite = this.dirty.workspaceState ? this.cache.workspaceState : null
+    if (workspaceStateToWrite) {
+      promises.push(this.writeJsonFile(ADNIFY_FILES.WORKSPACE_STATE, workspaceStateToWrite))
     }
 
-    if (this.dirty.settings && this.cache.settings) {
-      promises.push(this.writeJsonFile(ADNIFY_FILES.SETTINGS, this.cache.settings))
+    const settingsToWrite = this.dirty.settings ? this.cache.settings : null
+    if (settingsToWrite) {
+      promises.push(this.writeJsonFile(ADNIFY_FILES.SETTINGS, settingsToWrite))
     }
 
     if (promises.length > 0) {
@@ -274,13 +303,15 @@ class AdnifyDirService {
         this.dirty.sessionMeta = false
         this.metaHash = stableStringify({ ...metaToWrite.index, extra: metaToWrite.extra })
       }
-      for (const threadId of flushedThreadIds) {
-        this.dirty.dirtyThreads.delete(threadId)
+      for (const { threadId, hash } of flushedThreads) {
+        if (this.threadHashes.get(threadId) === hash) {
+          this.dirty.dirtyThreads.delete(threadId)
+        }
       }
-      if (this.dirty.workspaceState && this.cache.workspaceState) {
+      if (workspaceStateToWrite && this.cache.workspaceState === workspaceStateToWrite) {
         this.dirty.workspaceState = false
       }
-      if (this.dirty.settings && this.cache.settings) {
+      if (settingsToWrite && this.cache.settings === settingsToWrite) {
         this.dirty.settings = false
       }
       logger.system.info('[AdnifyDir] Flushed all dirty data')
@@ -355,8 +386,10 @@ class AdnifyDirService {
     }
   }
 
-  private async reconcileSessionMeta(meta: SessionMeta): Promise<SessionMeta> {
-    const summaries = await this.sessionFiles.listPersistedThreadSummaries()
+  private async reconcileSessionMeta(
+    meta: SessionMeta,
+    summaries: PersistedThreadSummary[]
+  ): Promise<SessionMeta> {
     const reconciledMeta = buildEffectiveSessionMeta(meta, summaries)
     const indexedThreadIds = [...meta.threadIds].sort()
     const actualThreadIds = [...reconciledMeta.threadIds].sort()
@@ -386,8 +419,8 @@ class AdnifyDirService {
     if (this.cache.sessionMeta) return this.cache.sessionMeta
     if (!this.isInitialized()) return { ...DEFAULT_SESSION_META }
 
-    const { meta } = await this.buildSessionCatalog()
-    const reconciledMeta = await this.reconcileSessionMeta(meta)
+    const { meta, summaries } = await this.buildSessionCatalog()
+    const reconciledMeta = await this.reconcileSessionMeta(meta, summaries)
 
     this.cache.sessionMeta = reconciledMeta
     this.metaHash = stableStringify(reconciledMeta)
@@ -524,6 +557,7 @@ class AdnifyDirService {
     this.cache.sessionMeta = meta
     if (this.metaHash === nextHash) return
     this.metaHash = nextHash
+    this.metaWriteRevision += 1
     this.dirty.sessionMeta = true
     this.scheduleFlush()
   }
@@ -579,7 +613,7 @@ class AdnifyDirService {
 
   async getHydratedAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
     const { meta, summaries } = await this.buildSessionCatalog()
-    const reconciledMeta = await this.reconcileSessionMeta(meta)
+    const reconciledMeta = await this.reconcileSessionMeta(meta, summaries)
 
     if (reconciledMeta.threadIds.length === 0 && !reconciledMeta.currentThreadId) {
       this.cache.sessionMeta = reconciledMeta
@@ -626,7 +660,7 @@ class AdnifyDirService {
 
   async getAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
     const { meta, summaries } = await this.buildSessionCatalog()
-    const reconciledMeta = await this.reconcileSessionMeta(meta)
+    const reconciledMeta = await this.reconcileSessionMeta(meta, summaries)
 
     if (reconciledMeta.threadIds.length === 0 && !reconciledMeta.currentThreadId) {
       this.cache.sessionMeta = reconciledMeta
@@ -809,7 +843,8 @@ class AdnifyDirService {
   }
 
   private async writeJsonFile<T>(file: AdnifyFile, data: T): Promise<void> {
-    await this.writeJson(file, data)
+    const written = await this.writeJson(file, data)
+    if (!written) throw new Error(`[AdnifyDir] Failed to write ${file}`)
   }
 }
 

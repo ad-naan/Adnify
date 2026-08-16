@@ -17,10 +17,19 @@ import type { LintCheckFile, ChatMessage, AssistantMessage, InteractiveContent }
 import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext, LoopCheckResult } from './types'
-import { resolveMessageRouting, resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
+import {
+  messageContentHasImages,
+  resolveMessageRouting,
+  resolveRuntimeModelRoutingConfig,
+} from '@shared/config/modelRouting'
 import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
-import { injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromLatestUserMessage } from '../services/multimodalRoutingService'
+import {
+  injectVisualSummaryIntoMessages,
+  runMultimodalPrepass,
+  stripImagesFromAllUserMessages,
+  stripImagesFromLatestUserMessage,
+} from '../services/multimodalRoutingService'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
 
@@ -559,7 +568,7 @@ export async function runLoop(
       ? selectPlanPlanningTools(planningState, agentTools)
       : agentTools
 
-    const result = await callLLMWithRetry(
+    let result = await callLLMWithRetry(
       primaryConfig,
       requestMessages,
       context.systemPrompt,
@@ -569,6 +578,36 @@ export async function runLoop(
       requestId,
       iterationTools
     )
+
+    const requestContainedImages = requestMessages.some(message => messageContentHasImages(message.content))
+    if (result.error && requestContainedImages && !context.abortSignal?.aborted) {
+      const initialImageError = result.error
+      requestMessages = stripImagesFromAllUserMessages(requestMessages)
+      const { language } = useStore.getState()
+
+      logger.agent.warn('[Loop] Image request failed; retrying once with text-only messages:', initialImageError)
+      threadStore.addSystemAlertPart(assistantId, {
+        alertType: 'warning',
+        title: getLocalizedText(language, '图片输入已降级', 'Image Input Fallback'),
+        message: getLocalizedText(
+          language,
+          '当前端点未能处理这次图片请求，已自动移除图片并继续文本处理。',
+          'The endpoint could not process this image request. Adnify removed the images and continued with text-only input.',
+        ),
+        compact: true,
+      })
+
+      result = await callLLMWithRetry(
+        primaryConfig,
+        requestMessages,
+        context.systemPrompt,
+        assistantId,
+        threadStore,
+        context.abortSignal,
+        `${requestId}-text-fallback`,
+        iterationTools,
+      )
+    }
 
     if (context.abortSignal?.aborted) {
       EventBus.emit({ type: 'loop:end', reason: 'aborted', threadId, assistantId, requestId, planTaskId: context.planTaskId })

@@ -29,6 +29,56 @@ import { analyzeImage } from '@main/services/documentReader/imageAnalysisService
 import { readRichContent } from '@main/services/documentReader/richContentReader'
 import type { ImageAnalysisRequest, ReadRichContentOptions } from '@shared/types'
 
+interface SharedFileRead {
+  content: string | null
+  size: number
+}
+
+const pendingFileReads = new Map<string, Promise<SharedFileRead>>()
+const pendingFileWrites = new Map<string, {
+  content: string
+  encoding: string
+  promise: Promise<boolean>
+}>()
+
+function isInternalAdnifyPath(filePath: string): boolean {
+  return /(?:^|[\\/])\.adnify(?:[\\/]|$)/i.test(filePath)
+}
+
+function readFileSingleFlight(filePath: string, encoding?: string): Promise<SharedFileRead> {
+  const key = `${path.resolve(filePath)}\0${encoding || 'auto'}`
+  const existing = pendingFileReads.get(key)
+  if (existing) return existing
+
+  const read = (async () => {
+    const stats = await fsPromises.stat(filePath)
+    const content = stats.size > 5 * 1024 * 1024
+      ? await readLargeFile(filePath, 0, 10000)
+      : (await readFileWithEncodingInfo(filePath, encoding)).content
+    return { content, size: stats.size }
+  })()
+
+  pendingFileReads.set(key, read)
+  void read.finally(() => {
+    if (pendingFileReads.get(key) === read) pendingFileReads.delete(key)
+  }).catch(() => undefined)
+  return read
+}
+
+function writeFileSerialized(filePath: string, content: string, encoding: string): Promise<boolean> {
+  const key = path.resolve(filePath)
+  const existing = pendingFileWrites.get(key)
+  if (existing?.content === content && existing.encoding === encoding) return existing.promise
+
+  const previous = existing?.promise ?? Promise.resolve(true)
+  const write = previous.catch(() => false).then(() => safeWriteFile(filePath, content, encoding as any))
+  pendingFileWrites.set(key, { content, encoding, promise: write })
+  void write.finally(() => {
+    if (pendingFileWrites.get(key)?.promise === write) pendingFileWrites.delete(key)
+  }).catch(() => undefined)
+  return write
+}
+
 /**
  * 向渲染进程发送错误通知
  */
@@ -168,17 +218,14 @@ export function registerSecureFileHandlers(
     }
 
     try {
-      const stats = await fsPromises.stat(filePath)
+      const { content, size } = await readFileSingleFlight(filePath, encoding)
       // 使用拆分的 fileUtils 函数
-      const content =
-        stats.size > 5 * 1024 * 1024
-          ? await readLargeFile(filePath, 0, 10000)
-          : (await readFileWithEncodingInfo(filePath, encoding)).content
-
-      securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
-        size: stats.size,
-        bypass: true,
-      })
+      if (!isInternalAdnifyPath(filePath)) {
+        securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
+          size,
+          bypass: true,
+        })
+      }
       return content
     } catch (err) {
       // 文件不存在是正常情况（如可选的规则文件），不记录为 ERROR
@@ -365,14 +412,16 @@ export function registerSecureFileHandlers(
     }
 
     try {
-      const success = await safeWriteFile(filePath, content, (encoding as any) || 'utf-8')
+      const success = await writeFileSerialized(filePath, content, encoding || 'utf-8')
       if (!success) {
         return false
       }
-      securityManager.logOperation(OperationType.FILE_WRITE, filePath, true, {
-        size: content.length,
-        bypass: true,
-      })
+      if (!isInternalAdnifyPath(filePath)) {
+        securityManager.logOperation(OperationType.FILE_WRITE, filePath, true, {
+          size: content.length,
+          bypass: true,
+        })
+      }
       return true
     } catch (err) {
       logger.security.error('[File] write failed:', filePath, toAppError(err).message)

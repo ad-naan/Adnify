@@ -2,7 +2,7 @@ import type { LLMConfig } from '@shared/types'
 import { logger } from '@shared/utils/Logger'
 import { ErrorCode } from '@shared/utils/errorHandler'
 import {
-  detectUnsupportedCacheFeature,
+  getCacheFeatureForConfig,
   getCacheFeatureErrorReason,
   markCacheFeatureUnsupported,
 } from './CacheCompatibility'
@@ -51,24 +51,37 @@ export async function executeWithGenerationRecovery<T>(
 
   let useCache = true
   let attempt = 0
+  let cacheFallbackError: unknown
 
   while (true) {
     attempt += 1
 
     try {
-      return await execute(useCache, attempt)
+      const result = await execute(useCache, attempt)
+
+      // Cache decorations are optional optimizations. If the same request
+      // failed with cache and then succeeded without it, learn that fact for
+      // this exact route. This is causal runtime negotiation: no provider,
+      // model, parameter-name, or error-message table is involved.
+      if (state.cacheRetryCount > 0) {
+        const cacheFeature = getCacheFeatureForConfig(config)
+        if (cacheFeature) {
+          markCacheFeatureUnsupported(
+            config,
+            cacheFeature,
+            getCacheFeatureErrorReason(cacheFallbackError),
+          )
+        }
+      }
+
+      return result
     } catch (error) {
       if (abortSignal?.aborted) {
         throw new LLMError('Request was cancelled', ErrorCode.ABORTED, false)
       }
 
-      const unsupportedFeature = detectUnsupportedCacheFeature(error, config)
-      if (unsupportedFeature && useCache && state.cacheRetryCount < maxCacheRetries) {
-        markCacheFeatureUnsupported(
-          config,
-          unsupportedFeature,
-          getCacheFeatureErrorReason(error)
-        )
+      if (useCache && state.cacheRetryCount < maxCacheRetries) {
+        cacheFallbackError = error
         state.cacheRetryCount += 1
         useCache = false
         continue

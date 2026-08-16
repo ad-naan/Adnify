@@ -202,7 +202,7 @@ describe('document read tool executors', () => {
 
     expect(result.success).toBe(true)
     expect(analyzeImageSource).toHaveBeenCalledWith({
-      path: 'images/dashboard.png',
+      path: '/workspace/images/dashboard.png',
       prompt: 'Summarize the visible widgets',
     })
     expect(result.result).toContain('Image Overview')
@@ -210,5 +210,38 @@ describe('document read tool executors', () => {
       contentKind: 'image',
       sourceFormat: 'image/png',
     })
+  })
+
+  it('automatically routes image paths from read_file into visual analysis', async () => {
+    vi.mocked(analyzeImageSource).mockResolvedValue({
+      success: true,
+      content: 'The screenshot shows a settings panel.',
+      richContent: [
+        {
+          type: 'markdown',
+          title: 'Image Analysis',
+          text: 'The screenshot shows a settings panel.',
+        },
+      ],
+      meta: {
+        contentKind: 'image',
+        sourceFormat: 'image/png',
+      },
+    })
+
+    const result = await toolExecutors.read_file({ path: 'images/settings.png' }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(analyzeImageSource).toHaveBeenCalledWith({
+      path: '/workspace/images/settings.png',
+    })
+    expect(result.result).toContain('settings panel')
+    expect(result.richContent).toHaveLength(1)
+    expect(result.meta).toMatchObject({
+      contentKind: 'image',
+      filePath: '/workspace/images/settings.png',
+      routedFrom: 'read_file',
+    })
+    expect(api.file.read).not.toHaveBeenCalled()
   })
 })

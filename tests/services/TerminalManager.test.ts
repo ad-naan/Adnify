@@ -125,6 +125,23 @@ describe('TerminalManager command sessions', () => {
     vi.useRealTimers()
   })
 
+  it('hides the internal command wrapper and renders one clean command line', async () => {
+    const { filterCommandDisplayChunk } = await import('@renderer/services/TerminalManager')
+    const filter = {
+      startSequence: '\x1b]9001;ADNIFY_CMD_START_test\x07',
+      displayLine: 'PS E:\\workspace> Get-Item icon.png',
+      pending: '',
+      started: false,
+    }
+
+    expect(filterCommandDisplayChunk(filter, 'Write-Host wrapper; \x1b]9001;ADNIFY_')).toBe('')
+    expect(filterCommandDisplayChunk(
+      filter,
+      'CMD_START_test\x07actual output\r\n',
+    )).toBe('\r\x1b[2KPS E:\\workspace> Get-Item icon.png\r\nactual output\r\n')
+    expect(filterCommandDisplayChunk(filter, 'next line\r\n')).toBe('next line\r\n')
+  })
+
   it('tracks detached background commands as last session state', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 

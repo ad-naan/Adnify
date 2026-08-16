@@ -32,8 +32,9 @@ const MIME_TYPES: Record<string, string> = {
 }
 
 export async function analyzeImage(request: ImageAnalysisRequest): Promise<ImageAnalysisResult> {
+  let image: DocumentReaderEmbeddedImage | undefined
   try {
-    const image = request.image ?? await loadImageFromPath(request.path)
+    image = request.image ?? await loadImageFromPath(request.path)
     const syncService = new SyncService()
     const response = await syncService.generate({
       config: request.config,
@@ -66,6 +67,15 @@ export async function analyzeImage(request: ImageAnalysisRequest): Promise<Image
       image,
     }
   } catch (error) {
+    if (image) {
+      return {
+        success: true,
+        content: `Image file "${image.displayName}" was read successfully (${image.mimeType}), but the current endpoint did not return a visual analysis.`,
+        image,
+        analysisAvailable: false,
+      }
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),

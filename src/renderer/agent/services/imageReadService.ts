@@ -1,6 +1,9 @@
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@/renderer/store'
-import { resolveModelConfigForRole, resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
+import {
+  resolveModelConfigForRole,
+  resolveRuntimeModelRoutingConfig,
+} from '@shared/config/modelRouting'
 import type {
   DocumentReaderEmbeddedImage,
   LLMConfig,
@@ -8,12 +11,36 @@ import type {
   ToolRichContent,
 } from '@shared/types'
 
-const READ_IMAGE_UNAVAILABLE_MESSAGE = 'Error: read_image requires a configured multimodal model. Configure a multimodal route in settings before using this tool.'
+const READ_IMAGE_UNAVAILABLE_MESSAGE = 'Error: read_image requires a usable active model or a configured multimodal route.'
 
-function resolveConfiguredMultimodalConfig(): LLMConfig | null {
+function resolveConfiguredMultimodalConfig(options?: { fallbackToPrimary?: boolean }): LLMConfig | null {
   const store = useStore.getState()
   const routingConfig = resolveRuntimeModelRoutingConfig(store.modelRouting, store.llmConfig)
-  return resolveModelConfigForRole('multimodal', routingConfig, store.providerConfigs, store.llmConfig)
+  const multimodalConfig = routingConfig.enabled
+    ? resolveModelConfigForRole(
+        'multimodal',
+        routingConfig,
+        store.providerConfigs,
+        store.llmConfig,
+      )
+    : null
+
+  if (multimodalConfig) {
+    return multimodalConfig
+  }
+
+  // Explicit image reads should still work when the active model itself is
+  // multimodal. A separate route is an optimization, not a prerequisite.
+  if (!options?.fallbackToPrimary) {
+    return null
+  }
+
+  return resolveModelConfigForRole(
+    'primary',
+    routingConfig,
+    store.providerConfigs,
+    store.llmConfig,
+  )
 }
 
 export function getReadImageUnavailableMessage(): string {
@@ -44,7 +71,7 @@ export async function analyzeImageSource(params: {
   richContent?: ToolRichContent[]
   meta?: Record<string, unknown>
 }> {
-  const config = resolveConfiguredMultimodalConfig()
+  const config = resolveConfiguredMultimodalConfig({ fallbackToPrimary: true })
   if (!config) {
     return {
       success: false,
@@ -59,6 +86,25 @@ export async function analyzeImageSource(params: {
     image: params.image,
     prompt: params.prompt,
   })
+
+  if (response.analysisAvailable === false && response.image) {
+    const content = `${response.content} Continue without visual details or use a configured multimodal route if image understanding is required.`
+    return {
+      success: true,
+      content,
+      richContent: [{
+        type: 'image',
+        title: response.image.displayName,
+        data: response.image.data,
+        mimeType: response.image.mimeType,
+      }],
+      meta: {
+        contentKind: 'image',
+        sourceFormat: response.image.mimeType,
+        imageAnalysisUnavailable: true,
+      },
+    }
+  }
 
   if (!response.success || !response.content) {
     return {

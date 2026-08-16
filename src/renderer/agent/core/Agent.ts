@@ -168,7 +168,7 @@ export class AgentClass {
 
       // 4. 构建系统提示词（异步执行）
       const buildAgentSystemPrompt = await importBuildAgentSystemPrompt()
-      const { prompt: systemPrompt, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
+      const { prompt: systemPrompt, runtimeEnvironment, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
         ...promptOptions,
         threadId,
         isSubAgent: executionOptions?.isSubAgent,
@@ -200,6 +200,7 @@ export class AgentClass {
         planTaskId: executionOptions?.planTaskId,
         contextLimit: config.contextLimit,
         model: config.model,
+        runtimeEnvironment,
       }
 
       const preparation = await agentExecutor.prepare(

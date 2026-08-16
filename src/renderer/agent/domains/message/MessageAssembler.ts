@@ -13,6 +13,7 @@ import { buildLLMApiMessages } from './MessageConverter'
 import { countTokens } from '@shared/utils/tokenCounter'
 
 export interface RuntimeStateContext {
+  environment?: string
   handoffContext?: string
   workingMemory?: StructuredSummary | null
   todos?: TodoItem[]
@@ -166,6 +167,10 @@ export class MessageAssembler {
     if (!runtimeState) return null
 
     const sections: string[] = []
+
+    if (runtimeState.environment?.trim()) {
+      sections.push(runtimeState.environment.trim())
+    }
 
     if (runtimeState.handoffContext?.trim()) {
       sections.push(runtimeState.handoffContext.trim())

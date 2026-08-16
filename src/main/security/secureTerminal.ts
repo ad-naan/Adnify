@@ -1020,6 +1020,16 @@ export function registerSecureTerminalHandlers(
         shellPath = process.env.SHELL || '/bin/bash'
       }
 
+      if (isWindows) {
+        const shellName = path.basename(shellPath).toLowerCase()
+        if (shellName === 'powershell.exe' || shellName === 'powershell' || shellName === 'pwsh.exe' || shellName === 'pwsh') {
+          const utf8Init = '$__adnifyUtf8 = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = $__adnifyUtf8; [Console]::InputEncoding = $__adnifyUtf8; [Console]::OutputEncoding = $__adnifyUtf8'
+          shellArgs = ['-NoLogo', '-NoExit', '-Command', utf8Init]
+        } else if (shellName === 'cmd.exe' || shellName === 'cmd') {
+          shellArgs = ['/K', 'chcp 65001 > nul']
+        }
+      }
+
       logger.security.info(`[Terminal] Spawning ${effectiveBackend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
 
       const fs = require('fs')
@@ -1289,9 +1299,20 @@ export function registerSecureTerminalHandlers(
     return new Promise((resolve) => {
       const isWindows = process.platform === 'win32'
       const shell = customShell || (isWindows ? 'powershell.exe' : '/bin/bash')
-      const shellArgs = isWindows
-        ? ['-NoProfile', '-NoLogo', '-Command', command]
-        : ['-c', command]
+      const shellName = path.basename(shell).toLowerCase()
+      const isPowerShell = isWindows && (
+        shellName === 'powershell.exe' || shellName === 'powershell' ||
+        shellName === 'pwsh.exe' || shellName === 'pwsh'
+      )
+      const isCmd = isWindows && (shellName === 'cmd.exe' || shellName === 'cmd')
+      const utf8Command = isPowerShell
+        ? `$__adnifyUtf8 = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = $__adnifyUtf8; [Console]::InputEncoding = $__adnifyUtf8; [Console]::OutputEncoding = $__adnifyUtf8; ${command}`
+        : command
+      const shellArgs = isPowerShell
+        ? ['-NoProfile', '-NoLogo', '-Command', utf8Command]
+        : isCmd
+          ? ['/D', '/S', '/C', `chcp 65001 > nul & ${command}`]
+          : ['-c', command]
 
       logger.security.info(`[Shell] Executing: ${command} in ${workingDir}`)
 

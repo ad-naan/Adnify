@@ -66,7 +66,11 @@ function isOpenAIReasoningRoute(config: LLMConfig): boolean {
     return false
   }
 
-  return Boolean(config.capabilities?.openAIReasoningModel)
+  return Boolean(
+    config.capabilities?.openAIReasoningModel ||
+    protocol === 'openai-responses' && config.reasoningEffort && config.reasoningEffort !== 'none' ||
+    config.enableThinking && config.reasoningEffort && config.reasoningEffort !== 'none'
+  )
 }
 
 function supportsOpenAIResponsesMaxOutputTokens(config: LLMConfig): boolean {

@@ -455,6 +455,8 @@ class AiAttributionService {
   private flushPromise: Promise<void> | null = null
   private eventsCache: AiWriteEvent[] | null = null
   private dashboardCache = new Map<string, AiDashboardData>()
+  private commitReportCache = new Map<string, AiCommitReport | null>()
+  private pendingCommitReportReads = new Map<string, Promise<AiCommitReport | null>>()
 
   async bindWorkspace(workspace: WorkspaceConfig | null): Promise<void> {
     const nextRoot = workspace?.roots?.[0] || null
@@ -475,6 +477,8 @@ class AiAttributionService {
     this.workspaceKey = nextKey
     this.eventsCache = null
     this.dashboardCache.clear()
+    this.commitReportCache.clear()
+    this.pendingCommitReportReads.clear()
     await this.ensureStoragePaths()
     await this.reconcileWorkspaceRepos().catch(error => {
       logger.system.warn('[AiAttribution] Failed to reconcile workspace repos on bind:', error)
@@ -491,6 +495,8 @@ class AiAttributionService {
     this.eventQueue = []
     this.eventsCache = null
     this.dashboardCache.clear()
+    this.commitReportCache.clear()
+    this.pendingCommitReportReads.clear()
   }
 
   async flush(): Promise<void> {
@@ -1153,20 +1159,47 @@ class AiAttributionService {
   }
 
   private async readCommitReport(repoRoot: string, commitSha: string): Promise<AiCommitReport | null> {
-    const local = await adnifyDir.readText(this.getCommitReportPath(repoRoot, commitSha))
-    if (local) {
-      const parsed = safeParseJson<AiCommitReport>(local)
-      if (parsed) {
-        return parsed
+    const cacheKey = `${normalizePath(repoRoot)}::${commitSha}`
+    if (this.commitReportCache.has(cacheKey)) {
+      return this.commitReportCache.get(cacheKey) ?? null
+    }
+
+    const pending = this.pendingCommitReportReads.get(cacheKey)
+    if (pending) return pending
+
+    const read = (async () => {
+      const local = await adnifyDir.readText(this.getCommitReportPath(repoRoot, commitSha))
+      if (local) {
+        const parsed = safeParseJson<AiCommitReport>(local)
+        if (parsed) {
+          return parsed
+        }
+      }
+      return this.readAiNote(repoRoot, commitSha)
+    })()
+
+    this.pendingCommitReportReads.set(cacheKey, read)
+    try {
+      const report = await read
+      this.commitReportCache.set(cacheKey, report)
+      return report
+    } finally {
+      if (this.pendingCommitReportReads.get(cacheKey) === read) {
+        this.pendingCommitReportReads.delete(cacheKey)
       }
     }
-    return this.readAiNote(repoRoot, commitSha)
   }
 
   private async writeCommitReport(report: AiCommitReport): Promise<void> {
     await this.ensureStoragePaths()
     await api.file.ensureDir(adnifyDir.getFilePath(`${COMMIT_REPORTS_DIR}/${report.repoKey}`))
-    await adnifyDir.writeText(this.getCommitReportPath(report.repoRoot, report.commitSha), JSON.stringify(report, null, 2))
+    const written = await adnifyDir.writeText(
+      this.getCommitReportPath(report.repoRoot, report.commitSha),
+      JSON.stringify(report, null, 2)
+    )
+    if (written) {
+      this.commitReportCache.set(`${normalizePath(report.repoRoot)}::${report.commitSha}`, report)
+    }
   }
 
   private async readPendingCommits(repoRoot: string): Promise<Array<{ timestamp: number; commitSha: string }>> {

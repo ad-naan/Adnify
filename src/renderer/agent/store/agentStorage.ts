@@ -7,7 +7,9 @@ let writeSuspendCount = 0
 let scheduledPersistTimer: ReturnType<typeof setTimeout> | null = null
 let pendingStateGetter: (() => Partial<PersistedAgentSessionState>) | null = null
 const AGENT_STORAGE_VERSION = 0
-const DEFAULT_PERSIST_DEBOUNCE_MS = 240
+// Session snapshots serialize every thread and can be large. Keep short UI bursts
+// in memory so the repository can coalesce them into one durable write.
+const DEFAULT_PERSIST_DEBOUNCE_MS = 750
 
 export interface PersistedAgentSessionState {
   threads: Record<string, unknown>

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildThinkingProviderOptions } from '@/main/services/llm/core/ProviderCompatibility'
+import {
+  buildProtocolProviderOptions,
+  buildThinkingProviderOptions,
+} from '@/main/services/llm/core/ProviderCompatibility'
 import type { LLMConfig } from '@shared/types'
 
 const base = (over: Partial<LLMConfig>): LLMConfig => ({
@@ -15,7 +18,7 @@ describe('reasoning effort per protocol', () => {
     const o = buildThinkingProviderOptions(base({
       provider: 'custom', protocol: 'openai', reasoningEffort: 'max', openAICompatibilityProfile: 'compatible',
     }))
-    const bag = (o as any)?.openaiCompatible ?? (o as any)?.['custom-openai']
+    const bag = (o as any)?.customOpenai
     expect(bag?.reasoningEffort).toBe('high')
   })
   it('openai compatible forwards xhigh and max when extended effort is enabled', () => {
@@ -27,7 +30,7 @@ describe('reasoning effort per protocol', () => {
         openAICompatibilityProfile: 'compatible',
         capabilities: { openAICompatibleSupportsExtendedReasoningEffort: true },
       }))
-      const bag = (o as any)?.openaiCompatible ?? (o as any)?.['custom-openai']
+      const bag = (o as any)?.customOpenai
       expect(bag?.reasoningEffort).toBe(effort)
     }
   })
@@ -43,5 +46,44 @@ describe('reasoning effort per protocol', () => {
       capabilities: { googleThinkingMode: 'level' },
     } as any))
     expect((o as any)?.google?.thinkingConfig?.thinkingLevel).toBe('high')
+  })
+})
+
+describe('OpenAI Responses provider options', () => {
+  const responsesOptions = {
+    reasoningMode: 'pro',
+    reasoningContext: 'all_turns',
+    textVerbosity: 'high',
+    promptCacheOptions: { mode: 'explicit', ttl: '30m' },
+    promptCacheRetention: '24h',
+    serviceTier: 'priority',
+  }
+
+  it('forwards opt-in capabilities to full OpenAI Responses requests', () => {
+    const options = buildProtocolProviderOptions(base({
+      protocol: 'openai-responses',
+      openAICompatibilityProfile: 'full',
+      providerOptions: { openai: responsesOptions },
+    }))
+
+    expect(options?.openai).toMatchObject(responsesOptions)
+  })
+
+  it.each([
+    ['Chat Completions', { protocol: 'openai', openAICompatibilityProfile: 'full' }],
+    ['compatible Responses', { provider: 'custom', protocol: 'openai-responses', openAICompatibilityProfile: 'compatible' }],
+  ])('does not leak Responses-only options into %s', (_name, override) => {
+    const options = buildProtocolProviderOptions(base({
+      ...override,
+      providerOptions: {
+        openai: {
+          ...responsesOptions,
+          user: 'safe-pass-through',
+        },
+      },
+    } as Partial<LLMConfig>))
+    const bag = options?.openai ?? options?.customOpenai
+
+    expect(bag).toEqual({ user: 'safe-pass-through' })
   })
 })

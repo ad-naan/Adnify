@@ -41,9 +41,57 @@ describe('prepareRequestCache', () => {
     )
 
     expect(result.messages).toEqual(messages)
-    expect((result.providerOptions?.openai as Record<string, unknown>)?.promptCacheKey).toMatch(
-      /^openai:openai:tenant-routing-alias:/,
+    expect((result.providerOptions?.openai as Record<string, unknown>)?.promptCacheKey)
+      .toBe('openai:openai:tenant-routing-alias')
+  })
+
+  it('still attempts prompt caching through an OpenAI-compatible proxy', async () => {
+    const messages: ModelMessage[] = [
+      { role: 'system', content: longText('system') },
+      { role: 'user', content: longText('context') },
+      { role: 'assistant', content: 'Working notes' },
+      { role: 'user', content: 'Continue.' },
+    ]
+
+    const result = await prepareRequestCache(
+      createConfig({
+        provider: 'custom-proxy',
+        protocol: 'openai',
+        model: 'proxy-model',
+        baseUrl: 'https://proxy.example/v1',
+        openAICompatibilityProfile: 'compatible',
+      }),
+      messages,
     )
+
+    expect(result.providerOptions?.customOpenai).toMatchObject({
+      prompt_cache_key: 'custom-proxy:openai:proxy-model',
+    })
+  })
+
+  it('adds a stable explicit breakpoint when Responses cache options are enabled', async () => {
+    const messages: ModelMessage[] = [
+      { role: 'system', content: longText('stable policy') },
+      { role: 'system', content: '## Environment\n- Active File: changing.ts' },
+      { role: 'user', content: 'Continue.' },
+    ]
+
+    const result = await prepareRequestCache(
+      createConfig({
+        provider: 'openai',
+        protocol: 'openai-responses',
+        model: 'reasoning-route',
+        providerOptions: {
+          openai: { promptCacheOptions: { mode: 'explicit', ttl: '30m' } },
+        },
+      }),
+      messages,
+    )
+
+    expect(result.messages[0].providerOptions).toMatchObject({
+      openai: { promptCacheBreakpoint: { mode: 'explicit' } },
+    })
+    expect(result.messages[1].providerOptions).toBeUndefined()
   })
 
   it('adds a single Anthropic cache breakpoint near the end of the stable prefix', async () => {
@@ -65,7 +113,9 @@ describe('prepareRequestCache', () => {
         cacheControl: { type: 'ephemeral' },
       },
     })
-    expect(result.messages[0].providerOptions).toBeUndefined()
+    expect(result.messages[0].providerOptions).toMatchObject({
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+    })
     expect(result.messages[1].providerOptions).toBeUndefined()
   })
 
