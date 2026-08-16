@@ -13,7 +13,7 @@ import pLimit from 'p-limit'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
-import { getToolApprovalType, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
+import { getToolApprovalType, getToolMetadata, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
 import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
@@ -321,6 +321,59 @@ function analyzeToolDependencies(toolCalls: ToolCall[]): Map<string, Set<string>
 }
 
 /**
+ * Execute a tool through the manager, retrying only when it is genuinely safe.
+ *
+ * `ToolManager` computes `envelope.retryable` per attempt, but nothing consumed it:
+ * `executeSingle` dropped both `envelope` and `outcome`, and every tool declared
+ * `retryPolicy: { maxAttempts: 1 }`, which makes `inferRetryable` return false
+ * unconditionally. So the whole retry subsystem was inert and a transient network
+ * blip surfaced to the model as a hard tool error.
+ *
+ * Retry is deliberately narrow:
+ *  - the tool must opt in via `retryPolicy.maxAttempts > 1`
+ *  - the tool must be free of side effects. Never retry a write or a command:
+ *    a "failed" write may have partially applied, and repeating it can double-apply.
+ *    Note this is judged by category/resourceScope, NOT by the `parallel` flag —
+ *    `web_search` is `parallel: false` purely to discourage scattered searches,
+ *    yet it is perfectly safe to retry.
+ *  - the manager must classify the failure as retryable (timeout / execution /
+ *    dependency, not validation or user rejection)
+ */
+const RETRY_SAFE_CATEGORIES = new Set(['read', 'search', 'lsp', 'network'])
+
+function isRetrySafe(metadata: ReturnType<typeof getToolMetadata>): boolean {
+  if (!metadata) return false
+  if (!RETRY_SAFE_CATEGORIES.has(metadata.category)) return false
+  // Belt and braces: a read-category tool that declares a write scope is not safe.
+  return !(metadata.resourceScope || []).some(scope => scope.includes('write'))
+}
+
+async function executeWithRetry(
+  toolName: string,
+  toolArguments: Record<string, unknown>,
+  managerContext: Parameters<typeof toolManager.execute>[2]
+): Promise<Awaited<ReturnType<typeof toolManager.execute>>> {
+  const metadata = getToolMetadata(toolName)
+  const maxAttempts = Math.max(1, metadata?.retryPolicy?.maxAttempts ?? 1)
+  const attemptLimit = isRetrySafe(metadata) ? maxAttempts : 1
+
+  let result = await toolManager.execute(toolName, toolArguments, managerContext)
+
+  for (let attempt = 2; attempt <= attemptLimit; attempt++) {
+    if (result.success) break
+    const retryable = result.envelope?.retryable ?? result.outcome?.retryable ?? false
+    if (!retryable) break
+
+    logger.agent.info(
+      `[Tools] Retrying ${toolName} (attempt ${attempt}/${attemptLimit}) after retryable failure: ${result.error || 'unknown'}`
+    )
+    result = await toolManager.execute(toolName, toolArguments, managerContext)
+  }
+
+  return result
+}
+
+/**
  * 执行单个工具
  */
 async function executeSingle(
@@ -366,7 +419,7 @@ async function executeSingle(
   })
 
   try {
-    const result = await toolManager.execute(
+    const result = await executeWithRetry(
       toolCall.name,
       toolArguments,
       {
