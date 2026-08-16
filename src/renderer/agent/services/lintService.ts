@@ -72,10 +72,15 @@ async function resolveLintCommand(filePath: string, language: string): Promise<R
 	const workspaceRoot = getFileWorkspaceRoot(filePath)
 
 	if (language === 'typescript') {
+		const tsconfigPath = workspaceRoot ? joinPath(workspaceRoot, 'tsconfig.json') : null
+		const hasProjectConfig = tsconfigPath ? await api.file.exists(tsconfigPath).catch(() => false) : false
+		const typecheckArgs = hasProjectConfig
+			? ['--noEmit', '--pretty', 'false', '--project', tsconfigPath!]
+			: ['--noEmit', '--pretty', 'false', filePath]
 		const localTsc = await resolveWorkspaceTool(
 			workspaceRoot,
 			[joinPath('node_modules', '.bin', platform.isWindows ? 'tsc.cmd' : 'tsc')],
-			['--noEmit', '--pretty', 'false', filePath]
+			typecheckArgs
 		)
 		if (localTsc) return localTsc
 	}
@@ -117,6 +122,7 @@ const EXT_TO_LANG: Record<string, string> = {
 function parseTscOutput(output: string, file: string): LintError[] {
 	const errors: LintError[] = []
 	const lines = output.split('\n')
+	const normalizedTarget = normalizePath(file).toLowerCase()
 
 	// 格式: file(line,col): error TS1234: message
 	const regex = /^(.+?)\((\d+),(\d+)\):\s*(error|warning)\s+(TS\d+):\s*(.+)$/
@@ -127,7 +133,12 @@ function parseTscOutput(output: string, file: string): LintError[] {
 			const [, filePath, lineNum, , severity, code, message] = match
 
 			// 只返回指定文件的错误
-			if (filePath.includes(file) || file.includes(filePath)) {
+			const normalizedReported = normalizePath(filePath).toLowerCase()
+			if (
+				normalizedTarget === normalizedReported ||
+				normalizedTarget.endsWith(`/${normalizedReported}`) ||
+				normalizedReported.endsWith(`/${normalizedTarget}`)
+			) {
 				errors.push({
 					code,
 					message,

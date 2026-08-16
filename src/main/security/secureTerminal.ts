@@ -210,8 +210,13 @@ class SecureCommandParser {
     timeout: number
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
+      const isWindowsBatch = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command)
+      const executable = isWindowsBatch ? (process.env.ComSpec || 'cmd.exe') : command
+      const executableArgs = isWindowsBatch
+        ? ['/d', '/s', '/c', 'call', command, ...args]
+        : args
       // 使用 spawn 直接执行（不经过 shell），防止注入攻击
-      const child = spawn(command, args, {
+      const child = spawn(executable, executableArgs, {
         cwd,
         timeout,
         env: {
@@ -239,7 +244,7 @@ class SecureCommandParser {
       child.on('close', (code) => {
         stdout += stdoutDecoder.end()
         stderr += stderrDecoder.end()
-        resolve({ stdout, stderr, exitCode: code || 0 })
+        resolve({ stdout, stderr, exitCode: code ?? -1 })
       })
 
       child.on('error', (err) => {
@@ -374,12 +379,14 @@ export function registerSecureTerminalHandlers(
         exitCode: result.exitCode,
       }
     } catch (err) {
+      const executionError = err as NodeJS.ErrnoException
+      const errorDetail = `${executionError.code ? `[${executionError.code}] ` : ''}${executionError.message || toAppError(err).message}`
       securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, {
-        error: toAppError(err).message,
+        error: errorDetail,
       })
       return {
         success: false,
-        error: `执行失败: ${toAppError(err).message}`,
+        error: `执行失败: ${errorDetail}`,
       }
     }
   })
