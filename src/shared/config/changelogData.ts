@@ -152,11 +152,13 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
             "titleEn": "Terminal and Tool Output Encoding",
             "details": [
               "统一 Windows 终端 UTF-8 输出与文本提取，过滤命令包装控制标记",
+              "安全执行器可正确启动 node_modules 中的 .cmd/.bat 工具，并保留原始系统错误详情",
               "对所有工具结果进行通用乱码清理，避免不可读内容显示给用户或继续传给模型",
               "改进真实退出码、有效输出和错误信息捕获"
             ],
             "detailsEn": [
               "Standardized UTF-8 terminal capture on Windows and removed wrapper control markers",
+              "Secure execution now launches .cmd/.bat tools correctly and preserves native error details",
               "Sanitized tool output before display and model reuse",
               "Improved exit-code and actionable error capture"
             ]
