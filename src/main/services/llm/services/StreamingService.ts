@@ -1,5 +1,5 @@
 /**
- * 流式服务 - 使用 AI SDK 6.0 streamText
+ * 流式服务 - 使用 AI SDK 7 streamText
  * 工具调用只接受原生 tool-call 事件；特殊处理仅用于部分模型的 thinking 标签解析。
  */
 
@@ -402,7 +402,7 @@ export class StreamingService {
       // 构建 streamText 参数
       const streamParams: Parameters<typeof streamText>[0] = {
         model,
-        system: systemPrompt,
+        instructions: systemPrompt,
         messages: stripSystemMessages(coreMessages),
         tools: coreTools,
         activeTools,  // 动态限制可用工具
@@ -412,7 +412,7 @@ export class StreamingService {
         providerOptions: preparedRequest.providerOptions,
       }
 
-      // 流式生成 - AI SDK 6.0 自动处理所有 reasoning
+      // 流式生成 - AI SDK 7 自动处理所有 reasoning
       const result = streamText({
         ...streamParams,
         // 自动修复工具调用 JSON 格式错误
@@ -484,11 +484,11 @@ export class StreamingService {
 
   /**
    * 处理流式响应
-   * AI SDK 6.0 自动处理 reasoning-delta；额外解析仅用于部分模型的 thinking 标签。
+   * AI SDK 7 自动处理 reasoning-delta；额外解析仅用于部分模型的 thinking 标签。
    */
   private async processStream(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    result: StreamTextResult<any, any>,
+    result: StreamTextResult<any, any, any>,
     strategy: ThinkingStrategy,
     requestId: string,
     streamIdleTimeoutMs: number,
@@ -504,7 +504,7 @@ export class StreamingService {
     let streamError: Error | null = null
     let sawToolActivity = false
     let sawExecutableToolCall = false
-    const iterator = result.fullStream[Symbol.asyncIterator]()
+    const iterator = result.stream[Symbol.asyncIterator]()
     const pseudoToolAdapter = new PseudoToolCallStreamAdapter(enablePseudoToolAdapter)
 
     while (true) {
@@ -630,6 +630,7 @@ export class StreamingService {
           case 'tool-output-denied':
           case 'tool-approval-request':
           case 'file':
+          case 'reasoning-file':
             sawNonTextOutput = true
             break
 
@@ -702,8 +703,9 @@ export class StreamingService {
     // 获取最终结果
     const text = await result.text
     const usage = await result.usage
-    const providerMetadata = await result.providerMetadata
-    const response = await result.response
+    const finalStep = await result.finalStep
+    const providerMetadata = finalStep.providerMetadata
+    const response = finalStep.response
 
     // 使用策略提取最终 thinking
     let finalText = text

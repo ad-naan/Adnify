@@ -210,7 +210,7 @@ export interface PersistedLLMConfig {
   model: string
   enableThinking?: boolean
   thinkingBudget?: number
-  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   capabilities?: LLMConfig['capabilities']
   temperature?: number
   maxTokens?: number

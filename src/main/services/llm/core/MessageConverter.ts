@@ -1,6 +1,6 @@
 /**
  * 消息转换器 - 将应用消息格式转换为 AI SDK ModelMessage 格式
- * 使用 AI SDK 6.0 的标准类型，不使用 any
+ * 使用 AI SDK 7 的标准类型，不使用 any
  */
 
 import type { JSONValue } from '@ai-sdk/provider'

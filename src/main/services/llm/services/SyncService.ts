@@ -59,7 +59,7 @@ export class SyncService {
           // consumed to completion here, so this stays a synchronous API.
           const stream = streamText({
             model,
-            system: systemPrompt,
+            instructions: systemPrompt,
             messages: this.stripSystemMessages(preparedMessages),
             tools: coreTools,
             ...settings,
@@ -78,7 +78,8 @@ export class SyncService {
             stream.warnings,
           ])
 
-          return { text, usage, finishReason, response, warnings, providerMetadata: await stream.providerMetadata }
+          const finalStep = await stream.finalStep
+          return { text, usage, finishReason, response, warnings, providerMetadata: finalStep.providerMetadata }
         },
       })
 

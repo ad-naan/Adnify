@@ -93,6 +93,11 @@ export interface LLMCapabilities {
      */
     openAIReasoningSupportsSampling?: boolean
     /**
+     * Whether an OpenAI-compatible gateway accepts newer reasoning effort
+     * tiers such as `xhigh` and `max` instead of the conservative subset.
+     */
+    openAICompatibleSupportsExtendedReasoningEffort?: boolean
+    /**
      * Whether this route supports OpenAI prompt cache retention hints.
      */
     openAIPromptCacheRetention?: boolean
@@ -145,7 +150,7 @@ export interface LLMConfig {
     /** Thinking token budget for providers that support it. */
     thinkingBudget?: number
     /** Reasoning effort level for providers that support it. */
-    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     /** Explicit route capability overrides; preferred over model-name heuristics. */
     capabilities?: LLMCapabilities
     /**

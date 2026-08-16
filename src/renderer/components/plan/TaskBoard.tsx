@@ -365,7 +365,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
       <div className="h-4 shrink-0" />
     </main> : <div className="flex min-h-0 flex-1">
       <aside className="w-[310px] shrink-0 overflow-y-auto border-r border-border/55 bg-surface/[0.08] px-3 py-3 custom-scrollbar max-lg:w-[275px]">
-        <div className="mb-2 flex items-center justify-between px-1 text-[9px] font-medium text-text-muted"><span>{copy(language, stage === 'plan' ? '任务依赖' : '任务调度', stage === 'plan' ? 'Task dependencies' : 'Task orchestration')}</span><span>{plan.executionMode === 'parallel' ? copy(language, '并行', 'Parallel') : copy(language, '顺序', 'Serial')}</span></div>
+        <div className="mb-2 flex items-center justify-between px-1 text-[9px] font-medium text-text-muted"><span>{copy(language, '任务调度', 'Task orchestration')}</span><span>{plan.executionMode === 'parallel' ? copy(language, '并行', 'Parallel') : copy(language, '顺序', 'Serial')}</span></div>
         <div className="space-y-1">
           {plan.tasks.map((task, index) => {
             const runtime = runtimeByTask.get(task.id)

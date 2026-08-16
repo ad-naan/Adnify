@@ -1,5 +1,5 @@
 /**
- * Embeddings 服务 - 使用 AI SDK 6.0 embed/embedMany
+ * Embeddings 服务 - 使用 AI SDK 7 embed/embedMany
  * 用于代码语义搜索、相似度匹配、RAG
  */
 
