@@ -29,6 +29,7 @@ import type { BranchSlice } from './branchSlice'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
 import { buildPersistedAgentSessionState, persistCriticalAgentSessionState } from '../agentStorage'
+import { getAgentConfig } from '../../utils/AgentConfig'
 
 // ===== 类型定义 =====
 
@@ -116,6 +117,31 @@ const bumpThreadMessageVersion = (
     ...versions,
     [threadId]: (versions[threadId] || 0) + 1,
 })
+
+/**
+ * Trim a thread's stored history to `maxStoredMessagesPerThread`.
+ *
+ * Only thread COUNT was bounded (50 in `createThread`), so one long session grew
+ * its `<id>.jsonl` without limit — and that file is rewritten in full on every
+ * dirty flush, so persistence cost scaled with history length.
+ *
+ * The cut point is chosen carefully: dropping a `tool` message while keeping the
+ * `assistant` message whose `tool_calls` reference it produces an orphaned tool
+ * result, which many providers reject outright. So the boundary is advanced to the
+ * next `user` message, which is always a safe splice point.
+ */
+function trimStoredMessages(messages: ChatMessage[], limit: number): ChatMessage[] {
+    if (limit <= 0 || messages.length <= limit) return messages
+
+    let cut = messages.length - limit
+    while (cut < messages.length && messages[cut].role !== 'user') {
+        cut++
+    }
+    // No later user message: keep the tail intact rather than orphaning tool results.
+    if (cut >= messages.length) return messages
+
+    return messages.slice(cut)
+}
 
 function isHandoffSnapshotOnlyAssistantMessage(message: AssistantMessage): boolean {
     return (
@@ -223,13 +249,21 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId!]
             if (!thread) return state
 
+            // Bound stored history once per turn. Uses a much larger limit than the
+            // model payload cap, so scrollback stays useful.
+            const appended = [...thread.messages, userMessage, assistantMessage]
+            const messages = trimStoredMessages(
+                appended,
+                getAgentConfig().maxStoredMessagesPerThread
+            )
+
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId!),
                 threads: {
                     ...state.threads,
                     [threadId!]: {
                         ...thread,
-                        messages: [...thread.messages, userMessage, assistantMessage],
+                        messages,
                         lastModified: Date.now(),
                         streamState: { ...thread.streamState, phase: 'streaming' },
                         contextItems: [], // 同时清理上下文

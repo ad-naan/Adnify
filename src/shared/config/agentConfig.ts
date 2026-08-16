@@ -121,6 +121,8 @@ export interface AgentRuntimeConfig {
   // 循环控制
   maxToolLoops: number
   maxHistoryMessages: number
+  /** Messages retained per thread on disk; see AGENT_DEFAULTS. */
+  maxStoredMessagesPerThread: number
 
   // 上下文限制
   maxToolResultChars: number

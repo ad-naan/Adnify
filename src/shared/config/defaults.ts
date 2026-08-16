@@ -151,6 +151,17 @@ export const AGENT_DEFAULTS = {
   // 循环控制
   maxToolLoops: 20,
   maxHistoryMessages: 60,
+  /**
+   * Hard cap on messages RETAINED PER THREAD (storage), distinct from
+   * `maxHistoryMessages` which bounds what is sent to the model.
+   *
+   * Only thread COUNT was capped (50), so a single long session grew its
+   * `<id>.jsonl` without limit — and that file is rewritten in full on every
+   * dirty flush, so cost grew with history length. Set well above
+   * `maxHistoryMessages` so scrollback stays useful; trimming only discards
+   * messages the model can no longer see anyway.
+   */
+  maxStoredMessagesPerThread: 1000,
 
   // 上下文限制
   maxToolResultChars: 10000,

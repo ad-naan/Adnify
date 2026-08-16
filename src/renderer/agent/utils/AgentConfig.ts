@@ -29,6 +29,7 @@ export function getAgentConfig(): AgentRuntimeConfig {
         // 基础配置
         maxToolLoops: agentConfig.maxToolLoops ?? DEFAULT_AGENT_CONFIG.maxToolLoops,
         maxHistoryMessages: agentConfig.maxHistoryMessages ?? DEFAULT_AGENT_CONFIG.maxHistoryMessages,
+        maxStoredMessagesPerThread: DEFAULT_AGENT_CONFIG.maxStoredMessagesPerThread,
 
         // 上下文限制
         maxToolResultChars: agentConfig.maxToolResultChars ?? DEFAULT_AGENT_CONFIG.maxToolResultChars,

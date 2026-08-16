@@ -850,6 +850,8 @@ BAD: Separate searches for "Python asyncio" and "Python threading"`,
         category: 'network',
         approvalType: 'none',
         parallel: false,  // 禁止并行，避免多次分散搜索
+        // Idempotent read over the network: a transient failure is worth one retry.
+        retryPolicy: { maxAttempts: 2 },
         requiresWorkspace: false,
         enabled: true,
         parameters: {
@@ -881,6 +883,8 @@ TIPS:
         category: 'network',
         approvalType: 'none',
         parallel: true,
+        // Idempotent read over the network: a transient failure is worth one retry.
+        retryPolicy: { maxAttempts: 2 },
         requiresWorkspace: false,
         enabled: true,
         parameters: {
