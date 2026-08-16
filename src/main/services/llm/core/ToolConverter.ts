@@ -1,6 +1,6 @@
 /**
  * 工具转换器 - 将应用工具定义转换为 AI SDK Tool 格式
- * 使用 AI SDK 6.0 的标准类型
+ * 使用 AI SDK 7 的标准类型
  */
 
 import { tool } from 'ai'

@@ -181,18 +181,21 @@ const ChatInput = memo(function ChatInput({
       medium: language === 'zh' ? '中' : 'Medium',
       high: language === 'zh' ? '高' : 'High',
       xhigh: language === 'zh' ? '极高' : 'X-High',
+      max: language === 'zh' ? '最高' : 'Max',
     } as const
     const protocol = llmConfig.protocol
     const supported = llmConfig.provider === 'anthropic' || protocol === 'anthropic'
-      ? ['none', 'low', 'medium', 'high'] as const
+      ? ['none', 'low', 'medium', 'high', 'xhigh', 'max'] as const
       : llmConfig.provider === 'gemini' || protocol === 'google'
         ? ['none', 'minimal', 'low', 'medium', 'high'] as const
         : llmConfig.openAICompatibilityProfile === 'compatible'
-          ? ['none', 'minimal', 'low', 'medium', 'high'] as const
-          : ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
+          ? llmConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort
+            ? ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+            : ['none', 'minimal', 'low', 'medium', 'high'] as const
+          : ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
     return supported.map(value => ({ value, label: labels[value] }))
-  }, [language, llmConfig.openAICompatibilityProfile, llmConfig.protocol, llmConfig.provider])
+  }, [language, llmConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort, llmConfig.openAICompatibilityProfile, llmConfig.protocol, llmConfig.provider])
   const selectedReasoningEffort = llmConfig.enableThinking
     ? (reasoningOptions.some(option => option.value === llmConfig.reasoningEffort)
       ? llmConfig.reasoningEffort ?? 'medium'

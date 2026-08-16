@@ -1,7 +1,7 @@
 import type { LLMConfig, LLMProviderOptions } from '@/shared/types/llm'
 import type { PersistedLLMConfig } from './types'
 
-export const REASONING_EFFORT_VALUES = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
+export const REASONING_EFFORT_VALUES = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -67,6 +67,10 @@ function sanitizeCapabilities(value: unknown): LLMConfig['capabilities'] | undef
 
   if (typeof value.openAIReasoningSupportsSampling === 'boolean') {
     cleaned.openAIReasoningSupportsSampling = value.openAIReasoningSupportsSampling
+  }
+
+  if (typeof value.openAICompatibleSupportsExtendedReasoningEffort === 'boolean') {
+    cleaned.openAICompatibleSupportsExtendedReasoningEffort = value.openAICompatibleSupportsExtendedReasoningEffort
   }
 
   if (typeof value.openAIPromptCacheRetention === 'boolean') {

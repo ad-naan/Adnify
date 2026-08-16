@@ -70,6 +70,7 @@ function getReasoningEffortOptions(
   provider: string,
   protocol: ApiProtocol | undefined,
   openAICompatibilityProfile: OpenAICompatibilityProfile | undefined,
+  supportsExtendedCompatibleEffort: boolean,
   language: 'en' | 'zh',
 ): Array<{ value: ReasoningEffortValue; label: string }> {
   const optionLabels: Record<ReasoningEffortValue, { en: string; zh: string }> = {
@@ -79,15 +80,18 @@ function getReasoningEffortOptions(
     medium: { en: 'Medium', zh: '中' },
     high: { en: 'High', zh: '高' },
     xhigh: { en: 'X-High', zh: '极高' },
+    max: { en: 'Max', zh: '最高' },
   }
 
   const supportedValues: ReasoningEffortValue[] =
     provider === 'anthropic' || protocol === 'anthropic'
-      ? ['low', 'medium', 'high']
+      ? ['low', 'medium', 'high', 'xhigh', 'max']
       : provider === 'gemini' || protocol === 'google'
         ? ['minimal', 'low', 'medium', 'high']
         : isOpenAIStyleProtocol(protocol) && openAICompatibilityProfile === 'compatible'
-          ? ['minimal', 'low', 'medium', 'high']
+          ? supportsExtendedCompatibleEffort
+            ? ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+            : ['minimal', 'low', 'medium', 'high']
           : [...REASONING_EFFORT_VALUES]
 
   return supportedValues.map(value => ({
@@ -100,12 +104,13 @@ function getReasoningEffortDescription(
   provider: string,
   protocol: ApiProtocol | undefined,
   openAICompatibilityProfile: OpenAICompatibilityProfile | undefined,
+  supportsExtendedCompatibleEffort: boolean,
   language: 'en' | 'zh',
 ): string {
   if (provider === 'anthropic' || protocol === 'anthropic') {
     return language === 'zh'
-      ? 'Anthropic 使用 low / medium / high 三档 effort'
-      : 'Anthropic uses low / medium / high effort levels'
+      ? 'Anthropic 使用 low / medium / high / xhigh / max effort；具体支持范围取决于模型'
+      : 'Anthropic uses low / medium / high / xhigh / max effort; exact support depends on the model'
   }
 
   if (provider === 'gemini' || protocol === 'google') {
@@ -115,6 +120,11 @@ function getReasoningEffortDescription(
   }
 
   if (isOpenAIStyleProtocol(protocol) && openAICompatibilityProfile === 'compatible') {
+    if (supportsExtendedCompatibleEffort) {
+      return language === 'zh'
+        ? '兼容端点已启用扩展档位，将原样发送 xhigh / max；具体支持范围取决于上游模型'
+        : 'Extended compatible tiers are enabled; xhigh / max are sent unchanged when supported upstream'
+    }
     return language === 'zh'
       ? '第三方 OpenAI Compatible 接口通常只兼容 minimal / low / medium / high'
       : 'Compatible mode only sends the safer OpenAI subset for broader third-party gateway support'
@@ -1062,9 +1072,10 @@ export function ProviderSettings({
       localConfig.provider,
       currentProtocol,
       currentOpenAICompatibilityProfile,
+      localConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort === true,
       language,
     ),
-    [currentOpenAICompatibilityProfile, currentProtocol, language, localConfig.provider],
+    [currentOpenAICompatibilityProfile, currentProtocol, language, localConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort, localConfig.provider],
   )
 
   const reasoningEffortDescription = useMemo(
@@ -1072,9 +1083,10 @@ export function ProviderSettings({
       localConfig.provider,
       currentProtocol,
       currentOpenAICompatibilityProfile,
+      localConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort === true,
       language,
     ),
-    [currentOpenAICompatibilityProfile, currentProtocol, language, localConfig.provider],
+    [currentOpenAICompatibilityProfile, currentProtocol, language, localConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort, localConfig.provider],
   )
 
   const openAICompatibilityProfileOptions = useMemo(
@@ -2259,6 +2271,32 @@ export function ProviderSettings({
                             </div>
                           )}
                         </div>
+
+                        {isOpenAIStyleProtocol(currentProtocol) && currentOpenAICompatibilityProfile === 'compatible' && (
+                          <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
+                            <div className="pr-4">
+                              <div className="text-xs text-text-secondary">
+                                {language === 'zh' ? '兼容模式：扩展推理档位' : 'Compatible Mode: Extended Reasoning'}
+                              </div>
+                              <p className="text-[10px] text-text-muted mt-0.5">
+                                {language === 'zh'
+                                  ? '仅当上游模型明确支持时启用；启用后会原样发送 xhigh 和 max。'
+                                  : 'Enable only when the upstream model supports it; xhigh and max will be sent unchanged.'}
+                              </p>
+                            </div>
+                            <Switch
+                              checked={localConfig.capabilities?.openAICompatibleSupportsExtendedReasoningEffort === true}
+                              onChange={(e) => setLocalConfig({
+                                ...localConfig,
+                                capabilities: {
+                                  ...localConfig.capabilities,
+                                  openAICompatibleSupportsExtendedReasoningEffort: e.target.checked,
+                                },
+                              })}
+                              className="flex-shrink-0"
+                            />
+                          </div>
+                        )}
 
                         {currentProtocol === 'openai-responses' && currentOpenAICompatibilityProfile === 'compatible' && (
                           <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">

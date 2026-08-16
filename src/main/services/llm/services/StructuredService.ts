@@ -165,7 +165,7 @@ export class StructuredService {
         // single result, so callers see no behavioural change.
         const stream = streamObject({
           model,
-          system: systemPrompt,
+          instructions: systemPrompt,
           messages: this.stripSystemMessages(preparedMessages),
           schema: schema as any,
           ...settings,
@@ -228,7 +228,7 @@ export class StructuredService {
         const stream = streamObject({
           model,
           schema: schema as any,
-          system: systemPrompt,
+          instructions: systemPrompt,
           messages: this.stripSystemMessages(preparedMessages) as any,
           ...settings,
           ...callOptions,

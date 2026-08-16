@@ -236,7 +236,7 @@ const ParticleSlider = memo(function ParticleSlider({
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
         onCommit()
       }}
-      className="relative h-6 cursor-ew-resize touch-none overflow-hidden rounded-full border border-border/35 bg-text-primary/[0.055] shadow-inner outline-none ring-accent/20 transition-shadow focus:ring-2"
+      className="relative h-6 cursor-pointer touch-none overflow-hidden rounded-full border border-border/35 bg-text-primary/[0.055] shadow-inner outline-none ring-accent/20 transition-shadow focus:ring-2"
     >
       <span
         aria-hidden="true"

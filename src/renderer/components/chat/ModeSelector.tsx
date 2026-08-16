@@ -86,7 +86,6 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
       const elapsed = (now - startedAt) / duration
       const progress = Math.min(1, elapsed)
       const travelProgress = Math.min(1, progress / travelEnd)
-      const eased = easeInOutQuint(travelProgress)
       const holdFade = progress < travelEnd
         ? Math.sin((progress / travelEnd) * Math.PI * 0.5)
         : progress < holdEnd

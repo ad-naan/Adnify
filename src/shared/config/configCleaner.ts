@@ -247,7 +247,7 @@ export interface AppSettingsSchema {
     model?: string
     enableThinking?: boolean
     thinkingBudget?: number
-    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+    reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     // 核心参数
     temperature?: number
     maxTokens?: number

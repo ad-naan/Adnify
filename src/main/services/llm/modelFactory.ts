@@ -4,7 +4,7 @@
 
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
-import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createGoogle } from '@ai-sdk/google'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
 import type { LLMConfig } from '@shared/types/llm'
@@ -231,7 +231,7 @@ function createBuiltinModel(route: ResolvedModelRoute): LanguageModel {
         }
 
         case 'gemini': {
-            const google = createGoogleGenerativeAI({
+            const google = createGoogle({
                 apiKey: route.apiKey,
                 baseURL: route.baseUrl,
             })
@@ -282,7 +282,7 @@ function createCustomModel(
         }
 
         case 'google': {
-            const google = createGoogleGenerativeAI({
+            const google = createGoogle({
                 apiKey: route.apiKey,
                 baseURL: route.baseUrl,
             })

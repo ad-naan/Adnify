@@ -124,7 +124,10 @@ export function buildThinkingProviderOptions(config: LLMConfig): RequestProvider
 
   const reasoningEffort = supportsFullOpenAIProfile(config)
     ? resolveFullOpenAIReasoningEffort(config.reasoningEffort)
-    : resolveCompatibleOpenAIReasoningEffort(config.reasoningEffort)
+    : resolveCompatibleOpenAIReasoningEffort(
+        config.reasoningEffort,
+        config.capabilities?.openAICompatibleSupportsExtendedReasoningEffort,
+      )
 
   if (!reasoningEffort) {
     return undefined
@@ -220,7 +223,7 @@ function buildConfiguredProviderOptions(config: LLMConfig): RequestProviderOptio
 
 function resolveFullOpenAIReasoningEffort(
   effort: LLMConfig['reasoningEffort'],
-): 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' {
+): 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' {
   switch (effort) {
     case 'none':
     case 'minimal':
@@ -228,6 +231,7 @@ function resolveFullOpenAIReasoningEffort(
     case 'medium':
     case 'high':
     case 'xhigh':
+    case 'max':
       return effort
     default:
       return 'medium'
@@ -236,15 +240,19 @@ function resolveFullOpenAIReasoningEffort(
 
 function resolveCompatibleOpenAIReasoningEffort(
   effort: LLMConfig['reasoningEffort'],
-): 'minimal' | 'low' | 'medium' | 'high' | undefined {
+  supportsExtendedEffort = false,
+): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | undefined {
   switch (effort) {
     case 'minimal':
     case 'low':
     case 'medium':
     case 'high':
       return effort
+    // Third-party gateways rarely accept the newer top tiers; clamp to the
+    // highest value the compatible subset defines unless explicitly enabled.
     case 'xhigh':
-      return 'high'
+    case 'max':
+      return supportsExtendedEffort ? effort : 'high'
     case 'none':
       return undefined
     default:
@@ -261,6 +269,10 @@ function resolveGoogleThinkingLevel(
     case 'low':
     case 'minimal':
       return effort
+    // Google tops out at 'high'; degrade rather than drop the setting.
+    case 'xhigh':
+    case 'max':
+      return 'high'
     default:
       return undefined
   }
@@ -268,12 +280,20 @@ function resolveGoogleThinkingLevel(
 
 function resolveAnthropicEffort(
   effort: LLMConfig['reasoningEffort'],
-): 'low' | 'medium' | 'high' | undefined {
-  if (effort === 'low' || effort === 'medium' || effort === 'high') {
-    return effort
+): 'low' | 'medium' | 'high' | 'xhigh' | 'max' | undefined {
+  switch (effort) {
+    case 'low':
+    case 'medium':
+    case 'high':
+    case 'xhigh':
+    case 'max':
+      return effort
+    // Anthropic has no 'minimal' tier; map it onto the lowest real one.
+    case 'minimal':
+      return 'low'
+    default:
+      return undefined
   }
-
-  return undefined
 }
 
 function omitManagedOptions(
