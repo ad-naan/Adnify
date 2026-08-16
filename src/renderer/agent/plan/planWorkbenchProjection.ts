@@ -5,6 +5,7 @@ import { PLAN_ACTIVITY_STAGES, PLAN_ACTIVITY_STATUSES, type PlanActivityStage, t
 
 export type { PlanActivityStatus } from '@/shared/types/planActivity'
 import { derivePlanPlanningState, type PlanPlanningState } from './planWorkflowGuard'
+import { layoutPlanGraph } from './planGraphLayout'
 
 export type PlanWorkbenchStage = PlanActivityStage
 
@@ -28,6 +29,21 @@ export interface PlanTaskRuntimeItem {
   currentToolArguments?: Record<string, unknown>
   requestId?: string
   latestText?: string
+  latestActivity?: PlanActivityItem
+  subAgents: PlanSubAgentRuntimeItem[]
+}
+
+export interface PlanSubAgentRuntimeItem {
+  id: string
+  description: string
+  threadId?: string
+  startedAt?: number
+  durationMs?: number
+  status: 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed'
+  currentAction?: string
+  currentToolName?: string
+  currentToolArguments?: Record<string, unknown>
+  requestId?: string
 }
 
 export interface PlanClarificationItem {
@@ -62,6 +78,31 @@ export interface PlanWorkbenchProjection {
   progress: number
   canStart: boolean
   isProcessing: boolean
+  review?: PlanReviewProjection
+}
+
+export interface PlanRoleAllocation {
+  key: string
+  role: string
+  provider: string
+  model: string
+  taskCount: number
+}
+
+export interface PlanReviewRisk {
+  id: string
+  severity: 'warning' | 'error'
+  title: string
+  detail: string
+}
+
+export interface PlanReviewProjection {
+  taskCount: number
+  maxParallelism: number
+  declaredArtifacts: number
+  estimatedTokens: number
+  allocations: PlanRoleAllocation[]
+  risks: PlanReviewRisk[]
 }
 
 const ACTIVITY_STAGES = new Set<PlanWorkbenchStage>(PLAN_ACTIVITY_STAGES)
@@ -121,7 +162,59 @@ function getRelevantThreads(plan: TaskPlan | undefined, currentThreadId: string 
   if (plan) {
     for (const thread of Object.values(threads)) if (thread.planId === plan.id) ids.add(thread.id)
   }
+  for (const id of Array.from(ids)) {
+    const thread = threads[id]
+    for (const message of thread?.messages || []) {
+      if (!isAssistantMessage(message)) continue
+      for (const toolCall of message.toolCalls || []) {
+        if (toolCall.name !== 'task') continue
+        const meta = toolCall.arguments._meta
+        if (!meta || typeof meta !== 'object' || Array.isArray(meta)) continue
+        const subAgentThreadId = (meta as Record<string, unknown>).subAgentThreadId
+        if (typeof subAgentThreadId === 'string') ids.add(subAgentThreadId)
+      }
+    }
+  }
   return Array.from(ids).map(id => threads[id]).filter(Boolean)
+}
+
+function projectSubAgents(thread: ChatThread | undefined, threads: Record<string, ChatThread>): PlanSubAgentRuntimeItem[] {
+  if (!thread) return []
+  return thread.messages.flatMap(message => {
+    if (!isAssistantMessage(message)) return []
+    return (message.toolCalls || []).flatMap(toolCall => {
+      if (toolCall.name !== 'task') return []
+      const meta = toolCall.arguments._meta
+      const values = meta && typeof meta === 'object' && !Array.isArray(meta) ? meta as Record<string, unknown> : {}
+      const threadId = typeof values.subAgentThreadId === 'string' ? values.subAgentThreadId : undefined
+      const child = threadId ? threads[threadId] : undefined
+      const latestAssistant = child ? [...child.messages].reverse().find(isAssistantMessage) : undefined
+      const metaStatus = typeof values.subAgentStatus === 'string' ? values.subAgentStatus : undefined
+      const status: PlanSubAgentRuntimeItem['status'] = child?.streamState.phase === 'tool_pending'
+        ? 'waiting_approval'
+        : child && (child.executionMeta?.loopState === 'running' || ['streaming', 'tool_running'].includes(child.streamState.phase))
+          ? 'running'
+          : metaStatus === 'completed' || toolCall.status === 'success'
+            ? 'completed'
+            : metaStatus === 'failed' || ['error', 'rejected'].includes(toolCall.status)
+              ? 'failed'
+              : toolCall.status === 'running'
+                ? 'running'
+                : 'queued'
+      return [{
+        id: toolCall.id,
+        description: typeof toolCall.arguments.description === 'string' ? toolCall.arguments.description : 'Sub-agent task',
+        threadId,
+        startedAt: typeof values.subAgentStartedAt === 'number' ? values.subAgentStartedAt : undefined,
+        durationMs: typeof values.subAgentDurationMs === 'number' ? values.subAgentDurationMs : undefined,
+        status,
+        currentAction: child?.streamState.statusText || (latestAssistant ? getMessageText(latestAssistant.content).trim() : undefined),
+        currentToolName: child?.streamState.currentToolCall?.name,
+        currentToolArguments: child?.streamState.currentToolCall?.arguments,
+        requestId: child?.streamState.requestId,
+      }]
+    })
+  })
 }
 
 function getPlanningThread(plan: TaskPlan | undefined, currentThreadId: string | null, threads: Record<string, ChatThread>): ChatThread | undefined {
@@ -134,6 +227,46 @@ function deriveStage(plan: TaskPlan | undefined, planningState: PlanPlanningStat
   if (['executing', 'pausing', 'paused', 'stopping'].includes(plan.status)) return 'execution'
   if (plan.status === 'completed' || (tasks.length > 0 && tasks.every(item => ['completed', 'failed', 'skipped', 'cancelled'].includes(item.task.status)))) return 'validation'
   return 'plan'
+}
+
+export function projectPlanReview(plan: TaskPlan): PlanReviewProjection {
+  const graph = layoutPlanGraph(plan.tasks)
+  const countsByRank = new Map<number, number>()
+  for (const node of graph.nodes) countsByRank.set(node.rank, (countsByRank.get(node.rank) || 0) + 1)
+
+  const allocationMap = new Map<string, PlanRoleAllocation>()
+  for (const task of plan.tasks) {
+    const key = `${task.role}\u0000${task.provider}\u0000${task.model}`
+    const current = allocationMap.get(key)
+    if (current) current.taskCount += 1
+    else allocationMap.set(key, { key, role: task.role, provider: task.provider, model: task.model, taskCount: 1 })
+  }
+
+  const risks: PlanReviewRisk[] = []
+  if (graph.hasCycle) risks.push({ id: 'dependency-cycle', severity: 'error', title: 'Dependency cycle', detail: 'At least one task is part of a circular dependency and cannot be scheduled safely.' })
+  if (graph.missingDependencies.length) risks.push({ id: 'missing-dependency', severity: 'error', title: 'Missing dependency', detail: `${graph.missingDependencies.length} dependency references do not match a task in this plan.` })
+
+  if (plan.executionMode === 'parallel') {
+    const nodesByRank = new Map<number, PlanTask[]>()
+    for (const node of graph.nodes) nodesByRank.set(node.rank, [...(nodesByRank.get(node.rank) || []), node.task])
+    for (const [rank, rankedTasks] of nodesByRank) {
+      const writers = new Map<string, string[]>()
+      for (const task of rankedTasks) for (const file of task.producesFiles || []) writers.set(file, [...(writers.get(file) || []), task.title])
+      for (const [file, taskTitles] of writers) {
+        if (taskTitles.length < 2) continue
+        risks.push({ id: `write-conflict:${rank}:${file}`, severity: 'warning', title: 'Parallel write conflict', detail: `${taskTitles.join(', ')} may write ${file} in the same scheduling layer.` })
+      }
+    }
+  }
+
+  return {
+    taskCount: plan.tasks.length,
+    maxParallelism: Math.max(0, ...countsByRank.values()),
+    declaredArtifacts: new Set(plan.tasks.flatMap(task => task.producesFiles || [])).size,
+    estimatedTokens: plan.tasks.reduce((total, task) => total + (task.estimatedTokens || 0), 0),
+    allocations: Array.from(allocationMap.values()).sort((a, b) => b.taskCount - a.taskCount || a.role.localeCompare(b.role)),
+    risks,
+  }
 }
 
 export function projectPlanWorkbench(input: {
@@ -167,6 +300,7 @@ export function projectPlanWorkbench(input: {
       currentToolArguments: thread?.streamState.currentToolCall?.arguments,
       requestId: task.requestId || thread?.streamState.requestId,
       latestText: latestAssistant ? getMessageText(latestAssistant.content).trim() : undefined,
+      subAgents: projectSubAgents(thread, threads),
     }
   })
 
@@ -200,6 +334,7 @@ export function projectPlanWorkbench(input: {
   const completedCount = tasks.filter(item => item.task.status === 'completed').length
   const progress = tasks.length ? Math.round((completedCount / tasks.length) * 100) : 0
   const stage = deriveStage(plan, planningState, tasks)
+  const taskIdByThread = new Map(tasks.flatMap(item => item.thread ? [[item.thread.id, item.task.id] as const] : []))
   const toolActivities: PlanActivityItem[] = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
     if (!isAssistantMessage(message)) return []
     return (message.toolCalls || []).flatMap((toolCall, index) => {
@@ -210,12 +345,16 @@ export function projectPlanWorkbench(input: {
         title: TOOL_TITLES[toolCall.name] || toolCall.name.replaceAll('_', ' '),
         detail: toolDetail(toolCall.arguments),
         status: toolStatus(toolCall.status),
+        taskId: taskIdByThread.get(thread.id),
         timestamp: message.timestamp + index,
         source: 'tool',
       } satisfies PlanActivityItem]
     })
   }))
   const activities = [...reportedActivities, ...toolActivities].sort((a, b) => a.timestamp - b.timestamp)
+  for (const task of tasks) {
+    task.latestActivity = activities.filter(activity => activity.taskId === task.task.id).at(-1)
+  }
   const latestActivity = activities.at(-1)
 
   let focus: PlanWorkbenchFocus | null = latestActivity ? {
@@ -261,5 +400,6 @@ export function projectPlanWorkbench(input: {
     progress,
     canStart: Boolean(plan && ['draft', 'approved', 'stopped', 'failed'].includes(plan.status) && queuedTasks.length > 0),
     isProcessing,
+    review: plan ? projectPlanReview(plan) : undefined,
   }
 }

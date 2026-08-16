@@ -22,7 +22,7 @@ import { ContextAssembler } from '../domains/context/ContextAssembler'
 import type { ContextAssemblyConfig } from '../domains/context/ContextAssembler'
 import { MessageAssembler, type RuntimeStateContext } from '../domains/message/MessageAssembler'
 import type { CompressionLevel } from '../domains/context/compressionShared'
-import { countTokens } from '@shared/utils/tokenCounter'
+import { countTokens, setActiveTokenModel } from '@shared/utils/tokenCounter'
 import { useAgentStore } from '../store/AgentStore'
 
 // ===== Value Objects =====
@@ -45,6 +45,12 @@ export interface ExecutionConfig {
   planTaskId?: string
   /** 上下文限制 */
   contextLimit?: number
+  /**
+   * Model id, used to correct token estimates. Only OpenAI models use the bundled
+   * cl100k_base tokenizer, so without this the estimate under-counts other
+   * providers and compression can escalate too late.
+   */
+  model?: string
   /** Plan 特定上下文 */
   planContext?: {
     planId?: string
@@ -127,6 +133,12 @@ export class AgentExecutor {
     // 2. 创建预算控制器
     const contextLimit = config.contextLimit || 128_000
     const budgetController = createBudgetController(config.mode, modeDescriptor, contextLimit)
+
+    // Correct token estimates for this turn's model. Only OpenAI models use the
+    // bundled cl100k_base tokenizer; without this, counts for Claude/Gemini/etc.
+    // are too low and compression escalates later than the real context window
+    // requires. Set once here rather than threaded through every counting layer.
+    setActiveTokenModel(config.model)
 
     // 3. 组装上下文
     const contextConfig: ContextAssemblyConfig = {

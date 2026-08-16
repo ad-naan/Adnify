@@ -11,6 +11,23 @@ const statusText = (status: PlanHistoryEntry['status'], language: string) => {
   }
   return map[status]?.[language === 'zh' ? 0 : 1] || status
 }
+function groupName(timestamp: number, language: string) {
+  const value = new Date(timestamp)
+  const today = new Date()
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const startValue = new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
+  if (startValue === startToday) return language === 'zh' ? '今天' : 'Today'
+  if (startToday - startValue < 7 * 86_400_000) return language === 'zh' ? '最近 7 天' : 'Last 7 days'
+  return language === 'zh' ? '更早' : 'Earlier'
+}
+
+function dotTone(entry: PlanHistoryEntry) {
+  if (entry.status === 'executing') return 'bg-accent'
+  if (entry.status === 'failed') return 'bg-red-400'
+  if (entry.status === 'completed') return 'bg-emerald-400'
+  if (!entry.status) return 'bg-blue-400'
+  return 'bg-amber-400'
+}
 
 interface Props {
   open: boolean
@@ -23,11 +40,17 @@ interface Props {
 
 export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, onDelete }: Props) {
   const [query, setQuery] = useState('')
-  // Two-step confirm: a plan delete also removes its requirements doc and every
-  // plan-task thread it spawned, none of which is recoverable.
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const panelRef = useRef<HTMLElement>(null)
   const filtered = useMemo(() => entries.filter(entry => entry.title.toLowerCase().includes(query.trim().toLowerCase())), [entries, query])
+  const groups = useMemo(() => filtered.reduce<Array<{ label: string, entries: PlanHistoryEntry[] }>>((result, entry) => {
+    const label = groupName(entry.updatedAt, language)
+    const current = result.at(-1)
+    if (current?.label === label) current.entries.push(entry)
+    else result.push({ label, entries: [entry] })
+    return result
+  }, []), [filtered, language])
+
   useEffect(() => {
     if (!open) {
       setConfirmingId(null)
@@ -49,42 +72,32 @@ export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, 
 
   if (!open || entries.length === 0) return null
 
-  return <aside ref={panelRef} className="absolute right-3 top-3 z-40 flex max-h-[360px] w-[min(310px,calc(100%-24px))] flex-col overflow-hidden rounded-xl border border-border/55 bg-background shadow-lg">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border/40 px-3">
-        <div className="min-w-0 flex-1"><span className="text-[10px] font-semibold text-text-primary">{language === 'zh' ? '历史计划' : 'Plan history'}</span><span className="ml-2 text-[8px] tabular-nums text-text-muted/65">{entries.length}</span></div>
+  return <div className="absolute inset-0 z-40 bg-black/10 backdrop-blur-[1px]">
+    <aside ref={panelRef} className="absolute inset-y-0 right-0 flex w-[calc(100%-14px)] max-w-[380px] flex-col border-l border-border/65 bg-background shadow-[-18px_0_45px_-30px_rgba(0,0,0,0.45)]">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/45 px-3.5">
+        <div className="min-w-0 flex-1"><div className="text-[11px] font-semibold text-text-primary">{language === 'zh' ? '计划历史' : 'Plan history'}</div><div className="mt-1 text-[8px] text-text-muted">{language === 'zh' ? '独立于 Agent 对话记录' : 'Separate from agent conversations'}</div></div>
         <button onClick={onClose} aria-label={language === 'zh' ? '关闭' : 'Close'} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3.5 w-3.5" /></button>
+      </header>
+      <div className="shrink-0 px-3.5 py-3">
+        <label className="relative block"><Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted/55" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={language === 'zh' ? '搜索计划名称、目标或结果' : 'Search plan history'} className="h-8 w-full rounded-md border border-border/50 bg-surface/[0.1] pl-8 pr-3 text-[9px] text-text-primary outline-none placeholder:text-text-muted/45 focus:border-accent/35" /></label>
       </div>
-      {entries.length > 6 && <div className="px-2.5 pb-1 pt-2.5">
-        <div className="relative"><Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted/60" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={language === 'zh' ? '搜索历史计划' : 'Search plans'} className="h-8 w-full rounded-lg border border-border/45 bg-surface/[0.12] pl-8 pr-3 text-[10px] text-text-primary outline-none placeholder:text-text-muted/45 focus:border-accent/35" /></div>
-      </div>}
-      <div className="min-h-0 overflow-y-auto p-2 custom-scrollbar">
-        {filtered.length > 0 ? <div className="space-y-0.5">{filtered.map(entry => <div key={entry.id} className="group relative flex items-start gap-1 rounded-lg pr-1 hover:bg-surface-hover/45">
-          <button onClick={() => { onSelect(entry); onClose() }} className="min-w-0 flex-1 rounded-lg px-2.5 py-2 text-left">
-            <div className="flex items-start gap-3"><span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${entry.status === 'executing' ? 'bg-accent' : entry.status === 'failed' ? 'bg-red-400' : entry.status === 'completed' ? 'bg-green-500' : 'bg-text-muted/35'}`} /><div className="min-w-0 flex-1"><div className="truncate text-[10px] font-medium text-text-secondary">{entry.title}</div><div className="mt-1 flex items-center gap-2 text-[8px] text-text-muted"><span>{statusText(entry.status, language)}</span>{entry.taskCount !== undefined && <span>{entry.completedCount}/{entry.taskCount}</span>}<span>{new Date(entry.updatedAt).toLocaleDateString()}</span></div></div></div>
-          </button>
-          {confirmingId === entry.id
-            ? <div className="flex shrink-0 items-center gap-1 self-center">
-                <button
-                  onClick={() => { onDelete(entry); setConfirmingId(null) }}
-                  className="rounded px-1.5 py-1 text-[8px] font-medium text-red-400 hover:bg-red-500/10"
-                >{language === 'zh' ? '确认删除' : 'Delete'}</button>
-                <button
-                  onClick={() => setConfirmingId(null)}
-                  className="rounded px-1.5 py-1 text-[8px] text-text-muted hover:bg-surface-hover"
-                >{language === 'zh' ? '取消' : 'Cancel'}</button>
-              </div>
-            : <button
-                onClick={() => setConfirmingId(entry.id)}
-                title={entry.planId
-                  ? (language === 'zh' ? '删除计划及其任务线程' : 'Delete plan and its task threads')
-                  : (language === 'zh' ? '删除会话' : 'Delete conversation')}
-                className="shrink-0 self-center rounded p-1.5 text-text-muted opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"
-              ><Trash2 className="h-3 w-3" /></button>}
-        </div>)}</div> : <div className="flex min-h-32 flex-col items-center justify-center px-5 py-7 text-center">
-          <span className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-lg border border-border/40 bg-surface/[0.12] text-text-muted/55"><History className="h-4 w-4" /></span>
-          <div className="text-[10px] font-medium text-text-secondary">{query ? (language === 'zh' ? '没有找到匹配记录' : 'No matching plans') : (language === 'zh' ? '还没有历史计划' : 'No plan history yet')}</div>
-          <div className="mt-1 text-[8px] leading-4 text-text-muted/70">{query ? (language === 'zh' ? '换一个关键词试试' : 'Try another search') : (language === 'zh' ? '完成需求确认并创建计划后，会自动保存在这里' : 'Created plans will appear here automatically')}</div>
-        </div>}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3.5 pb-3 custom-scrollbar">
+        {groups.length > 0 ? groups.map(group => <section key={group.label} className="mb-4 last:mb-0">
+          <div className="mb-1.5 text-[8px] font-medium text-text-muted">{group.label}</div>
+          <div className="divide-y divide-border/35 border-y border-border/35">
+            {group.entries.map(entry => <div key={entry.id} className="group flex items-start gap-1">
+              <button onClick={() => { onSelect(entry); onClose() }} className="min-w-0 flex-1 py-2.5 text-left">
+                <div className="grid grid-cols-[8px_minmax(0,1fr)_auto] gap-2.5"><span className={`mt-1 h-1.5 w-1.5 rounded-full ${dotTone(entry)}`} /><div className="min-w-0"><div className="truncate text-[10px] font-medium text-text-secondary">{entry.title}</div><div className="mt-1 flex items-center gap-2 text-[8px] text-text-muted"><span>{statusText(entry.status, language)}</span>{entry.taskCount !== undefined && <span>{entry.completedCount}/{entry.taskCount}</span>}</div></div><time className="text-[8px] text-text-muted/60">{new Date(entry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
+              </button>
+              {confirmingId === entry.id ? <div className="flex shrink-0 items-center gap-1 self-center">
+                <button onClick={() => { onDelete(entry); setConfirmingId(null) }} className="rounded px-1.5 py-1 text-[8px] font-medium text-red-400 hover:bg-red-500/10">{language === 'zh' ? '确认' : 'Delete'}</button>
+                <button onClick={() => setConfirmingId(null)} className="rounded px-1.5 py-1 text-[8px] text-text-muted hover:bg-surface-hover">{language === 'zh' ? '取消' : 'Cancel'}</button>
+              </div> : <button onClick={() => setConfirmingId(entry.id)} aria-label={language === 'zh' ? '删除计划记录' : 'Delete plan history'} className="shrink-0 self-center rounded p-1.5 text-text-muted opacity-0 hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>}
+            </div>)}
+          </div>
+        </section>) : <div className="flex min-h-48 flex-col items-center justify-center text-center"><History className="h-5 w-5 text-text-muted/40" /><div className="mt-3 text-[10px] font-medium text-text-secondary">{language === 'zh' ? '没有匹配的计划' : 'No matching plans'}</div><div className="mt-1 text-[8px] text-text-muted">{language === 'zh' ? '换一个关键词试试' : 'Try another search'}</div></div>}
       </div>
+      <footer className="shrink-0 border-t border-border/40 px-3.5 py-2 text-[8px] text-text-muted">{language === 'zh' ? `共 ${entries.length} 条记录` : `${entries.length} records`}</footer>
     </aside>
+  </div>
 }
