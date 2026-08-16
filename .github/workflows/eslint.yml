@@ -28,17 +28,19 @@ jobs:
       actions: read # only required for a private repository by github/codeql-action/upload-sarif to get the Action run status
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 22
 
       - name: Install ESLint and TypeScript Parser
         run: |
-          npm install eslint@8.57.0 @typescript-eslint/parser@6.21.0 @typescript-eslint/eslint-plugin@6.21.0 typescript@5.3.3 @microsoft/eslint-formatter-sarif@3.1.0
+          mkdir -p "$RUNNER_TEMP/eslint-tools"
+          cd "$RUNNER_TEMP/eslint-tools"
+          npm init -y
+          npm install --no-package-lock --no-save eslint@8.57.0 @typescript-eslint/parser@6.21.0 @typescript-eslint/eslint-plugin@6.21.0 typescript@5.3.3 @microsoft/eslint-formatter-sarif@3.1.0
 
       - name: Create temporary ESLint config
         run: |
@@ -60,20 +62,23 @@ jobs:
               'no-undef': 'off',
               'no-case-declarations': 'off'
             }
-          };" > .eslintrc.js
+          };" > "$RUNNER_TEMP/eslint-tools/.eslintrc.cjs"
 
       - name: Run ESLint
         env:
           SARIF_ESLINT_IGNORE_SUPPRESSED: "true"
-        run: npx eslint .
-          --config .eslintrc.js
-          --ext .js,.jsx,.ts,.tsx
-          --format @microsoft/eslint-formatter-sarif
-          --output-file eslint-results.sarif
+        run: |
+          cd "$RUNNER_TEMP/eslint-tools"
+          npx eslint "$GITHUB_WORKSPACE" \
+            --config "$RUNNER_TEMP/eslint-tools/.eslintrc.cjs" \
+            --resolve-plugins-relative-to "$RUNNER_TEMP/eslint-tools" \
+            --ext .js,.jsx,.ts,.tsx \
+            --format @microsoft/eslint-formatter-sarif \
+            --output-file "$GITHUB_WORKSPACE/eslint-results.sarif"
         continue-on-error: true
 
       - name: Upload analysis results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: eslint-results.sarif
           wait-for-processing: true
