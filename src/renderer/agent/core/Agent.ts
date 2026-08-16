@@ -199,6 +199,7 @@ export class AgentClass {
         requestId,
         planTaskId: executionOptions?.planTaskId,
         contextLimit: config.contextLimit,
+        model: config.model,
       }
 
       const preparation = await agentExecutor.prepare(

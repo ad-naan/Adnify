@@ -29,10 +29,91 @@ let cachedEncoder: Tiktoken | null = null
  */
 function getEncoder(): Tiktoken {
   if (!cachedEncoder) {
-    // cl100k_base 用于 GPT-4, GPT-3.5-turbo, Claude 等
+    // cl100k_base is OpenAI's tokenizer, and the only one bundled. For other
+    // providers it is a baseline that gets corrected by measured feedback — see
+    // `recordObservedTokenUsage`.
     cachedEncoder = getEncoding('cl100k_base')
   }
   return cachedEncoder
+}
+
+/**
+ * Self-calibrating correction on top of the cl100k_base count.
+ *
+ * Only OpenAI models use cl100k_base. Every other provider tokenizes differently,
+ * so a raw cl100k count is wrong by an unknown factor — and the model list cannot
+ * be enumerated: this app supports custom providers, custom base URLs, local
+ * Ollama models and aggregator gateways that rewrite model names.
+ *
+ * So instead of guessing per model name, we MEASURE. After each response the
+ * provider reports real prompt tokens (loop.ts). Dividing that by what we
+ * estimated for the same request yields this model's actual correction factor,
+ * which is cached and applied to subsequent estimates. Unknown models start at
+ * 1.0 and converge after a single turn.
+ *
+ * Note this only affects the pre-send estimate and the no-usage fallback path;
+ * compression's main path already uses the provider's real usage numbers.
+ */
+const observedRatios = new Map<string, number>()
+
+/** Clamped so one anomalous sample cannot wildly distort future estimates. */
+const MIN_RATIO = 0.5
+const MAX_RATIO = 3
+/** Weight of each new observation; low enough to smooth out per-turn noise. */
+const RATIO_SMOOTHING = 0.35
+
+export function getModelTokenRatio(model?: string | null): number {
+  if (!model) return 1
+  return observedRatios.get(model) ?? 1
+}
+
+/**
+ * Feed back a real prompt-token count so future estimates for this model improve.
+ *
+ * @param model - model id the request was sent to
+ * @param estimatedTokens - what `countTokens`-based estimation predicted
+ * @param actualTokens - prompt tokens the provider actually reported
+ */
+export function recordObservedTokenUsage(
+  model: string | null | undefined,
+  estimatedTokens: number,
+  actualTokens: number
+): void {
+  if (!model || estimatedTokens <= 0 || actualTokens <= 0) return
+
+  // `estimatedTokens` already includes the previous correction, so recover the
+  // uncorrected baseline before deriving the new ratio.
+  const previous = getModelTokenRatio(model)
+  const baseline = estimatedTokens / previous
+  if (baseline <= 0) return
+
+  const sample = Math.min(MAX_RATIO, Math.max(MIN_RATIO, actualTokens / baseline))
+  const blended = previous + (sample - previous) * RATIO_SMOOTHING
+  observedRatios.set(model, Math.min(MAX_RATIO, Math.max(MIN_RATIO, blended)))
+}
+
+export function resetObservedTokenUsage(model?: string): void {
+  if (model) observedRatios.delete(model)
+  else observedRatios.clear()
+}
+
+/**
+ * Model used to correct counts when a call site does not pass one explicitly.
+ *
+ * Token counting happens across many layers (context assembly, message assembly,
+ * compression estimates) that would each need the model threaded through their
+ * signatures. Setting it once per turn keeps those call sites unchanged while
+ * still correcting the estimate. `null` means "raw cl100k count", which is the
+ * historical behaviour and what tests expect by default.
+ */
+let activeModel: string | null = null
+
+export function setActiveTokenModel(model: string | null | undefined): void {
+  activeModel = model || null
+}
+
+export function getActiveTokenModel(): string | null {
+  return activeModel
 }
 
 /**
@@ -45,14 +126,26 @@ export function freeEncoder(): void {
 // ===== 核心函数 =====
 
 /**
- * 计算文本的 token 数量（精确）
- * 
+ * 计算文本的 token 数量
+ *
  * @param text - 要计算的文本
+ * @param model - Optional model id. Applies that model's measured correction
+ *   factor (see `recordObservedTokenUsage`). Pass `null` for the raw count.
  * @returns token 数量
  */
-export function countTokens(text: string): number {
+export function countTokens(text: string, model?: string | null): number {
   if (!text) return 0
-  
+
+  const raw = countRawTokens(text)
+  const effectiveModel = model !== undefined ? model : activeModel
+  const ratio = getModelTokenRatio(effectiveModel)
+  return ratio === 1 ? raw : Math.ceil(raw * ratio)
+}
+
+/** Raw cl100k_base count with no model correction. */
+function countRawTokens(text: string): number {
+  if (!text) return 0
+
   try {
     const encoder = getEncoder()
     const tokens = encoder.encode(text)

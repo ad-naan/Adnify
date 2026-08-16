@@ -82,6 +82,40 @@ describe('projectPlanWorkbench', () => {
     expect(result.focus?.title).toBe('运行验证')
   })
 
+  it('projects nested sub-agent runtime and approval state from real task metadata', () => {
+    const root = thread('root')
+    const worker = thread('worker')
+    const child = thread('child')
+    worker.messages = [{
+      id: 'worker-assistant', role: 'assistant', content: '', timestamp: 10, parts: [],
+      toolCalls: [{
+        id: 'sub-agent-tool', name: 'task', status: 'running',
+        arguments: {
+          description: '检查渲染回归',
+          _meta: { subAgentThreadId: child.id, subAgentStartedAt: 100 },
+        },
+      }],
+    }]
+    child.streamState = {
+      phase: 'tool_pending', requestId: 'child-approval', statusText: '等待运行测试',
+      currentToolCall: { id: 'child-command', name: 'run_command', status: 'pending', arguments: { command: 'pnpm test' } },
+    }
+    const plan: TaskPlan = {
+      id: 'plan-1', name: 'Nested runtime', createdAt: 1, updatedAt: 1,
+      requirementsDoc: 'plan-1.md', executionMode: 'parallel', status: 'executing', originThreadId: root.id,
+      tasks: [{ id: 'task-1', title: '前端验证', description: '验证界面', provider: 'openai', model: 'test', role: 'tester', dependencies: [], status: 'running', threadId: worker.id }],
+    }
+
+    const result = projectPlanWorkbench({ plan, currentThreadId: root.id, threads: { root, worker, child } })
+    expect(result.tasks[0].subAgents).toEqual([expect.objectContaining({
+      description: '检查渲染回归',
+      threadId: 'child',
+      status: 'waiting_approval',
+      currentToolName: 'run_command',
+      requestId: 'child-approval',
+    })])
+  })
+
   it('keeps the original request instead of reducing it to a clarification reply', () => {
     const root = thread('root')
     root.messages = [

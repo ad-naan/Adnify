@@ -10,6 +10,7 @@ import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { createStreamProcessor } from './stream'
 import { EventBus } from './EventBus'
 import { estimateMessagesTokens } from '../domains/context/CompressionManager'
+import { recordObservedTokenUsage } from '@shared/utils/tokenCounter'
 import { getRelativeChangePath, isFileWriteToolResult } from '../utils/fileChangeUtils'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { LintCheckFile, ChatMessage, AssistantMessage, InteractiveContent } from '../types'
@@ -628,6 +629,18 @@ Try again with the corrected tool call.`,
         input: usageData.promptTokens || 0,
         output: usageData.completionTokens || 0,
       }
+
+      // Calibrate the estimator against ground truth. cl100k_base is OpenAI's
+      // tokenizer; for every other provider our estimate is off by an unknown
+      // factor, and the model list cannot be enumerated (custom providers, local
+      // models, aggregator gateways). Comparing our estimate for this request
+      // against the prompt tokens the provider actually charged lets the estimate
+      // converge per model after a single turn, with no hardcoded model table.
+      recordObservedTokenUsage(
+        config.model,
+        estimateMessagesTokens(requestMessages as ChatMessage[]),
+        usage.input
+      )
 
       const compressionResult = await runCompressionCheck(
         usage,
