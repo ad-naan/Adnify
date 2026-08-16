@@ -19,7 +19,9 @@ import {
   Image as ImageIcon,
   ListOrdered,
   Maximize2,
-  Minimize2
+  Minimize2,
+  WandSparkles,
+  LoaderCircle
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -28,6 +30,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
+import ReasoningParticleSlider from './ReasoningParticleSlider'
 import { KaomojiPet } from './KaomojiPet'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
@@ -56,6 +59,8 @@ interface ChatInputProps {
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
   onKeyDown: (e: React.KeyboardEvent) => void
   onPaste: (e: React.ClipboardEvent) => void
+  onOptimizePrompt: () => void
+  isOptimizingPrompt: boolean
   textareaRef: React.RefObject<HTMLTextAreaElement>
   inputContainerRef: React.RefObject<HTMLDivElement>
   contextItems: ContextItem[]
@@ -77,6 +82,8 @@ const ChatInput = memo(function ChatInput({
   onInputChange,
   onKeyDown,
   onPaste,
+  onOptimizePrompt,
+  isOptimizingPrompt,
   textareaRef,
   inputContainerRef,
   contextItems,
@@ -84,7 +91,12 @@ const ChatInput = memo(function ChatInput({
   activeFilePath,
   onAddFile,
 }: ChatInputProps) {
-  const { language, editorConfig } = useStore(useShallow(s => ({ language: s.language, editorConfig: s.editorConfig })))
+  const { language, editorConfig, llmConfig, update } = useStore(useShallow(s => ({
+    language: s.language,
+    editorConfig: s.editorConfig,
+    llmConfig: s.llmConfig,
+    update: s.update,
+  })))
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isFocused, setIsFocused] = useState(false)
   const [isInputExpanded, setIsInputExpanded] = useState(false)
@@ -161,6 +173,31 @@ const ChatInput = memo(function ChatInput({
   )
 
   const isSendable = input.trim().length > 0 || images.length > 0
+  const reasoningOptions = useMemo(() => {
+    const labels = {
+      none: language === 'zh' ? '关闭' : 'Off',
+      minimal: language === 'zh' ? '极低' : 'Minimal',
+      low: language === 'zh' ? '低' : 'Low',
+      medium: language === 'zh' ? '中' : 'Medium',
+      high: language === 'zh' ? '高' : 'High',
+      xhigh: language === 'zh' ? '极高' : 'X-High',
+    } as const
+    const protocol = llmConfig.protocol
+    const supported = llmConfig.provider === 'anthropic' || protocol === 'anthropic'
+      ? ['none', 'low', 'medium', 'high'] as const
+      : llmConfig.provider === 'gemini' || protocol === 'google'
+        ? ['none', 'minimal', 'low', 'medium', 'high'] as const
+        : llmConfig.openAICompatibilityProfile === 'compatible'
+          ? ['none', 'minimal', 'low', 'medium', 'high'] as const
+          : ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
+
+    return supported.map(value => ({ value, label: labels[value] }))
+  }, [language, llmConfig.openAICompatibilityProfile, llmConfig.protocol, llmConfig.provider])
+  const selectedReasoningEffort = llmConfig.enableThinking
+    ? (reasoningOptions.some(option => option.value === llmConfig.reasoningEffort)
+      ? llmConfig.reasoningEffort ?? 'medium'
+      : 'medium')
+    : 'none'
 
   return (
     <div ref={inputContainerRef} className="z-20">
@@ -296,7 +333,7 @@ const ChatInput = memo(function ChatInput({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
-            disabled={!hasApiKey}
+            disabled={!hasApiKey || isOptimizingPrompt}
             className={`w-full bg-transparent border-none p-0
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
                        focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide ${compact ? 'py-1.5' : 'py-2.5'}`}
@@ -322,10 +359,22 @@ const ChatInput = memo(function ChatInput({
 
           {/* Bottom Actions */}
           <div className="relative flex items-center justify-between pt-1 gap-2">
-            <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity flex-1 min-w-0">
-              <ModelSelector alignLeft className="max-w-[260px]" />
+            <div className="flex flex-1 min-w-0 items-center overflow-hidden opacity-80 transition-opacity hover:opacity-100">
+              <ModelSelector alignLeft className="flex-1 max-w-full" />
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <ReasoningParticleSlider
+                options={reasoningOptions}
+                value={selectedReasoningEffort}
+                enabled={!!llmConfig.enableThinking}
+                language={language}
+                onChange={(reasoningEffort) => update('llmConfig', {
+                  enableThinking: reasoningEffort !== 'none',
+                  reasoningEffort: reasoningEffort as typeof llmConfig.reasoningEffort,
+                })}
+                onCommit={() => void useStore.getState().save()}
+              />
+
               <input
                 type="file"
                 ref={fileInputRef}
@@ -347,6 +396,20 @@ const ChatInput = memo(function ChatInput({
                 className="rounded-xl w-8 h-8 hover:bg-surface-active text-text-muted hover:text-text-primary transition-all active:scale-95"
               >
                 <ImageIcon className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onOptimizePrompt}
+                disabled={!hasApiKey || !input.trim() || isOptimizingPrompt || isStreaming}
+                title={language === 'zh' ? '调用当前模型优化输入框中的提示词' : 'Improve the prompt using the current model'}
+                aria-label={language === 'zh' ? '优化提示词' : 'Improve prompt'}
+                className="h-8 w-8 rounded-lg text-text-muted hover:bg-accent/10 hover:text-accent disabled:opacity-35"
+              >
+                {isOptimizingPrompt
+                  ? <LoaderCircle className="h-4 w-4 animate-spin" />
+                  : <WandSparkles className="h-4 w-4" />}
               </Button>
 
               {/* Send / Queue / Stop buttons */}

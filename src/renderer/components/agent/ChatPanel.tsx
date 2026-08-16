@@ -175,6 +175,8 @@ export default function ChatPanel() {
     setInputState(value ?? '')
   }, [])
   const [images, setImages] = useState<PendingImage[]>([])
+  const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false)
+  const optimizeRequestRef = useRef<{ requestId: string; cleanup: () => void } | null>(null)
   const [planOverlayOpen, setPlanOverlayOpen] = useState(false)
   const imagesRef = useRef(images)
   imagesRef.current = images
@@ -401,6 +403,79 @@ export default function ChatPanel() {
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
   }, [inputPrompt, setInputPrompt, textareaRef])
+
+  useEffect(() => () => {
+    const activeRequest = optimizeRequestRef.current
+    if (!activeRequest) return
+    activeRequest.cleanup()
+    api.llm.abort(activeRequest.requestId)
+    optimizeRequestRef.current = null
+  }, [])
+
+  const handleOptimizePrompt = useCallback(async () => {
+    const draft = input.trim()
+    if (!draft || isOptimizingPrompt || isStreaming) return
+
+    const requestId = crypto.randomUUID()
+    let optimizedPrompt = ''
+    let settled = false
+    let unsubscribeStream = () => {}
+    let unsubscribeDone = () => {}
+    let unsubscribeError = () => {}
+
+    const cleanup = () => {
+      unsubscribeStream()
+      unsubscribeDone()
+      unsubscribeError()
+      if (optimizeRequestRef.current?.requestId === requestId) {
+        optimizeRequestRef.current = null
+      }
+    }
+    const finish = () => {
+      if (settled) return false
+      settled = true
+      cleanup()
+      setIsOptimizingPrompt(false)
+      return true
+    }
+
+    setIsOptimizingPrompt(true)
+    unsubscribeStream = api.llm.onStream(requestId, chunk => {
+      if (chunk.type === 'text' && chunk.content) optimizedPrompt += chunk.content
+    })
+    unsubscribeDone = api.llm.onDone(requestId, () => {
+      if (!finish()) return
+      const result = optimizedPrompt.trim()
+      if (!result) {
+        toast.error(language === 'zh' ? '提示词优化失败' : 'Could not improve prompt', language === 'zh' ? '模型没有返回内容' : 'The model returned no content')
+        return
+      }
+      setInput(result)
+      requestAnimationFrame(() => textareaRef.current?.focus())
+      toast.success(language === 'zh' ? '提示词已优化' : 'Prompt improved')
+    })
+    unsubscribeError = api.llm.onError(requestId, error => {
+      if (!finish()) return
+      toast.error(language === 'zh' ? '提示词优化失败' : 'Could not improve prompt', error.message)
+    })
+    optimizeRequestRef.current = { requestId, cleanup }
+
+    try {
+      await api.llm.send({
+        config: llmConfig,
+        messages: [{ role: 'user', content: draft }],
+        systemPrompt: language === 'zh'
+          ? '你是提示词编辑器。将用户草稿改写为清晰、具体、可执行的提示词；保留原意、语言、上下文和约束，不要虚构需求，不要回答草稿中的问题。只输出改写后的提示词，不要解释，不要添加引号或外层 Markdown 代码块。'
+          : 'You are a prompt editor. Rewrite the user draft into a clear, specific, actionable prompt. Preserve its intent, language, context, and constraints. Do not invent requirements or answer the draft. Output only the rewritten prompt, without explanations, quotes, or an outer Markdown fence.',
+        requestId,
+      })
+    } catch (error) {
+      if (!finish()) return
+      const message = error instanceof Error ? error.message : String(error)
+      logger.ui.error('[ChatPanel] Prompt optimization failed:', error)
+      toast.error(language === 'zh' ? '提示词优化失败' : 'Could not improve prompt', message)
+    }
+  }, [input, isOptimizingPrompt, isStreaming, language, llmConfig, setInput, textareaRef, toast])
 
 
   // 处理显示 diff
@@ -1414,6 +1489,8 @@ export default function ChatPanel() {
                 onInputChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onOptimizePrompt={handleOptimizePrompt}
+                isOptimizingPrompt={isOptimizingPrompt}
                 textareaRef={textareaRef}
                 inputContainerRef={inputContainerRef}
                 contextItems={visibleContextItems}
