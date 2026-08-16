@@ -75,6 +75,7 @@ describe('secureTerminal', () => {
   afterEach(async () => {
     const module = await import('@main/security/secureTerminal')
     module.cleanupTerminals()
+    vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
 
@@ -165,6 +166,46 @@ describe('secureTerminal', () => {
       '[Git] dugite exec failed:',
       ['notes', '--ref', 'adnify-ai', 'show', '86436c51be5491ea46e883bc59b96a9786f0e525'],
       'error: no note found for object 86436c51be5491ea46e883bc59b96a9786f0e525.\n',
+    )
+  })
+
+  it('launches Windows cmd and bat shims through cmd.exe', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
+    vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')
+    const workspaceRoot = process.cwd()
+
+    const stdout = new EventEmitter()
+    const stderr = new EventEmitter()
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter
+      stderr: EventEmitter
+    }
+    child.stdout = stdout
+    child.stderr = stderr
+    childSpawnMock.mockImplementation(() => {
+      queueMicrotask(() => child.emit('close', 0))
+      return child
+    })
+
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const handler = handlers.get('shell:executeSecure')
+    const result = await handler?.({}, {
+      command: 'tsc.cmd',
+      args: ['--noEmit', '--pretty', 'false'],
+      cwd: workspaceRoot,
+      requireConfirm: false,
+    })
+
+    expect(result).toMatchObject({ success: true, exitCode: 0 })
+    expect(childSpawnMock).toHaveBeenCalledWith(
+      'C:\\Windows\\System32\\cmd.exe',
+      ['/d', '/s', '/c', 'call', 'tsc.cmd', '--noEmit', '--pretty', 'false'],
+      expect.objectContaining({ cwd: workspaceRoot }),
     )
   })
 })

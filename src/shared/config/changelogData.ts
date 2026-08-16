@@ -43,40 +43,73 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
-    "version": "Unreleased (1.7.56-dev)",
-    "rawVersion": "1.7.56-dev",
-    "date": "2026-08-14",
-    "title": "TaskBoard 看板重构与 Sub-agent 协同编排",
-    "titleEn": "TaskBoard Refactor & Sub-agent Orchestration",
-    "highlight": "TaskBoard UI 全面重构、新增 task 工具支持子代理编排、混合召回与重排升级、流式推理 Token 节流",
-    "highlightEn": "Streamlined TaskBoard UI, sub-agent task orchestration, hybrid recall & rerank, reasoning token throttling",
-    "tag": "dev",
+    "version": "1.7.56",
+    "rawVersion": "1.7.56",
+    "date": "2026-08-16",
+    "title": "AI SDK 7 全协议升级、智能缓存与 Agent 稳定性",
+    "titleEn": "AI SDK 7, Cross-provider Caching & Agent Reliability",
+    "highlight": "全面升级 AI SDK 与协议适配，增强推理、多模态和提示词缓存能力，并系统优化 Agent、终端、文件 I/O 与流式界面稳定性",
+    "highlightEn": "Upgraded AI SDK integrations with stronger reasoning, multimodal routing and prompt caching, plus major Agent, terminal, file I/O and streaming UI reliability improvements",
+    "tag": "latest",
     "isLatest": true,
     "categories": [
       {
         "type": "feature",
         "label": "核心新特性 / Features",
+        "labelEn": "Features",
         "items": [
           {
-            "title": "TaskBoard 任务管理看板全面升级",
-            "titleEn": "TaskBoard UI Streamlined",
+            "title": "AI SDK 7 与多协议能力升级",
+            "titleEn": "AI SDK 7 and Protocol Upgrades",
             "details": [
-              "全新现代化看板设计，流畅拖拽与状态流转体验",
-              "任务执行状态精准捕获与历史记录联动"
+              "升级 AI SDK 及 OpenAI、OpenAI Compatible、Anthropic、Google 等协议包，及时接入新模型能力",
+              "扩展 reasoning effort 配置，协议支持时可使用 xhigh、max 等更高推理等级",
+              "根据协议与请求能力动态组装参数，减少不同代理服务之间的兼容性冲突"
+            ],
+            "detailsEn": [
+              "Upgraded AI SDK and OpenAI, OpenAI Compatible, Anthropic and Google provider packages",
+              "Added xhigh and max reasoning effort levels where supported by the selected protocol",
+              "Requests now adapt parameters to provider capabilities for stronger proxy compatibility"
             ]
           },
           {
-            "title": "Sub-agent 任务编排工具 (task tool)",
-            "titleEn": "Sub-agent Orchestration Tool",
+            "title": "全协议提示词缓存优化",
+            "titleEn": "Cross-provider Prompt Caching",
             "details": [
-              "新增 task 工具，支持主 Agent 将复杂工程任务拆解并派发给子代理协同完成"
+              "为 OpenAI Responses、Compatible、Anthropic 与 Google 协议统一优化稳定前缀和缓存断点",
+              "将运行时环境信息移出稳定系统提示词，降低无效前缀变化并提升缓存命中率",
+              "缓存参数不兼容时可自动协商降级，避免因代理服务不支持扩展参数而中断生成"
+            ],
+            "detailsEn": [
+              "Optimized stable prompt prefixes and cache breakpoints across supported protocols",
+              "Moved volatile runtime context out of the stable system prompt to improve cache hits",
+              "Unsupported cache extensions are negotiated away without interrupting generation"
             ]
           },
           {
-            "title": "混合向量召回与重排 (Hybrid Recall & Rerank)",
-            "titleEn": "Hybrid Recall & Rerank Architecture",
+            "title": "无硬编码的多模态路由与图片回退",
+            "titleEn": "Capability-driven Multimodal Routing",
             "details": [
-              "拓宽关键词与向量混合检索召回广度，对融合候选集进行智能重排序，大幅提升检索命中率"
+              "本地图片路径可按协议能力转换为标准 file/image 输入，不再由文本 read 工具错误读取",
+              "模型或代理不接受图片时自动回退到安全的图片分析流程，不依赖模型名称硬编码",
+              "兼容 AI SDK 新版 file part，消除旧 image content part 弃用警告"
+            ],
+            "detailsEn": [
+              "Local image paths are routed as standard multimodal file inputs instead of text reads",
+              "Unsupported image requests fall back safely without hard-coded model lists",
+              "Migrated to the current AI SDK file-part format"
+            ]
+          },
+          {
+            "title": "TaskBoard 与 Sub-agent 协同编排",
+            "titleEn": "TaskBoard and Sub-agent Orchestration",
+            "details": [
+              "重构 TaskBoard 与 Plan Workbench，完善任务依赖、历史、阶段状态和执行过程展示",
+              "新增 task 工具与子代理任务卡片，支持复杂工程任务拆解和协同执行"
+            ],
+            "detailsEn": [
+              "Redesigned TaskBoard and Plan Workbench with dependencies, history and runtime states",
+              "Added task tooling and sub-agent cards for coordinated engineering workflows"
             ]
           }
         ]
@@ -84,26 +117,109 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
       {
         "type": "improvement",
         "label": "性能与体验 / Performance & Polish",
+        "labelEn": "Performance & Polish",
         "items": [
           {
-            "title": "流式推理 Token 节流与帧率优化",
-            "titleEn": "Reasoning Token Throttling",
+            "title": "会话与文件 I/O 全链路优化",
+            "titleEn": "Session and File I/O Optimization",
             "details": [
-              "对深度思考 Token 流式更新引入精准节流，消除每帧重复计算，大幅降低 CPU 占用"
+              "合并相同文件的并发读取、限制会话扫描并发并消除重复目录扫描",
+              "同路径写入串行化并继续使用原子替换，降低小文件写放大和状态覆盖风险",
+              "为 AI 提交统计增加内存缓存，减少重复报告读取和高频安全日志"
+            ],
+            "detailsEn": [
+              "Coalesced duplicate reads, bounded session scan concurrency and removed repeated scans",
+              "Serialized same-path writes while preserving atomic replacement",
+              "Cached AI attribution reports to reduce repeated disk and logging work"
             ]
           },
           {
-            "title": "主进程高频 IPC 批量合并",
-            "titleEn": "Batched High-Frequency IPC",
+            "title": "流式消息与持久化性能优化",
+            "titleEn": "Streaming and Persistence Performance",
             "details": [
-              "对主进程高频事件进行批量化合并发送，彻底消除主线程同步 IO 阻塞"
+              "文本与推理 token 批量刷新，减少 Store 更新、列表测量和 Markdown 重渲染压力",
+              "生成期间暂停整份会话序列化，完成后一次性持久化，改善长回复时的 UI 响应",
+              "保留消息完成和工具调用边界的强制刷新，确保最终文字完整显示"
+            ],
+            "detailsEn": [
+              "Batched text and reasoning updates to reduce store and list rendering pressure",
+              "Deferred full-session serialization until generation completes",
+              "Forced final flushes preserve complete text at tool and completion boundaries"
             ]
           },
           {
-            "title": "终端执行退出码精准捕获",
-            "titleEn": "Terminal Exit Code & Output Capture",
+            "title": "终端与工具输出编码治理",
+            "titleEn": "Terminal and Tool Output Encoding",
             "details": [
-              "Agent Shell 工具精准捕获子进程真实退出码与可读输出，错误排查更直接"
+              "统一 Windows 终端 UTF-8 输出与文本提取，过滤命令包装控制标记",
+              "对所有工具结果进行通用乱码清理，避免不可读内容显示给用户或继续传给模型",
+              "改进真实退出码、有效输出和错误信息捕获"
+            ],
+            "detailsEn": [
+              "Standardized UTF-8 terminal capture on Windows and removed wrapper control markers",
+              "Sanitized tool output before display and model reuse",
+              "Improved exit-code and actionable error capture"
+            ]
+          },
+          {
+            "title": "检索、上下文与 Agent 执行优化",
+            "titleEn": "Retrieval, Context and Agent Execution",
+            "details": [
+              "升级关键词与向量混合召回及重排，提高代码检索命中率",
+              "校准 token 估算与真实供应商用量，优化上下文压缩和历史消息上限",
+              "改进工具重试、循环检测和后台任务执行，减少无效迭代"
+            ],
+            "detailsEn": [
+              "Improved hybrid retrieval and reranking for code search",
+              "Calibrated token estimates and bounded persisted history",
+              "Refined tool retry, loop detection and background task execution"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "问题修复 / Bug Fixes",
+        "labelEn": "Bug Fixes",
+        "items": [
+          {
+            "title": "供应商参数与生成恢复修复",
+            "titleEn": "Provider Parameters and Generation Recovery",
+            "details": [
+              "推理模型不再发送不支持的 temperature、topP 等采样参数",
+              "修复 prompt_cache_key 等扩展参数被代理拒绝后反复重试并最终无输出的问题",
+              "改进非文本输出、工具调用结束和无输出场景的恢复判断"
+            ],
+            "detailsEn": [
+              "Stopped sending unsupported sampling options to reasoning models",
+              "Recovered from proxy rejection of optional parameters such as prompt_cache_key",
+              "Improved no-output and tool-call completion recovery"
+            ]
+          },
+          {
+            "title": "会话持久化与线程生命周期修复",
+            "titleEn": "Session Persistence and Thread Lifecycle",
+            "details": [
+              "恢复线程切换、重命名、删除、计划和分支状态的持久化监听",
+              "修复线程淘汰或清理时遗留孤儿文件以及未加载消息被空数据覆盖的问题",
+              "防止写入过程中产生的新版本被旧 flush 错误标记为已保存"
+            ],
+            "detailsEn": [
+              "Restored persistence for thread, plan and branch mutations",
+              "Removed orphaned session files and protected non-hydrated message data",
+              "Prevented older flushes from acknowledging newer in-memory revisions"
+            ]
+          },
+          {
+            "title": "Tree-sitter TypeScript 索引资源修复",
+            "titleEn": "Tree-sitter TypeScript Indexing Repair",
+            "details": [
+              "替换被截断的 TypeScript WASM 语法文件，恢复 AST 索引解析",
+              "安装脚本现在会验证全部 WASM，优先从依赖恢复，并在校验通过后原子替换"
+            ],
+            "detailsEn": [
+              "Replaced the truncated TypeScript grammar WASM and restored AST indexing",
+              "The installer now validates grammars and only replaces resources after validation"
             ]
           }
         ]
@@ -118,8 +234,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Version v1.7.55 Release",
     "highlight": "Windows ARM64 适配加固与构建 OOM 修复",
     "highlightEn": "Adnify v1.7.55 updates and stability improvements",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
