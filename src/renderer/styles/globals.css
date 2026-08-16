@@ -1001,3 +1001,33 @@ textarea,
 .katex-display > .katex {
   white-space: nowrap;
 }
+
+/* Plan mode is a dense operational surface, but its metadata must remain
+   readable at normal desktop scaling. Keep this scoped so editor chrome and
+   code typography are unaffected. */
+.plan-readable .text-\[7px\],
+.plan-readable .text-\[8px\] {
+  font-size: 10px !important;
+  line-height: 1.45 !important;
+}
+
+.plan-readable .text-\[9px\] {
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+}
+
+.plan-readable .text-\[10px\] {
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+.plan-readable .text-\[11px\] {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+@keyframes plan-processing {
+  0% { transform: translateX(-120%); opacity: 0; }
+  18% { opacity: 0.85; }
+  82% { opacity: 0.85; }
+  100% { transform: translateX(320%); opacity: 0; }
+}

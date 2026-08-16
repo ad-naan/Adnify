@@ -1,6 +1,7 @@
 import { Check, CheckCircle2, Clock3, CornerDownRight, ExternalLink, LoaderCircle, ShieldAlert, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { PlanTaskRuntimeItem } from '@/renderer/agent/plan/planWorkbenchProjection'
+import { getPlanProviderDisplayName } from '@/renderer/agent/plan/planProviderCatalog'
 
 function useNow(running: boolean) {
   const [now, setNow] = useState(Date.now())
@@ -50,28 +51,34 @@ export function PlanWorkbenchRuntime({ items, completed, language, onOpenThread,
   const hasRunning = items.some(item => item.task.status === 'running')
   const now = useNow(hasRunning)
   if (!items.length) return null
+  const active = items.find(item => item.waitingApproval || item.task.status === 'running')
 
-  return <section className="mt-4">
+  return <section>
+    {active && <div className="mb-3 rounded-xl border border-border/55 bg-surface/[0.08] px-3.5 py-3">
+      <div className="flex items-center justify-between gap-3"><span className="text-[10px] font-semibold text-text-primary">{language === 'zh' ? '当前模型操作' : 'Current model operation'}</span><time className="text-[9px] tabular-nums text-text-muted">{taskDuration(active, now)}</time></div>
+      <div className="mt-2 flex items-center gap-2 text-[9px] text-text-muted"><span className={`h-1.5 w-1.5 rounded-full ${active.waitingApproval ? 'bg-amber-400' : 'animate-pulse bg-emerald-500'}`} /><span className="truncate">{getPlanProviderDisplayName(active.task.provider)} · {active.task.model}</span></div>
+      <p className="mt-2 truncate text-[10px] text-text-secondary">{active.currentToolName || active.latestActivity?.title || active.latestText || active.task.description}</p>
+    </div>}
     <div className="mb-1 flex items-center justify-between px-0.5 text-[9px] text-text-muted">
       <span>{language === 'zh' ? '任务调度' : 'Task orchestration'}</span>
       <span className="tabular-nums">{completed}/{items.length}</span>
     </div>
-    <div className="relative ml-1.5">
-      <span className="absolute bottom-4 left-[6px] top-4 w-px bg-border/55" />
+    <div className="space-y-2.5">
       {items.map(item => {
         const activity = item.latestActivity
         const currentAction = item.waitingApproval
           ? (language === 'zh' ? '等待工具审批' : 'Waiting for approval')
           : item.currentToolName || activity?.title || item.latestText || item.task.description
-        return <article key={item.task.id} className="relative grid grid-cols-[14px_minmax(0,1fr)_auto] gap-2 border-b border-border/35 py-3 last:border-b-0">
-          <span className="z-[1] flex h-3.5 w-3.5 items-center justify-center bg-background"><TaskStateIcon item={item} /></span>
+        return <article key={item.task.id} className={`relative grid grid-cols-[18px_minmax(0,1fr)_auto] gap-2.5 rounded-xl border p-3.5 ${item.waitingApproval ? 'border-amber-400/30 bg-amber-400/[0.035]' : item.task.status === 'running' ? 'border-accent/25 bg-accent/[0.025]' : 'border-border/50 bg-surface/[0.045]'}`}>
+          <span className="z-[1] flex h-4.5 w-4.5 items-center justify-center"><TaskStateIcon item={item} /></span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="truncate text-[10px] font-medium text-text-secondary">{item.task.title}</span>
+              <span className="truncate text-[11px] font-semibold text-text-primary">{item.task.role || item.task.title}</span>
               {item.task.status === 'running' && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.waitingApproval ? 'bg-amber-400' : 'animate-pulse bg-emerald-400'}`} />}
             </div>
-            <div className={`mt-1 truncate text-[9px] leading-4 text-text-muted ${item.task.status === 'running' && !item.waitingApproval ? 'tool-text-shimmer' : ''}`}>{currentAction}</div>
-            <div className="mt-1 flex min-w-0 items-center gap-2 text-[8px] text-text-muted/60">
+            <div className="mt-0.5 truncate text-[9px] text-text-muted">{item.task.title}</div>
+            <div className={`mt-2 border-l-2 pl-2 text-[10px] leading-4 ${item.task.status === 'running' && !item.waitingApproval ? 'border-emerald-500 text-text-secondary tool-text-shimmer' : 'border-border text-text-muted'}`}>{currentAction}</div>
+            <div className="mt-2 flex min-w-0 items-center gap-2 text-[9px] text-text-muted/70">
               <span className="truncate">{item.task.role}</span><span>·</span><span className="truncate">{item.task.model}</span>
             </div>
 

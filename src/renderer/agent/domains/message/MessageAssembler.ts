@@ -41,7 +41,8 @@ export interface UserMessageContent {
 export class MessageCompressor {
   compress(
     messages: ChatMessage[],
-    level: CompressionLevel
+    level: CompressionLevel,
+    hasContinuityArtifact = true
   ): {
     messages: ChatMessage[]
     stats: {
@@ -50,7 +51,7 @@ export class MessageCompressor {
       removedMessages: number
     }
   } {
-    const result = prepareMessages(messages, level)
+    const result = prepareMessages(messages, level, { hasContinuityArtifact })
 
     logger.agent.debug(
       `[MessageCompressor] Compressed to L${level}: removed=${result.removedMessages}, truncated=${result.truncatedToolCalls}, cleared=${result.clearedToolResults}`
@@ -116,9 +117,16 @@ export class MessageAssembler {
     compressionLevel: CompressionLevel,
     runtimeState?: RuntimeStateContext
   ): MessageAssemblyResult {
+    // Aggressive message-count truncation is only safe if something carries the
+    // dropped history forward. `runtimeState` is where those artifacts arrive, so
+    // derive the flag here rather than making callers remember to pass it.
+    const hasContinuityArtifact = Boolean(
+      runtimeState?.workingMemory || runtimeState?.handoffContext
+    )
     const { messages: compressedMessages, stats } = this.compressor.compress(
       messageHistory,
-      compressionLevel
+      compressionLevel,
+      hasContinuityArtifact
     )
 
     const lastMsg = compressedMessages[compressedMessages.length - 1]

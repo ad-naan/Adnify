@@ -1,4 +1,10 @@
-export type PlanPlanningState = 'needs_clarification' | 'waiting_for_answer' | 'ready_to_create' | 'plan_created'
+export type PlanPlanningState =
+  | 'needs_clarification'
+  | 'waiting_for_answer'
+  | 'ready_to_create'
+  | 'revision_requested'
+  | 'ready_to_update'
+  | 'plan_created'
 
 type MessageLike = {
   role?: string
@@ -18,9 +24,18 @@ export function derivePlanPlanningState(messages: readonly MessageLike[]): PlanP
   if (latestUserIndex < 0) return 'needs_clarification'
 
   const planCreatedAfterRequest = messages.some((message, index) =>
-    index > latestUserIndex && message.role === 'assistant' && toolNames(message).includes('create_task_plan')
+    index > latestUserIndex
+      && message.role === 'assistant'
+      && toolNames(message).some(name => name === 'create_task_plan' || name === 'update_task_plan')
   )
   if (planCreatedAfterRequest) return 'plan_created'
+
+  const previousPlanIndex = messages.reduce((latest, message, index) => (
+    index < latestUserIndex && message.role === 'assistant' && toolNames(message).includes('create_task_plan')
+      ? index
+      : latest
+  ), -1)
+  const isRevision = previousPlanIndex >= 0
 
   const clarificationAfterRequest = messages.findIndex((message, index) =>
     index > latestUserIndex && message.role === 'assistant' && toolNames(message).includes('ask_user')
@@ -30,11 +45,13 @@ export function derivePlanPlanningState(messages: readonly MessageLike[]): PlanP
   for (let index = latestUserIndex - 1; index >= 0; index--) {
     const message = messages[index]
     if (message.role === 'tool') continue
-    if (message.role === 'assistant' && toolNames(message).includes('ask_user')) return 'ready_to_create'
+    if (message.role === 'assistant' && toolNames(message).includes('ask_user')) {
+      return isRevision && index > previousPlanIndex ? 'ready_to_update' : 'ready_to_create'
+    }
     break
   }
 
-  return 'needs_clarification'
+  return isRevision ? 'revision_requested' : 'needs_clarification'
 }
 
 export function getPlanContinuationReminder(state: PlanPlanningState): string | null {
@@ -51,11 +68,26 @@ export function getPlanContinuationReminder(state: PlanPlanningState): string | 
       'You cannot finish with a prose-only plan. Call create_task_plan now with the structured tasks and requirements document.',
     ].join('\n')
   }
+  if (state === 'revision_requested') {
+    return [
+      'PLAN REVISION ENFORCEMENT: A structured plan already exists in this conversation.',
+      'If the requested change is clear, call update_task_plan for that existing plan. If a material decision is missing, call ask_user once.',
+      'Do not call create_task_plan and do not create a duplicate plan.',
+    ].join('\n')
+  }
+  if (state === 'ready_to_update') {
+    return [
+      'PLAN REVISION ENFORCEMENT: The user has answered the revision clarification.',
+      'Call update_task_plan for the existing plan now. Do not call create_task_plan.',
+    ].join('\n')
+  }
   return null
 }
 
 /** After clarification, the next model turn must converge on a structured plan. */
 export function selectPlanPlanningTools<T extends { name: string }>(state: PlanPlanningState, tools: readonly T[]): T[] {
-  if (state !== 'ready_to_create') return [...tools]
-  return tools.filter(tool => tool.name === 'create_task_plan')
+  if (state === 'ready_to_create') return tools.filter(tool => tool.name === 'create_task_plan')
+  if (state === 'ready_to_update') return tools.filter(tool => tool.name === 'update_task_plan')
+  if (state === 'revision_requested') return tools.filter(tool => tool.name !== 'create_task_plan')
+  return [...tools]
 }

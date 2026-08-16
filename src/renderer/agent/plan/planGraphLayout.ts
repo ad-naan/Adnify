@@ -43,10 +43,11 @@ export interface PlanGraphLayoutOptions {
  * layout reports `hasCycle` so the UI can surface the invalid plan.
  */
 export function layoutPlanGraph(tasks: PlanTask[], options: PlanGraphLayoutOptions = {}): PlanGraphLayout {
-  const nodeWidth = options.nodeWidth ?? 344
-  const nodeHeight = options.nodeHeight ?? 158
+  const compact = tasks.length >= 7
+  const baseNodeWidth = options.nodeWidth ?? 344
+  const nodeHeight = options.nodeHeight ?? (compact ? 138 : 158)
   const columnGap = options.columnGap ?? 56
-  const rowGap = options.rowGap ?? 70
+  const rowGap = options.rowGap ?? (compact ? 42 : 70)
   const paddingX = options.paddingX ?? 36
   const paddingY = options.paddingY ?? 28
   const minWidth = options.minWidth ?? 760
@@ -97,20 +98,31 @@ export function layoutPlanGraph(tasks: PlanTask[], options: PlanGraphLayoutOptio
   }
   const orderedRanks = Array.from(ranks.keys()).sort((a, b) => a - b)
   const widestRank = Math.max(1, ...Array.from(ranks.values()).map(items => items.length))
-  const contentWidth = widestRank * nodeWidth + Math.max(0, widestRank - 1) * columnGap
+  // A graph is not a uniform card grid. A single root or merge node should
+  // occupy the visual lane, while true parallel ranks keep compact columns.
+  // This keeps the hierarchy legible and mirrors the actual dependency shape.
+  const contentWidth = widestRank === 1
+    ? Math.max(520, baseNodeWidth)
+    : widestRank * baseNodeWidth + Math.max(0, widestRank - 1) * columnGap
   const width = Math.max(minWidth, contentWidth + paddingX * 2)
 
   const nodes: PlanGraphNode[] = []
   for (const rank of orderedRanks) {
     const items = ranks.get(rank) || []
-    const rowWidth = items.length * nodeWidth + Math.max(0, items.length - 1) * columnGap
+    const availableNodeWidth = (contentWidth - Math.max(0, items.length - 1) * columnGap) / Math.max(1, items.length)
+    const rankNodeWidth = widestRank === 1
+      ? contentWidth
+      : items.length === widestRank
+        ? baseNodeWidth
+        : Math.min(760, Math.max(baseNodeWidth, availableNodeWidth))
+    const rowWidth = items.length * rankNodeWidth + Math.max(0, items.length - 1) * columnGap
     const startX = (width - rowWidth) / 2
     items.forEach((task, index) => nodes.push({
       task,
       rank,
-      x: startX + index * (nodeWidth + columnGap),
+      x: startX + index * (rankNodeWidth + columnGap),
       y: paddingY + rank * (nodeHeight + rowGap),
-      width: nodeWidth,
+      width: rankNodeWidth,
       height: nodeHeight,
     }))
   }
@@ -137,4 +149,28 @@ export function layoutPlanGraph(tasks: PlanTask[], options: PlanGraphLayoutOptio
 
   const height = Math.max(260, paddingY * 2 + orderedRanks.length * nodeHeight + Math.max(0, orderedRanks.length - 1) * rowGap)
   return { nodes, edges, width, height, hasCycle, missingDependencies }
+}
+
+/** Returns true when replacing a task's dependencies would introduce a cycle. */
+export function wouldCreateDependencyCycle(tasks: PlanTask[], taskId: string, dependencyIds: string[]): boolean {
+  const dependenciesByTask = new Map(tasks.map(task => [
+    task.id,
+    task.id === taskId ? dependencyIds : task.dependencies,
+  ]))
+  const visiting = new Set<string>()
+  const visited = new Set<string>()
+
+  const visit = (id: string): boolean => {
+    if (visiting.has(id)) return true
+    if (visited.has(id)) return false
+    visiting.add(id)
+    for (const dependencyId of dependenciesByTask.get(id) || []) {
+      if (dependenciesByTask.has(dependencyId) && visit(dependencyId)) return true
+    }
+    visiting.delete(id)
+    visited.add(id)
+    return false
+  }
+
+  return Array.from(dependenciesByTask.keys()).some(visit)
 }

@@ -22,6 +22,7 @@ import { Agent } from '../core/Agent'
 import { gitService } from '@/renderer/services/gitService'
 import { ExecutionScheduler } from './PlanScheduler'
 import { getLLMConfigForTask } from '../services/llmConfigService'
+import { resolvePlanProviderAssignment } from './planProviderCatalog'
 import {
     DEFAULT_PLAN_CONFIG,
     type TaskPlan,
@@ -233,6 +234,20 @@ export async function startPlanExecution(
     if (!workspacePath) {
         return { success: false, message: 'No workspace open' }
     }
+
+    let repairedAssignments = 0
+    for (const task of plan.tasks) {
+        if (task.status !== 'pending') continue
+        const assignment = resolvePlanProviderAssignment(task.provider, task.model)
+        if (!assignment) {
+            return { success: false, message: 'No usable Plan task provider is configured. Add an API key, endpoint, and model first.' }
+        }
+        if (assignment.reassigned) {
+            store.updateTask(plan.id, task.id, { provider: assignment.provider, model: assignment.model })
+            repairedAssignments += 1
+        }
+    }
+    if (repairedAssignments > 0) plan = store.getPlan(plan.id) || plan
 
     const validationError = await validatePlanTaskModels(plan)
     if (validationError) {
@@ -533,6 +548,7 @@ async function completeExecution(session: ExecutionSession, plan: TaskPlan): Pro
 
     const store = useAgentStore.getState()
     store.stopExecution(plan.id, hasFailures ? 'failed' : 'completed')
+    store.updatePlan(plan.id, { validation: { status: 'pending' } })
 
     session.status = hasFailures ? 'failed' : 'completed'
     EventBus.emit({ type: 'plan:complete', planId: plan.id, stats, sessionId: session.id })

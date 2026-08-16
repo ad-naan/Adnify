@@ -23,6 +23,9 @@ import { memoryService, normalizeMemoryContentInput } from '../services/memorySe
 import { useStore } from '@/renderer/store'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 import { derivePlanPlanningState } from '../plan/planWorkflowGuard'
+import { hasCompletePlanStageMap, normalizePlanStageMap, renderPlanStageMarkdown } from '../plan/planStageContent'
+import type { PlanStageKey } from '../plan/types'
+import { getConfiguredPlanProviders, resolvePlanProviderAssignment } from '../plan/planProviderCatalog'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { getMessageText } from '@/renderer/agent/types'
 import { composerService } from '../services/composerService'
@@ -2206,9 +2209,21 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             dependencies?: string[]
         }>
         const executionMode = (args.executionMode as 'sequential' | 'parallel') || 'sequential'
+        const stageContent = normalizePlanStageMap(args.stageContent)
 
         if (!ctx.workspacePath) {
             return { success: false, result: 'No workspace path available' }
+        }
+
+        if (!hasCompletePlanStageMap(stageContent)) {
+            return {
+                success: false,
+                result: 'stageContent must contain complete requirements, plan, execution, and validation content. Each stage needs a title, summary, and sections array.',
+            }
+        }
+
+        if (getConfiguredPlanProviders().length === 0) {
+            return { success: false, result: 'No usable Plan task provider is configured. Add an API key, endpoint, and at least one model before creating a plan.' }
         }
 
         const currentAssistantId = ctx.currentAssistantId ?? ctx.assistantId
@@ -2244,9 +2259,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             await api.file.mkdir(planDir)
 
             // 保存需求文档 (markdown)
-            const mdPath = `${planDir}/${planId}.md`
-            internalWriteTracker.mark(mdPath)
-            await api.file.write(mdPath, requirementsDoc)
+            const stageDocs = Object.fromEntries((Object.keys(stageContent) as PlanStageKey[]).map(stage => [stage, `${planId}.${stage}.md`])) as Record<PlanStageKey, string>
+            for (const stage of Object.keys(stageContent) as PlanStageKey[]) {
+                const stagePath = `${planDir}/${stageDocs[stage]}`
+                internalWriteTracker.mark(stagePath)
+                await api.file.write(stagePath, renderPlanStageMarkdown(stageContent[stage]))
+            }
+            const mdPath = `${planDir}/${stageDocs.requirements}`
 
             // 构建任务对象
             // 处理 "default" 值，转换为真实的默认配置
@@ -2255,16 +2274,21 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 return value
             }
 
-            const planTasks = tasks.map((t, idx) => ({
-                id: `task-${idx + 1}`,
-                title: t.title,
-                description: t.description,
-                provider: resolveDefault(t.suggestedProvider, 'anthropic'),
-                model: resolveDefault(t.suggestedModel, 'claude-sonnet-4-20250514'),
-                role: resolveDefault(t.suggestedRole, 'coder'),
-                dependencies: t.dependencies || [],
-                status: 'pending' as const,
-            }))
+            let reassignedCount = 0
+            const planTasks = tasks.map((t, idx) => {
+                const assignment = resolvePlanProviderAssignment(t.suggestedProvider, t.suggestedModel)!
+                if (assignment.reassigned) reassignedCount += 1
+                return {
+                    id: `task-${idx + 1}`,
+                    title: t.title,
+                    description: t.description,
+                    provider: assignment.provider,
+                    model: assignment.model,
+                    role: resolveDefault(t.suggestedRole, 'coder'),
+                    dependencies: t.dependencies || [],
+                    status: 'pending' as const,
+                }
+            })
 
             // 构建规划对象
             const plan = {
@@ -2272,7 +2296,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 name,
                 createdAt: timestamp,
                 updatedAt: timestamp,
-                requirementsDoc: `${planId}.md`,
+                requirementsDoc: stageDocs.requirements,
+                requirementsContent: requirementsDoc,
+                stageContent,
+                stageDocs,
+                contentSchemaVersion: 1 as const,
                 executionMode,
                 status: 'draft' as const,
                 tasks: planTasks,
@@ -2299,7 +2327,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 result: getLocalizedText(
                     getCurrentLanguage(),
                     `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n规划文件：${jsonPath}\n需求文档：${mdPath}\n\n计划已显示在常驻看板中，请先审核，再点击“开始执行”。`,
-                    `Created task plan "${name}" with ${tasks.length} tasks.\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe plan is now shown in the persistent board. Review it, then click "Start Execution".`,
+                    `Created task plan "${name}" with ${tasks.length} tasks.${reassignedCount ? ` ${reassignedCount} invalid provider/model assignment(s) were replaced with configured routes.` : ''}\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe plan is now shown in the persistent board. Review it, then click "Start Execution".`,
                 ),
                 meta: { planId, planPath: jsonPath, stopLoop: true },
             }
@@ -2331,6 +2359,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 role?: string
             }> | undefined
             const executionMode = args.executionMode as 'sequential' | 'parallel' | undefined
+            const stageContentPatch = normalizePlanStageMap(args.stageContent)
 
             const store = agentStorePlanBridge
             const plan = store.getPlanById(planId)
@@ -2340,6 +2369,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
 
             const changes: string[] = []
+            let nextTasks = [...plan.tasks]
+            let nextRequirementsContent = plan.requirementsContent
 
             // 更新需求文档
             if (updateRequirements) {
@@ -2348,56 +2379,123 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 const newContent = `${existingContent}\n\n---\n## Updates\n${updateRequirements}`
                 internalWriteTracker.mark(mdPath)
                 await api.file.write(mdPath, newContent)
+                nextRequirementsContent = newContent
                 changes.push('Updated requirements document')
             }
 
-            // 删除任务
+            // Remove tasks and clean every dependency edge that pointed at them.
             if (removeTasks?.length) {
-                const newTasks = plan.tasks.filter(t => !removeTasks.includes(t.id))
-                store.updatePlan(planId, { tasks: newTasks })
-                changes.push(`Removed ${removeTasks.length} tasks`)
+                const removed = new Set(removeTasks)
+                const before = nextTasks.length
+                nextTasks = nextTasks
+                    .filter(task => !removed.has(task.id))
+                    .map(task => ({ ...task, dependencies: task.dependencies.filter(id => !removed.has(id)) }))
+                changes.push(`Removed ${before - nextTasks.length} tasks`)
             }
 
-            // 添加任务
+            // Add tasks at the requested graph position instead of always appending.
             if (addTasks?.length) {
                 const timestamp = Date.now()
-                const newTasks = addTasks.map((t, i) => ({
-                    id: `task-${timestamp}-${i}`,
-                    title: t.title,
-                    description: t.description,
-                    provider: t.suggestedProvider || 'anthropic',
-                    model: t.suggestedModel || 'claude-sonnet-4-20250514',
-                    role: t.suggestedRole || 'coder',
-                    status: 'pending' as const,
-                    dependencies: [],
-                }))
+                const newTasks = addTasks.map((t, i) => {
+                    const assignment = resolvePlanProviderAssignment(t.suggestedProvider, t.suggestedModel)
+                    if (!assignment) throw new Error('No usable Plan task provider is configured.')
+                    return {
+                        id: `task-${timestamp}-${i}`,
+                        title: t.title,
+                        description: t.description,
+                        provider: assignment.provider,
+                        model: assignment.model,
+                        role: t.suggestedRole || 'coder',
+                        status: 'pending' as const,
+                        dependencies: [],
+                    }
+                })
 
-                const currentPlan = store.getPlanById(planId)
-                if (currentPlan) {
-                    store.updatePlan(planId, { tasks: [...currentPlan.tasks, ...newTasks] })
+                for (let index = 0; index < newTasks.length; index++) {
+                    const definition = addTasks[index]
+                    const task = newTasks[index]
+                    const insertAt = definition.insertAfter
+                        ? nextTasks.findIndex(item => item.id === definition.insertAfter) + 1
+                        : nextTasks.length
+                    if (definition.insertAfter && insertAt === 0) {
+                        nextTasks.push(task)
+                    } else {
+                        nextTasks.splice(insertAt, 0, task)
+                    }
                 }
                 changes.push(`Added ${addTasks.length} tasks`)
             }
 
-            // 更新任务
+            // Preserve unspecified fields. A changed completed task becomes pending
+            // again so validation revisions actually execute the new definition.
             if (updateTasks?.length) {
                 for (const update of updateTasks) {
-                    store.updateTask(planId, update.taskId, {
-                        title: update.title,
-                        description: update.description,
-                        provider: update.provider,
-                        model: update.model,
-                        role: update.role,
-                    })
+                    const taskIndex = nextTasks.findIndex(task => task.id === update.taskId)
+                    if (taskIndex < 0) continue
+                    const currentTask = nextTasks[taskIndex]
+                    const assignment = (update.provider !== undefined || update.model !== undefined)
+                        ? resolvePlanProviderAssignment(update.provider || currentTask.provider, update.model || currentTask.model)
+                        : null
+                    if ((update.provider !== undefined || update.model !== undefined) && !assignment) throw new Error('No usable Plan task provider is configured.')
+                    const definedUpdates = Object.fromEntries(
+                        Object.entries({
+                            title: update.title,
+                            description: update.description,
+                            provider: assignment?.provider,
+                            model: assignment?.model,
+                            role: update.role,
+                        }).filter(([, value]) => value !== undefined),
+                    )
+                    nextTasks[taskIndex] = {
+                        ...nextTasks[taskIndex],
+                        ...definedUpdates,
+                        status: 'pending',
+                        output: undefined,
+                        error: undefined,
+                        startedAt: undefined,
+                        completedAt: undefined,
+                        threadId: undefined,
+                        assistantId: undefined,
+                        requestId: undefined,
+                    }
                 }
                 changes.push(`Updated ${updateTasks.length} tasks`)
             }
 
-            // 更新执行模式
+            // Apply the revision atomically so persistence cannot capture a
+            // half-updated task graph between several debounced store writes.
             if (executionMode) {
-                store.updatePlan(planId, { executionMode })
                 changes.push(`Changed execution mode to ${executionMode}`)
             }
+
+            const nextStageContent = { ...(plan.stageContent || {}), ...stageContentPatch }
+            const nextStageDocs = { ...(plan.stageDocs || {}) }
+            if (Object.keys(stageContentPatch).length > 0) {
+                const planDir = `${ctx.workspacePath}/.adnify/plan`
+                for (const stage of Object.keys(stageContentPatch) as PlanStageKey[]) {
+                    const fileName = nextStageDocs[stage] || `${planId}.${stage}.md`
+                    nextStageDocs[stage] = fileName
+                    const filePath = `${planDir}/${fileName}`
+                    internalWriteTracker.mark(filePath)
+                    await api.file.write(filePath, renderPlanStageMarkdown(stageContentPatch[stage]!))
+                }
+                changes.push(`Updated ${Object.keys(stageContentPatch).join(', ')} stage content`)
+            }
+
+            if (changes.length === 0) {
+                return { success: false, result: 'No plan changes were provided.' }
+            }
+
+            store.updatePlan(planId, {
+                tasks: nextTasks,
+                requirementsContent: nextRequirementsContent,
+                stageContent: nextStageContent,
+                stageDocs: nextStageDocs,
+                contentSchemaVersion: Object.keys(nextStageContent).length > 0 ? 1 : plan.contentSchemaVersion,
+                executionMode: executionMode || plan.executionMode,
+                status: 'draft',
+                validation: undefined,
+            })
 
             // 更新 JSON 文件
             const updatedPlan = store.getPlanById(planId)

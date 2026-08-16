@@ -59,6 +59,50 @@ export interface ToolConfig {
     validate?: (data: Record<string, unknown>) => { valid: boolean; error?: string }
 }
 
+const PLAN_STAGE_CONTENT_PROPERTY: ToolPropertyDef = {
+    type: 'object',
+    description: 'AI-authored content for every Plan workspace stage. This is the UI data model, not decorative prose.',
+    properties: Object.fromEntries(['requirements', 'plan', 'execution', 'validation'].map(stage => [stage, {
+        type: 'object',
+        description: `Renderable content for the ${stage} stage`,
+        required: true,
+        properties: {
+            title: { type: 'string', description: 'Stage-specific heading', required: true },
+            summary: { type: 'string', description: 'Concise stage summary grounded in the user request', required: true },
+            sections: {
+                type: 'array',
+                description: 'Dynamic sections chosen by the AI for this specific plan',
+                required: true,
+                items: {
+                    type: 'object',
+                    description: 'A renderable stage section',
+                    properties: {
+                        id: { type: 'string', description: 'Stable unique section id', required: true },
+                        title: { type: 'string', description: 'Section title', required: true },
+                        description: { type: 'string', description: 'Optional section context' },
+                        kind: { type: 'string', description: 'Presentation semantics', required: true, enum: ['overview', 'list', 'checklist', 'decisions', 'risks', 'deliverables', 'metrics'] },
+                        items: {
+                            type: 'array',
+                            description: 'AI-authored entries for this section',
+                            required: true,
+                            items: {
+                                type: 'object',
+                                description: 'A renderable content entry',
+                                properties: {
+                                    id: { type: 'string', description: 'Stable unique item id', required: true },
+                                    title: { type: 'string', description: 'Entry title', required: true },
+                                    description: { type: 'string', description: 'Entry detail' },
+                                    status: { type: 'string', description: 'Initial semantic state', enum: ['pending', 'confirmed', 'active', 'completed', 'warning', 'blocked'] },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }])) as Record<string, ToolPropertyDef>,
+}
+
 // ============================================
 // 工具配置
 // ============================================
@@ -941,6 +985,7 @@ TIPS:
             'Break complex requests into atomic tasks',
             'Suggest appropriate models based on task complexity',
             'Include clear task descriptions',
+            'Author complete requirements, plan, execution, and validation stageContent; the Plan UI renders this data directly',
         ],
         category: 'plan',
         approvalType: 'none',
@@ -950,6 +995,7 @@ TIPS:
         parameters: {
             name: { type: 'string', description: 'Human-readable name for the plan', required: true },
             requirementsDoc: { type: 'string', description: 'Markdown formatted requirements document', required: true },
+            stageContent: { ...PLAN_STAGE_CONTENT_PROPERTY, required: true },
             tasks: {
                 type: 'array',
                 description: 'List of tasks to execute',
@@ -960,7 +1006,7 @@ TIPS:
                     properties: {
                         title: { type: 'string', description: 'Task title', required: true },
                         description: { type: 'string', description: 'Detailed task description', required: true },
-                        suggestedProvider: { type: 'string', description: 'Recommended provider', required: true, enum: ['anthropic', 'openai', 'gemini', 'ollama'] },
+                        suggestedProvider: { type: 'string', description: 'Provider ID from the dynamically supplied Configured Plan Task Providers list', required: true },
                         suggestedModel: { type: 'string', description: 'Recommended model ID (e.g., "claude-sonnet-4-6", "gpt-4o", "gemini-2.0-flash")', required: true },
                         suggestedRole: { type: 'string', description: 'Recommended role/persona (e.g., "coder", "reviewer", "planner", "tester")', required: true },
                         dependencies: { type: 'array', description: 'IDs of tasks this depends on', items: { type: 'string', description: 'Task ID' } },
@@ -994,6 +1040,7 @@ You can:
         parameters: {
             planId: { type: 'string', description: 'Plan ID to update', required: true },
             updateRequirements: { type: 'string', description: 'Additional requirements to append (markdown)' },
+            stageContent: { ...PLAN_STAGE_CONTENT_PROPERTY, description: 'Replacement content for one or more stages. Omitted stages are preserved.' },
             addTasks: {
                 type: 'array',
                 description: 'New tasks to add',

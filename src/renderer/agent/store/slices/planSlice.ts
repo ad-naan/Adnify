@@ -161,6 +161,10 @@ export const createPlanSlice: StateCreator<
             const planDir = `${workspacePath}/.adnify/plan`
             const targets = [`${planDir}/${planId}.json`]
             if (plan?.requirementsDoc) targets.push(`${planDir}/${plan.requirementsDoc}`)
+            for (const stageDoc of Object.values(plan?.stageDocs || {})) {
+                const target = `${planDir}/${stageDoc}`
+                if (!targets.includes(target)) targets.push(target)
+            }
 
             for (const target of targets) {
                 try {
@@ -304,6 +308,7 @@ export const createPlanSlice: StateCreator<
 
                 return withRevision(plan, {
                     status: 'approved',
+                    validation: undefined,
                     tasks: plan.tasks.map((task) => {
                         if (task.status === 'completed' && !includeCompleted) {
                             return task
@@ -338,7 +343,7 @@ export const createPlanSlice: StateCreator<
             currentTaskId: null,
             plans: state.plans.map((p) =>
                 p.id === planId
-                    ? withRevision(p, { status: 'executing' as PlanStatus })
+                    ? withRevision(p, { status: 'executing' as PlanStatus, validation: undefined })
                     : p
             ),
         }))

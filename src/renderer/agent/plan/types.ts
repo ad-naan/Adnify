@@ -19,6 +19,45 @@ export type ExecutionMode = 'sequential' | 'parallel'
 /** 计划状态 */
 export type PlanStatus = 'draft' | 'approved' | 'executing' | 'pausing' | 'paused' | 'stopping' | 'stopped' | 'completed' | 'failed'
 
+export type PlanValidationStatus = 'pending' | 'accepted' | 'changes_requested'
+
+export type PlanStageKey = 'requirements' | 'plan' | 'execution' | 'validation'
+
+export type PlanStageSectionKind =
+    | 'overview'
+    | 'list'
+    | 'checklist'
+    | 'decisions'
+    | 'risks'
+    | 'deliverables'
+    | 'metrics'
+
+export interface PlanStageContentItem {
+    id: string
+    title: string
+    description?: string
+    status?: 'pending' | 'confirmed' | 'active' | 'completed' | 'warning' | 'blocked'
+}
+
+export interface PlanStageContentSection {
+    id: string
+    title: string
+    description?: string
+    kind: PlanStageSectionKind
+    items: PlanStageContentItem[]
+}
+
+export interface PlanStageContent {
+    title: string
+    summary: string
+    sections: PlanStageContentSection[]
+}
+
+export interface PlanValidation {
+    status: PlanValidationStatus
+    reviewedAt?: number
+}
+
 export type TaskExecutionClass = 'analysis-read-heavy' | 'write-heavy' | 'approval-heavy' | 'general'
 
 export interface TaskResourceScope {
@@ -92,6 +131,12 @@ export interface TaskPlan {
     requirementsDoc: string
     /** 需求文档内容（缓存，用于注入上下文） */
     requirementsContent?: string
+    /** Structured, AI-authored content rendered by each Plan workspace stage. */
+    stageContent?: Partial<Record<PlanStageKey, PlanStageContent>>
+    /** Human-readable Markdown mirrors for auditing and external review. */
+    stageDocs?: Partial<Record<PlanStageKey, string>>
+    /** Version of the structured stage-content contract. */
+    contentSchemaVersion?: 1
     /** 执行模式 */
     executionMode: ExecutionMode
     /** 计划状态 */
@@ -102,6 +147,8 @@ export interface TaskPlan {
     userRequest?: string
     /** 创建该计划的规划线程，用于聚合规划阶段的动态活动 */
     originThreadId?: string
+    /** User review of the execution result. Persisted with the plan. */
+    validation?: PlanValidation
 }
 
 // ============================================

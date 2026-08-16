@@ -24,12 +24,10 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
-import { WorkMode } from '@/renderer/modes/types'
 import { motion, AnimatePresence } from 'framer-motion'
 import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
-import ModeSelector from './ModeSelector'
 import { KaomojiPet } from './KaomojiPet'
 
 import { ContextItem, FileContext } from '@/renderer/agent/types'
@@ -52,8 +50,7 @@ interface ChatInputProps {
   isStreaming: boolean
   hasApiKey: boolean
   hasPendingToolCall: boolean
-  chatMode: WorkMode
-  setChatMode: (mode: WorkMode) => void
+  compact?: boolean
   onSubmit: () => void
   onAbort: () => void
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
@@ -74,8 +71,7 @@ const ChatInput = memo(function ChatInput({
   isStreaming,
   hasApiKey,
   hasPendingToolCall,
-  chatMode,
-  setChatMode,
+  compact = false,
   onSubmit,
   onAbort,
   onInputChange,
@@ -290,7 +286,7 @@ const ChatInput = memo(function ChatInput({
         )}
 
         {/* Input Area */}
-        <div className="flex flex-col px-4 pb-3 pt-2">
+        <div className={`flex flex-col ${compact ? 'px-3 pb-2 pt-1' : 'px-4 pb-3 pt-2'}`}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -301,11 +297,11 @@ const ChatInput = memo(function ChatInput({
             onBlur={() => setIsFocused(false)}
             placeholder={hasApiKey ? t('pasteImagesHint', language) : t('configureApiKey', language)}
             disabled={!hasApiKey}
-            className="w-full bg-transparent border-none p-0 py-2.5
+            className={`w-full bg-transparent border-none p-0
                        text-[15px] text-text-primary placeholder-text-muted/40 resize-none
-                       focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide"
+                       focus:ring-0 focus:outline-none leading-relaxed custom-scrollbar max-h-[50vh] caret-accent font-medium tracking-wide ${compact ? 'py-1.5' : 'py-2.5'}`}
             rows={1}
-            style={{ minHeight: '48px', fontSize: `${Math.max(14, editorConfig.chatFontSize ?? editorConfig.fontSize)}px` }}
+            style={{ minHeight: compact ? '36px' : '48px', fontSize: `${Math.max(14, editorConfig.chatFontSize ?? editorConfig.fontSize)}px` }}
           />
 
           {canCollapseInput && (
@@ -327,7 +323,6 @@ const ChatInput = memo(function ChatInput({
           {/* Bottom Actions */}
           <div className="relative flex items-center justify-between pt-1 gap-2">
             <div className="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity flex-1 min-w-0">
-              <ModeSelector mode={chatMode} onModeChange={setChatMode} className="shrink-0" />
               <ModelSelector alignLeft className="max-w-[260px]" />
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">

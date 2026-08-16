@@ -5,6 +5,7 @@ import { projectPlanWorkbench } from '@/renderer/agent/plan/planWorkbenchProject
 import { Agent } from '@/renderer/agent/core/Agent'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { projectPlanHistory, type PlanHistoryEntry } from '@/renderer/agent/plan/planHistoryProjection'
+import { beginPlanRevision } from '@/renderer/agent/plan/planRevisionService'
 
 export function usePlanWorkbenchController() {
   const language = useStore(state => state.language)
@@ -17,6 +18,7 @@ export function usePlanWorkbenchController() {
   const createThread = useAgentStore(state => state.createThread)
   const deletePlan = useAgentStore(state => state.deletePlan)
   const deleteThread = useAgentStore(state => state.deleteThread)
+  const updatePlan = useAgentStore(state => state.updatePlan)
   const [starting, setStarting] = useState(false)
 
   const model = useMemo(() => projectPlanWorkbench({ plan, currentThreadId, threads }), [currentThreadId, plan, threads])
@@ -68,6 +70,41 @@ export function usePlanWorkbenchController() {
     createThread({ activate: true, mode: 'plan', origin: 'user' })
   }, [createThread, setActivePlan])
 
+  const acceptValidation = useCallback(() => {
+    if (!plan) return
+    updatePlan(plan.id, { validation: { status: 'accepted', reviewedAt: Date.now() } })
+  }, [plan, updatePlan])
+
+  const requestValidationChanges = useCallback(() => {
+    if (!plan) return
+    const result = beginPlanRevision(plan.id, 'validation', language)
+    if (result.success) toast.info(result.message)
+    else toast.error(language === 'zh' ? '无法继续调整' : 'Unable to revise', result.message)
+  }, [language, plan])
+
+  const revisePlan = useCallback(() => {
+    if (!plan) return
+    const result = beginPlanRevision(plan.id, 'review', language)
+    if (result.success) toast.info(result.message)
+    else toast.error(language === 'zh' ? '无法调整计划' : 'Unable to revise plan', result.message)
+  }, [language, plan])
+
+  const approve = useCallback((requestId?: string) => {
+    if (!requestId) {
+      toast.error(language === 'zh' ? '审批请求已失效' : 'Approval request expired')
+      return
+    }
+    Agent.approve(requestId)
+  }, [language])
+
+  const reject = useCallback((requestId?: string) => {
+    if (!requestId) {
+      toast.error(language === 'zh' ? '审批请求已失效' : 'Approval request expired')
+      return
+    }
+    Agent.reject(requestId)
+  }, [language])
+
   return {
     language,
     plan,
@@ -76,11 +113,14 @@ export function usePlanWorkbenchController() {
     starting,
     startPlan,
     submitClarification,
-    approve: (requestId?: string) => Agent.approve(requestId),
-    reject: (requestId?: string) => Agent.reject(requestId),
+    approve,
+    reject,
     openThread: switchThread,
     openHistoryEntry,
     deleteHistoryEntry,
     createNewPlan,
+    acceptValidation,
+    requestValidationChanges,
+    revisePlan,
   }
 }

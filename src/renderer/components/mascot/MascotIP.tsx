@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useStore } from '@store'
+import { useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import ModeSelector from '@/renderer/components/chat/ModeSelector'
 
 export function MascotIP() {
   const { chatVisible, setChatVisible, language } = useStore(useShallow(s => ({
@@ -11,43 +12,36 @@ export function MascotIP() {
     language: s.language,
   })))
 
-  const [isHovered, setIsHovered] = useState(false)
+  const mode = useModeStore(s => s.currentMode)
+  const setMode = useModeStore(s => s.setMode)
 
   const handleToggle = () => {
     setChatVisible(!chatVisible)
   }
 
-  return (
-    <div className="relative no-drag flex items-center justify-center w-8 h-8">
-      <motion.button
-        className={`relative w-full h-full flex items-center justify-center rounded-lg transition-colors ${chatVisible ? 'bg-accent/10' : 'hover:bg-text-primary/[0.05]'}`}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onClick={handleToggle}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <OtterAsset
-          asset={chatVisible ? 'assistantFace' : 'assistant'}
-          alt="Adnify Mascot"
-          className="h-full w-full object-cover"
-        />
+  const handleModeChange = (nextMode: Parameters<typeof setMode>[0]) => {
+    setMode(nextMode)
+    if (!chatVisible) setChatVisible(true)
+  }
 
-        {/* 鼠标悬浮气泡提示 */}
-        <AnimatePresence>
-          {isHovered && (
-            <motion.div
-              initial={{ opacity: 0, y: 5, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute top-[120%] right-0 whitespace-nowrap bg-surface-active/90 backdrop-blur-md border border-border text-text-primary text-xs px-3 py-1.5 rounded-lg shadow-xl font-medium z-[9999]"
-            >
-              {language === 'zh' ? (chatVisible ? '关闭 AI 助手' : '呼叫 AI 助手') : (chatVisible ? 'Close AI Assistant' : 'Call AI Assistant')}
-              <div className="absolute -top-1.5 right-3 w-3 h-3 bg-surface-active/90 border-l border-t border-border rotate-45" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.button>
+  return (
+    <div className="no-drag flex h-10 items-center gap-1.5">
+        <ModeSelector mode={mode} onModeChange={handleModeChange} />
+
+        <motion.button
+          className={`relative z-[2] flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-background shadow-[0_4px_14px_rgba(15,23,42,0.12)] transition-all ${chatVisible ? 'border-accent/30 ring-2 ring-accent/10' : 'border-border/55 hover:border-accent/25'}`}
+          onClick={handleToggle}
+          aria-label={language === 'zh' ? (chatVisible ? '关闭 AI 助手' : '打开 AI 助手') : (chatVisible ? 'Close AI Assistant' : 'Open AI Assistant')}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <OtterAsset
+            asset={chatVisible ? 'assistantFace' : 'assistant'}
+            alt="Adnify Mascot"
+            className="h-9 w-9 rounded-full object-cover"
+          />
+          <span className="absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full border border-background bg-accent" />
+        </motion.button>
     </div>
   )
 }

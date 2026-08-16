@@ -1,10 +1,8 @@
 import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
 import * as fs from 'fs'
-// web-tree-sitter@0.20 uses `export = Parser` and CommonJS returns the
-// constructor directly. A synthetic default import is unstable across the
-// Electron/Vite CJS boundary and can become `{ default: ... }` twice.
-import Parser = require('web-tree-sitter')
+import type Parser = require('web-tree-sitter')
+import { initializeTreeSitter, type TreeSitterRuntime } from './treeSitterRuntime'
 
 const LANGUAGE_MAP: Record<string, string> = {
     ts: 'typescript', tsx: 'tsx',
@@ -49,6 +47,7 @@ export class ASTParser {
     private languages: Map<string, Parser.Language> = new Map()
     private initialized = false
     private wasmDir: string
+    private runtime: TreeSitterRuntime | null = null
 
     constructor() {
         const potentialPaths = [
@@ -63,10 +62,10 @@ export class ASTParser {
         if (this.initialized) return
         try {
             const parserWasm = path.join(this.wasmDir, 'tree-sitter.wasm')
-            await Parser.init({
+            this.runtime = await initializeTreeSitter({
                 locateFile: () => parserWasm
             })
-            this.parser = new Parser()
+            this.parser = new this.runtime.Parser()
             this.initialized = true
         } catch (e) {
             logger.index.error('[ASTParser] Failed to initialize parser:', e)
@@ -79,7 +78,8 @@ export class ASTParser {
 
         try {
             const wasmPath = path.join(this.wasmDir, `tree-sitter-${langName}.wasm`)
-            const lang = await Parser.Language.load(wasmPath)
+            if (!this.runtime) return false
+            const lang = await this.runtime.Language.load(wasmPath)
             this.languages.set(langName, lang)
             return true
         } catch (e) {
