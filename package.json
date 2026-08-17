@@ -46,6 +46,8 @@
       "@hono/node-server@<2.0.5": "^2.0.5",
       "ip-address@<=10.3.0": "^10.3.1",
       "js-yaml@>=4.0.0 <4.3.1": "^4.3.1",
+      "dompurify@<3.4.13": "^3.4.13",
+      "sharp@<0.35.0": "^0.35.1",
       "tar@<7.5.22": "^7.5.22",
       "undici@<6.28.0": "^6.28.0"
     }
@@ -253,6 +255,10 @@
       {
         "from": "resources/uiux",
         "to": "uiux"
+      },
+      {
+        "from": "resources/shell-integration",
+        "to": "shell-integration"
       }
     ]
   },
