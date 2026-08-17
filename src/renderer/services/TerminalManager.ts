@@ -10,7 +10,7 @@
  */
 
 import { api } from "@/renderer/services/electronAPI";
-import { Terminal as XTerminal } from "@xterm/xterm";
+import { Terminal as XTerminal, type IDisposable, type IMarker } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -23,16 +23,11 @@ import { readClipboardText, writeClipboardText } from "@/renderer/services/clipb
 import { detectTerminalShellFamily } from "@/renderer/services/terminalShell";
 import { shellRegistryService } from "@/renderer/shell/services/shellRegistryService";
 import {
-  createAnsiStripper,
-  renderTerminalText,
-  stripAnsi,
-} from "@/renderer/services/terminalTextExtraction";
-import {
-  createTerminalCommandFrameState,
-  filterCommandDisplayChunk,
-  pushTerminalCommandFrame,
-  type CommandDisplayFilterState,
-} from "@/renderer/services/terminalCommandProtocol";
+  createShellIntegrationOscParser,
+  parseShellIntegrationPayload,
+  SHELL_INTEGRATION_OSC_ID,
+  type ShellIntegrationEvent,
+} from "@/renderer/services/terminalShellIntegration";
 
 // ===== 类型定义 =====
 
@@ -70,6 +65,7 @@ export type TerminalCommandStatus =
 export type TerminalCommandTerminationReason =
   | 'sentinel_matched'
   | 'sentinel_missing_prompt'
+  | 'shell_integration_missing'
   | 'terminal_exit'
   | 'terminal_error'
   | 'timeout'
@@ -163,6 +159,9 @@ interface XTermInstance {
   fitAddon: FitAddon;
   webglAddon?: WebglAddon;
   container: HTMLDivElement | null;
+  shellIntegrationDisposable?: IDisposable;
+  shellIntegrationFallbackDisposable?: IDisposable;
+  shellIntegrationReady?: boolean;
 }
 
 interface ActiveCommandExecution {
@@ -174,6 +173,7 @@ interface ActiveCommandExecution {
 }
 
 type StateListener = (state: TerminalManagerState) => void;
+type ShellIntegrationListener = (event: ShellIntegrationEvent & { terminalId: string; seq: number }) => void;
 
 // ===== 终端管理器 =====
 
@@ -189,7 +189,6 @@ function getOutputBufferConfig() {
 }
 
 const MAX_COMMAND_OUTPUT_CHARS = 120_000
-const MAX_RAW_SENTINEL_BUFFER_CHARS = 24_000
 
 function trimRetainedText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -254,12 +253,39 @@ class RingBuffer {
   }
 }
 
-function looksLikeShellPrompt(str: string): boolean {
-  const text = renderTerminalText(stripAnsi(str)).trimEnd()
-  if (!text) return false
+function escapePosixSingleQuoted(value: string): string {
+  return value.replace(/'/g, `'\\''`)
+}
 
-  const tail = text.split('\n').slice(-3).join('\n')
-  return /(?:^|\n)(?:PS\s+[^\n>]*>\s*|(?:[^\n@\s]+@[^\n:\s]+:[^\n#$]+[#$]\s*)|(?:[A-Za-z]:\\[^\n>]*>\s*)|(?:[^\n]*[#$]\s*))$/.test(tail)
+function escapePowerShellSingleQuoted(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
+/**
+ * Extract terminal-visible text between two markers. Wrapped lines are joined
+ * because a command line may be hard-wrapped arbitrarily by ConPTY.
+ */
+function extractTerminalOutput(terminal: XTerminal, start: IMarker, end: IMarker): string {
+  // The C marker follows the submitted command line, while D is emitted just
+  // before the next prompt. Use the first line after C through the line at D;
+  // extraction is tolerant of hard-wrapped command echoes.
+  const startLine = Math.min(start.line + 1, terminal.buffer.active.length - 1)
+  const endLine = Math.max(startLine, Math.min(end.line, terminal.buffer.active.length - 1))
+  if (endLine < startLine) return ''
+
+  const lines: string[] = []
+  const buffer = terminal.buffer.active
+  for (let line = startLine; line <= endLine; line++) {
+    const bufferLine = buffer.getLine(line)
+    if (!bufferLine) continue
+    const text = bufferLine.translateToString(true)
+    if (bufferLine.isWrapped && lines.length > 0) {
+      lines[lines.length - 1] += text
+    } else {
+      lines.push(text)
+    }
+  }
+  return lines.join('\n').trim()
 }
 
 function cloneCommandSession(session: TerminalCommandSession | null): TerminalCommandSession | null {
@@ -267,7 +293,7 @@ function cloneCommandSession(session: TerminalCommandSession | null): TerminalCo
   return { ...session }
 }
 
-export { filterCommandDisplayChunk } from "@/renderer/services/terminalCommandProtocol";
+export { parseShellIntegrationPayload, SHELL_INTEGRATION_OSC_ID } from "@/renderer/services/terminalShellIntegration";
 
 class TerminalManagerClass {
   private static readonly MAX_IDLE_AGENT_TERMINALS = 2
@@ -291,7 +317,10 @@ class TerminalManagerClass {
   private currentCommandSessions = new Map<string, TerminalCommandSession>();
   private lastCommandSessions = new Map<string, TerminalCommandSession>();
   private activeExecutions = new Map<string, ActiveCommandExecution>();
-  private commandDisplayFilters = new Map<string, CommandDisplayFilterState>();
+  private shellIntegrationListeners = new Set<ShellIntegrationListener>();
+  private shellIntegrationDisposables = new Map<string, IDisposable>();
+  private shellIntegrationFallbacks = new Map<string, IDisposable>();
+  private shellIntegrationRawParsers = new Map<string, ReturnType<typeof createShellIntegrationOscParser>>();
 
   // PTY 状态
   private ptyReady = new Map<string, boolean>();
@@ -338,28 +367,112 @@ class TerminalManagerClass {
     this.setupIpcListeners();
   }
 
+  private emitShellIntegration(id: string, payload: string): boolean {
+    const parsed = parseShellIntegrationPayload(payload)
+    if (!parsed) return false
+
+    const instance = this.xtermInstances.get(id)
+    if (instance && parsed.phase === 'prompt') instance.shellIntegrationReady = true
+    this.shellIntegrationListeners.forEach(listener => listener({
+      ...parsed,
+      terminalId: id,
+      seq: Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`),
+    }))
+    return true
+  }
+
+  private registerShellIntegrationHandler(id: string, terminal: XTerminal): void {
+    const emit = (payload: string): boolean => this.emitShellIntegration(id, payload)
+
+    // Some long-lived installations can still have an older bundled xterm in
+    // Vite's dependency cache while the rest of the renderer has reloaded.
+    // Shell integration is important, but it must never take the terminal UI
+    // down. Prefer the modern xterm parser and fall back to OSC parsing on
+    // writeParsed when that API is unavailable.
+    if (typeof terminal.registerOscHandler === 'function') {
+      try {
+        const disposable = terminal.registerOscHandler(SHELL_INTEGRATION_OSC_ID, emit)
+        this.shellIntegrationDisposables.set(id, disposable)
+        return
+      } catch (error) {
+        logger.system.warn(`[TerminalManager] Failed to register xterm OSC handler for ${id}:`, error)
+      }
+    }
+
+    const onWriteParsed = (terminal as {
+      onWriteParsed?: (listener: (data: string) => void) => IDisposable
+    }).onWriteParsed
+    if (typeof onWriteParsed !== 'function') {
+      logger.system.warn(
+        `[TerminalManager] Shell integration is unavailable for ${id}: xterm lacks an OSC parser API`,
+      )
+      return
+    }
+
+    const parser = createShellIntegrationOscParser()
+    const disposable = onWriteParsed.call(terminal, data => {
+      for (const payload of parser.push(data)) emit(payload)
+    })
+    this.shellIntegrationFallbacks.set(id, disposable)
+  }
+
+  private disposeShellIntegrationHandler(id: string): void {
+    this.shellIntegrationDisposables.get(id)?.dispose()
+    this.shellIntegrationDisposables.delete(id)
+    this.shellIntegrationFallbacks.get(id)?.dispose()
+    this.shellIntegrationFallbacks.delete(id)
+  }
+
+  private hasShellIntegrationHandler(id: string): boolean {
+    return this.shellIntegrationDisposables.has(id) || this.shellIntegrationFallbacks.has(id)
+  }
+
   private setupIpcListeners() {
-    const onData = api.terminal.onData(
-      (event: TerminalDataEvent) => {
-        const { id, data } = event;
-        const displayFilter = this.commandDisplayFilters.get(id)
-        const displayData = displayFilter
-          ? filterCommandDisplayChunk(displayFilter, data)
-          : data
-        const xterm = this.xtermInstances.get(id);
-        if (xterm?.terminal && displayData) {
-          xterm.terminal.write(displayData);
-        }
+      const onData = api.terminal.onData(
+        (event: TerminalDataEvent) => {
+      const { id, data } = event;
+          // Parse lifecycle OSC directly from the renderer's terminal stream.
+          // xterm normally parses OSC 633 as well, but the raw path makes ready
+          // state independent of the installed xterm version and UI mounting.
+          const lifecyclePayloads = data ? (() => {
+            let parser = this.shellIntegrationRawParsers.get(id)
+            if (!parser) {
+              parser = createShellIntegrationOscParser()
+              this.shellIntegrationRawParsers.set(id, parser)
+            }
+            return parser.push(data)
+          })() : []
+
+          const xterm = this.xtermInstances.get(id) ?? this.ensureXtermInstance(id);
+          const consumeLifecyclePayloads = () => {
+            for (const payload of lifecyclePayloads) {
+              this.emitShellIntegration(id, payload)
+            }
+          }
+          if (xterm?.terminal && data) {
+            // The PTY frequently delivers short command output and its D/A
+            // markers in one chunk. Let xterm consume that chunk first, then
+            // emit lifecycle events so markers point at the real output.
+            try {
+              xterm.terminal.write(data)
+            } catch {
+              // Command framing comes from the raw stream, so continue even
+              // if a detached xterm instance rejects one display chunk.
+            }
+            consumeLifecyclePayloads()
+          } else {
+            consumeLifecyclePayloads()
+          }
 
         // UI 展示缓冲（ring buffer）
-        if (displayData) {
-          this.appendToBuffer(id, displayData);
+        if (data) {
+          this.appendToBuffer(id, data);
         }
 
         // 命令级缓冲由 active command session 单独维护
         this.rawDataListeners.forEach(listener => listener(event));
-        if (displayData) {
-          this.dataListeners.forEach(listener => listener(id, displayData));
+        if (data) {
+          this.dataListeners.forEach(listener => listener(id, data));
         }
       },
     );
@@ -402,6 +515,7 @@ class TerminalManagerClass {
 
         // 清理 PTY 状态
         this.ptyReady.delete(id);
+        this.shellIntegrationRawParsers.delete(id);
       },
     );
 
@@ -533,6 +647,11 @@ class TerminalManagerClass {
     return () => this.rawDataListeners.delete(listener)
   }
 
+  private onShellIntegration(listener: ShellIntegrationListener): () => void {
+    this.shellIntegrationListeners.add(listener)
+    return () => this.shellIntegrationListeners.delete(listener)
+  }
+
   private notify() {
     const state = this.getState();
     this.stateListeners.forEach((listener) => listener(state));
@@ -624,6 +743,11 @@ class TerminalManagerClass {
     this.state.activeId = id;
     this.notify();
 
+    // xterm owns OSC parsing and output markers. Construct it before starting
+    // the PTY so integration events emitted during shell startup are never
+    // lost, including Agent terminals whose tab is mounted lazily.
+    this.createXtermInstance(id)
+
     // 创建 PTY
     const ptyPromise = this.createPty(id, options.cwd, options.shell, backend, options.remote, options.isAgent);
     this.pendingPtyCreation.set(id, ptyPromise);
@@ -696,28 +820,161 @@ class TerminalManagerClass {
     }
   }
 
+  private attachWebglAddon(id: string, instance: XTermInstance): void {
+    if (instance.webglAddon) return
+    try {
+      const webglAddon = new WebglAddon();
+      instance.terminal.loadAddon(webglAddon);
+      instance.webglAddon = webglAddon;
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+        if (this.xtermInstances.get(id) === instance) {
+          instance.webglAddon = undefined;
+        }
+      });
+    } catch { }
+  }
+
+  private createXtermInstance(id: string): XTermInstance {
+    const termConfig = getEditorConfig().terminal;
+    const terminal = new XTerminal({
+      cursorBlink: termConfig.cursorBlink,
+      fontFamily: termConfig.fontFamily,
+      fontSize: termConfig.fontSize,
+      lineHeight: termConfig.lineHeight,
+      scrollback: termConfig.scrollback,
+      allowProposedApi: true,
+      drawBoldTextInBrightColors: true,
+      minimumContrastRatio: 4.5,
+      theme: this.currentTheme,
+    });
+
+    const fitAddon = new FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.loadAddon(new WebLinksAddon());
+    this.registerShellIntegrationHandler(id, terminal);
+
+    // 处理终端输入
+    terminal.onData((data) => {
+      api.terminal.write(id, data);
+    });
+
+    const mod = (e: KeyboardEvent) => isMac ? e.metaKey : e.ctrlKey;
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      // Cmd/Ctrl+C 复制（有选中内容时）
+      if (mod(event) && event.key === "c" && event.type === "keydown") {
+        const selection = terminal.getSelection();
+        if (selection) {
+          void writeClipboardText(selection);
+          return false;
+        }
+        // macOS 上 Cmd+C 没有选中内容时不发送中断信号
+        // 但 Ctrl+C（非 Cmd）应该发送中断信号
+        if (isMac && event.metaKey) return false;
+        return true;
+      }
+
+      if (event.type !== "keydown") return true;
+
+      // Cmd/Ctrl+V for paste
+      if (mod(event) && !event.shiftKey && event.key === "v") {
+        event.preventDefault();
+        readClipboardText()
+          .then((text) => {
+            if (text) {
+              api.terminal.write(id, text);
+            }
+          })
+          .catch(() => { });
+        return false;
+      }
+
+      // Ctrl+Shift+C 复制（备用，非 macOS）
+      if (
+        event.ctrlKey &&
+        event.shiftKey &&
+        event.key === "C" &&
+        event.type === "keydown"
+      ) {
+        const selection = terminal.getSelection();
+        if (selection) {
+          void writeClipboardText(selection);
+        }
+        return false;
+      }
+
+      // Ctrl+Shift+V 粘贴（备用，非 macOS）
+      if (
+        event.ctrlKey &&
+        event.shiftKey &&
+        event.key === "V" &&
+        event.type === "keydown"
+      ) {
+        readClipboardText()
+          .then((text) => {
+            if (text) {
+              api.terminal.write(id, text);
+            }
+          })
+          .catch(() => { });
+        return false;
+      }
+
+      return true; // 其他按键正常行为
+    });
+
+    const instance: XTermInstance = {
+      terminal,
+      fitAddon,
+      container: null,
+      shellIntegrationReady: false,
+    };
+    this.xtermInstances.set(id, instance);
+    return instance;
+  }
+
+  private replayOutputBuffer(id: string, terminal: XTerminal): void {
+    const existingBuffer = this.outputBuffers.get(id);
+    if (!existingBuffer || existingBuffer.length === 0) return;
+    for (const chunk of existingBuffer.toArray()) {
+      terminal.write(chunk);
+    }
+  }
+
+  /**
+   * Ensure a logical terminal has an xterm parser even while its UI is not
+   * mounted. Agent execution must not depend on React panel lifetime; the PTY
+   * and its output buffer can outlive the currently visible terminal view.
+   */
+  private ensureXtermInstance(id: string): XTermInstance | null {
+    const existing = this.xtermInstances.get(id)
+    if (existing) return existing
+    if (!this.hasTerminal(id)) return null
+
+    const instance = this.createXtermInstance(id)
+    this.replayOutputBuffer(id, instance.terminal)
+    return instance
+  }
+
   mountTerminal(id: string, container: HTMLDivElement): boolean {
     if (this.xtermInstances.has(id)) {
       const existing = this.xtermInstances.get(id)!;
-      if (existing.container !== container) {
-        existing.container = container;
-        if (!container.isConnected) {
-          return true;
-        }
+      existing.container = container;
+
+      // A non-null element means xterm was opened before and can only be
+      // opened once. Move that DOM node into its new parent so an Agent
+      // terminal can be remounted while a command is still running.
+      if (!existing.terminal.element) {
         existing.terminal.open(container);
-        try {
-          // 如果之前被卸载了 WebGL，则重新挂载
-          if (!existing.webglAddon) {
-            const webglAddon = new WebglAddon();
-            existing.terminal.loadAddon(webglAddon);
-            existing.webglAddon = webglAddon;
-            webglAddon.onContextLoss(() => {
-              webglAddon.dispose();
-              existing.webglAddon = undefined;
-            });
-          }
-          this.resizeTerminalIfReady(id, existing);
-        } catch { }
+        this.replayOutputBuffer(id, existing.terminal);
+      } else if (existing.terminal.element.parentElement !== container) {
+        container.appendChild(existing.terminal.element);
+      }
+
+      if (container.isConnected) {
+        this.attachWebglAddon(id, existing);
+        this.resizeTerminalIfReady(id, existing);
       }
       return true;
     }
@@ -738,6 +995,7 @@ class TerminalManagerClass {
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new WebLinksAddon());
+    this.registerShellIntegrationHandler(id, terminal);
     terminal.open(container);
 
     let webglAddon: WebglAddon | undefined;
@@ -823,15 +1081,16 @@ class TerminalManagerClass {
       return true; // 其他按键正常处理
     });
 
-    this.xtermInstances.set(id, { terminal, fitAddon, webglAddon, container });
+    this.xtermInstances.set(id, {
+      terminal,
+      fitAddon,
+      webglAddon,
+      container,
+      shellIntegrationReady: false,
+    });
 
     // 回放已有 buffer —— 解决 xterm 挂载前 PTY 已产生输出导致终端显示为空的问题
-    const existingBuffer = this.outputBuffers.get(id);
-    if (existingBuffer && existingBuffer.length > 0) {
-      for (const chunk of existingBuffer.toArray()) {
-        terminal.write(chunk);
-      }
-    }
+    this.replayOutputBuffer(id, terminal);
 
     this.resizeTerminalIfReady(id, this.xtermInstances.get(id));
 
@@ -845,16 +1104,24 @@ class TerminalManagerClass {
   unmountTerminal(id: string) {
     const existing = this.xtermInstances.get(id);
     if (!existing) return;
+    existing.container = null;
 
     if (existing.webglAddon) {
       try { existing.webglAddon.dispose(); } catch { }
       existing.webglAddon = undefined;
     }
 
+    // Keep the xterm parser alive for an executing Agent command. Otherwise
+    // closing/reopening the panel would lose OSC 633 markers even though the
+    // PTY is still alive. Idle terminals are recreated from outputBuffer on
+    // their next execution or data event.
+    if (this.activeExecutions.has(id)) return
+
     try { existing.terminal.dispose(); } catch { }
 
     // 从 map 中移除，确保下次 mountTerminal 走"新建实例 + buffer replay"分支
     // 而不是尝试在已销毁的 terminal 上调用 open()（会静默失败导致空白）
+    this.disposeShellIntegrationHandler(id)
     this.xtermInstances.delete(id);
   }
 
@@ -884,6 +1151,7 @@ class TerminalManagerClass {
     const xterm = this.xtermInstances.get(id);
     if (xterm) {
       xterm.container = null;
+      this.disposeShellIntegrationHandler(id)
       xterm.terminal.dispose();
       this.xtermInstances.delete(id);
     }
@@ -892,6 +1160,7 @@ class TerminalManagerClass {
 
     this.outputBuffers.delete(id);
     this.ptyReady.delete(id);
+    this.shellIntegrationRawParsers.delete(id);
     this.terminalCreateErrors.delete(id);
     this.clearCommandState(id)
     api.terminal.kill(id);
@@ -929,38 +1198,17 @@ class TerminalManagerClass {
     api.terminal.write(id, data);
   }
 
-  /** Start a long-running Agent command while hiding cwd/marker plumbing. */
+  /** Start a long-running Agent command in the existing interactive shell. */
   executeDetachedCommand(termId: string, command: string, cwd?: string): void {
     const terminal = this.state.terminals.find((item) => item.id === termId)
     const shellFamily = terminal?.remote ? 'posix' : detectTerminalShellFamily(terminal?.shell)
-    if (shellFamily === 'cmd') {
-      this.writeToTerminal(termId, `${command}\r`)
-      return
-    }
-
     const isPowerShell = shellFamily === 'powershell'
-    const sentinelId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    const payload = `ADNIFY_DETACHED_START_${sentinelId}`
-    const startSequence = `\x1b]9001;${payload}\x07`
-    const sentinel = isPowerShell
-      ? `[Console]::Out.Write("$([char]27)]9001;${payload}$([char]7)")`
-      : `printf '\\033]9001;${payload}\\007'`
     const runnable = cwd
       ? (isPowerShell
-        ? `Push-Location "${cwd}"; ${command}`
-        : `cd "${cwd}" && ${command}`)
+        ? `Push-Location '${escapePowerShellSingleQuoted(cwd)}'; ${command}`
+        : `cd '${escapePosixSingleQuoted(cwd)}' && ${command}`)
       : command
-    const displayPath = cwd ?? (isPowerShell ? '$(Get-Location)' : '$(pwd)')
-
-    this.commandDisplayFilters.set(termId, {
-      startSequence,
-      displayLine: isPowerShell
-        ? `PS ${displayPath}> ${command}`
-        : `${displayPath.replace(/\\/g, '/')}\$ ${command}`,
-      pending: '',
-      started: false,
-    })
-    this.writeToTerminal(termId, `${sentinel}; ${runnable}\r`)
+    this.writeToTerminal(termId, isPowerShell ? `${runnable}\r` : `${runnable}\n`)
   }
 
   getOutputBuffer(id: string): string[] {
@@ -1045,6 +1293,43 @@ class TerminalManagerClass {
   }
 
   /**
+   * Reclaim terminal capacity before asking the main process for another
+   * Agent PTY. Creating first and cleaning up afterwards can transiently hit
+   * the main-process ceiling and surface "Maximum number of terminals".
+   */
+  private reclaimAgentTerminalCapacity(): boolean {
+    const maxTerminals = 10
+    if (this.state.terminals.length < maxTerminals) return true
+
+    const reservedAgentTerminalIds = new Set([
+      this.agentTerminalId,
+      ...this.agentRemoteTerminalIds.values(),
+    ].filter((id): id is string => Boolean(id)))
+
+    const reclaimable = this.state.terminals
+      .filter(terminal => terminal.isAgent)
+      .filter(terminal => !reservedAgentTerminalIds.has(terminal.id))
+      .filter(terminal => !this.activeExecutions.has(terminal.id))
+      .filter(terminal => {
+        const commandInfo = this.getTerminalCommandState(terminal.id)
+        const currentStatus = commandInfo.current?.status
+        const lastStatus = commandInfo.last?.status
+        return currentStatus !== 'queued'
+          && currentStatus !== 'running'
+          && currentStatus !== 'detached'
+          && lastStatus !== 'detached'
+      })
+      .sort((a, b) => a.createdAt - b.createdAt)
+
+    while (this.state.terminals.length >= maxTerminals) {
+      const terminal = reclaimable.shift()
+      if (!terminal || !this.hasTerminal(terminal.id)) return false
+      this.closeTerminal(terminal.id)
+    }
+    return true
+  }
+
+  /**
    * 获取或创建 Agent 专属终端。
    * Agent 终端跨 tool call 复用，避免每次 run_command 产生孤立 tab。
    */
@@ -1068,6 +1353,10 @@ class TerminalManagerClass {
       if (pendingCreation) {
         const terminalId = await pendingCreation
         return { terminalId, reused: false }
+      }
+
+      if (!this.reclaimAgentTerminalCapacity()) {
+        throw new Error('Terminal capacity is exhausted. Stop unused background terminals or close an idle terminal, then retry.')
       }
 
       const creating = this.createTerminal({
@@ -1121,6 +1410,34 @@ class TerminalManagerClass {
       return { terminalId, reused: false }
     }
 
+    if (!this.reclaimAgentTerminalCapacity()) {
+      throw new Error('Terminal capacity is exhausted. Stop unused background terminals or close an idle terminal, then retry.')
+    }
+
+    const staleAgentTerminals = [...this.state.terminals].filter(terminal => {
+      if (!terminal.isAgent) return false
+      const commandInfo = this.getTerminalCommandState(terminal.id)
+      return commandInfo.current?.terminationReason === 'shell_integration_missing' ||
+        commandInfo.last?.terminationReason === 'shell_integration_missing'
+    })
+    const closeStaleAgentTerminals = (createdTerminalId: string) => {
+      for (const terminal of staleAgentTerminals) {
+        if (!this.hasTerminal(terminal.id)) continue
+        if (this.xtermInstances.get(terminal.id)?.shellIntegrationReady) continue
+        this.closeTerminal(terminal.id)
+      }
+
+      if (this.state.terminals.length >= 10) {
+        const closableAgent = this.state.terminals.find(item =>
+          item.isAgent &&
+          item.id !== createdTerminalId &&
+          !this.activeExecutions.has(item.id) &&
+          this.getTerminalCommandState(item.id).current?.status !== 'running'
+        )
+        if (closableAgent) this.closeTerminal(closableAgent.id)
+      }
+    }
+
     this.agentTerminalCreating = this.createTerminal({
       name: options?.name || this.getNextAgentTerminalName(),
       cwd,
@@ -1136,6 +1453,7 @@ class TerminalManagerClass {
         throw new Error(error)
       }
       this.agentTerminalId = id
+      closeStaleAgentTerminals(id)
       this.cleanupIdleAgentTerminals()
       this.agentTerminalCreating = null
       return id
@@ -1246,16 +1564,61 @@ class TerminalManagerClass {
    * @param cwd 可选工作目录。若提供，用 Push-Location/popd（PS）或子 shell（Unix）临时切换目录。
    */
   executeCommandWithOutput(termId: string, command: string, timeoutMs: number, cwd?: string): Promise<CommandResult> {
-    const sentinelId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-    // OSC 序列格式：ESC ] 9001 ; <payload> BEL
-    // xterm.js 在序列解析阶段静默消耗未注册的 OSC 编号，完全不渲染任何文本。
-    // 这与 VS Code Shell Integration（OSC 133）采用相同机制。
-    const OSC = '\x1b]9001;'
-    const BEL = '\x07'
-    const START_PAYLOAD = `ADNIFY_CMD_START_${sentinelId}`
-    const END_PAYLOAD_PREFIX = `ADNIFY_CMD_END_${sentinelId}_`
     const commandSessionId = crypto.randomUUID()
     const startedAt = Date.now()
+    const terminal = this.state.terminals.find(item => item.id === termId)
+    const shellFamily = terminal?.remote ? 'posix' : detectTerminalShellFamily(terminal?.shell)
+    const isCmd = shellFamily === 'cmd'
+    const initialXterm = this.ensureXtermInstance(termId)
+
+    if (isCmd) {
+      return Promise.resolve({
+        success: false,
+        finalStatus: 'failed',
+        output: 'Shell integration is not available in cmd.exe. Use PowerShell or a POSIX shell.',
+        partialOutput: 'Shell integration is not available in cmd.exe. Use PowerShell or a POSIX shell.',
+        exitCode: null,
+        timedOut: false,
+        durationMs: 0,
+        terminalId: termId,
+        commandSessionId,
+        terminationReason: 'shell_integration_missing',
+        sentinelMatched: false,
+      })
+    }
+
+    if (!terminal || !initialXterm) {
+      return Promise.resolve({
+        success: false,
+        finalStatus: 'failed',
+        output: 'Terminal is no longer available.',
+        partialOutput: 'Terminal is no longer available.',
+        exitCode: null,
+        timedOut: false,
+        durationMs: 0,
+        terminalId: termId,
+        commandSessionId,
+        terminationReason: 'shell_integration_missing',
+        sentinelMatched: false,
+      })
+    }
+
+    if (!initialXterm.shellIntegrationReady && !this.hasShellIntegrationHandler(termId)) {
+      return Promise.resolve({
+        success: false,
+        finalStatus: 'failed',
+        output: 'Terminal shell integration is unavailable. Create a new terminal and try again.',
+        partialOutput: 'Terminal shell integration is unavailable. Create a new terminal and try again.',
+        exitCode: null,
+        timedOut: false,
+        durationMs: 0,
+        terminalId: termId,
+        commandSessionId,
+        terminationReason: 'shell_integration_missing',
+        sentinelMatched: false,
+      })
+    }
+
     const initialSession: TerminalCommandSession = {
       commandSessionId,
       terminalId: termId,
@@ -1275,19 +1638,25 @@ class TerminalManagerClass {
     this.setCurrentCommandSession(termId, initialSession)
 
     return new Promise<CommandResult>((resolve) => {
-      let rawAccumulator = ''   // 原始 PTY 尾部，用于提示符兜底检测
-      let textAccumulator = ''  // 只累加 START/END 帧之间的命令输出
-      const stripper = createAnsiStripper()
-      const frame = createTerminalCommandFrameState(sentinelId)
+      const getXterm = () => this.xtermInstances.get(termId)
+      let startMarker: IMarker | null = null
       let settled = false
       let sentinelMatched = false
-      let idleTimer: ReturnType<typeof setTimeout> | null = null
+      let commandSubmitted = false
 
       const getVisibleOutput = () => {
-        const output = textAccumulator
-        // CR 覆写在这里才折叠：累加阶段必须保留 \r，否则进度条的最后一帧
-        // 无法与之前的帧区分。
-        return renderTerminalText(output).trim()
+        const xterm = getXterm()
+        if (!xterm) return ''
+        if (!startMarker) return ''
+        const endMarker = xterm.terminal.registerMarker()
+        try {
+          return trimRetainedText(
+            extractTerminalOutput(xterm.terminal, startMarker, endMarker),
+            MAX_COMMAND_OUTPUT_CHARS,
+          )
+        } finally {
+          endMarker.dispose()
+        }
       }
 
       const updatePartialOutput = (partialOutput: string, captureStartSeq?: number) => {
@@ -1299,29 +1668,23 @@ class TerminalManagerClass {
         }))
       }
 
-      const clearIdleTimer = () => {
-        if (idleTimer) {
-          clearTimeout(idleTimer)
-          idleTimer = null
-        }
-      }
-
       const settle = (
         reason: TerminalCommandTerminationReason,
         override?: Partial<Pick<CommandResult, 'finalStatus' | 'exitCode' | 'signal' | 'timedOut' | 'output' | 'partialOutput' | 'sentinelMatched'>>,
       ) => {
         if (settled) return
         settled = true
-        unsubRaw()
+        unsubShellIntegration()
         clearTimeout(timer)
-        clearIdleTimer()
+        clearTimeout(handshakeTimer)
         this.activeExecutions.delete(termId)
-        this.commandDisplayFilters.delete(termId)
 
         const partialOutput = trimRetainedText(
           override?.partialOutput ?? getVisibleOutput(),
           MAX_COMMAND_OUTPUT_CHARS,
         )
+        startMarker?.dispose()
+        startMarker = null
         const output = trimRetainedText(
           override?.output ?? partialOutput,
           MAX_COMMAND_OUTPUT_CHARS,
@@ -1362,23 +1725,6 @@ class TerminalManagerClass {
         resolve(result)
       }
 
-      const scheduleIdleFallback = () => {
-        clearIdleTimer()
-        if (!frame.startSeen || sentinelMatched) return
-        idleTimer = setTimeout(() => {
-          if (settled) return
-          const tail = rawAccumulator.slice(-400)
-          if (looksLikeShellPrompt(tail)) {
-            settle('sentinel_missing_prompt', {
-              finalStatus: 'interrupted',
-              output: getVisibleOutput(),
-              partialOutput: getVisibleOutput(),
-              sentinelMatched: false,
-            })
-          }
-        }, 1200)
-      }
-
       const timer = setTimeout(() => {
         settle('timeout', {
           finalStatus: 'timed_out',
@@ -1388,18 +1734,25 @@ class TerminalManagerClass {
         })
       }, timeoutMs)
 
-      const unsubRaw = this.onRawData((event) => {
-        if (event.id !== termId || settled) return
-        rawAccumulator = trimRetainedText(rawAccumulator + event.data, MAX_RAW_SENTINEL_BUFFER_CHARS)
-        const framed = pushTerminalCommandFrame(frame, event.data)
-        if (framed.output) {
-          textAccumulator = trimRetainedText(
-            textAccumulator + stripper.push(framed.output),
-            MAX_COMMAND_OUTPUT_CHARS,
-          )
+      const handshakeTimer = setTimeout(() => {
+        const xterm = getXterm()
+        if (!xterm?.shellIntegrationReady) {
+          settle('shell_integration_missing', {
+            finalStatus: 'failed',
+            output: 'Terminal shell integration did not become ready. Reopen the terminal and try again.',
+            partialOutput: 'Terminal shell integration did not become ready. Reopen the terminal and try again.',
+          })
         }
+      }, Math.min(5000, Math.max(0, timeoutMs - 1)))
 
+      const unsubShellIntegration = this.onShellIntegration((event) => {
+        if (event.terminalId !== termId || settled) return
+        const framed = { started: event.phase === 'command-start', ended: event.phase === 'command-end', exitCode: event.exitCode ?? null }
         if (framed.started) {
+          const xterm = getXterm()
+          if (!xterm) return
+          startMarker?.dispose()
+          startMarker = xterm.terminal.registerMarker()
           this.updateCurrentCommandSession(termId, (session) => ({
             ...session,
             status: 'running',
@@ -1407,10 +1760,13 @@ class TerminalManagerClass {
           }))
         }
 
-        const visibleOutput = trimRetainedText(getVisibleOutput(), MAX_COMMAND_OUTPUT_CHARS)
-        updatePartialOutput(visibleOutput)
-
         if (framed.ended) {
+          const xterm = getXterm()
+          if (!xterm) return
+          const endMarker = xterm.terminal.registerMarker()
+          const capturedOutput = startMarker
+            ? trimRetainedText(extractTerminalOutput(xterm.terminal, startMarker, endMarker), MAX_COMMAND_OUTPUT_CHARS)
+            : ''
           sentinelMatched = true
           const exitCode = framed.exitCode ?? 0
           this.updateCurrentCommandSession(termId, (session) => ({
@@ -1421,14 +1777,31 @@ class TerminalManagerClass {
           settle('sentinel_matched', {
             finalStatus: exitCode === 0 ? 'completed' : 'failed',
             exitCode,
-            output: visibleOutput,
-            partialOutput: visibleOutput,
+            output: capturedOutput,
+            partialOutput: capturedOutput,
             sentinelMatched: true,
+          })
+          endMarker.dispose()
+          return
+        }
+
+        if (event.phase === 'prompt' && commandSubmitted) {
+          // A prompt after submission means the shell is interactive and
+          // usable again even if a command replaced our hooks before C/D could
+          // be emitted. Finish promptly with an unknown exit code; never
+          // invent a successful result.
+          settle('sentinel_missing_prompt', {
+            finalStatus: 'failed',
+            exitCode: null,
+            partialOutput: getVisibleOutput(),
+            output: getVisibleOutput(),
           })
           return
         }
 
-        scheduleIdleFallback()
+        if (event.phase === 'command-line' || event.phase === 'prompt') {
+          updatePartialOutput(getVisibleOutput())
+        }
       })
 
       this.activeExecutions.set(termId, {
@@ -1436,81 +1809,44 @@ class TerminalManagerClass {
         finalize: settle,
       })
 
-      // 必须先订阅，再写命令（避免竞态）
-      const terminal = this.state.terminals.find((item) => item.id === termId)
-      const shellFamily = terminal?.remote ? 'posix' : detectTerminalShellFamily(terminal?.shell)
-      const usesPosixSyntax = shellFamily === 'posix'
-      const isPowerShell = !usesPosixSyntax
-
-      // PowerShell 5.x 不支持 && 运算符；cmd.exe 的 cd /d 在 PS 里无效（/d 被当位置参数）
-      const sanitizedCommand = isPowerShell
-        ? command
-          .replace(/\s*&&\s*/g, '; ')
-          .replace(/\bcd\s+\/[dD]\s+(['"]?)([^;|&\n'"]+)\1/g, 'Push-Location "$2"')
+      const shellFamilyForCommand = terminal.remote ? 'posix' : detectTerminalShellFamily(terminal.shell)
+      const isPowerShellForCommand = shellFamilyForCommand === 'powershell'
+      const runnable = cwd
+        ? (isPowerShellForCommand
+          ? `Push-Location '${escapePowerShellSingleQuoted(cwd)}'; ${command}; Pop-Location`
+          : `cd '${escapePosixSingleQuoted(cwd)}' && ${command}`)
         : command
+      const input = isPowerShellForCommand ? `${runnable}\r` : `${runnable}\n`
 
-      // cwd 由下方 mainCommand 按 shell 分别处理（需保证退出码不被覆盖）
+      const submitWhenReady = () => {
+        if (settled) return
+        const currentXterm = getXterm()
+        if (!currentXterm) {
+          settle('terminal_error', {
+            finalStatus: 'failed',
+            output: 'Terminal is no longer available.',
+            partialOutput: 'Terminal is no longer available.',
+          })
+          return
+        }
+        if (!currentXterm.shellIntegrationReady) {
+          setTimeout(submitWhenReady, 50)
+          return
+        }
 
-      // OSC sentinel 命令（Windows/Unix/macOS 三平台）
-      const sentinelStart = isPowerShell
-        ? `[Console]::Out.Write("$([char]27)]9001;${START_PAYLOAD}$([char]7)")`
-        : `printf '\\033]9001;${START_PAYLOAD}\\007'`
+        clearTimeout(handshakeTimer)
+        // Submit exactly what the user asked for. The shell integration script
+        // emits OSC 633 command boundaries and the real process exit code, so no
+        // per-command wrapper can corrupt stdin, stdout, or shell state.
+        this.updateCurrentCommandSession(termId, (session) => ({
+          ...session,
+          status: 'running',
+        }))
+        commandSubmitted = true
+        this.writeToTerminal(termId, input)
+      }
 
-      // 退出码求值必须在紧跟命令的那一步完成，且不能被后续语句覆盖。
-      //
-      // PowerShell 有两个独立的状态：
-      //   $LASTEXITCODE —— 只有原生 exe 会设置；纯 cmdlet 执行后是 $null，
-      //                    或者更糟：上一条原生命令残留的旧值。
-      //   $?            —— 布尔值，cmdlet 和原生命令都会设置，但只反映
-      //                    「上一条语句」，任何后续语句都会覆盖它。
-      // 只读 $LASTEXITCODE 会让 `Test-Path` / `Set-Content` 这类纯 cmdlet
-      // 渲染出空 payload（sentinel 变成 `..._END_xxx_` + BEL），renderer 侧
-      // 的 /^(\d+)\x07/ 匹配失败 → sentinelMatched 永远 false → 命令掉进
-      // idle fallback 并被报成 interrupted/失败。
-      //
-      // 因此必须在命令结束的「下一条语句」里同时抓取两个值，之后再做判断：
-      // 原生命令用真实退出码，cmdlet 成功记 0、失败记 1。
-      const PS_CAPTURE = '$__adnify_ok = $?; $__adnify_lec = $LASTEXITCODE'
-      const PS_RESOLVE = '$__adnify_ec = if ($__adnify_ok) { if ($null -ne $__adnify_lec) { $__adnify_lec } else { 0 } } else { if ($__adnify_lec) { $__adnify_lec } else { 1 } }'
-      const psEmitEnd = `[Console]::Out.Write("$([char]27)]9001;${END_PAYLOAD_PREFIX}$__adnify_ec$([char]7)")`
-      const sentinelEnd = isPowerShell
-        ? `${PS_RESOLVE}; ${psEmitEnd}`
-        : `printf '\\033]9001;${END_PAYLOAD_PREFIX}%s\\007' "$__adnify_ec"`
-
-      // cwd 处理不能包在命令外层：Pop-Location / 子 shell 退出会覆盖
-      // $? 和 $LASTEXITCODE，导致带 cwd 的命令退出码必然失真。
-      // 顺序固定为「切目录 → 执行 → 立刻捕获状态 → 还原目录 → 输出 sentinel」。
-      // 注：sentinelStart 不在这里——它由 wrapped 在主命令前单独发出。
-      const mainCommand = isPowerShell
-        ? (cwd
-          ? `Push-Location "${cwd}"; & { ${sanitizedCommand} } | Out-Host; ${PS_CAPTURE}; Pop-Location; ${sentinelEnd}`
-          : `& { ${sanitizedCommand} } | Out-Host; ${PS_CAPTURE}; ${sentinelEnd}`)
-        : (cwd
-          ? `( cd "${cwd}" && ${sanitizedCommand} ); __adnify_ec=$?; ${sentinelEnd}`
-          : `${sanitizedCommand}; __adnify_ec=$?; ${sentinelEnd}`)
-
-      // Renderer 展示一条干净的提示符和原始命令，不展示内部包装器。
-      const displayPath = cwd ?? (isPowerShell ? '$(Get-Location)' : '$(pwd)')
-      const displayLine = isPowerShell
-        ? `PS ${displayPath}> ${command}`
-        : `${displayPath.replace(/\\/g, '/')}\$ ${command}`
-
-      // START 之前的 PTY 数据只可能是输入回显；捕获逻辑仍接收完整原始数据。
-      this.commandDisplayFilters.set(termId, {
-        startSequence: `${OSC}${START_PAYLOAD}${BEL}`,
-        displayLine,
-        pending: '',
-        started: false,
-        frame: createTerminalCommandFrameState(sentinelId),
-      })
-
-      const wrapped = `${sentinelStart}; ${mainCommand}\r`
-
-      this.updateCurrentCommandSession(termId, (session) => ({
-        ...session,
-        status: 'running',
-      }))
-      this.writeToTerminal(termId, wrapped)
+      submitWhenReady()
     })
   }
 
@@ -1537,7 +1873,7 @@ class TerminalManagerClass {
     this.currentCommandSessions.clear()
     this.lastCommandSessions.clear()
     this.activeExecutions.clear()
-    this.commandDisplayFilters.clear()
+    this.shellIntegrationRawParsers.clear()
     this.state = {
       terminals: [],
       activeId: null,

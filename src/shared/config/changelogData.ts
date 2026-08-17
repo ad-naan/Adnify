@@ -43,6 +43,150 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.57",
+    "rawVersion": "1.7.57",
+    "date": "2026-08-18",
+    "title": "原生终端 Shell 集成、Agent 工作流与安全加固",
+    "titleEn": "Native Shell Integration, Agent Workflows & Security Hardening",
+    "highlight": "引入 VS Code 兼容的 OSC 633 Shell 集成，修复多项 Agent 工作流与终端问题，并系统加固 URL、富文本内容处理和依赖安全",
+    "highlightEn": "Added VS Code-compatible OSC 633 shell integration, resolved multiple Agent workflow and terminal issues, and hardened URL, rich-content and dependency security",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "核心新特性 / Features",
+        "labelEn": "Features",
+        "items": [
+          {
+            "title": "跨 Shell 的原生命令集成",
+            "titleEn": "Native Integration Across Shells",
+            "details": [
+              "为 PowerShell、Windows PowerShell、bash 和 zsh 提供内置 Shell 集成，通过 VS Code 兼容的 OSC 633 序列识别命令边界",
+              "Agent 直接提交原始命令，不再注入 printf、Out-Write 等包装逻辑，避免污染 stdin、stdout 和 Shell 状态",
+              "自动切换命令指定的工作目录，同时保留用户真实的 Shell 配置与提示符"
+            ],
+            "detailsEn": [
+              "Built-in PowerShell, bash and zsh integration follows the VS Code-compatible OSC 633 command lifecycle",
+              "Agent commands are submitted natively without sentinel wrappers that could corrupt stdin, stdout or shell state",
+              "Commands run in their requested working directory while preserving user shell configuration and prompts"
+            ]
+          },
+          {
+            "title": "可靠的结果捕获与边界恢复",
+            "titleEn": "Reliable Result Capture and Recovery",
+            "details": [
+              "基于命令开始与结束标记提取输出，并捕获真实进程退出码，不再从包装文本猜测结果",
+              "完整解析跨 PTY 数据块拆分的 OSC 序列，兼容缺少 xterm OSC API 的渲染路径",
+              "命令结束标记缺失时通过提示符恢复收尾，保留部分输出且不虚构成功状态"
+            ],
+            "detailsEn": [
+              "Captures output between command boundaries and reports the real process exit code",
+              "Parses OSC sequences split across PTY chunks and supports renderers without a native xterm OSC API",
+              "Recovers from missing command-end markers at the next prompt without fabricating success"
+            ]
+          },
+          {
+            "title": "Agent 终端生命周期优化",
+            "titleEn": "Agent Terminal Lifecycle",
+            "details": [
+              "自动复用空闲 Agent 终端，并在接近终端数量上限时回收空闲实例，降低创建失败率",
+              "清理集成失败的陈旧 Agent 终端，避免无效会话持续占用资源",
+              "终端 UI 卸载后仍可继续跟踪已提交命令，任务输出不会因界面切换丢失"
+            ],
+            "detailsEn": [
+              "Reuses idle Agent terminals and reclaims capacity before hitting the terminal ceiling",
+              "Closes stale Agent terminals whose shell integration failed instead of leaking sessions",
+              "Keeps submitted commands observable after terminal UI unmount so output is not lost"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "优化与改进 / Improvements",
+        "labelEn": "Improvements",
+        "items": [
+          {
+            "title": "远程终端与多平台适配",
+            "titleEn": "Remote Terminal and Platform Support",
+            "details": [
+              "远程 SSH 终端可自动识别登录 Shell，并为 bash 与 zsh 注入集成脚本",
+              "远程 Shell 集成初始化失败时保持终端可用，自动进入安全回退模式",
+              "PowerShell 默认启用 UTF-8 输入输出，改善中英文混合命令输出"
+            ],
+            "detailsEn": [
+              "Remote SSH terminals detect the login shell and inject bash or zsh integration",
+              "Remote terminals remain usable in fallback mode if integration initialization fails",
+              "PowerShell defaults to UTF-8 input and output for better multilingual command results"
+            ]
+          },
+          {
+            "title": "发布与测试保障",
+            "titleEn": "Release and Test Coverage",
+            "details": [
+              "将 Shell 集成脚本纳入应用打包资源，确保安装版与开发环境行为一致",
+              "新增 OSC 解析、命令生命周期、终端卸载、容量回收和真实 Windows ConPTY 集成测试"
+            ],
+            "detailsEn": [
+              "Bundles shell integration scripts with the app so installed builds match development behavior",
+              "Added OSC parsing, command lifecycle, unmount, capacity reclaim and real Windows ConPTY coverage"
+            ]
+          },
+          {
+            "title": "Agent 交互与工作流修复",
+            "titleEn": "Agent Interaction and Workflow Fixes",
+            "details": [
+              "完善命令审批、交互式响应和 TODO 完成状态，减少工具执行卡住或误判完成的问题",
+              "优化工具重试、结果状态与消息展示，交互卡片可更可靠地回传用户选择",
+              "改进 Agent 后台任务与线程状态同步，修复多个工作流执行问题"
+            ],
+            "detailsEn": [
+              "Improved command approval, interactive responses and TODO completion handling to avoid stuck or premature tool runs",
+              "Refined tool retries, result states and message rendering for reliable user selections",
+              "Improved background task and thread-state synchronization across Agent workflows"
+            ]
+          },
+          {
+            "title": "工作区、Git 与 LSP 体验优化",
+            "titleEn": "Workspace, Git and LSP Polish",
+            "details": [
+              "文件树右键菜单可准确显示并切换 Git 排除状态，非仓库路径不再提供误导性操作",
+              "LSP 安装失败时保留 npm 的原始错误信息，便于定位环境问题",
+              "修复工作区下拉定位、文件树状态和会话目录初始化前的快照加载问题"
+            ],
+            "detailsEn": [
+              "The file-tree context menu now reflects Git exclude state and hides invalid operations outside repositories",
+              "LSP installation failures preserve original npm errors for easier environment diagnosis",
+              "Fixed workspace dropdown positioning, file-tree state and pre-initialization session snapshot loading"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "security",
+        "label": "安全加固 / Security",
+        "labelEn": "Security",
+        "items": [
+          {
+            "title": "URL 与富文本内容处理加固",
+            "titleEn": "URL and Rich Content Hardening",
+            "details": [
+              "使用标准 URL 解析校验 HTTP(S)，并基于主机名和路径精确识别 API 端点，防止子域或查询参数伪装",
+              "完善 HTML 与 XML 实体解码，优先移除 script、style 和注释内容，避免隐藏内容进入正文",
+              "收紧安全 HTML 检测和 GitHub Actions 默认权限，并更新 dompurify、sharp 等依赖安全覆盖"
+            ],
+            "detailsEn": [
+              "Validates HTTP(S) URLs with the URL parser and matches API endpoints by exact hostname and path to prevent spoofing",
+              "Improved HTML and XML entity decoding while removing script, style and comment content before text extraction",
+              "Tightened safe-HTML detection and GitHub Actions permissions while updating dompurify and sharp security overrides"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.56",
     "rawVersion": "1.7.56",
     "date": "2026-08-16",
@@ -50,8 +194,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "AI SDK 7, Cross-provider Caching & Agent Reliability",
     "highlight": "全面升级 AI SDK 与协议适配，增强推理、多模态和提示词缓存能力，并系统优化 Agent、终端、文件 I/O 与流式界面稳定性",
     "highlightEn": "Upgraded AI SDK integrations with stronger reasoning, multimodal routing and prompt caching, plus major Agent, terminal, file I/O and streaming UI reliability improvements",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "major",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const createMock = vi.fn()
 const writeMock = vi.fn()
@@ -6,6 +6,7 @@ const resizeMock = vi.fn()
 const killMock = vi.fn()
 const settingsGetMock = vi.fn()
 const settingsSetMock = vi.fn()
+let uuidCounter = 0
 let dataHandler: ((event: { id: string; data: string; seq: number; occurredAt: number }) => void) | null = null
 let exitHandler: ((event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) | null = null
 
@@ -16,17 +17,15 @@ vi.mock('@renderer/services/electronAPI', () => ({
       write: writeMock,
       resize: resizeMock,
       kill: killMock,
-      onData: vi.fn((handler) => {
+      onData: vi.fn(handler => {
         dataHandler = handler
         return () => { dataHandler = null }
       }),
-      onExit: vi.fn((handler) => {
+      onExit: vi.fn(handler => {
         exitHandler = handler
         return () => { exitHandler = null }
       }),
-      onError: vi.fn((_handler) => {
-        return () => {}
-      }),
+      onError: vi.fn(() => () => undefined),
     },
     settings: {
       get: settingsGetMock,
@@ -48,40 +47,74 @@ vi.mock('@renderer/settings', () => ({
   }),
 }))
 
-vi.mock('@xterm/xterm', () => ({
-  Terminal: class MockTerminal {
-    options: Record<string, unknown> = {}
-    write = vi.fn()
-    focus = vi.fn()
-    loadAddon = vi.fn()
-    open = vi.fn()
-    dispose = vi.fn()
-    onData = vi.fn()
-    attachCustomKeyEventHandler = vi.fn()
-    getSelection = vi.fn(() => '')
-    clear = vi.fn()
-  },
-}))
+class MockBufferLine {
+  constructor(readonly text: string, readonly isWrapped = false) {}
 
+  translateToString() {
+    return this.text
+  }
+}
+
+class MockTerminal {
+  element: HTMLElement | null = null
+  options: Record<string, unknown> = {}
+  lines: string[] = ['startup']
+  markerCounter = 0
+  private oscHandlers = new Map<number, (payload: string) => boolean | Promise<boolean>>()
+  write = vi.fn((data: string, callback?: () => void) => {
+    const visibleData = data.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+    const lines = visibleData.split(/\r?\n/)
+    this.lines.push(...(visibleData.endsWith('\n') || visibleData.endsWith('\r') ? lines.slice(0, -1) : lines))
+    callback?.()
+  })
+  focus = vi.fn()
+  loadAddon = vi.fn()
+  open = vi.fn(() => { this.element = {} as HTMLElement })
+  dispose = vi.fn()
+  onData = vi.fn()
+  attachCustomKeyEventHandler = vi.fn()
+  getSelection = vi.fn(() => '')
+  clear = vi.fn()
+  registerOscHandler = vi.fn((id: number, handler: (payload: string) => boolean | Promise<boolean>) => {
+    this.oscHandlers.set(id, handler)
+    return { dispose: () => this.oscHandlers.delete(id) }
+  })
+  registerMarker = vi.fn(() => ({ line: this.markerCounter++, dispose: vi.fn() }))
+
+  emitOsc(payload: string) {
+    void this.oscHandlers.get(633)?.(payload)
+  }
+
+  get buffer() {
+    const lines = this.lines
+    return {
+      active: {
+        get length() { return lines.length },
+        getLine(line: number) {
+          return line >= 0 && line < lines.length
+            ? new MockBufferLine(lines[line])
+            : null
+        },
+      },
+    }
+  }
+}
+
+vi.mock('@xterm/xterm', () => ({ Terminal: MockTerminal }))
 vi.mock('@xterm/addon-fit', () => ({
-  FitAddon: class MockFitAddon {
+  FitAddon: class {
     fit = vi.fn()
     dispose = vi.fn()
     proposeDimensions = vi.fn(() => ({ cols: 120, rows: 30 }))
   },
 }))
-
-vi.mock('@xterm/addon-web-links', () => ({
-  WebLinksAddon: class MockWebLinksAddon {},
-}))
-
+vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }))
 vi.mock('@xterm/addon-webgl', () => ({
-  WebglAddon: class MockWebglAddon {
+  WebglAddon: class {
     dispose = vi.fn()
     onContextLoss = vi.fn()
   },
 }))
-
 vi.mock('@utils/Logger', () => ({
   logger: {
     system: {
@@ -92,16 +125,12 @@ vi.mock('@utils/Logger', () => ({
     },
   },
 }))
-
-vi.mock('@services/keybindingService', () => ({
-  isMac: true,
-}))
-
+vi.mock('@services/keybindingService', () => ({ isMac: true }))
 vi.mock('@renderer/agent/tools/commandRuntime', () => ({
   getInteractiveTerminalBackend: vi.fn(() => 'pipe'),
 }))
 
-describe('TerminalManager command sessions', () => {
+describe('TerminalManager shell integration', () => {
   beforeEach(() => {
     vi.resetModules()
     createMock.mockReset()
@@ -109,15 +138,11 @@ describe('TerminalManager command sessions', () => {
     writeMock.mockReset()
     resizeMock.mockReset()
     killMock.mockReset()
-    settingsGetMock.mockReset()
-    settingsGetMock.mockResolvedValue(null)
-    settingsSetMock.mockReset()
-    settingsSetMock.mockResolvedValue(undefined)
     dataHandler = null
     exitHandler = null
     vi.useFakeTimers()
-    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => 'session-uuid') })
-    vi.stubGlobal('navigator', { userAgent: 'Macintosh' })
+    uuidCounter = 0
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => `terminal-${++uuidCounter}`) })
   })
 
   afterEach(() => {
@@ -125,209 +150,294 @@ describe('TerminalManager command sessions', () => {
     vi.useRealTimers()
   })
 
-  it('hides the internal command wrapper and renders one clean command line', async () => {
-    const { filterCommandDisplayChunk } = await import('@renderer/services/TerminalManager')
-    const filter = {
-      startSequence: '\x1b]9001;ADNIFY_CMD_START_test\x07',
-      displayLine: 'PS E:\\workspace> Get-Item icon.png',
-      pending: '',
-      started: false,
-    }
-
-    expect(filterCommandDisplayChunk(filter, 'Write-Host wrapper; \x1b]9001;ADNIFY_')).toBe('')
-    expect(filterCommandDisplayChunk(
-      filter,
-      'CMD_START_test\x07actual output\r\n',
-    )).toBe('\r\x1b[2KPS E:\\workspace> Get-Item icon.png\r\nactual output\r\n')
-    expect(filterCommandDisplayChunk(filter, 'next line\r\n')).toBe('next line\r\n')
-  })
-
-  it.each([
-    {
-      platform: 'Windows PowerShell',
-      userAgent: 'Windows NT 10.0',
-      shell: 'powershell.exe',
-      cwd: 'C:\\workspace',
-      prompt: 'PS C:\\workspace> ',
-      display: 'PS C:\\workspace> npm test',
-    },
-    {
-      platform: 'macOS zsh',
-      userAgent: 'Macintosh',
-      shell: '/bin/zsh',
-      cwd: '/Users/dev/workspace',
-      prompt: 'dev@mac workspace % ',
-      display: '/Users/dev/workspace$ npm test',
-    },
-    {
-      platform: 'Linux bash',
-      userAgent: 'X11; Linux x86_64',
-      shell: '/bin/bash',
-      cwd: '/home/dev/workspace',
-      prompt: 'dev@linux:~/workspace$ ',
-      display: '/home/dev/workspace$ npm test',
-    },
-  ])('keeps $platform PTY replay free of internal protocol text', async ({ userAgent, shell, cwd, prompt, display }) => {
-    vi.stubGlobal('navigator', { userAgent })
-    settingsGetMock.mockResolvedValue({ defaultShell: shell, presets: [], links: [] })
+  it('submits raw commands and resolves output from OSC 633 markers', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
-      const termId = await terminalManager.getOrCreateAgentTerminal(cwd)
-      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000, cwd)
-      const wrapped = writeMock.mock.calls.at(-1)?.[1] as string
-      const sentinelId = wrapped.match(/ADNIFY_CMD_START_([a-z0-9]+)/)?.[1]
-      expect(sentinelId).toBeTruthy()
+      const termId = await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const resultPromise = terminalManager.executeCommandWithOutput(
+        termId,
+        'npm test',
+        5000,
+        'C:\\work',
+      )
 
-      const start = `\x1b]9001;ADNIFY_CMD_START_${sentinelId}\x07`
-      const end = `\x1b]9001;ADNIFY_CMD_END_${sentinelId}_0\x07`
-      const trace = [
-        `\x1b[?2004h${prompt}`,
-        wrapped.replace(/\r$/, ''),
-        '\r\n',
-        start,
-        '\x1b[32mstarting\x1b[0m\r\x1b[Kdone\r\n',
-        end,
-        `\r\n${prompt}`,
-      ].join('')
-
-      // Character-level replay is the harshest possible PTY split and covers
-      // boundaries inside ESC, OSC payloads, exit codes and ANSI redraws.
-      for (let index = 0; index < trace.length; index++) {
-        dataHandler?.({ id: termId, data: trace[index], seq: index + 1, occurredAt: Date.now() })
-      }
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      xterm.emitOsc('P;Adnify;1')
+      await vi.advanceTimersByTimeAsync(50)
+      const submitted = writeMock.mock.calls.at(-1)?.[1]
+      expect(submitted).toBe("Push-Location 'C:\\work'; npm test; Pop-Location\r")
+      expect(submitted).not.toMatch(/9001|Out\.Write|Out-Host|printf/)
+      xterm.markerCounter = 1
+      xterm.lines.push('$ npm test')
+      xterm.emitOsc('C')
+      expect(xterm.registerMarker).toHaveBeenCalledTimes(1)
+      dataHandler?.({ id: termId, data: 'actual output\r\n', seq: 1, occurredAt: Date.now() })
+      xterm.emitOsc('D;7')
 
       const result = await resultPromise
-      const visible = terminalManager.getOutputBuffer(termId).join('')
-      expect(result.output).toContain('done')
-      expect(visible).toContain(display)
-      expect(visible).toContain('done')
-      for (const internal of ['[Console]::Out.Write', 'Write-Host', 'printf', 'ADNIFY_CMD_', '$__adnify_', 'Push-Location']) {
-        expect(visible).not.toContain(internal)
-      }
+      expect(result.finalStatus).toBe('failed')
+      expect(result.exitCode).toBe(7)
+      expect(result.sentinelMatched).toBe(true)
+      expect(result.output).toBe('actual output')
+      expect(result.terminationReason).toBe('sentinel_matched')
     } finally {
       terminalManager.cleanup()
     }
   })
 
-  it('tracks detached background commands as last session state', async () => {
+  it('keeps detached commands native and cwd-safe', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
-      const termId = await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
-      const session = terminalManager.recordDetachedCommand(termId, 'npm run dev', '/tmp/adnify-agent', 'agent')
-      const state = terminalManager.getTerminalCommandState(termId)
+      const termId = await terminalManager.createTerminal({
+        cwd: '/tmp/adnify',
+        shell: '/bin/zsh',
+        backend: 'pipe',
+      })
+      terminalManager.executeDetachedCommand(termId, "npm run dev -- --host '0.0.0.0'", '/tmp/project')
 
-      expect(session.status).toBe('detached')
-      expect(state.current).toBeNull()
-      expect(state.last?.status).toBe('detached')
-      expect(state.last?.command).toBe('npm run dev')
+      expect(writeMock).toHaveBeenLastCalledWith(
+        termId,
+        "cd '/tmp/project' && npm run dev -- --host '0.0.0.0'\n",
+      )
     } finally {
       terminalManager.cleanup()
     }
   })
 
-  it('keeps detached tool commands free of cwd and marker plumbing', async () => {
-    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' })
-    settingsGetMock.mockResolvedValue({ defaultShell: 'powershell.exe', presets: [], links: [] })
+  it('does not report fake success for cmd.exe integration', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
-      const termId = await terminalManager.getOrCreateAgentTerminal('C:\\workspace')
-      terminalManager.executeDetachedCommand(termId, 'npm run dev', 'C:\\workspace')
-      const wrapped = writeMock.mock.calls.at(-1)?.[1] as string
-      const payload = wrapped.match(/9001;(ADNIFY_DETACHED_START_[a-z0-9]+)/)?.[1]
-      expect(payload).toBeTruthy()
+      const termId = await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'cmd.exe',
+        backend: 'pipe',
+      })
+      const result = await terminalManager.executeCommandWithOutput(termId, 'npm test', 5000)
 
-      const trace = `${wrapped.replace(/\r$/, '')}\r\n\x1b]9001;${payload}\x07server ready\r\n`
-      for (const character of trace) {
-        dataHandler?.({ id: termId, data: character, seq: 1, occurredAt: Date.now() })
-      }
-      const visible = terminalManager.getOutputBuffer(termId).join('')
-      expect(visible).toContain('PS C:\\workspace> npm run dev')
-      expect(visible).toContain('server ready')
-      expect(visible).not.toMatch(/ADNIFY_DETACHED|Console.*Out\.Write|Push-Location/)
+      expect(result.success).toBe(false)
+      expect(result.finalStatus).toBe('failed')
+      expect(result.exitCode).toBeNull()
+      expect(result.terminationReason).toBe('shell_integration_missing')
+      expect(writeMock).not.toHaveBeenCalledWith(termId, 'npm test\r')
     } finally {
       terminalManager.cleanup()
     }
   })
 
-  it('finalizes command when terminal exits before sentinel matches', async () => {
+  it('marks integration ready from the raw terminal stream without xterm OSC support', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
-      const termId = await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
-      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000, '/tmp/adnify-agent')
+      const termId = await terminalManager.createTerminal({
+        cwd: 'E:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000)
 
-      expect(writeMock).toHaveBeenCalledTimes(1)
+      dataHandler?.({
+        id: termId,
+        data: '\x1b[2J\x1b[H\x1b]0;C:\\windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\x07\x1b[?25h\x1b]633;P;Adnify;1\x07',
+        seq: 1,
+        occurredAt: Date.now(),
+      })
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(writeMock).toHaveBeenLastCalledWith(termId, 'npm test\r')
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      xterm.lines.length = 0
+      xterm.emitOsc('C')
+      xterm.markerCounter = 1
+      dataHandler?.({ id: termId, data: 'actual output\r\n', seq: 2, occurredAt: Date.now() })
+      xterm.emitOsc('D;7')
+
+      const result = await resultPromise
+      expect(result.output).toBe('actual output')
+      expect(result.exitCode).toBe(7)
+      expect(result.terminationReason).toBe('sentinel_matched')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('preserves integration state before the terminal UI is mounted and reports real shell exit', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.createTerminal({
+        cwd: '/tmp/adnify',
+        shell: '/bin/bash',
+        backend: 'pipe',
+      })
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000)
+      terminalManager.getXterm(termId)?.emitOsc?.('P;Adnify')
+      await vi.advanceTimersByTimeAsync(0)
+
       dataHandler?.({ id: termId, data: 'partial output\n', seq: 1, occurredAt: Date.now() })
       exitHandler?.({ id: termId, exitCode: 7, seq: 2, occurredAt: Date.now(), reason: 'process_exit' })
 
       const result = await resultPromise
-      const state = terminalManager.getTerminalCommandState(termId)
-
       expect(result.finalStatus).toBe('shell_exited')
       expect(result.exitCode).toBe(7)
+      expect(result.terminationReason).toBe('terminal_exit')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('captures short output that arrives in the same PTY chunk as command end', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.createTerminal({
+        cwd: 'E:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'echo Hello', 5000)
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      dataHandler?.({ id: termId, data: '\x1b]633;A\x07', seq: 1, occurredAt: Date.now() })
+      await vi.advanceTimersByTimeAsync(50)
+
+      xterm.lines.length = 0
+      xterm.lines.push('echo Hello')
+      xterm.markerCounter = 1
+      xterm.emitOsc('C')
+      dataHandler?.({
+        id: termId,
+        data: 'Hello\r\n\x1b]633;D;0\x07',
+        seq: 2,
+        occurredAt: Date.now(),
+      })
+
+      const result = await resultPromise
+      expect(result.output).toBe('Hello')
+      expect(result.exitCode).toBe(0)
+      expect(result.success).toBe(true)
+      expect(result.terminationReason).toBe('sentinel_matched')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('keeps the executing parser alive when terminal UI is unmounted', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000)
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      xterm.emitOsc('P;Adnify;1')
+      await vi.advanceTimersByTimeAsync(50)
+
+      terminalManager.unmountTerminal(termId)
+      xterm.markerCounter = 1
+      xterm.emitOsc('C')
+      dataHandler?.({ id: termId, data: 'output after unmount\r\n', seq: 1, occurredAt: Date.now() })
+      xterm.emitOsc('D;7')
+
+      const result = await resultPromise
+      expect(result.terminationReason).not.toBe('terminal_error')
+      expect(result.output).toBe('output after unmount')
+      expect(result.exitCode).toBe(7)
+      expect(writeMock).toHaveBeenLastCalledWith(termId, 'npm test\r')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('finishes at prompt recovery when command-end marker is missing', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 30_000)
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      xterm.emitOsc('P;Adnify;1')
+      await vi.advanceTimersByTimeAsync(50)
+
+      xterm.emitOsc('C')
+      xterm.markerCounter = 1
+      dataHandler?.({ id: termId, data: 'actual output\r\n', seq: 1, occurredAt: Date.now() })
+      xterm.emitOsc('A')
+
+      const result = await resultPromise
+      expect(result.terminationReason).toBe('sentinel_missing_prompt')
+      expect(result.output).toBe('actual output')
+      expect(result.exitCode).toBeNull()
       expect(result.success).toBe(false)
-      expect(state.current).toBeNull()
-      expect(state.last?.status).toBe('shell_exited')
-      expect(state.last?.terminationReason).toBe('terminal_exit')
+      expect(result.timedOut).toBe(false)
     } finally {
       terminalManager.cleanup()
     }
   })
 
-  it('ignores delayed fit calls after the terminal container is detached', async () => {
+  it('closes stale integration-failed agent terminals before creating a replacement', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
     try {
-      const termId = await terminalManager.getOrCreateAgentTerminal('/tmp/adnify-agent')
-      const container = {
-        childElementCount: 0,
-        clientWidth: 800,
-        clientHeight: 600,
-        isConnected: true,
-      } as HTMLDivElement
+      const staleId = await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+        isAgent: true,
+      })
+      const failed = terminalManager.executeCommandWithOutput(staleId, 'npm test', 10)
+      await vi.advanceTimersByTimeAsync(10)
+      await expect(failed).resolves.toMatchObject({
+        terminationReason: 'shell_integration_missing',
+      })
+      terminalManager.releaseAgentTerminal(staleId)
 
-      terminalManager.mountTerminal(termId, container)
-      resizeMock.mockClear()
+      const termId = await terminalManager.getOrCreateAgentTerminal('C:\\workspace', {
+        name: 'Agent',
+      })
 
-      Object.defineProperty(container, 'isConnected', { configurable: true, value: false })
-      terminalManager.fitTerminal(termId)
-
-      expect(resizeMock).not.toHaveBeenCalled()
+      expect(termId).not.toBe(staleId)
+      expect(terminalManager.hasTerminal(staleId)).toBe(false)
     } finally {
       terminalManager.cleanup()
     }
   })
 
-  it('uses the configured Git Bash shell for agent terminals on Windows hosts', async () => {
-    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' })
-    settingsGetMock.mockResolvedValue({
-      defaultShell: 'C:\\Program Files\\Git\\bin\\bash.exe',
-      presets: [],
-      links: [],
-    })
+  it('reclaims an idle agent terminal before hitting the main-process terminal ceiling', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
-    const resultPromise = terminalManager
-      .getOrCreateAgentTerminal('/tmp/adnify-agent')
-      .then((termId) => terminalManager.executeCommandWithOutput(termId, 'ps -ef', 5000, '/home'))
-
     try {
-      await vi.waitFor(() => expect(writeMock).toHaveBeenCalledTimes(1))
-      expect(createMock.mock.calls[0]?.[0]?.shell).toBe('C:\\Program Files\\Git\\bin\\bash.exe')
-      const wrapped = writeMock.mock.calls[0]?.[1] as string
+      const userTerminalIds: string[] = []
+      for (let index = 0; index < 10; index += 1) {
+        userTerminalIds.push(await terminalManager.createTerminal({
+          cwd: `C:\\workspace-${index}`,
+          shell: 'powershell.exe',
+          backend: 'pipe',
+          isAgent: index === 0,
+        }))
+      }
 
-      expect(wrapped).toContain("printf '\\033]9001;ADNIFY_CMD_START_")
-      expect(wrapped).toContain('( cd "/home" && ps -ef )')
-      // 退出码必须紧跟命令捕获，否则会被 sentinel 自身的 printf 覆盖
-      expect(wrapped).toContain('__adnify_ec=$?')
-      expect(wrapped).toMatch(/ADNIFY_CMD_END_[a-z0-9]+_%s\\007' "\$__adnify_ec"/)
-      expect(wrapped).not.toContain('Write-Host -NoNewline')
+      const agentTerminalId = await terminalManager.getOrCreateAgentTerminal('C:\\workspace', {
+        name: 'Agent',
+      })
+
+      expect(terminalManager.hasTerminal(agentTerminalId)).toBe(true)
+      expect(terminalManager.getState().terminals).toHaveLength(10)
+      expect(terminalManager.hasTerminal(userTerminalIds[0])).toBe(false)
     } finally {
       terminalManager.cleanup()
-      await resultPromise
     }
   })
 })

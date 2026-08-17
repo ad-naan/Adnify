@@ -205,6 +205,7 @@ interface RemoteShellServer {
   password?: string
   privateKeyPath?: string
   remotePath?: string
+  shell?: string
 }
 
 type RemoteHostTrustStatus = 'known' | 'accepted_new' | 'mismatch_rejected'
