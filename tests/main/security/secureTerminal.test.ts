@@ -14,6 +14,11 @@ vi.mock('fs', () => ({
 }))
 
 vi.mock('electron', () => ({
+  app: {
+    getAppPath: vi.fn(() => process.cwd()),
+    getPath: vi.fn(() => '.'),
+    isPackaged: false,
+  },
   BrowserWindow: class MockBrowserWindow {},
   ipcMain: {
     on: vi.fn(),

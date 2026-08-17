@@ -4,7 +4,7 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, app, ipcMain } from 'electron'
 import { spawn, execSync, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import * as path from 'path'
@@ -59,6 +59,69 @@ export function getWhitelist() {
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
 const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
+
+function getShellIntegrationResourcePath(scriptName: string): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'shell-integration', scriptName)
+    : path.join(app.getAppPath(), 'resources', 'shell-integration', scriptName)
+}
+
+function getPowerShellIntegrationCommand(): string {
+  const scriptPath = getShellIntegrationResourcePath('shellIntegration.ps1')
+  const literalPath = scriptPath.replace(/'/g, "''")
+
+  // The startup command itself is not echoed by an interactive PowerShell
+  // host. Unlike the old per-command wrapper, users only see their own prompt
+  // and commands.
+  return `$null = chcp 65001; . '${literalPath}'`
+}
+
+function getShellBasename(shellPath: string): string {
+  return path.basename(shellPath).toLowerCase()
+}
+
+function getUnixShellKind(shellPath: string): 'bash' | 'zsh' | 'other' {
+  const shellName = getShellBasename(shellPath)
+  if (shellName === 'bash') return 'bash'
+  if (shellName === 'zsh') return 'zsh'
+  return 'other'
+}
+
+function createUnixShellIntegrationRc(
+  id: string,
+  shellKind: 'bash' | 'zsh',
+): { env: Record<string, string>; rcFile: string; cleanup: () => void } | null {
+  try {
+    const fs = require('fs') as typeof import('fs')
+    const home = process.env.HOME || ''
+      const userRc = shellKind === 'zsh'
+      ? path.join(home, '.zshrc')
+      : path.join(home, '.bashrc')
+    const sourceUserRc = home && fs.existsSync(userRc)
+      ? `if [ -f '${userRc.replace(/'/g, `'\\''`)}' ]; then . '${userRc.replace(/'/g, `'\\''`)}'; fi\n`
+      : ''
+    const integration = getShellIntegrationResourcePath('shellIntegration.sh')
+    const integrationLiteral = integration.replace(/'/g, `'\\''`)
+
+    if (shellKind === 'bash') {
+      const rcFile = path.join(app.getPath('temp'), `adnify-shell-integration-${id}.bashrc`)
+      fs.writeFileSync(rcFile, `${sourceUserRc}. '${integrationLiteral}'\n`, { mode: 0o600 })
+      return { env: {}, rcFile, cleanup: () => { try { fs.rmSync(rcFile, { force: true }) } catch { } } }
+    }
+
+    const zdotdir = path.join(app.getPath('temp'), `adnify-shell-integration-${id}`)
+    fs.mkdirSync(zdotdir, { recursive: true })
+    const rcFile = path.join(zdotdir, '.zshrc')
+    fs.writeFileSync(rcFile, `${sourceUserRc}. '${integrationLiteral}'\n`, { mode: 0o600 })
+    return {
+      env: { ZDOTDIR: zdotdir },
+      rcFile,
+      cleanup: () => { try { fs.rmSync(zdotdir, { recursive: true, force: true }) } catch { } },
+    }
+  } catch {
+    return null
+  }
+}
 
 // In dev mode, dugite may fail to execute (e.g. missing bundled git),
 // and we can end up spamming the full stack for every git invocation.
@@ -714,8 +777,9 @@ export function registerSecureTerminalHandlers(
     private cols: number
     private rows: number
     private readonly streamUtf8 = new StringDecoder('utf8')
+    private integrationCommand: string | null = null
 
-    constructor(private readonly server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }, cols = 80, rows = 24) {
+    constructor(private readonly server: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string; shell?: string }, cols = 80, rows = 24) {
       super()
       this.cols = cols
       this.rows = rows
@@ -804,10 +868,23 @@ export function registerSecureTerminalHandlers(
                 stream.write(`cd '${escaped}'\n`)
               }
 
-              if (!settled) {
+              const finish = () => {
+                if (settled) return
                 settled = true
                 resolve()
               }
+
+              this.detectRemoteLoginShell()
+                .then(async shell => {
+                  await this.uploadShellIntegration(stream, shell)
+                  finish()
+                })
+                .catch(error => {
+                  // Shell start-up must never fail because integration is
+                  // unavailable. The terminal remains usable in fallback mode.
+                  logger.security.warn('[Terminal] Remote shell integration unavailable:', error)
+                  finish()
+                })
             })
           })
           .on('keyboard-interactive', (_name: string, _instructions: string, _lang: string, _prompts: Array<unknown>, finish: (responses: string[]) => void) => {
@@ -829,6 +906,65 @@ export function registerSecureTerminalHandlers(
           })
           .connect(config as any)
       })
+    }
+
+    private async detectRemoteLoginShell(): Promise<string> {
+      const command = `getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7`
+      return await new Promise<string>((resolve, reject) => {
+        this.connection.exec(command, (error: Error | undefined, channel: any) => {
+          if (error || !channel) {
+            reject(error || new Error('Failed to inspect remote login shell'))
+            return
+          }
+
+          let output = ''
+          let stderr = ''
+          channel.on('data', (data: Buffer) => { output += data.toString('utf8') })
+          channel.on('stderr', (data: Buffer) => { stderr += data.toString('utf8') })
+          channel.on('close', (code: number) => {
+            const shell = output.trim().split('\n')[0] || ''
+            if (code === 0 && shell) resolve(shell)
+            else reject(new Error(stderr.trim() || `Failed to inspect remote login shell (exit ${code})`))
+          })
+          channel.on('error', reject)
+        })
+      })
+    }
+
+    private async uploadShellIntegration(stream: any, shellPath: string): Promise<void> {
+      const shellKind = getUnixShellKind(shellPath)
+      if (shellKind === 'other') return
+
+      const scriptPath = getShellIntegrationResourcePath('shellIntegration.sh')
+      const fs = require('fs') as typeof import('fs')
+      const contents = await new Promise<Buffer>((resolve, reject) => {
+        fs.readFile(scriptPath, (error: NodeJS.ErrnoException | null, data: Buffer) => {
+          if (error) reject(error)
+          else resolve(data)
+        })
+      })
+      const remoteScript = `.adnify-shell-integration-${process.pid}-${Date.now()}.sh`
+      const sftp = await new Promise<any>((resolve, reject) => {
+        this.connection.sftp((error: Error | undefined, client: any) => {
+          if (error || !client) reject(error || new Error('Failed to open SFTP subsystem'))
+          else resolve(client)
+        })
+      })
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          sftp.writeFile(remoteScript, contents, { mode: 0o600 }, (error: Error | null | undefined) => {
+            if (error) reject(error)
+            else resolve()
+          })
+        })
+      } finally {
+        sftp.end()
+      }
+
+      const literalPath = remoteScript.replace(/'/g, `'\\''`)
+      this.integrationCommand = `. './${literalPath}' && rm -f './${literalPath}'`
+      stream.write(`${this.integrationCommand}\n`)
     }
 
     onData(listener: (data: string) => void) {
@@ -961,9 +1097,26 @@ export function registerSecureTerminalHandlers(
   /**
    * 交互式终端创建（默认 node-pty；渲染进程为 Agent 终端传入 pipe 时可退回 pipe 会话）
    */
+  type InteractiveTerminalOptions = {
+    id: string
+    cwd?: string
+    shell?: string
+    backend?: TerminalBackend
+    remote?: {
+      host: string
+      port?: number
+      username?: string
+      password?: string
+      privateKeyPath?: string
+      remotePath?: string
+      shell?: string
+    }
+    isAgent?: boolean
+  }
+
   safeIpcHandle('terminal:interactive', async (
     event,
-    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend; remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }; isAgent?: boolean }
+    options: InteractiveTerminalOptions
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
@@ -1026,18 +1179,16 @@ export function registerSecureTerminalHandlers(
       } else {
         shellPath = process.env.SHELL || '/bin/bash'
       }
+      const shellName = getShellBasename(shellPath)
 
       if (isWindows) {
-        const shellName = path.basename(shellPath).toLowerCase()
         if (shellName === 'powershell.exe' || shellName === 'powershell' || shellName === 'pwsh.exe' || shellName === 'pwsh') {
-          const psReadLineInit = isAgent
-            ? '; Remove-Module PSReadLine -ErrorAction SilentlyContinue'
-            : ''
-          const utf8Init = `$__adnifyUtf8 = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = $__adnifyUtf8; [Console]::InputEncoding = $__adnifyUtf8; [Console]::OutputEncoding = $__adnifyUtf8${psReadLineInit}`
-          shellArgs = ['-NoLogo', '-NoExit', '-Command', utf8Init]
+          shellArgs = ['-NoLogo', '-NoExit', '-Command', getPowerShellIntegrationCommand()]
         } else if (shellName === 'cmd.exe' || shellName === 'cmd') {
           shellArgs = ['/K', 'chcp 65001 > nul']
         }
+      } else if (shellName === 'bash' || shellName === 'zsh') {
+        shellArgs = ['-i']
       }
 
       logger.security.info(`[Terminal] Spawning ${effectiveBackend.toUpperCase()} terminal: ${shellPath} ${shellArgs.join(' ')} in ${targetCwd}`)
@@ -1058,10 +1209,27 @@ export function registerSecureTerminalHandlers(
       }
 
       let terminalProcess: any
+      let unixIntegrationRc: ReturnType<typeof createUnixShellIntegrationRc> = null
+      const shellKind = getUnixShellKind(shellPath)
+      const spawnEnv = () => ({
+        ...process.env,
+        ...(unixIntegrationRc?.env || {}),
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+      })
+
+      if (!remote?.host && !isWindows && (shellKind === 'bash' || shellKind === 'zsh')) {
+        // bash supports --rcfile directly. zsh does not, so point ZDOTDIR at a
+        // temporary .zshrc that first sources the user's real configuration.
+        unixIntegrationRc = createUnixShellIntegrationRc(id, shellKind)
+        if (unixIntegrationRc && shellKind === 'bash') {
+          shellArgs = [...shellArgs, '--rcfile', unixIntegrationRc.rcFile]
+        }
+      }
 
       if (remote?.host) {
         try {
-          const session = new SshShellSession(remote)
+          const session = new SshShellSession({ ...remote, shell })
           await session.connect()
           terminalProcess = session
         } catch (err) {
@@ -1072,11 +1240,7 @@ export function registerSecureTerminalHandlers(
       } else if (effectiveBackend === 'pipe') {
         const child = spawn(shellPath, shellArgs, {
           cwd: targetCwd,
-          env: {
-            ...process.env,
-            TERM: 'xterm-256color',
-            COLORTERM: 'truecolor',
-          },
+          env: spawnEnv(),
           stdio: 'pipe',
           detached: process.platform !== 'win32',
           windowsHide: true,
@@ -1093,11 +1257,7 @@ export function registerSecureTerminalHandlers(
                   cols: 80,
                   rows: 24,
                   cwd: targetCwd,
-                  env: {
-                    ...process.env,
-                    TERM: 'xterm-256color',
-                    COLORTERM: 'truecolor',
-                  },
+                  env: spawnEnv(),
                 })
 
                 if (!terminalProcess) {
@@ -1127,31 +1287,18 @@ export function registerSecureTerminalHandlers(
       }
 
       bindTerminalProcess(id, terminalProcess, mainWindow)
+      if (unixIntegrationRc) {
+        // The rc file only needs to survive shell start-up. SFTP and zsh
+        // environments may hold a handle briefly, so removal is deliberately
+        // deferred and failure is harmless.
+        setTimeout(() => unixIntegrationRc.cleanup(), 30_000)
+      }
 
       // PTY 输出统一按 UTF-8 解码（bindTerminalProcess 里的 StringDecoder），
       // 但 Windows 控制台默认代码页是本地化的（简中为 GBK/936），PowerShell
       // 会按该代码页输出字节 → 被当成 UTF-8 解码就是乱码。
       // 这里在任何命令执行前把会话切到 UTF-8，让两端一致。
       // 注意：只对本地 Windows PTY 生效；SSH/pipe 会话不适用。
-      if (!remote?.host && process.platform === 'win32' && effectiveBackend === 'pty') {
-        const isPowerShellShell = /powershell|pwsh/i.test(shellPath)
-        if (isPowerShellShell) {
-          try {
-            // chcp 保证原生 exe（git/npm 等）也走 UTF-8；
-            // OutputEncoding/InputEncoding 覆盖 PowerShell 自身的管道编码。
-            terminalProcess.write(
-              '$null = chcp 65001; ' +
-              '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' +
-              '[Console]::InputEncoding = [System.Text.Encoding]::UTF8; ' +
-              '$OutputEncoding = [System.Text.Encoding]::UTF8; ' +
-              'Clear-Host\r'
-            )
-          } catch (err) {
-            logger.security.warn('[Terminal] Failed to set UTF-8 code page:', err)
-          }
-        }
-      }
-
       securityManager.logOperation(OperationType.TERMINAL_INTERACTIVE, 'terminal:create', true, {
         id,
         cwd: targetCwd,

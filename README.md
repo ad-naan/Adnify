@@ -13,7 +13,7 @@
 
   <p>
     <a href="https://github.com/ad-naan/adnify"><img src="https://img.shields.io/github/stars/ad-naan/adnify?logo=github&color=181717" alt="GitHub" /></a>
-    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-150%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
+    <a href="https://gitee.com/adnaan/adnify"><img src="https://img.shields.io/badge/Gitee-152%20Stars-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
     <a href="https://atomgit.com/adnaan/adnify"><img src="images/atomgit-badge.svg" alt="AtomGit" /></a>
     <a href="https://deepwiki.com/ad-naan/Adnify"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki" /></a>
     <img src="https://img.shields.io/badge/license-Custom%20License-blue.svg" alt="License" />
