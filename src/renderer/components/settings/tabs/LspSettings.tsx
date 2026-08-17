@@ -21,6 +21,7 @@ import { Language } from '@renderer/i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { Button, Input } from '@components/ui'
 import { LSP_SERVER_DEFINITIONS } from '@shared/languages'
+import { toast } from '@components/common/ToastProvider'
 
 interface LspSettingsProps {
   language: Language
@@ -108,11 +109,17 @@ export function LspSettings({ language }: LspSettingsProps) {
       const result = await api.lsp.installServer(serverId)
       if (result.success) {
         await loadStatus()
+        const serverName = LSP_SERVER_DEFINITIONS.find(server => server.id === serverId)?.name || serverId
+        toast.success(language === 'zh' ? '语言服务器安装成功' : 'Language server installed', serverName)
       } else {
-        setError(result.error || 'Installation failed')
+        const message = result.error || 'Installation failed'
+        setError(message)
+        toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
       }
     } catch (err: any) {
-      setError(err.message)
+      const message = err?.message || String(err)
+      setError(message)
+      toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
     } finally {
       setInstalling(null)
     }
@@ -125,11 +132,16 @@ export function LspSettings({ language }: LspSettingsProps) {
       const result = await api.lsp.installBasicServers()
       if (result.success) {
         await loadStatus()
+        toast.success(language === 'zh' ? '基础语言服务器安装成功' : 'Basic language servers installed')
       } else {
-        setError(result.error || 'Installation failed')
+        const message = result.error || 'Installation failed'
+        setError(message)
+        toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
       }
     } catch (err: any) {
-      setError(err.message)
+      const message = err?.message || String(err)
+      setError(message)
+      toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
     } finally {
       setInstalling(null)
     }

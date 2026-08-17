@@ -305,7 +305,7 @@ export interface ElectronAPI {
   onLLMDone: (requestId: string, callback: (data: LLMResult) => void) => () => void
 
   // Interactive Terminal
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) => Promise<{ success: boolean; error?: string }>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
@@ -656,7 +656,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(channel, handler)
   },
 
-  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer }) =>
+  createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) =>
     ipcRenderer.invoke('terminal:interactive', options),
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>

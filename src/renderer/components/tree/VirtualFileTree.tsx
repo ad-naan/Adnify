@@ -15,7 +15,9 @@ import {
   ExternalLink,
   Loader2,
   Globe,
-  Terminal
+  Terminal,
+  EyeOff,
+  Eye
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -32,6 +34,7 @@ import { writeClipboardText } from '@/renderer/services/clipboardService'
 import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
+import { gitExcludeService } from '@services/gitExcludeService'
 
 // 每个节点的高度（像素）
 const ITEM_HEIGHT = 30
@@ -119,6 +122,22 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const renameInputRef = useRef<HTMLInputElement>(null)
   const [dragOverPath, setDragOverPath] = useState<string | null>(null)
   const dragSourcePathRef = useRef<string | null>(null)
+
+  const handleGitExclude = useCallback(async (node: FlattenedNode, action: 'add' | 'remove') => {
+    if (!workspacePath) return
+    try {
+      const result = await gitExcludeService.update(
+        workspacePath,
+        node.item.path,
+        node.item.isDirectory,
+        action,
+      )
+      const verb = action === 'add' ? '加入' : '移出'
+      toast.success(result.changed ? `已${verb} Git 本地排除` : '无需更改', result.pattern)
+    } catch (error) {
+      toast.error('更新 Git 本地排除失败', error instanceof Error ? error.message : String(error))
+    }
+  }, [workspacePath])
 
   useEffect(() => {
     return explorerClipboardService.subscribe(state => {
@@ -797,6 +816,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'sep3', label: '', separator: true },
         { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
         { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+        { id: 'gitExcludeAdd', label: '加入 Git 本地排除', icon: EyeOff, onClick: () => void handleGitExclude(node, 'add') },
+        { id: 'gitExcludeRemove', label: '移出 Git 本地排除', icon: Eye, onClick: () => void handleGitExclude(node, 'remove') },
         { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
@@ -814,6 +835,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       { id: 'sep2', label: '', separator: true },
       { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
       { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+      { id: 'gitExcludeAdd', label: '加入 Git 本地排除', icon: EyeOff, onClick: () => void handleGitExclude(node, 'add') },
+      { id: 'gitExcludeRemove', label: '移出 Git 本地排除', icon: Eye, onClick: () => void handleGitExclude(node, 'remove') },
       { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
@@ -824,7 +847,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
 
     return items
-  }, [clipboardItem, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyItem, handlePasteForNode, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleRevealInExplorer, handleOpenInBrowser])
+  }, [clipboardItem, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyItem, handlePasteForNode, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleGitExclude, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {

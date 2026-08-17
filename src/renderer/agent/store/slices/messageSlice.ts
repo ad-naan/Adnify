@@ -1272,8 +1272,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 设置交互式内容（用于 ask_user 工具）
-    setInteractive: (messageId, interactive) => {
-        const threadId = get().currentThreadId
+    setInteractive: (messageId, interactive, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {

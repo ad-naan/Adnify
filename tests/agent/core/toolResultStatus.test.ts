@@ -48,9 +48,8 @@ vi.mock('@utils/Logger', () => ({
 vi.mock('@store', () => ({
   useStore: {
     getState: vi.fn(() => ({
-      // needsApproval 读的是顶层 autoApprove（不是 agentConfig.autoApprove），
-      // 这里全开，让 run_command 之类的工具走无审批的并行路径。
-      autoApprove: { terminal: true, dangerous: true },
+      // 终端只按显式规则自动批准；危险文件操作仍由测试统一放行。
+      autoApprove: { terminal: false, dangerous: true, terminalCommandRules: ['tsc *'] },
       agentConfig: { autoApprove: true },
       addToolCallLog: vi.fn(),
     })),

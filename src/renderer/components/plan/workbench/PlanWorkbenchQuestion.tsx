@@ -12,10 +12,13 @@ interface Props {
 export function PlanWorkbenchQuestion({ content, language, onSubmit }: Props) {
   const [selected, setSelected] = useState(() => new Set(content.selectedIds || []))
   const [customText, setCustomText] = useState('')
+  const [customMode, setCustomMode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const selectedCustom = useMemo(() => content.options.some(option => selected.has(option.id) && isCustomOption(option.id, option.label)), [content.options, selected])
+  const needsCustomText = customMode || selectedCustom
 
   const choose = (id: string) => setSelected(previous => {
+    setCustomMode(false)
     const next = content.multiSelect ? new Set(previous) : new Set<string>()
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -24,9 +27,9 @@ export function PlanWorkbenchQuestion({ content, language, onSubmit }: Props) {
 
   const submit = () => {
     const ids = Array.from(selected)
-    if (!ids.length || (selectedCustom && !customText.trim()) || submitting) return
+    if ((!ids.length && !customMode) || (needsCustomText && !customText.trim()) || submitting) return
     setSubmitting(true)
-    onSubmit(ids, selectedCustom ? customText.trim() : undefined)
+    onSubmit(ids, needsCustomText ? customText.trim() : undefined)
   }
 
   return <section>
@@ -43,10 +46,11 @@ export function PlanWorkbenchQuestion({ content, language, onSubmit }: Props) {
         </button>
       })}
     </div>
-    {selectedCustom && <textarea value={customText} onChange={event => setCustomText(event.target.value)} rows={3} autoFocus placeholder={language === 'zh' ? '补充你的要求…' : 'Add details…'} className="mt-2 w-full resize-none rounded-lg border border-border/60 bg-background/55 px-2.5 py-2 text-[10px] leading-4 text-text-primary outline-none placeholder:text-text-muted/55 focus:border-accent/40" />}
+    <button type="button" onClick={() => { setCustomMode(value => !value); if (!content.multiSelect) setSelected(new Set()) }} className={`mt-2 w-full rounded-md border border-dashed px-2.5 py-2 text-left text-[10px] transition-colors ${customMode ? 'border-accent/45 bg-accent/10 text-text-primary' : 'border-border/60 text-text-muted hover:border-accent/35'}`}>{language === 'zh' ? '自定义回答' : 'Custom response'}</button>
+    {needsCustomText && <textarea value={customText} onChange={event => setCustomText(event.target.value)} rows={3} autoFocus placeholder={language === 'zh' ? '补充你的要求…' : 'Add details…'} className="mt-2 w-full resize-none rounded-lg border border-border/60 bg-background/55 px-2.5 py-2 text-[10px] leading-4 text-text-primary outline-none placeholder:text-text-muted/55 focus:border-accent/40" />}
     <div className="mt-2.5 flex items-center justify-between gap-3">
       <span className="text-[8px] leading-4 text-text-muted/65">{language === 'zh' ? '确认后 AI 才会继续整理并创建计划' : 'The plan is created only after confirmation'}</span>
-      <button onClick={submit} disabled={!selected.size || (selectedCustom && !customText.trim()) || submitting} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-accent px-2.5 text-[9px] font-medium text-white hover:bg-accent-hover disabled:opacity-35"><Send className="h-3 w-3" />{language === 'zh' ? '确认选择' : 'Confirm'}</button>
+      <button onClick={submit} disabled={(!selected.size && !customMode) || (needsCustomText && !customText.trim()) || submitting} className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-accent px-2.5 text-[9px] font-medium text-white hover:bg-accent-hover disabled:opacity-35"><Send className="h-3 w-3" />{language === 'zh' ? '确认选择' : 'Confirm'}</button>
     </div>
   </section>
 }

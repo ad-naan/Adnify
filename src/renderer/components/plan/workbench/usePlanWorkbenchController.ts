@@ -6,6 +6,7 @@ import { Agent } from '@/renderer/agent/core/Agent'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { projectPlanHistory, type PlanHistoryEntry } from '@/renderer/agent/plan/planHistoryProjection'
 import { beginPlanRevision } from '@/renderer/agent/plan/planRevisionService'
+import { buildInteractiveResponse } from '@/renderer/agent/utils/interactiveResponse'
 
 export function usePlanWorkbenchController() {
   const language = useStore(state => state.language)
@@ -38,9 +39,8 @@ export function usePlanWorkbenchController() {
 
   const submitClarification = useCallback((selectedIds: string[], customText?: string) => {
     if (!model.clarification) return
-    const labels = model.clarification.content.options.filter(option => selectedIds.includes(option.id)).map(option => option.label)
-    const response = customText || labels.join(', ')
-    window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: model.clarification.messageId, selectedIds } }))
+    const response = buildInteractiveResponse(model.clarification.content, { selectedIds, customText })
+    window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: model.clarification.messageId, selectedIds, customText } }))
     window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: model.clarification.messageId } }))
   }, [model.clarification])
 

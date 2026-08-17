@@ -101,6 +101,17 @@ class GitService {
         return this.primaryWorkspacePath
     }
 
+    async getExcludeFilePath(repoRoot: string): Promise<string> {
+        const result = await this.exec(['rev-parse', '--git-path', 'info/exclude'], repoRoot)
+        if (result.exitCode !== 0 || !result.stdout.trim()) {
+            throw new Error(result.stderr.trim() || 'Unable to resolve .git/info/exclude')
+        }
+        const resolved = normalizePath(result.stdout.trim())
+        return /^[a-zA-Z]:\//.test(resolved) || resolved.startsWith('/')
+            ? resolved
+            : normalizePath(`${repoRoot}/${resolved}`)
+    }
+
     /**
      * 执行 Git 命令 (使用安全的 gitExecSecure API)
      */

@@ -60,6 +60,8 @@ export interface ProviderConfig {
 export interface AutoApproveSettings {
   terminal: boolean
   dangerous: boolean
+  /** Claude Code-style command rules, for example `git status *`. */
+  terminalCommandRules: string[]
 }
 
 export interface LoopDetectionConfig {

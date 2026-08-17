@@ -232,6 +232,7 @@ export const AGENT_DEFAULTS = {
 export const AUTO_APPROVE_DEFAULTS = {
   terminal: false,
   dangerous: false,
+  terminalCommandRules: [] as string[],
 } as const
 
 /**
@@ -252,5 +253,3 @@ export const CODE_FONT_PRESETS = [
   { label: 'Menlo / Monaco', value: 'Menlo, Monaco, Consolas, monospace' },
   { label: 'SF Mono', value: "'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace" },
 ] as const
-
-

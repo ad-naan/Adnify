@@ -28,6 +28,7 @@ import { streamingEditService } from '../services/streamingEditService'
 import { resolveStreamingEditFilePath } from '../services/streamingEditPreview'
 import { shellServerRoutingService } from '../services/shellServerRoutingService'
 import { sanitizeToolRichContent, sanitizeToolTextOutput } from '../tools/toolOutputSanitizer'
+import { isTerminalCommandAutoApproved } from '../utils/commandApproval'
 
 // ===== 文件快照 =====
 
@@ -229,8 +230,8 @@ async function enrichToolArgumentsWithRoutingMeta(
  * 检查工具是否需要审批
  * 基于 TOOL_CONFIGS 中的 approvalType 配置和用户的 autoApprove 设置
  */
-function needsApproval(toolName: string): boolean {
-  const approvalType = getToolApprovalType(toolName)
+function needsApproval(toolCall: ToolCall): boolean {
+  const approvalType = getToolApprovalType(toolCall.name)
 
   // 如果工具本身不需要审批，直接返回 false
   if (approvalType === 'none') return false
@@ -240,8 +241,10 @@ function needsApproval(toolName: string): boolean {
   const autoApprove = mainStore.autoApprove
 
   // 根据工具类型检查对应的 autoApprove 设置
-  if (approvalType === 'terminal' && autoApprove?.terminal) {
-    return false // 终端命令已设置自动批准
+  if (toolCall.name === 'run_command') {
+    if (isTerminalCommandAutoApproved(toolCall.arguments.command, autoApprove?.terminalCommandRules)) {
+      return false
+    }
   }
 
   if (approvalType === 'dangerous' && autoApprove?.dangerous) {
@@ -572,8 +575,8 @@ export async function executeTools(
   const pending = new Set(toolCalls.map(tc => tc.id))
 
   // 分离需要审批和不需要审批的工具
-  const approvalRequired = toolCalls.filter(tc => needsApproval(tc.name))
-  const noApprovalRequired = toolCalls.filter(tc => !needsApproval(tc.name))
+  const approvalRequired = toolCalls.filter(tc => needsApproval(tc))
+  const noApprovalRequired = toolCalls.filter(tc => !needsApproval(tc))
 
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)

@@ -142,6 +142,74 @@ describe('TerminalManager command sessions', () => {
     expect(filterCommandDisplayChunk(filter, 'next line\r\n')).toBe('next line\r\n')
   })
 
+  it.each([
+    {
+      platform: 'Windows PowerShell',
+      userAgent: 'Windows NT 10.0',
+      shell: 'powershell.exe',
+      cwd: 'C:\\workspace',
+      prompt: 'PS C:\\workspace> ',
+      display: 'PS C:\\workspace> npm test',
+    },
+    {
+      platform: 'macOS zsh',
+      userAgent: 'Macintosh',
+      shell: '/bin/zsh',
+      cwd: '/Users/dev/workspace',
+      prompt: 'dev@mac workspace % ',
+      display: '/Users/dev/workspace$ npm test',
+    },
+    {
+      platform: 'Linux bash',
+      userAgent: 'X11; Linux x86_64',
+      shell: '/bin/bash',
+      cwd: '/home/dev/workspace',
+      prompt: 'dev@linux:~/workspace$ ',
+      display: '/home/dev/workspace$ npm test',
+    },
+  ])('keeps $platform PTY replay free of internal protocol text', async ({ userAgent, shell, cwd, prompt, display }) => {
+    vi.stubGlobal('navigator', { userAgent })
+    settingsGetMock.mockResolvedValue({ defaultShell: shell, presets: [], links: [] })
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.getOrCreateAgentTerminal(cwd)
+      const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000, cwd)
+      const wrapped = writeMock.mock.calls.at(-1)?.[1] as string
+      const sentinelId = wrapped.match(/ADNIFY_CMD_START_([a-z0-9]+)/)?.[1]
+      expect(sentinelId).toBeTruthy()
+
+      const start = `\x1b]9001;ADNIFY_CMD_START_${sentinelId}\x07`
+      const end = `\x1b]9001;ADNIFY_CMD_END_${sentinelId}_0\x07`
+      const trace = [
+        `\x1b[?2004h${prompt}`,
+        wrapped.replace(/\r$/, ''),
+        '\r\n',
+        start,
+        '\x1b[32mstarting\x1b[0m\r\x1b[Kdone\r\n',
+        end,
+        `\r\n${prompt}`,
+      ].join('')
+
+      // Character-level replay is the harshest possible PTY split and covers
+      // boundaries inside ESC, OSC payloads, exit codes and ANSI redraws.
+      for (let index = 0; index < trace.length; index++) {
+        dataHandler?.({ id: termId, data: trace[index], seq: index + 1, occurredAt: Date.now() })
+      }
+
+      const result = await resultPromise
+      const visible = terminalManager.getOutputBuffer(termId).join('')
+      expect(result.output).toContain('done')
+      expect(visible).toContain(display)
+      expect(visible).toContain('done')
+      for (const internal of ['[Console]::Out.Write', 'Write-Host', 'printf', 'ADNIFY_CMD_', '$__adnify_', 'Push-Location']) {
+        expect(visible).not.toContain(internal)
+      }
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
   it('tracks detached background commands as last session state', async () => {
     const { terminalManager } = await import('@renderer/services/TerminalManager')
 
@@ -154,6 +222,31 @@ describe('TerminalManager command sessions', () => {
       expect(state.current).toBeNull()
       expect(state.last?.status).toBe('detached')
       expect(state.last?.command).toBe('npm run dev')
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('keeps detached tool commands free of cwd and marker plumbing', async () => {
+    vi.stubGlobal('navigator', { userAgent: 'Windows NT 10.0' })
+    settingsGetMock.mockResolvedValue({ defaultShell: 'powershell.exe', presets: [], links: [] })
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.getOrCreateAgentTerminal('C:\\workspace')
+      terminalManager.executeDetachedCommand(termId, 'npm run dev', 'C:\\workspace')
+      const wrapped = writeMock.mock.calls.at(-1)?.[1] as string
+      const payload = wrapped.match(/9001;(ADNIFY_DETACHED_START_[a-z0-9]+)/)?.[1]
+      expect(payload).toBeTruthy()
+
+      const trace = `${wrapped.replace(/\r$/, '')}\r\n\x1b]9001;${payload}\x07server ready\r\n`
+      for (const character of trace) {
+        dataHandler?.({ id: termId, data: character, seq: 1, occurredAt: Date.now() })
+      }
+      const visible = terminalManager.getOutputBuffer(termId).join('')
+      expect(visible).toContain('PS C:\\workspace> npm run dev')
+      expect(visible).toContain('server ready')
+      expect(visible).not.toMatch(/ADNIFY_DETACHED|Console.*Out\.Write|Push-Location/)
     } finally {
       terminalManager.cleanup()
     }

@@ -176,21 +176,8 @@ export function registerWorkspaceHandlers(
     if (result.canceled || !result.filePaths[0]) return null
 
     const folderPath = normalizeWorkspacePath(result.filePaths[0])
-    if (windowManager?.findWindowByWorkspace) {
-      const existingWindow = windowManager.findWindowByWorkspace([folderPath])
-      if (existingWindow && existingWindow !== mainWindow) {
-        if (existingWindow.isMinimized()) existingWindow.restore()
-        existingWindow.focus()
-        return { redirected: true, path: folderPath }
-      }
-    }
-
-    const workspaceId = await ensureWorkspaceMarker(folderPath)
-    windowManager?.setWindowWorkspace?.(event.sender.id, [folderPath])
-    securityManager.setWorkspacePath(folderPath)
-    persistWorkspaceSession({ configPath: null, roots: [folderPath], workspaceId: workspaceId || undefined })
-    addRecentWorkspace(folderPath)
-    await restartWindowFileWatcher(event.sender, [folderPath])
+    // This handler is a picker only. WorkspaceManager first persists the old
+    // workspace, then workspace:setActive performs the security/window switch.
     return folderPath
   })
 
@@ -212,23 +199,9 @@ export function registerWorkspaceHandlers(
       return null
     }
 
-    if (windowManager?.findWindowByWorkspace && roots.length > 0) {
-      const existingWindow = windowManager.findWindowByWorkspace(roots)
-      if (existingWindow && existingWindow !== mainWindow) {
-        if (existingWindow.isMinimized()) existingWindow.restore()
-        existingWindow.focus()
-        return { redirected: true, roots }
-      }
-    }
-
-    const workspaceId = roots[0] ? await ensureWorkspaceMarker(roots[0]) : null
-    windowManager?.setWindowWorkspace?.(event.sender.id, roots)
-    securityManager.setWorkspacePath(roots[0] || null)
-    const session: StoredWorkspaceSession = { configPath: descriptorPath, roots, workspaceId: workspaceId || undefined }
-    persistWorkspaceSession(session)
-    roots.forEach(addRecentWorkspace)
-    await restartWindowFileWatcher(event.sender, roots)
-    return session
+    // As with file:openFolder, selecting a workspace must not revoke access to
+    // the currently-open workspace before its renderer has persisted state.
+    return { configPath: descriptorPath, roots }
   })
 
   ipcMain.handle('workspace:addFolder', async () => {
