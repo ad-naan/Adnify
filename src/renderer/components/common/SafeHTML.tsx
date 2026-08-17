@@ -97,7 +97,7 @@ function escapeHtml(unsafe: string): string {
  */
 function containsDangerousContent(html: string): boolean {
   const dangerousPatterns = [
-    /<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi,
+    /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi,
     /javascript:/gi,
     /on\w+\s*=/gi, // onclick, onerror 等事件处理器
     /<iframe\b/gi,
@@ -227,10 +227,7 @@ export function SafeText({
     if (html == null || html === '') {
       return fallback as string
     }
-    // 先净化，然后移除所有标签
-    const cleaned = sanitizeHtml(String(html), { ALLOWED_TAGS: [] })
-    // 移除剩余的标签（DOMPurify 应该已经做了，但双重保险）
-    return cleaned.replace(/<[^>]+>/g, '')
+    return sanitizeHtml(String(html), { ALLOWED_TAGS: [] })
   }, [html, fallback])
 
   return <span className={className}>{textContent}</span>

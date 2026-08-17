@@ -1,6 +1,6 @@
 import { api } from './electronAPI'
 import { gitService } from './gitService'
-import { getDirPath, normalizePath, toRelativePath } from '@shared/utils/pathUtils'
+import { normalizePath, toRelativePath } from '@shared/utils/pathUtils'
 
 export function createGitExcludePattern(repoRoot: string, targetPath: string, isDirectory: boolean): string {
   const relative = toRelativePath(normalizePath(targetPath), normalizePath(repoRoot))
@@ -29,6 +29,19 @@ export function updateGitExcludeContent(content: string, pattern: string, action
   return lines.join(newline)
 }
 
+interface GitExcludeStatus {
+  pattern: string
+  ignored: boolean
+  available: boolean
+}
+
+async function findRepositoryForPath(workspacePath: string, targetPath: string) {
+  const repositories = await gitService.discoverRepositories(workspacePath, 3, true)
+  return repositories
+    .filter(repo => targetPath === repo.root || targetPath.startsWith(`${repo.root}/`))
+    .sort((left, right) => right.root.length - left.root.length)[0]
+}
+
 class GitExcludeService {
   async update(
     workspacePath: string,
@@ -37,23 +50,39 @@ class GitExcludeService {
     action: 'add' | 'remove',
   ): Promise<{ changed: boolean; pattern: string }> {
     const normalizedTarget = normalizePath(targetPath).replace(/\/$/, '')
-    const repositories = await gitService.discoverRepositories(workspacePath, 3)
-    const repository = repositories
-      .filter(repo => normalizedTarget === repo.root || normalizedTarget.startsWith(`${repo.root}/`))
-      .sort((left, right) => right.root.length - left.root.length)[0]
+    const repository = await findRepositoryForPath(workspacePath, normalizedTarget)
     if (!repository) throw new Error('所选内容不在 Git 仓库中')
 
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
-    const excludePath = await gitService.getExcludeFilePath(repository.root)
-    const exists = await api.file.exists(excludePath)
-    const current = exists ? (await api.file.read(excludePath) || '') : ''
+    const ignorePath = `${repository.root}/.gitignore`
+    const exists = await api.file.exists(ignorePath)
+    const current = exists ? (await api.file.read(ignorePath) || '') : ''
     const next = updateGitExcludeContent(current, pattern, action)
     if (next === current) return { changed: false, pattern }
 
-    await api.file.ensureDir(getDirPath(excludePath))
-    const written = await api.file.write(excludePath, next)
-    if (!written) throw new Error('写入 .git/info/exclude 失败')
+    const written = await api.file.write(ignorePath, next)
+    if (!written) throw new Error('写入 .gitignore 失败')
     return { changed: true, pattern }
+  }
+
+  async getStatus(
+    workspacePath: string,
+    targetPath: string,
+    isDirectory: boolean,
+  ): Promise<GitExcludeStatus> {
+    const normalizedTarget = normalizePath(targetPath).replace(/\/$/, '')
+    const repository = await findRepositoryForPath(workspacePath, normalizedTarget)
+    if (!repository) return { pattern: '', ignored: false, available: false }
+
+    const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
+    const ignorePath = `${repository.root}/.gitignore`
+    const exists = await api.file.exists(ignorePath)
+    const current = exists ? (await api.file.read(ignorePath) || '') : ''
+    return {
+      pattern,
+      available: true,
+      ignored: updateGitExcludeContent(current, pattern, 'remove') !== current,
+    }
   }
 }
 

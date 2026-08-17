@@ -659,6 +659,7 @@ class AdnifyDirService {
   }
 
   async getAgentSessionSnapshot(): Promise<AgentSessionSnapshot | null> {
+    if (!this.isInitialized()) return null
     const { meta, summaries } = await this.buildSessionCatalog()
     const reconciledMeta = await this.reconcileSessionMeta(meta, summaries)
 

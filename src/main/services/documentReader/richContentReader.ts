@@ -740,12 +740,22 @@ function stripXmlTags(value: string): string {
 }
 
 function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
+  const entities: Record<string, string> = {
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: "'",
+  }
+  return value.replace(/&#(?:(x[0-9a-f]+)|([0-9]+));|&([a-z][a-z0-9]*);/gi, (entity, hex?: string, decimal?: string, name?: string) => {
+    if (hex || decimal) {
+      const codePoint = Number.parseInt(hex ?? decimal ?? '', hex ? 16 : 10)
+      return Number.isSafeInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : entity
+    }
+    return entities[name?.toLowerCase() ?? ''] ?? entity
+  })
 }
 
 function compareNaturalPath(left: string, right: string): number {
