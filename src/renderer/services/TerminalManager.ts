@@ -383,15 +383,19 @@ class TerminalManagerClass {
 
   private registerShellIntegrationHandler(id: string, terminal: XTerminal): void {
     const emit = (payload: string): boolean => this.emitShellIntegration(id, payload)
+    const parserTerminal = terminal as unknown as {
+      registerOscHandler?: (id: number, handler: (payload: string) => boolean | Promise<boolean>) => IDisposable
+      onWriteParsed?: (listener: (data: string) => void) => IDisposable
+    }
 
     // Some long-lived installations can still have an older bundled xterm in
     // Vite's dependency cache while the rest of the renderer has reloaded.
     // Shell integration is important, but it must never take the terminal UI
     // down. Prefer the modern xterm parser and fall back to OSC parsing on
     // writeParsed when that API is unavailable.
-    if (typeof terminal.registerOscHandler === 'function') {
+    if (typeof parserTerminal.registerOscHandler === 'function') {
       try {
-        const disposable = terminal.registerOscHandler(SHELL_INTEGRATION_OSC_ID, emit)
+        const disposable = parserTerminal.registerOscHandler(SHELL_INTEGRATION_OSC_ID, emit)
         this.shellIntegrationDisposables.set(id, disposable)
         return
       } catch (error) {
@@ -399,9 +403,7 @@ class TerminalManagerClass {
       }
     }
 
-    const onWriteParsed = (terminal as {
-      onWriteParsed?: (listener: (data: string) => void) => IDisposable
-    }).onWriteParsed
+    const onWriteParsed = parserTerminal.onWriteParsed
     if (typeof onWriteParsed !== 'function') {
       logger.system.warn(
         `[TerminalManager] Shell integration is unavailable for ${id}: xterm lacks an OSC parser API`,
@@ -640,11 +642,6 @@ class TerminalManagerClass {
   onData(listener: (id: string, data: string) => void): () => void {
     this.dataListeners.add(listener);
     return () => this.dataListeners.delete(listener);
-  }
-
-  private onRawData(listener: (event: TerminalDataEvent) => void): () => void {
-    this.rawDataListeners.add(listener)
-    return () => this.rawDataListeners.delete(listener)
   }
 
   private onShellIntegration(listener: ShellIntegrationListener): () => void {

@@ -277,7 +277,8 @@ describe('TerminalManager shell integration', () => {
         backend: 'pipe',
       })
       const resultPromise = terminalManager.executeCommandWithOutput(termId, 'npm test', 5000)
-      terminalManager.getXterm(termId)?.emitOsc?.('P;Adnify')
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+      xterm.emitOsc('P;Adnify')
       await vi.advanceTimersByTimeAsync(0)
 
       dataHandler?.({ id: termId, data: 'partial output\n', seq: 1, occurredAt: Date.now() })
