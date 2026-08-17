@@ -17,6 +17,15 @@ interface ReadUrlResult {
     statusCode?: number
 }
 
+function parseHttpUrl(url: string): URL | null {
+    try {
+        const parsed = new URL(url)
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed : null
+    } catch {
+        return null
+    }
+}
+
 /**
  * 使用 Jina Reader API 读取 URL 内容
  * Jina Reader 专为 LLM 优化，支持 JS 渲染页面
@@ -137,19 +146,23 @@ async function fetchUrlDirect(url: string, timeout = 60000): Promise<ReadUrlResu
  * 优先使用 Jina Reader，失败时回退到直接抓取
  */
 async function fetchUrl(url: string, timeout = 60000): Promise<ReadUrlResult> {
+    const parsedUrl = parseHttpUrl(url)
+
     // 对于非 HTTP(S) URL，直接返回错误
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    if (!parsedUrl) {
         return {
             success: false,
             error: 'Only HTTP and HTTPS URLs are supported',
         }
     }
 
-    // 对于 JSON/API 端点，直接抓取更合适
-    const isApiEndpoint = url.includes('/api/') ||
-        url.endsWith('.json') ||
-        url.includes('raw.githubusercontent.com') ||
-        url.includes('api.github.com')
+    // 对于 JSON/API 端点，直接抓取更合适。主机名必须精确匹配，避免子域伪装。
+    const hostname = parsedUrl.hostname.toLowerCase()
+    const pathname = parsedUrl.pathname.toLowerCase()
+    const isApiEndpoint = pathname.includes('/api/') ||
+        pathname.endsWith('.json') ||
+        hostname === 'raw.githubusercontent.com' ||
+        hostname === 'api.github.com'
 
     if (isApiEndpoint) {
         logger.ipc.debug('[HTTP] API endpoint detected, using direct fetch')
@@ -172,32 +185,46 @@ async function fetchUrl(url: string, timeout = 60000): Promise<ReadUrlResult> {
 
 // 简单的 HTML 到文本转换
 function htmlToText(html: string): string {
-    return html
-        // 移除 script 和 style
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        // 移除 HTML 注释
+    // 先移除 script/style/comment，再处理文本，避免把脚本内容作为正文输出。
+    const withoutHiddenContent = html
+        .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
         .replace(/<!--[\s\S]*?-->/g, '')
-        // 转换常用标签
+
+    return decodeHtmlEntities(withoutHiddenContent
         .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/(p|div)>/gi, (_, tagName: string) => tagName.toLowerCase() === 'p' ? '\n\n' : '\n')
         .replace(/<\/li>/gi, '\n')
         .replace(/<\/h[1-6]>/gi, '\n\n')
-        // 保留链接文本
-        .replace(/<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi, '$2 ($1)')
-        // 移除所有其他标签
-        .replace(/<[^>]+>/g, '')
-        // 解码 HTML 实体
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        // 清理多余空白
+        .replace(/<a\b[^>]*href=["']([^"']*)["'][^>]*>([\s\S]*?)<\/a\s*>/gi, (_, href: string, text: string) => `${stripHtmlTags(text)} (${href})`)
+        .replace(/<[^>]+>/g, ''))
         .replace(/\n\s*\n\s*\n/g, '\n\n')
         .trim()
+}
+
+function stripHtmlTags(html: string): string {
+    return html.replace(/<[^>]+>/g, '')
+}
+
+function decodeHtmlEntities(text: string): string {
+    const namedEntities: Record<string, string> = {
+        amp: '&',
+        lt: '<',
+        gt: '>',
+        quot: '"',
+        apos: "'",
+        nbsp: ' ',
+    }
+
+    return text.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/gi, (entity, body: string) => {
+        if (body[0] === '#') {
+            const isHex = body[1]?.toLowerCase() === 'x'
+            const codePoint = Number.parseInt(body.slice(isHex ? 2 : 1), isHex ? 16 : 10)
+            return Number.isSafeInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+                ? String.fromCodePoint(codePoint)
+                : entity
+        }
+        return namedEntities[body.toLowerCase()] ?? entity
+    })
 }
 
 // ===== 网络搜索 =====
@@ -404,19 +431,6 @@ function parseDuckDuckGoHtml(html: string, maxResults: number): SearchResult[] {
     return results
 }
 
-// 解码 HTML 实体
-function decodeHtmlEntities(text: string): string {
-    return text
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&#x27;/g, "'")
-        .replace(/&#x2F;/g, '/')
-}
-
 // ===== 注册 IPC Handlers =====
 
 export function registerHttpHandlers() {
@@ -440,6 +454,3 @@ export function registerHttpHandlers() {
 
     logger.ipc.info('[HTTP] IPC handlers registered')
 }
-
-
-

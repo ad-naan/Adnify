@@ -26,7 +26,6 @@ export default function WorkspaceDropdown() {
     const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([])
     const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null)
     const containerRef = useRef<HTMLDivElement>(null)
-    const panelRef = useRef<HTMLDivElement>(null)
 
     const currentWorkspaceName = workspace?.roots[0]
         ? getFileName(workspace.roots[0]) || 'Workspace'
@@ -47,7 +46,7 @@ export default function WorkspaceDropdown() {
 
     const updatePosition = useCallback(() => {
         const rect = containerRef.current?.getBoundingClientRect()
-        if (!rect) return
+        if (!rect || !isOpen) return
 
         const width = 288
         const margin = 12
@@ -56,7 +55,7 @@ export default function WorkspaceDropdown() {
         const left = Math.min(Math.max(rect.left, margin), window.innerWidth - width - margin)
 
         setPanelStyle({ position: 'fixed', top, left, width, maxHeight })
-    }, [])
+    }, [isOpen])
 
     useLayoutEffect(() => {
         if (!isOpen) return
@@ -73,7 +72,10 @@ export default function WorkspaceDropdown() {
         if (!isOpen) return
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Node
-            if (containerRef.current?.contains(target) || panelRef.current?.contains(target)) return
+            if (
+                containerRef.current?.contains(target) ||
+                (target instanceof Element && target.closest('[data-workspace-panel]') !== null)
+            ) return
             setIsOpen(false)
         }
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -103,12 +105,12 @@ export default function WorkspaceDropdown() {
         <AnimatePresence>
             {isOpen && panelStyle && (
                 <motion.div
-                    ref={panelRef}
                     initial={{ opacity: 0, y: 8, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.15, ease: 'easeOut' }}
                     className="floating-surface z-[1000] overflow-hidden rounded-xl border border-border bg-background-secondary/95 p-1.5 shadow-2xl shadow-black/15 backdrop-blur-xl"
+                    data-workspace-panel
                     style={panelStyle}
                 >
                     <div className="space-y-0.5">

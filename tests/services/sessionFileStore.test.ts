@@ -15,6 +15,8 @@ vi.mock('@utils/Logger', () => ({
 
 import { SessionFileStore } from '@/renderer/services/sessionFileStore'
 
+type SessionFileStorePaths = ConstructorParameters<typeof SessionFileStore>[0]
+
 function createStore() {
   return new SessionFileStore({
     getSessionsDirPath: () => 'C:/workspace/.adnify/sessions',
@@ -68,6 +70,27 @@ describe('SessionFileStore I/O coordination', () => {
     expect(fileApi.read).toHaveBeenCalledTimes(12)
     expect(peakReads).toBeLessThanOrEqual(4)
     expect(first).toEqual(second)
+  })
+
+  it('returns no summaries before a session directory is bound', async () => {
+    const paths: SessionFileStorePaths = {
+      getSessionsDirPath: () => {
+        throw new Error('[AdnifyDir] Not initialized')
+      },
+      getSessionFilePath: () => {
+        throw new Error('[AdnifyDir] Not initialized')
+      },
+      getThreadMetaPath: () => {
+        throw new Error('[AdnifyDir] Not initialized')
+      },
+      getThreadMessagesPath: () => {
+        throw new Error('[AdnifyDir] Not initialized')
+      },
+    }
+    const store = new SessionFileStore(paths)
+
+    await expect(store.listPersistedThreadSummaries()).resolves.toEqual([])
+    expect(fileApi.readDir).not.toHaveBeenCalled()
   })
 
   it('serializes writes targeting the same session file', async () => {
