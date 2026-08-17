@@ -963,11 +963,11 @@ export function registerSecureTerminalHandlers(
    */
   safeIpcHandle('terminal:interactive', async (
     event,
-    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend; remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string } }
+    options: { id: string; cwd?: string; shell?: string; backend?: TerminalBackend; remote?: { host: string; port?: number; username?: string; password?: string; privateKeyPath?: string; remotePath?: string }; isAgent?: boolean }
   ) => {
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
-    const { id, cwd, shell, remote } = options
+    const { id, cwd, shell, remote, isAgent } = options
     const backend = options.backend ?? (process.platform === 'darwin' ? 'pipe' : 'pty')
     const effectiveBackend: TerminalBackend = backend
 
@@ -1030,7 +1030,10 @@ export function registerSecureTerminalHandlers(
       if (isWindows) {
         const shellName = path.basename(shellPath).toLowerCase()
         if (shellName === 'powershell.exe' || shellName === 'powershell' || shellName === 'pwsh.exe' || shellName === 'pwsh') {
-          const utf8Init = '$__adnifyUtf8 = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = $__adnifyUtf8; [Console]::InputEncoding = $__adnifyUtf8; [Console]::OutputEncoding = $__adnifyUtf8'
+          const psReadLineInit = isAgent
+            ? '; Remove-Module PSReadLine -ErrorAction SilentlyContinue'
+            : ''
+          const utf8Init = `$__adnifyUtf8 = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = $__adnifyUtf8; [Console]::InputEncoding = $__adnifyUtf8; [Console]::OutputEncoding = $__adnifyUtf8${psReadLineInit}`
           shellArgs = ['-NoLogo', '-NoExit', '-Command', utf8Init]
         } else if (shellName === 'cmd.exe' || shellName === 'cmd') {
           shellArgs = ['/K', 'chcp 65001 > nul']

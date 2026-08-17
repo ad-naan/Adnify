@@ -27,6 +27,12 @@ import {
   renderTerminalText,
   stripAnsi,
 } from "@/renderer/services/terminalTextExtraction";
+import {
+  createTerminalCommandFrameState,
+  filterCommandDisplayChunk,
+  pushTerminalCommandFrame,
+  type CommandDisplayFilterState,
+} from "@/renderer/services/terminalCommandProtocol";
 
 // ===== 类型定义 =====
 
@@ -261,30 +267,7 @@ function cloneCommandSession(session: TerminalCommandSession | null): TerminalCo
   return { ...session }
 }
 
-export interface CommandDisplayFilter {
-  startSequence: string
-  displayLine: string
-  pending: string
-  started: boolean
-}
-
-export function filterCommandDisplayChunk(filter: CommandDisplayFilter, data: string): string {
-  if (filter.started) return data
-
-  const combined = filter.pending + data
-  const markerIndex = combined.indexOf(filter.startSequence)
-  if (markerIndex < 0) {
-    // Discard shell input echo while retaining a possible marker prefix split
-    // across PTY chunks.
-    filter.pending = combined.slice(-Math.max(1, filter.startSequence.length - 1))
-    return ''
-  }
-
-  filter.started = true
-  filter.pending = ''
-  const afterMarker = combined.slice(markerIndex + filter.startSequence.length)
-  return `\r\x1b[2K${filter.displayLine}\r\n${afterMarker}`
-}
+export { filterCommandDisplayChunk } from "@/renderer/services/terminalCommandProtocol";
 
 class TerminalManagerClass {
   private static readonly MAX_IDLE_AGENT_TERMINALS = 2
@@ -308,7 +291,7 @@ class TerminalManagerClass {
   private currentCommandSessions = new Map<string, TerminalCommandSession>();
   private lastCommandSessions = new Map<string, TerminalCommandSession>();
   private activeExecutions = new Map<string, ActiveCommandExecution>();
-  private commandDisplayFilters = new Map<string, CommandDisplayFilter>();
+  private commandDisplayFilters = new Map<string, CommandDisplayFilterState>();
 
   // PTY 状态
   private ptyReady = new Map<string, boolean>();
@@ -642,7 +625,7 @@ class TerminalManagerClass {
     this.notify();
 
     // 创建 PTY
-    const ptyPromise = this.createPty(id, options.cwd, options.shell, backend, options.remote);
+    const ptyPromise = this.createPty(id, options.cwd, options.shell, backend, options.remote, options.isAgent);
     this.pendingPtyCreation.set(id, ptyPromise);
 
     try {
@@ -669,9 +652,10 @@ class TerminalManagerClass {
     shell?: string,
     backend: TerminalBackend = 'pty',
     remote?: TerminalInstance['remote'],
+    isAgent?: boolean,
   ): Promise<boolean> {
     try {
-      const result = await api.terminal.create({ id, cwd, shell, backend, remote });
+      const result = await api.terminal.create({ id, cwd, shell, backend, remote, isAgent });
       if (!result?.success) {
         const errorMsg = result?.error || "Unknown error";
         this.terminalCreateErrors.set(id, errorMsg)
@@ -943,6 +927,40 @@ class TerminalManagerClass {
 
   writeToTerminal(id: string, data: string) {
     api.terminal.write(id, data);
+  }
+
+  /** Start a long-running Agent command while hiding cwd/marker plumbing. */
+  executeDetachedCommand(termId: string, command: string, cwd?: string): void {
+    const terminal = this.state.terminals.find((item) => item.id === termId)
+    const shellFamily = terminal?.remote ? 'posix' : detectTerminalShellFamily(terminal?.shell)
+    if (shellFamily === 'cmd') {
+      this.writeToTerminal(termId, `${command}\r`)
+      return
+    }
+
+    const isPowerShell = shellFamily === 'powershell'
+    const sentinelId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+    const payload = `ADNIFY_DETACHED_START_${sentinelId}`
+    const startSequence = `\x1b]9001;${payload}\x07`
+    const sentinel = isPowerShell
+      ? `[Console]::Out.Write("$([char]27)]9001;${payload}$([char]7)")`
+      : `printf '\\033]9001;${payload}\\007'`
+    const runnable = cwd
+      ? (isPowerShell
+        ? `Push-Location "${cwd}"; ${command}`
+        : `cd "${cwd}" && ${command}`)
+      : command
+    const displayPath = cwd ?? (isPowerShell ? '$(Get-Location)' : '$(pwd)')
+
+    this.commandDisplayFilters.set(termId, {
+      startSequence,
+      displayLine: isPowerShell
+        ? `PS ${displayPath}> ${command}`
+        : `${displayPath.replace(/\\/g, '/')}\$ ${command}`,
+      pending: '',
+      started: false,
+    })
+    this.writeToTerminal(termId, `${sentinel}; ${runnable}\r`)
   }
 
   getOutputBuffer(id: string): string[] {
@@ -1236,9 +1254,6 @@ class TerminalManagerClass {
     const BEL = '\x07'
     const START_PAYLOAD = `ADNIFY_CMD_START_${sentinelId}`
     const END_PAYLOAD_PREFIX = `ADNIFY_CMD_END_${sentinelId}_`
-    // 用于在原始数据中检测 end sentinel
-    const RAW_END_MARKER = `${OSC}${END_PAYLOAD_PREFIX}`
-
     const commandSessionId = crypto.randomUUID()
     const startedAt = Date.now()
     const initialSession: TerminalCommandSession = {
@@ -1260,18 +1275,16 @@ class TerminalManagerClass {
     this.setCurrentCommandSession(termId, initialSession)
 
     return new Promise<CommandResult>((resolve) => {
-      let rawAccumulator = ''   // 原始 PTY 数据，用于检测 OSC sentinel
-      let textAccumulator = ''  // 剥离转义后的文本（仍含 \r，渲染在 getVisibleOutput 里做）
-      const stripper = createAnsiStripper()  // 有状态：跨 PTY 块的转义序列不会漏半截
-      let textAtStart = -1      // 检测到 START sentinel 时 textAccumulator 的长度
+      let rawAccumulator = ''   // 原始 PTY 尾部，用于提示符兜底检测
+      let textAccumulator = ''  // 只累加 START/END 帧之间的命令输出
+      const stripper = createAnsiStripper()
+      const frame = createTerminalCommandFrameState(sentinelId)
       let settled = false
       let sentinelMatched = false
       let idleTimer: ReturnType<typeof setTimeout> | null = null
 
       const getVisibleOutput = () => {
-        const output = textAtStart !== -1
-          ? textAccumulator.slice(textAtStart)
-          : textAccumulator
+        const output = textAccumulator
         // CR 覆写在这里才折叠：累加阶段必须保留 \r，否则进度条的最后一帧
         // 无法与之前的帧区分。
         return renderTerminalText(output).trim()
@@ -1351,7 +1364,7 @@ class TerminalManagerClass {
 
       const scheduleIdleFallback = () => {
         clearIdleTimer()
-        if (textAtStart === -1 || sentinelMatched) return
+        if (!frame.startSeen || sentinelMatched) return
         idleTimer = setTimeout(() => {
           if (settled) return
           const tail = rawAccumulator.slice(-400)
@@ -1378,10 +1391,15 @@ class TerminalManagerClass {
       const unsubRaw = this.onRawData((event) => {
         if (event.id !== termId || settled) return
         rawAccumulator = trimRetainedText(rawAccumulator + event.data, MAX_RAW_SENTINEL_BUFFER_CHARS)
-        textAccumulator = trimRetainedText(textAccumulator + stripper.push(event.data), MAX_COMMAND_OUTPUT_CHARS)
+        const framed = pushTerminalCommandFrame(frame, event.data)
+        if (framed.output) {
+          textAccumulator = trimRetainedText(
+            textAccumulator + stripper.push(framed.output),
+            MAX_COMMAND_OUTPUT_CHARS,
+          )
+        }
 
-        if (textAtStart === -1 && rawAccumulator.includes(`${OSC}${START_PAYLOAD}${BEL}`)) {
-          textAtStart = textAccumulator.length
+        if (framed.started) {
           this.updateCurrentCommandSession(termId, (session) => ({
             ...session,
             status: 'running',
@@ -1392,40 +1410,22 @@ class TerminalManagerClass {
         const visibleOutput = trimRetainedText(getVisibleOutput(), MAX_COMMAND_OUTPUT_CHARS)
         updatePartialOutput(visibleOutput)
 
-        // 在原始数据中检测 OSC end sentinel：ESC]9001;ADNIFY_CMD_END_..._N BEL
-        const endIdx = rawAccumulator.indexOf(RAW_END_MARKER)
-        if (endIdx !== -1) {
-          const afterMarker = rawAccumulator.slice(endIdx + RAW_END_MARKER.length)
-          // payload 容错：正常是数字退出码，但 shell 状态异常时可能是空串或
-          // 非数字（例如变量未展开）。只要 sentinel 本身到达，命令就是结束了，
-          // 不能因为 payload 解析失败而退回 idle fallback 并报成 interrupted。
-          const codeMatch = afterMarker.match(/^([^\x07]*)\x07/)
-          if (codeMatch) {
-            sentinelMatched = true
-            const rawCode = codeMatch[1].trim()
-            const parsedCode = /^\d+$/.test(rawCode) ? parseInt(rawCode, 10) : null
-            if (parsedCode === null) {
-              logger.system.warn(
-                `[TerminalManager] Sentinel exit code payload was not numeric: ${JSON.stringify(rawCode)}`,
-              )
-            }
-            // payload 不可解析时按成功处理：sentinel 已到达说明命令正常跑完，
-            // 报成失败会让上层 Agent 误判。
-            const exitCode = parsedCode ?? 0
-            this.updateCurrentCommandSession(termId, (session) => ({
-              ...session,
-              captureEndSeq: event.seq,
-              sentinelMatched: true,
-            }))
-            settle('sentinel_matched', {
-              finalStatus: exitCode === 0 ? 'completed' : 'failed',
-              exitCode,
-              output: visibleOutput,
-              partialOutput: visibleOutput,
-              sentinelMatched: true,
-            })
-            return
-          }
+        if (framed.ended) {
+          sentinelMatched = true
+          const exitCode = framed.exitCode ?? 0
+          this.updateCurrentCommandSession(termId, (session) => ({
+            ...session,
+            captureEndSeq: event.seq,
+            sentinelMatched: true,
+          }))
+          settle('sentinel_matched', {
+            finalStatus: exitCode === 0 ? 'completed' : 'failed',
+            exitCode,
+            output: visibleOutput,
+            partialOutput: visibleOutput,
+            sentinelMatched: true,
+          })
+          return
         }
 
         scheduleIdleFallback()
@@ -1438,7 +1438,7 @@ class TerminalManagerClass {
 
       // 必须先订阅，再写命令（避免竞态）
       const terminal = this.state.terminals.find((item) => item.id === termId)
-      const shellFamily = detectTerminalShellFamily(terminal?.shell)
+      const shellFamily = terminal?.remote ? 'posix' : detectTerminalShellFamily(terminal?.shell)
       const usesPosixSyntax = shellFamily === 'posix'
       const isPowerShell = !usesPosixSyntax
 
@@ -1453,7 +1453,7 @@ class TerminalManagerClass {
 
       // OSC sentinel 命令（Windows/Unix/macOS 三平台）
       const sentinelStart = isPowerShell
-        ? `Write-Host -NoNewline "$([char]27)]9001;${START_PAYLOAD}$([char]7)"`
+        ? `[Console]::Out.Write("$([char]27)]9001;${START_PAYLOAD}$([char]7)")`
         : `printf '\\033]9001;${START_PAYLOAD}\\007'`
 
       // 退出码求值必须在紧跟命令的那一步完成，且不能被后续语句覆盖。
@@ -1472,7 +1472,7 @@ class TerminalManagerClass {
       // 原生命令用真实退出码，cmdlet 成功记 0、失败记 1。
       const PS_CAPTURE = '$__adnify_ok = $?; $__adnify_lec = $LASTEXITCODE'
       const PS_RESOLVE = '$__adnify_ec = if ($__adnify_ok) { if ($null -ne $__adnify_lec) { $__adnify_lec } else { 0 } } else { if ($__adnify_lec) { $__adnify_lec } else { 1 } }'
-      const psEmitEnd = `Write-Host -NoNewline "$([char]27)]9001;${END_PAYLOAD_PREFIX}$__adnify_ec$([char]7)"`
+      const psEmitEnd = `[Console]::Out.Write("$([char]27)]9001;${END_PAYLOAD_PREFIX}$__adnify_ec$([char]7)")`
       const sentinelEnd = isPowerShell
         ? `${PS_RESOLVE}; ${psEmitEnd}`
         : `printf '\\033]9001;${END_PAYLOAD_PREFIX}%s\\007' "$__adnify_ec"`
@@ -1483,8 +1483,8 @@ class TerminalManagerClass {
       // 注：sentinelStart 不在这里——它由 wrapped 在主命令前单独发出。
       const mainCommand = isPowerShell
         ? (cwd
-          ? `Push-Location "${cwd}"; ${sanitizedCommand}; ${PS_CAPTURE}; Pop-Location; ${sentinelEnd}`
-          : `${sanitizedCommand}; ${PS_CAPTURE}; ${sentinelEnd}`)
+          ? `Push-Location "${cwd}"; & { ${sanitizedCommand} } | Out-Host; ${PS_CAPTURE}; Pop-Location; ${sentinelEnd}`
+          : `& { ${sanitizedCommand} } | Out-Host; ${PS_CAPTURE}; ${sentinelEnd}`)
         : (cwd
           ? `( cd "${cwd}" && ${sanitizedCommand} ); __adnify_ec=$?; ${sentinelEnd}`
           : `${sanitizedCommand}; __adnify_ec=$?; ${sentinelEnd}`)
@@ -1501,6 +1501,7 @@ class TerminalManagerClass {
         displayLine,
         pending: '',
         started: false,
+        frame: createTerminalCommandFrameState(sentinelId),
       })
 
       const wrapped = `${sentinelStart}; ${mainCommand}\r`

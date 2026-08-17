@@ -32,6 +32,7 @@ import {
 } from '../services/multimodalRoutingService'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
+import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
@@ -381,6 +382,12 @@ export async function runLoop(
   }
 
   const threadStore = store.forThread(threadId)
+  const completeVisibleTodos = () => {
+    const todos = threadStore.getTodos()
+    if (todos.some(todo => todo.status !== 'completed')) {
+      threadStore.setTodos(completeTodosAfterSuccessfulTurn(todos))
+    }
+  }
   const agentConfig = getAgentConfig()
   const maxIterations = mainStore.agentConfig.maxToolLoops || agentConfig.maxToolLoops
   const enableAutoFix = mainStore.agentConfig.enableAutoFix
@@ -515,6 +522,7 @@ export async function runLoop(
     }
 
     threadStore.updateExecutionMeta({ loopState: 'completed' })
+    completeVisibleTodos()
     EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, planTaskId: context.planTaskId })
   }
 
@@ -774,6 +782,7 @@ Try again with the corrected tool call.`,
       }
 
       threadStore.updateExecutionMeta({ loopState: 'completed' })
+      completeVisibleTodos()
       EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, planTaskId: context.planTaskId })
       break
     }

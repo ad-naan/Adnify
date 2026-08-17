@@ -79,13 +79,17 @@ class WorkspaceManager {
     })
 
     try {
+      // Persist the old workspace while its security boundary is still active.
+      // Switching the main process first makes writes to the old .adnify data
+      // fail when changing folders from an already-open project.
+      await this.saveCurrentWorkspace()
+
       const redirected = await this.handleWorkspaceRedirection(newWorkspace)
       if (redirected) {
         api.window.close()
-        return false
+        return true
       }
 
-      await this.saveCurrentWorkspace()
       await runCacheCleanupPhase('workspace-switch')
       this.resetRuntimeState()
       await this.loadWorkspace(newWorkspace)
@@ -102,6 +106,7 @@ class WorkspaceManager {
 
       if (oldWorkspace) {
         try {
+          await api.workspace.setActive(oldWorkspace.roots)
           await this.loadWorkspace(oldWorkspace)
         } catch {
           this.resetRuntimeState()

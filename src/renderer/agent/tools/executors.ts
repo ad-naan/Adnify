@@ -1647,7 +1647,11 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                         ? `(cd "${resolvedCwd}" && ${command})`
                         : `Push-Location "${resolvedCwd}"; ${command}; Pop-Location`)
                     : command
-                terminalManager.writeToTerminal(termId, `${bgCmd}\r`)
+                terminalManager.executeDetachedCommand(
+                    termId,
+                    remoteLink ? bgCmd : command,
+                    remoteLink ? undefined : (resolvedCwd || undefined),
+                )
 
                 const detachedSession = terminalManager.recordDetachedCommand(
                     termId,

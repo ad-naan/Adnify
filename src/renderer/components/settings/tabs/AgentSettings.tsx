@@ -21,6 +21,7 @@ export function AgentSettings({
     const [selectedTemplateForPreview, setSelectedTemplateForPreview] = useState<string | null>(null)
     const [showAdvanced, setShowAdvanced] = useState(false)
     const [showGoogleApiKey, setShowGoogleApiKey] = useState(false)
+    const [terminalCommandInput, setTerminalCommandInput] = useState('')
 
     // 使用 DEFAULT_AGENT_CONFIG 中的忽略目录作为默认值
     const defaultIgnoredDirs = DEFAULT_AGENT_CONFIG.ignoredDirectories
@@ -59,11 +60,6 @@ export function AgentSettings({
                         </div>
                         <div className="space-y-3">
                             <Switch
-                                label={t('自动批准终端命令', 'Auto-approve terminal commands')}
-                                checked={autoApprove.terminal}
-                                onChange={(e) => setAutoApprove({ ...autoApprove, terminal: e.target.checked })}
-                            />
-                            <Switch
                                 label={t('自动批准危险操作', 'Auto-approve dangerous operations')}
                                 checked={autoApprove.dangerous}
                                 onChange={(e) => setAutoApprove({ ...autoApprove, dangerous: e.target.checked })}
@@ -78,6 +74,55 @@ export function AgentSettings({
                                 checked={agentConfig.expandAgentBlocksByDefault ?? false}
                                 onChange={(e) => setAgentConfig({ ...agentConfig, expandAgentBlocksByDefault: e.target.checked })}
                             />
+                            <div className="space-y-2 pt-2">
+                                <label className="text-xs font-medium text-text-secondary">
+                                    {t('始终允许的终端规则', 'Always-allowed terminal rules')}
+                                </label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={terminalCommandInput}
+                                        onChange={(event) => setTerminalCommandInput(event.target.value)}
+                                        placeholder={t('例如：git status *', 'For example: git status *')}
+                                        className="flex-1"
+                                    />
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => {
+                                            const command = terminalCommandInput.trim()
+                                            if (!command || (autoApprove.terminalCommandRules || []).includes(command)) return
+                                            setAutoApprove({
+                                                ...autoApprove,
+                                                terminalCommandRules: [...(autoApprove.terminalCommandRules || []), command],
+                                            })
+                                            setTerminalCommandInput('')
+                                        }}
+                                    >
+                                        {t('添加', 'Add')}
+                                    </Button>
+                                </div>
+                                {(autoApprove.terminalCommandRules || []).length > 0 && (
+                                    <div className="max-h-36 space-y-1.5 overflow-y-auto pr-1">
+                                        {(autoApprove.terminalCommandRules || []).map(command => (
+                                            <div key={command} className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
+                                                <code className="min-w-0 flex-1 truncate text-[11px] text-text-secondary" title={command}>{command}</code>
+                                                <button
+                                                    type="button"
+                                                    className="shrink-0 text-[11px] text-text-muted hover:text-red-400"
+                                                    onClick={() => setAutoApprove({
+                                                        ...autoApprove,
+                                                        terminalCommandRules: (autoApprove.terminalCommandRules || []).filter(item => item !== command),
+                                                    })}
+                                                >
+                                                    {t('移除', 'Remove')}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="text-[10px] leading-4 text-text-muted">
+                                    {t('* 可匹配相似参数；复合命令会逐段检查，未命中的部分仍会询问。', '* matches similar arguments. Compound commands are checked one part at a time.')}
+                                </p>
+                            </div>
                         </div>
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs">
                             <AlertOctagon className="w-4 h-4 shrink-0 mt-0.5" />

@@ -17,4 +17,7 @@ export interface InteractiveContent {
   options: InteractiveOption[]
   multiSelect?: boolean
   selectedIds?: string[]
+  customResponse?: string
+  /** Custom-only answers can be complete without any selected option IDs. */
+  answeredAt?: number
 }

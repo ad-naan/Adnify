@@ -27,9 +27,8 @@ interface InteractiveCardProps {
 const isCustomOption = (option: { id: string; label: string }) => {
     const id = option.id.toLowerCase()
     const label = option.label.toLowerCase()
-    return ['custom', 'other', '其他', '自定义'].some(k =>
-        id.includes(k) || label.includes(k)
-    )
+    return /(^|[-_])(custom|other)([-_]|$)/.test(id)
+        || ['其他', '自定义', 'custom', 'other'].includes(label.trim())
 }
 
 export function InteractiveCard({ content, onSelect, disabled }: InteractiveCardProps) {
@@ -38,21 +37,25 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
         new Set(content.selectedIds || [])
     )
     const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
-    const [submitted, setSubmitted] = useState(!!content.selectedIds?.length)
-    const [customText, setCustomText] = useState('')
+    const initiallySubmitted = Boolean(content.answeredAt || content.selectedIds?.length)
+    const [submitted, setSubmitted] = useState(initiallySubmitted)
+    const submittedRef = useRef(initiallySubmitted)
+    const [customText, setCustomText] = useState(content.customResponse || '')
     const [showCustomInput, setShowCustomInput] = useState(false)
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const language = useStore(s => s.language)
 
     useEffect(() => {
-        if (content.selectedIds?.length) {
+        if (content.answeredAt || content.selectedIds?.length) {
             setSelected(new Set(content.selectedIds))
             setSubmitted(true)
+            submittedRef.current = true
+            setCustomText(content.customResponse || '')
             if (disabled) {
                 setIsExpanded(false)
             }
         }
-    }, [content.selectedIds, disabled])
+    }, [content.answeredAt, content.customResponse, content.selectedIds, disabled])
 
     // 聚焦输入框
     useEffect(() => {
@@ -62,7 +65,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
     }, [showCustomInput])
 
     const handleToggle = useCallback((id: string) => {
-        if (disabled || submitted) return
+        if (disabled || submittedRef.current) return
 
         const option = content.options.find(o => o.id === id)
         const isCustom = option && isCustomOption(option)
@@ -92,6 +95,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
 
         // 单选 + 非自定义：立即提交
         if (!content.multiSelect && !(option && isCustomOption(option))) {
+            submittedRef.current = true
             setTimeout(() => {
                 setSubmitted(true)
                 onSelect([id])
@@ -101,7 +105,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
     }, [content.multiSelect, content.options, disabled, submitted, onSelect])
 
     const handleSubmit = useCallback(() => {
-        if (selected.size === 0 || submitted) return
+        if (selected.size === 0 || submittedRef.current) return
 
         // 检查是否有自定义选项并携带文本
         const selectedArr = Array.from(selected)
@@ -110,17 +114,25 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
             return opt && isCustomOption(opt)
         })
 
+        submittedRef.current = true
         setSubmitted(true)
         onSelect(selectedArr, hasCustom && customText.trim() ? customText.trim() : undefined)
         setIsExpanded(false)
     }, [selected, submitted, onSelect, customText, content.options])
 
     const handleCustomSubmit = useCallback(() => {
-        if (!customText.trim() || submitted) return
+        if (!customText.trim() || submittedRef.current) return
+        submittedRef.current = true
         setSubmitted(true)
         onSelect(Array.from(selected), customText.trim())
         setIsExpanded(false)
     }, [customText, submitted, selected, onSelect])
+
+    const toggleCustomInput = useCallback(() => {
+        if (disabled || submittedRef.current) return
+        setShowCustomInput(current => !current)
+        if (!content.multiSelect) setSelected(new Set())
+    }, [content.multiSelect, disabled])
 
     const isMulti = content.multiSelect
 
@@ -236,6 +248,19 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                     )
                                 })}
                             </div>
+
+                            {!submitted && (
+                                <button
+                                    type="button"
+                                    onClick={toggleCustomInput}
+                                    className={`relative z-10 mt-1.5 w-full rounded-md border border-dashed px-2.5 py-2 text-left text-[11px] transition-colors ${showCustomInput
+                                        ? 'border-accent/45 bg-accent/10 text-text-primary'
+                                        : 'border-border/60 text-text-muted hover:border-accent/35 hover:text-text-secondary'
+                                    }`}
+                                >
+                                    {language === 'zh' ? '自定义回答' : 'Custom response'}
+                                </button>
+                            )}
 
                             {/* Custom Text Input */}
                             <AnimatePresence>

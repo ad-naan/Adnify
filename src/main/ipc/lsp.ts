@@ -485,8 +485,14 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
   ipcMain.handle('lsp:installBasicServers', async () => {
     try {
-      await installBasicServers()
-      return { success: true }
+      const result = await installBasicServers()
+      if (result.success) {
+        lspManager.clearUnavailable('typescript')
+        lspManager.clearUnavailable('html')
+        lspManager.clearUnavailable('css')
+        lspManager.clearUnavailable('json')
+      }
+      return result
     } catch (err) {
       return { success: false, error: toAppError(err).message }
     }

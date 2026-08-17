@@ -170,7 +170,12 @@ export function commandExists(cmd: string): boolean {
 /**
  * 运行 npm 安装包到指定目录
  */
-async function npmInstall(packageNames: string | string[], targetDir: string): Promise<boolean> {
+interface PackageInstallResult {
+  success: boolean
+  error?: string
+}
+
+async function npmInstall(packageNames: string | string[], targetDir: string): Promise<PackageInstallResult> {
   return new Promise((resolve) => {
     const npmCmd = getNpmCommand()
     const resolvedNpmCmd = resolveCommandPath(npmCmd) || resolveCommandPath('npm')
@@ -189,7 +194,7 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
     // 检查 npm 是否可用
     if (!resolvedNpmCmd) {
       logger.lsp.error('[LSP Installer] npm not found in PATH')
-      resolve(false)
+      resolve({ success: false, error: 'npm was not found. Install Node.js 20 or newer and restart Adnify.' })
       return
     }
 
@@ -200,7 +205,7 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
         logger.lsp.debug(`[LSP Installer] Created target directory: ${targetDir}`)
       } catch (err) {
         logger.lsp.error(`[LSP Installer] Failed to create target directory: ${targetDir}`, err)
-        resolve(false)
+        resolve({ success: false, error: `Cannot create the LSP installation directory: ${targetDir}` })
         return
       }
     }
@@ -232,7 +237,7 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
     proc.on('close', (code) => {
       if (code === 0) {
         logger.lsp.info(`[LSP Installer] npm install succeeded for ${packages.join(' ')}`)
-        resolve(true)
+        resolve({ success: true })
       } else {
         logger.lsp.error(`[LSP Installer] npm install failed with code ${code}`, {
           packageNames: packages,
@@ -240,7 +245,8 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
           stdout: stdout.slice(-500), // 最后 500 字符
           stderr: stderr.slice(-500),
         })
-        resolve(false)
+        const detail = stderr.trim() || stdout.trim() || `npm exited with code ${code}`
+        resolve({ success: false, error: detail.slice(-2000) })
       }
     })
 
@@ -251,7 +257,7 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
         targetDir,
         npmCmd: resolvedNpmCmd,
       })
-      resolve(false)
+      resolve({ success: false, error: `Could not start npm: ${err.message}` })
     })
   })
 }
@@ -727,9 +733,9 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const success = await npmInstall(['typescript-language-server', 'typescript'], binDir)
+  const installResult = await npmInstall(['typescript-language-server', 'typescript'], binDir)
 
-  if (success) {
+  if (installResult.success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('typescript')
     if (serverPath) {
@@ -745,7 +751,7 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
   }
 
   logger.lsp.error('[LSP Installer] npm install failed for typescript-language-server')
-  return { success: false, error: 'npm install failed. Check logs for details.' }
+  return { success: false, error: installResult.error || 'npm install failed. Check logs for details.' }
 }
 
 /**
@@ -764,9 +770,9 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const success = await npmInstall('vscode-langservers-extracted', binDir)
+  const installResult = await npmInstall('vscode-langservers-extracted', binDir)
 
-  if (success) {
+  if (installResult.success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('html')
     if (serverPath) {
@@ -782,7 +788,7 @@ export async function installVscodeLanguageServers(): Promise<LspInstallResult> 
   }
 
   logger.lsp.error('[LSP Installer] npm install failed for vscode-langservers-extracted')
-  return { success: false, error: 'npm install failed. Check logs for details.' }
+  return { success: false, error: installResult.error || 'npm install failed. Check logs for details.' }
 }
 
 /**
@@ -801,9 +807,9 @@ export async function installPyright(): Promise<LspInstallResult> {
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const success = await npmInstall('pyright', binDir)
+  const installResult = await npmInstall('pyright', binDir)
 
-  if (success) {
+  if (installResult.success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('python')
     if (serverPath) {
@@ -819,7 +825,7 @@ export async function installPyright(): Promise<LspInstallResult> {
   }
 
   logger.lsp.error('[LSP Installer] npm install failed for pyright')
-  return { success: false, error: 'npm install failed. Check logs for details.' }
+  return { success: false, error: installResult.error || 'npm install failed. Check logs for details.' }
 }
 
 /**
@@ -838,9 +844,9 @@ export async function installVueServer(): Promise<LspInstallResult> {
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const success = await npmInstall('@vue/language-server', binDir)
+  const installResult = await npmInstall('@vue/language-server', binDir)
 
-  if (success) {
+  if (installResult.success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('vue')
     if (serverPath) {
@@ -856,7 +862,7 @@ export async function installVueServer(): Promise<LspInstallResult> {
   }
 
   logger.lsp.error('[LSP Installer] npm install failed for @vue/language-server')
-  return { success: false, error: 'npm install failed. Check logs for details.' }
+  return { success: false, error: installResult.error || 'npm install failed. Check logs for details.' }
 }
 
 /**
@@ -1278,9 +1284,9 @@ export async function installIntelephense(): Promise<LspInstallResult> {
   const binDir = getLspBinDir()
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const success = await npmInstall('intelephense', binDir)
+  const installResult = await npmInstall('intelephense', binDir)
 
-  if (success) {
+  if (installResult.success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
     const serverPath = getInstalledServerPath('php')
     if (serverPath) {
@@ -1296,7 +1302,7 @@ export async function installIntelephense(): Promise<LspInstallResult> {
   }
 
   logger.lsp.error('[LSP Installer] npm install failed for intelephense')
-  return { success: false, error: 'npm install failed. Check logs for details.' }
+  return { success: false, error: installResult.error || 'npm install failed. Check logs for details.' }
 }
 
 // ============ 统一安装入口 ============

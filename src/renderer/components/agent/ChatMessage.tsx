@@ -32,6 +32,7 @@ import type { LLMStreamSource } from '@/shared/types/llm'
 import { LintCheckCard } from './LintCheckCard'
 import ToolCallGroup, { renderToolCallCard } from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
+import { buildInteractiveResponse } from '@/renderer/agent/utils/interactiveResponse'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
@@ -1473,15 +1474,11 @@ const ChatMessage = React.memo(({
                   <InteractiveCard
                     content={assistantInteractive}
                     onSelect={(selectedIds, customText) => {
-                      const selectedLabels = assistantInteractive.options
-                        .filter(opt => selectedIds.includes(opt.id))
-                        .map(opt => opt.label)
-                      // 有自定义文本时，用自定义文本作为消息内容
-                      const response = customText || selectedLabels.join(', ')
-                      window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds } }))
+                      const response = buildInteractiveResponse(assistantInteractive, { selectedIds, customText })
+                      window.dispatchEvent(new CustomEvent('chat-update-interactive', { detail: { messageId: message.id, selectedIds, customText } }))
                       window.dispatchEvent(new CustomEvent('chat-send-message', { detail: { content: response, messageId: message.id } }))
                     }}
-                    disabled={!!assistantInteractive.selectedIds?.length}
+                    disabled={Boolean(assistantInteractive.answeredAt || assistantInteractive.selectedIds?.length)}
                   />
                 </div>
               )}

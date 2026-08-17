@@ -285,6 +285,7 @@ export interface AppSettingsSchema {
   autoApprove?: {
     terminal?: boolean
     dangerous?: boolean
+    terminalCommandRules?: string[]
   }
   promptTemplateId?: string
   agentConfig?: AgentConfigSchema
@@ -327,6 +328,15 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
     cleaned.autoApprove = {}
     if (typeof aa.terminal === 'boolean') cleaned.autoApprove.terminal = aa.terminal
     if (typeof aa.dangerous === 'boolean') cleaned.autoApprove.dangerous = aa.dangerous
+    const terminalRules = Array.isArray(aa.terminalCommandRules)
+      ? aa.terminalCommandRules
+      : (Array.isArray(aa.terminalCommands) ? aa.terminalCommands : [])
+    if (terminalRules.length > 0) {
+      cleaned.autoApprove.terminalCommandRules = terminalRules
+        .filter((rule): rule is string => typeof rule === 'string')
+        .map(rule => rule.trim())
+        .filter(Boolean)
+    }
   }
 
   if (typeof config.promptTemplateId === 'string') cleaned.promptTemplateId = config.promptTemplateId

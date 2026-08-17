@@ -57,6 +57,7 @@ import PlanWorkbench from '@/renderer/components/plan/workbench/PlanWorkbench'
 import { isPlanBoardPath } from '@/shared/types/planBoard'
 import { findMostRecentThreadForMode, isTopLevelThreadForMode } from '@/renderer/agent/threads/threadModeProjection'
 import type { WorkMode } from '@/shared/types/workMode'
+import { findThreadIdForMessage } from '@/renderer/agent/utils/interactiveResponse'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -290,24 +291,29 @@ export default function ChatPanel() {
   // 监听选项卡片选择事件
   useEffect(() => {
     const handleOptionSelect = (event: CustomEvent<{ content: string; messageId: string }>) => {
-      const { content } = event.detail
+      const { content, messageId } = event.detail
       if (content) {
-        sendMessage(content)
+        const state = useAgentStore.getState()
+        const threadId = findThreadIdForMessage(state.threads, messageId)
+        void sendMessage(content, threadId ? { threadId } : undefined)
       }
     }
 
-    const handleUpdateInteractive = (event: CustomEvent<{ messageId: string; selectedIds: string[] }>) => {
-      const { messageId, selectedIds } = event.detail
+    const handleUpdateInteractive = (event: CustomEvent<{ messageId: string; selectedIds: string[]; customText?: string }>) => {
+      const { messageId, selectedIds, customText } = event.detail
       // 更新消息的 interactive.selectedIds
       const store = useAgentStore.getState()
-      const thread = store.getCurrentThread()
+      const threadId = findThreadIdForMessage(store.threads, messageId)
+      const thread = threadId ? store.threads[threadId] : undefined
       if (thread) {
         const msg = thread.messages.find(m => m.id === messageId)
         if (msg && msg.role === 'assistant' && (msg as any).interactive) {
-          store.updateMessage(messageId, {
+          store.forThread(thread.id).updateMessage(messageId, {
             interactive: {
               ...(msg as any).interactive,
               selectedIds,
+              customResponse: customText?.trim() || undefined,
+              answeredAt: Date.now(),
             },
           } as any)
         }
