@@ -3,7 +3,7 @@
  * 管理语言服务器的安装、配置和状态
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   FolderOpen,
   Download,
@@ -37,7 +37,8 @@ export function LspSettings({ language }: LspSettingsProps) {
   const [binDir, setBinDir] = useState('')
   const [defaultBinDir, setDefaultBinDir] = useState('')
   const [customBinDir, setCustomBinDir] = useState('')
-  const [installing, setInstalling] = useState<string | null>(null)
+  const [installing, setInstalling] = useState<Set<string>>(new Set())
+  const hasLoadedOnce = useRef(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,7 +77,10 @@ export function LspSettings({ language }: LspSettingsProps) {
 
   // 加载状态
   const loadStatus = useCallback(async () => {
-    setLoading(true)
+    // 首次加载显示 loading spinner，后续刷新静默更新避免闪烁
+    if (!hasLoadedOnce.current) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const [status, currentDir, defaultDir] = await Promise.all([
@@ -91,6 +95,7 @@ export function LspSettings({ language }: LspSettingsProps) {
       if (currentDir !== defaultDir) {
         setCustomBinDir(currentDir)
       }
+      hasLoadedOnce.current = true
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -104,11 +109,21 @@ export function LspSettings({ language }: LspSettingsProps) {
 
   // 安装服务器
   const handleInstall = async (serverId: string) => {
-    setInstalling(serverId)
+    setInstalling(prev => { const next = new Set(prev); next.add(serverId); return next })
     try {
       const result = await api.lsp.installServer(serverId)
       if (result.success) {
-        await loadStatus()
+        // 局部更新状态，避免全量重载导致的闪烁和状态丢失
+        // html/css/json 共享 vscode-langservers-extracted 包，一个安装成功意味着全部可用
+        const sharedIds = ['html', 'css', 'json']
+        const idsToUpdate = sharedIds.includes(serverId) ? sharedIds : [serverId]
+        setServerStatus(prev => {
+          const next = { ...prev }
+          for (const id of idsToUpdate) {
+            next[id] = { installed: true, path: result.path }
+          }
+          return next
+        })
         const serverName = LSP_SERVER_DEFINITIONS.find(server => server.id === serverId)?.name || serverId
         toast.success(language === 'zh' ? '语言服务器安装成功' : 'Language server installed', serverName)
       } else {
@@ -121,17 +136,19 @@ export function LspSettings({ language }: LspSettingsProps) {
       setError(message)
       toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
     } finally {
-      setInstalling(null)
+      setInstalling(prev => { const next = new Set(prev); next.delete(serverId); return next })
     }
   }
 
   // 安装所有基础服务器
   const handleInstallAll = async () => {
-    setInstalling('all')
+    setInstalling(prev => { const next = new Set(prev); next.add('all'); return next })
     try {
       const result = await api.lsp.installBasicServers()
       if (result.success) {
-        await loadStatus()
+        // 基础服务器包含 typescript + html/css/json，局部更新它们的状态
+        const freshStatus = await api.lsp.getServerStatus()
+        setServerStatus(freshStatus)
         toast.success(language === 'zh' ? '基础语言服务器安装成功' : 'Basic language servers installed')
       } else {
         const message = result.error || 'Installation failed'
@@ -143,7 +160,7 @@ export function LspSettings({ language }: LspSettingsProps) {
       setError(message)
       toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
     } finally {
-      setInstalling(null)
+      setInstalling(prev => { const next = new Set(prev); next.delete('all'); return next })
     }
   }
 
@@ -276,9 +293,9 @@ export function LspSettings({ language }: LspSettingsProps) {
               variant="secondary"
               size="sm"
               onClick={handleInstallAll}
-              disabled={installing !== null}
+              disabled={installing.size > 0}
             >
-              {installing === 'all' ? (
+              {installing.has('all') ? (
                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
               ) : (
                 <Download className="w-4 h-4 mr-1" />
@@ -294,7 +311,7 @@ export function LspSettings({ language }: LspSettingsProps) {
           {LSP_SERVER_DEFINITIONS.map((server) => {
             const status = serverStatus[server.id]
             const isInstalled = status?.installed
-            const isInstalling = installing === server.id
+            const isInstalling = installing.has(server.id)
             const isBuiltin = server.builtin
             const canInstall = server.installable
 
@@ -345,7 +362,7 @@ export function LspSettings({ language }: LspSettingsProps) {
                     variant={isInstalled ? 'ghost' : 'secondary'}
                     size="sm"
                     onClick={() => handleInstall(server.id)}
-                    disabled={installing !== null}
+                    disabled={isInstalling || installing.has('all')}
                     className="ml-4"
                   >
                     {isInstalling ? (
