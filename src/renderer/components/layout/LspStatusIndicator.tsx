@@ -74,7 +74,7 @@ const LANGUAGES_WITH_RUNTIME = new Set([
 export default function LspStatusIndicator() {
   const { activeFilePath, language, workspacePath } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language, workspacePath: s.workspacePath })))
   const [serverStatus, setServerStatus] = useState<Record<string, LspServerStatus>>({})
-  const [installing, setInstalling] = useState<string | null>(null)
+  const [installing, setInstalling] = useState<Set<string>>(new Set())
   const [currentLanguageId, setCurrentLanguageId] = useState<string | null>(null)
   const [runtimePath, setRuntimePath] = useState<string | null>(null)
 
@@ -106,19 +106,27 @@ export default function LspStatusIndicator() {
 
   // 安装服务器
   const handleInstall = useCallback(async (serverType: string) => {
-    setInstalling(serverType)
+    setInstalling(prev => { const next = new Set(prev); next.add(serverType); return next })
     try {
       const result = await api.lsp.installServer(serverType)
       if (result.success) {
-        const newStatus = await api.lsp.getServerStatus()
-        setServerStatus(newStatus)
+        // 局部更新当前服务器状态，避免全量重载导致状态闪烁
+        const sharedIds = ['html', 'css', 'json']
+        const idsToUpdate = sharedIds.includes(serverType) ? sharedIds : [serverType]
+        setServerStatus(prev => {
+          const next = { ...prev }
+          for (const id of idsToUpdate) {
+            next[id] = { installed: true, path: result.path }
+          }
+          return next
+        })
       } else {
         logger.lsp.error('Install failed:', result.error)
       }
     } catch (error) {
       logger.lsp.error('Install error:', error)
     } finally {
-      setInstalling(null)
+      setInstalling(prev => { const next = new Set(prev); next.delete(serverType); return next })
     }
   }, [])
 
@@ -254,10 +262,10 @@ export default function LspStatusIndicator() {
             {installInfo.auto ? (
               <button
                 onClick={() => handleInstall(currentServerType)}
-                disabled={installing !== null}
+                disabled={installing.has(currentServerType)}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-accent/20 hover:bg-accent/30 text-accent rounded-md transition-colors disabled:opacity-50"
               >
-                {installing === currentServerType ? (
+                {installing.has(currentServerType) ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>{language === 'zh' ? '安装中...' : 'Installing...'}</span>
