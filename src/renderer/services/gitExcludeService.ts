@@ -2,6 +2,8 @@ import { api } from './electronAPI'
 import { gitService } from './gitService'
 import { normalizePath, toRelativePath } from '@shared/utils/pathUtils'
 
+export type GitIgnoreTarget = 'gitignore' | 'exclude'
+
 export function createGitExcludePattern(repoRoot: string, targetPath: string, isDirectory: boolean): string {
   const relative = toRelativePath(normalizePath(targetPath), normalizePath(repoRoot))
     .replace(/\\/g, '/')
@@ -29,10 +31,16 @@ export function updateGitExcludeContent(content: string, pattern: string, action
   return lines.join(newline)
 }
 
-interface GitExcludeStatus {
+export interface GitIgnoreEntryStatus {
   pattern: string
   ignored: boolean
   available: boolean
+}
+
+export interface GitIgnoreCombinedStatus {
+  available: boolean
+  gitignore: GitIgnoreEntryStatus
+  exclude: GitIgnoreEntryStatus
 }
 
 async function findRepositoryForPath(workspacePath: string, targetPath: string) {
@@ -42,46 +50,78 @@ async function findRepositoryForPath(workspacePath: string, targetPath: string) 
     .sort((left, right) => right.root.length - left.root.length)[0]
 }
 
+function resolveIgnoreFilePath(repoRoot: string, target: GitIgnoreTarget): string {
+  return target === 'gitignore'
+    ? `${repoRoot}/.gitignore`
+    : `${repoRoot}/.git/info/exclude`
+}
+
 class GitExcludeService {
   async update(
     workspacePath: string,
     targetPath: string,
     isDirectory: boolean,
     action: 'add' | 'remove',
-  ): Promise<{ changed: boolean; pattern: string }> {
+    target: GitIgnoreTarget = 'exclude',
+  ): Promise<{ changed: boolean; pattern: string; target: GitIgnoreTarget }> {
     const normalizedTarget = normalizePath(targetPath).replace(/\/$/, '')
     const repository = await findRepositoryForPath(workspacePath, normalizedTarget)
     if (!repository) throw new Error('所选内容不在 Git 仓库中')
 
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
-    const ignorePath = `${repository.root}/.gitignore`
-    const exists = await api.file.exists(ignorePath)
-    const current = exists ? (await api.file.read(ignorePath) || '') : ''
+    const filePath = resolveIgnoreFilePath(repository.root, target)
+    const exists = await api.file.exists(filePath)
+    const current = exists ? (await api.file.read(filePath) || '') : ''
     const next = updateGitExcludeContent(current, pattern, action)
-    if (next === current) return { changed: false, pattern }
+    if (next === current) return { changed: false, pattern, target }
 
-    const written = await api.file.write(ignorePath, next)
-    if (!written) throw new Error('写入 .gitignore 失败')
-    return { changed: true, pattern }
+    const written = await api.file.write(filePath, next)
+    const fileLabel = target === 'gitignore' ? '.gitignore' : '.git/info/exclude'
+    if (!written) throw new Error(`写入 ${fileLabel} 失败`)
+    return { changed: true, pattern, target }
   }
 
   async getStatus(
     workspacePath: string,
     targetPath: string,
     isDirectory: boolean,
-  ): Promise<GitExcludeStatus> {
+  ): Promise<GitIgnoreCombinedStatus> {
     const normalizedTarget = normalizePath(targetPath).replace(/\/$/, '')
     const repository = await findRepositoryForPath(workspacePath, normalizedTarget)
-    if (!repository) return { pattern: '', ignored: false, available: false }
+    if (!repository) {
+      return {
+        available: false,
+        gitignore: { pattern: '', ignored: false, available: false },
+        exclude: { pattern: '', ignored: false, available: false },
+      }
+    }
 
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
-    const ignorePath = `${repository.root}/.gitignore`
-    const exists = await api.file.exists(ignorePath)
-    const current = exists ? (await api.file.read(ignorePath) || '') : ''
+    const gitignorePath = resolveIgnoreFilePath(repository.root, 'gitignore')
+    const excludePath = resolveIgnoreFilePath(repository.root, 'exclude')
+
+    const [gitignoreExists, excludeExists] = await Promise.all([
+      api.file.exists(gitignorePath),
+      api.file.exists(excludePath),
+    ])
+
+    const [gitignoreContent, excludeContent] = await Promise.all([
+      gitignoreExists ? (await api.file.read(gitignorePath) || '') : '',
+      excludeExists ? (await api.file.read(excludePath) || '') : '',
+    ])
+
     return {
-      pattern,
       available: true,
-      ignored: updateGitExcludeContent(current, pattern, 'remove') !== current,
+      gitignore: {
+        pattern,
+        available: true,
+        ignored: updateGitExcludeContent(gitignoreContent, pattern, 'remove') !== gitignoreContent,
+      },
+      exclude: {
+        pattern,
+        available: true,
+        ignored: updateGitExcludeContent(excludeContent, pattern, 'remove') !== excludeContent,
+      },
     }
   }
 }

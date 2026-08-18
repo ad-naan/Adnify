@@ -111,8 +111,9 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     x: number
     y: number
     node: FlattenedNode
-    gitIgnored: boolean | null
     gitAvailable: boolean
+    gitignoreIgnored: boolean | null
+    gitExcludeIgnored: boolean | null
   } | null>(null)
   const [clipboardItem, setClipboardItem] = useState<ExplorerClipboardItem | null>(
     () => explorerClipboardService.getState().item
@@ -126,29 +127,51 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const dragSourcePathRef = useRef<string | null>(null)
   const gitExcludeMenuAbortRef = useRef<AbortController | null>(null)
 
-  const handleGitExclude = useCallback(async (node: FlattenedNode, action: 'add' | 'remove') => {
+  const handleGitIgnore = useCallback(async (
+    node: FlattenedNode,
+    action: 'add' | 'remove',
+    target: import('@services/gitExcludeService').GitIgnoreTarget,
+  ) => {
     if (!workspacePath) return
+    const targetLabel = target === 'gitignore' ? '.gitignore' : '.git/info/exclude'
     try {
       const result = await gitExcludeService.update(
         workspacePath,
         node.item.path,
         node.item.isDirectory,
         action,
+        target,
       )
-      const verb = action === 'add' ? '加入' : '移出'
-      toast.success(result.changed ? `已${verb} Git 本地排除` : '无需更改', result.pattern)
+      const verb = action === 'add'
+        ? (language === 'zh' ? '添加' : 'Added')
+        : (language === 'zh' ? '移除' : 'Removed')
+      toast.success(
+        result.changed
+          ? (language === 'zh' ? `已${verb}到 ${targetLabel}` : `${verb} ${targetLabel}`)
+          : (language === 'zh' ? '无需更改' : 'No changes needed'),
+        result.pattern,
+      )
       setContextMenu(current => current && current.node === node
-        ? { ...current, gitIgnored: action === 'add', gitAvailable: true }
+        ? {
+            ...current,
+            gitAvailable: true,
+            ...(target === 'gitignore'
+              ? { gitignoreIgnored: action === 'add' }
+              : { gitExcludeIgnored: action === 'add' }),
+          }
         : current)
     } catch (error) {
-      toast.error('更新 Git 本地排除失败', error instanceof Error ? error.message : String(error))
+      toast.error(
+        language === 'zh' ? `更新 ${targetLabel} 失败` : `Failed to update ${targetLabel}`,
+        error instanceof Error ? error.message : String(error),
+      )
     }
-  }, [workspacePath])
+  }, [language, workspacePath])
 
   const updateGitExcludeMenuState = useCallback(async (node: FlattenedNode, signal: AbortSignal) => {
     if (!workspacePath) {
       setContextMenu(current => current && current.node === node
-        ? { ...current, gitIgnored: false, gitAvailable: false }
+        ? { ...current, gitAvailable: false, gitignoreIgnored: false, gitExcludeIgnored: false }
         : current)
       return
     }
@@ -161,12 +184,17 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       )
       if (signal.aborted) return
       setContextMenu(current => current && current.node === node
-        ? { ...current, gitIgnored: status.ignored, gitAvailable: status.available }
+        ? {
+            ...current,
+            gitAvailable: status.available,
+            gitignoreIgnored: status.gitignore.ignored,
+            gitExcludeIgnored: status.exclude.ignored,
+          }
         : current)
     } catch {
       if (signal.aborted) return
       setContextMenu(current => current && current.node === node
-        ? { ...current, gitIgnored: false, gitAvailable: false }
+        ? { ...current, gitAvailable: false, gitignoreIgnored: false, gitExcludeIgnored: false }
         : current)
     }
   }, [workspacePath])
@@ -552,7 +580,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     const abortController = new AbortController()
     gitExcludeMenuAbortRef.current?.abort()
     gitExcludeMenuAbortRef.current = abortController
-    setContextMenu({ x: e.clientX, y: e.clientY, node, gitIgnored: null, gitAvailable: false })
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      node,
+      gitAvailable: false,
+      gitignoreIgnored: null,
+      gitExcludeIgnored: null,
+    })
     void updateGitExcludeMenuState(node, abortController.signal)
   }, [updateGitExcludeMenuState])
 
@@ -852,8 +887,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         { id: 'sep3', label: '', separator: true },
         { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
         { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-        { id: 'gitExcludeAdd', label: '加入 Git 本地排除', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable || contextMenu.gitIgnored !== false, onClick: () => void handleGitExclude(node, 'add') },
-        { id: 'gitExcludeRemove', label: '移出 Git 本地排除', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable || contextMenu.gitIgnored !== true, onClick: () => void handleGitExclude(node, 'remove') },
+        contextMenu?.gitignoreIgnored
+          ? { id: 'gitignoreRemove', label: contextMenuLanguage === 'zh' ? '从 .gitignore 中移除' : 'Remove from .gitignore', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'gitignore') }
+          : { id: 'gitignoreAdd', label: contextMenuLanguage === 'zh' ? '添加到 .gitignore' : 'Add to .gitignore', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'gitignore') },
+        contextMenu?.gitExcludeIgnored
+          ? { id: 'gitExcludeRemove', label: contextMenuLanguage === 'zh' ? '从 .git/info/exclude 中移除' : 'Remove from .git/info/exclude', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'exclude') }
+          : { id: 'gitExcludeAdd', label: contextMenuLanguage === 'zh' ? '添加到 .git/info/exclude' : 'Add to .git/info/exclude', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'exclude') },
         { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
@@ -871,8 +910,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       { id: 'sep2', label: '', separator: true },
       { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
       { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
-      { id: 'gitExcludeAdd', label: '加入 Git 本地排除', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable || contextMenu.gitIgnored !== false, onClick: () => void handleGitExclude(node, 'add') },
-      { id: 'gitExcludeRemove', label: '移出 Git 本地排除', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable || contextMenu.gitIgnored !== true, onClick: () => void handleGitExclude(node, 'remove') },
+      contextMenu?.gitignoreIgnored
+        ? { id: 'gitignoreRemove', label: contextMenuLanguage === 'zh' ? '从 .gitignore 中移除' : 'Remove from .gitignore', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'gitignore') }
+        : { id: 'gitignoreAdd', label: contextMenuLanguage === 'zh' ? '添加到 .gitignore' : 'Add to .gitignore', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'gitignore') },
+      contextMenu?.gitExcludeIgnored
+        ? { id: 'gitExcludeRemove', label: contextMenuLanguage === 'zh' ? '从 .git/info/exclude 中移除' : 'Remove from .git/info/exclude', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'exclude') }
+        : { id: 'gitExcludeAdd', label: contextMenuLanguage === 'zh' ? '添加到 .git/info/exclude' : 'Add to .git/info/exclude', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'exclude') },
       { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
@@ -883,7 +926,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     }
 
     return items
-  }, [clipboardItem, contextMenu, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyItem, handlePasteForNode, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleGitExclude, handleRevealInExplorer, handleOpenInBrowser])
+  }, [clipboardItem, contextMenu, handleNewFile, handleNewFolder, handleOpenTerminalHere, handleCopyItem, handlePasteForNode, handleRenameStart, handleDelete, handleCopyPath, handleCopyRelativePath, handleGitIgnore, handleRevealInExplorer, handleOpenInBrowser])
 
   // 渲染单个节点
   const renderNode = (node: FlattenedNode, index: number) => {
