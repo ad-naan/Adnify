@@ -1330,7 +1330,7 @@ export default function ChatPanel() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => createThread()}
+              onClick={() => createThread({ mode: chatMode, origin: 'user' })}
               title={language === 'zh' ? '新对话' : 'New chat'}
               className="hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             >

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
@@ -22,15 +22,11 @@ export const PlanWorkspace = memo(function PlanWorkspace() {
   const setActivePlan = useAgentStore(state => state.setActivePlan)
 
   const sortedPlans = useMemo(() => [...plans].sort((a, b) => b.updatedAt - a.updatedAt), [plans])
-  const activePlan = plans.find(plan => plan.id === activePlanId) || sortedPlans[0]
+  const activePlan = plans.find(plan => plan.id === activePlanId)
   const options = useMemo(() => sortedPlans.map(plan => ({
     value: plan.id,
     label: `${plan.name} · ${planStatusLabel(plan.status, language)}`,
   })), [language, sortedPlans])
-
-  useEffect(() => {
-    if (!activePlanId && sortedPlans[0]) setActivePlan(sortedPlans[0].id)
-  }, [activePlanId, setActivePlan, sortedPlans])
 
   return <div className="flex h-full min-h-0 flex-col bg-background">
     <div className="min-h-0 flex-1">

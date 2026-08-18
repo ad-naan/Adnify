@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Boxes, Check, CheckCircle2, FileText, GitBranch, History, LoaderCircle, MessageSquareText, Play, RotateCcw, ShieldCheck, TriangleAlert, UserRoundCog } from 'lucide-react'
+import { AlertTriangle, Boxes, Check, CheckCircle2, FileText, GitBranch, History, LoaderCircle, MessageSquareText, Play, Plus, RotateCcw, ShieldCheck, TriangleAlert, UserRoundCog } from 'lucide-react'
 import type { PlanActivityStatus, PlanWorkbenchFocus } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { PlanWorkbenchActivity } from './PlanWorkbenchActivity'
 import { PlanWorkbenchRuntime } from './PlanWorkbenchRuntime'
@@ -97,8 +97,23 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
   }, [plan])
 
   if (!model.hasSession) return <div className="plan-readable relative h-full bg-background">
-    <div className="absolute right-3 top-3 z-10">
-      <button onClick={() => setHistoryOpen(true)} aria-label={language === 'zh' ? '计划历史' : 'Plan history'} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><History className="h-3.5 w-3.5" /></button>
+    <div className="absolute right-3 top-3 z-10 flex items-center gap-1">
+      <button
+        onClick={createNewPlan}
+        aria-label={language === 'zh' ? '开始新计划' : 'Start new plan'}
+        title={language === 'zh' ? '开始新计划' : 'Start new plan'}
+        className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary transition-colors"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={() => setHistoryOpen(true)}
+        aria-label={language === 'zh' ? '计划历史' : 'Plan history'}
+        title={language === 'zh' ? '计划历史' : 'Plan history'}
+        className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary transition-colors"
+      >
+        <History className="h-3.5 w-3.5" />
+      </button>
     </div>
     <PlanWorkbenchEmpty language={language} recent={history} onOpenHistory={() => setHistoryOpen(true)} onSelectHistory={openHistoryEntry} />
     <PlanHistoryDrawer open={historyOpen} entries={history} language={language} onClose={() => setHistoryOpen(false)} onSelect={openHistoryEntry} onDelete={deleteHistoryEntry} onCreateNew={createNewPlan} />
@@ -111,7 +126,24 @@ export const PlanWorkbench = memo(function PlanWorkbench({ onOverlayChange }: Pl
           <div className="flex items-center gap-2 truncate text-[12px] font-semibold text-text-primary">{displayStage === 'execution' && model.stage === 'execution' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}{panelTitle(displayStage, language)}</div>
           <div className="mt-1.5 flex items-center gap-2 text-[9px] text-text-muted">{displayStage === 'execution' ? <>{model.stage === 'execution' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}{plan?.executionMode === 'parallel' ? (language === 'zh' ? '并行任务调度' : 'Parallel orchestration') : (language === 'zh' ? '顺序任务调度' : 'Sequential orchestration')}{model.stage === 'execution' && <span className="ml-auto tabular-nums">{language === 'zh' ? '总耗时' : 'Total'} {formatElapsed(elapsedSeconds * 1000)}</span>}</> : plan?.name || (language === 'zh' ? '正在形成需求简报' : 'Building the brief')}</div>
         </div>
-        <button onClick={() => setHistoryOpen(true)} aria-label={language === 'zh' ? '计划历史' : 'Plan history'} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><History className="h-3.5 w-3.5" /></button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={createNewPlan}
+            aria-label={language === 'zh' ? '开始新计划' : 'Start new plan'}
+            title={language === 'zh' ? '开始新计划' : 'Start new plan'}
+            className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setHistoryOpen(true)}
+            aria-label={language === 'zh' ? '计划历史' : 'Plan history'}
+            title={language === 'zh' ? '计划历史' : 'Plan history'}
+            className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary transition-colors"
+          >
+            <History className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
     </header>
 

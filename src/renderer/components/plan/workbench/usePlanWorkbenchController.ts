@@ -7,6 +7,7 @@ import { toast } from '@/renderer/components/common/ToastProvider'
 import { projectPlanHistory, type PlanHistoryEntry } from '@/renderer/agent/plan/planHistoryProjection'
 import { beginPlanRevision } from '@/renderer/agent/plan/planRevisionService'
 import { buildInteractiveResponse } from '@/renderer/agent/utils/interactiveResponse'
+import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 
 export function usePlanWorkbenchController() {
   const language = useStore(state => state.language)
@@ -47,6 +48,12 @@ export function usePlanWorkbenchController() {
   const openHistoryEntry = useCallback((entry: PlanHistoryEntry) => {
     if (entry.planId) setActivePlan(entry.planId)
     if (entry.threadId) switchThread(entry.threadId)
+    const state = useStore.getState()
+    if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
+      state.setActiveFile(PLAN_BOARD_PATH)
+    } else {
+      state.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+    }
   }, [setActivePlan, switchThread])
 
   /**
@@ -68,6 +75,12 @@ export function usePlanWorkbenchController() {
   const createNewPlan = useCallback(() => {
     setActivePlan(null)
     createThread({ activate: true, mode: 'plan', origin: 'user' })
+    const state = useStore.getState()
+    if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
+      state.setActiveFile(PLAN_BOARD_PATH)
+    } else {
+      state.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+    }
   }, [createThread, setActivePlan])
 
   const acceptValidation = useCallback(() => {
