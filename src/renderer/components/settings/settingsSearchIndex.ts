@@ -39,6 +39,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'editor.autoSave', tab: 'editor', label: { en: 'Auto Save', zh: '自动保存' }, keywords: ['auto', 'save', '自动', '保存', 'autosave', 'delay', '延迟'] },
   { id: 'editor.aiCompletion', tab: 'editor', label: { en: 'AI Code Completion', zh: 'AI 代码补全' }, keywords: ['ai', 'completion', '补全', 'autocomplete', '代码补全', 'copilot', 'trigger', '触发'] },
   { id: 'editor.git', tab: 'editor', label: { en: 'Git Auto Refresh', zh: 'Git 自动刷新' }, keywords: ['git', 'refresh', '刷新', '自动', 'status', '状态'] },
+  { id: 'editor.gitCommitPrompt', tab: 'editor', label: { en: 'AI Commit Message Prompt', zh: '使用 AI 生成提交信息的提示词' }, keywords: ['git', 'commit', 'message', 'prompt', '提交信息', '提交', '提示词', 'ai 提交', 'conventional commits'] },
   { id: 'editor.performance', tab: 'editor', label: { en: 'Performance & Limits', zh: '性能与限制' }, keywords: ['performance', '性能', 'limit', '限制', 'large file', '大文件', 'timeout', '超时', 'max', '最大'] },
 
   // ========== snippets（代码片段）==========

@@ -100,8 +100,11 @@ export const EDITOR_DEFAULTS = {
 // Git 配置默认值
 // ============================================
 
+export const DEFAULT_GIT_COMMIT_PROMPT = `Based on the following git diff, generate a concise and descriptive commit message. Follow conventional commits format (e.g., feat:, fix:, docs:, refactor:, etc.). Only output the commit message, nothing else.`
+
 export const GIT_DEFAULTS = {
   autoRefresh: true,
+  commitPrompt: '',
 } as const
 
 // ============================================

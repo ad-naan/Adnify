@@ -3,13 +3,13 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap } from 'lucide-react'
+import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap, RotateCcw } from 'lucide-react'
 import { useStore, type ThemeName } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { themeManager } from '@/renderer/config/themeConfig'
 import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
-import { CODE_FONT_PRESETS } from '@shared/config/defaults'
+import { CODE_FONT_PRESETS, DEFAULT_GIT_COMMIT_PROMPT } from '@shared/config/defaults'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
 
 const CUSTOM_FONT_VALUE = '__custom__'
@@ -407,6 +407,43 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     ? '检测到文件变化时自动更新侧边栏状态。'
                                     : 'Automatically refresh git indicators when file changes are detected.'}
                             </p>
+
+                            <div className="pt-3 border-t border-border/50 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block">
+                                        {language === 'zh' ? '使用 AI 生成提交信息的提示词' : 'AI Commit Message Prompt'}
+                                    </label>
+                                    {(advancedConfig.git?.commitPrompt !== undefined && advancedConfig.git.commitPrompt !== '' && advancedConfig.git.commitPrompt !== DEFAULT_GIT_COMMIT_PROMPT) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setAdvancedConfig({
+                                                ...advancedConfig,
+                                                git: { ...advancedConfig.git, commitPrompt: DEFAULT_GIT_COMMIT_PROMPT },
+                                            })}
+                                            className="inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-accent transition-colors"
+                                            title={language === 'zh' ? '恢复默认提示词' : 'Reset to default prompt'}
+                                        >
+                                            <RotateCcw className="w-3 h-3" />
+                                            <span>{language === 'zh' ? '恢复默认' : 'Reset'}</span>
+                                        </button>
+                                    )}
+                                </div>
+                                <textarea
+                                    value={advancedConfig.git?.commitPrompt ?? DEFAULT_GIT_COMMIT_PROMPT}
+                                    onChange={(e) => setAdvancedConfig({
+                                        ...advancedConfig,
+                                        git: { ...advancedConfig.git, commitPrompt: e.target.value },
+                                    })}
+                                    placeholder={DEFAULT_GIT_COMMIT_PROMPT}
+                                    rows={5}
+                                    className="w-full rounded-lg border border-border/50 bg-background/50 p-3 text-xs leading-relaxed text-text-primary placeholder:text-text-muted/40 focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all resize-y custom-scrollbar"
+                                />
+                                <p className="text-[10px] text-text-muted opacity-80 leading-relaxed">
+                                    {language === 'zh'
+                                        ? '可直接在上方编辑提示词规范。支持使用 {diff} 占位符指定代码变更位置，未包含占位符时将自动附加在提示词后。'
+                                        : 'Edit the prompt rules above. Supports {diff} placeholder for changes position, otherwise diffs are appended automatically.'}
+                                </p>
+                            </div>
                         </div>
                     </section>
 
