@@ -22,7 +22,6 @@ import { lintService } from '../services/lintService'
 import { memoryService, normalizeMemoryContentInput } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
-import { derivePlanPlanningState } from '../plan/planWorkflowGuard'
 import { hasCompletePlanStageMap, normalizePlanStageMap, renderPlanStageMarkdown } from '../plan/planStageContent'
 import type { PlanStageKey } from '../plan/types'
 import { getConfiguredPlanProviders, resolvePlanProviderAssignment } from '../plan/planProviderCatalog'
@@ -2274,20 +2273,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const messagesBeforeCurrentCall = currentAssistantId
             ? threadMessages.filter(message => message.id !== currentAssistantId)
             : threadMessages
-        const latestPreviousPlanIndex = messagesBeforeCurrentCall.reduce((latest, message, index) => (
-            message.role === 'assistant' && message.toolCalls?.some(toolCall => toolCall.name === 'create_task_plan') ? index : latest
-        ), -1)
-        const requestMessage = messagesBeforeCurrentCall.slice(latestPreviousPlanIndex + 1).find(message => message.role === 'user')
-        if (derivePlanPlanningState(messagesBeforeCurrentCall) !== 'ready_to_create') {
-            return {
-                success: false,
-                result: getLocalizedText(
-                    getCurrentLanguage(),
-                    '创建计划前必须先使用 ask_user 向用户确认需求，并等待用户回答。请先完成澄清，不要直接创建计划。',
-                    'You must call ask_user and wait for the user response before creating a plan. Clarify the request first.',
-                ),
-            }
-        }
+        const requestMessage = [...messagesBeforeCurrentCall].reverse().find(message => message.role === 'user')
 
         try {
             // 生成唯一 ID

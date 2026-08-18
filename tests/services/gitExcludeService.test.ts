@@ -32,7 +32,7 @@ describe('git exclude helpers', () => {
     expect(updateGitExcludeContent(added, '/.agent/', 'remove')).toBe('# local\n/temp/\n')
   })
 
-  it('reports whether the exact root-anchored pattern is present', async () => {
+  it('reports whether the exact root-anchored pattern is present in .gitignore and .git/info/exclude', async () => {
     const { gitExcludeService } = await import('@renderer/services/gitExcludeService')
     const { gitService } = await import('@renderer/services/gitService')
     vi.mocked(gitService.discoverRepositories).mockResolvedValue([
@@ -46,39 +46,65 @@ describe('git exclude helpers', () => {
     })
     vi.mocked(fileApi.read).mockImplementation(async path => {
       readCalls.push(path)
-      return '/logs/\n/.agent/cache/\n'
+      return path === 'E:/repo/.gitignore' ? '/logs/\n/.agent/cache/\n' : ''
     })
 
-    const ignored = await gitExcludeService.getStatus('E:/workspace', 'E:/repo/.agent/cache', true)
-    expect(ignored).toEqual({ pattern: '/.agent/cache/', ignored: true, available: true })
+    const status = await gitExcludeService.getStatus('E:/workspace', 'E:/repo/.agent/cache', true)
+    expect(status).toEqual({
+      available: true,
+      gitignore: { pattern: '/.agent/cache/', ignored: true, available: true },
+      exclude: { pattern: '/.agent/cache/', ignored: false, available: true },
+    })
 
-    vi.mocked(fileApi.read).mockResolvedValue('/logs/\n')
+    vi.mocked(fileApi.read).mockImplementation(async path => {
+      readCalls.push(path)
+      return path === 'E:/repo/.gitignore' ? '/logs/\n' : ''
+    })
     const notIgnored = await gitExcludeService.getStatus('E:/workspace', 'E:/repo/.agent/cache', true)
-    expect(notIgnored).toEqual({ pattern: '/.agent/cache/', ignored: false, available: true })
-    expect(existsCalls).toEqual(['E:/repo/.gitignore', 'E:/repo/.gitignore'])
-    expect(readCalls).toEqual(['E:/repo/.gitignore'])
+    expect(notIgnored).toEqual({
+      available: true,
+      gitignore: { pattern: '/.agent/cache/', ignored: false, available: true },
+      exclude: { pattern: '/.agent/cache/', ignored: false, available: true },
+    })
+    expect(existsCalls).toEqual([
+      'E:/repo/.gitignore',
+      'E:/repo/.git/info/exclude',
+      'E:/repo/.gitignore',
+      'E:/repo/.git/info/exclude',
+    ])
   })
 
-  it('marks paths outside Git repositories unavailable and creates the root .gitignore when adding', async () => {
+  it('marks paths outside Git repositories unavailable and supports target selection when adding', async () => {
     const { gitExcludeService } = await import('@renderer/services/gitExcludeService')
     const { gitService } = await import('@renderer/services/gitService')
     vi.mocked(gitService.discoverRepositories)
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
+      .mockResolvedValue([
         { root: 'E:/repo', name: 'repo', relativePath: '', isWorkspaceRoot: false },
       ])
 
     await expect(gitExcludeService.getStatus('E:/workspace', 'E:/workspace/plain/file.txt', false))
-      .resolves.toEqual({ pattern: '', ignored: false, available: false })
+      .resolves.toEqual({
+        available: false,
+        gitignore: { pattern: '', ignored: false, available: false },
+        exclude: { pattern: '', ignored: false, available: false },
+      })
 
     vi.mocked(fileApi.exists).mockResolvedValue(false)
     vi.mocked(fileApi.write).mockResolvedValue(true)
-    await expect(gitExcludeService.update('E:/workspace', 'E:/repo/logs', true, 'add'))
-      .resolves.toEqual({ changed: true, pattern: '/logs/' })
+
+    // 添加到 .gitignore
+    await expect(gitExcludeService.update('E:/workspace', 'E:/repo/logs', true, 'add', 'gitignore'))
+      .resolves.toEqual({ changed: true, pattern: '/logs/', target: 'gitignore' })
     expect(fileApi.write).toHaveBeenCalledWith('E:/repo/.gitignore', '/logs/\n')
+
+    // 添加到 .git/info/exclude (默认目标)
+    await expect(gitExcludeService.update('E:/workspace', 'E:/repo/logs', true, 'add', 'exclude'))
+      .resolves.toEqual({ changed: true, pattern: '/logs/', target: 'exclude' })
+    expect(fileApi.write).toHaveBeenCalledWith('E:/repo/.git/info/exclude', '/logs/\n')
   })
 
-  it('treats a Git repository without .gitignore as available but not ignored', async () => {
+  it('treats a Git repository without ignore files as available but not ignored', async () => {
     const { gitExcludeService } = await import('@renderer/services/gitExcludeService')
     const { gitService } = await import('@renderer/services/gitService')
     vi.mocked(gitService.discoverRepositories).mockResolvedValue([
@@ -87,7 +113,11 @@ describe('git exclude helpers', () => {
     vi.mocked(fileApi.exists).mockResolvedValue(false)
 
     await expect(gitExcludeService.getStatus('E:/workspace', 'E:/repo/logs', true))
-      .resolves.toEqual({ pattern: '/logs/', ignored: false, available: true })
+      .resolves.toEqual({
+        available: true,
+        gitignore: { pattern: '/logs/', ignored: false, available: true },
+        exclude: { pattern: '/logs/', ignored: false, available: true },
+      })
     expect(fileApi.read).not.toHaveBeenCalled()
   })
 })

@@ -284,7 +284,11 @@ export function projectPlanWorkbench(input: {
 
   const reportedActivities = relevantThreads.flatMap(thread => thread.messages.flatMap(message => {
     if (!isAssistantMessage(message)) return []
-    return (message.toolCalls || []).flatMap((toolCall, index) => {
+    const toolCalls = [
+      ...(message.toolCalls || []),
+      ...(message.parts || []).filter(p => p.type === 'tool_call').map(p => (p as { toolCall?: { name?: string; arguments?: unknown; id?: string } }).toolCall),
+    ].filter((tc): tc is { name: string; arguments: any; id: string } => Boolean(tc?.name))
+    return toolCalls.flatMap((toolCall, index) => {
       if (toolCall.name !== 'report_plan_activity') return []
       const item = toActivity(toolCall.arguments, `${thread.id}:${toolCall.id}`, message.timestamp + index)
       return item ? [item] : []
