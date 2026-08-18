@@ -23,6 +23,7 @@ import { getRelativeTime } from '@shared/utils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { projectThreadsForMode } from '@/renderer/agent/threads/threadModeProjection'
+import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 
 type Tab = 'history' | 'branches'
 
@@ -150,7 +151,16 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                 <Button
                   className="w-full justify-center gap-2 bg-accent hover:bg-accent-hover text-white shadow-lg shadow-accent/20 h-10 rounded-xl transition-transform active:scale-[0.98]"
                   onClick={() => {
-                    const { createThread } = useAgentStore.getState()
+                    const { createThread, setActivePlan } = useAgentStore.getState()
+                    if (currentMode === 'plan') {
+                      setActivePlan(null)
+                      const state = useStore.getState()
+                      if (state.openFiles.some(file => isPlanBoardPath(file.path))) {
+                        state.setActiveFile(PLAN_BOARD_PATH)
+                      } else {
+                        state.openFile(PLAN_BOARD_PATH, '', undefined, { pinned: true })
+                      }
+                    }
                     createThread({ mode: currentMode, origin: 'user' })
                     onClose()
                   }}
