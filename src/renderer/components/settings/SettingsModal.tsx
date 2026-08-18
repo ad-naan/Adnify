@@ -1,5 +1,5 @@
-import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react'
-import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check } from 'lucide-react'
+import { lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { Cpu, Settings2, Code, Keyboard, Database, Shield, Monitor, Globe, Plug, Braces, Brain, FileCode, Zap, Check, Search, X } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
@@ -10,6 +10,7 @@ import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Modal, Select } from '@components/ui'
 import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
+import { SETTINGS_SEARCH_INDEX, type SettingsSearchEntry } from './settingsSearchIndex'
 
 const ProviderSettings = lazy(() =>
     import('./tabs/ProviderSettings').then(module => ({ default: module.ProviderSettings })),
@@ -143,6 +144,8 @@ export default function SettingsModal() {
     const [activeTab, setActiveTab] = useState<SettingsTab>('provider')
     const [showApiKey, setShowApiKey] = useState(false)
     const [saved, setSaved] = useState(false)
+    const [searchQuery, setSearchQuery] = useState('')
+    const searchInputRef = useRef<HTMLInputElement>(null)
 
     const [localConfig, setLocalConfig] = useState(llmConfig)
     const [localModelRouting, setLocalModelRouting] = useState(modelRouting)
@@ -430,6 +433,36 @@ export default function SettingsModal() {
         { id: 'system', label: language === 'zh' ? '系统' : 'System', icon: <Monitor className="w-4 h-4" /> },
     ] as const, [language])
 
+    // 搜索逻辑：按关键词筛选设置项，按 Tab 分组
+    const searchResults = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        if (!q) return null
+        const matched = SETTINGS_SEARCH_INDEX.filter(entry =>
+            entry.label.en.toLowerCase().includes(q) ||
+            entry.label.zh.includes(q) ||
+            entry.keywords.some(kw => kw.toLowerCase().includes(q))
+        )
+        const grouped = new Map<SettingsTab, SettingsSearchEntry[]>()
+        for (const entry of matched) {
+            const list = grouped.get(entry.tab) || []
+            list.push(entry)
+            grouped.set(entry.tab, list)
+        }
+        return grouped
+    }, [searchQuery])
+
+    const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === 'Escape') {
+            setSearchQuery('')
+            searchInputRef.current?.blur()
+        }
+    }, [])
+
+    const handleSearchResultClick = useCallback((tab: SettingsTab) => {
+        setActiveTab(tab)
+        setSearchQuery('')
+    }, [])
+
     const renderActiveTab = () => {
         switch (activeTab) {
             case 'provider':
@@ -528,18 +561,77 @@ export default function SettingsModal() {
                     </div>
 
                     <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${activeTab === tab.id ? 'bg-accent/10 text-text-primary border border-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'}`}
-                            >
-                                <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
-                                    {tab.icon}
-                                </span>
-                                <span>{tab.label}</span>
-                            </button>
-                        ))}
+                        {/* 搜索输入框 */}
+                        <div className="relative mb-3">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={handleSearchKeyDown}
+                                placeholder={language === 'zh' ? '搜索设置...' : 'Search settings...'}
+                                className="w-full h-8 pl-9 pr-8 text-xs rounded-lg bg-background/50 border border-border/50 text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/10 transition-all"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+
+                        {searchResults === null ? (
+                            /* 无搜索时：原有 Tab 列表 */
+                            <>
+                            {tabs.map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${activeTab === tab.id ? 'bg-accent/10 text-text-primary border border-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'}`}
+                                >
+                                    <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
+                                        {tab.icon}
+                                    </span>
+                                    <span>{tab.label}</span>
+                                </button>
+                            ))}
+                            </>
+                        ) : searchResults.size === 0 ? (
+                            /* 无匹配结果 */
+                            <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <Search className="w-8 h-8 text-text-muted/30 mb-3" />
+                                <p className="text-xs text-text-muted">
+                                    {language === 'zh' ? '未找到匹配的设置项' : 'No matching settings found'}
+                                </p>
+                            </div>
+                        ) : (
+                            /* 搜索结果分组展示 */
+                            <div className="space-y-3">
+                                {Array.from(searchResults).map(([tabId, entries]) => {
+                                    const tabMeta = tabs.find(t => t.id === tabId)
+                                    return (
+                                        <div key={tabId}>
+                                            <div className="flex items-center gap-2 px-2 py-1.5 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                                                <span className="text-accent/70">{tabMeta?.icon}</span>
+                                                <span>{tabMeta?.label}</span>
+                                            </div>
+                                            {entries.map(entry => (
+                                                <button
+                                                    key={entry.id}
+                                                    onClick={() => handleSearchResultClick(entry.tab)}
+                                                    className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors duration-150 ${activeTab === entry.tab ? 'text-text-primary bg-accent/5' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}`}
+                                                >
+                                                    <span className="truncate">{language === 'zh' ? entry.label.zh : entry.label.en}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
                     </nav>
 
                     <div className="mt-auto px-6 pt-6 border-t border-border/50 space-y-3">
