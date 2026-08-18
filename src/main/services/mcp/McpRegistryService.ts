@@ -26,12 +26,19 @@ export interface RegistryServer {
 
 /** npm/pip/docker 包信息 */
 export interface RegistryPackage {
-    registryType: 'npm' | 'pip' | 'oci'
+    registryType: 'npm' | 'pip' | 'pypi' | 'oci' | string
     identifier: string
     version?: string
     transport: { type: 'stdio' }
     environmentVariables?: RegistryEnvVar[]
     runtimeHint?: string
+    runtimeArguments?: Array<{
+        name?: string
+        value?: string
+        default?: string
+        type?: 'named' | 'positional'
+        description?: string
+    }>
 }
 
 /** 远程端点信息 */
@@ -55,18 +62,18 @@ export interface RegistryEnvVar {
 interface RegistryListResponse {
     servers: Array<{
         server: RegistryServer
-        _meta: {
-            'io.modelcontextprotocol.registry/official': {
-                status: string
-                publishedAt: string
-                updatedAt: string
-                isLatest: boolean
+        _meta?: {
+            'io.modelcontextprotocol.registry/official'?: {
+                status?: string
+                publishedAt?: string
+                updatedAt?: string
+                isLatest?: boolean
             }
         }
     }>
     metadata: {
         nextCursor?: string
-        count: number
+        count?: number
     }
 }
 
@@ -92,28 +99,36 @@ export class McpRegistryService {
 
     /**
      * 搜索 Registry 中的 MCP 服务器
-     * 注：Registry API 当前不支持搜索查询参数，需要客户端过滤
+     * 支持官方 Registry 服务端 search 查询参数，保证全量检索
      */
     async search(query?: string): Promise<RegistrySearchResult[]> {
+        const trimmed = query?.trim()
+        const cacheKey = `search:${trimmed || 'all'}`
+        const cached = this.cache.get(cacheKey)
+        if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+            return cached.data
+        }
+
         try {
-            const cacheKey = `search:${query || 'all'}`
-            const cached = this.cache.get(cacheKey)
-            if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
-                return cached.data
-            }
+            const results: RegistrySearchResult[] = []
 
-            const allServers = await this.fetchAllServers()
-            let results = allServers
-
-            // 客户端过滤
-            if (query) {
-                const lowerQuery = query.toLowerCase()
-                results = allServers.filter(
-                    (s) =>
-                        s.name.toLowerCase().includes(lowerQuery) ||
-                        s.description.toLowerCase().includes(lowerQuery) ||
-                        s.title?.toLowerCase().includes(lowerQuery) === true
-                )
+            if (trimmed) {
+                // 1. 服务端检索：直接调用官方 Registry search 参数获取精准匹配（如 serena 等）
+                const searchUrl = `${REGISTRY_BASE_URL}/servers?search=${encodeURIComponent(trimmed)}`
+                const response = await fetch(searchUrl)
+                if (response.ok) {
+                    const data = (await response.json()) as RegistryListResponse
+                    for (const item of data.servers || []) {
+                        const server = item.server
+                        const meta = item._meta?.['io.modelcontextprotocol.registry/official']
+                        // 只过滤明确废弃或非最新的版本
+                        if (meta && (meta.status === 'deprecated' || meta.isLatest === false)) continue
+                        results.push(this.toSearchResult(server))
+                    }
+                }
+            } else {
+                // 2. 浏览全部：拉取官方活跃推荐列表
+                results.push(...(await this.fetchAllServers()))
             }
 
             this.cache.set(cacheKey, { data: results, timestamp: Date.now() })
@@ -142,31 +157,146 @@ export class McpRegistryService {
     }
 
     /**
-     * 将 Registry 服务器信息转换为本地 MCP 配置
+     * 将 Registry 服务器信息转换为本地 MCP 配置（支持 npm、pypi/uvx、oci/docker、cargo、nuget、mcpb 及 Remote）
      */
     toLocalConfig(server: RegistryServer): import('@shared/types/mcp').McpServerConfig | null {
-        // 优先使用 npm stdio 包
+        const id = server.name.replace(/[^a-zA-Z0-9-_]/g, '-')
+
+        // 1. npm 包 (Node.js stdio)
         const npmPackage = server.packages?.find((p) => p.registryType === 'npm')
         if (npmPackage) {
+            const runtimeArgs = this.extractRuntimeArgs(npmPackage)
             return {
-                id: server.name.replace(/[^a-zA-Z0-9-_]/g, '-'),
+                id,
                 command: 'npx',
-                args: ['-y', npmPackage.identifier],
+                args: ['-y', npmPackage.identifier, ...runtimeArgs],
                 env: this.buildEnvFromVars(npmPackage.environmentVariables),
             } as import('@shared/types/mcp').McpServerConfig
         }
 
-        // 其次使用远程端点
+        // 2. pypi / pip 包 (Python stdio)
+        const pypiPackage = server.packages?.find((p) => p.registryType === 'pypi' || p.registryType === 'pip')
+        if (pypiPackage) {
+            if (pypiPackage.runtimeHint === 'uvx') {
+                const { runtimeFlags, packageArgs } = this.extractUvxArgs(pypiPackage)
+                return {
+                    id,
+                    command: 'uvx',
+                    args: [...runtimeFlags, pypiPackage.identifier, ...packageArgs],
+                    env: this.buildEnvFromVars(pypiPackage.environmentVariables),
+                } as import('@shared/types/mcp').McpServerConfig
+            }
+
+            const runtimeArgs = this.extractRuntimeArgs(pypiPackage)
+            return {
+                id,
+                command: 'python',
+                args: ['-m', pypiPackage.identifier, ...runtimeArgs],
+                env: this.buildEnvFromVars(pypiPackage.environmentVariables),
+            } as import('@shared/types/mcp').McpServerConfig
+        }
+
+        // 3. oci 容器镜像 (Docker stdio)
+        const ociPackage = server.packages?.find((p) => p.registryType === 'oci' || p.registryType === 'docker')
+        if (ociPackage) {
+            const runtimeArgs = this.extractRuntimeArgs(ociPackage)
+            return {
+                id,
+                command: 'docker',
+                args: ['run', '-i', '--rm', ociPackage.identifier, ...runtimeArgs],
+                env: this.buildEnvFromVars(ociPackage.environmentVariables),
+            } as import('@shared/types/mcp').McpServerConfig
+        }
+
+        // 4. cargo 包 (Rust stdio)
+        const cargoPackage = server.packages?.find((p) => p.registryType === 'cargo')
+        if (cargoPackage) {
+            const runtimeArgs = this.extractRuntimeArgs(cargoPackage)
+            return {
+                id,
+                command: 'cargo',
+                args: ['run', '--bin', cargoPackage.identifier, ...runtimeArgs],
+                env: this.buildEnvFromVars(cargoPackage.environmentVariables),
+            } as import('@shared/types/mcp').McpServerConfig
+        }
+
+        // 5. nuget 包 (.NET stdio)
+        const nugetPackage = server.packages?.find((p) => p.registryType === 'nuget')
+        if (nugetPackage) {
+            const runtimeArgs = this.extractRuntimeArgs(nugetPackage)
+            return {
+                id,
+                command: 'dotnet',
+                args: ['tool', 'run', nugetPackage.identifier, ...runtimeArgs],
+                env: this.buildEnvFromVars(nugetPackage.environmentVariables),
+            } as import('@shared/types/mcp').McpServerConfig
+        }
+
+        // 6. mcpb 预编译包 / 二进制文件
+        const mcpbPackage = server.packages?.find((p) => p.registryType === 'mcpb')
+        if (mcpbPackage) {
+            const runtimeArgs = this.extractRuntimeArgs(mcpbPackage)
+            return {
+                id,
+                command: mcpbPackage.identifier,
+                args: runtimeArgs,
+                env: this.buildEnvFromVars(mcpbPackage.environmentVariables),
+            } as import('@shared/types/mcp').McpServerConfig
+        }
+
+        // 7. 远程端点 (HTTP / SSE / WebSocket)
         const remote = server.remotes?.[0]
         if (remote) {
             return {
-                id: server.name.replace(/[^a-zA-Z0-9-_]/g, '-'),
+                id,
                 url: remote.url,
                 headers: this.buildHeadersFromVars(remote.headers),
             } as import('@shared/types/mcp').McpServerConfig
         }
 
         return null
+    }
+
+    private extractUvxArgs(pkg: RegistryPackage): { runtimeFlags: string[]; packageArgs: string[] } {
+        const runtimeFlags: string[] = []
+        const packageArgs: string[] = []
+
+        if (pkg.runtimeArguments?.length) {
+            for (const arg of pkg.runtimeArguments) {
+                if (arg.type === 'named' && arg.name) {
+                    const val = arg.value || arg.default || ''
+                    // uvx 的自身前置选项：-p, --python, --from, --with
+                    if (arg.name === '-p' || arg.name === '--python' || arg.name === '--from' || arg.name === '--with') {
+                        runtimeFlags.push(arg.name)
+                        if (val) runtimeFlags.push(val)
+                    } else {
+                        packageArgs.push(arg.name)
+                        if (val) packageArgs.push(val)
+                    }
+                } else if (arg.value) {
+                    packageArgs.push(arg.value)
+                }
+            }
+        }
+
+        return { runtimeFlags, packageArgs }
+    }
+
+    private extractRuntimeArgs(pkg: RegistryPackage): string[] {
+        const runtimeArgs: string[] = []
+        if (pkg.runtimeArguments?.length) {
+            for (const arg of pkg.runtimeArguments) {
+                if (arg.type === 'named' && arg.name) {
+                    runtimeArgs.push(arg.name)
+                    if (arg.value || arg.default) {
+                        runtimeArgs.push(arg.value || arg.default || '')
+                    }
+                } else if (arg.value) {
+                    runtimeArgs.push(arg.value)
+                }
+            }
+        }
+        return runtimeArgs
     }
 
     /**

@@ -272,6 +272,7 @@ function createGroupedAPI() {
     // Skills
     skills: {
       getGlobalDir: () => raw.skillsGetGlobalDir(),
+      getGlobalDirs: () => (raw.skillsGetGlobalDirs ? raw.skillsGetGlobalDirs() : raw.skillsGetGlobalDir().then(d => [d])),
     },
 
     // LSP

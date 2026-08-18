@@ -514,6 +514,7 @@ export interface ElectronAPI {
 
   // Skills
   skillsGetGlobalDir: () => Promise<string>
+  skillsGetGlobalDirs?: () => Promise<string[]>
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
@@ -874,6 +875,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Skills
   skillsGetGlobalDir: () => ipcRenderer.invoke('skills:getGlobalDir'),
+  skillsGetGlobalDirs: () => ipcRenderer.invoke('skills:getGlobalDirs'),
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => {

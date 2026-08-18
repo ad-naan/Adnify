@@ -82,6 +82,14 @@ class SkillService {
     private readonly SCAN_INTERVAL = 5000 // 5 秒缓存
     private readonly SKILLS_DIR = '.adnify/skills'
     private readonly CONFIG_FILE = '.adnify/skills/.skills-config.json'
+    /** 工作区项目级技能候选目录（按优先级从低到高扫描，高优先级覆盖低优先级同名技能） */
+    private readonly PROJECT_SKILL_CANDIDATE_DIRS = [
+        'skills',
+        '.cursor/skills',
+        '.codex/skills',
+        '.claude/skills',
+        '.adnify/skills',
+    ]
 
     /**
      * 获取所有已启用的 Skills
@@ -93,8 +101,10 @@ class SkillService {
 
     /**
      * 获取所有 Skills（包括禁用的）
-     * 双层扫描：全局 ({userData}/skills/) + 项目 (.adnify/skills/)
-     * 项目级按 name 覆盖全局级
+     * 多层扫描：
+     * 1. 全局目录（~/.cursor/skills -> ~/.codex/skills -> ~/.claude/skills -> ~/.adnify/skills）
+     * 2. 项目目录（skills -> .cursor/skills -> .codex/skills -> .claude/skills -> .adnify/skills）
+     * 按 name 自动去重，高优先级目录覆盖低优先级目录
      */
     async getAllSkills(forceRefresh = false): Promise<SkillItem[]> {
         const now = Date.now()
@@ -105,28 +115,39 @@ class SkillService {
         const config = await this.loadConfig()
         const skillMap = new Map<string, SkillItem>()
 
-        // 1. 扫描全局 Skills（最低优先级）
+        // 1. 扫描全局 Skills（低优先级：Cursor -> Codex -> Claude -> Adnify）
         try {
-            const globalDir = await api.skills.getGlobalDir()
-            if (globalDir) {
-                await this.scanSkillsDir(globalDir, 'global', config, skillMap)
+            const globalDirs = await api.skills.getGlobalDirs()
+            for (const dir of globalDirs) {
+                if (dir) {
+                    await this.scanSkillsDir(dir, 'global', config, skillMap)
+                }
             }
         } catch {
-            // 全局目录不可用时静默跳过
+            try {
+                const defaultGlobalDir = await api.skills.getGlobalDir()
+                if (defaultGlobalDir) {
+                    await this.scanSkillsDir(defaultGlobalDir, 'global', config, skillMap)
+                }
+            } catch {
+                // 全局目录不可用时静默跳过
+            }
         }
 
-        // 2. 扫描项目 Skills（覆盖全局同名）
+        // 2. 扫描项目 Skills（高优先级，覆盖全局同名技能）
         const { workspacePath } = useStore.getState()
         if (workspacePath) {
-            const projectDir = joinPath(workspacePath, this.SKILLS_DIR)
-            await this.scanSkillsDir(projectDir, 'project', config, skillMap)
+            for (const candidateRelDir of this.PROJECT_SKILL_CANDIDATE_DIRS) {
+                const projectDir = joinPath(workspacePath, candidateRelDir)
+                await this.scanSkillsDir(projectDir, 'project', config, skillMap)
+            }
         }
 
         const skills = Array.from(skillMap.values())
 
         this.cache = skills
         this.lastScanTime = now
-        logger.agent.info(`[SkillService] Loaded ${skills.length} skills`)
+        logger.agent.info(`[SkillService] Loaded ${skills.length} skills from multi-source directories`)
         return skills
     }
 

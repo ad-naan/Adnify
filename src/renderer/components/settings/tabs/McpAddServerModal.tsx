@@ -220,10 +220,54 @@ export default function McpAddServerModal({
     setError(null)
     try {
       const result = await api.mcp.registryGetDetails(serverName)
-      if (result.success) {
-        const preset = result.localConfig as McpPreset
+      if (result.success && result.server && result.localConfig) {
+        const { server, localConfig, requiredEnvVars } = result
+        const isRemote = localConfig.type === 'remote' || 'url' in localConfig
+
+        const envConfigs: McpEnvConfig[] = (requiredEnvVars || []).map((v: any) => ({
+          key: v.name,
+          label: v.name,
+          labelZh: v.name,
+          description: v.description || '',
+          descriptionZh: v.description || '',
+          placeholder: v.default || (v.isSecret ? '••••••••' : ''),
+          defaultValue: v.default || '',
+          required: v.isRequired ?? true,
+          secret: v.isSecret ?? (v.name.toLowerCase().includes('key') || v.name.toLowerCase().includes('token') || v.name.toLowerCase().includes('secret')),
+        }))
+
+        const preset: McpPreset = isRemote
+          ? {
+              id: localConfig.id || server.name,
+              name: server.title || server.name,
+              description: server.description || '',
+              descriptionZh: server.description || '',
+              category: 'other',
+              icon: 'Globe',
+              requiresConfig: envConfigs.some(e => e.required),
+              type: 'remote',
+              url: localConfig.url || '',
+              headers: localConfig.headers,
+              envConfig: envConfigs,
+              docsUrl: server.websiteUrl || server.repository?.url,
+            }
+          : {
+              id: localConfig.id || server.name,
+              name: server.title || server.name,
+              description: server.description || '',
+              descriptionZh: server.description || '',
+              category: 'other',
+              icon: 'Server',
+              requiresConfig: envConfigs.some(e => e.required),
+              type: 'local',
+              command: localConfig.command || 'npx',
+              args: localConfig.args || [],
+              envConfig: envConfigs,
+              docsUrl: server.websiteUrl || server.repository?.url,
+            }
+
         setSelectedPreset(preset)
-        setEnvValues({})
+        setEnvValues(localConfig.env || {})
         setShowSecrets({})
         setViewMode('configure')
       } else {

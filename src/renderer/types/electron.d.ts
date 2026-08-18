@@ -707,6 +707,7 @@ export interface ElectronAPI {
 
   // Skills
   skillsGetGlobalDir: () => Promise<string>
+  skillsGetGlobalDirs?: () => Promise<string[]>
 
   // Command
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
