@@ -124,6 +124,7 @@ export interface TerminalConfig {
 
 export interface GitConfig {
   autoRefresh: boolean
+  commitPrompt?: string
 }
 
 export interface LspConfig {

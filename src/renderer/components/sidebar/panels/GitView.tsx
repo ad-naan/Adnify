@@ -18,6 +18,7 @@ import { t, type TranslationKey } from '@renderer/i18n'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry, type GitRepository } from '@renderer/services/gitService'
 import { workspaceManager } from '@renderer/services/WorkspaceManager'
 import { getEditorConfig } from '@renderer/settings'
+import { DEFAULT_GIT_COMMIT_PROMPT } from '@shared/config/defaults'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { keybindingService } from '@services/keybindingService'
@@ -865,7 +866,7 @@ export function GitView() {
             return
         }
 
-        const { llmConfig } = useStore.getState()
+        const { llmConfig, editorConfig } = useStore.getState()
         if (!llmConfig.apiKey) {
             toast.warning(tt('apiKeyWarning'))
             return
@@ -893,13 +894,24 @@ export function GitView() {
                 return
             }
 
-            // 构建提示
-            const prompt = `Based on the following git diff, generate a concise and descriptive commit message. Follow conventional commits format (e.g., feat:, fix:, docs:, refactor:, etc.). Only output the commit message, nothing else.
+            // 构建提示：优先使用用户配置的提示词，为空或空白时回退至系统默认提示词
+            const customPrompt = editorConfig.git?.commitPrompt?.trim()
+            const basePrompt = customPrompt || DEFAULT_GIT_COMMIT_PROMPT
+            const formattedDiffs = diffs.join('\n\n---\n\n')
+
+            let prompt: string
+            if (basePrompt.includes('{diff}')) {
+                prompt = basePrompt.replaceAll('{diff}', formattedDiffs)
+            } else if (basePrompt.includes('${diff}')) {
+                prompt = basePrompt.replaceAll('${diff}', formattedDiffs)
+            } else {
+                prompt = `${basePrompt}
 
 Changes:
-${diffs.join('\n\n---\n\n')}
+${formattedDiffs}
 
 Commit message:`
+            }
 
             // 调用 LLM API (使用 compactContext 进行同步调用)
             const response = await api.llm.compactContext({
