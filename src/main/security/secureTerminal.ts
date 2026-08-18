@@ -123,10 +123,9 @@ function createUnixShellIntegrationRc(
   }
 }
 
-// In dev mode, dugite may fail to execute (e.g. missing bundled git),
-// and we can end up spamming the full stack for every git invocation.
-// Deduplicate the "dugite unavailable" warning to keep logs usable.
-let dugiteUnavailableWarned = false
+// dugite 在开发环境或部分系统可能缺失嵌入式二进制包
+// 记录 dugite 可用性状态（null: 未探测, true: 可用, false: 不可用），避免每次重复报错与异常捕获开销
+let dugiteAvailable: boolean | null = null
 
 /**
  * 可靠地终止 PTY 进程树
@@ -558,56 +557,25 @@ export function registerSecureTerminalHandlers(
       return { success: false, error: '用户拒绝执行Git命令' }
     }
 
-    try {
-      const result = await gitExec(args, cwd)
-
-      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
-        exitCode: result.exitCode,
-      })
-
-      if (result.exitCode !== 0) {
-        // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
-        const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
-        if (isQueryCommand) {
-          logger.security.debug('[Git] dugite query returned non-zero:', args)
-        } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
-          logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
-        } else {
-          logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
-        }
-      }
-
-      return {
-        success: result.exitCode === 0,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-      }
-    } catch (error) {
-      if (!dugiteUnavailableWarned) {
-        dugiteUnavailableWarned = true
-        logger.security.warn(`[Git] dugite 不可用: ${error instanceof Error ? error.stack : error}，尝试安全的 spawn 方式`)
-      } else {
-        const msg = error instanceof Error ? error.message : String(error)
-        logger.security.debug('[Git] dugite still unavailable (deduped):', msg)
-      }
-
+    // 5. 执行 Git 命令（优先 dugite，若已探测不可用则直接使用系统安全的 spawn）
+    if (dugiteAvailable !== false) {
       try {
-        // 6. 安全回退：使用 spawn 而非 exec
-        const result = await SecureCommandParser.executeSecureCommand('git', args, cwd, 120000)
+        const result = await gitExec(args, cwd)
+        dugiteAvailable = true
 
         securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
           exitCode: result.exitCode,
         })
 
         if (result.exitCode !== 0) {
+          // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
           const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
           if (isQueryCommand) {
-            logger.security.debug('[Git] spawn query returned non-zero:', args)
+            logger.security.debug('[Git] dugite query returned non-zero:', args)
           } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
-            logger.security.warn('[Git] spawn returned expected non-zero result:', args, result.stderr || result.stdout)
+            logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
           } else {
-            logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
+            logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
           }
         }
 
@@ -617,14 +585,45 @@ export function registerSecureTerminalHandlers(
           stderr: result.stderr,
           exitCode: result.exitCode,
         }
-      } catch (err) {
-        securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
-          error: toAppError(err).message,
-        })
-        return {
-          success: false,
-          error: `Git执行失败: ${toAppError(err).message}`,
+      } catch (error) {
+        dugiteAvailable = false
+        const msg = error instanceof Error ? error.message : String(error)
+        logger.security.info(`[Git] dugite 嵌入式包不可用 (${msg})，已自动切换为系统安全 spawn 模式`)
+      }
+    }
+
+    try {
+      // 6. 安全回退：使用系统的 spawn 执行 git
+      const result = await SecureCommandParser.executeSecureCommand('git', args, cwd, 120000)
+
+      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
+        exitCode: result.exitCode,
+      })
+
+      if (result.exitCode !== 0) {
+        const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+        if (isQueryCommand) {
+          logger.security.debug('[Git] spawn query returned non-zero:', args)
+        } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
+          logger.security.warn('[Git] spawn returned expected non-zero result:', args, result.stderr || result.stdout)
+        } else {
+          logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
         }
+      }
+
+      return {
+        success: result.exitCode === 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      }
+    } catch (err) {
+      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
+        error: toAppError(err).message,
+      })
+      return {
+        success: false,
+        error: `Git执行失败: ${toAppError(err).message}`,
       }
     }
   })

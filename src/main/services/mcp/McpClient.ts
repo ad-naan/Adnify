@@ -31,6 +31,13 @@ import type {
   McpOAuthTokens,
 } from '@shared/types/mcp'
 import { isRemoteConfig } from '@shared/types/mcp'
+import {
+  getAugmentedProcessEnv,
+  normalizeLocalCommandArgs,
+  extractImportantStderr,
+} from './McpEnvHelper'
+
+export { normalizeLocalCommandArgs }
 
 const DEFAULT_TIMEOUT = 30000
 const NPX_TIMEOUT = 60000  // npx 首次需要下载包，给更长超时
@@ -125,10 +132,13 @@ export class McpClient extends EventEmitter {
 
   /** 连接本地服务器 */
   private async connectLocal(config: McpLocalServerConfig): Promise<void> {
+    const effectiveArgs = normalizeLocalCommandArgs(config.command, config.args || [])
+    const augmentedEnv = getAugmentedProcessEnv(config.env)
+
     const transport = new StdioClientTransport({
       command: config.command,
-      args: config.args || [],
-      env: { ...process.env, ...config.env } as Record<string, string>,
+      args: effectiveArgs,
+      env: augmentedEnv,
       cwd: config.cwd,
       stderr: 'pipe',
     })
@@ -150,15 +160,19 @@ export class McpClient extends EventEmitter {
 
     this.registerNotificationHandlers(client)
 
-    // 智能超时：npx/uvx 命令给更长超时（首次需要下载包）
-    const isPackageRunner = ['npx', 'uvx', 'bunx'].includes(config.command)
-    const timeout = config.timeout || (isPackageRunner ? NPX_TIMEOUT : DEFAULT_TIMEOUT)
+    // 智能超时：包运行器首次需要下载包/运行时，给予 180s 充裕时间
+    const isPackageRunner = ['npx', 'uvx', 'bunx', 'pipx', 'cargo', 'docker'].includes(config.command)
+    const timeout = config.timeout || (isPackageRunner ? 180000 : DEFAULT_TIMEOUT)
     try {
       await this.withTimeout(client.connect(transport), timeout)
     } catch (err) {
-      // 连接失败时，附带 stderr 信息以便诊断
+      const refinedError = extractImportantStderr(stderrOutput)
       if (stderrOutput) {
         logger.mcp?.error(`[MCP:${config.id}] Process stderr output:\n${stderrOutput}`)
+      }
+      if (refinedError) {
+        const errorWithDetails = new Error(`${toAppError(err).message} (${refinedError})`)
+        throw errorWithDetails
       }
       throw err
     }

@@ -20,12 +20,20 @@ class RulesService {
   private lastCheckTime = 0
   private checkInterval = 5000
 
-  // 支持的规则文件名（按优先级）
+  // 支持的规则文件名（按优先级从高到低探测，命中首个有效规则）
   private ruleFiles = [
     '.adnify/rules.md',
     '.adnifyrules',
+    'CLAUDE.md',
+    '.claude/CLAUDE.md',
+    '.claude/rules.md',
+    '.clauderules',
     '.cursorrules',
     '.cursor/rules.md',
+    '.codexrules',
+    '.codex/rules.md',
+    '.codex/instructions.md',
+    '.github/copilot-instructions.md',
     'CODING_GUIDELINES.md',
   ]
 

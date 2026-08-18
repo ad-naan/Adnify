@@ -6,10 +6,12 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import * as os from 'os'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getConfigFilePath, getWorkspaceConfigFilePath, CONFIG_FILES } from '../configPath'
 import type { McpConfig, McpServerConfig } from '@shared/types/mcp'
+import { normalizeLocalCommandArgs } from './McpEnvHelper'
 
 export class McpConfigLoader {
   private workspaceRoots: string[] = []
@@ -17,9 +19,53 @@ export class McpConfigLoader {
   private onConfigChange?: () => void
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** 获取用户配置路径 */
+  /** 获取 Adnify 默认用户配置路径 */
   private get userConfigPath(): string {
     return getConfigFilePath(CONFIG_FILES.MCP, CONFIG_FILES.SETTINGS_DIR)
+  }
+
+  /** 获取所有用户全局级候选 MCP 配置文件路径（按优先级从低到高） */
+  private getUserConfigPaths(): string[] {
+    const homeDir = os.homedir()
+    const paths: string[] = []
+
+    // 1. Claude Desktop 配置
+    if (process.platform === 'win32') {
+      const appData = process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming')
+      paths.push(path.join(appData, 'Claude', 'claude_desktop_config.json'))
+    } else if (process.platform === 'darwin') {
+      paths.push(path.join(homeDir, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json'))
+    } else {
+      paths.push(path.join(homeDir, '.config', 'Claude', 'claude_desktop_config.json'))
+    }
+
+    // 2. Claude Code 全局配置
+    paths.push(path.join(homeDir, '.claude.json'))
+    paths.push(path.join(homeDir, '.claude', 'mcp.json'))
+    paths.push(path.join(homeDir, '.claude', 'settings.json'))
+
+    // 3. Codex 全局配置
+    paths.push(path.join(homeDir, '.codex', 'mcp.json'))
+
+    // 4. Cursor 全局配置
+    paths.push(path.join(homeDir, '.cursor', 'mcp.json'))
+
+    // 5. Adnify 原生用户配置（最高全局优先级）
+    paths.push(this.userConfigPath)
+
+    return paths
+  }
+
+  /** 获取指定工作区的所有候选 MCP 配置文件路径（按优先级从低到高） */
+  private getWorkspaceConfigPaths(workspaceRoot: string): string[] {
+    return [
+      path.join(workspaceRoot, 'mcp.json'),
+      path.join(workspaceRoot, '.vscode', 'mcp.json'),
+      path.join(workspaceRoot, '.codex', 'mcp.json'),
+      path.join(workspaceRoot, '.cursor', 'mcp.json'),
+      path.join(workspaceRoot, '.claude', 'mcp.json'),
+      this.getWorkspaceConfigPath(workspaceRoot), // .adnify/mcp.json（最高工作区优先级）
+    ]
   }
 
   /** 设置工作区根目录 */
@@ -33,46 +79,38 @@ export class McpConfigLoader {
     this.onConfigChange = callback
   }
 
-  /** 加载合并后的配置 */
+  /** 加载合并后的配置，按优先级从低到高聚合去重 */
   async loadConfig(): Promise<McpServerConfig[]> {
-    const configs: McpServerConfig[] = []
-    const seenIds = new Set<string>()
+    const configMap = new Map<string, McpServerConfig>()
 
-    // 1. 加载用户级配置（最低优先级）
-    const userConfig = await this.loadConfigFile(this.userConfigPath)
-    if (userConfig) {
-      for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
-        if (!seenIds.has(id)) {
-          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>, 'user'))
-          seenIds.add(id)
+    // 1. 加载所有全局用户级配置（低到高，高优先级覆盖低优先级同名配置）
+    for (const configPath of this.getUserConfigPaths()) {
+      const userConfig = await this.loadConfigFile(configPath)
+      if (userConfig && userConfig.mcpServers) {
+        for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
+          configMap.set(id, this.normalizeConfig(id, serverConfig as Record<string, any>, 'user'))
         }
       }
     }
 
-    // 2. 加载工作区配置（后面的覆盖前面的）
+    // 2. 加载工作区配置（工作区级覆盖全局级）
     for (const root of this.workspaceRoots) {
-      const workspaceConfigPath = this.getWorkspaceConfigPath(root)
-      const workspaceConfig = await this.loadConfigFile(workspaceConfigPath)
-
-      if (workspaceConfig) {
-        for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
-          // 移除旧配置
-          const existingIndex = configs.findIndex(c => c.id === id)
-          if (existingIndex !== -1) {
-            configs.splice(existingIndex, 1)
+      for (const workspaceConfigPath of this.getWorkspaceConfigPaths(root)) {
+        const workspaceConfig = await this.loadConfigFile(workspaceConfigPath)
+        if (workspaceConfig && workspaceConfig.mcpServers) {
+          for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
+            configMap.set(id, this.normalizeConfig(id, serverConfig as Record<string, any>, 'workspace'))
           }
-          // 添加新配置
-          configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>, 'workspace'))
-          seenIds.add(id)
         }
       }
     }
 
-    logger.mcp?.info(`[McpConfigLoader] Loaded ${configs.length} MCP server configs`)
+    const configs = Array.from(configMap.values())
+    logger.mcp?.info(`[McpConfigLoader] Loaded ${configs.length} MCP server configs from multi-source directories`)
     return configs
   }
 
-  /** 自动推断配置的 type 字段，标记来源层级 */
+  /** 自动推断配置的 type 字段，标记来源层级并规范化参数 */
   private normalizeConfig(id: string, serverConfig: Record<string, any>, source: 'user' | 'workspace' = 'user'): McpServerConfig {
     let type = serverConfig.type
     if (!type) {
@@ -82,7 +120,13 @@ export class McpConfigLoader {
         type = 'local'
       }
     }
-    return { ...serverConfig, id, type, source } as McpServerConfig
+
+    let args = serverConfig.args
+    if (type === 'local' && serverConfig.command && Array.isArray(args)) {
+      args = normalizeLocalCommandArgs(serverConfig.command, args)
+    }
+
+    return { ...serverConfig, id, type, args, source } as McpServerConfig
   }
 
   /** 保存用户级配置 */
@@ -170,7 +214,7 @@ export class McpConfigLoader {
       const config = JSON.parse(content) as McpConfig
 
       if (!config.mcpServers || typeof config.mcpServers !== 'object') {
-        logger.mcp?.warn(`[McpConfigLoader] Invalid config format: ${filePath}`)
+        logger.mcp?.debug(`[McpConfigLoader] Skipping non-MCP JSON file: ${filePath}`)
         return null
       }
 
@@ -201,13 +245,23 @@ export class McpConfigLoader {
     // 清理旧的 watchers
     this.cleanup()
 
-    // 监听用户配置
+    // 监听全局候选配置文件
+    for (const userPath of this.getUserConfigPaths()) {
+      if (fs.existsSync(userPath)) {
+        this.watchConfigFile(userPath)
+      }
+    }
+    // 监听默认用户配置路径（即便文件不存在也监听其目录）
     this.watchConfigFile(this.userConfigPath)
 
-    // 监听工作区配置
+    // 监听工作区候选配置文件
     for (const root of this.workspaceRoots) {
-      const configPath = this.getWorkspaceConfigPath(root)
-      this.watchConfigFile(configPath)
+      for (const workspacePath of this.getWorkspaceConfigPaths(root)) {
+        if (fs.existsSync(workspacePath)) {
+          this.watchConfigFile(workspacePath)
+        }
+      }
+      this.watchConfigFile(this.getWorkspaceConfigPath(root))
     }
   }
 

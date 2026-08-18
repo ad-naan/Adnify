@@ -12,6 +12,8 @@ import { promises as fsPromises } from 'fs'
 import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
 import { isUserAuthorizedPath } from '../services/fileAssociation'
+import * as os from 'os'
+import { getUserConfigDir } from '../services/configPath'
 
 // 导入拆分的模块
 import { readFileWithEncodingInfo, readLargeFile, safeWriteFile } from './fileUtils'
@@ -43,6 +45,35 @@ const pendingFileWrites = new Map<string, {
 
 function isInternalAdnifyPath(filePath: string): boolean {
   return /(?:^|[\\/])\.adnify(?:[\\/]|$)/i.test(filePath)
+}
+
+/** 检查是否为合法的全局 Skills、Rules 或 MCP 配置文件路径（允许跨工作区读取） */
+function isAllowedGlobalResourcePath(filePath: string): boolean {
+  if (!filePath || typeof filePath !== 'string') return false
+  try {
+    const resolved = path.resolve(filePath).toLowerCase()
+    const homeDir = os.homedir().toLowerCase()
+    const userConfigDir = getUserConfigDir().toLowerCase()
+
+    const allowedPrefixes = [
+      path.join(userConfigDir, 'skills').toLowerCase(),
+      path.join(userConfigDir, 'settings').toLowerCase(),
+      path.join(homeDir, '.claude', 'skills').toLowerCase(),
+      path.join(homeDir, '.codex', 'skills').toLowerCase(),
+      path.join(homeDir, '.cursor', 'skills').toLowerCase(),
+      path.join(homeDir, '.claude.json').toLowerCase(),
+      path.join(homeDir, '.claude', 'mcp.json').toLowerCase(),
+      path.join(homeDir, '.claude', 'settings.json').toLowerCase(),
+      path.join(homeDir, '.claude', 'claude.md').toLowerCase(),
+      path.join(homeDir, '.codex', 'mcp.json').toLowerCase(),
+      path.join(homeDir, '.codex', 'instructions.md').toLowerCase(),
+      path.join(homeDir, '.cursor', 'mcp.json').toLowerCase(),
+    ]
+
+    return allowedPrefixes.some(prefix => resolved.startsWith(prefix) || resolved === prefix)
+  } catch {
+    return false
+  }
 }
 
 function readFileSingleFlight(filePath: string, encoding?: string): Promise<SharedFileRead> {
@@ -200,9 +231,9 @@ export function registerSecureFileHandlers(
 
     const workspace = getWorkspaceSessionFn(event)
 
-    // 强制工作区边界（用户通过文件关联主动打开的文件可绕过）
+    // 强制工作区边界（用户通过文件关联主动打开的文件或合法全局 skills/config 可绕过）
     if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      if (!isUserAuthorizedPath(filePath)) {
+      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
         securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
           reason: '安全底线：超出工作区边界',
         })
@@ -244,10 +275,12 @@ export function registerSecureFileHandlers(
     const workspace = getWorkspaceSessionFn(event)
 
     if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：超出工作区边界',
-      })
-      return null
+      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
+        securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
+          reason: '安全底线：超出工作区边界',
+        })
+        return null
+      }
     }
 
     if (securityManager.isSensitivePath(filePath)) {
@@ -507,7 +540,9 @@ export function registerSecureFileHandlers(
 
     const workspace = getWorkspaceSessionFn(event)
     if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      return false
+      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
+        return false
+      }
     }
 
     try {
