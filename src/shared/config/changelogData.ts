@@ -43,6 +43,128 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.58",
+    "rawVersion": "1.7.58",
+    "date": "2026-08-18",
+    "title": "全生态 MCP 适配引擎、跨平台生态互通与设置搜索",
+    "titleEn": "Omni-Ecosystem MCP Engine, Cross-Platform Interoperability & Settings Search",
+    "highlight": "重构上线高可靠 MCP 适配引擎并支持官方全类型包与协议，全面打通 Claude / Codex / Cursor 的全局与项目级 MCP、Skills 及 Rules 配置，新增设置全局搜索与 Plan 交互工作流优化",
+    "highlightEn": "Introduced high-reliability MCP adaptation engine supporting all official package types and transports, unified cross-platform MCP/Skills/Rules discovery from Claude/Codex/Cursor, and added in-settings search with Plan workflow polish",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "核心新特性 / Features",
+        "labelEn": "Features",
+        "items": [
+          {
+            "title": "全生态 MCP 适配引擎与官方 Registry 全量检索",
+            "titleEn": "Omni-Ecosystem MCP Engine & Full-Text Registry Search",
+            "details": [
+              "接入官方 MCP Registry 服务端搜索接口（?search=），实现全量精准检索与关键词匹配",
+              "全面支持 npm、pypi（uvx / python）、docker（oci）、cargo、nuget、mcpb 二进制与远程端点（HTTP/SSE）等全生态包类型与启动参数解析",
+              "新增跨平台系统 PATH 自动增强与 UTF-8 编码注入，自动补全 Python/uvx/npm/Docker/Cargo 运行路径",
+              "增加运行时参数智能纠偏（自动将 uvx 的 -p/--python 等前置选项提至包名之前）与 3 分钟动态包下载超时保障"
+            ],
+            "detailsEn": [
+              "Integrated official MCP Registry server-side search API (?search=) for full-text accurate search across the registry",
+              "Full ecosystem support for npm, pypi (uvx/python), docker (oci), cargo, nuget, mcpb binary and remote HTTP/SSE servers",
+              "Added cross-platform system PATH augmentation and UTF-8 injection for Python, uvx, npm, Docker and Cargo runtimes",
+              "Introduced intelligent CLI argument normalization (auto-reordering uvx -p/--python flags) and 3-minute package download timeout"
+            ]
+          },
+          {
+            "title": "Claude / Codex / Cursor 多源生态互通与去重",
+            "titleEn": "Cross-Platform MCP, Skills & Rules Interoperability",
+            "details": [
+              "自动发现并聚合 Claude Desktop、Claude Code、Codex、Cursor 及项目级（.cursor / .codex / .claude / .adnify）的所有 MCP 配置，支持热重载与按 ID 智能去重",
+              "扫描并加载各主流工具的全局与项目级技能（Skills），自动以技能名称去重并支持高优先级覆盖",
+              "规则探测链全面兼容 .adnify/rules.md、CLAUDE.md、.cursorrules、.codexrules、.github/copilot-instructions.md 等主流规范"
+            ],
+            "detailsEn": [
+              "Automatically discover and aggregate user and workspace MCP servers from Claude Desktop, Claude Code, Codex, Cursor and Adnify with hot-reloading and ID deduplication",
+              "Scan and load global and workspace skills across Claude, Codex, Cursor and Adnify with automated name-based deduplication",
+              "Extended rules detection chain to fully support .adnify/rules.md, CLAUDE.md, .cursorrules, .codexrules and Copilot instructions"
+            ]
+          },
+          {
+            "title": "设置中心全局搜索与高亮检索",
+            "titleEn": "In-Settings Search & Multi-Tab Indexing",
+            "details": [
+              "新增设置面板全局即时搜索，建立覆盖 12 个设置 Tab 的中英文双语索引",
+              "支持关键词匹配与跨 Tab 快速导航跳转"
+            ],
+            "detailsEn": [
+              "Added global real-time search in Settings modal with bilingual index covering all 12 settings tabs",
+              "Supports keyword matching and instant cross-tab navigation"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "优化与改进 / Improvements",
+        "labelEn": "Improvements",
+        "items": [
+          {
+            "title": "Plan 模式与工作台协同优化",
+            "titleEn": "Plan Mode & Workbench Workflow Polish",
+            "details": [
+              "优化 Plan 模式下的执行确认流转，支持新消息格式与清晰的状态管理",
+              "改进会话侧边栏与 Plan Workbench 联动体验"
+            ],
+            "detailsEn": [
+              "Polished execution confirmation flow in Plan mode with new message format and explicit state management",
+              "Enhanced synchronization between conversation sidebar and Plan Workbench"
+            ]
+          },
+          {
+            "title": "Git 忽略与排除探测增强",
+            "titleEn": "Git Ignore and Exclude Support",
+            "details": [
+              "增强对 .gitignore 与 .git/info/exclude 的探测支持，修复忽略状态判定与边界单测",
+              "新增自定义 AI Commit 提交信息提示词配置与默认专业模板"
+            ],
+            "detailsEn": [
+              "Enhanced support for .gitignore and .git/info/exclude file status detection with robust test coverage",
+              "Added customizable AI commit message prompt configuration and default professional template"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "问题修复 / Bug Fixes",
+        "labelEn": "Bug Fixes",
+        "items": [
+          {
+            "title": "MCP 在线市场与配置弹窗修复",
+            "titleEn": "MCP Registry Modal & Configuration Fixes",
+            "details": [
+              "修复从官方 Registry 选择服务进入配置页面时标题显示为“配置 undefined”及启动命令显示为“URL: undefined”的问题",
+              "优化非 MCP 格式配置文件的日志判定，消除启动时的误报警告"
+            ],
+            "detailsEn": [
+              "Fixed preset title rendering as 'undefined' and command rendering as 'URL: undefined' when configuring servers from Registry",
+              "Optimized log severity for non-MCP JSON configurations to eliminate false positive warnings on startup"
+            ]
+          },
+          {
+            "title": "LSP 多服务并发安装修复",
+            "titleEn": "LSP Concurrent Installation State Fix",
+            "details": [
+              "改进 LSP 安装状态管理，支持多语言服务器并发安装与状态精准跟踪"
+            ],
+            "detailsEn": [
+              "Improved LSP installation state management to accurately track concurrent language server installations"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.57",
     "rawVersion": "1.7.57",
     "date": "2026-08-18",
@@ -50,8 +172,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Native Shell Integration, Agent Workflows & Security Hardening",
     "highlight": "引入 VS Code 兼容的 OSC 633 Shell 集成，修复多项 Agent 工作流与终端问题，并系统加固 URL、富文本内容处理和依赖安全",
     "highlightEn": "Added VS Code-compatible OSC 633 shell integration, resolved multiple Agent workflow and terminal issues, and hardened URL, rich-content and dependency security",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",

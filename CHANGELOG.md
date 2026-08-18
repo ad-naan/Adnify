@@ -4,6 +4,41 @@
 
 ---
 
+## [1.7.58] - 2026-08-18 全生态 MCP 适配引擎、跨平台生态互通与设置搜索
+
+> **版本亮点**：重构上线高可靠 MCP 适配引擎并支持官方全类型包与协议，全面打通 Claude / Codex / Cursor 的全局与项目级 MCP、Skills 及 Rules 配置，新增设置全局搜索与 Plan 交互工作流优化
+
+### 核心新特性 / Features
+- **全生态 MCP 适配引擎与官方 Registry 全量检索**
+  - 接入官方 MCP Registry 服务端搜索接口（?search=），实现全量精准检索与关键词匹配
+  - 全面支持 npm、pypi（uvx / python）、docker（oci）、cargo、nuget、mcpb 二进制与远程端点（HTTP/SSE）等全生态包类型与启动参数解析
+  - 新增跨平台系统 PATH 自动增强与 UTF-8 编码注入，自动补全 Python/uvx/npm/Docker/Cargo 运行路径
+  - 增加运行时参数智能纠偏（自动将 uvx 的 -p/--python 等前置选项提至包名之前）与 3 分钟动态包下载超时保障
+- **Claude / Codex / Cursor 多源生态互通与去重**
+  - 自动发现并聚合 Claude Desktop、Claude Code、Codex、Cursor 及项目级（.cursor / .codex / .claude / .adnify）的所有 MCP 配置，支持热重载与按 ID 智能去重
+  - 扫描并加载各主流工具的全局与项目级技能（Skills），自动以技能名称去重并支持高优先级覆盖
+  - 规则探测链全面兼容 .adnify/rules.md、CLAUDE.md、.cursorrules、.codexrules、.github/copilot-instructions.md 等主流规范
+- **设置中心全局搜索与高亮检索**
+  - 新增设置面板全局即时搜索，建立覆盖 12 个设置 Tab 的中英文双语索引
+  - 支持关键词匹配与跨 Tab 快速导航跳转
+
+### 优化与改进 / Improvements
+- **Plan 模式与工作台协同优化**
+  - 优化 Plan 模式下的执行确认流转，支持新消息格式与清晰的状态管理
+  - 改进会话侧边栏与 Plan Workbench 联动体验
+- **Git 忽略与排除探测增强**
+  - 增强对 .gitignore 与 .git/info/exclude 的探测支持，修复忽略状态判定与边界单测
+  - 新增自定义 AI Commit 提交信息提示词配置与默认专业模板
+
+### 问题修复 / Bug Fixes
+- **MCP 在线市场与配置弹窗修复**
+  - 修复从官方 Registry 选择服务进入配置页面时标题显示为“配置 undefined”及启动命令显示为“URL: undefined”的问题
+  - 优化非 MCP 格式配置文件的日志判定，消除启动时的误报警告
+- **LSP 多服务并发安装修复**
+  - 改进 LSP 安装状态管理，支持多语言服务器并发安装与状态精准跟踪
+
+---
+
 ## [1.7.57] - 2026-08-18 原生终端 Shell 集成、Agent 工作流与安全加固
 
 > **版本亮点**：引入 VS Code 兼容的 OSC 633 Shell 集成，修复多项 Agent 工作流与终端问题，并系统加固 URL、富文本内容处理和依赖安全
