@@ -27,6 +27,30 @@ describe('planWorkflowGuard', () => {
     expect(getPlanContinuationReminder(state)).toContain('create_task_plan')
   })
 
+  it('recognizes ask_user in ChatMessage parts format', () => {
+    const state = derivePlanPlanningState([
+      { role: 'user' },
+      {
+        role: 'assistant',
+        parts: [{ type: 'tool_call', toolCall: { name: 'ask_user' } }],
+      },
+      { role: 'user' },
+    ])
+    expect(state).toBe('ready_to_create')
+  })
+
+  it('recognizes ask_user in ChatMessage interactive card format', () => {
+    const state = derivePlanPlanningState([
+      { role: 'user' },
+      {
+        role: 'assistant',
+        interactive: { question: 'Confirm plan?' },
+      },
+      { role: 'user' },
+    ])
+    expect(state).toBe('ready_to_create')
+  })
+
   it('allows completion only after a structured plan tool call', () => {
     const state = derivePlanPlanningState([
       { role: 'user' },

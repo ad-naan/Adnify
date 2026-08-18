@@ -6,17 +6,39 @@ export type PlanPlanningState =
   | 'ready_to_update'
   | 'plan_created'
 
-type MessageLike = {
+export type MessageLike = {
   role?: string
+  parts?: Array<{ type?: string; toolCall?: { name?: string } }>
   toolCalls?: Array<{ name?: string }>
   tool_calls?: Array<{ function?: { name?: string } }>
+  interactive?: unknown
 }
 
-function toolNames(message: MessageLike): string[] {
-  return [
-    ...(message.toolCalls || []).map(call => call.name || ''),
-    ...(message.tool_calls || []).map(call => call.function?.name || ''),
-  ].filter(Boolean)
+export function toolNames(message: MessageLike): string[] {
+  const names: string[] = []
+  if (message.parts && Array.isArray(message.parts)) {
+    for (const part of message.parts) {
+      if (part && typeof part === 'object') {
+        if (part.type === 'tool_call' && part.toolCall?.name) {
+          names.push(part.toolCall.name)
+        }
+      }
+    }
+  }
+  if (message.toolCalls && Array.isArray(message.toolCalls)) {
+    for (const call of message.toolCalls) {
+      if (call?.name) names.push(call.name)
+    }
+  }
+  if (message.tool_calls && Array.isArray(message.tool_calls)) {
+    for (const call of message.tool_calls) {
+      if (call?.function?.name) names.push(call.function.name)
+    }
+  }
+  if (message.interactive) {
+    names.push('ask_user')
+  }
+  return names
 }
 
 export function derivePlanPlanningState(messages: readonly MessageLike[]): PlanPlanningState {
@@ -37,18 +59,22 @@ export function derivePlanPlanningState(messages: readonly MessageLike[]): PlanP
   ), -1)
   const isRevision = previousPlanIndex >= 0
 
+  // 检查在用户最新输入之后，是否有正在等待用户回答的 ask_user
   const clarificationAfterRequest = messages.findIndex((message, index) =>
     index > latestUserIndex && message.role === 'assistant' && toolNames(message).includes('ask_user')
   )
   if (clarificationAfterRequest >= 0) return 'waiting_for_answer'
 
+  // 检查在用户最新输入之前，是否有 ask_user 提问（即当前用户的输入是澄清答复）
   for (let index = latestUserIndex - 1; index >= 0; index--) {
     const message = messages[index]
-    if (message.role === 'tool') continue
-    if (message.role === 'assistant' && toolNames(message).includes('ask_user')) {
-      return isRevision && index > previousPlanIndex ? 'ready_to_update' : 'ready_to_create'
+    if (message.role === 'tool' || message.role === 'system' || message.role === 'checkpoint') continue
+    if (message.role === 'assistant') {
+      if (toolNames(message).includes('ask_user')) {
+        return isRevision && index > previousPlanIndex ? 'ready_to_update' : 'ready_to_create'
+      }
+      break
     }
-    break
   }
 
   return isRevision ? 'revision_requested' : 'needs_clarification'
