@@ -1,4 +1,5 @@
 import { promises as fsPromises } from 'fs'
+import type { FileHandle } from 'fs/promises'
 import * as iconv from 'iconv-lite'
 
 export type SupportedEncoding = 'utf-8' | 'utf-8-bom' | 'gbk' | 'gb18030'
@@ -79,20 +80,70 @@ export async function readFileWithEncodingInfo(
   }
 }
 
+/**
+ * Read a byte range from a file.
+ *
+ * `maxLength` is a BYTE count, not a line count. The returned text is decoded
+ * with `Buffer.toString`, which replaces a multi-byte character straddling the
+ * end boundary with U+FFFD rather than dropping it silently.
+ *
+ * This is a preview primitive: callers that need the whole file — anything that
+ * parses the result or writes it back — must use `readFileWithEncodingInfo`,
+ * otherwise a truncated read round-trips as a destructive write.
+ */
 export async function readLargeFile(
   filePath: string,
   start: number,
   maxLength: number,
 ): Promise<string | null> {
+  let handle: FileHandle | null = null
   try {
-    const fd = await fsPromises.open(filePath, 'r')
+    handle = await fsPromises.open(filePath, 'r')
     const buffer = Buffer.alloc(maxLength)
-    const { bytesRead } = await fd.read(buffer, 0, maxLength, start)
-    await fd.close()
+    const { bytesRead } = await handle.read(buffer, 0, maxLength, start)
     return buffer.toString('utf-8', 0, bytesRead)
   } catch {
     return null
+  } finally {
+    // The previous implementation leaked the descriptor whenever read() threw.
+    await handle?.close().catch(() => { /* ignore */ })
   }
+}
+
+export interface SizedReadResult extends ReadFileResult {
+  /** Byte size reported by stat, before any decoding. */
+  size: number
+  /** True when only a leading slice of the file was returned. */
+  truncated: boolean
+}
+
+/**
+ * Read a file, returning whether the result is the complete contents.
+ *
+ * `previewByteLimit` caps how much of an oversized file is read. Pass
+ * `Infinity` to always read in full. Truncation is reported rather than
+ * inferred: callers cannot detect it from content length alone, because the
+ * cap is applied before they ever see the data.
+ */
+export async function readFileSized(
+  filePath: string,
+  encoding?: string,
+  previewByteLimit = Number.POSITIVE_INFINITY,
+): Promise<SizedReadResult> {
+  const stats = await fsPromises.stat(filePath)
+
+  if (stats.size > previewByteLimit) {
+    const content = await readLargeFile(filePath, 0, previewByteLimit)
+    return {
+      content,
+      encoding: normalizeEncoding(encoding),
+      size: stats.size,
+      truncated: content !== null,
+    }
+  }
+
+  const result = await readFileWithEncodingInfo(filePath, encoding)
+  return { ...result, size: stats.size, truncated: false }
 }
 
 export async function getFileStats(filePath: string): Promise<{

@@ -18,6 +18,30 @@ interface SessionFileStorePaths {
 
 const SESSION_READ_CONCURRENCY = 4
 
+/**
+ * Thrown when a thread's messages exist on disk but cannot be trusted.
+ *
+ * Callers must not substitute an empty history for this: the persistence layer
+ * treats an empty message list as "delete the file".
+ */
+export class SessionMessagesUnreadableError extends Error {
+  readonly threadId: string
+  readonly invalidLines: number
+  readonly recoveredCount: number
+
+  constructor(
+    threadId: string,
+    message: string,
+    details?: { invalidLines?: number; recoveredCount?: number }
+  ) {
+    super(message)
+    this.name = 'SessionMessagesUnreadableError'
+    this.threadId = threadId
+    this.invalidLines = details?.invalidLines ?? 0
+    this.recoveredCount = details?.recoveredCount ?? 0
+  }
+}
+
 async function mapWithConcurrency<T, R>(
   values: readonly T[],
   concurrency: number,
@@ -75,7 +99,16 @@ export class SessionFileStore {
         async (entry): Promise<PersistedThreadSummary | null> => {
           const threadId = entry.name.slice(0, -'.json'.length)
           const data = await this.readSessionFile<PersistedChatThread>(entry.name)
-          if (!data) return null
+          if (!data) {
+            // The file is present but unreadable. Report it as unreadable rather
+            // than dropping it: an omitted thread is pruned from _meta.json, so a
+            // transient failure would permanently unlink a session that still
+            // has its .jsonl on disk.
+            logger.system.error(
+              `[SessionFileStore] Thread metadata ${entry.name} exists but could not be read`
+            )
+            return { id: threadId, lastModified: 0, messageCount: 0, unreadable: true }
+          }
 
           return {
             id: threadId,
@@ -126,6 +159,18 @@ export class SessionFileStore {
         const threadId = fileName.replace('.json', '')
         const threadData = normalizePersistedChatThread(data as PersistedChatThread)
         const { messages, ...metadata } = threadData
+
+        // Last line of defence against a failed load being persisted as truth.
+        // normalizePersistedChatThread preserves the incoming messageCount, so a
+        // thread that is known to have history but arrives with no messages means
+        // something upstream lost them — never let that erase the payload.
+        if (messages.length === 0 && (metadata.messageCount ?? 0) > 0) {
+          const reason =
+            `Refusing to clear ${messages.length} messages for thread ${threadId} ` +
+            `while metadata reports messageCount=${metadata.messageCount}`
+          logger.system.error(`[SessionFileStore] ${reason}`)
+          throw new Error(reason)
+        }
 
         // Commit the larger payload first and metadata last. Readers therefore
         // never observe a new messageCount pointing at an older JSONL payload.
@@ -201,26 +246,56 @@ export class SessionFileStore {
   }
 
   private async readThreadMessages(threadId: string): Promise<any[]> {
-    try {
-      const jsonlPath = this.paths.getThreadMessagesPath(threadId)
-      const jsonlExists = await api.file.exists(jsonlPath)
+    const jsonlPath = this.paths.getThreadMessagesPath(threadId)
+    const jsonlExists = await api.file.exists(jsonlPath)
 
-      if (!jsonlExists) {
-        return []
-      }
-
-      const jsonlContent = await api.file.read(jsonlPath)
-      if (!jsonlContent) return []
-
-      const messages = parseMessagesFromJsonl(
-        jsonlContent,
-        error => logger.system.warn('[SessionFileStore] Skipped invalid JSONL line', error)
-      )
-      logger.system.info(`[SessionFileStore] Loaded ${messages.length} messages for thread ${threadId}`)
-      return messages
-    } catch (error) {
-      logger.system.error(`[SessionFileStore] Failed to load messages for thread ${threadId}:`, error)
+    // A thread with no message file is legitimately empty. Every other failure
+    // below throws: returning [] would make "unreadable" look identical to
+    // "empty", and an empty message list is persisted back as a deletion.
+    if (!jsonlExists) {
       return []
+    }
+
+    const jsonlContent = await api.file.read(jsonlPath)
+    if (jsonlContent === null) {
+      throw new SessionMessagesUnreadableError(
+        threadId,
+        `Failed to read ${jsonlPath} (file exists but returned no content)`
+      )
+    }
+
+    const { messages, invalidLines } = parseMessagesFromJsonl(
+      jsonlContent,
+      error => logger.system.warn('[SessionFileStore] Skipped invalid JSONL line', error)
+    )
+
+    if (invalidLines > 0) {
+      // Preserve the damaged payload before anything can overwrite it, then
+      // refuse to report a partial history as if it were complete.
+      await this.quarantineCorruptMessages(threadId, jsonlPath)
+      throw new SessionMessagesUnreadableError(
+        threadId,
+        `${invalidLines} invalid line(s) in ${jsonlPath}; recovered ${messages.length} message(s)`,
+        { invalidLines, recoveredCount: messages.length }
+      )
+    }
+
+    logger.system.info(`[SessionFileStore] Loaded ${messages.length} messages for thread ${threadId}`)
+    return messages
+  }
+
+  /** Copy a damaged JSONL aside so the data survives the next write. */
+  private async quarantineCorruptMessages(threadId: string, jsonlPath: string): Promise<void> {
+    try {
+      const corruptPath = `${jsonlPath}.corrupt`
+      const alreadySaved = await api.file.exists(corruptPath)
+      if (alreadySaved) return
+      await api.file.copy(jsonlPath, corruptPath)
+      logger.system.error(
+        `[SessionFileStore] Preserved damaged messages for thread ${threadId} at ${corruptPath}`
+      )
+    } catch (error) {
+      logger.system.error('[SessionFileStore] Failed to preserve damaged messages:', error)
     }
   }
 }

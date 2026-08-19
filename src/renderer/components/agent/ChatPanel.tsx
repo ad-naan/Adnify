@@ -113,7 +113,13 @@ export default function ChatPanel() {
   })
   const activeThreadMessagesHydrated = useAgentStore(state => {
     if (!state.currentThreadId) return true
-    return state.threads[state.currentThreadId]?.messagesHydrated !== false
+    const thread = state.threads[state.currentThreadId]
+    if (!thread) return true
+    // A failed load also ends the skeleton: the messages are not in memory, but
+    // waiting longer will not change that, and the thread stays un-hydrated so
+    // the persistence layer keeps its hands off the on-disk history.
+    if (thread.hydrationFailed) return true
+    return thread.messagesHydrated !== false
   })
 
   const chatMode = useModeStore(s => s.currentMode)
