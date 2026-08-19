@@ -686,7 +686,8 @@ async function guardedWriteFile(opts: {
 > {
     const originalHash = hashContent(opts.originalContent)
     if (!opts.skipStaleCheck) {
-        const currentContent = await api.file.read(opts.path)
+        // 陈旧检查比对整文件哈希，必须读全文，否则超大文件的哈希只反映前导切片。
+        const currentContent = await api.file.read(opts.path, undefined, { full: true })
         const currentHash = hashContent(currentContent)
 
         if (currentHash !== originalHash) {
@@ -1055,7 +1056,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async edit_file(args, ctx) {
         const path = resolvePath(args.path, ctx.workspacePath)
-        const originalContent = await api.file.read(path)
+        // 编辑会把结果整体写回，读取截断等于把文件尾部删掉。
+        const originalContent = await api.file.read(path, undefined, { full: true })
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
         const resolution = resolveEditFileRequest(args)
@@ -1473,7 +1475,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         // 因此在真正落盘前，先经过统一策略守卫，避免把局部修改误用成整文件覆盖。
         const path = resolvePath(args.path, ctx.workspacePath)
         const content = args.content as string
-        const originalContent = await api.file.read(path) || ''
+        const originalContent = await api.file.read(path, undefined, { full: true }) || ''
         const writeDecision = guardWriteFile({
             path,
             originalContent,

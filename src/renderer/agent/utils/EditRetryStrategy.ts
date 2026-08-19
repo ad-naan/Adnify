@@ -230,7 +230,7 @@ export async function tryEditWithRetry(
   const { path, oldString, newString, replaceAll } = attempt
 
   // 读取文件内容
-  const content = await api.file.read(path)
+  const content = await api.file.read(path, undefined, { full: true })
   if (content === null) {
     return {
       success: false,

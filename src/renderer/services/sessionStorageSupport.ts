@@ -32,6 +32,13 @@ export interface PersistedThreadSummary {
   title?: string
   lastModified: number
   messageCount: number
+  /**
+   * The metadata file exists but could not be parsed.
+   *
+   * Such a thread must never be pruned from the index: its `.jsonl` may still be
+   * intact, and removing the id is what turns a bad read into permanent loss.
+   */
+  unreadable?: boolean
 }
 
 export interface SessionCatalog {
@@ -54,20 +61,39 @@ export function serializeMessages(messages: unknown[]): string {
   return messages.map(message => JSON.stringify(message)).join('\n')
 }
 
-export function parseMessagesFromJsonl(content: string, onInvalidLine?: (error: unknown) => void): unknown[] {
-  if (!content.trim()) return []
+export interface ParsedJsonlMessages {
+  messages: unknown[]
+  /** Lines that were present but unparseable. Non-zero means the file is damaged. */
+  invalidLines: number
+}
+
+/**
+ * Parse JSONL message payloads.
+ *
+ * Unparseable lines are counted, not just skipped: a truncated tail line is
+ * indistinguishable from a short file if the count is discarded, and callers
+ * need to know the result is partial before they persist anything derived
+ * from it — an empty or short parse is otherwise written back as the truth.
+ */
+export function parseMessagesFromJsonl(
+  content: string,
+  onInvalidLine?: (error: unknown) => void
+): ParsedJsonlMessages {
+  if (!content.trim()) return { messages: [], invalidLines: 0 }
 
   const messages: unknown[] = []
+  let invalidLines = 0
   for (const line of content.split(/\r?\n/)) {
     const trimmed = line.trim()
     if (!trimmed) continue
     try {
       messages.push(JSON.parse(trimmed))
     } catch (error) {
+      invalidLines += 1
       onInvalidLine?.(error)
     }
   }
-  return messages
+  return { messages, invalidLines }
 }
 
 export const DEFAULT_SESSION_META: SessionMeta = {
@@ -255,8 +281,10 @@ export function buildEffectiveSessionMeta(
   }
 
   const hasNonEmptyThread = summaries.some(summary => summary.messageCount > 0)
+  // Unreadable threads report messageCount 0 because the count could not be
+  // read — not because the thread is empty. Keep them so the id survives.
   const effectiveSummaries = hasNonEmptyThread
-    ? summaries.filter(summary => summary.messageCount > 0)
+    ? summaries.filter(summary => summary.messageCount > 0 || summary.unreadable)
     : summaries
   const actualThreadIds = effectiveSummaries.map(summary => summary.id).sort()
   const preferredCurrentThreadId = selectPreferredCurrentThreadId(

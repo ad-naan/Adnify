@@ -367,7 +367,8 @@ export interface ElectronAPI {
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
-  readFile: (path: string, encoding?: string) => Promise<string | null>
+  readFile: (path: string, encoding?: string, options?: { full?: boolean }) => Promise<string | null>
+  statFile: (path: string) => Promise<{ size: number; isDirectory: boolean; isFile: boolean; mtimeMs: number } | null>
   readBinaryFile: (path: string) => Promise<string | null>
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>

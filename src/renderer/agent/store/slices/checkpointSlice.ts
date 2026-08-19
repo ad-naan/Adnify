@@ -2,7 +2,7 @@ import { api } from '@/renderer/services/electronAPI'
 import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
-import { buildAgentSessionSnapshot, persistCriticalAgentSessionState } from '../agentStorage'
+import { buildAgentSessionSnapshot, persistCriticalAgentSessionState, stageAgentSessionState } from '../agentStorage'
 import type {
   ChatThread,
   CheckpointImage,
@@ -308,7 +308,12 @@ export const createCheckpointSlice: StateCreator<
       }
     })
 
-    persistCheckpointState(get())
+    // Snapshots are taken once per file the agent touches, so a multi-file turn
+    // would otherwise force N full-session serializations plus N disk flushes
+    // mid-turn, bypassing both the streaming skip and the debounce. Staging lets
+    // the normal debounce coalesce them; the checkpoint payload is recreated from
+    // disk state anyway, so it does not need a synchronous commit.
+    stageAgentSessionState(get())
   },
 
   restoreToCheckpoint: async (checkpointId) => {

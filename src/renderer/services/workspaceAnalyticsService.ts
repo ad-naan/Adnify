@@ -262,10 +262,16 @@ class WorkspaceAnalyticsService {
     const threads = sessionSnapshot?.threads || {}
     const todos = Object.values(threads).flatMap(thread => thread.todos || [])
     const threadIds = Object.keys(threads)
-    const threadMessages = await Promise.all(threadIds.map(async threadId => ({
-      threadId,
-      messages: await agentSessionRepository.loadThreadMessages(threadId),
-    })))
+    // 分析面板是只读视图：单个线程读不出来不该让整个仪表盘失败，
+    // 但也不能把读取失败当成"这个线程没有消息"去统计，所以跳过并记录。
+    const threadMessages = await Promise.all(threadIds.map(async threadId => {
+      try {
+        return { threadId, messages: await agentSessionRepository.loadThreadMessages(threadId) }
+      } catch (error) {
+        logger.system.warn(`[WorkspaceAnalytics] Skipped unreadable thread ${threadId}:`, error)
+        return { threadId, messages: [] as Awaited<ReturnType<typeof agentSessionRepository.loadThreadMessages>> }
+      }
+    }))
     const allMessages = threadMessages.flatMap(item => item.messages)
 
     const fileChangeEvents = events.filter((event): event is Extract<AnalyticsEvent, { type: 'file_change' }> => (

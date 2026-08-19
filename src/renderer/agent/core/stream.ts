@@ -217,10 +217,11 @@ export function createStreamProcessor(
           }
           reasoning += reasoningContent
           if (assistantId && reasoningPartId) {
+            // Only the buffered part update runs per delta. The mirrored
+            // `message.reasoning` field is written once when the stream settles
+            // (loop.ts) — updating it here cost a full messages.map() plus a
+            // threads clone on every token, unthrottled, and nothing renders it.
             store.updateReasoningPart(assistantId, reasoningPartId, reasoningContent, true)
-            store.updateMessage(assistantId, {
-              reasoning,
-            } as Partial<import('../types').AssistantMessage>)
           }
           EventBus.emit({ type: 'stream:reasoning', text: reasoningContent, phase: 'delta' })
         }
