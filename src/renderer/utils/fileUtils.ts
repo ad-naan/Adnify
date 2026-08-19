@@ -114,32 +114,28 @@ export async function safeOpenFile(
   }
 
   try {
-    // 2. 读取文件内容
-    const content = await api.file.read(filePath)
-
-    if (content === null) {
-      const msg = language === 'zh' ? '文件不存在' : 'File not found'
-      if (showWarning) {
-        toast.error(msg, filePath)
-      }
-      return { success: false, error: msg }
-    }
+    // 2. 先用 stat 判断体积，再决定是否读取。
+    // 读取回来的内容长度不能用来判断大小：主进程对超大文件只返回前导切片，
+    // 于是 content.length 永远落在阈值以下，两道防线形同虚设，
+    // 而这份被截断的内容一旦保存就会覆盖磁盘上的完整文件。
+    const stats = await api.file.stat(filePath)
+    const byteSize = stats?.size ?? 0
 
     // 3. 检查文件大小
-    if (content.length > FILE_CONFIG.maxFileSize) {
+    if (byteSize > FILE_CONFIG.maxFileSize) {
       const msg = language === 'zh'
         ? '文件太大，无法打开'
         : 'File is too large to open'
       if (showWarning) {
-        toast.error(msg, `${(content.length / 1024 / 1024).toFixed(1)} MB`)
+        toast.error(msg, `${(byteSize / 1024 / 1024).toFixed(1)} MB`)
       }
       return { success: false, error: msg, isLargeFile: true }
     }
 
     // 4. 大文件确认
-    if (confirmLargeFile && content.length > FILE_CONFIG.confirmThreshold) {
+    if (confirmLargeFile && byteSize > FILE_CONFIG.confirmThreshold) {
       const { t } = await import('../i18n')
-      const size = (content.length / 1024 / 1024).toFixed(1)
+      const size = (byteSize / 1024 / 1024).toFixed(1)
 
       const confirmed = await globalConfirm({
         title: language === 'zh' ? '大文件警告' : 'Large File Warning',
@@ -151,6 +147,18 @@ export async function safeOpenFile(
       if (!confirmed) {
         return { success: false, error: 'Cancelled by user', isLargeFile: true }
       }
+    }
+
+    // 5. 读取完整内容。编辑器缓冲区是可写的，必须拿到全文，
+    // 否则一次保存就会把文件截断到预览切片的长度。
+    const content = await api.file.read(filePath, undefined, { full: true })
+
+    if (content === null) {
+      const msg = language === 'zh' ? '文件不存在' : 'File not found'
+      if (showWarning) {
+        toast.error(msg, filePath)
+      }
+      return { success: false, error: msg }
     }
 
     // 5. 检测大文件信息

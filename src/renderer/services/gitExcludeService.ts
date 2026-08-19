@@ -71,7 +71,7 @@ class GitExcludeService {
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
     const filePath = resolveIgnoreFilePath(repository.root, target)
     const exists = await api.file.exists(filePath)
-    const current = exists ? (await api.file.read(filePath) || '') : ''
+    const current = exists ? (await api.file.read(filePath, undefined, { full: true }) || '') : ''
     const next = updateGitExcludeContent(current, pattern, action)
     if (next === current) return { changed: false, pattern, target }
 

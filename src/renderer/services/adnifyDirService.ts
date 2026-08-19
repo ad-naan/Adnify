@@ -113,6 +113,34 @@ const DEFAULT_PROJECT_SETTINGS: ProjectSettingsData = {
   },
 }
 
+/**
+ * Cheap change signature for a thread.
+ *
+ * The previous implementation ran `stableStringify` over the whole thread —
+ * a recursive walk that sorted the keys of every message and every tool call —
+ * on each store mutation, so persistence bookkeeping alone scaled with history
+ * length. Messages are append-mostly and only the tail mutates while streaming,
+ * so the tail identity plus the metadata is enough to detect a real change.
+ *
+ * Metadata is still stringified in full: it is small and bounded, and fields
+ * like `todos` or `messageCheckpoints` must not be missed.
+ */
+function buildThreadDirtySignature(data: PersistedChatThread): string {
+  const messages = data.messages || []
+  const last = messages[messages.length - 1] as
+    | { id?: string; timestamp?: number; content?: unknown; isStreaming?: boolean }
+    | undefined
+  const { messages: _messages, ...metadata } = data
+
+  // The tail's serialized length changes as tokens stream into it, which is what
+  // makes an in-place edit of the last message visible without hashing the rest.
+  const tailFingerprint = last
+    ? `${last.id ?? ''}:${last.timestamp ?? 0}:${JSON.stringify(last).length}`
+    : ''
+
+  return `${messages.length}|${tailFingerprint}|${stableStringify(metadata)}`
+}
+
 class AdnifyDirService {
   private primaryRoot: string | null = null
   private initializedRoots: Set<string> = new Set()
@@ -402,6 +430,18 @@ class AdnifyDirService {
       return meta
     }
 
+    // Never persist a pruned index while any thread metadata is unreadable:
+    // the drift may be an artefact of the failed read, and rewriting _meta.json
+    // would unlink a session whose messages are still on disk.
+    const unreadable = summaries.filter(summary => summary.unreadable)
+    if (unreadable.length > 0) {
+      logger.system.error(
+        '[AdnifyDir] Skipped session meta reconciliation: unreadable thread metadata',
+        { threadIds: unreadable.map(summary => summary.id) }
+      )
+      return meta
+    }
+
     await this.sessionFiles.writeSessionFile('_meta.json', toSessionIndexMeta(reconciledMeta))
     this.cache.sessionMeta = reconciledMeta
     this.metaHash = stableStringify(reconciledMeta)
@@ -543,7 +583,7 @@ class AdnifyDirService {
   }
 
   setThreadDirty(threadId: string, data: PersistedChatThread): void {
-    const nextHash = stableStringify(data)
+    const nextHash = buildThreadDirtySignature(data)
     const prevHash = this.threadHashes.get(threadId)
     this.cache.threads.set(threadId, data)
     if (prevHash === nextHash) return
@@ -643,9 +683,21 @@ class AdnifyDirService {
       const threadData = threads[currentThreadId] as ChatThread
       // 只有当消息为空时才加载（避免重复加载）
       if (!threadData.messages || threadData.messages.length === 0) {
-        const messages = await this.loadThreadMessages(currentThreadId)
-        threadData.messages = messages
-        threadData.messageCount = messages.length
+        try {
+          const messages = await this.loadThreadMessages(currentThreadId)
+          threadData.messages = messages
+          threadData.messageCount = messages.length
+          threadData.messagesHydrated = true
+        } catch (error) {
+          // 保留元数据里的 messageCount，并维持 messagesHydrated=false：
+          // 覆写成 0 会让这个线程看起来是空的，随后被写回磁盘。
+          logger.system.error(
+            `[AdnifyDir] Failed to hydrate current thread ${currentThreadId}:`,
+            error
+          )
+          threadData.messagesHydrated = false
+          threadData.hydrationFailed = true
+        }
       }
     }
 

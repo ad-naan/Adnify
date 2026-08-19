@@ -92,6 +92,14 @@ export interface ChatThread {
   messageCount?: number
   /** Runtime-only flag: whether the full message body has been loaded into memory. */
   messagesHydrated?: boolean
+  /**
+   * Runtime-only flag: the last hydration attempt failed.
+   *
+   * Kept separate from `messagesHydrated` so the UI can leave its loading state
+   * without claiming the thread is loaded — marking it hydrated would let the
+   * persistence layer overwrite the on-disk messages with an empty list.
+   */
+  hydrationFailed?: boolean
 
   streamState: StreamState
   toolStreamingPreviews?: Record<string, ToolStreamingPreview>

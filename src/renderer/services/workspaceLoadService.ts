@@ -113,7 +113,31 @@ export async function hydrateThreadMessages(threadId: string): Promise<void> {
     return
   }
 
-  const messages = await agentSessionRepository.loadThreadMessages(threadId)
+  let messages: Awaited<ReturnType<typeof agentSessionRepository.loadThreadMessages>>
+  try {
+    messages = await agentSessionRepository.loadThreadMessages(threadId)
+  } catch (error) {
+    // 标记失败让 UI 退出加载态，但不写入空消息、不标记 hydrated，
+    // 这样持久化层不会用空数组覆盖磁盘上的历史。
+    logger.system.error(`[WorkspaceLoad] Failed to hydrate thread ${threadId}:`, error)
+    suspendAgentStorageWrites()
+    try {
+      useAgentStore.setState(currentState => {
+        const currentThread = currentState.threads[threadId]
+        if (!currentThread) return currentState
+        return {
+          threads: {
+            ...currentState.threads,
+            [threadId]: { ...currentThread, hydrationFailed: true },
+          },
+        }
+      })
+    } finally {
+      resumeAgentStorageWrites()
+    }
+    return
+  }
+
   suspendAgentStorageWrites()
   try {
     useAgentStore.setState(currentState => {

@@ -16,7 +16,7 @@ import * as os from 'os'
 import { getUserConfigDir } from '../services/configPath'
 
 // 导入拆分的模块
-import { readFileWithEncodingInfo, readLargeFile, safeWriteFile } from './fileUtils'
+import { readFileWithEncodingInfo, readFileSized, readLargeFile, safeWriteFile, getFileStats } from './fileUtils'
 import {
   setupFileWatcher,
   cleanupFileWatcher,
@@ -34,6 +34,7 @@ import type { ImageAnalysisRequest, ReadRichContentOptions } from '@shared/types
 interface SharedFileRead {
   content: string | null
   size: number
+  truncated: boolean
 }
 
 const pendingFileReads = new Map<string, Promise<SharedFileRead>>()
@@ -76,17 +77,36 @@ function isAllowedGlobalResourcePath(filePath: string): boolean {
   }
 }
 
-function readFileSingleFlight(filePath: string, encoding?: string): Promise<SharedFileRead> {
-  const key = `${path.resolve(filePath)}\0${encoding || 'auto'}`
+/**
+ * Byte size past which a read returns only a leading preview slice.
+ *
+ * Previews keep the UI responsive on huge files, but a truncated read is
+ * indistinguishable from a short file once it crosses the IPC boundary — so any
+ * caller that parses the result or writes it back must opt into a full read.
+ * `.adnify` state (session JSONL, settings, indexes) is always read in full:
+ * a truncated parse there reads as "empty", and empty round-trips as deletion.
+ */
+const PREVIEW_BYTE_LIMIT = 5 * 1024 * 1024
+const PREVIEW_SLICE_BYTES = 10000
+
+function readFileSingleFlight(
+  filePath: string,
+  encoding?: string,
+  full = false,
+): Promise<SharedFileRead> {
+  // The truncation mode is part of the identity of the read: without it a
+  // preview caller and a full caller would share whichever result landed first.
+  const key = `${path.resolve(filePath)}\0${encoding || 'auto'}\0${full ? 'full' : 'preview'}`
   const existing = pendingFileReads.get(key)
   if (existing) return existing
 
   const read = (async () => {
-    const stats = await fsPromises.stat(filePath)
-    const content = stats.size > 5 * 1024 * 1024
-      ? await readLargeFile(filePath, 0, 10000)
-      : (await readFileWithEncodingInfo(filePath, encoding)).content
-    return { content, size: stats.size }
+    const result = await readFileSized(
+      filePath,
+      encoding,
+      full ? Number.POSITIVE_INFINITY : PREVIEW_BYTE_LIMIT,
+    )
+    return { content: result.content, size: result.size, truncated: result.truncated }
   })()
 
   pendingFileReads.set(key, read)
@@ -221,7 +241,7 @@ export function registerSecureFileHandlers(
   })
 
   // 读取文件（无弹窗，使用拆分的 fileUtils）
-  ipcMain.handle('file:read', async (event, filePath: string, encoding?: string) => {
+  ipcMain.handle('file:read', async (event, filePath: string, encoding?: string, options?: { full?: boolean }) => {
     if (!filePath) return null
 
     // 跳过虚拟协议路径（如 git-diff://、diff:// 等），这些不是真实文件路径
@@ -249,7 +269,10 @@ export function registerSecureFileHandlers(
     }
 
     try {
-      const { content, size } = await readFileSingleFlight(filePath, encoding)
+      // Internal .adnify state is never previewed: a truncated parse there is
+      // read as "empty", and empty is persisted back as a deletion.
+      const full = options?.full === true || isInternalAdnifyPath(filePath)
+      const { content, size } = await readFileSingleFlight(filePath, encoding, full)
       // 使用拆分的 fileUtils 函数
       if (!isInternalAdnifyPath(filePath)) {
         securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
@@ -550,6 +573,29 @@ export function registerSecureFileHandlers(
       return true
     } catch {
       return false
+    }
+  })
+
+  // 文件大小/类型（读取前判断，避免大文件被预览截断后无法察觉）
+  ipcMain.handle('file:stat', async (event, filePath: string) => {
+    if (!filePath || typeof filePath !== 'string') return null
+    if (securityManager.isSensitivePath(filePath)) return null
+
+    const workspace = getWorkspaceSessionFn(event)
+    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
+        return null
+      }
+    }
+
+    const stats = await getFileStats(filePath)
+    if (!stats) return null
+
+    return {
+      size: stats.size,
+      isDirectory: stats.isDirectory,
+      isFile: stats.isFile,
+      mtimeMs: stats.mtime.getTime(),
     }
   })
 

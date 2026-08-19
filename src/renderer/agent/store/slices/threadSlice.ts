@@ -14,6 +14,7 @@ import { agentSessionRepository } from '@/renderer/services/agentSessionReposito
 import { createIdleHandoffState, createRuntimeThreadState } from '../../types'
 import { findMostRecentThreadForMode } from '../../threads/threadModeProjection'
 import { normalizeMode } from '@/shared/types/workMode'
+import { logger } from '@utils/Logger'
 
 export interface ThreadStoreState {
     threads: Record<string, ChatThread>
@@ -242,20 +243,22 @@ export const createThreadSlice: StateCreator<
                             ...state.threads[threadId],
                             messages,
                             messagesHydrated: true,
+                            hydrationFailed: false,
                             messageCount: messages.length,
                         },
                     },
                 }))
             }).catch(err => {
-                console.error('[ThreadSlice] Failed to load messages:', err)
-                // 加载失败时也强制触发 set，让骨架屏能正常退出
+                logger.agent.error('[ThreadSlice] Failed to load messages:', err)
+                // 加载失败时只标记失败，让骨架屏能退出，但绝不写入空消息列表：
+                // messagesHydrated 必须保持 false，否则 stageAgentSessionSnapshot
+                // 会把这个线程标脏，用空数组覆盖并删除磁盘上的 .jsonl。
                 set(state => ({
                     threads: {
                         ...state.threads,
                         [threadId]: {
                             ...state.threads[threadId],
-                            messages: [],
-                            messagesHydrated: true,
+                            hydrationFailed: true,
                         },
                     },
                 }))

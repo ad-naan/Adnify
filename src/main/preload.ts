@@ -263,7 +263,8 @@ export interface ElectronAPI {
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
-  readFile: (path: string, encoding?: string) => Promise<string | null>
+  readFile: (path: string, encoding?: string, options?: { full?: boolean }) => Promise<string | null>
+  statFile: (path: string) => Promise<{ size: number; isDirectory: boolean; isFile: boolean; mtimeMs: number } | null>
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
   writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
@@ -572,7 +573,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeFromRecentWorkspaces: (path: string) => ipcRenderer.invoke('workspace:removeFromRecent', path),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),
   getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
-  readFile: (path: string, encoding?: string) => ipcRenderer.invoke('file:read', path, encoding),
+  readFile: (path: string, encoding?: string, options?: { full?: boolean }) => ipcRenderer.invoke('file:read', path, encoding, options),
+  statFile: (path: string) => ipcRenderer.invoke('file:stat', path),
   readBinaryFile: (path: string) => ipcRenderer.invoke('file:readBinary', path),
   readRichContent: (path: string, options?: ReadRichContentOptions) => ipcRenderer.invoke('file:readRichContent', path, options),
   readImageAnalysis: (request: ImageAnalysisRequest) => ipcRenderer.invoke('file:readImageAnalysis', request),
