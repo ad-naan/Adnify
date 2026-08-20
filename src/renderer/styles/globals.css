@@ -633,20 +633,20 @@ textarea,
   background-size: 200% 100%;
 }
 
+/* Only background-position moves here. A filter: hue-rotate() keyframe would
+   re-run a per-pixel filter over the pill (and its backdrop-filter blur) every
+   frame, for an 8deg shift that is essentially invisible. */
 @keyframes process-fluid-border {
   0% {
     background-position: 0% 50%;
-    filter: hue-rotate(0deg);
   }
 
   50% {
     background-position: 100% 50%;
-    filter: hue-rotate(8deg);
   }
 
   100% {
     background-position: 0% 50%;
-    filter: hue-rotate(0deg);
   }
 }
 

@@ -307,7 +307,10 @@
       background: var(--loader-inner-glow);
       filter: blur(25px);
       border-radius: 50%;
-      animation: pulse 3s infinite alternate;
+      /* Animate opacity only: a blur() that also scales must be re-convolved
+         every frame, which is the single most expensive thing on this screen. */
+      animation: glow-pulse 3s infinite alternate;
+      will-change: opacity;
       z-index: 1;
     }
 
@@ -363,10 +366,15 @@
 
     .loader-progress-bar {
       height: 100%;
-      width: 0%;
+      /* Full width, revealed via scaleX: animating width would relayout (and
+         repaint the gradient) on every one of the 150ms progress ticks. */
+      width: 100%;
+      transform: scaleX(0);
+      transform-origin: left center;
       background: linear-gradient(90deg, #a5b4fc, #c084fc);
       border-radius: 14px;
-      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
       position: relative;
       overflow: hidden;
     }
@@ -451,6 +459,20 @@
       }
     }
 
+    /* Opacity-only variant for blurred elements, where animating transform
+       would force the blur to be recomputed on every frame. */
+    @keyframes glow-pulse {
+
+      0%,
+      100% {
+        opacity: 0.4;
+      }
+
+      50% {
+        opacity: 1;
+      }
+    }
+
     @keyframes spin {
       to {
         transform: rotate(360deg);
@@ -522,7 +544,7 @@
         progress += increment;
 
         if (bar && text) {
-          bar.style.width = progress + '%';
+          bar.style.transform = 'scaleX(' + (progress / 100) + ')';
           text.innerText = progress + '%';
         }
 
@@ -535,7 +557,7 @@
       window.completeLoading = function () {
         clearInterval(interval);
         if (bar && text) {
-          bar.style.width = '100%';
+          bar.style.transform = 'scaleX(1)';
           text.innerText = '100%';
         }
         setTimeout(function () {
