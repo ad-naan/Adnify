@@ -15,6 +15,7 @@ import { securityManager, OperationType } from './securityModule'
 import { SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import { safeIpcHandle } from '../ipc/safeHandle'
 import { normalizePipeTerminalInput } from './terminalInput'
+import { runPipedShellCommand } from './pipedShell'
 import { exec as gitExec } from 'dugite'
 import { remoteHostTrustService } from '../services/remoteHostTrustService'
 
@@ -25,6 +26,34 @@ interface SecureShellRequest {
   cwd?: string
   timeout?: number
   requireConfirm?: boolean
+}
+
+/**
+ * A shell command to run through pipes rather than an interactive PTY.
+ *
+ * This is the fallback for `run_command` when terminal shell integration cannot
+ * report command boundaries (cmd.exe, or a failed OSC 633 handshake). Piped
+ * stdio gives the real stdout/stderr and the real exit code, so the agent can
+ * never be told a command failed when it actually succeeded.
+ */
+interface PipedShellRequest {
+  command: string
+  cwd?: string
+  timeout?: number
+  shell?: string
+  maxOutputChars?: number
+}
+
+interface PipedShellResult {
+  success: boolean
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  signal: string | null
+  timedOut: boolean
+  truncated: boolean
+  durationMs: number
+  error?: string
 }
 
 interface CommandWhitelist {
@@ -59,6 +88,8 @@ export function getWhitelist() {
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
 const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
+/** PIDs of in-flight shell:runPiped children, so app shutdown can reap them. */
+const pipedShellPids = new Set<number>()
 
 function getShellIntegrationResourcePath(scriptName: string): string {
   return app.isPackaged
@@ -170,6 +201,12 @@ export function cleanupTerminals(): void {
   for (const [pid, child] of backgroundProcesses) {
     try { child.kill('SIGTERM') } catch { /* ignore */ }
     backgroundProcesses.delete(pid)
+  }
+  // Piped agent commands are tracked by pid only; the promise that owns each
+  // child is already gone by the time shutdown runs.
+  for (const pid of pipedShellPids) {
+    try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
+    pipedShellPids.delete(pid)
   }
   logger.security.info(`[Terminal] All terminals and background processes cleaned up`)
 }
@@ -320,8 +357,7 @@ class SecureCommandParser {
   }
 }
 
-function shouldLogGitNonZeroAsWarning(args: string[], stderr: string, stdout: string): boolean {
-  const gitSubCommand = args.find(arg => !arg.startsWith('-'))?.toLowerCase()
+function shouldLogGitNonZeroAsWarning(args: string[], stderr: string, stdout: string): boolean {  const gitSubCommand = args.find(arg => !arg.startsWith('-'))?.toLowerCase()
   const output = `${stderr}\n${stdout}`.toLowerCase()
 
   if (gitSubCommand === 'notes' && args.includes('show') && output.includes('no note found for object')) {
@@ -1417,6 +1453,86 @@ export function registerSecureTerminalHandlers(
    * 使用 child_process.spawn，不依赖 PTY
    * 实时推送输出到前端，精确捕获 exit code
    */
+  /**
+   * Run an agent command through pipes instead of the interactive PTY.
+   *
+   * Reached only when terminal shell integration cannot frame the command, so it
+   * carries no command whitelist: the caller is the same `run_command` tool call
+   * that the PTY path serves, gated by the same approval UI. Dangerous-pattern
+   * detection and the workspace boundary still apply, matching what the PTY path
+   * enforces.
+   */
+  safeIpcHandle('shell:runPiped', async (
+    event,
+    request: PipedShellRequest,
+  ): Promise<PipedShellResult> => {
+    const { command, cwd, timeout = 120_000, shell: customShell, maxOutputChars = 120_000 } = request || {}
+    const fail = (error: string): PipedShellResult => ({
+      success: false,
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      signal: null,
+      timedOut: false,
+      truncated: false,
+      durationMs: 0,
+      error,
+    })
+
+    if (typeof command !== 'string' || !command.trim()) {
+      return fail('No command provided')
+    }
+
+    const workspace = getWorkspace(event)
+    const workingDir = cwd || workspace?.roots[0] || process.cwd()
+
+    if (workspace && !securityManager.validateWorkspacePath(workingDir, workspace.roots)) {
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
+        reason: 'Working directory outside workspace',
+        source: 'runPiped',
+      })
+      return fail('Working directory outside workspace')
+    }
+
+    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(command)
+    if (!dangerousCheck.safe) {
+      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
+        reason: dangerousCheck.reason,
+        source: 'runPiped',
+      })
+      return fail(dangerousCheck.reason || 'Command rejected')
+    }
+
+    const outcome = await runPipedShellCommand({
+      command,
+      cwd: workingDir,
+      timeoutMs: timeout,
+      shell: customShell,
+      maxOutputChars,
+      onSpawn: pid => pipedShellPids.add(pid),
+      onExit: pid => pipedShellPids.delete(pid),
+    })
+
+    securityManager.logOperation(OperationType.SHELL_EXECUTE, command, outcome.exitCode === 0, {
+      source: 'runPiped',
+      exitCode: outcome.exitCode,
+      timedOut: outcome.timedOut,
+      durationMs: outcome.durationMs,
+    })
+
+    return {
+      success: outcome.exitCode === 0 && !outcome.timedOut,
+      stdout: outcome.stdout,
+      stderr: outcome.stderr,
+      exitCode: outcome.exitCode,
+      signal: outcome.signal,
+      timedOut: outcome.timedOut,
+      truncated: outcome.truncated,
+      durationMs: outcome.durationMs,
+      error: outcome.error,
+    }
+  })
+
   safeIpcHandle('shell:executeBackground', async (
     event,
     { command, cwd, timeout = 30000, shell: customShell }: {

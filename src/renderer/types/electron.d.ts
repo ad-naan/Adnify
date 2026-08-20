@@ -519,6 +519,27 @@ export interface ElectronAPI {
     success: boolean; output: string; exitCode: number; error?: string
   }>
   onShellOutput: (callback: (event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => void) => () => void
+  /**
+   * Run a command through pipes and get its real stdout/stderr/exit code.
+   * Fallback for when terminal shell integration cannot frame a command.
+   */
+  runPiped: (params: {
+    command: string
+    cwd?: string
+    timeout?: number
+    shell?: string
+    maxOutputChars?: number
+  }) => Promise<{
+    success: boolean
+    stdout: string
+    stderr: string
+    exitCode: number | null
+    signal: string | null
+    timedOut: boolean
+    truncated: boolean
+    durationMs: number
+    error?: string
+  }>
   executeSecureCommand: (request: SecureCommandRequest) => Promise<{
     success: boolean; output?: string; errorOutput?: string; exitCode?: number; error?: string
   }>

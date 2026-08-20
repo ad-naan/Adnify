@@ -204,6 +204,7 @@ function createGroupedAPI() {
     shell: {
       executeSecure: (request: Parameters<typeof raw.executeSecureCommand>[0]) => raw.executeSecureCommand(request),
       executeBackground: (params: Parameters<typeof raw.executeBackground>[0]) => raw.executeBackground(params),
+      runPiped: (params: Parameters<typeof raw.runPiped>[0]) => raw.runPiped(params),
       onOutput: (callback: Parameters<typeof raw.onShellOutput>[0]) => raw.onShellOutput(callback),
     },
 

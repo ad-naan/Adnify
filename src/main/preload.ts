@@ -693,6 +693,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
     ipcRenderer.invoke('shell:executeBackground', params),
+  runPiped: (params: { command: string; cwd?: string; timeout?: number; shell?: string; maxOutputChars?: number }) =>
+    ipcRenderer.invoke('shell:runPiped', params),
   onShellOutput: (callback: (event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => void) => {
     const handler = (_: IpcRendererEvent, event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => callback(event)
     ipcRenderer.on('shell:output', handler)
