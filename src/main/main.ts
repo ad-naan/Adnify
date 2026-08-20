@@ -569,6 +569,10 @@ async function performGlobalCleanup() {
     try {
       destroyIndexService()
     } catch { /* ignore */ }
+    await withTimeout(
+      import('./services/session/SessionStorageWorkerClient').then(m => m.sessionStorageWorker.closeAll()),
+      3000, 'SessionStorageWorker closeAll'
+    )
     logger.system.info('[Main] Global cleanup completed successfully')
   } catch (err) {
     logger.system.error('[Main] Global cleanup error:', err)

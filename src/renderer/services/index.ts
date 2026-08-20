@@ -13,7 +13,7 @@ export { initializeApp, registerSettingsSync, type InitResult } from './initServ
 export { workspaceManager } from './WorkspaceManager'
 export { loadWorkspace } from './workspaceLoadService'
 export { resetWorkspaceRuntimeState } from './workspaceRuntimeResetService'
-export { adnifyDir } from './adnifyDirService'
+export { workspaceFiles } from './workspaceFileRepository'
 export { saveWorkspaceState, restoreWorkspaceState, scheduleStateSave, initWorkspaceStateSync } from './workspaceStateService'
 export { directoryCacheService } from './directoryCacheService'
 export { initCacheLifecycleService, runCacheCleanupPhase } from './cacheLifecycleService'

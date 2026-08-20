@@ -75,7 +75,7 @@ async function restartWindowFileWatcher(sender: Electron.WebContents, roots: str
   })
 }
 
-async function readWorkspaceMarkerId(root: string): Promise<string | null> {
+export async function readWorkspaceMarkerId(root: string): Promise<string | null> {
   try {
     const markerPath = path.join(root, WORKSPACE_MARKER_RELATIVE_PATH)
     const content = await fsPromises.readFile(markerPath, 'utf-8')

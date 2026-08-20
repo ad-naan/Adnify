@@ -3,6 +3,12 @@
  */
 
 import { clipboard, contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import type {
+  SessionCatalogRecord,
+  SessionPatch,
+  SessionStorageStats,
+  SessionWorkerResult,
+} from '@shared/types/sessionPersistence'
 
 // 本地类型定义（避免从 renderer 导入）
 type Language = 'en' | 'zh'
@@ -261,6 +267,13 @@ export interface ElectronAPI {
   workspaceExists: (path: string) => Promise<boolean>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
+  sessionOpen: () => Promise<Extract<SessionWorkerResult, { type: 'opened' }>>
+  sessionLoadCatalog: () => Promise<SessionCatalogRecord>
+  sessionLoadMessages: (threadId: string) => Promise<unknown[]>
+  sessionLoadBranchMessages: (threadId: string) => Promise<Array<{ id: string; messages: unknown[] }>>
+  sessionGetStats: () => Promise<SessionStorageStats>
+  sessionApplyPatch: (patch: SessionPatch) => Promise<boolean>
+  sessionClear: () => Promise<boolean>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string, encoding?: string, options?: { full?: boolean }) => Promise<string | null>
@@ -571,6 +584,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   workspaceExists: (path: string) => ipcRenderer.invoke('workspace:exists', path),
   clearRecentWorkspaces: () => ipcRenderer.invoke('workspace:clearRecent'),
   removeFromRecentWorkspaces: (path: string) => ipcRenderer.invoke('workspace:removeFromRecent', path),
+  sessionOpen: () => ipcRenderer.invoke('session:open'),
+  sessionLoadCatalog: () => ipcRenderer.invoke('session:loadCatalog'),
+  sessionLoadMessages: (threadId: string) => ipcRenderer.invoke('session:loadMessages', threadId),
+  sessionLoadBranchMessages: (threadId: string) => ipcRenderer.invoke('session:loadBranchMessages', threadId),
+  sessionGetStats: () => ipcRenderer.invoke('session:getStats'),
+  sessionApplyPatch: (patch: SessionPatch) => ipcRenderer.invoke('session:applyPatch', patch),
+  sessionClear: () => ipcRenderer.invoke('session:clear'),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),
   getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
   readFile: (path: string, encoding?: string, options?: { full?: boolean }) => ipcRenderer.invoke('file:read', path, encoding, options),

@@ -35,6 +35,13 @@ export type {
   LspPrepareRename,
 } from '@shared/types'
 
+import type {
+  SessionCatalogRecord,
+  SessionPatch,
+  SessionStorageStats,
+  SessionWorkerResult,
+} from '@shared/types/sessionPersistence'
+
 // 从 @shared/types/llm 重新导出
 export type {
   LLMStreamChunk,
@@ -365,6 +372,13 @@ export interface ElectronAPI {
   workspaceExists: (path: string) => Promise<boolean>
   clearRecentWorkspaces: () => Promise<boolean>
   removeFromRecentWorkspaces: (path: string) => Promise<boolean>
+  sessionOpen: () => Promise<Extract<SessionWorkerResult, { type: 'opened' }>>
+  sessionLoadCatalog: () => Promise<SessionCatalogRecord>
+  sessionLoadMessages: (threadId: string) => Promise<unknown[]>
+  sessionLoadBranchMessages: (threadId: string) => Promise<Array<{ id: string; messages: unknown[] }>>
+  sessionGetStats: () => Promise<SessionStorageStats>
+  sessionApplyPatch: (patch: SessionPatch) => Promise<boolean>
+  sessionClear: () => Promise<boolean>
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string, encoding?: string, options?: { full?: boolean }) => Promise<string | null>

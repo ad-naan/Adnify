@@ -1,8 +1,8 @@
-import { adnifyDir } from './adnifyDirService'
+import { workspaceFiles } from './workspaceFileRepository'
 
 class WorkspaceStorageRuntime {
   initializeRoot(rootPath: string): Promise<boolean> {
-    return adnifyDir.initialize(rootPath)
+    return workspaceFiles.initialize(rootPath)
   }
 
   async initializeRoots(rootPaths: string[]): Promise<void> {
@@ -10,19 +10,15 @@ class WorkspaceStorageRuntime {
   }
 
   bindPrimaryRoot(rootPath: string): Promise<void> {
-    return adnifyDir.setPrimaryRoot(rootPath)
+    return workspaceFiles.setPrimaryRoot(rootPath)
   }
 
   isReady(): boolean {
-    return adnifyDir.isInitialized()
-  }
-
-  flush(): Promise<void> {
-    return adnifyDir.flush()
+    return workspaceFiles.isInitialized()
   }
 
   reset(): void {
-    adnifyDir.reset()
+    workspaceFiles.reset()
   }
 }
 

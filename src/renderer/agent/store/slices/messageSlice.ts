@@ -121,9 +121,9 @@ const bumpThreadMessageVersion = (
 /**
  * Trim a thread's stored history to `maxStoredMessagesPerThread`.
  *
- * Only thread COUNT was bounded (50 in `createThread`), so one long session grew
- * its `<id>.jsonl` without limit — and that file is rewritten in full on every
- * dirty flush, so persistence cost scaled with history length.
+ * Thread count and per-thread message count are bounded independently. SQLite
+ * avoids full-history rewrites, but unbounded histories still increase memory,
+ * startup hydration, backup size, and model-context work.
  *
  * The cut point is chosen carefully: dropping a `tool` message while keeping the
  * `assistant` message whose `tool_calls` reference it produces an orphaned tool
@@ -685,10 +685,8 @@ export const createMessageSlice: StateCreator<
 
         get().clearToolStreamingPreviews(threadId)
 
-        // Persist immediately rather than relying on the debounce. Whether the
-        // on-disk `<id>.jsonl` actually got truncated used to depend on if a flush
-        // happened before the next restart, so "clear history" was
-        // nondeterministic: the messages could come back.
+        // Persist immediately rather than relying on the debounce so a restart
+        // cannot race the durable clear transaction.
         void persistCriticalAgentSessionState(
             buildPersistedAgentSessionState(get())
         )

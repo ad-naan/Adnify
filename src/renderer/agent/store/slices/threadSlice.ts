@@ -63,6 +63,14 @@ export type ThreadSlice = ThreadStoreState & ThreadActions
 
 const generateId = () => crypto.randomUUID()
 
+function deletePersistedThread(threadId: string): void {
+    void agentSessionRepository.deleteThread(threadId).catch(error => {
+        // The next staged snapshot still contains the deletion diff, so the
+        // shared commit queue will retry it instead of losing the operation.
+        logger.agent.error('[ThreadSlice] Immediate thread deletion failed:', error)
+    })
+}
+
 export const createEmptyThread = (metadata?: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId'>): ChatThread => ({
     id: generateId(),
     createdAt: Date.now(),
@@ -185,11 +193,11 @@ export const createThreadSlice: StateCreator<
         })
 
         // FIFO eviction used to drop threads from the in-memory map only, leaving
-        // their `<id>.jsonl` and metadata orphaned on disk forever — a permanent
+        // their persisted rows orphaned forever — a permanent
         // leak that plan mode makes worse, since every plan task burns a slot.
         // `deleteThread` has always cleaned up disk; eviction now does too.
         for (const evictedId of evictedThreadIds) {
-            void agentSessionRepository.deleteThread(evictedId)
+            deletePersistedThread(evictedId)
         }
 
         return thread.id
@@ -230,10 +238,18 @@ export const createThreadSlice: StateCreator<
         if (state.currentThreadId === threadId) return
         set({ currentThreadId: threadId })
 
-        // 懒加载切换后线程的消息
+        // Lazily hydrate both messages and normalized branch messages.
         const thread = state.threads[threadId]
-        if (thread?.messagesHydrated === false) {
-            agentSessionRepository.loadThreadMessages(threadId).then(messages => {
+        if (thread && (thread.messagesHydrated === false ||
+            !agentSessionRepository.areThreadBranchesHydrated(threadId))) {
+            Promise.all([
+                thread.messagesHydrated === false
+                    ? agentSessionRepository.loadThreadMessages(threadId)
+                    : Promise.resolve(thread.messages),
+                agentSessionRepository.areThreadBranchesHydrated(threadId)
+                    ? Promise.resolve(state.branches[threadId] || [])
+                    : agentSessionRepository.loadThreadBranches(threadId),
+            ]).then(([messages, branches]) => {
                 // 无论消息是否为空，都触发一次 set，确保 ChatPanel 的 useEffect
                 // 检测到 filteredMessages 引用变化，能正常退出骨架屏状态
                 set(state => ({
@@ -247,12 +263,16 @@ export const createThreadSlice: StateCreator<
                             messageCount: messages.length,
                         },
                     },
+                    branches: {
+                        ...state.branches,
+                        [threadId]: branches,
+                    },
                 }))
             }).catch(err => {
                 logger.agent.error('[ThreadSlice] Failed to load messages:', err)
                 // 加载失败时只标记失败，让骨架屏能退出，但绝不写入空消息列表：
-                // messagesHydrated 必须保持 false，否则 stageAgentSessionSnapshot
-                // 会把这个线程标脏，用空数组覆盖并删除磁盘上的 .jsonl。
+                // messagesHydrated 必须保持 false，否则持久化层会把读取失败
+                // 误判为真实的空历史，并提交删除事务。
                 set(state => ({
                     threads: {
                         ...state.threads,
@@ -291,8 +311,7 @@ export const createThreadSlice: StateCreator<
         })
 
         if (didDelete) {
-            // 删除 JSONL 文件和元数据
-            void agentSessionRepository.deleteThread(threadId)
+            deletePersistedThread(threadId)
         }
     },
 

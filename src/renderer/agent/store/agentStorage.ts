@@ -2,7 +2,6 @@ import { logger } from '@utils/Logger'
 import { agentSessionRepository, type AgentSessionSnapshot } from '@services/agentSessionRepository'
 import { toPersistedChatThread, type ChatThread } from '@renderer/agent/types'
 
-let lastSerializedValue: string | null = null
 let writeSuspendCount = 0
 let scheduledPersistTimer: ReturnType<typeof setTimeout> | null = null
 let pendingStateGetter: (() => Partial<PersistedAgentSessionState>) | null = null
@@ -13,6 +12,7 @@ const DEFAULT_PERSIST_DEBOUNCE_MS = 750
 
 export interface PersistedAgentSessionState {
   threads: Record<string, unknown>
+  threadMessageVersions?: Record<string, number>
   currentThreadId: string | null
   branches: Record<string, unknown>
   activeBranchId: Record<string, unknown>
@@ -25,6 +25,7 @@ interface PersistedAgentStorageEnvelope {
 
 const EMPTY_PERSISTED_AGENT_SESSION_STATE: PersistedAgentSessionState = {
   threads: {},
+  threadMessageVersions: {},
   currentThreadId: null,
   branches: {},
   activeBranchId: {},
@@ -40,6 +41,7 @@ export function buildPersistedAgentSessionState(
 
   return {
     threads,
+    threadMessageVersions: state.threadMessageVersions || {},
     currentThreadId: state.currentThreadId || null,
     branches: state.branches || {},
     activeBranchId: state.activeBranchId || {},
@@ -81,6 +83,7 @@ export function buildAgentSessionSnapshot(
 
   return {
     threads: persistedState.threads as AgentSessionSnapshot['threads'],
+    threadMessageVersions: persistedState.threadMessageVersions,
     currentThreadId: persistedState.currentThreadId,
     branches: persistedState.branches,
     activeBranchId: persistedState.activeBranchId,
@@ -104,7 +107,11 @@ export function parseAgentStorageValue(value: string): AgentSessionSnapshot {
 }
 
 export function markAgentStorageSnapshotAsCurrent(snapshot: AgentSessionSnapshot | null): void {
-  lastSerializedValue = snapshot ? serializeAgentSessionSnapshot(snapshot) : null
+  // Kept as a lifecycle boundary for callers. Snapshot equality used to be
+  // tracked by JSON-stringifying every message in every thread here, which can
+  // freeze the renderer after loading a large workspace. Dirty detection now
+  // uses threadMessageVersions plus bounded metadata in the session repository.
+  void snapshot
 }
 
 function clearScheduledPersistTimer(): void {
@@ -121,13 +128,7 @@ function stagePersistedAgentSessionFromGetter(
     return
   }
   const snapshot = buildAgentSessionSnapshot(getState())
-  const serialized = serializeAgentSessionSnapshot(snapshot)
-  if (serialized === lastSerializedValue) {
-    return
-  }
-
   agentSessionRepository.stageSnapshot(snapshot)
-  lastSerializedValue = serialized
 }
 
 export function schedulePersistedAgentSessionState(
@@ -189,7 +190,6 @@ export async function persistCriticalAgentSessionState(
     flushScheduledPersistedAgentSessionState()
     agentSessionRepository.stageSnapshot(buildAgentSessionSnapshot(state))
     await agentSessionRepository.flush()
-    lastSerializedValue = null
   } catch (error) {
     logger.agent.error('[AgentStorage] Failed to persist critical agent session state:', error)
   }
@@ -198,6 +198,5 @@ export async function persistCriticalAgentSessionState(
 export async function clearPersistedAgentSessionState(): Promise<void> {
   clearScheduledPersistTimer()
   pendingStateGetter = null
-  lastSerializedValue = null
   await agentSessionRepository.clear()
 }

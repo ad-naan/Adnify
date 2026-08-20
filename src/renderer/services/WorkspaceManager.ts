@@ -9,6 +9,8 @@ import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import { runCacheCleanupPhase } from './cacheLifecycleService'
 import type { WorkspaceConfig } from '@store'
 import { workspaceAnalyticsService } from './workspaceAnalyticsService'
+import { persistenceCoordinator } from './persistence/PersistenceCoordinator'
+import { stageWorkspaceStatePersistence } from './workspaceStateService'
 
 export class WorkspaceOpenError extends Error {
   constructor(
@@ -192,7 +194,8 @@ class WorkspaceManager {
 
     logger.system.info('[WorkspaceManager] Saving current workspace data...')
     flushAgentSessionPersistence()
-    await workspaceStorageRuntime.flush()
+    await stageWorkspaceStatePersistence()
+    await persistenceCoordinator.flush('workspace-switch', 'workspace')
   }
 
   private resetRuntimeState(): void {
