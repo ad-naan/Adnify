@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { PROVIDERS } from '@/shared/config/providers'
 import stableStringify from 'fast-json-stable-stringify'
 import { getEditorConfig } from '@renderer/settings'
+import { captureActiveProviderConfig } from '@renderer/settings/providerConfigPersistence'
 import { t, type Language } from '@renderer/i18n'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
@@ -299,16 +300,10 @@ export default function SettingsModal() {
         const finalProviderConfigs = providerExists
             ? {
                 ...localProviderConfigs,
-                [currentProvider]: {
-                    ...localProviderConfigs[currentProvider],
-                    apiKey: localConfig.apiKey,
-                    baseUrl: localConfig.baseUrl,
-                    timeout: localConfig.timeout,
-                    model: localConfig.model,
-                    headers: localConfig.headers,
-                    openAICompatibilityProfile: localConfig.openAICompatibilityProfile,
-                    protocol: localConfig.protocol,
-                }
+                [currentProvider]: captureActiveProviderConfig(
+                    localProviderConfigs[currentProvider],
+                    localConfig,
+                ),
             }
             : { ...localProviderConfigs }
 

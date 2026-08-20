@@ -17,6 +17,7 @@ import {
   resolveOpenAICompatibilityProfile,
 } from '@/shared/config/providers'
 import { REASONING_EFFORT_VALUES } from '@/shared/config/llmPersistence'
+import { captureActiveProviderConfig } from '@renderer/settings/providerConfigPersistence'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
@@ -1377,17 +1378,10 @@ export function ProviderSettings({
     if (!skipSaveCurrent && (localProviderConfigs[localConfig.provider] || BUILTIN_PROVIDER_IDS.includes(localConfig.provider))) {
       updatedConfigs = {
         ...localProviderConfigs,
-        [localConfig.provider]: {
-          ...localProviderConfigs[localConfig.provider],
-          displayName: localProviderConfigs[localConfig.provider]?.displayName,
-          apiKey: localConfig.apiKey,
-          baseUrl: localConfig.baseUrl,
-          timeout: localConfig.timeout,
-          model: localConfig.model,
-          headers: localConfig.headers,
-          openAICompatibilityProfile: localConfig.openAICompatibilityProfile,
-          protocol: localConfig.protocol,
-        },
+        [localConfig.provider]: captureActiveProviderConfig(
+          localProviderConfigs[localConfig.provider],
+          localConfig,
+        ),
       }
       setLocalProviderConfigs(updatedConfigs)
     }
@@ -1403,6 +1397,7 @@ export function ProviderSettings({
       timeout: nextConfig.timeout || providerInfo?.defaults.timeout || 120000,
       model: nextConfig.model || providerInfo?.models[0] || '',
       headers: nextConfig.headers,
+      capabilities: nextConfig.capabilities,
       openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
         providerId,
         nextConfig.protocol || providerInfo?.protocol,
@@ -1418,17 +1413,10 @@ export function ProviderSettings({
     // 保存当前配置（包括 headers）
     const updatedConfigs = {
       ...localProviderConfigs,
-      [localConfig.provider]: {
-        ...localProviderConfigs[localConfig.provider],
-        displayName: localProviderConfigs[localConfig.provider]?.displayName,
-        apiKey: localConfig.apiKey,
-        baseUrl: localConfig.baseUrl,
-        timeout: localConfig.timeout,
-        model: localConfig.model,
-        headers: localConfig.headers,
-        openAICompatibilityProfile: localConfig.openAICompatibilityProfile,
-        protocol: localConfig.protocol,
-      },
+      [localConfig.provider]: captureActiveProviderConfig(
+        localProviderConfigs[localConfig.provider],
+        localConfig,
+      ),
     }
     setLocalProviderConfigs(updatedConfigs)
 
@@ -1444,6 +1432,7 @@ export function ProviderSettings({
       timeout: customConfig.timeout || 120000,
       model: customConfig.model || models[0] || '',
       headers: customConfig.headers,
+      capabilities: customConfig.capabilities,
       openAICompatibilityProfile: resolveOpenAICompatibilityProfile(
         id,
         customConfig.protocol,
