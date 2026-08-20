@@ -166,4 +166,53 @@ describe('projectPlanWorkbench', () => {
     expect(review.allocations).toEqual([{ key: 'engineer\u0000openai\u0000gpt-test', role: 'engineer', provider: 'openai', model: 'gpt-test', taskCount: 3 }])
     expect(review.risks.map(risk => risk.id)).toContain('write-conflict:1:shared.ts')
   })
+
+  // Thread scans are cached by `messages` array identity so streaming does not
+  // re-walk every plan thread ~30×/s. These pin the invalidation contract: a new
+  // array must be observed, and a reused array must not go stale for the fields
+  // that live outside `messages`.
+  it('picks up new messages through the per-thread scan cache', () => {
+    const root = thread('root')
+    root.messages = [{
+      id: 'assistant-1', role: 'assistant', content: '', timestamp: 10, parts: [],
+      toolCalls: [{ id: 'read-1', name: 'read_file', status: 'success', arguments: { path: 'first.ts' } }],
+    }]
+
+    const first = projectPlanWorkbench({ currentThreadId: root.id, threads: { root } })
+    expect(first.activities.map(activity => activity.detail)).toEqual(['first.ts'])
+
+    // Same thread id, new messages array — exactly what a streaming flush produces.
+    const grown = {
+      ...root,
+      messages: [...root.messages, {
+        id: 'assistant-2', role: 'assistant' as const, content: '', timestamp: 20, parts: [],
+        toolCalls: [{ id: 'read-2', name: 'read_file', status: 'success' as const, arguments: { path: 'second.ts' } }],
+      }],
+    }
+    const second = projectPlanWorkbench({ currentThreadId: root.id, threads: { root: grown } })
+    expect(second.activities.map(activity => activity.detail)).toEqual(['first.ts', 'second.ts'])
+  })
+
+  it('still reflects streamState changes when the messages array is reused', () => {
+    const root = thread('root')
+    root.messages = [{
+      id: 'assistant-1', role: 'assistant', content: '', timestamp: 10, parts: [],
+      toolCalls: [{ id: 'read-1', name: 'read_file', status: 'running', arguments: { path: 'src/main.ts' } }],
+    }]
+
+    const idle = projectPlanWorkbench({ currentThreadId: root.id, threads: { root } })
+    expect(idle.isProcessing).toBe(false)
+
+    // Only streamState changes; `messages` keeps its identity and stays cached.
+    const live = {
+      ...root,
+      streamState: {
+        phase: 'tool_running' as const,
+        currentToolCall: { id: 'read-1', name: 'read_file', arguments: { path: 'src/main.ts' }, status: 'running' as const },
+      },
+    }
+    const running = projectPlanWorkbench({ currentThreadId: root.id, threads: { root: live } })
+    expect(running.isProcessing).toBe(true)
+    expect(running.focus).toMatchObject({ title: '读取文件', detail: 'src/main.ts' })
+  })
 })

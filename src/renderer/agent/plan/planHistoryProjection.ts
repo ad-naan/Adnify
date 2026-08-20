@@ -1,5 +1,5 @@
 import { normalizeMode } from '@/shared/types/workMode'
-import type { ChatThread } from '@/renderer/agent/types'
+import type { ChatMessage, ChatThread } from '@/renderer/agent/types'
 import { getThreadDisplayTitle } from '@/renderer/agent/types'
 import type { TaskPlan } from './types'
 
@@ -12,6 +12,22 @@ export interface PlanHistoryEntry {
   status?: TaskPlan['status']
   taskCount?: number
   completedCount?: number
+}
+
+/**
+ * `messages.some(role === 'user')` per thread, re-run on every store transition,
+ * was a full history scan for every plan thread. The answer only flips once (a
+ * thread never loses its first user message), so cache it by array identity.
+ */
+const hasUserMessageCache = new WeakMap<readonly ChatMessage[], boolean>()
+
+function hasUserMessage(thread: ChatThread): boolean {
+  const cached = hasUserMessageCache.get(thread.messages)
+  if (cached !== undefined) return cached
+
+  const result = thread.messages.some(message => message.role === 'user')
+  hasUserMessageCache.set(thread.messages, result)
+  return result
 }
 
 export function projectPlanHistory(plans: TaskPlan[], threads: Record<string, ChatThread>): PlanHistoryEntry[] {
@@ -28,7 +44,7 @@ export function projectPlanHistory(plans: TaskPlan[], threads: Record<string, Ch
   }))
   const conversationEntries = Object.values(threads)
     .filter(thread => normalizeMode(thread.mode) === 'plan' && thread.origin !== 'plan-task' && !linkedThreads.has(thread.id))
-    .filter(thread => thread.messages.some(message => message.role === 'user'))
+    .filter(thread => hasUserMessage(thread))
     .map(thread => ({
       id: `thread:${thread.id}`,
       title: getThreadDisplayTitle(thread),
