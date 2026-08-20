@@ -176,6 +176,30 @@ function prepareCpuFeaturesBuildcheck(env) {
 }
 
 /**
+ * node-pty ships Node-API prebuilds but does not advertise them in the naming
+ * convention that @electron/rebuild detects. Rebuilding those files from
+ * source unnecessarily requires the optional MSVC Spectre libraries.
+ */
+function hasBundledNodePtyPrebuild() {
+  try {
+    const packageDir = path.dirname(
+      require.resolve('node-pty/package.json', { paths: [projectRoot] }),
+    )
+    const prebuildDir = path.join(
+      packageDir,
+      'prebuilds',
+      `${process.platform}-${process.arch}`,
+    )
+    const binaries = process.platform === 'win32'
+      ? ['conpty.node', 'conpty_console_list.node', 'pty.node']
+      : ['pty.node']
+    return binaries.every((binary) => fs.existsSync(path.join(prebuildDir, binary)))
+  } catch {
+    return false
+  }
+}
+
+/**
  * Rebuild all native modules for the installed Electron ABI.
  *
  * Uses @electron/rebuild's programmatic API so we don't depend on npx or
@@ -214,12 +238,19 @@ async function rebuildNativeModules(env) {
 
   console.log(`[postinstall] Rebuilding native modules for Electron v${electronVersion}…`)
 
+  const ignoreModules = []
+  if (hasBundledNodePtyPrebuild()) {
+    ignoreModules.push('node-pty')
+    console.log('[postinstall] Using bundled Node-API prebuild for node-pty')
+  }
+
   try {
     await rebuild({
       buildPath: projectRoot,
       electronVersion,
       buildFromSource: false, // prefer prebuilt binaries; compile only when needed
       force: false,           // skip modules already at the right ABI
+      ignoreModules,
     })
     console.log('[postinstall] Native module rebuild complete ✓')
   } catch (/** @type {any} */ err) {
