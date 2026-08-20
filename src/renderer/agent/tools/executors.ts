@@ -616,6 +616,89 @@ async function buildRemoteTrustMeta(
     return {}
 }
 
+/** Matches the PTY path's own output budget so both transports report the same volume. */
+const MAX_PIPED_OUTPUT_CHARS = 120_000
+
+/**
+ * Terminal outcomes that mean "the shell never told us what happened".
+ *
+ * These are transport failures, not command failures: the command may well have
+ * run and printed its output, but without OSC 633 boundaries the PTY path cannot
+ * read a result, so it reports failure with a null exit code. Re-running through
+ * pipes is the only way to get a trustworthy answer.
+ */
+const FALLBACK_TERMINATION_REASONS = new Set([
+    'shell_integration_missing',
+    'sentinel_missing_prompt',
+    'terminal_error',
+    'terminal_exit',
+    'user_closed_terminal',
+])
+
+/**
+ * Re-run a command through pipes and shape it like a normal tool result.
+ *
+ * Returns null when the piped transport itself could not start, so the caller can
+ * keep the original PTY diagnostics rather than replacing them with a worse
+ * message.
+ */
+async function runCommandViaPipes(
+    command: string,
+    cwd: string | undefined,
+    timeout: number,
+    reason: string,
+): Promise<{ result: ToolExecutionResult } | null> {
+    let piped: Awaited<ReturnType<typeof api.shell.runPiped>>
+    try {
+        piped = await api.shell.runPiped({
+            command,
+            cwd,
+            timeout,
+            maxOutputChars: MAX_PIPED_OUTPUT_CHARS,
+        })
+    } catch (error) {
+        logger.agent.warn('[run_command] Piped fallback failed to start:', error)
+        return null
+    }
+
+    if (piped.error && piped.exitCode === null && !piped.stdout && !piped.stderr) {
+        logger.agent.warn(`[run_command] Piped fallback rejected: ${piped.error}`)
+        return null
+    }
+
+    const combined = [piped.stdout, piped.stderr].filter(Boolean).join('\n').trim()
+    let resultText = combined
+
+    if (piped.timedOut) {
+        resultText = combined
+            ? `[Timed out after ${timeout / 1000}s]\n${combined}`
+            : `Command timed out after ${timeout / 1000}s`
+    } else if (!resultText) {
+        resultText = piped.exitCode === 0
+            ? 'Command executed successfully (no output)'
+            : `Command failed${piped.exitCode !== null ? ` (exit code ${piped.exitCode})` : ''} (no output)`
+    }
+
+    return {
+        result: {
+            success: piped.success,
+            result: resultText,
+            error: piped.success ? undefined : (piped.error || resultText),
+            meta: {
+                command,
+                cwd,
+                exitCode: piped.exitCode,
+                signal: piped.signal,
+                timedOut: piped.timedOut,
+                truncated: piped.truncated,
+                durationMs: piped.durationMs,
+                executionMode: 'piped-fallback',
+                fallbackReason: reason,
+            },
+        },
+    }
+}
+
 async function runInlineScriptViaTempFile(
     command: string,
     ctx: ToolExecutionContext,
@@ -1688,6 +1771,33 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 timeout,
                 remoteLink ? undefined : (resolvedCwd || undefined),
             )
+
+            // The PTY could not frame this command, so its "failure" says nothing
+            // about the command itself. Re-run through pipes, where stdout and the
+            // exit code come straight from the process. Remote commands are left
+            // alone: pipes here would run them on the wrong machine.
+            if (!remoteLink
+                && !commandResult.sentinelMatched
+                && commandResult.terminationReason
+                && FALLBACK_TERMINATION_REASONS.has(commandResult.terminationReason)) {
+                logger.agent.info(
+                    `[run_command] Shell integration unusable (${commandResult.terminationReason}); retrying through pipes`,
+                )
+                const fallback = await runCommandViaPipes(
+                    command,
+                    resolvedCwd || ctx.workspacePath || undefined,
+                    timeout,
+                    commandResult.terminationReason,
+                )
+                if (fallback) {
+                    fallback.result.meta = {
+                        ...(fallback.result.meta || {}),
+                        ...routeMeta,
+                        terminalId: termId,
+                    }
+                    return fallback.result
+                }
+            }
 
             const displayOutput = (commandResult.output || commandResult.partialOutput || '').trim()
             let resultText = displayOutput
