@@ -9,6 +9,7 @@ import { useStore } from '@store'
 import { EXTENSION_TO_LANGUAGE, LSP_SUPPORTED_LANGUAGES } from '@shared/languages'
 import { toAppError } from '@shared/utils/errorHandler'
 import { pathToLspUri } from '@shared/utils/uriUtils'
+import { pathStartsWith } from '@shared/utils/pathUtils'
 
 // 文档版本追踪
 const documentVersions = new Map<string, number>()
@@ -110,12 +111,11 @@ export function getFileWorkspaceRoot(filePath: string): string | null {
   if (!workspace || workspace.roots.length === 0) return getFileDirectory(filePath)
 
   // 找到最长匹配的根目录（处理嵌套情况）
-  const normalizedPath = filePath.replace(/\\/g, '/')
   let bestMatch: string | null = null
 
   for (const root of workspace.roots) {
-    const normalizedRoot = root.replace(/\\/g, '/')
-    if (normalizedPath.startsWith(normalizedRoot)) {
+    const normalizedRoot = root.replace(/\\/g, '/').replace(/\/$/, '')
+    if (pathStartsWith(filePath, normalizedRoot)) {
       if (!bestMatch || normalizedRoot.length > bestMatch.length) {
         bestMatch = root
       }
@@ -431,7 +431,10 @@ export async function goToTypeDefinition(
     async (params) => {
       const result = await api.lsp.typeDefinition(params)
       if (!result) return null
-      return Array.isArray(result) ? result : [result]
+      const normalized = (Array.isArray(result) ? result : [result])
+        .map(normalizeLspLocation)
+        .filter((location): location is NormalizedLspLocation => location !== null)
+      return normalized.length > 0 ? normalized : null
     },
     null
   )
@@ -450,7 +453,10 @@ export async function goToImplementation(
     async (params) => {
       const result = await api.lsp.implementation(params)
       if (!result) return null
-      return Array.isArray(result) ? result : [result]
+      const normalized = (Array.isArray(result) ? result : [result])
+        .map(normalizeLspLocation)
+        .filter((location): location is NormalizedLspLocation => location !== null)
+      return normalized.length > 0 ? normalized : null
     },
     null
   )

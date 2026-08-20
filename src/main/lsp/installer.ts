@@ -8,33 +8,29 @@
  * - 配置持久化
  */
 
-import { app } from 'electron'
 import { spawn, execSync } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getExecutableName, getNpmCommand } from '@shared/utils/pathUtils'
-import Store from 'electron-store'
 import { fetchLatestRelease } from '../services/githubApiService'
+import { getUserConfigDir } from '../services/configPath'
+import { resolvePackageBin } from './serverDiscovery'
 
 // ============ 配置持久化 ============
 
-const store = new Store({ name: 'lsp-config' })
-const CONFIG_KEY_BIN_DIR = 'lspBinDir'
+let customLspBinDir: string | null = null
 
-// 默认 LSP 服务器安装目录
-const DEFAULT_LSP_BIN_DIR = path.join(app.getPath('userData'), 'lsp-servers')
+function getDefaultBinDir(): string {
+  return path.join(getUserConfigDir(), 'lsp-servers')
+}
 
 /**
  * 设置自定义 LSP 服务器安装目录（持久化）
  */
 export function setCustomLspBinDir(customPath: string | null): void {
-  if (customPath) {
-    store.set(CONFIG_KEY_BIN_DIR, customPath)
-  } else {
-    store.delete(CONFIG_KEY_BIN_DIR)
-  }
+  customLspBinDir = customPath ? path.resolve(customPath) : null
   logger.lsp.info(`[LSP Installer] Bin dir set to: ${customPath || 'default'}`)
 }
 
@@ -42,12 +38,12 @@ export function setCustomLspBinDir(customPath: string | null): void {
  * 获取当前配置的 LSP 服务器安装目录
  */
 export function getLspBinDir(): string {
-  const customDir = store.get(CONFIG_KEY_BIN_DIR) as string | undefined
-  const dir = customDir || DEFAULT_LSP_BIN_DIR
+  const defaultDir = getDefaultBinDir()
+  const dir = customLspBinDir || defaultDir
 
   logger.lsp.debug(`[LSP Installer] Using bin directory: ${dir}`, {
-    isCustom: !!customDir,
-    defaultDir: DEFAULT_LSP_BIN_DIR,
+    isCustom: !!customLspBinDir,
+    defaultDir,
   })
 
   if (!fs.existsSync(dir)) {
@@ -66,10 +62,11 @@ export function getLspBinDir(): string {
 
 function getCandidateLspBinDirs(): string[] {
   const configuredDir = getLspBinDir()
-  if (configuredDir === DEFAULT_LSP_BIN_DIR) {
+  const defaultDir = getDefaultBinDir()
+  if (configuredDir === defaultDir) {
     return [configuredDir]
   }
-  return [configuredDir, DEFAULT_LSP_BIN_DIR]
+  return [configuredDir, defaultDir]
 }
 
 function getActiveLspBinDirs(): string[] {
@@ -80,7 +77,7 @@ function getActiveLspBinDirs(): string[] {
  * 获取默认 LSP 服务器安装目录
  */
 export function getDefaultLspBinDir(): string {
-  return DEFAULT_LSP_BIN_DIR
+  return getDefaultBinDir()
 }
 
 // ============ 工具函数 ============
@@ -175,18 +172,48 @@ interface PackageInstallResult {
   error?: string
 }
 
+const MANAGED_NPM_PACKAGES = [
+  'typescript-language-server',
+  'typescript',
+  'vscode-langservers-extracted',
+  'pyright',
+  '@vue/language-server',
+  'intelephense',
+] as const
+
+function includeExistingManagedPackages(packages: string[], targetDir: string): string[] {
+  const installPackages = [...packages]
+  for (const packageName of MANAGED_NPM_PACKAGES) {
+    if (packages.some(spec => spec === packageName || spec.startsWith(`${packageName}@`))) continue
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(
+        path.join(targetDir, 'node_modules', packageName, 'package.json'),
+        'utf8',
+      )) as { version?: string }
+      if (packageJson.version) installPackages.push(`${packageName}@${packageJson.version}`)
+    } catch {
+      // Package is not currently installed in the managed directory.
+    }
+  }
+  return installPackages
+}
+
 async function npmInstall(packageNames: string | string[], targetDir: string): Promise<PackageInstallResult> {
   return new Promise((resolve) => {
     const npmCmd = getNpmCommand()
     const resolvedNpmCmd = resolveCommandPath(npmCmd) || resolveCommandPath('npm')
     const packages = Array.isArray(packageNames) ? packageNames : [packageNames]
-    const installArgs = ['install', ...packages, '--no-save', '--no-package-lock']
+    const installPackages = includeExistingManagedPackages(packages, targetDir)
+    // Keep every installed server declared in package.json/package-lock.json.
+    // npm can otherwise prune a previously installed --no-save package when a
+    // different server is installed later, making installation appear to vanish.
+    const installArgs = ['install', ...installPackages, '--save-exact', '--no-audit', '--no-fund']
     const env = {
       ...process.env,
       PATH: getAugmentedPathEnv(),
     }
 
-    logger.lsp.info(`[LSP Installer] Running: npm install ${packages.join(' ')} in ${targetDir}`)
+    logger.lsp.info(`[LSP Installer] Running: npm install ${installPackages.join(' ')} in ${targetDir}`)
     logger.lsp.debug(`[LSP Installer] npm command: ${resolvedNpmCmd || npmCmd}`)
     logger.lsp.debug('[LSP Installer] npm args:', installArgs)
     logger.lsp.debug(`[LSP Installer] npm cwd: ${targetDir}`)
@@ -493,39 +520,13 @@ function setExecutable(filePath: string): void {
 
 // ============ 路径查找（统一逻辑） ============
 
-// 内置 node_modules 的基础路径
-function getBuiltinBases(): string[] {
-  return [
-    path.join(process.cwd(), 'node_modules'),
-    path.join(__dirname, '..', '..', 'node_modules'),
-    path.join(__dirname, '..', 'node_modules'),
-    path.join(app.getAppPath(), 'node_modules'),
-    path.join(process.resourcesPath || '', 'app.asar', 'node_modules'),
-    path.join(process.resourcesPath || '', 'app', 'node_modules'),
-  ]
-}
-
-/**
- * 在内置 node_modules 中查找模块
- */
-export function findBuiltinModule(moduleName: string, subPath: string): string | null {
-  for (const base of getBuiltinBases()) {
-    const fullPath = path.join(base, moduleName, subPath)
-    if (fs.existsSync(fullPath)) {
-      logger.lsp.debug(`[LSP] Found ${moduleName} at: ${fullPath}`)
-      return fullPath
-    }
-  }
-  return null
-}
-
 // ============ 服务器路径配置 ============
 
 interface ServerPathConfig {
   // 用户安装目录下的相对路径
   userPaths: string[]
-  // 内置 node_modules 下的相对路径
-  builtinPaths: string[]
+  // npm package.json 中声明的可执行入口，优先于易变的硬编码路径
+  packageBin?: { packageName: string; executable: string }
   // 系统命令名（用于检查 PATH）
   systemCommand?: string
 }
@@ -536,59 +537,48 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
       'node_modules/typescript-language-server/lib/cli.mjs',
       'node_modules/typescript-language-server/lib/cli.js',
     ],
-    builtinPaths: [
-      'typescript-language-server/lib/cli.mjs',
-      'typescript-language-server/lib/cli.js',
-    ],
+    packageBin: { packageName: 'typescript-language-server', executable: 'typescript-language-server' },
   },
   html: {
     userPaths: [
       'node_modules/vscode-langservers-extracted/bin/vscode-html-language-server',
       'node_modules/vscode-langservers-extracted/bin/vscode-html-language-server.js',
     ],
-    builtinPaths: [
-      'vscode-langservers-extracted/bin/vscode-html-language-server',
-      'vscode-langservers-extracted/bin/vscode-html-language-server.js',
-    ],
+    packageBin: { packageName: 'vscode-langservers-extracted', executable: 'vscode-html-language-server' },
   },
   css: {
     userPaths: [
       'node_modules/vscode-langservers-extracted/bin/vscode-css-language-server',
       'node_modules/vscode-langservers-extracted/bin/vscode-css-language-server.js',
     ],
-    builtinPaths: [
-      'vscode-langservers-extracted/bin/vscode-css-language-server',
-      'vscode-langservers-extracted/bin/vscode-css-language-server.js',
-    ],
+    packageBin: { packageName: 'vscode-langservers-extracted', executable: 'vscode-css-language-server' },
   },
   json: {
     userPaths: [
       'node_modules/vscode-langservers-extracted/bin/vscode-json-language-server',
       'node_modules/vscode-langservers-extracted/bin/vscode-json-language-server.js',
     ],
-    builtinPaths: [
-      'vscode-langservers-extracted/bin/vscode-json-language-server',
-      'vscode-langservers-extracted/bin/vscode-json-language-server.js',
-    ],
+    packageBin: { packageName: 'vscode-langservers-extracted', executable: 'vscode-json-language-server' },
   },
   python: {
-    userPaths: ['node_modules/pyright/dist/pyright-langserver.js'],
-    builtinPaths: ['pyright/dist/pyright-langserver.js'],
+    userPaths: [
+      'node_modules/pyright/langserver.index.js',
+      'node_modules/pyright/dist/pyright-langserver.js',
+    ],
+    packageBin: { packageName: 'pyright', executable: 'pyright-langserver' },
     systemCommand: 'pylsp',
   },
   vue: {
     userPaths: ['node_modules/@vue/language-server/bin/vue-language-server.js'],
-    builtinPaths: ['@vue/language-server/bin/vue-language-server.js'],
+    packageBin: { packageName: '@vue/language-server', executable: 'vue-language-server' },
     systemCommand: 'vue-language-server',
   },
   go: {
     userPaths: [getExecutableName('gopls')],
-    builtinPaths: [],
     systemCommand: 'gopls',
   },
   rust: {
     userPaths: [],
-    builtinPaths: [],
     systemCommand: 'rust-analyzer',
   },
   clangd: {
@@ -597,27 +587,23 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
       // clangd 下载后可能在子目录
       `clangd_*/bin/${getExecutableName('clangd')}`,
     ],
-    builtinPaths: [],
     systemCommand: 'clangd',
   },
   zig: {
     userPaths: [getExecutableName('zls')],
-    builtinPaths: [],
     systemCommand: 'zls',
   },
   csharp: {
     userPaths: [getExecutableName('csharp-ls')],
-    builtinPaths: [],
     systemCommand: 'csharp-ls',
   },
   deno: {
     userPaths: [],
-    builtinPaths: [],
     systemCommand: 'deno',
   },
   php: {
     userPaths: ['node_modules/intelephense/lib/intelephense.js'],
-    builtinPaths: ['intelephense/lib/intelephense.js'],
+    packageBin: { packageName: 'intelephense', executable: 'intelephense' },
     systemCommand: 'intelephense',
   },
 }
@@ -631,6 +617,11 @@ function getInstalledServerPathFromDirs(serverType: string, binDirs: string[]): 
 
   // 1. 检查用户安装目录
   for (const binDir of binDirs) {
+    if (config.packageBin) {
+      const packageBin = resolvePackageBin(binDir, config.packageBin.packageName, config.packageBin.executable)
+      if (packageBin) return packageBin
+    }
+
     for (const p of config.userPaths) {
       // 处理通配符路径（如 clangd_*/bin/clangd）
       if (p.includes('*')) {
@@ -656,25 +647,16 @@ function getInstalledServerPathFromDirs(serverType: string, binDirs: string[]): 
 }
 
 export function getInstalledServerPath(serverType: string): string | null {
-  const userOrBuiltinPath = getInstalledServerPathFromDirs(serverType, getCandidateLspBinDirs())
-  if (userOrBuiltinPath) {
-    return userOrBuiltinPath
+  const installedPath = getInstalledServerPathFromDirs(serverType, getCandidateLspBinDirs())
+  if (installedPath) {
+    return installedPath
   }
 
-  // 2. 检查内置 node_modules
   const config = SERVER_PATHS[serverType]
   if (!config) return null
 
-  for (const base of getBuiltinBases()) {
-    for (const subPath of config.builtinPaths) {
-      const fullPath = path.join(base, subPath)
-      if (fs.existsSync(fullPath)) return fullPath
-    }
-  }
-
-  // 3. 检查系统 PATH
-  if (config.systemCommand && commandExists(config.systemCommand)) {
-    return config.systemCommand
+  if (config.systemCommand) {
+    return resolveCommandPath(config.systemCommand)
   }
 
   return null
@@ -691,20 +673,7 @@ function getInstallCheckServerPath(serverType: string): string | null {
   }
 
   const config = SERVER_PATHS[serverType]
-  if (!config) return null
-
-  for (const base of getBuiltinBases()) {
-    for (const subPath of config.builtinPaths) {
-      const fullPath = path.join(base, subPath)
-      if (fs.existsSync(fullPath)) return fullPath
-    }
-  }
-
-  if (config.systemCommand && commandExists(config.systemCommand)) {
-    return config.systemCommand
-  }
-
-  return null
+  return config?.systemCommand ? resolveCommandPath(config.systemCommand) : null
 }
 
 // ============ 安装结果类型 ============
