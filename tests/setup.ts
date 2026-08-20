@@ -186,6 +186,7 @@ vi.stubGlobal('self', globalThis)
     readRichContent: vi.fn(),
     readImageAnalysis: vi.fn(),
     writeFile: vi.fn(),
+    appendFile: vi.fn(async () => true),
     saveFile: vi.fn(),
     mkdir: vi.fn(),
     ensureDir: vi.fn(),

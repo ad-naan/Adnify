@@ -5,7 +5,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { BrowserWindow, app, ipcMain } from 'electron'
-import { spawn, execSync, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
+import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
 import * as path from 'path'
 const execFileAsync = promisify(execFile)
@@ -141,17 +141,21 @@ function killPtyReliably(ptyProcess: any): void {
   } catch { /* ignore */ }
 
   const pid = ptyProcess.pid
-  try {
-    if (process.platform === 'win32' && pid) {
-      // Windows: taskkill /F /T 强制杀死整个进程树（PowerShell + conhost）
-      execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore', timeout: 5000 })
-    } else {
-      ptyProcess.kill()
-    }
-  } catch {
-    // taskkill 失败时 fallback 到 node-pty 原生 kill
-    try { ptyProcess.kill() } catch { /* ignore */ }
+  if (process.platform === 'win32' && pid) {
+    // Never block Electron's main loop while Windows tears down ConPTY.
+    execFile(
+      'taskkill',
+      ['/F', '/T', '/PID', String(pid)],
+      { windowsHide: true, timeout: 5000 },
+      (error) => {
+        if (!error) return
+        try { ptyProcess.kill() } catch { /* ignore */ }
+      },
+    )
+    return
   }
+
+  try { ptyProcess.kill() } catch { /* ignore */ }
 }
 
 /**

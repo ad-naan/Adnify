@@ -354,8 +354,16 @@ export class McpClient extends EventEmitter {
           if (subProcess && subProcess.pid) {
             logger.mcp?.info(`[MCP:${this.id}] Force killing process tree for PID ${subProcess.pid}`)
             if (process.platform === 'win32') {
-              // Windows: 使用 taskkill /F /T 杀死整个进程树
-              cp.execSync(`taskkill /F /T /PID ${subProcess.pid}`, { stdio: 'ignore' })
+              // Process-tree cleanup can take seconds; keep Electron's main
+              // event loop responsive while Windows tears down the process.
+              await new Promise<void>((resolve) => {
+                cp.execFile(
+                  'taskkill',
+                  ['/F', '/T', '/PID', String(subProcess.pid)],
+                  { windowsHide: true, timeout: 5000 },
+                  () => resolve(),
+                )
+              })
             } else {
               subProcess.kill('SIGKILL')
             }

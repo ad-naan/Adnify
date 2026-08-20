@@ -39,6 +39,7 @@ interface SharedFileRead {
 
 const pendingFileReads = new Map<string, Promise<SharedFileRead>>()
 const pendingFileWrites = new Map<string, {
+  kind: 'replace' | 'append'
   content: string
   encoding: string
   promise: Promise<boolean>
@@ -136,15 +137,34 @@ function readFileSingleFlight(
 function writeFileSerialized(filePath: string, content: string, encoding: string): Promise<boolean> {
   const key = path.resolve(filePath)
   const existing = pendingFileWrites.get(key)
-  if (existing?.content === content && existing.encoding === encoding) return existing.promise
+  if (existing?.kind === 'replace' && existing.content === content && existing.encoding === encoding) return existing.promise
 
   const previous = existing?.promise ?? Promise.resolve(true)
   const write = previous.catch(() => false).then(() => safeWriteFile(filePath, content, encoding as any))
-  pendingFileWrites.set(key, { content, encoding, promise: write })
+  pendingFileWrites.set(key, { kind: 'replace', content, encoding, promise: write })
   void write.finally(() => {
     if (pendingFileWrites.get(key)?.promise === write) pendingFileWrites.delete(key)
   }).catch(() => undefined)
   return write
+}
+
+function appendFileSerialized(filePath: string, content: string, encoding: string): Promise<boolean> {
+  const key = path.resolve(filePath)
+  const previous = pendingFileWrites.get(key)?.promise ?? Promise.resolve(true)
+  const append = previous.catch(() => false).then(async () => {
+    try {
+      await fsPromises.mkdir(path.dirname(filePath), { recursive: true })
+      await fsPromises.appendFile(filePath, content, { encoding: encoding as BufferEncoding })
+      return true
+    } catch {
+      return false
+    }
+  })
+  pendingFileWrites.set(key, { kind: 'append', content, encoding, promise: append })
+  void append.finally(() => {
+    if (pendingFileWrites.get(key)?.promise === append) pendingFileWrites.delete(key)
+  }).catch(() => undefined)
+  return append
 }
 
 /**
@@ -454,6 +474,19 @@ export function registerSecureFileHandlers(
     }
   })
 
+  // Append-only project logs avoid reading and rewriting an ever-growing file.
+  ipcMain.handle('file:append', async (event, filePath: string, content: string, encoding?: string) => {
+    if (!filePath || typeof filePath !== 'string' || !content) return false
+    // Append is intentionally narrower than general writes: it exists for
+    // internal append-only journals, not arbitrary renderer file mutation.
+    if (!isInternalAdnifyPath(filePath)) return false
+    const workspace = getWorkspaceSessionFn(event)
+    if (!canAccessFile(filePath, workspace, 'write')) return false
+    const success = await appendFileSerialized(filePath, content, encoding || 'utf-8')
+    if (!success) logger.security.error('[File] append failed:', filePath)
+    return success
+  })
+
   // 确保目录存在
   ipcMain.handle('file:ensureDir', async (event, dirPath: string) => {
     if (!dirPath) return false
@@ -743,21 +776,40 @@ export function registerSecureFileHandlers(
         // 因为下游 handler 关心的是文件的最终状态。
         const pending = new Map<string, FileWatcherEvent>()
         let flushTimer: NodeJS.Timeout | null = null
+        let draining = false
+        const maxEventsPerTurn = 128
 
-        const flush = () => {
-          flushTimer = null
-          if (pending.size === 0) return
-          const batch = Array.from(pending.values())
-          pending.clear()
-          if (win.isDestroyed()) return
+        const drain = () => {
+          if (win.isDestroyed()) {
+            pending.clear()
+            draining = false
+            return
+          }
+
+          const batch: FileWatcherEvent[] = []
+          for (const [filePath, item] of pending) {
+            pending.delete(filePath)
+            batch.push(item)
+            if (batch.length >= maxEventsPerTurn) break
+          }
           for (const item of batch) {
             win.webContents.send('file:changed', item)
           }
+
+          if (pending.size > 0) setImmediate(drain)
+          else draining = false
+        }
+
+        const flush = () => {
+          flushTimer = null
+          if (pending.size === 0 || draining) return
+          draining = true
+          drain()
         }
 
         void setupFileWatcher(`window-${win.webContents.id}`, workspace.roots[0], (data: FileWatcherEvent) => {
           pending.set(data.path, data)
-          if (flushTimer === null) {
+          if (!draining && flushTimer === null) {
             flushTimer = setTimeout(flush, 33)
           }
         })

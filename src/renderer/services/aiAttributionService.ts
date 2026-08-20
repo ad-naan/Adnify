@@ -525,13 +525,12 @@ class AiAttributionService {
     this.flushPromise = (async () => {
       try {
         await this.ensureStoragePaths()
-        const existing = await workspaceFiles.readText(WRITE_EVENTS_FILE)
         const nextLines = pending.map(event => JSON.stringify(event)).join('\n')
-        const nextContent = existing && existing.trim().length > 0
-          ? `${existing.trimEnd()}\n${nextLines}\n`
-          : `${nextLines}\n`
-        await workspaceFiles.writeText(WRITE_EVENTS_FILE, nextContent)
-        this.eventsCache = this.eventsCache ? [...this.eventsCache, ...pending] : null
+        const written = await workspaceFiles.appendText(WRITE_EVENTS_FILE, `${nextLines}\n`)
+        if (!written) throw new Error('Failed to append AI attribution events')
+        if (this.eventsCache) {
+          for (const event of pending) this.eventsCache.push(event)
+        }
         this.dashboardCache.clear()
       } catch (error) {
         logger.system.warn('[AiAttribution] Failed to flush write events:', error)

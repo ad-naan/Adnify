@@ -95,6 +95,21 @@ describe('assistantTurnProjection', () => {
     expect(projection.shouldCollapseProcess).toBe(true)
   })
 
+  it('preserves interleaved text and tool order inside the collapsed process block', () => {
+    const parts = [
+      text('先读取配置。'),
+      toolCall('tool-1', 'read_file'),
+      text('再检查调用方。'),
+      toolCall('tool-2', 'search_files'),
+      text('最终结论。'),
+    ]
+    const projection = projectAssistantTurn(parts)
+
+    expect(projection.processParts).toEqual(parts.slice(0, 4))
+    expect(projection.finalReplyParts).toEqual([parts[4]])
+    expect(projection.shouldCollapseProcess).toBe(true)
+  })
+
   it('keeps trailing sources visible with the final reply', () => {
     const projection = projectAssistantTurn([
       text('Answer with source.'),

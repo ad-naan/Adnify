@@ -284,6 +284,7 @@ export interface ElectronAPI {
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
   writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
+  appendFile: (path: string, content: string, encoding?: string) => Promise<boolean>
   ensureDir: (path: string) => Promise<boolean>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
@@ -605,6 +606,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readRichContent: (path: string, options?: ReadRichContentOptions) => ipcRenderer.invoke('file:readRichContent', path, options),
   readImageAnalysis: (request: ImageAnalysisRequest) => ipcRenderer.invoke('file:readImageAnalysis', request),
   writeFile: (path: string, content: string, encoding?: string) => ipcRenderer.invoke('file:write', path, content, encoding),
+  appendFile: (path: string, content: string, encoding?: string) => ipcRenderer.invoke('file:append', path, content, encoding),
   ensureDir: (path: string) => ipcRenderer.invoke('file:ensureDir', path),
   saveFile: (content: string, path?: string, encoding?: string) => ipcRenderer.invoke('file:save', content, path, encoding),
   fileExists: (path: string) => ipcRenderer.invoke('file:exists', path),
