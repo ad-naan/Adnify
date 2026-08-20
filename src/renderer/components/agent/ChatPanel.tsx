@@ -254,10 +254,18 @@ export default function ChatPanel() {
   // 避免每次消息列表变化都重新传入新的 initialTopMostItemIndex
   // 导致 Virtuoso 强制跳回该位置（即滚动条回顶的根因）
   const initialIndexRef = useRef(Math.max(0, timelineItems.length - 1))
+  // 让上面的切换 effect 能读到最新条目数，而不必把它列为依赖。
+  const timelineItemCountRef = useRef(timelineItems.length)
+  timelineItemCountRef.current = timelineItems.length
 
   // Effect 1：只监听 currentThreadId 变化，控制骨架屏的显示/隐藏
-  // 与 filteredMessages 解耦，防止懒加载消息在 350ms 内到达时
-  // 触发 effect cleanup → clearTimeout → isSwitchingThread 永远不归 false
+  //
+  // 依赖里绝对不能出现随消息变化的值。骨架屏靠一个 16ms 定时器关闭，而任何
+  // 额外依赖变化都会先触发 cleanup（clearTimeout）再重新执行；重新执行时
+  // threadChanged 已经是 false，于是提前 return，定时器再也不会被装回去，
+  // isSwitchingThread 永久停在 true —— 表现为消息面板卡在骨架屏，必须手动
+  // 切换线程才能恢复。hydration 完成正好会改变消息数量，所以这个竞态在
+  // 「切到未加载的线程」时高频出现。
   useEffect(() => {
     const threadChanged = currentThreadId !== prevThreadIdRef.current
     prevThreadIdRef.current = currentThreadId
@@ -265,7 +273,7 @@ export default function ChatPanel() {
     if (!threadChanged) return
 
     // 线程切换时同步更新初始位置索引，指向新线程的底部
-    initialIndexRef.current = Math.max(0, timelineItems.length - 1)
+    initialIndexRef.current = Math.max(0, timelineItemCountRef.current - 1)
 
     // 线程切换：已加载线程只保留一帧过渡，未加载线程继续由 hydration 骨架接管
     setIsSwitchingThread(true)
@@ -275,7 +283,7 @@ export default function ChatPanel() {
       })
     }, 16)
     return () => window.clearTimeout(timer)
-  }, [currentThreadId, timelineItems.length])
+  }, [currentThreadId])
 
   // Unified Sidebar State
   const [sidebarOpen, setSidebarOpen] = useState(false)

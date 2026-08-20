@@ -1,4 +1,4 @@
-import { useState, useCallback, createContext, useContext, ReactNode } from 'react'
+import { useState, useCallback, createContext, useContext, useMemo, useRef, ReactNode } from 'react'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
 export type ToastVariant = 'inline' | 'card'
@@ -55,6 +55,12 @@ function createToastId(prefix: string): string {
 export function InlineToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [visibleIds, setVisibleIds] = useState<string[]>([])
+  // Dedupe lookup reads the latest list through a ref so `showCard` — and with it
+  // the context value — stays referentially stable. It used to list `toasts` as a
+  // dependency, so every toast and every 5s auto-dismiss rebuilt the context and
+  // re-rendered every consumer, including ChatPanel and StatusBar.
+  const toastsRef = useRef(toasts)
+  toastsRef.current = toasts
 
   const scheduleDismiss = useCallback((id: string, duration: number) => {
     if (duration <= 0) {
@@ -102,7 +108,7 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
 
   const showCard = useCallback((options: ShowCardOptions) => {
     const existingToast = options.dedupeKey
-      ? toasts.find((toast) => toast.dedupeKey === options.dedupeKey)
+      ? toastsRef.current.find((toast) => toast.dedupeKey === options.dedupeKey)
       : null
 
     if (existingToast) {
@@ -148,7 +154,7 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
     setVisibleIds((prev) => [...prev.filter((visibleId) => visibleId !== id), id])
     scheduleDismiss(id, newToast.duration ?? 0)
     return id
-  }, [scheduleDismiss, toasts])
+  }, [scheduleDismiss])
 
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
@@ -164,8 +170,15 @@ export function InlineToastProvider({ children }: { children: ReactNode }) {
   const warning = useCallback((message: string, durationOrDetail?: number | string) => addToast('warning', message, durationOrDetail), [addToast])
   const info = useCallback((message: string, durationOrDetail?: number | string) => addToast('info', message, durationOrDetail), [addToast])
 
+  // Memoized so consumers that never read `toasts`/`visibleIds` are not
+  // re-rendered by an inline object literal on every provider render.
+  const value = useMemo<ToastContextType>(
+    () => ({ toasts, visibleIds, addToast, showCard, removeToast, dismissToast, success, error, warning, info }),
+    [addToast, dismissToast, error, info, removeToast, showCard, success, toasts, visibleIds, warning],
+  )
+
   return (
-    <ToastContext.Provider value={{ toasts, visibleIds, addToast, showCard, removeToast, dismissToast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
     </ToastContext.Provider>
   )

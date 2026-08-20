@@ -9,6 +9,7 @@ import { MarkdownPreview } from '@/renderer/components/editor/FilePreview'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { Agent } from '@/renderer/agent/core/Agent'
 import { getMessageText } from '@/renderer/agent/types'
+import type { AssistantMessage, ChatMessage } from '@/renderer/agent/types'
 import { useStore } from '@/renderer/store'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { api } from '@/renderer/services/electronAPI'
@@ -136,6 +137,67 @@ const ModeToggle = memo(function ModeToggle({ mode, disabled, onChange, language
   </div>
 })
 
+/**
+ * Per-thread scans cached by message-array identity.
+ *
+ * `runtimeByTask` depends on the whole `threads` record, which gets a new
+ * identity on every streaming flush (~30×/s). Re-walking each task thread's full
+ * history that often is the dominant cost of the board once a plan has run for a
+ * while; only the streaming thread actually has new messages.
+ */
+const RECENT_TOOL_EVENT_LIMIT = 12
+
+interface TaskToolEvent {
+  id: string
+  name: string
+  detail: string
+}
+
+const latestAssistantCache = new WeakMap<readonly ChatMessage[], AssistantMessage | undefined>()
+const toolEventsCache = new WeakMap<readonly ChatMessage[], TaskToolEvent[]>()
+
+function findLastAssistant(messages: readonly ChatMessage[]): AssistantMessage | undefined {
+  if (latestAssistantCache.has(messages)) return latestAssistantCache.get(messages)
+
+  let found: AssistantMessage | undefined
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role === 'assistant') {
+      found = message
+      break
+    }
+  }
+  latestAssistantCache.set(messages, found)
+  return found
+}
+
+function collectRecentToolEvents(messages: readonly ChatMessage[]): TaskToolEvent[] {
+  const cached = toolEventsCache.get(messages)
+  if (cached) return cached
+
+  // Walk backwards and stop once the tail is filled, instead of building an
+  // event object for every tool call in the history and slicing the last 12.
+  const reversed: TaskToolEvent[] = []
+  outer: for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (message.role !== 'assistant') continue
+    const toolCalls = message.toolCalls || []
+    for (let callIndex = toolCalls.length - 1; callIndex >= 0; callIndex -= 1) {
+      const toolCall = toolCalls[callIndex]
+      reversed.push({
+        id: toolCall.id,
+        name: toolCall.name,
+        detail: toolCall.result ? String(toolCall.result) : (toolCall.arguments ? JSON.stringify(toolCall.arguments) : ''),
+      })
+      if (reversed.length >= RECENT_TOOL_EVENT_LIMIT) break outer
+    }
+  }
+
+  const events = reversed.reverse()
+  toolEventsCache.set(messages, events)
+  return events
+}
+
 export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onPlanChange }: TaskBoardProps) {
   const language = useStore(state => state.language)
   const workspacePath = useStore(state => state.workspacePath)
@@ -154,22 +216,15 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
   const runtimeByTask = useMemo(() => new Map((plan?.tasks || []).map(task => {
     const thread = task.threadId ? threads[task.threadId] : undefined
     const waitingApproval = thread?.streamState?.phase === 'tool_pending'
-    const latestAssistant = thread ? [...thread.messages].reverse().find(message => message.role === 'assistant') : undefined
-    const events = thread ? thread.messages.flatMap(message => {
-      if (message.role !== 'assistant') return []
-      return (message.toolCalls || []).map(toolCall => ({
-        id: toolCall.id,
-        name: toolCall.name,
-        detail: toolCall.result ? String(toolCall.result) : (toolCall.arguments ? JSON.stringify(toolCall.arguments) : ''),
-      }))
-    }).slice(-12) : []
+    const latestAssistant = thread ? findLastAssistant(thread.messages) : undefined
+    const events = thread ? collectRecentToolEvents(thread.messages) : []
     return [task.id, {
       thread,
       waitingApproval,
       tool: waitingApproval ? thread?.streamState?.currentToolCall : undefined,
       currentTool: thread?.streamState?.currentToolCall,
       statusText: thread?.streamState?.statusText,
-      latestText: latestAssistant?.role === 'assistant' ? getMessageText(latestAssistant.content).trim() : '',
+      latestText: latestAssistant ? getMessageText(latestAssistant.content).trim() : '',
       events,
     }] as const
   })), [plan?.tasks, threads])
