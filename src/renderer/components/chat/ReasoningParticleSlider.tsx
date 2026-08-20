@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { createPortal } from 'react-dom'
 import { Brain } from 'lucide-react'
 import { Button } from '../ui'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 interface ReasoningOption {
   value: string
@@ -48,6 +49,7 @@ const ParticleSlider = memo(function ParticleSlider({
   const trackRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const previousIndexRef = useRef(index)
+  const decorativeAnimations = useDecorativeAnimations()
   const progress = count > 1 ? index / (count - 1) : 0
 
   useEffect(() => {
@@ -85,6 +87,7 @@ const ParticleSlider = memo(function ParticleSlider({
     }))
     const duration = 1150
     const startedAt = performance.now()
+    const needsAmbient = decorativeAnimations && progress > 0
     let animationFrame = 0
 
     const easeInOutQuint = (value: number) => value < 0.5
@@ -112,7 +115,7 @@ const ParticleSlider = memo(function ParticleSlider({
 
       // Keep a quiet stream of particles alive across the entire selected area.
       // The canvas is clipped at the thumb center so nothing leaks into the inactive side.
-      if (progress > 0) {
+      if (needsAmbient) {
         context.save()
         context.beginPath()
         context.rect(0, 0, endX, height)
@@ -191,12 +194,20 @@ const ParticleSlider = memo(function ParticleSlider({
         context.restore()
       }
 
-      animationFrame = requestAnimationFrame(draw)
+      // The ambient stream is a perpetual decoration; the transition burst is
+      // not. With no ambient work left the loop has to end — otherwise this
+      // canvas repaints 26 shadow-blurred, `lighter`-composited particles at
+      // display rate for as long as the popover stays open.
+      if (needsAmbient || (hasTransition && animationProgress < 1)) {
+        animationFrame = requestAnimationFrame(draw)
+      } else {
+        context.clearRect(0, 0, width, height)
+      }
     }
 
     animationFrame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(animationFrame)
-  }, [count, index, progress])
+  }, [count, index, progress, decorativeAnimations])
 
   const updateFromPointer = useCallback((clientX: number) => {
     const track = trackRef.current

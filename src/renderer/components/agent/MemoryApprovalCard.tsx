@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Brain, Edit2, Check, Sparkles, MessageSquare } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 interface MemoryApprovalCardProps {
     content: unknown
@@ -17,6 +18,7 @@ export const MemoryApprovalCard: React.FC<MemoryApprovalCardProps> = ({
     onUpdateContent
 }) => {
     const safeContent = normalizeMemoryContentInput(content)
+    const decorativeAnimations = useDecorativeAnimations()
     const [isEditing, setIsEditing] = useState(false)
     const [editedContent, setEditedContent] = useState(safeContent)
 
@@ -58,8 +60,8 @@ export const MemoryApprovalCard: React.FC<MemoryApprovalCardProps> = ({
                         {isSuccess ? 'Memory Stored' : 'AI Memory Proposal'}
                         {isAwaitingApproval && (
                             <motion.span
-                                animate={{ opacity: [0.4, 1, 0.4] }}
-                                transition={{ repeat: Infinity, duration: 2 }}
+                                animate={decorativeAnimations ? { opacity: [0.4, 1, 0.4] } : undefined}
+                                transition={decorativeAnimations ? { repeat: Infinity, duration: 2 } : undefined}
                                 className="inline-block"
                             >
                                 <Sparkles className="w-3 h-3 text-amber-400" />

@@ -15,10 +15,12 @@ import { emotionAdapter } from '@/renderer/agent/emotion/emotionAdapter'
 import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 export const EmotionEditorBar: React.FC = () => {
   const language = useStore(s => s.language)
   const emotion = useEmotionState()
+  const decorativeAnimations = useDecorativeAnimations()
   const [feedback, setFeedback] = useState<EmotionFeedbackPayload | null>(null)
   const [hovered, setHovered] = useState(false)
   const [companionEnabled, setCompanionEnabled] = useState(loadEmotionPanelSettings().companionEnabled)
@@ -94,8 +96,8 @@ export const EmotionEditorBar: React.FC = () => {
             <div className="px-4 py-2 flex items-center gap-3 pointer-events-auto">
               <div className="flex items-center gap-2 flex-shrink-0">
                 <motion.div
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  animate={decorativeAnimations ? { scale: [1, 1.1, 1] } : undefined}
+                  transition={decorativeAnimations ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : undefined}
                   className="h-8 w-8 overflow-hidden rounded-lg bg-white/5 p-0.5"
                 >
                   <OtterAsset asset={meta.asset} className="h-full w-full object-contain" />

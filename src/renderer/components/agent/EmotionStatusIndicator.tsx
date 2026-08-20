@@ -17,12 +17,14 @@ import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META, EMOTION_STATUS_MESSAGE_KEYS } from '@/renderer/agent/emotion'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 const EMOTION_MESSAGES = EMOTION_STATUS_MESSAGE_KEYS
 
 export const EmotionStatusIndicator: React.FC = () => {
   const language = useStore(s => s.language)
   const emotion = useEmotionState()
+  const decorativeAnimations = useDecorativeAnimations()
   const [isHovered, setIsHovered] = useState(false)
   const [justChanged, setJustChanged] = useState(false)
   const [messageIndex, setMessageIndex] = useState(0)
@@ -151,8 +153,8 @@ export const EmotionStatusIndicator: React.FC = () => {
         {activeFeedback && (
           <motion.div
             className="absolute inset-0 opacity-20 pointer-events-none"
-            animate={{ backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-            transition={{ duration: 5, ease: 'linear', repeat: Infinity }}
+            animate={decorativeAnimations ? { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] } : undefined}
+            transition={decorativeAnimations ? { duration: 5, ease: 'linear', repeat: Infinity } : undefined}
             style={{
               backgroundImage: `linear-gradient(90deg, transparent, ${meta.color}, transparent)`,
               backgroundSize: '200% 100%'
@@ -160,17 +162,25 @@ export const EmotionStatusIndicator: React.FC = () => {
           />
         )}
         <div className="relative flex-shrink-0">
-          <motion.div
-            className="absolute inset-0 rounded-full"
-            style={{ backgroundColor: meta.color }}
-            animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
-            transition={{ duration: meta.pulseSpeed, repeat: Infinity, ease: 'easeInOut' }}
-          />
+          {/* The halo ring only exists to pulse, so it is dropped entirely rather
+              than left as a static circle when decorative motion is off. */}
+          {decorativeAnimations && (
+            <motion.div
+              className="absolute inset-0 rounded-full"
+              style={{ backgroundColor: meta.color, willChange: 'transform, opacity' }}
+              animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
+              transition={{ duration: meta.pulseSpeed, repeat: Infinity, ease: 'easeInOut' }}
+            />
+          )}
           <motion.div
             className="w-2.5 h-2.5 rounded-full relative z-10"
             style={{ backgroundColor: meta.color }}
-            animate={justChanged || activeFeedback ? { scale: [1, 1.5, 1] } : { opacity: [0.7, 1, 0.7] }}
-            transition={justChanged || activeFeedback ? { duration: 0.5, type: 'spring' } : { duration: meta.pulseSpeed, repeat: Infinity, ease: 'easeInOut' }}
+            animate={justChanged || activeFeedback
+              ? { scale: [1, 1.5, 1] }
+              : decorativeAnimations ? { opacity: [0.7, 1, 0.7] } : undefined}
+            transition={justChanged || activeFeedback
+              ? { duration: 0.5, type: 'spring' }
+              : decorativeAnimations ? { duration: meta.pulseSpeed, repeat: Infinity, ease: 'easeInOut' } : undefined}
           />
         </div>
 

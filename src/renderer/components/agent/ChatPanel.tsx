@@ -45,6 +45,7 @@ import { useToast } from '@/renderer/components/common/ToastProvider'
 import ConversationSidebar from './ConversationSidebar'
 import { BranchSelector } from './BranchControls'
 import { composerService } from '@/renderer/agent/services/composerService'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 import {
   buildChatTimelineProjection,
   type ChatTimelineItem,
@@ -86,6 +87,7 @@ function buildRenderableMessageItems(
 }
 
 export default function ChatPanel() {
+  const decorativeAnimations = useDecorativeAnimations()
   const {
     llmConfig,
     workspacePath,
@@ -1244,25 +1246,33 @@ export default function ChatPanel() {
     )),
     EmptyPlaceholder: () => (
       <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
-        {/* Background Ambience - More subtle & Animated */}
+        {/* Background Ambience — translate/opacity only.
+            `scale` here forced the 120px blur to re-rasterize every frame, and
+            `mix-blend-screen` forced an extra off-screen pass; together they held
+            the GPU at ~27% on integrated graphics. Translation and opacity stay
+            on the compositor, so the blurred layer is rasterized once. */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <motion.div
-            animate={{
-              scale: [1, 1.2, 1],
+            animate={decorativeAnimations ? {
               opacity: [0.3, 0.5, 0.3],
               x: [0, 20, 0]
-            }}
-            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] mix-blend-screen"
+            } : undefined}
+            transition={decorativeAnimations
+              ? { duration: 8, repeat: Infinity, ease: "easeInOut" }
+              : undefined}
+            style={{ opacity: 0.4, willChange: decorativeAnimations ? 'transform, opacity' : undefined }}
+            className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px]"
           />
           <motion.div
-            animate={{
-              scale: [1, 1.1, 1],
+            animate={decorativeAnimations ? {
               opacity: [0.2, 0.4, 0.2],
               x: [0, -30, 0]
-            }}
-            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-            className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px] mix-blend-screen"
+            } : undefined}
+            transition={decorativeAnimations
+              ? { duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }
+              : undefined}
+            style={{ opacity: 0.3, willChange: decorativeAnimations ? 'transform, opacity' : undefined }}
+            className="absolute bottom-[-10%] left-[-20%] w-[600px] h-[600px] bg-blue-500/5 rounded-full blur-[120px]"
           />
         </div>
 
@@ -1276,7 +1286,7 @@ export default function ChatPanel() {
         </div>
       </div>
     )
-  }), [attachScrollerNode, language, setInput, textareaRef])
+  }), [attachScrollerNode, language, setInput, textareaRef, decorativeAnimations])
 
   return (
     <div
