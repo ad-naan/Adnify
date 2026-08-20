@@ -26,6 +26,55 @@ const OPTIONAL_NATIVE_MODULES = new Set(['cpu-features', 'ssh2'])
 // ─── Windows VS environment activation ──────────────────────────────────────
 
 /**
+ * Strip quoting artifacts and duplicates out of PATH.
+ *
+ * A PATH entry containing a stray `"` makes cmd.exe mis-parse the rest of the
+ * variable, which causes vcvars64.bat to abort early with "The system cannot
+ * find the path specified" *while still exiting 0* — leaving us with an env
+ * that has no cl.exe and no MSVC lib directories.
+ */
+function sanitizePath() {
+  const seen = new Set()
+  return (process.env.PATH || '')
+    .split(path.delimiter)
+    .map((entry) => entry.replace(/"/g, '').trim())
+    // `&`/`%` break cmd parsing the same way quotes do
+    .filter((entry) => entry && !entry.includes('&') && !entry.includes('%'))
+    .filter((entry) => {
+      const key = entry.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .join(path.delimiter)
+}
+
+/**
+ * Pick an MSVC toolset that actually ships the x64 link libraries.
+ *
+ * A VS installation can carry several toolsets, and the one named by
+ * Microsoft.VCToolsVersion.default.txt is not guaranteed to be complete — a
+ * partial install (e.g. ARM-only libs) leaves `lib/x64` missing, so linking
+ * fails on `delayimp.lib` even though cl.exe works. Return the highest version
+ * that has the x64 libs, or null to fall back to the VS default.
+ */
+function pickVCToolsVersion(vsPath) {
+  const toolsRoot = path.join(vsPath, 'VC', 'Tools', 'MSVC')
+  if (!fs.existsSync(toolsRoot)) return null
+
+  const usable = fs
+    .readdirSync(toolsRoot)
+    .filter((version) =>
+      fs.existsSync(path.join(toolsRoot, version, 'lib', 'x64', 'delayimp.lib')),
+    )
+    .sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }),
+    )
+
+  return usable.length > 0 ? usable[usable.length - 1] : null
+}
+
+/**
  * Find VS installation via vswhere and activate the x64 build environment.
  * Returns a merged env object, or null when not on Windows / VS not found.
  *
@@ -66,18 +115,15 @@ function activateVSEnv() {
     const vcvars = path.join(vsPath, 'VC', 'Auxiliary', 'Build', 'vcvars64.bat')
     if (!fs.existsSync(vcvars)) throw new Error(`vcvars64.bat not found at: ${vcvars}`)
 
-    // Sanitize PATH before calling vcvars64.bat to avoid CMD syntax errors
-    // caused by unescaped characters in some poorly-formed PATH entries.
-    let safePath = process.env.PATH || '';
-    safePath = safePath.split(path.delimiter).filter(p => {
-      const lower = p.toLowerCase();
-      return !p.includes('&') && !lower.includes('nvidia');
-    }).join(path.delimiter);
+    // The VS-default toolset may be incomplete; prefer one with x64 link libs.
+    const toolsVersion = pickVCToolsVersion(vsPath)
+    const verArg = toolsVersion ? ` -vcvars_ver=${toolsVersion}` : ''
 
-    // Run vcvars64 and dump the resulting environment
-    const envDump = execSync(`"${vcvars}" && set`, {
+    // Run vcvars64 and dump the resulting environment. PATH must be sanitized
+    // first or cmd.exe mis-parses it and vcvars silently no-ops (exit code 0).
+    const envDump = execSync(`"${vcvars}"${verArg} && set`, {
       encoding: 'utf8',
-      env: { ...process.env, PATH: safePath },
+      env: { ...process.env, PATH: sanitizePath() },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
 
@@ -89,7 +135,33 @@ function activateVSEnv() {
       }
     }
 
-    console.log(`[postinstall] VS build environment activated (${path.basename(vsPath)})`)
+    // Drop the developer-prompt marker variables. With VSCMD_VER present,
+    // MSBuild treats the toolset as already pinned by the shell and ignores the
+    // VCToolsVersion we selected above, silently falling back to the toolset
+    // named by Microsoft.VCToolsVersion.v143.default.txt — which is exactly the
+    // incomplete one we are trying to avoid. These vars are informational only;
+    // every path/lib setting vcvars exported is kept.
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('VSCMD_')) delete env[key]
+    }
+
+    // vcvars can exit 0 without setting anything (see sanitizePath). Verify the
+    // env is actually usable instead of trusting the exit code.
+    const libDirs = (env.LIB || '').split(';').filter(Boolean)
+    const hasDelayimp = libDirs.some((dir) =>
+      fs.existsSync(path.join(dir, 'delayimp.lib')),
+    )
+    if (!env.VCToolsInstallDir || !hasDelayimp) {
+      throw new Error(
+        'vcvars64.bat ran but produced an incomplete environment ' +
+          `(VCToolsVersion=${env.VCToolsVersion || 'unset'}, delayimp.lib ${hasDelayimp ? 'found' : 'missing'})`,
+      )
+    }
+
+    console.log(
+      `[postinstall] VS build environment activated ` +
+        `(${path.basename(vsPath)}, MSVC ${env.VCToolsVersion})`,
+    )
     return env
   } catch (err) {
     console.warn(
@@ -147,6 +219,23 @@ function prepareCpuFeaturesBuildcheck(env) {
     return
   }
 
+  // On Windows every value buildcheck.js emits sits behind a
+  // `OS!="win" and target_arch not in "ia32 x32 x64"` condition, so the file
+  // contributes nothing to the build. Running the probe anyway is pure risk: it
+  // resolves cl.exe through Microsoft.VCToolsVersion.v143.default.txt, which
+  // cannot be redirected via the environment, so an incomplete default toolset
+  // makes it hard-crash with a stack trace that looks like a real failure.
+  // Write the equivalent empty gypi instead.
+  if (process.platform === 'win32') {
+    for (const dir of dirs) {
+      fs.writeFileSync(path.join(dir, 'buildcheck.gypi'), "{'variables': {}}\n")
+    }
+    console.log(
+      '[postinstall] Wrote empty buildcheck.gypi for cpu-features (no-op on Windows)',
+    )
+    return
+  }
+
   for (const dir of dirs) {
     const outFile = path.join(dir, 'buildcheck.gypi')
     try {
@@ -172,6 +261,33 @@ function prepareCpuFeaturesBuildcheck(env) {
         console.log('[postinstall] Wrote stub buildcheck.gypi to allow node-gyp configure')
       }
     }
+  }
+}
+
+/**
+ * @parcel/watcher is Node-API based (ABI-stable across Node and Electron) and
+ * resolves its binary from a per-platform sibling package. When that prebuilt
+ * exists there is nothing to rebuild — and compiling from source needs a full
+ * MSVC install, which fails on machines with a partial toolset.
+ */
+function hasParcelWatcherPrebuild() {
+  try {
+    const name = `@parcel/watcher-${process.platform}-${process.arch}`
+    // The Linux packages carry a libc suffix; probe both variants.
+    const candidates =
+      process.platform === 'linux'
+        ? [`${name}-glibc`, `${name}-musl`]
+        : [name]
+    return candidates.some((pkg) => {
+      try {
+        require.resolve(`${pkg}/watcher.node`, { paths: [projectRoot] })
+        return true
+      } catch {
+        return false
+      }
+    })
+  } catch {
+    return false
   }
 }
 
@@ -242,6 +358,10 @@ async function rebuildNativeModules(env) {
   if (hasBundledNodePtyPrebuild()) {
     ignoreModules.push('node-pty')
     console.log('[postinstall] Using bundled Node-API prebuild for node-pty')
+  }
+  if (hasParcelWatcherPrebuild()) {
+    ignoreModules.push('@parcel/watcher')
+    console.log('[postinstall] Using platform prebuild for @parcel/watcher')
   }
 
   try {
