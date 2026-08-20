@@ -68,4 +68,70 @@ describe('AgentSessionRepository incremental patches', () => {
       messages: [{ ordinal: 1, id: 'm2', payload: updatedSecond }],
     })
   })
+
+  // Dirty detection used to JSON.stringify each thread's metadata, which
+  // transitively serialized every checkpoint's file contents on every persist.
+  // It is now identity-based, so these two cases pin the behaviour it replaced:
+  // a real checkpoint edit must still be written, and an untouched thread must
+  // not be.
+  it('detects a checkpoint change without serializing its payload', async () => {
+    const repository = new AgentSessionRepository()
+    session.loadMessages.mockResolvedValue([])
+
+    const snapshot = await repository.getSnapshot()
+    const thread = snapshot!.threads.t1
+    const checkpoint = {
+      id: 'cp1',
+      messageId: 'm1',
+      timestamp: 1,
+      description: 'edit',
+      fileSnapshots: { 'a.ts': { path: 'a.ts', content: 'before' } },
+    }
+
+    repository.stageSnapshot({
+      ...snapshot!,
+      threads: {
+        t1: { ...thread, messageCheckpoints: [checkpoint] } as typeof thread,
+      },
+    })
+    await repository.flush()
+    expect(session.applyPatch).toHaveBeenCalledTimes(1)
+
+    // Same checkpoint id, new content — writers always replace the containers.
+    const edited = {
+      ...checkpoint,
+      fileSnapshots: { 'a.ts': { path: 'a.ts', content: 'after' } },
+    }
+    repository.stageSnapshot({
+      ...snapshot!,
+      threads: {
+        t1: { ...thread, messageCheckpoints: [edited] } as typeof thread,
+      },
+    })
+    await repository.flush()
+
+    expect(session.applyPatch).toHaveBeenCalledTimes(2)
+    expect(session.applyPatch.mock.calls[1][0].threads[0].metadata.data.messageCheckpoints)
+      .toEqual([edited])
+  })
+
+  it('does not re-patch a thread whose metadata is unchanged', async () => {
+    const repository = new AgentSessionRepository()
+    session.loadMessages.mockResolvedValue([])
+
+    const snapshot = await repository.getSnapshot()
+    const thread = snapshot!.threads.t1
+
+    // The first persist after load writes once: rehydration normalizes `mode`,
+    // so the in-memory thread genuinely differs from what the catalog held.
+    repository.stageSnapshot({ ...snapshot!, threads: { t1: thread } })
+    await repository.flush()
+    expect(session.applyPatch).toHaveBeenCalledTimes(1)
+
+    // Staging the very same thread again must be recognized as a no-op.
+    repository.stageSnapshot({ ...snapshot!, threads: { t1: thread } })
+    await repository.flush()
+
+    expect(session.applyPatch).toHaveBeenCalledTimes(1)
+  })
 })

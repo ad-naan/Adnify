@@ -25,7 +25,7 @@ import type { Branch } from '@renderer/agent/store/slices'
 const AUTO_FLUSH_DELAY_MS = 100
 
 interface ThreadBaseline {
-  metadata: string
+  metadata: ThreadMetadataSignature
   messages: ChatMessage[] | null
   messageVersion: number
 }
@@ -56,8 +56,61 @@ function toThreadMetadata(thread: ChatThread): SessionThreadMetadata {
   }
 }
 
-function metadataSignature(metadata: SessionThreadMetadata): string {
-  return JSON.stringify(metadata)
+/**
+ * Reference-based dirty signature for a thread's metadata.
+ *
+ * `metadata.data` transitively holds `messageCheckpoints`, whose `fileSnapshots`
+ * store whole file contents (plus base64 images). JSON-stringifying it to compare
+ * against a baseline meant every persist re-serialized every checkpoint of every
+ * thread — tens of MB of throwaway strings, synchronously on the renderer's main
+ * thread, growing with each task the agent runs.
+ *
+ * All writers replace `data` and its nested containers instead of mutating them
+ * (see `updateThreadCheckpoints` / `addSnapshotToCheckpoint`), so identity
+ * comparison detects every real change without reading the payload. Scalars are
+ * compared by value because `toThreadMetadata` rebuilds the wrapper each call.
+ */
+interface ThreadMetadataSignature {
+  createdAt: number
+  lastModified: number
+  title: string | undefined
+  messageCount: number
+  data: Record<string, unknown>
+}
+
+function metadataSignature(metadata: SessionThreadMetadata): ThreadMetadataSignature {
+  return {
+    createdAt: metadata.createdAt,
+    lastModified: metadata.lastModified,
+    title: metadata.title,
+    messageCount: metadata.messageCount,
+    data: metadata.data,
+  }
+}
+
+function metadataSignatureEquals(
+  a: ThreadMetadataSignature,
+  b: ThreadMetadataSignature,
+): boolean {
+  if (
+    a.createdAt !== b.createdAt ||
+    a.lastModified !== b.lastModified ||
+    a.title !== b.title ||
+    a.messageCount !== b.messageCount
+  ) {
+    return false
+  }
+
+  // `data` is rebuilt by object rest in toThreadMetadata, so the wrapper is
+  // always a fresh object — compare its fields by identity instead. Undefined
+  // entries are skipped on both sides: toPersistedChatThread sets every optional
+  // field explicitly, while a JSON round-trip through SQLite drops them, so the
+  // key sets legitimately differ for a thread that has not actually changed.
+  for (const key of new Set([...Object.keys(a.data), ...Object.keys(b.data)])) {
+    if (a.data[key] !== b.data[key]) return false
+  }
+
+  return true
 }
 
 function toMessageWrite(message: ChatMessage, ordinal: number): SessionMessageWrite {
@@ -279,7 +332,8 @@ export class AgentSessionRepository {
       const metadata = toThreadMetadata(thread)
       const baseline = this.baselines.get(threadId)
       const messageVersion = snapshot.threadMessageVersions?.[threadId] || 0
-      const metadataChanged = !baseline || baseline.metadata !== metadataSignature(metadata)
+      const metadataChanged =
+        !baseline || !metadataSignatureEquals(baseline.metadata, metadataSignature(metadata))
       let replaceFrom: number | undefined
 
       if (thread.messagesHydrated !== false && (!baseline || baseline.messageVersion !== messageVersion)) {
