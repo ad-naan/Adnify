@@ -1,6 +1,6 @@
 {
   "name": "adnify",
-  "version": "1.7.58",
+  "version": "1.7.59",
   "description": "Adnify - A lightweight yet powerful AI-powered code editor",
   "productName": "Adnify",
   "author": "adnaan <adnaan.worker@gmail.com>",
@@ -49,7 +49,11 @@
       "dompurify@<3.4.13": "^3.4.13",
       "sharp@<0.35.0": "^0.35.1",
       "tar@<7.5.22": "^7.5.22",
-      "undici@<6.28.0": "^6.28.0"
+      "undici@<6.28.0": "^6.28.0",
+      "protobufjs@<7.6.3": "^7.6.3"
+    },
+    "patchedDependencies": {
+      "extract-zip@2.0.1": "patches/extract-zip@2.0.1.patch"
     }
   },
   "dependencies": {

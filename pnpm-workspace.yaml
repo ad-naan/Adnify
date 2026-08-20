@@ -21,6 +21,13 @@ overrides:
   undici@<6.28.0: ^6.28.0
   dompurify@<3.4.13: ^3.4.13
   sharp@<0.35.0: ^0.35.1
+  protobufjs@<7.6.3: ^7.6.3
+
+# Electron installs through extract-zip 2.0.1 and upstream has no fixed
+# release. The repository patch preserves internal symlinks while rejecting
+# targets that resolve outside the extraction root.
+patchedDependencies:
+  'extract-zip@2.0.1': patches/extract-zip@2.0.1.patch
 
 # minimumReleaseAge 策略说明：
 # pnpm v11+ 默认要求包发布后至少等待 1440 分钟（24小时）才能安装，

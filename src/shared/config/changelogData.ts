@@ -43,6 +43,147 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.59",
+    "rawVersion": "1.7.59",
+    "date": "2026-08-20",
+    "title": "企业级持久化、外部文件互通与全链路流畅度升级",
+    "titleEn": "Enterprise Persistence, External File Interop & End-to-End Performance",
+    "highlight": "以 SQLite 单写者架构重构会话与 Plan 持久化，完善外部文件安全访问、LSP 与文件树联动，并消除长会话渲染、JSONL 写放大和主进程阻塞热点",
+    "highlightEn": "Rebuilt session and Plan persistence around a single-writer SQLite architecture, completed secure external-file and LSP integration, and removed long-session rendering, JSONL write amplification and main-process stalls",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "核心新特性 / Features",
+        "labelEn": "Features",
+        "items": [
+          {
+            "title": "SQLite 会话共享存储层与无损迁移",
+            "titleEn": "Shared SQLite Session Storage & Lossless Migration",
+            "details": [
+              "以 Worker 单写者、事务批处理和统一 Repository 接口替代分散的 JSON 会话持久化，隔离主线程磁盘 I/O",
+              "自动迁移历史会话、消息、分支、检查点和 Plan 数据，迁移完成前保留旧数据且支持幂等重试",
+              "修复静默截断、未加载消息被空数据覆盖以及异常退出时会话丢失等高风险问题"
+            ],
+            "detailsEn": [
+              "Replaced fragmented JSON session persistence with a worker-owned single-writer SQLite store, transactional batching and a shared repository boundary",
+              "Automatically migrates legacy sessions, messages, branches, checkpoints and Plan data with idempotent retry while retaining source data until completion",
+              "Fixed silent truncation, unloaded-message overwrite and session loss during abnormal shutdown"
+            ]
+          },
+          {
+            "title": "外部文件安全互通与编辑器自动定位",
+            "titleEn": "Secure External-File Interop & Editor Auto Reveal",
+            "details": [
+              "严格工作区模式关闭后可通过显式授权访问外部文件，并统一覆盖系统文件关联、Monaco 定义跳转和应用内打开流程",
+              "活跃文件自动展开父级目录并在资源管理器中定位高亮，兼容搜索、跳转和深层目录文件",
+              "安全边界由路径来源、访问意图和持久授权共同判定，避免把关闭严格模式等同于无限制文件访问"
+            ],
+            "detailsEn": [
+              "Explicit grants now enable external-file access when strict workspace mode is disabled across OS file associations, Monaco definitions and in-app open flows",
+              "The explorer automatically expands ancestor directories and reveals the active file opened through search or navigation",
+              "The security boundary combines path provenance, access intent and persisted grants instead of treating relaxed workspace mode as unrestricted filesystem access"
+            ]
+          },
+          {
+            "title": "LSP 安装持久化与项目运行时识别",
+            "titleEn": "Persistent LSP Installations & Project Runtime Detection",
+            "details": [
+              "语言服务器安装目录和状态跨刷新、重启持久化，不再重复提示安装",
+              "增强 Python、JavaScript 与 TypeScript 项目运行时和依赖解析，改善类型诊断与定义跳转位置",
+              "Windows 原生模块安装优先使用随包预构建的 node-pty Node-API 二进制，降低构建工具链失败率"
+            ],
+            "detailsEn": [
+              "Language-server locations and installation state now survive refreshes and restarts without repeated install prompts",
+              "Improved Python, JavaScript and TypeScript runtime/dependency resolution for accurate diagnostics and definition locations",
+              "Windows native setup prefers bundled node-pty Node-API prebuilds to reduce toolchain-related installation failures"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "性能与体验 / Performance & Polish",
+        "labelEn": "Performance & Polish",
+        "items": [
+          {
+            "title": "流式 Markdown 增量渲染",
+            "titleEn": "Incremental Streaming Markdown Rendering",
+            "details": [
+              "保持 30 FPS 流式尾部动画，已闭合 Markdown 块仅解析一次，避免长回复反复解析全部历史文本",
+              "未闭合代码围栏和超长活跃尾块自动切换轻量路径，结束后统一恢复完整富文本排版",
+              "文本、工具调用与后续文本始终按原始 part 顺序穿插；折叠过程区内部同样保持顺序"
+            ],
+            "detailsEn": [
+              "Preserves the 30 FPS streaming tail while parsing completed Markdown blocks only once instead of reparsing the full response",
+              "Open code fences and oversized live tails use a lightweight path before converging to the full final rich-text layout",
+              "Text, tool calls and subsequent text retain their original interleaved order, including inside collapsed process sections"
+            ]
+          },
+          {
+            "title": "磁盘 I/O 与主进程阻塞治理",
+            "titleEn": "Disk I/O and Main-Process Stall Elimination",
+            "details": [
+              "统计与 AI 归因 JSONL 改为受控追加写，不再周期性读取并重写持续增长的完整文件",
+              "文件监听事件按帧分批派发，吸收安装、Git 切换等场景的事件风暴",
+              "终端与 MCP 进程树清理由同步 taskkill 改为异步执行，避免 Electron 主线程冻结",
+              "减少事件缓存数组复制和无关 Store 订阅，降低长会话内存与计算开销"
+            ],
+            "detailsEn": [
+              "Analytics and AI-attribution JSONL journals now use controlled append writes instead of repeatedly reading and replacing growing files",
+              "Filesystem watcher bursts are drained in bounded batches during installs and large Git operations",
+              "Terminal and MCP process-tree cleanup now runs asynchronously instead of blocking Electron with synchronous taskkill calls",
+              "Reduced event-cache copying and unrelated store subscriptions in long sessions"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "问题修复 / Bug Fixes",
+        "labelEn": "Bug Fixes",
+        "items": [
+          {
+            "title": "设置、MCP 与存储可靠性修复",
+            "titleEn": "Settings, MCP & Storage Reliability Fixes",
+            "details": [
+              "修复“扩展推理档位”在 IDE 重启后被重置的问题",
+              "修复 MCP Registry 可选 metadata 的 TypeScript 空值错误",
+              "统一项目内部文件追加写安全通道，并在写入失败时可靠回队，避免统计事件静默丢失"
+            ],
+            "detailsEn": [
+              "Fixed Extended Reasoning Levels being reset after restarting the IDE",
+              "Fixed optional MCP Registry metadata nullability errors in TypeScript",
+              "Added a shared secure append channel with reliable requeue on write failure to prevent silent analytics loss"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "security",
+        "label": "安全加固 / Security",
+        "labelEn": "Security",
+        "items": [
+          {
+            "title": "生产依赖漏洞清零与安装链路加固",
+            "titleEn": "Zero Production Dependency Advisories & Hardened Installation",
+            "details": [
+              "将 protobufjs 锁定到 7.6.5，消除 1 个 Critical、5 个 High 和 5 个 Moderate 告警",
+              "为尚无上游修复版本的 extract-zip 增加仓库级确定性补丁，拒绝逃逸目标目录的符号链接",
+              "新增恶意 ZIP 越界与 ONNX/Protobuf 兼容性回归测试；pnpm audit --prod 结果为 0"
+            ],
+            "detailsEn": [
+              "Pinned protobufjs to 7.6.5, resolving one Critical, five High and five Moderate advisories",
+              "Added a deterministic repository patch for extract-zip, whose upstream has no fixed release, rejecting symlinks that escape the destination root",
+              "Added malicious ZIP traversal and ONNX/Protobuf compatibility regression tests; pnpm audit --prod now reports zero advisories"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.58",
     "rawVersion": "1.7.58",
     "date": "2026-08-18",
@@ -50,8 +191,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Omni-Ecosystem MCP Engine, Cross-Platform Interoperability & Settings Search",
     "highlight": "重构上线高可靠 MCP 适配引擎并支持官方全类型包与协议，全面打通 Claude / Codex / Cursor 的全局与项目级 MCP、Skills 及 Rules 配置，新增设置全局搜索与 Plan 交互工作流优化",
     "highlightEn": "Introduced high-reliability MCP adaptation engine supporting all official package types and transports, unified cross-platform MCP/Skills/Rules discovery from Claude/Codex/Cursor, and added in-settings search with Plan workflow polish",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
