@@ -42,6 +42,8 @@ import type {
   SessionWorkerResult,
 } from '@shared/types/sessionPersistence'
 
+import type { PreviewProbeResult } from '@shared/types/preview'
+
 // 从 @shared/types/llm 重新导出
 export type {
   LLMStreamChunk,
@@ -606,6 +608,10 @@ export interface ElectronAPI {
     success: boolean; results?: Array<{ title: string; url: string; snippet: string }>; error?: string
   }>
   httpSetGoogleSearch: (apiKey: string, cx: string) => Promise<{ success: boolean }>
+
+  // 本地预览
+  previewProbe: (url: string, timeout?: number) => Promise<PreviewProbeResult>
+  previewOpenExternal: (url: string) => Promise<boolean>
 
   // Health Check
   healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number, protocol?: string) => Promise<{

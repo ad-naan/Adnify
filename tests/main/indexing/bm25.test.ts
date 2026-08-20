@@ -126,4 +126,61 @@ describe('BM25Index', () => {
     expect(idx.search('authentication')).toEqual([])
     expect(idx.toJSON().idf).toEqual([])
   })
+
+  // `toJSONString` caches a JSON fragment per document so a file-watcher burst
+  // does not re-encode the whole index on the main process. These pin the two
+  // things that can go wrong: output must match the uncached encoding, and a
+  // stale fragment must never survive a mutation.
+  describe('toJSONString', () => {
+    it('matches JSON.stringify(toJSON()) exactly', () => {
+      const idx = new BM25Index()
+      idx.addDocument(doc('a', 'a.ts', 'authentication token refresh', ['login']))
+      idx.addDocument(doc('b', 'b.ts', 'rendering pipeline code'))
+      idx.build()
+
+      expect(idx.toJSONString()).toBe(JSON.stringify(idx.toJSON()))
+    })
+
+    it('stays correct across add, delete and clear after caching fragments', () => {
+      const idx = new BM25Index()
+      idx.addDocument(doc('a1', 'a.ts', 'authentication token part one'))
+      idx.addDocument(doc('b1', 'b.ts', 'rendering pipeline'))
+      idx.build()
+      idx.toJSONString() // warm the fragment cache
+
+      idx.addDocument(doc('c1', 'c.ts', 'search indexing service'))
+      idx.build()
+      expect(idx.toJSONString()).toBe(JSON.stringify(idx.toJSON()))
+
+      idx.deleteFile('a.ts')
+      idx.build()
+      expect(idx.toJSONString()).toBe(JSON.stringify(idx.toJSON()))
+
+      // Re-adding the same id must not resurrect the old fragment.
+      idx.addDocument(doc('b1', 'b.ts', 'completely different content now'))
+      idx.build()
+      const encoded = idx.toJSONString()
+      expect(encoded).toBe(JSON.stringify(idx.toJSON()))
+      expect(encoded).toContain('completely different content now')
+
+      idx.clear()
+      expect(idx.toJSONString()).toBe(JSON.stringify(idx.toJSON()))
+    })
+
+    it('round-trips through fromJSON with identical ranking', () => {
+      const idx = new BM25Index()
+      idx.addDocument(doc('a', 'a.ts', 'authentication token refresh handler'))
+      idx.addDocument(doc('b', 'b.ts', 'unrelated rendering pipeline code'))
+      idx.build()
+      const before = idx.search('authentication token')
+
+      const restored = new BM25Index()
+      restored.fromJSON(JSON.parse(idx.toJSONString()))
+
+      expect(restored.size).toBe(idx.size)
+      expect(restored.search('authentication token')).toEqual(before)
+      // A restored index has no cached fragments; it must still encode correctly.
+      expect(restored.toJSONString()).toBe(JSON.stringify(restored.toJSON()))
+    })
+  })
 })

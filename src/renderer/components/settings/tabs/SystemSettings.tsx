@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe, BookOpen, Sparkles } from 'lucide-react'
+import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe, BookOpen, Sparkles, MonitorPlay } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
@@ -17,6 +17,12 @@ import { memoryService } from '@/renderer/agent/services/memoryService'
 import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
 import { resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
 import { loadEmotionPanelSettings, saveEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
+import {
+    clearDismissedOrigins,
+    loadPreviewSettings,
+    subscribePreviewSettings,
+    updatePreviewSettings,
+} from '@/renderer/preview/previewSettings'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 import type { ProxyConfig } from '@shared/config/types'
 
@@ -54,11 +60,20 @@ export function SystemSettings({
     const [decorativeAnimations, setDecorativeAnimations] = useState(
         () => loadEmotionPanelSettings().decorativeAnimations,
     )
+    const [previewAutoPrompt, setPreviewAutoPrompt] = useState(() => loadPreviewSettings().autoPrompt)
+    const [dismissedOriginCount, setDismissedOriginCount] = useState(() => loadPreviewSettings().dismissedOrigins.length)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const getStore = () => useStore.getState()
 
     useEffect(() => {
         return subscribeEmotionPanelSettings(settings => setDecorativeAnimations(settings.decorativeAnimations))
+    }, [])
+
+    useEffect(() => {
+        return subscribePreviewSettings(settings => {
+            setPreviewAutoPrompt(settings.autoPrompt)
+            setDismissedOriginCount(settings.dismissedOrigins.length)
+        })
     }, [])
 
     const handleToggleDecorativeAnimations = (enabled: boolean) => {
@@ -342,6 +357,53 @@ export function SystemSettings({
                                     : 'Your system “reduce motion” preference disables these automatically — no need to set it here.'}
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <MonitorPlay className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? '本地预览' : 'Local Preview'}
+                    </h4>
+                </div>
+                <div className="space-y-4">
+                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <div className="text-sm font-bold text-text-primary">
+                                    {language === 'zh' ? '检测到本地服务时弹窗提示' : 'Notify when a local server is detected'}
+                                </div>
+                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                    {language === 'zh'
+                                        ? '关闭时（默认），发现的 dev server 只显示在状态栏的“本地服务”入口里，不会主动弹卡片。'
+                                        : 'When off (the default), detected dev servers only appear in the status bar “Local Servers” entry instead of popping a card.'}
+                                </div>
+                            </div>
+                            <Switch
+                                checked={previewAutoPrompt}
+                                onChange={(e) => updatePreviewSettings({ autoPrompt: e.target.checked })}
+                            />
+                        </div>
+
+                        {dismissedOriginCount > 0 && (
+                            <div className="flex items-center justify-between gap-4 border-t border-border/40 pt-5">
+                                <div>
+                                    <div className="text-sm font-bold text-text-primary">
+                                        {language === 'zh' ? '已忽略的地址' : 'Muted addresses'}
+                                    </div>
+                                    <div className="text-xs text-text-muted mt-1 opacity-70">
+                                        {language === 'zh'
+                                            ? `有 ${dismissedOriginCount} 个地址被标记为“不再提示”。`
+                                            : `${dismissedOriginCount} address(es) marked as “don't ask again”.`}
+                                    </div>
+                                </div>
+                                <Button variant="secondary" size="sm" onClick={() => clearDismissedOrigins()} className="rounded-xl px-4">
+                                    {language === 'zh' ? '清除' : 'Clear'}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </section>

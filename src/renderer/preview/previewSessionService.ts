@@ -1,6 +1,7 @@
 import { useStore } from '@store'
 import type { OpenPreviewMetadata, PreviewServerCandidate, PreviewSession, PreviewSessionStatus } from '@shared/types/preview'
 import { buildPreviewDocumentPath, parsePreviewDocumentPath } from '@shared/types/preview'
+import { formatPreviewOriginLabel, parseLocalPreviewOrigin } from '@shared/preview/discovery'
 import { devServerDiscoveryService } from './devServerDiscoveryService'
 
 interface PreviewSessionState {
@@ -14,24 +15,23 @@ function createSessionTitle(candidate: PreviewServerCandidate | null, url: strin
     return candidate.title.trim()
   }
 
-  try {
-    const parsed = new URL(url)
-    return parsed.port ? `Preview ${parsed.port}` : `Preview ${parsed.host}`
-  } catch {
-    return 'Preview'
-  }
+  const origin = parseLocalPreviewOrigin(url)
+  return origin ? `Preview ${formatPreviewOriginLabel(origin)}` : 'Preview'
 }
 
 export class PreviewSessionService {
   private readonly listeners = new Set<PreviewSessionListener>()
   private readonly sessions = new Map<string, PreviewSession>()
+  /** url -> sessionId，用于"同一地址复用已有标签"。 */
   private readonly sessionByUrl = new Map<string, string>()
   private state: PreviewSessionState = { sessions: [] }
 
   subscribe(listener: PreviewSessionListener): () => void {
     this.listeners.add(listener)
     listener(this.state)
-    return () => this.listeners.delete(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
   }
 
   getState(): PreviewSessionState {
@@ -48,7 +48,7 @@ export class PreviewSessionService {
   }
 
   async openPreferredPreview(workspaceRoots: string[]): Promise<PreviewSession | null> {
-    await devServerDiscoveryService.refresh(workspaceRoots)
+    await devServerDiscoveryService.refresh(workspaceRoots, { force: true })
     const workspaceRoot = workspaceRoots[0] || undefined
     const candidate = devServerDiscoveryService.getPreferredCandidate(workspaceRoot)
     if (!candidate) {
@@ -91,6 +91,8 @@ export class PreviewSessionService {
         }, { activate: options.activate })
         return existingSession
       }
+      // 索引指向了已销毁的会话，清掉再新建。
+      this.sessionByUrl.delete(url)
     }
 
     const session: PreviewSession = {
@@ -104,6 +106,8 @@ export class PreviewSessionService {
       reloadToken: 0,
       workspaceRoot: options.workspaceRoot,
       candidateId: options.candidateId,
+      canGoBack: false,
+      canGoForward: false,
     }
 
     this.sessions.set(session.id, session)
@@ -140,6 +144,8 @@ export class PreviewSessionService {
       reloadToken: 0,
       workspaceRoot: preview.workspaceRoot,
       candidateId: preview.candidateId,
+      canGoBack: false,
+      canGoForward: false,
     }
 
     this.sessions.set(session.id, session)
@@ -148,7 +154,49 @@ export class PreviewSessionService {
     this.emit()
   }
 
-  markStatus(sessionId: string, status: PreviewSessionStatus, error?: string): void {
+  /**
+   * 关闭预览标签时释放会话。
+   *
+   * 之前没有这一步：sessions / sessionByUrl 只增不减，关掉标签再打开同一地址会
+   * 命中一个没有任何 UI 挂载的僵尸会话，reloadToken 也永远不归零。
+   */
+  disposeSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return
+    }
+
+    this.sessions.delete(sessionId)
+    if (this.sessionByUrl.get(session.url) === sessionId) {
+      this.sessionByUrl.delete(session.url)
+    }
+    this.rebuildState()
+    this.emit()
+  }
+
+  disposeSessionByPath(path: string): void {
+    const parsed = parsePreviewDocumentPath(path)
+    if (parsed) {
+      this.disposeSession(parsed.sessionId)
+    }
+  }
+
+  /**
+   * 以当前打开的 preview 标签为准，回收其余会话。
+   *
+   * 用对账而不是在 closeFile 里挂钩子：关闭路径有好几条（标签 X、关闭其他、
+   * 关闭右侧、workspace 切换），逐个挂钩子早晚漏一个。
+   */
+  pruneSessions(openSessionIds: Iterable<string>): void {
+    const keep = new Set(openSessionIds)
+    for (const sessionId of [...this.sessions.keys()]) {
+      if (!keep.has(sessionId)) {
+        this.disposeSession(sessionId)
+      }
+    }
+  }
+
+  markStatus(sessionId: string, status: PreviewSessionStatus, error?: string, errorCode?: number): void {
     const session = this.sessions.get(sessionId)
     if (!session) {
       return
@@ -158,8 +206,35 @@ export class PreviewSessionService {
       ...session,
       status,
       lastError: error,
+      lastErrorCode: errorCode,
       updatedAt: Date.now(),
     })
+    this.rebuildState()
+    this.emit()
+  }
+
+  /** 同步 guest 的导航历史可用性，驱动前进/后退按钮的 disabled 状态。 */
+  updateNavigationState(sessionId: string, navigation: { canGoBack: boolean; canGoForward: boolean }): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return
+    }
+    if (session.canGoBack === navigation.canGoBack && session.canGoForward === navigation.canGoForward) {
+      return
+    }
+
+    this.sessions.set(sessionId, { ...session, ...navigation, updatedAt: Date.now() })
+    this.rebuildState()
+    this.emit()
+  }
+
+  updateFavicon(sessionId: string, faviconUrl: string | undefined): void {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.faviconUrl === faviconUrl) {
+      return
+    }
+
+    this.sessions.set(sessionId, { ...session, faviconUrl, updatedAt: Date.now() })
     this.rebuildState()
     this.emit()
   }
@@ -179,8 +254,27 @@ export class PreviewSessionService {
     this.rebuildState()
     this.emit()
 
-    const previewPath = buildPreviewDocumentPath(sessionId)
-    useStore.getState().updatePreviewMetadata(previewPath, { title: nextSession.title })
+    useStore.getState().updatePreviewMetadata(buildPreviewDocumentPath(sessionId), { title: nextSession.title })
+  }
+
+  /**
+   * 记录 guest 已经到达的地址。
+   *
+   * 与 navigate() 的区别：这个方法不请求导航，只把已经发生的跳转（用户点链接、
+   * 框架重定向）同步进 store，所以不动 status，也不碰 reloadToken。
+   */
+  syncNavigated(sessionId: string, url: string): void {
+    const session = this.sessions.get(sessionId)
+    if (!session || !url.trim() || session.url === url) {
+      return
+    }
+
+    this.remapUrl(session, url)
+    this.sessions.set(sessionId, { ...session, url, updatedAt: Date.now() })
+    this.rebuildState()
+    this.emit()
+
+    useStore.getState().updatePreviewMetadata(buildPreviewDocumentPath(sessionId), { url })
   }
 
   navigate(sessionId: string, url: string): void {
@@ -189,23 +283,21 @@ export class PreviewSessionService {
       return
     }
 
-    if (session.url !== url) {
-      this.sessionByUrl.delete(session.url)
-      this.sessionByUrl.set(url, session.id)
-    }
+    this.remapUrl(session, url)
 
-    const nextSession = {
+    const nextSession: PreviewSession = {
       ...session,
       url,
-      status: 'loading' as const,
+      status: 'loading',
+      lastError: undefined,
+      lastErrorCode: undefined,
       updatedAt: Date.now(),
     }
     this.sessions.set(sessionId, nextSession)
     this.rebuildState()
     this.emit()
 
-    const previewPath = buildPreviewDocumentPath(sessionId)
-    useStore.getState().updatePreviewMetadata(previewPath, { url })
+    useStore.getState().updatePreviewMetadata(buildPreviewDocumentPath(sessionId), { url })
   }
 
   reload(sessionId: string): void {
@@ -217,11 +309,21 @@ export class PreviewSessionService {
     this.sessions.set(sessionId, {
       ...session,
       status: 'loading',
+      lastError: undefined,
+      lastErrorCode: undefined,
       reloadToken: session.reloadToken + 1,
       updatedAt: Date.now(),
     })
     this.rebuildState()
     this.emit()
+  }
+
+  private remapUrl(session: PreviewSession, nextUrl: string): void {
+    if (session.url === nextUrl) return
+    if (this.sessionByUrl.get(session.url) === session.id) {
+      this.sessionByUrl.delete(session.url)
+    }
+    this.sessionByUrl.set(nextUrl, session.id)
   }
 
   private rebuildState(): void {
@@ -231,7 +333,9 @@ export class PreviewSessionService {
   }
 
   private emit(): void {
-    this.listeners.forEach((listener) => listener(this.state))
+    for (const listener of this.listeners) {
+      listener(this.state)
+    }
   }
 }
 

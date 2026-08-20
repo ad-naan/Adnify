@@ -4,13 +4,10 @@ import { toast } from '@/renderer/components/common/ToastProvider'
 import { t, type Language } from '@/renderer/i18n'
 import { devServerDiscoveryService } from './devServerDiscoveryService'
 import { previewSessionService } from './previewSessionService'
+import { dismissOrigin, isOriginDismissed, loadPreviewSettings, subscribePreviewSettings } from './previewSettings'
 
 function areRootsEqual(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  return left.every((root, index) => root === right[index])
+  return left.length === right.length && left.every((root, index) => root === right[index])
 }
 
 function normalizePath(value: string): string {
@@ -27,22 +24,27 @@ function isWithinWorkspace(candidateRoot: string, workspaceRoots: string[]): boo
 }
 
 function getSourceLabel(source: PreviewServerCandidate['source'], language: Language): string {
-  if (source === 'terminal') {
-    return t('preview.toast.source.terminal', language)
-  }
-
-  if (source === 'workspace-script') {
-    return t('preview.toast.source.workspace', language)
-  }
-
+  if (source === 'terminal') return t('preview.toast.source.terminal', language)
+  if (source === 'workspace-script') return t('preview.toast.source.workspace', language)
   return t('preview.toast.source.discovery', language)
 }
 
+/**
+ * 发现本地服务后的主动提示。
+ *
+ * 默认不弹（见 previewSettings.autoPrompt）。开启后每个 origin 在一次会话里
+ * 最多弹一次，且卡片会自己消失 —— 之前的实现是常驻卡片 + 按完整 URL 去重，
+ * dev server 每刷一条带地址的日志就换一个 dedupeKey，于是右下角反复闪出新卡片。
+ */
+const TOAST_DURATION_MS = 12000
+
 export class PreviewPromptService {
-  private readonly handledPromptKeys = new Set<string>()
+  /** 本次会话里已经提示过的 origin，不持久化。 */
+  private readonly promptedOrigins = new Set<string>()
   private readonly activeToastIds = new Map<string, string>()
   private initialized = false
   private workspaceRoots: string[] = []
+  private autoPrompt = loadPreviewSettings().autoPrompt
 
   initialize(): void {
     if (this.initialized) {
@@ -50,6 +52,15 @@ export class PreviewPromptService {
     }
 
     this.initialized = true
+    this.autoPrompt = loadPreviewSettings().autoPrompt
+
+    subscribePreviewSettings((settings) => {
+      this.autoPrompt = settings.autoPrompt
+      if (!settings.autoPrompt) {
+        this.dismissAllToasts()
+      }
+    })
+
     devServerDiscoveryService.initialize()
     devServerDiscoveryService.subscribe((state) => {
       this.syncFromDiscovery(state.candidates)
@@ -73,37 +84,31 @@ export class PreviewPromptService {
     void devServerDiscoveryService.refresh(this.workspaceRoots)
   }
 
+  private dismissAllToasts(): void {
+    for (const toastId of this.activeToastIds.values()) {
+      toast.dismiss(toastId)
+    }
+    this.activeToastIds.clear()
+  }
+
   private syncFromDiscovery(candidates: PreviewServerCandidate[]): void {
-    if (this.workspaceRoots.length === 0) {
+    if (!this.autoPrompt || this.workspaceRoots.length === 0) {
       return
     }
 
     for (const candidate of candidates) {
-      if (!this.shouldPromptFor(candidate)) {
-        continue
+      if (this.shouldPromptFor(candidate)) {
+        this.showCandidateToast(candidate)
       }
-
-      this.showCandidateToast(candidate)
     }
   }
 
   private shouldPromptFor(candidate: PreviewServerCandidate): boolean {
-    if (candidate.status !== 'ready') {
-      return false
-    }
-
-    if (candidate.workspaceRoot && !isWithinWorkspace(candidate.workspaceRoot, this.workspaceRoots)) {
-      return false
-    }
-
-    if (this.handledPromptKeys.has(candidate.id)) {
-      return false
-    }
-
-    if (this.activeToastIds.has(candidate.id)) {
-      return false
-    }
-
+    if (candidate.status !== 'ready') return false
+    if (candidate.workspaceRoot && !isWithinWorkspace(candidate.workspaceRoot, this.workspaceRoots)) return false
+    if (this.promptedOrigins.has(candidate.url)) return false
+    if (isOriginDismissed(candidate.url)) return false
+    if (this.activeToastIds.has(candidate.id)) return false
     return !this.hasOpenPreview(candidate)
   }
 
@@ -116,27 +121,34 @@ export class PreviewPromptService {
   }
 
   private showCandidateToast(candidate: PreviewServerCandidate): void {
+    // 先登记再弹：showCard 是同步的，回调里也会读这个集合。
+    this.promptedOrigins.add(candidate.url)
+
     const language = (useStore.getState().language || 'en') as Language
-    const sourceLabel = getSourceLabel(candidate.source, language)
     const candidateLabel = candidate.label || candidate.url
+
+    const settle = (toastId: string | undefined) => {
+      this.activeToastIds.delete(candidate.id)
+      if (toastId) {
+        toast.dismiss(toastId)
+      }
+    }
 
     const toastId = toast.card({
       type: 'info',
       title: t('preview.toast.title', language),
       message: t('preview.toast.message', language, { target: candidateLabel }),
-      source: sourceLabel,
+      source: getSourceLabel(candidate.source, language),
       dedupeKey: candidate.id,
+      duration: TOAST_DURATION_MS,
       actions: [
         {
-          id: 'dismiss',
-          label: t('preview.toast.notNow', language),
-          style: 'secondary',
+          id: 'never',
+          label: t('preview.toast.never', language),
+          style: 'ghost',
           onClick: () => {
-            this.handledPromptKeys.add(candidate.id)
-            this.activeToastIds.delete(candidate.id)
-            if (toastId) {
-              toast.dismiss(toastId)
-            }
+            dismissOrigin(candidate.url)
+            settle(toastId)
           },
         },
         {
@@ -144,12 +156,8 @@ export class PreviewPromptService {
           label: t('preview.toast.open', language),
           style: 'primary',
           onClick: () => {
-            this.handledPromptKeys.add(candidate.id)
-            this.activeToastIds.delete(candidate.id)
             previewSessionService.openCandidate(candidate, { activate: true })
-            if (toastId) {
-              toast.dismiss(toastId)
-            }
+            settle(toastId)
           },
         },
       ],

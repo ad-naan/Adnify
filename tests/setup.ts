@@ -210,9 +210,15 @@ vi.stubGlobal('self', globalThis)
   }
 
 // Mock performance API
-global.performance = {
-  now: () => Date.now(),
-} as any
+//
+// 保留真实 performance 的其余成员：undici 在每次 fetch 结束后会调用
+// performance.markResourceTiming，整体替换掉这个对象会让任何用到真实网络请求的
+// 测试在响应完成后抛 "markResourceTiming is not a function"。
+global.performance = Object.assign(
+  Object.create(Object.getPrototypeOf(globalThis.performance) || Object.prototype),
+  globalThis.performance,
+  { now: () => Date.now() },
+) as any
 
 // Mock crypto.randomUUID if not available
 if (!global.crypto?.randomUUID) {

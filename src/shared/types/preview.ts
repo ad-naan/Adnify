@@ -17,6 +17,23 @@ export interface PreviewServerCandidate {
   error?: string
 }
 
+/** 主进程探活单个本地端口的结果。 */
+export interface PreviewProbeResult {
+  ok: boolean
+  /** HTTP 状态码；连接失败时缺省 */
+  statusCode?: number
+  contentType?: string
+  title?: string
+  error?: string
+  /**
+   * 实际连通的地址。
+   *
+   * 只监听 ::1 的服务用 127.0.0.1 连不上，探活会退回 localhost 重试；
+   * 这时返回的地址与请求的地址不同，调用方应该用这个去导航。
+   */
+  resolvedUrl?: string
+}
+
 export type PreviewSessionStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface PreviewSession {
@@ -31,6 +48,12 @@ export interface PreviewSession {
   workspaceRoot?: string
   candidateId?: string
   lastError?: string
+  /** guest 的导航历史状态，由 webview 事件同步 */
+  canGoBack?: boolean
+  canGoForward?: boolean
+  faviconUrl?: string
+  /** 加载失败时的 Chromium errorCode，用于区分"服务没起来"和"页面自己报错" */
+  lastErrorCode?: number
 }
 
 export interface OpenPreviewMetadata {
