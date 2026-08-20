@@ -72,16 +72,20 @@ export interface SessionStorageStats {
   messageCount: number
   branchCount: number
   blobCount: number
+  planCount: number
   pageSize: number
   freePages: number
 }
 
 export type SessionWorkerOperation =
-  | { type: 'open'; databasePath: string; legacySessionsDir?: string }
+  | { type: 'open'; databasePath: string; legacySessionsDir?: string; legacyPlanDir?: string }
   | { type: 'loadCatalog'; databasePath: string }
   | { type: 'loadMessages'; databasePath: string; threadId: string }
   | { type: 'loadBranchMessages'; databasePath: string; threadId: string }
   | { type: 'getStats'; databasePath: string }
+  | { type: 'loadPlans'; databasePath: string }
+  | { type: 'upsertPlan'; databasePath: string; plan: unknown }
+  | { type: 'deletePlan'; databasePath: string; planId: string }
   | { type: 'applyPatch'; databasePath: string; patch: SessionPatch }
   | { type: 'clear'; databasePath: string }
   | { type: 'checkpoint'; databasePath: string; truncate?: boolean }
@@ -98,6 +102,7 @@ export type SessionWorkerResult =
   | { type: 'messages'; messages: unknown[] }
   | { type: 'branchMessages'; branches: Array<{ id: string; messages: unknown[] }> }
   | { type: 'stats'; stats: SessionStorageStats }
+  | { type: 'plans'; plans: unknown[] }
   | { type: 'ok' }
 
 export type SessionWorkerResponse =

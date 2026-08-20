@@ -201,7 +201,7 @@ describe('SQLite session store', () => {
       expect.objectContaining({ id: 'b1', name: 'Legacy', messageCount: 1 }),
     ])
     const check = new DatabaseSync(databasePath, { readOnly: true })
-    expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3)
+    expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(4)
     check.close()
   })
 
@@ -231,6 +231,44 @@ describe('SQLite session store', () => {
     await executeSessionStorageOperation({ type: 'clear', databasePath })
     const second = await executeSessionStorageOperation({ type: 'open', databasePath, legacySessionsDir })
     expect(second.type === 'opened' ? second.catalog.threads : []).toEqual([])
+  })
+
+  it('migrates legacy task plans once and keeps SQLite authoritative', async () => {
+    const { root, databasePath } = await temporaryDatabase()
+    const legacyPlanDir = join(root, 'plan')
+    await mkdir(legacyPlanDir)
+    const legacyPlan = {
+      id: 'plan-1', name: 'Legacy plan', tasks: [], updatedAt: 10, revision: 1,
+    }
+    await writeFile(join(legacyPlanDir, 'plan-1.json'), JSON.stringify(legacyPlan))
+
+    const opened = await executeSessionStorageOperation({ type: 'open', databasePath, legacyPlanDir })
+    expect(opened.type === 'opened' && opened.migrated).toBe(true)
+    expect(await executeSessionStorageOperation({ type: 'loadPlans', databasePath })).toEqual({
+      type: 'plans', plans: [legacyPlan],
+    })
+
+    await writeFile(join(legacyPlanDir, 'plan-1.json'), JSON.stringify({ ...legacyPlan, name: 'Stale JSON' }))
+    await executeSessionStorageOperation({
+      type: 'upsertPlan', databasePath,
+      plan: { ...legacyPlan, name: 'SQLite plan', updatedAt: 20, revision: 2 },
+    })
+    await executeSessionStorageOperation({ type: 'closeAll' })
+    await executeSessionStorageOperation({ type: 'open', databasePath, legacyPlanDir })
+    const loaded = await executeSessionStorageOperation({ type: 'loadPlans', databasePath })
+    expect(loaded.type === 'plans' ? loaded.plans : []).toEqual([
+      { ...legacyPlan, name: 'SQLite plan', updatedAt: 20, revision: 2 },
+    ])
+  })
+
+  it('does not delete task plans when conversation history is cleared', async () => {
+    const { databasePath } = await temporaryDatabase()
+    await executeSessionStorageOperation({ type: 'open', databasePath })
+    const plan = { id: 'plan-1', name: 'Plan', tasks: [], revision: 1, updatedAt: 1 }
+    await executeSessionStorageOperation({ type: 'upsertPlan', databasePath, plan })
+    await executeSessionStorageOperation({ type: 'clear', databasePath })
+    expect(await executeSessionStorageOperation({ type: 'loadPlans', databasePath }))
+      .toEqual({ type: 'plans', plans: [plan] })
   })
 
   it('quarantines a corrupt primary and restores a verified snapshot', async () => {

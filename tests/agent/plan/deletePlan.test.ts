@@ -2,6 +2,9 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 
 vi.mock('@/renderer/services/electronAPI', () => ({
   api: {
+    session: {
+      deletePlan: vi.fn(async () => true),
+    },
     file: {
       exists: vi.fn(async () => true),
       delete: vi.fn(async () => undefined),
@@ -50,7 +53,7 @@ describe('deletePlan', () => {
     useAgentStore.setState({ plans: [], activePlanId: null, currentTaskId: null })
   })
 
-  it('removes the plan from state and deletes both of its files', async () => {
+  it('removes SQLite state and cleans up legacy and Markdown files', async () => {
     const store = useAgentStore.getState()
     store.addPlan(makePlan('p1', []))
     expect(useAgentStore.getState().plans).toHaveLength(1)
@@ -63,6 +66,7 @@ describe('deletePlan', () => {
 
     // The async file cleanup is fire-and-forget; let it settle.
     await vi.waitFor(() => {
+      expect(api.session.deletePlan).toHaveBeenCalledWith('p1')
       expect(api.file.delete).toHaveBeenCalledWith('/ws/.adnify/plan/p1.json')
       expect(api.file.delete).toHaveBeenCalledWith('/ws/.adnify/plan/p1.md')
     })

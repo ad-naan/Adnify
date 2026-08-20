@@ -157,13 +157,13 @@ export default function StatusBar() {
   )
   const plans = useAgentStore(state => state.plans)
   const activePlanId = useAgentStore(state => state.activePlanId)
-  const loadPlansFromDisk = useAgentStore(state => state.loadPlansFromDisk)
+  const loadPlansFromStorage = useAgentStore(state => state.loadPlansFromStorage)
 
   useEffect(() => {
     if (workspacePath) {
-      loadPlansFromDisk(workspacePath)
+      loadPlansFromStorage()
     }
-  }, [workspacePath, loadPlansFromDisk])
+  }, [workspacePath, loadPlansFromStorage])
 
   const executingPlansCount = plans.filter(plan =>
     plan.status === 'executing' || plan.status === 'pausing' || plan.status === 'stopping'

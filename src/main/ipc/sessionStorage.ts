@@ -16,6 +16,7 @@ interface SessionStorageHandlerOptions {
 interface SessionScope {
   databasePath: string
   legacySessionsDir: string
+  legacyPlanDir: string
 }
 
 async function resolveScope(
@@ -32,6 +33,7 @@ async function resolveScope(
   return {
     databasePath: path.join(storageDir, `${workspaceId}.sqlite3`),
     legacySessionsDir: path.join(root, '.adnify', 'sessions'),
+    legacyPlanDir: path.join(root, '.adnify', 'plan'),
   }
 }
 
@@ -50,6 +52,7 @@ export function registerSessionStorageHandlers(options: SessionStorageHandlerOpt
       type: 'open',
       databasePath: scope.databasePath,
       legacySessionsDir: scope.legacySessionsDir,
+      legacyPlanDir: scope.legacyPlanDir,
     }), 'opened')
   })
 
@@ -87,6 +90,27 @@ export function registerSessionStorageHandlers(options: SessionStorageHandlerOpt
       type: 'getStats',
       databasePath: scope.databasePath,
     }), 'stats').stats
+  })
+
+  ipcMain.handle('session:loadPlans', async event => {
+    const scope = await resolveScope(event, options)
+    return expectResult(await sessionStorageWorker.request({
+      type: 'loadPlans',
+      databasePath: scope.databasePath,
+    }), 'plans').plans
+  })
+
+  ipcMain.handle('session:upsertPlan', async (event, plan: unknown) => {
+    const scope = await resolveScope(event, options)
+    await sessionStorageWorker.request({ type: 'upsertPlan', databasePath: scope.databasePath, plan })
+    return true
+  })
+
+  ipcMain.handle('session:deletePlan', async (event, planId: string) => {
+    if (!planId) throw new Error('planId is required')
+    const scope = await resolveScope(event, options)
+    await sessionStorageWorker.request({ type: 'deletePlan', databasePath: scope.databasePath, planId })
+    return true
   })
 
   ipcMain.handle('session:applyPatch', async (event, patch: SessionPatch) => {

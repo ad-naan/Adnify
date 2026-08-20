@@ -52,7 +52,7 @@ const DEFAULT_STATE: SessionStateRecord = {
   activeBranchId: {},
   version: 0,
 }
-const LATEST_SCHEMA_VERSION = 3
+const LATEST_SCHEMA_VERSION = 4
 const BLOB_THRESHOLD_BYTES = 256 * 1024
 const IDLE_CHECKPOINT_MS = 30_000
 const CHECKPOINT_WRITE_THRESHOLD = 32
@@ -220,6 +220,19 @@ function migrateV3(database: DatabaseSync): void {
   `)
 }
 
+function migrateV4(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS plans (
+      id TEXT PRIMARY KEY,
+      updated_at INTEGER NOT NULL,
+      revision INTEGER NOT NULL CHECK (revision >= 0),
+      payload_json TEXT NOT NULL
+    ) STRICT;
+
+    CREATE INDEX IF NOT EXISTS plans_updated_at ON plans(updated_at DESC);
+  `)
+}
+
 function migrateSchema(database: DatabaseSync): boolean {
   let version = Number((database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
   if (version > LATEST_SCHEMA_VERSION) {
@@ -227,7 +240,7 @@ function migrateSchema(database: DatabaseSync): boolean {
   }
 
   const startingVersion = version
-  const migrations = [migrateV1, migrateV2, migrateV3]
+  const migrations = [migrateV1, migrateV2, migrateV3, migrateV4]
   while (version < LATEST_SCHEMA_VERSION) {
     const nextVersion = version + 1
     database.exec('BEGIN IMMEDIATE')
@@ -920,6 +933,79 @@ async function importLegacy(database: DatabaseSync, databasePath: string, sessio
   return true
 }
 
+interface PersistedPlanRecord extends Record<string, unknown> {
+  id: string
+  name: string
+  tasks: unknown[]
+}
+
+function planRecord(value: unknown): PersistedPlanRecord | null {
+  if (!value || typeof value !== 'object') return null
+  const plan = value as Record<string, unknown>
+  return typeof plan.id === 'string' && plan.id.length > 0 &&
+    typeof plan.name === 'string' && Array.isArray(plan.tasks)
+    ? plan as PersistedPlanRecord
+    : null
+}
+
+function writePlan(database: DatabaseSync, value: unknown): void {
+  const plan = planRecord(value)
+  if (!plan) throw new Error('Invalid task plan')
+  const updatedAt = typeof plan.updatedAt === 'number' ? plan.updatedAt : Date.now()
+  const revision = typeof plan.revision === 'number' && plan.revision >= 0 ? plan.revision : 0
+  database.prepare(`
+    INSERT INTO plans(id, updated_at, revision, payload_json)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      updated_at = excluded.updated_at,
+      revision = excluded.revision,
+      payload_json = excluded.payload_json
+    WHERE excluded.revision >= plans.revision
+  `).run(plan.id, updatedAt, revision, JSON.stringify(plan))
+}
+
+function readPlans(database: DatabaseSync): unknown[] {
+  const rows = database.prepare(
+    'SELECT payload_json FROM plans ORDER BY updated_at DESC, id ASC',
+  ).all() as Array<{ payload_json: string }>
+  return rows.map(row => JSON.parse(row.payload_json))
+}
+
+async function importLegacyPlans(database: DatabaseSync, planDir: string): Promise<boolean> {
+  const migrationName = 'workspace-plan-json-v1'
+  if (database.prepare('SELECT 1 FROM migration_log WHERE name = ?').get(migrationName)) return false
+
+  let entries
+  try {
+    entries = await fs.readdir(planDir, { withFileTypes: true })
+  } catch {
+    database.prepare('INSERT INTO migration_log(name, completed_at) VALUES (?, ?)')
+      .run(migrationName, Date.now())
+    return false
+  }
+
+  const imported: unknown[] = []
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+    try {
+      const value = JSON.parse(await fs.readFile(path.join(planDir, entry.name), 'utf8'))
+      if (planRecord(value)) imported.push(value)
+    } catch { /* malformed legacy plan remains untouched */ }
+  }
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    for (const plan of imported) writePlan(database, plan)
+    database.prepare('INSERT INTO migration_log(name, completed_at) VALUES (?, ?)')
+      .run(migrationName, Date.now())
+    database.exec('COMMIT')
+  } catch (error) {
+    database.exec('ROLLBACK')
+    throw error
+  }
+  return imported.length > 0
+}
+
 function checkpoint(opened: OpenDatabase, truncate: boolean): void {
   opened.database.exec(`PRAGMA wal_checkpoint(${truncate ? 'TRUNCATE' : 'PASSIVE'})`)
   opened.writesSinceCheckpoint = 0
@@ -1015,6 +1101,7 @@ async function readStats(database: DatabaseSync, databasePath: string): Promise<
     messageCount: scalar('SELECT COUNT(*) AS value FROM messages', 'value'),
     branchCount: scalar('SELECT COUNT(*) AS value FROM branches', 'value'),
     blobCount: scalar('SELECT COUNT(*) AS value FROM blobs WHERE ref_count > 0', 'value'),
+    planCount: scalar('SELECT COUNT(*) AS value FROM plans', 'value'),
     pageSize: scalar('PRAGMA page_size', 'page_size'),
     freePages: scalar('PRAGMA freelist_count', 'freelist_count'),
   }
@@ -1030,9 +1117,13 @@ export async function executeSessionStorageOperation(
   const opened = await getDatabase(operation.databasePath)
   switch (operation.type) {
     case 'open': {
-      const migrated = operation.legacySessionsDir
+      const sessionsMigrated = operation.legacySessionsDir
         ? await importLegacy(opened.database, opened.path, operation.legacySessionsDir)
         : false
+      const plansMigrated = operation.legacyPlanDir
+        ? await importLegacyPlans(opened.database, operation.legacyPlanDir)
+        : false
+      const migrated = sessionsMigrated || plansMigrated
       if (migrated) opened.dirtySinceBackup = true
       return { type: 'opened', catalog: readCatalog(opened.database), migrated }
     }
@@ -1047,6 +1138,16 @@ export async function executeSessionStorageOperation(
       }
     case 'getStats':
       return { type: 'stats', stats: await readStats(opened.database, opened.path) }
+    case 'loadPlans':
+      return { type: 'plans', plans: readPlans(opened.database) }
+    case 'upsertPlan':
+      writePlan(opened.database, operation.plan)
+      scheduleCheckpoint(opened)
+      return { type: 'ok' }
+    case 'deletePlan':
+      opened.database.prepare('DELETE FROM plans WHERE id = ?').run(operation.planId)
+      scheduleCheckpoint(opened)
+      return { type: 'ok' }
     case 'applyPatch':
       await applyPatch(opened.database, opened.path, operation.patch)
       scheduleCheckpoint(opened)

@@ -343,7 +343,11 @@ class SettingsService {
     try {
       localStorage.setItem(
         LOCAL_CACHE_KEY,
-        JSON.stringify(buildPersistedSettingsPayload(settings, settings.providerConfigs)),
+        JSON.stringify({
+          ...buildPersistedSettingsPayload(settings, settings.providerConfigs),
+          editorConfig: settings.editorConfig,
+          securitySettings: settings.securitySettings,
+        }),
       )
     } catch {
       // ignore local cache write failures
