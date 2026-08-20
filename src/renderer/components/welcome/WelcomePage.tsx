@@ -400,13 +400,25 @@ function WelcomeStyles({ rootClass }: { rootClass: string }) {
         -webkit-mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, black 60%, transparent 100%);
         mask-image: radial-gradient(ellipse 50% 50% at 50% 50%, black 60%, transparent 100%);
         animation: float 8s ease-in-out infinite;
+        /* Promote to its own compositor layer so the masked image is rasterized
+           once instead of every frame. */
+        will-change: transform;
         opacity: 0.95;
       }
 
+      /* translate-only keeps this on the compositor; adding scale() would force
+         a re-raster of the mask + blurred glow on every frame. */
       @keyframes float {
-        0% { transform: translateY(0px) scale(1); }
-        50% { transform: translateY(-12px) scale(1.02); }
-        100% { transform: translateY(0px) scale(1); }
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-12px); }
+        100% { transform: translateY(0px); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .${rootClass} .adnify-welcome-visual img {
+          animation: none;
+          will-change: auto;
+        }
       }
 
       .${rootClass} .adnify-welcome-visual-fade {

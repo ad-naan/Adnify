@@ -27,6 +27,33 @@ interface LspWorkspaceEdit {
   documentChanges?: unknown[]
 }
 
+/**
+ * Normalizes an LSP location into a Monaco location.
+ *
+ * `definition`/`typeDefinition`/`implementation` declare `linkSupport`, so a
+ * server may answer with LocationLink (`targetUri`/`targetRange`) instead of
+ * Location (`uri`/`range`). Returns null for entries carrying neither, so one
+ * malformed item cannot break the whole response.
+ */
+function toMonacoLocation(
+  monaco: typeof Monaco,
+  entry: any
+): Monaco.languages.Location | null {
+  const uri = entry?.targetUri ?? entry?.uri
+  const range = entry?.targetSelectionRange ?? entry?.targetRange ?? entry?.range
+  if (!uri || !range?.start || !range?.end) return null
+
+  return {
+    uri: monaco.Uri.parse(uri),
+    range: {
+      startLineNumber: range.start.line + 1,
+      startColumn: range.start.character + 1,
+      endLineNumber: range.end.line + 1,
+      endColumn: range.end.character + 1,
+    },
+  }
+}
+
 import {
   getHoverInfo,
   getCompletions,
@@ -142,15 +169,9 @@ export function registerLspProviders(monaco: typeof Monaco) {
         model.getValue()
       )
       if (!result || result.length === 0) return null
-      return result.map((loc: any) => ({
-        uri: monaco.Uri.parse(loc.uri),
-        range: {
-          startLineNumber: loc.range.start.line + 1,
-          startColumn: loc.range.start.character + 1,
-          endLineNumber: loc.range.end.line + 1,
-          endColumn: loc.range.end.character + 1,
-        },
-      }))
+      return result
+        .map((loc: any) => toMonacoLocation(monaco, loc))
+        .filter(Boolean) as Monaco.languages.Location[]
     },
   })
 
@@ -327,15 +348,9 @@ export function registerLspProviders(monaco: typeof Monaco) {
 
       if (!result) return null
 
-      return result.map((loc: any) => ({
-        uri: monaco.Uri.parse(loc.uri),
-        range: {
-          startLineNumber: loc.range.start.line + 1,
-          startColumn: loc.range.start.character + 1,
-          endLineNumber: loc.range.end.line + 1,
-          endColumn: loc.range.end.character + 1,
-        },
-      }))
+      return result
+        .map((loc: any) => toMonacoLocation(monaco, loc))
+        .filter(Boolean) as Monaco.languages.Location[]
     },
   })
 
@@ -351,15 +366,9 @@ export function registerLspProviders(monaco: typeof Monaco) {
 
       if (!result) return null
 
-      return result.map((loc: any) => ({
-        uri: monaco.Uri.parse(loc.uri),
-        range: {
-          startLineNumber: loc.range.start.line + 1,
-          startColumn: loc.range.start.character + 1,
-          endLineNumber: loc.range.end.line + 1,
-          endColumn: loc.range.end.character + 1,
-        },
-      }))
+      return result
+        .map((loc: any) => toMonacoLocation(monaco, loc))
+        .filter(Boolean) as Monaco.languages.Location[]
     },
   })
 
@@ -375,15 +384,9 @@ export function registerLspProviders(monaco: typeof Monaco) {
 
       if (!result) return null
 
-      return result.map((loc: any) => ({
-        uri: monaco.Uri.parse(loc.uri),
-        range: {
-          startLineNumber: loc.range.start.line + 1,
-          startColumn: loc.range.start.character + 1,
-          endLineNumber: loc.range.end.line + 1,
-          endColumn: loc.range.end.character + 1,
-        },
-      }))
+      return result
+        .map((loc: any) => toMonacoLocation(monaco, loc))
+        .filter(Boolean) as Monaco.languages.Location[]
     },
   })
 
@@ -528,27 +531,34 @@ export function registerLspProviders(monaco: typeof Monaco) {
 
       if (!result || result.length === 0) return []
 
-      const convertSymbol = (symbol: any): Monaco.languages.DocumentSymbol => ({
-        name: symbol.name,
-        detail: symbol.detail || '',
-        kind: symbolKindMap[symbol.kind] ?? 0,
-        range: {
-          startLineNumber: symbol.range.start.line + 1,
-          startColumn: symbol.range.start.character + 1,
-          endLineNumber: symbol.range.end.line + 1,
-          endColumn: symbol.range.end.character + 1,
-        },
-        selectionRange: {
-          startLineNumber: symbol.selectionRange.start.line + 1,
-          startColumn: symbol.selectionRange.start.character + 1,
-          endLineNumber: symbol.selectionRange.end.line + 1,
-          endColumn: symbol.selectionRange.end.character + 1,
-        },
-        tags: [],
-        children: symbol.children?.map(convertSymbol) || [],
-      })
+      // A server may answer with either DocumentSymbol[] (hierarchical, carries
+      // `range`/`selectionRange`) or SymbolInformation[] (flat, carries only
+      // `location.range`) — the spec allows the latter even when the client
+      // advertises hierarchicalDocumentSymbolSupport.
+      const convertSymbol = (symbol: any): Monaco.languages.DocumentSymbol | null => {
+        const range = symbol.range ?? symbol.location?.range
+        if (!range?.start || !range?.end) return null
+        const selectionRange = symbol.selectionRange ?? range
 
-      return result.map(convertSymbol)
+        const toMonacoRange = (source: any) => ({
+          startLineNumber: source.start.line + 1,
+          startColumn: source.start.character + 1,
+          endLineNumber: source.end.line + 1,
+          endColumn: source.end.character + 1,
+        })
+
+        return {
+          name: symbol.name,
+          detail: symbol.detail || '',
+          kind: symbolKindMap[symbol.kind] ?? 0,
+          range: toMonacoRange(range),
+          selectionRange: toMonacoRange(selectionRange),
+          tags: [],
+          children: symbol.children?.map(convertSymbol).filter(Boolean) || [],
+        }
+      }
+
+      return result.map(convertSymbol).filter(Boolean) as Monaco.languages.DocumentSymbol[]
     },
   })
 

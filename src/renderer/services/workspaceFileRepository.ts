@@ -141,6 +141,21 @@ class WorkspaceFileRepository {
     return `${this.getDirPath(rootPath)}/${file}`
   }
 
+  /**
+   * Resolves a path for an IO call, or null when no workspace is bound.
+   *
+   * Closing a workspace clears `primaryRoot` synchronously while buffered
+   * writers may still have a flush in flight, so IO that lands after the reset
+   * reports failure through its normal return value instead of rejecting.
+   */
+  private resolveIoPath(file: AdnifyFile | string, rootPath?: string): string | null {
+    if (!rootPath && !this.primaryRoot) {
+      logger.system.debug('[WorkspaceFiles] Dropped IO with no workspace bound:', file)
+      return null
+    }
+    return this.getFilePath(file, rootPath)
+  }
+
   async getWorkspaceState(): Promise<WorkspaceStateData> {
     if (this.workspaceState) return this.workspaceState
     this.workspaceState = await this.readJsonFile<WorkspaceStateData>(ADNIFY_FILES.WORKSPACE_STATE)
@@ -166,23 +181,33 @@ class WorkspaceFileRepository {
   }
 
   async readText(file: AdnifyFile | string, rootPath?: string): Promise<string | null> {
-    return api.file.read(this.getFilePath(file, rootPath))
+    const target = this.resolveIoPath(file, rootPath)
+    if (!target) return null
+    return api.file.read(target)
   }
 
   async writeText(file: AdnifyFile | string, content: string, rootPath?: string): Promise<boolean> {
-    return api.file.write(this.getFilePath(file, rootPath), content)
+    const target = this.resolveIoPath(file, rootPath)
+    if (!target) return false
+    return api.file.write(target, content)
   }
 
   async appendText(file: AdnifyFile | string, content: string, rootPath?: string): Promise<boolean> {
-    return api.file.append(this.getFilePath(file, rootPath), content)
+    const target = this.resolveIoPath(file, rootPath)
+    if (!target) return false
+    return api.file.append(target, content)
   }
 
   async exists(file: AdnifyFile | string, rootPath?: string): Promise<boolean> {
-    return api.file.exists(this.getFilePath(file, rootPath))
+    const target = this.resolveIoPath(file, rootPath)
+    if (!target) return false
+    return api.file.exists(target)
   }
 
   async delete(file: AdnifyFile | string, rootPath?: string): Promise<boolean> {
-    return api.file.delete(this.getFilePath(file, rootPath))
+    const target = this.resolveIoPath(file, rootPath)
+    if (!target) return false
+    return api.file.delete(target)
   }
 
   async flush(): Promise<void> {
@@ -204,6 +229,13 @@ class WorkspaceFileRepository {
   }
 
   private async writeJsonFile<T>(file: AdnifyFile, data: T): Promise<void> {
+    // No workspace bound means the workspace closed while this commit was
+    // buffered. Dropping it is correct: throwing would leave the value pending
+    // in the commit queue, which retries it forever against a null root.
+    if (!this.primaryRoot) {
+      logger.system.debug('[WorkspaceFiles] Dropped buffered commit after workspace close:', file)
+      return
+    }
     const written = await this.writeText(file, JSON.stringify(data, null, 2))
     if (!written) throw new Error(`Failed to write workspace file: ${file}`)
   }
