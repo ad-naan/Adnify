@@ -13,7 +13,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getExecutableName } from '@shared/utils/pathUtils'
-import { normalizeLspUri } from '@shared/utils/uriUtils'
+import { normalizeLspUri, pathToLspUri } from '@shared/utils/uriUtils'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
@@ -151,10 +151,37 @@ async function getJsonServerCommand(): Promise<{ command: string; args: string[]
 
 // ============ Python 环境检测 ============
 
-import { resolveRuntimePath } from './languageEnvConfig'
+import { getLanguageEnv, resolveRuntimePath } from './languageEnvConfig'
 
 /** 缓存已检测的 Python 路径（按工作区） */
 const pythonPathCache = new Map<string, string>()
+
+function getPythonAnalysisSettings(workspacePath: string) {
+  const languageEnv = getLanguageEnv(workspacePath, 'python')
+  return {
+    typeCheckingMode: 'basic',
+    diagnosticMode: 'openFilesOnly',
+    autoSearchPaths: true,
+    useLibraryCodeForTypes: true,
+    extraPaths: languageEnv?.extraPaths || [],
+    diagnosticSeverityOverrides: {},
+  }
+}
+
+function getTypeScriptInitializationOptions(workspacePath: string) {
+  const workspaceTsserver = path.join(workspacePath, 'node_modules', 'typescript', 'lib', 'tsserver.js')
+  if (fs.existsSync(workspaceTsserver)) {
+    return { tsserver: { path: workspaceTsserver } }
+  }
+
+  const serverPath = getInstalledServerPath('typescript')
+  const managedTsserver = serverPath
+    ? path.resolve(path.dirname(serverPath), '..', '..', 'typescript', 'lib', 'tsserver.js')
+    : null
+  return managedTsserver && fs.existsSync(managedTsserver)
+    ? { tsserver: { fallbackPath: managedTsserver } }
+    : undefined
+}
 
 function getPythonPathForWorkspace(workspacePath: string): string {
   const cached = pythonPathCache.get(workspacePath)
@@ -483,7 +510,7 @@ class LspManager {
   private languageToServer: Map<LanguageId, string> = new Map()
   private documentVersions: Map<string, number> = new Map() // 启用文档版本管理
   private diagnosticsCache: CacheService<any[]>
-  private startingServers: Set<string> = new Set()
+  private startingServers: Map<string, Promise<boolean>> = new Map()
 
   // 跟踪每个服务器打开的文档
   private serverOpenedDocuments: Map<string, Map<string, { languageId: string; version: number; text: string }>> = new Map()
@@ -573,23 +600,21 @@ class LspManager {
       return false
     }
 
-    if (this.startingServers.has(key)) {
-      await new Promise(resolve => setTimeout(resolve, 200))
-      return this.servers.get(key)?.initialized || false
-    }
+    const pendingStart = this.startingServers.get(key)
+    if (pendingStart) return pendingStart
 
     const config = LSP_SERVERS.find(c => c.name === serverName)
     if (!config) return false
 
-    this.startingServers.add(key)
+    const startPromise = this.spawnServer(config, workspacePath)
+      .then(success => {
+        if (!success) this.unavailableServers.set(key, Date.now())
+        else this.unavailableServers.delete(key)
+        return success
+      })
+    this.startingServers.set(key, startPromise)
     try {
-      const success = await this.spawnServer(config, workspacePath)
-      if (!success) {
-        this.unavailableServers.set(key, Date.now())
-      } else {
-        this.unavailableServers.delete(key)
-      }
-      return success
+      return await startPromise
     } finally {
       this.startingServers.delete(key)
     }
@@ -606,9 +631,20 @@ class LspManager {
     const key = this.getInstanceKey(config.name, workspacePath)
 
     // 使用 ELECTRON_RUN_AS_NODE=1 让 Electron 作为纯 Node.js 运行时工作
+    const languageEnv = getLanguageEnv(workspacePath, config.name)
+    const extraPathEnv = languageEnv?.extraPaths?.length
+      ? languageEnv.extraPaths.join(path.delimiter)
+      : undefined
     const proc = spawn(command, args, {
       cwd: workspacePath,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: {
+        ...process.env,
+        ...languageEnv?.env,
+        ...(extraPathEnv ? {
+          PYTHONPATH: [extraPathEnv, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
+        } : {}),
+        ELECTRON_RUN_AS_NODE: '1',
+      },
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
@@ -742,16 +778,13 @@ class LspManager {
         const section = item.section || ''
 
         // Python (Pyright) — 使用检测到的虚拟环境路径
+        if (section === 'python.analysis') {
+          return getPythonAnalysisSettings(instance.workspacePath)
+        }
         if (section === 'python' || section.startsWith('python.')) {
           return {
             pythonPath: getPythonPathForWorkspace(instance.workspacePath),
-            analysis: {
-              typeCheckingMode: 'basic',
-              diagnosticMode: 'openFilesOnly',
-              autoSearchPaths: true,
-              useLibraryCodeForTypes: true,
-              diagnosticSeverityOverrides: {}
-            }
+            analysis: getPythonAnalysisSettings(instance.workspacePath),
           }
         }
 
@@ -929,18 +962,17 @@ class LspManager {
   }
 
   private async initializeServer(key: string, workspacePath: string): Promise<void> {
-    const normalizedPath = workspacePath.replace(/\\/g, '/')
-    const rootUri = /^[a-zA-Z]:/.test(normalizedPath) ? `file:///${normalizedPath}` : `file://${normalizedPath}`
+    const rootUri = pathToLspUri(workspacePath)
 
     const instance = this.servers.get(key)
     const serverName = instance?.config.name
 
     // 为 Pyright 添加 Python 解释器配置（自动检测虚拟环境）
-    const initializationOptions = serverName === 'python' ? {
-      python: {
-        pythonPath: getPythonPathForWorkspace(workspacePath),
-      },
-    } : undefined
+    const initializationOptions = serverName === 'python'
+      ? { python: { pythonPath: getPythonPathForWorkspace(workspacePath) } }
+      : serverName === 'typescript'
+        ? getTypeScriptInitializationOptions(workspacePath)
+        : undefined
 
     await this.sendRequest(key, 'initialize', {
       processId: process.pid,
@@ -959,13 +991,7 @@ class LspManager {
         settings: {
           python: {
             pythonPath,
-            analysis: {
-              typeCheckingMode: 'basic',
-              diagnosticMode: 'openFilesOnly',
-              autoSearchPaths: true,
-              useLibraryCodeForTypes: true,
-              diagnosticSeverityOverrides: {}
-            }
+            analysis: getPythonAnalysisSettings(workspacePath),
           }
         }
       })
@@ -1017,12 +1043,11 @@ class LspManager {
     if (!instance?.process) return
 
     // 清除该服务器相关的诊断缓存（按前缀删除）
-    const workspaceUri = `file:///${instance.workspacePath.replace(/\\/g, '/')}`
-    const altUri = workspaceUri.replace('file:///', 'file://')
+    const workspaceUri = pathToLspUri(instance.workspacePath)
 
     // 获取要删除的 URI 列表
     const urisToDelete = this.diagnosticsCache.keys().filter(
-      uri => uri.startsWith(workspaceUri) || uri.startsWith(altUri)
+      uri => uri === workspaceUri || uri.startsWith(`${workspaceUri}/`)
     )
 
     for (const uri of urisToDelete) {

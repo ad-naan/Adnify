@@ -154,7 +154,7 @@ export interface LspServerDefinition {
     description: string
     languages: string[]        // 支持的语言 ID
     displayLanguages: string[] // UI 显示的语言名称
-    builtin: boolean           // 是否内置（通过 package.json 依赖）
+    builtin: boolean           // 是否随应用包交付
     installable: boolean       // 是否可通过 npm 安装
 }
 
@@ -169,7 +169,7 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         description: 'typescript-language-server',
         languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
         displayLanguages: ['TypeScript', 'JavaScript', 'TSX', 'JSX'],
-        builtin: true,
+        builtin: false,
         installable: true,
     },
     {
@@ -178,7 +178,7 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         description: 'vscode-html-language-server',
         languages: ['html'],
         displayLanguages: ['HTML'],
-        builtin: true,
+        builtin: false,
         installable: true,
     },
     {
@@ -187,7 +187,7 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         description: 'vscode-css-language-server',
         languages: ['css', 'scss', 'less'],
         displayLanguages: ['CSS', 'SCSS', 'Less'],
-        builtin: true,
+        builtin: false,
         installable: true,
     },
     {
@@ -196,7 +196,7 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         description: 'vscode-json-language-server',
         languages: ['json', 'jsonc'],
         displayLanguages: ['JSON', 'JSONC'],
-        builtin: true,
+        builtin: false,
         installable: true,
     },
     {

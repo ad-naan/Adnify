@@ -54,10 +54,10 @@ const SERVER_NAMES: Record<string, string> = {
 
 // 安装说明
 const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boolean }> = {
-  typescript: { auto: true, hint: '可自动安装', builtin: true },
-  html: { auto: true, hint: '可自动安装', builtin: true },
-  css: { auto: true, hint: '可自动安装', builtin: true },
-  json: { auto: true, hint: '可自动安装', builtin: true },
+  typescript: { auto: true, hint: '可自动安装' },
+  html: { auto: true, hint: '可自动安装' },
+  css: { auto: true, hint: '可自动安装' },
+  json: { auto: true, hint: '可自动安装' },
   python: { auto: true, hint: '可自动安装 Pyright' },
   go: { auto: true, hint: '需要系统已安装 Go' },
   rust: { auto: false, hint: '请运行: rustup component add rust-analyzer' },

@@ -15,6 +15,7 @@ import {
   getDefaultLspBinDir,
   setCustomLspBinDir,
 } from '../lsp/installer'
+import { pathToLspUri } from '@shared/utils/uriUtils'
 import {
   getLanguageEnv,
   setLanguageEnv,
@@ -345,11 +346,7 @@ export function registerLspHandlers(preferencesStore?: any): void {
   })
 
   ipcMain.handle('lsp:getDiagnostics', (_, filePath: string) => {
-    const normalizedPath = filePath.replace(/\\/g, '/')
-    const uri = /^[a-zA-Z]:/.test(normalizedPath)
-      ? `file:///${normalizedPath}`
-      : `file://${normalizedPath}`
-    return lspManager.getDiagnostics(uri)
+    return lspManager.getDiagnostics(pathToLspUri(filePath))
   })
 
   // ============ Call Hierarchy 支持 ============

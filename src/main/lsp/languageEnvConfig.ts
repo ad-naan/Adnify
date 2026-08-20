@@ -14,8 +14,8 @@
 
 import * as path from 'path'
 import * as fs from 'fs'
-import Store from 'electron-store'
 import { logger } from '@shared/utils/Logger'
+import { createScopedStore } from '../services/configPath'
 
 // ============ 类型定义 ============
 
@@ -34,7 +34,7 @@ export type WorkspaceLanguageEnv = Record<string, LanguageEnvEntry>
 
 // ============ 持久化存储 ============
 
-const store = new Store<Record<string, WorkspaceLanguageEnv>>({ name: 'language-env' })
+const store = createScopedStore('language-env')
 
 // ============ 公共 API ============
 
@@ -43,7 +43,11 @@ const store = new Store<Record<string, WorkspaceLanguageEnv>>({ name: 'language-
  */
 export function getLanguageEnv(workspacePath: string, languageId: string): LanguageEnvEntry | null {
   const key = normalizeKey(workspacePath)
-  const workspaceConfig = store.get(key) as WorkspaceLanguageEnv | undefined
+  const workspaces = getWorkspaceConfigs()
+  const matchingKey = Object.keys(workspaces)
+    .filter(candidate => key === candidate || key.startsWith(`${candidate}/`))
+    .sort((a, b) => b.length - a.length)[0]
+  const workspaceConfig = matchingKey ? workspaces[matchingKey] : undefined
   return workspaceConfig?.[languageId] || null
 }
 
@@ -52,9 +56,11 @@ export function getLanguageEnv(workspacePath: string, languageId: string): Langu
  */
 export function setLanguageEnv(workspacePath: string, languageId: string, entry: LanguageEnvEntry): void {
   const key = normalizeKey(workspacePath)
-  const workspaceConfig = (store.get(key) as WorkspaceLanguageEnv) || {}
+  const workspaces = getWorkspaceConfigs()
+  const workspaceConfig = workspaces[key] || {}
   workspaceConfig[languageId] = entry
-  store.set(key, workspaceConfig)
+  workspaces[key] = workspaceConfig
+  store.set('workspaces', workspaces)
   logger.lsp.info(`[LanguageEnv] Set ${languageId} env for ${workspacePath}:`, entry)
 }
 
@@ -63,13 +69,15 @@ export function setLanguageEnv(workspacePath: string, languageId: string, entry:
  */
 export function removeLanguageEnv(workspacePath: string, languageId: string): void {
   const key = normalizeKey(workspacePath)
-  const workspaceConfig = (store.get(key) as WorkspaceLanguageEnv) || {}
+  const workspaces = getWorkspaceConfigs()
+  const workspaceConfig = workspaces[key] || {}
   delete workspaceConfig[languageId]
   if (Object.keys(workspaceConfig).length === 0) {
-    store.delete(key)
+    delete workspaces[key]
   } else {
-    store.set(key, workspaceConfig)
+    workspaces[key] = workspaceConfig
   }
+  store.set('workspaces', workspaces)
 }
 
 /**
@@ -77,7 +85,7 @@ export function removeLanguageEnv(workspacePath: string, languageId: string): vo
  */
 export function getAllLanguageEnv(workspacePath: string): WorkspaceLanguageEnv {
   const key = normalizeKey(workspacePath)
-  return (store.get(key) as WorkspaceLanguageEnv) || {}
+  return getWorkspaceConfigs()[key] || {}
 }
 
 /**
@@ -87,7 +95,9 @@ export function resolveRuntimePath(workspacePath: string, languageId: string): s
   // 1. 手动配置优先
   const manual = getLanguageEnv(workspacePath, languageId)
   if (manual?.runtimePath) {
-    return manual.runtimePath
+    const resolvedManual = resolveExecutable(manual.runtimePath)
+    if (resolvedManual) return resolvedManual
+    logger.lsp.warn(`[LanguageEnv] Configured ${languageId} runtime no longer exists: ${manual.runtimePath}`)
   }
 
   // 2. 自动检测
@@ -219,17 +229,39 @@ function detectRustRuntime(workspacePath: string): string | null {
 function getSystemDefault(languageId: string): string {
   const isWin = process.platform === 'win32'
   switch (languageId) {
-    case 'python': return isWin ? 'python' : 'python3'
-    case 'go': return 'go'
-    case 'rust': return 'rustc'
+    case 'python': return resolveExecutable(isWin ? 'python' : 'python3') || (isWin ? 'python' : 'python3')
+    case 'go': return resolveExecutable('go') || 'go'
+    case 'rust': return resolveExecutable('rustc') || 'rustc'
     case 'cpp':
     case 'c': return isWin ? 'cl' : 'gcc'
     default: return languageId
   }
 }
 
+function resolveExecutable(command: string): string | null {
+  if (path.isAbsolute(command)) return fs.existsSync(command) ? path.resolve(command) : null
+
+  const searchDirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean)
+  const extensions = process.platform === 'win32'
+    ? ['', ...(process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';').map(ext => ext.toLowerCase())]
+    : ['']
+
+  for (const dir of searchDirs) {
+    for (const extension of extensions) {
+      const candidateName = extension && !command.toLowerCase().endsWith(extension) ? `${command}${extension}` : command
+      const candidate = path.join(dir, candidateName)
+      if (fs.existsSync(candidate)) return path.resolve(candidate)
+    }
+  }
+  return null
+}
+
 // ============ 内部工具 ============
 
 function normalizeKey(workspacePath: string): string {
-  return workspacePath.replace(/\\/g, '/').toLowerCase()
+  return workspacePath.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
+}
+
+function getWorkspaceConfigs(): Record<string, WorkspaceLanguageEnv> {
+  return (store.get('workspaces') as Record<string, WorkspaceLanguageEnv> | undefined) || {}
 }

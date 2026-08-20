@@ -7,28 +7,44 @@
  */
 export function pathToLspUri(filePath: string): string {
   const normalizedPath = filePath.replace(/\\/g, '/')
+  const encodePath = (value: string) => value
+    .split('/')
+    .map(segment => encodeURIComponent(segment))
+    .join('/')
+
   if (/^[a-zA-Z]:/.test(normalizedPath)) {
-    return `file:///${normalizedPath}`
+    const drive = normalizedPath.charAt(0).toLowerCase()
+    return `file:///${drive}%3A${encodePath(normalizedPath.slice(2))}`
   }
-  return `file://${normalizedPath}`
+  if (normalizedPath.startsWith('//')) {
+    const [authority, ...segments] = normalizedPath.slice(2).split('/')
+    return `file://${authority}/${segments.map(segment => encodeURIComponent(segment)).join('/')}`
+  }
+  return `file://${encodePath(normalizedPath)}`
 }
 
 /**
  * 将 LSP URI 转换为文件路径
  */
 export function lspUriToPath(uri: string): string {
-  let path = uri
-  if (path.startsWith('file:///')) {
-    path = path.slice(8)
-    if (!/^[a-zA-Z]:/.test(path)) {
-      path = `/${path}`
-    }
-  } else if (path.startsWith('file://')) {
-    path = path.slice(7)
+  if (!uri.toLowerCase().startsWith('file://')) return uri
+
+  let filePath = uri.slice(7)
+  const hasAuthority = !filePath.startsWith('/')
+  if (hasAuthority) {
+    const slashIndex = filePath.indexOf('/')
+    const authority = slashIndex >= 0 ? filePath.slice(0, slashIndex) : filePath
+    const pathname = slashIndex >= 0 ? filePath.slice(slashIndex) : ''
+    try { filePath = `//${authority}${decodeURIComponent(pathname)}` } catch { filePath = `//${authority}${pathname}` }
+  } else {
+    try { filePath = decodeURIComponent(filePath) } catch { /* retain original encoding */ }
+    if (/^\/[a-zA-Z]:/.test(filePath)) filePath = filePath.slice(1)
   }
-  try { path = decodeURIComponent(path) } catch { }
-  if (/^[a-zA-Z]:/.test(path)) path = path.replace(/\//g, '\\')
-  return path
+
+  if (/^[a-zA-Z]:/.test(filePath) || filePath.startsWith('//')) {
+    return filePath.replace(/\//g, '\\')
+  }
+  return filePath
 }
 
 /**
@@ -37,31 +53,5 @@ export function lspUriToPath(uri: string): string {
  */
 export function normalizeLspUri(uri: string): string {
   if (!uri) return uri
-
-  try {
-    // 解码 URI
-    let normalized = decodeURIComponent(uri)
-
-    // 统一 file:// 协议格式
-    if (normalized.startsWith('file:///')) {
-      // Windows: file:///C:/path -> file:///C:/path
-      // Unix: file:///path -> file:///path
-      const pathPart = normalized.slice(8)
-
-      // Windows 盘符统一为大写
-      if (/^[a-z]:/.test(pathPart)) {
-        normalized = `file:///${pathPart.charAt(0).toUpperCase()}${pathPart.slice(1)}`
-      } else {
-        normalized = `file:///${pathPart}`
-      }
-    } else if (normalized.startsWith('file://')) {
-      // 补全第三个斜杠
-      normalized = `file:///${normalized.slice(7)}`
-    }
-
-    return normalized
-  } catch (e) {
-    console.error('[URI Utils] Failed to normalize URI:', uri, e)
-    return uri
-  }
+  return uri.toLowerCase().startsWith('file://') ? pathToLspUri(lspUriToPath(uri)) : uri
 }
