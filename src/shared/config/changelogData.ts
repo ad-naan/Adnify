@@ -43,6 +43,138 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.60",
+    "rawVersion": "1.7.60",
+    "date": "2026-08-21",
+    "title": "Webview 本地预览重构、管道式 Shell 降级与会话冷热内存管理",
+    "titleEn": "Webview Local Preview, Piped Shell Fallback & Cold-Thread Memory Management",
+    "highlight": "全面重构内置浏览器预览为 Webview 沙箱架构并支持 Dev Server 智能探测，新增 Agent 终端管道式执行降级通道，引入线程消息分层冷热卸载与零冗余元数据持久化，显著削减长会话内存与主进程卡顿",
+    "highlightEn": "Rebuilt embedded browser preview on isolated Webviews with automatic Dev Server discovery, added Piped Shell execution fallback for terminal integration, introduced thread message cold/hot hydration windows and zero-redundancy metadata persistence to drastically reduce long-session memory and main-process stalls",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "feature",
+        "label": "核心新特性 / Features",
+        "labelEn": "Features",
+        "items": [
+          {
+            "title": "内置浏览器预览全面升级为 Webview 架构",
+            "titleEn": "Embedded Browser Preview Upgraded to Webview Architecture",
+            "details": [
+              "内置 Dev Server 预览彻底从 iframe 迁移为独立的 Electron <webview> 沙箱进程，支持前进/后退/刷新导航控制与真实 did-fail-load 错误码捕获，消除 CSP 跨域与 frame-ancestors 拦截限制",
+              "主进程部署 WebviewGuard 看门狗，强制实施会话隔离与参数白名单，阻断非安全外部跳转与恶意提权"
+            ],
+            "detailsEn": [
+              "Migrated local dev server preview from iframes to isolated Electron <webview> guest processes, providing accurate navigation history, real did-fail-load error reporting, and freedom from CSP/frame-ancestors blocking",
+              "Enforced WebviewGuard in the main process to isolate guest sessions and prevent unsafe external navigations or permission escalation"
+            ]
+          },
+          {
+            "title": "本地开发服务智能探测与专属面板",
+            "titleEn": "Dev Server Auto-Discovery & Dedicated Local Servers Panel",
+            "details": [
+              "自动从终端输出与端口监听中捕获前端开发服务器（Vite、Next.js、Webpack 等），主进程提供安全的高速本地探活（Probe）通道",
+              "状态栏新增服务运行指示器与「Local Servers」面板，支持一键在内置预览标签页或系统浏览器中打开"
+            ],
+            "detailsEn": [
+              "Automatically discovers running frontend dev servers from terminal output and active ports, backed by a fast native main-process probe channel",
+              "Added a status bar server indicator and a dedicated Local Servers panel for one-click opening in embedded preview tabs or external browsers"
+            ]
+          },
+          {
+            "title": "Agent 终端管道式执行降级通道",
+            "titleEn": "Piped Shell Fallback for Agent Terminal Integration",
+            "details": [
+              "当终端 Shell Integration 因环境（如 Windows cmd.exe 或握手丢失）无法判定命令边界时，自动降级至独立的管道式执行管道（Piped Shell），彻底杜绝假阳性失败误报",
+              "直连子进程精准获取退出码、标准输出/错误，自动剥离 ANSI 控制符，并在超时或取消时递归清理进程树"
+            ],
+            "detailsEn": [
+              "Automatically falls back to piped process execution when terminal shell integration fails to frame command boundaries, eliminating false command failures",
+              "Captures exact exit codes, stdout/stderr, strips ANSI escape codes, and reliably reaps child process trees on timeouts or cancellations"
+            ]
+          },
+          {
+            "title": "系统设置新增装饰性动画开关",
+            "titleEn": "Decorative Animations Toggle in System Settings",
+            "details": [
+              "新增全局「装饰性动画」开关，支持一键关闭情绪流光、粒子特效与渐变动画，便于轻薄本低功耗运行与低配设备加速",
+              "适配系统 prefers-reduced-motion 规范，降低高负载下的 GPU 渲染开销"
+            ],
+            "detailsEn": [
+              "Added a global decorative animations toggle to disable ambient glows, particle sliders, and animated gradients for battery saving and performance",
+              "Honors prefers-reduced-motion settings and reduces GPU rendering load under heavy workflows"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "体验与性能优化 / Improvements",
+        "labelEn": "Improvements",
+        "items": [
+          {
+            "title": "线程消息分层冷热卸载与持久化零冗余",
+            "titleEn": "Thread Cold/Hot Hydration Window & Zero-Redundancy Serialization",
+            "details": [
+              "多任务长会话引入冷热滑动窗口，自动卸载非活跃线程的消息体并在切换时从 SQLite 按需回填，显著释放大文本工具结果与图片占用的内存",
+              "元数据脏检测改用引用与浅比较，消除会话持久化时对全量快照和 base64 数据的无意义 JSON 序列化"
+            ],
+            "detailsEn": [
+              "Introduced a thread hydration sliding window to automatically release message bodies of cold threads from memory while restoring on demand from SQLite",
+              "Replaced full-tree metadata JSON serialization with reference-based dirty checks, eliminating high memory churn on every session flush"
+            ]
+          },
+          {
+            "title": "Plan 任务看板流式投影与 BM25 增量索引提速",
+            "titleEn": "Plan Workbench Streaming Projection & BM25 Incremental Indexing",
+            "details": [
+              "在 Plan 看板与历史投影中引入 WeakMap 消息缓存与反向单趟扫描，消除 Agent 流式生成时对历史消息的全量拷贝与重复逆序遍历",
+              "BM25 倒排索引引入文档片段缓存，文件监听批量变更时的索引保存耗时由 ~37ms 降至 ~8ms，消除主进程卡顿"
+            ],
+            "detailsEn": [
+              "Cached message scans with WeakMaps and linear single-pass walks in Plan workbench projections to maintain 60fps responsiveness during rapid streaming",
+              "Added per-document JSON fragment caching to BM25 index serialization, reducing main-process blocking from ~37ms to ~8ms during batch file changes"
+            ]
+          },
+          {
+            "title": "界面渲染层与合成动效优化",
+            "titleEn": "Compositor Layer Promotion & Render Optimizations",
+            "details": [
+              "欢迎页与启动加载页动效提升至 GPU 合成层，改用 transform 与 opacity 驱动，消除高斯模糊重算与布局抖动",
+              "移除全局 CSS 进度流光滤镜动画中的每帧 hue-rotate 像素重绘"
+            ],
+            "detailsEn": [
+              "Promoted welcome and loader visual elements to GPU compositor layers using transform/opacity to eliminate layout thrashing and blur re-convolutions",
+              "Removed costly per-frame hue-rotate filters from process fluid borders"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "fix",
+        "label": "问题修复与构建优化 / Bug Fixes",
+        "labelEn": "Bug Fixes",
+        "items": [
+          {
+            "title": "原生模块安装鲁棒性与语言服务兼容性",
+            "titleEn": "Native Module Install Robustness & Language Server Compatibility",
+            "details": [
+              "Postinstall 优先使用随包预编译 Node-API 二进制，并在 Windows 下跳过无效的 cpu-features 编译，避免因缺少 MSVC 工具链报错",
+              "LSP 语言服务解析兼容平铺式 SymbolInformation 结构，保障符号跳转与大纲稳定性",
+              "修复工作区关闭瞬间异步写入操作导致的悬挂与无效重试问题"
+            ],
+            "detailsEn": [
+              "Postinstall prefers prebuilt Node-API binaries and skips Windows cpu-features builds, avoiding MSVC toolchain requirements",
+              "Enhanced LSP symbol mapping to support flat SymbolInformation structures alongside hierarchical DocumentSymbols",
+              "Fixed dangling I/O flushes and retry loops when a workspace is closed while commits are buffered"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.59",
     "rawVersion": "1.7.59",
     "date": "2026-08-20",
@@ -50,8 +182,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Enterprise Persistence, External File Interop & End-to-End Performance",
     "highlight": "以 SQLite 单写者架构重构会话与 Plan 持久化，完善外部文件安全访问、LSP 与文件树联动，并消除长会话渲染、JSONL 写放大和主进程阻塞热点",
     "highlightEn": "Rebuilt session and Plan persistence around a single-writer SQLite architecture, completed secure external-file and LSP integration, and removed long-session rendering, JSONL write amplification and main-process stalls",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
