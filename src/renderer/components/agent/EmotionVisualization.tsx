@@ -7,6 +7,7 @@ import React, { useId, useMemo } from 'react'
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion'
 import type { EmotionState, EmotionDetection } from '@/renderer/agent/types/emotion'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 interface EmotionVisualizationProps {
   emotion: EmotionDetection
@@ -17,6 +18,8 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
   emotion,
   history,
 }) => {
+  const decorativeAnimations = useDecorativeAnimations()
+
   // 创建动态的粒子效果（仅初始化一次，避免每次渲染跳动）
   const particles = useMemo(() => Array.from({ length: 20 }, (_, i) => ({
     id: i,
@@ -42,9 +45,10 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
 
   return (
     <div className="relative w-full h-48 overflow-hidden rounded-xl bg-gradient-to-br from-black/20 to-black/40">
-      {/* 背景粒子效果 */}
+      {/* 背景粒子效果 —— 20 个粒子各自跑一条 y/x/opacity/scale 循环，是这个面板
+          最重的一项；关掉装饰动画时整组不挂载。 */}
       <div className="absolute inset-0">
-        {particles.map(particle => (
+        {decorativeAnimations && particles.map(particle => (
           <motion.div
             key={particle.id}
             className="absolute rounded-full"
@@ -91,16 +95,18 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
               top: '50%',
               x: '-50%',
               y: '-50%',
+              willChange: decorativeAnimations ? 'opacity' : undefined,
             }}
-            animate={{
-              scale: [1, 1.2, 1],
+            // Opacity only: scaling a blur-xl layer re-rasterizes the blur every
+            // frame, which is the most expensive thing on this panel.
+            animate={decorativeAnimations ? {
               opacity: [0.3, 0.5, 0.3],
-            }}
-            transition={{
+            } : undefined}
+            transition={decorativeAnimations ? {
               duration: 2,
               repeat: Infinity,
               ease: 'easeInOut',
-            }}
+            } : undefined}
           />
 
           {/* 主球 */}
@@ -111,15 +117,16 @@ export const EmotionVisualization: React.FC<EmotionVisualizationProps> = ({
               height: 80,
               backgroundColor: color,
               boxShadow: `0 0 40px ${color}40`,
+              willChange: decorativeAnimations ? 'transform' : undefined,
             }}
-            animate={{
+            animate={decorativeAnimations ? {
               rotate: [0, 360],
-            }}
-            transition={{
+            } : undefined}
+            transition={decorativeAnimations ? {
               duration: 20,
               repeat: Infinity,
               ease: 'linear',
-            }}
+            } : undefined}
           >
             {/* 内部光效 */}
             <div

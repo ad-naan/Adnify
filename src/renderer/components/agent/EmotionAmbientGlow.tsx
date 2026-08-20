@@ -12,6 +12,7 @@ import type { EmotionState } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_COLORS } from '@/renderer/agent/emotion'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
+import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 const GLOW_CONFIG: Record<EmotionState, {
   opacity: number
@@ -50,6 +51,7 @@ function buildBackground(corner: string, color: string, spread: number, opacity:
 
 export const EmotionAmbientGlow: React.FC = () => {
   const emotion = useEmotionState()
+  const decorativeAnimations = useDecorativeAnimations()
   const [ambientGlowEnabled, setAmbientGlowEnabled] = useState(loadEmotionPanelSettings().ambientGlow)
 
   useEffect(() => {
@@ -65,6 +67,8 @@ export const EmotionAmbientGlow: React.FC = () => {
 
   // neutral 或 0 强度不渲染
   if (!ambientGlowEnabled || state === 'neutral' || intensity === 0 || config.opacity === 0) return null
+
+  const animate = config.animated && decorativeAnimations
 
   // 实际透明度 = 基础透明度 * 强度
   const effectiveOpacity = config.opacity * Math.max(intensity, 0.3)
@@ -89,12 +93,13 @@ export const EmotionAmbientGlow: React.FC = () => {
                   height: config.spread * 2,
                   ...cornerCSS[corner],
                   background: buildBackground(corner, config.color, config.spread, effectiveOpacity),
+                  willChange: animate ? 'opacity' : undefined,
                 }}
-                animate={config.animated ? {
-                  opacity: [1, 0.6, 1],
-                  scale: [1, 1.05, 1],
-                } : undefined}
-                transition={config.animated ? {
+                // Opacity only. Scaling these radial-gradient panes (up to
+                // 600x600 each, four at once) re-rasterized the gradient every
+                // frame; the pulse reads the same without it.
+                animate={animate ? { opacity: [1, 0.6, 1] } : undefined}
+                transition={animate ? {
                   duration: 4,
                   repeat: Infinity,
                   ease: 'easeInOut',

@@ -5,7 +5,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useState, useEffect, useRef } from 'react'
-import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe, BookOpen } from 'lucide-react'
+import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Globe, BookOpen, Sparkles } from 'lucide-react'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
@@ -16,6 +16,7 @@ import { Agent } from '@/renderer/agent/core'
 import { memoryService } from '@/renderer/agent/services/memoryService'
 import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
 import { resolveRuntimeModelRoutingConfig } from '@shared/config/modelRouting'
+import { loadEmotionPanelSettings, saveEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import type { ProviderModelConfig, SettingsState } from '@shared/config/settings'
 import type { ProxyConfig } from '@shared/config/types'
 
@@ -50,8 +51,19 @@ export function SystemSettings({
     const [isClearing, setIsClearing] = useState(false)
     const [includeApiKeys, setIncludeApiKeys] = useState(false)
     const [logPath, setLogPath] = useState('')
+    const [decorativeAnimations, setDecorativeAnimations] = useState(
+        () => loadEmotionPanelSettings().decorativeAnimations,
+    )
     const fileInputRef = useRef<HTMLInputElement>(null)
     const getStore = () => useStore.getState()
+
+    useEffect(() => {
+        return subscribeEmotionPanelSettings(settings => setDecorativeAnimations(settings.decorativeAnimations))
+    }, [])
+
+    const handleToggleDecorativeAnimations = (enabled: boolean) => {
+        saveEmotionPanelSettings({ ...loadEmotionPanelSettings(), decorativeAnimations: enabled })
+    }
 
     const handleToggleProxy = (enabled: boolean) => {
         setProxySettings({
@@ -285,6 +297,55 @@ export function SystemSettings({
 
     return (
         <div className="space-y-8 animate-fade-in pb-10">
+            <section>
+                <div className="flex items-center gap-2 mb-5 ml-1">
+                    <Sparkles className="w-4 h-4 text-accent" />
+                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                        {language === 'zh' ? '外观与性能' : 'Appearance & Performance'}
+                    </h4>
+                </div>
+                <div className="space-y-4">
+                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm font-bold text-text-primary">
+                                    {language === 'zh' ? '装饰性动画' : 'Decorative Animations'}
+                                </div>
+                                <div className="text-xs text-text-muted mt-1 opacity-70">
+                                    {language === 'zh'
+                                        ? '呼吸光晕、漂浮粒子、脉冲指示点等循环装饰动效。关闭可显著降低 GPU 占用，加载中和流式输出等状态动画不受影响。'
+                                        : 'Looping decorative effects such as breathing glows, floating particles, and pulsing dots. Turning this off significantly lowers GPU usage; state animations like loading and streaming are unaffected.'}
+                                </div>
+                            </div>
+                            <Switch
+                                checked={decorativeAnimations}
+                                onChange={(e) => handleToggleDecorativeAnimations(e.target.checked)}
+                            />
+                        </div>
+
+                        {!decorativeAnimations && (
+                            <div className="flex items-start gap-2 text-[10px] font-medium text-text-muted bg-white/5 px-3 py-2 rounded-lg border border-border">
+                                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    {language === 'zh'
+                                        ? '装饰动画已关闭。界面布局和配色保持不变，只是不再持续重绘。'
+                                        : 'Decorative animations are off. Layout and colors are unchanged — the interface simply stops repainting continuously.'}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                            <div>
+                                {language === 'zh'
+                                    ? '系统的“减少动态效果”偏好会自动关闭这些动画，无需在此手动设置。'
+                                    : 'Your system “reduce motion” preference disables these automatically — no need to set it here.'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section>
                 <div className="flex items-center gap-2 mb-5 ml-1">
                     <ExternalLink className="w-4 h-4 text-accent" />

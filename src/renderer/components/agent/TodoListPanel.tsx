@@ -90,11 +90,14 @@ export const TodoListPanel = memo(({ todos, headerPrefix }: TodoListPanelProps) 
           />
           {hasInProgress && (
             <motion.div
-              className="absolute inset-y-0 w-1/2 rounded-full"
+              className="absolute inset-y-0 left-0 w-1/2 rounded-full"
               style={{
                 background: 'linear-gradient(90deg, transparent, rgb(var(--accent) / 0.5), transparent)',
+                willChange: 'transform',
               }}
-              animate={{ left: ['-50%', '150%'] }}
+              // Animating `left` invalidates layout each frame; x is a compositor
+              // transform. This one stays on — it signals work in progress.
+              animate={{ x: ['-100%', '300%'] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
             />
           )}
