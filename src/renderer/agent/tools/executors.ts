@@ -2337,10 +2337,9 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 userRequest: requestMessage?.role === 'user' ? getMessageText(requestMessage.content).trim() : undefined,
             }
 
-            // 保存规划文件 (json)
-            const jsonPath = `${planDir}/${planId}.json`
-            internalWriteTracker.mark(jsonPath)
-            await api.file.write(jsonPath, JSON.stringify(plan, null, 2))
+            // Task Plan state is transactional; Markdown stage documents remain
+            // workspace artifacts for review and version control.
+            await api.session.upsertPlan(plan)
 
             // 添加到 store。PlanWorkspace 订阅 activePlanId，会立即展示新计划。
             agentStorePlanBridge.addPlan(plan)
@@ -2355,10 +2354,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 success: true,
                 result: getLocalizedText(
                     getCurrentLanguage(),
-                    `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n规划文件：${jsonPath}\n需求文档：${mdPath}\n\n计划已显示在常驻看板中，请先审核，再点击“开始执行”。`,
-                    `Created task plan "${name}" with ${tasks.length} tasks.${reassignedCount ? ` ${reassignedCount} invalid provider/model assignment(s) were replaced with configured routes.` : ''}\nPlan file: ${jsonPath}\nRequirements: ${mdPath}\n\nThe plan is now shown in the persistent board. Review it, then click "Start Execution".`,
+                    `已创建任务规划“${name}”，共 ${tasks.length} 个任务。\n计划状态已安全存入 SQLite。\n需求文档：${mdPath}\n\n计划已显示在常驻看板中，请先审核，再点击“开始执行”。`,
+                    `Created task plan "${name}" with ${tasks.length} tasks.${reassignedCount ? ` ${reassignedCount} invalid provider/model assignment(s) were replaced with configured routes.` : ''}\nPlan state is stored transactionally in SQLite.\nRequirements: ${mdPath}\n\nThe plan is now shown in the persistent board. Review it, then click "Start Execution".`,
                 ),
-                meta: { planId, planPath: jsonPath, stopLoop: true },
+                meta: { planId, storage: 'sqlite', stopLoop: true },
             }
         } catch (err) {
             const error = toAppError(err)
@@ -2525,14 +2524,6 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 status: 'draft',
                 validation: undefined,
             })
-
-            // 更新 JSON 文件
-            const updatedPlan = store.getPlanById(planId)
-            if (updatedPlan) {
-                const jsonPath = `${ctx.workspacePath}/.adnify/plan/${planId}.json`
-                internalWriteTracker.mark(jsonPath)
-                await api.file.write(jsonPath, JSON.stringify(updatedPlan, null, 2))
-            }
 
             return {
                 success: true,

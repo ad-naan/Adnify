@@ -377,6 +377,9 @@ export interface ElectronAPI {
   sessionLoadMessages: (threadId: string) => Promise<unknown[]>
   sessionLoadBranchMessages: (threadId: string) => Promise<Array<{ id: string; messages: unknown[] }>>
   sessionGetStats: () => Promise<SessionStorageStats>
+  sessionLoadPlans: () => Promise<unknown[]>
+  sessionUpsertPlan: (plan: unknown) => Promise<boolean>
+  sessionDeletePlan: (planId: string) => Promise<boolean>
   sessionApplyPatch: (patch: SessionPatch) => Promise<boolean>
   sessionClear: () => Promise<boolean>
   readDir: (path: string) => Promise<FileItem[]>

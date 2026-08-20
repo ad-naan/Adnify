@@ -272,6 +272,9 @@ export interface ElectronAPI {
   sessionLoadMessages: (threadId: string) => Promise<unknown[]>
   sessionLoadBranchMessages: (threadId: string) => Promise<Array<{ id: string; messages: unknown[] }>>
   sessionGetStats: () => Promise<SessionStorageStats>
+  sessionLoadPlans: () => Promise<unknown[]>
+  sessionUpsertPlan: (plan: unknown) => Promise<boolean>
+  sessionDeletePlan: (planId: string) => Promise<boolean>
   sessionApplyPatch: (patch: SessionPatch) => Promise<boolean>
   sessionClear: () => Promise<boolean>
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
@@ -589,6 +592,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sessionLoadMessages: (threadId: string) => ipcRenderer.invoke('session:loadMessages', threadId),
   sessionLoadBranchMessages: (threadId: string) => ipcRenderer.invoke('session:loadBranchMessages', threadId),
   sessionGetStats: () => ipcRenderer.invoke('session:getStats'),
+  sessionLoadPlans: () => ipcRenderer.invoke('session:loadPlans'),
+  sessionUpsertPlan: (plan: unknown) => ipcRenderer.invoke('session:upsertPlan', plan),
+  sessionDeletePlan: (planId: string) => ipcRenderer.invoke('session:deletePlan', planId),
   sessionApplyPatch: (patch: SessionPatch) => ipcRenderer.invoke('session:applyPatch', patch),
   sessionClear: () => ipcRenderer.invoke('session:clear'),
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),

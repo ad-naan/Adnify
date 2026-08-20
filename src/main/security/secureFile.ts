@@ -11,7 +11,7 @@ import { pathToFileURL } from 'url'
 import { promises as fsPromises } from 'fs'
 import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
-import { isUserAuthorizedPath } from '../services/fileAssociation'
+import { authorizeUserFile, isUserAuthorizedFile } from './userFileAccess'
 import * as os from 'os'
 import { getUserConfigDir } from '../services/configPath'
 
@@ -75,6 +75,23 @@ function isAllowedGlobalResourcePath(filePath: string): boolean {
   } catch {
     return false
   }
+}
+
+type FileAccessKind = 'read' | 'write' | 'manage'
+
+/**
+ * Single policy entry point for renderer-originated file access.
+ * Agent tools retain their own workspace-only validation before reaching IPC.
+ */
+function canAccessFile(
+  filePath: string,
+  workspace: { roots: string[] } | null,
+  kind: FileAccessKind,
+): boolean {
+  if (!filePath || securityManager.isSensitivePath(filePath)) return false
+  if (securityManager.validateWorkspacePath(filePath, workspace?.roots || [])) return true
+  if (kind !== 'manage' && isUserAuthorizedFile(filePath)) return true
+  return kind === 'read' && isAllowedGlobalResourcePath(filePath)
 }
 
 /**
@@ -178,6 +195,7 @@ export function registerSecureFileHandlers(
 
       try {
         const content = await fsPromises.readFile(filePath, 'utf-8')
+        authorizeUserFile(filePath, 'file-picker')
         securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
           userAction: true,
           size: content.length,
@@ -196,9 +214,9 @@ export function registerSecureFileHandlers(
   })
 
   // 读取目录
-  ipcMain.handle('file:readDir', async (_, dirPath: string) => {
+  ipcMain.handle('file:readDir', async (event, dirPath: string) => {
     if (!dirPath) return []
-    if (securityManager.isSensitivePath(dirPath)) return []
+    if (!canAccessFile(dirPath, getWorkspaceSessionFn(event), 'read')) return []
 
     try {
       const items = await fsPromises.readdir(dirPath, { withFileTypes: true })
@@ -213,9 +231,9 @@ export function registerSecureFileHandlers(
   })
 
   // 获取目录树
-  ipcMain.handle('file:getTree', async (_, dirPath: string, maxDepth = 2) => {
+  ipcMain.handle('file:getTree', async (event, dirPath: string, maxDepth = 2) => {
     if (!dirPath || maxDepth < 0) return ''
-    if (securityManager.isSensitivePath(dirPath)) return ''
+    if (!canAccessFile(dirPath, getWorkspaceSessionFn(event), 'read')) return ''
 
     const buildTree = async (currentPath: string, currentDepth: number): Promise<string> => {
       if (currentDepth >= maxDepth) return ''
@@ -251,19 +269,9 @@ export function registerSecureFileHandlers(
 
     const workspace = getWorkspaceSessionFn(event)
 
-    // 强制工作区边界（用户通过文件关联主动打开的文件或合法全局 skills/config 可绕过）
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
-        securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-          reason: '安全底线：超出工作区边界',
-        })
-        return null
-      }
-    }
-
-    if (securityManager.isSensitivePath(filePath)) {
+    if (!canAccessFile(filePath, workspace, 'read')) {
       securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：敏感路径',
+        reason: '安全底线：路径未获授权',
       })
       return null
     }
@@ -297,18 +305,9 @@ export function registerSecureFileHandlers(
     if (!filePath) return null
     const workspace = getWorkspaceSessionFn(event)
 
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
-        securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-          reason: '安全底线：超出工作区边界',
-        })
-        return null
-      }
-    }
-
-    if (securityManager.isSensitivePath(filePath)) {
+    if (!canAccessFile(filePath, workspace, 'read')) {
       securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：敏感路径',
+        reason: '安全底线：路径未获授权',
       })
       return null
     }
@@ -345,27 +344,14 @@ export function registerSecureFileHandlers(
     }
 
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+    if (!canAccessFile(filePath, workspace, 'read')) {
       securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：超出工作区边界',
+        reason: '安全底线：路径未获授权',
         richContent: true,
       })
       return {
         success: false,
         error: 'Error: File path is outside the active workspace.',
-        contentKind: 'unknown',
-        sourceFormat: path.extname(filePath).replace('.', '').toLowerCase() || 'unknown',
-      }
-    }
-
-    if (securityManager.isSensitivePath(filePath)) {
-      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: '安全底线：敏感路径',
-        richContent: true,
-      })
-      return {
-        success: false,
-        error: 'Error: Access to this file is blocked by security rules.',
         contentKind: 'unknown',
         sourceFormat: path.extname(filePath).replace('.', '').toLowerCase() || 'unknown',
       }
@@ -404,9 +390,9 @@ export function registerSecureFileHandlers(
     const workspace = getWorkspaceSessionFn(event)
 
     if (targetPath) {
-      if (workspace && !securityManager.validateWorkspacePath(targetPath, workspace.roots)) {
+      if (!canAccessFile(targetPath, workspace, 'read')) {
         securityManager.logOperation(OperationType.FILE_READ, targetPath, false, {
-          reason: '安全底线：超出工作区边界',
+          reason: '安全底线：路径未获授权',
           imageAnalysis: true,
         })
         return {
@@ -415,16 +401,6 @@ export function registerSecureFileHandlers(
         }
       }
 
-      if (securityManager.isSensitivePath(targetPath)) {
-        securityManager.logOperation(OperationType.FILE_READ, targetPath, false, {
-          reason: '安全底线：敏感路径',
-          imageAnalysis: true,
-        })
-        return {
-          success: false,
-          error: 'Error: Access to this file is blocked by security rules.',
-        }
-      }
     }
 
     const result = await analyzeImage(request)
@@ -442,16 +418,9 @@ export function registerSecureFileHandlers(
 
     const workspace = getWorkspaceSessionFn(event)
 
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+    if (!canAccessFile(filePath, workspace, 'write')) {
       securityManager.logOperation(OperationType.FILE_WRITE, filePath, false, {
-        reason: '安全底线：超出工作区边界',
-      })
-      return false
-    }
-
-    if (securityManager.isSensitivePath(filePath)) {
-      securityManager.logOperation(OperationType.FILE_WRITE, filePath, false, {
-        reason: '安全底线：敏感路径',
+        reason: '安全底线：路径未获授权',
       })
       return false
     }
@@ -489,8 +458,7 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:ensureDir', async (event, dirPath: string) => {
     if (!dirPath) return false
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && !securityManager.validateWorkspacePath(dirPath, workspace.roots)) return false
-    if (securityManager.isSensitivePath(dirPath)) return false
+    if (!canAccessFile(dirPath, workspace, 'manage')) return false
     try {
       await fsPromises.mkdir(dirPath, { recursive: true })
       return true
@@ -502,12 +470,10 @@ export function registerSecureFileHandlers(
   // 保存文件（带对话框支持）
   ipcMain.handle('file:save', async (event, content: string, currentPath?: string, encoding?: string) => {
     if (currentPath) {
-      if (securityManager.isSensitivePath(currentPath)) return null
-
       const workspace = getWorkspaceSessionFn(event)
-      if (workspace && !securityManager.validateWorkspacePath(currentPath, workspace.roots)) {
+      if (!canAccessFile(currentPath, workspace, 'write')) {
         securityManager.logOperation(OperationType.FILE_WRITE, currentPath, false, {
-          reason: '安全底线：超出工作区边界',
+          reason: '安全底线：路径未获授权',
         })
         return null
       }
@@ -545,6 +511,7 @@ export function registerSecureFileHandlers(
       try {
         const success = await safeWriteFile(savePath, content, (encoding as any) || 'utf-8')
         if (!success) return null
+        authorizeUserFile(savePath, 'save-picker')
         securityManager.logOperation(OperationType.FILE_WRITE, savePath, true, {
           isNewFile: true,
           bypass: true,
@@ -559,14 +526,8 @@ export function registerSecureFileHandlers(
 
   // 文件是否存在
   ipcMain.handle('file:exists', async (event, filePath: string) => {
-    if (securityManager.isSensitivePath(filePath)) return false
-
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
-        return false
-      }
-    }
+    if (!canAccessFile(filePath, workspace, 'read')) return false
 
     try {
       await fsPromises.access(filePath)
@@ -579,14 +540,8 @@ export function registerSecureFileHandlers(
   // 文件大小/类型（读取前判断，避免大文件被预览截断后无法察觉）
   ipcMain.handle('file:stat', async (event, filePath: string) => {
     if (!filePath || typeof filePath !== 'string') return null
-    if (securityManager.isSensitivePath(filePath)) return null
-
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
-      if (!isUserAuthorizedPath(filePath) && !isAllowedGlobalResourcePath(filePath)) {
-        return null
-      }
-    }
+    if (!canAccessFile(filePath, workspace, 'read')) return null
 
     const stats = await getFileStats(filePath)
     if (!stats) return null
@@ -603,8 +558,7 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:mkdir', async (event, dirPath: string) => {
     if (!dirPath || typeof dirPath !== 'string') return false
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && !securityManager.validateWorkspacePath(dirPath, workspace.roots)) return false
-    if (securityManager.isSensitivePath(dirPath)) return false
+    if (!canAccessFile(dirPath, workspace, 'manage')) return false
 
     try {
       await fsPromises.mkdir(dirPath, { recursive: true })
@@ -641,15 +595,9 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:delete', async (event, filePath: string) => {
     if (!filePath) return false
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && !securityManager.validateWorkspacePath(filePath, workspace.roots)) {
+    if (!canAccessFile(filePath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
         reason: '安全底线：超出工作区边界',
-      })
-      return false
-    }
-    if (securityManager.isSensitivePath(filePath)) {
-      securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-        reason: '安全底线：敏感路径',
       })
       return false
     }
@@ -703,16 +651,9 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:copy', async (event, sourcePath: string, destinationPath: string) => {
     if (!sourcePath || !destinationPath) return false
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && (!securityManager.validateWorkspacePath(sourcePath, workspace.roots) || !securityManager.validateWorkspacePath(destinationPath, workspace.roots))) {
+    if (!canAccessFile(sourcePath, workspace, 'manage') || !canAccessFile(destinationPath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, false, {
         reason: '安全底线：超出工作区边界',
-        destinationPath,
-      })
-      return false
-    }
-    if (securityManager.isSensitivePath(sourcePath) || securityManager.isSensitivePath(destinationPath)) {
-      securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, false, {
-        reason: '安全底线：敏感路径',
         destinationPath,
       })
       return false
@@ -746,16 +687,9 @@ export function registerSecureFileHandlers(
   ipcMain.handle('file:rename', async (event, oldPath: string, newPath: string) => {
     if (!oldPath || !newPath) return false
     const workspace = getWorkspaceSessionFn(event)
-    if (workspace && (!securityManager.validateWorkspacePath(oldPath, workspace.roots) || !securityManager.validateWorkspacePath(newPath, workspace.roots))) {
+    if (!canAccessFile(oldPath, workspace, 'manage') || !canAccessFile(newPath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_RENAME, oldPath, false, {
         reason: '安全底线：超出工作区边界',
-        newPath,
-      })
-      return false
-    }
-    if (securityManager.isSensitivePath(oldPath) || securityManager.isSensitivePath(newPath)) {
-      securityManager.logOperation(OperationType.FILE_RENAME, oldPath, false, {
-        reason: '安全底线：敏感路径',
         newPath,
       })
       return false

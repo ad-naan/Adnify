@@ -24,6 +24,33 @@ import {
   resolveRuntimePath,
 } from '../lsp/languageEnvConfig'
 import { lspUriToPath } from '@shared/utils/uriUtils'
+import { authorizeUserFile } from '../security/userFileAccess'
+
+const NAVIGATION_METHODS = new Set([
+  'textDocument/definition',
+  'textDocument/typeDefinition',
+  'textDocument/implementation',
+])
+
+function authorizeNavigationTargets(result: unknown): void {
+  const locations = Array.isArray(result) ? result : result ? [result] : []
+  for (const location of locations) {
+    if (!location || typeof location !== 'object') continue
+    const value = location as { uri?: unknown; targetUri?: unknown }
+    const uri = typeof value.targetUri === 'string'
+      ? value.targetUri
+      : typeof value.uri === 'string'
+        ? value.uri
+        : null
+    if (uri?.toLowerCase().startsWith('file://')) {
+      try {
+        authorizeUserFile(lspUriToPath(uri), 'lsp-navigation')
+      } catch {
+        // Ignore one malformed server location without discarding valid results.
+      }
+    }
+  }
+}
 
 function getFallbackRoot(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
@@ -166,6 +193,7 @@ export function registerLspHandlers(preferencesStore?: any): void {
           textDocument: { uri: params.uri },
           position: { line: params.line, character: params.character },
         })
+        if (NAVIGATION_METHODS.has(method)) authorizeNavigationTargets(result)
         if (method === 'textDocument/definition') {
           logger.lsp.info('[LSP IPC] Definition result:', {
             serverName,

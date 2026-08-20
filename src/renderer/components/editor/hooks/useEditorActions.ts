@@ -42,11 +42,11 @@ export async function navigateToDefinition(
     editorInstance.revealPositionInCenter({ lineNumber: targetLine, column: targetCol })
   } else {
     // ── 跨文件：先 setPendingNavigation，再 safeOpenFile ──
-    // stdlib / 工作区外文件会被安全模块拦截，safeOpenFile 返回 { success: false }，静默失败
+    // LSP 导航目标由主进程授予精确到文件的会话权限；敏感系统路径仍会被拒绝。
     setPendingNavigation({ filePath: targetPath, line: targetLine, col: targetCol })
     const result = await safeOpenFile(targetPath, { showWarning: false, confirmLargeFile: false })
     if (!result.success) {
-      // 目标文件无法打开（stdlib、工作区外），清除挂起导航
+      // 目标文件不存在、过大或被安全策略拒绝时，清除挂起导航。
       setPendingNavigation({ filePath: '', line: 0, col: 0 })
     }
   }
