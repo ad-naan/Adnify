@@ -247,6 +247,12 @@ function createGroupedAPI() {
       setGoogleSearch: (apiKey: string, cx: string) => raw.httpSetGoogleSearch(apiKey, cx),
     },
 
+    // 本地预览
+    preview: {
+      probe: (url: string, timeout?: number) => raw.previewProbe(url, timeout),
+      openExternal: (url: string) => raw.previewOpenExternal(url),
+    },
+
     // 资源
     resources: {
       readJson: <T = unknown>(relativePath: string) => raw.resourcesReadJson<T>(relativePath),

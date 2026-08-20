@@ -39,6 +39,7 @@ import {
 import { isAssistantMessage, type TokenUsage } from '@renderer/agent/types'
 import { useDiagnosticsStore, getFileStats } from '@services/diagnosticsStore'
 import LspStatusIndicator from './LspStatusIndicator'
+import LocalServersIndicator from './LocalServersIndicator'
 import { EmotionStatusIndicator } from '../agent/EmotionStatusIndicator'
 import { motion, AnimatePresence } from 'framer-motion'
 import FileFormatControls from './FileFormatControls'
@@ -412,6 +413,8 @@ export default function StatusBar() {
           >
             <ToolCallLogContent language={language as 'en' | 'zh'} />
           </BottomBarPopover>
+
+          <LocalServersIndicator language={language as 'en' | 'zh'} />
         </div>
 
         <div className="flex items-center gap-0.5 h-full">
