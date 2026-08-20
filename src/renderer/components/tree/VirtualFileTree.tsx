@@ -126,6 +126,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const [dragOverPath, setDragOverPath] = useState<string | null>(null)
   const dragSourcePathRef = useRef<string | null>(null)
   const gitExcludeMenuAbortRef = useRef<AbortController | null>(null)
+  const lastAutoRevealedFileRef = useRef<string | null>(null)
 
   const handleGitIgnore = useCallback(async (
     node: FlattenedNode,
@@ -365,6 +366,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
     const normalizedFilePath = normalizePath(filePath)
     const normalizedWorkspace = normalizePath(workspacePath)
+    if (!pathStartsWith(normalizedFilePath, normalizedWorkspace)) return
 
     // 收集需要展开的目录路径（从工作区根目录开始，到文件的直接父目录）
     const pathsToExpand: string[] = []
@@ -430,6 +432,20 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       window.removeEventListener('explorer:reveal-active-file', handleReveal)
       window.removeEventListener('explorer:reveal-file', handleRevealFile)
     }
+  }, [activeFilePath, workspacePath, revealFile])
+
+  // Auto reveal only when the active editor file changes. Tracking the last
+  // path prevents directory expansion updates from repeatedly stealing scroll.
+  useEffect(() => {
+    if (!activeFilePath || !workspacePath || !pathStartsWith(activeFilePath, workspacePath)) {
+      lastAutoRevealedFileRef.current = null
+      return
+    }
+    if (lastAutoRevealedFileRef.current &&
+      pathEquals(lastAutoRevealedFileRef.current, activeFilePath)) return
+
+    lastAutoRevealedFileRef.current = activeFilePath
+    void revealFile(activeFilePath)
   }, [activeFilePath, workspacePath, revealFile])
 
   // 扁平化树结构（只包含可见节点）
@@ -502,19 +518,27 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     const index = flattenedNodes.findIndex(node => pathEquals(node.item.path, scrollToFile))
 
     if (index !== -1 && containerRef.current) {
-      const top = index * ITEM_HEIGHT
-      containerRef.current.scrollTo({
-        top: Math.max(0, top - containerHeight / 2),
-        behavior: 'smooth'
-      })
+      const container = containerRef.current
+      const itemTop = index * ITEM_HEIGHT
+      const itemBottom = itemTop + ITEM_HEIGHT
+      const viewportTop = container.scrollTop
+      const viewportBottom = viewportTop + container.clientHeight
+
+      if (itemTop < viewportTop) {
+        container.scrollTo({ top: itemTop, behavior: 'smooth' })
+      } else if (itemBottom > viewportBottom) {
+        container.scrollTo({
+          top: Math.max(0, itemBottom - container.clientHeight),
+          behavior: 'smooth'
+        })
+      }
 
       // 触发闪烁高亮动画
       setHighlightPath(scrollToFile)
       setTimeout(() => setHighlightPath(null), 2000)
+      setScrollToFile(null)
     }
-
-    setScrollToFile(null)
-  }, [scrollToFile, flattenedNodes, containerHeight])
+  }, [scrollToFile, flattenedNodes])
 
   // 计算可见范围
   const visibleRange = useMemo(() => {
