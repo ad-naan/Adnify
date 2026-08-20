@@ -345,10 +345,10 @@ export class McpRegistryService {
 
             for (const item of data.servers) {
                 const server = item.server
-                const meta = item._meta['io.modelcontextprotocol.registry/official']
+                const meta = item._meta?.['io.modelcontextprotocol.registry/official']
 
                 // 只取最新版本和活跃的服务器
-                if (!meta.isLatest || meta.status !== 'active') continue
+                if (!meta?.isLatest || meta.status !== 'active') continue
 
                 results.push(this.toSearchResult(server))
             }
