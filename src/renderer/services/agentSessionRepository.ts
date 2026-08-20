@@ -266,6 +266,34 @@ export class AgentSessionRepository {
     return this.hydratedBranchThreads.has(threadId)
   }
 
+  /**
+   * Drop the repository's own copy of a thread's messages.
+   *
+   * `commitBaselines` keeps the last committed message array per thread so the
+   * next patch can send only the changed tail. That is a second reference to
+   * every hydrated thread's history, so unloading a thread from the store frees
+   * nothing unless this is released too.
+   *
+   * Refuses while a commit is pending: that staged snapshot still holds the full
+   * messages, and committing it would re-populate the baseline. More importantly,
+   * a caller that unloaded anyway would mark the thread un-hydrated, making the
+   * pending patch skip its messages — losing writes that never reached disk.
+   * Returns whether the caller may proceed with unloading.
+   */
+  releaseThreadMessages(threadId: string): boolean {
+    if (this.commits.hasPending()) return false
+
+    const baseline = this.baselines.get(threadId)
+    // No baseline means nothing was ever committed for this thread; unloading
+    // would leave the next patch unable to tell what is already on disk.
+    if (!baseline) return false
+
+    // Forces a full message rewrite if this thread is edited after rehydration,
+    // which is correct — just less incremental than the tail-diff path.
+    baseline.messages = null
+    return true
+  }
+
   async deleteThread(threadId: string): Promise<void> {
     if (!this.latestSnapshot) {
       await api.session.applyPatch({ threads: [], deletedThreadIds: [threadId], branchThreads: [] })

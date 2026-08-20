@@ -18,6 +18,7 @@ import { destroyIndexService } from './indexing/indexService'
 import { setCustomLspBinDir } from './lsp/installer'
 import { lspManager as mainLspManager } from './lsp/lspManager'
 import { isLocalDevServerUrl, openExternalSafely } from './security/externalUrl'
+import { registerWebviewGuards } from './security/webviewGuard'
 import { cleanupFileWatcher } from './security/fileWatcher'
 import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from './services/fileAssociation'
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
@@ -354,8 +355,16 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
       allowRunningInsecureContent: false,
       v8CacheOptions: 'bypassHeatCheck',
       backgroundThrottling: false,
+      // 内置预览用 <webview> 承载本地 dev server：它跑在独立进程里，并且能给出
+      // 真实的导航历史与 did-fail-load 错误码（iframe 两者都拿不到）。
+      // guest 的 webPreferences 由 registerWebviewGuards 在主进程强制收敛，
+      // 不采信 host 页面传上来的属性。
+      webviewTag: true,
     },
   })
+
+  // 必须在加载页面内容之前注册，否则首个 webview 挂载时闸门还不在。
+  registerWebviewGuards(win)
 
   win.webContents.session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
     const detailRecord = details as Partial<{

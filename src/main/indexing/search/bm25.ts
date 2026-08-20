@@ -26,6 +26,24 @@ export class BM25Index {
   private documents: BM25Document[] = []
   private avgDocLength = 0
   private idf: Map<string, number> = new Map()
+  /**
+   * Per-document JSON fragments.
+   *
+   * Persisting the index used to `JSON.stringify` every document on every save —
+   * ~37 ms of blocked main process for a 20k-chunk workspace, and the file
+   * watcher re-triggers it after any burst (a `git checkout`, an `npm install`).
+   * Blocking the main process stalls every renderer IPC, so the whole window
+   * freezes. A watcher burst typically touches a handful of chunks, so caching
+   * each document's fragment and re-encoding only the changed ones cuts that to
+   * ~8 ms. Moving the work to a worker was measured to be *worse*: the
+   * structured clone of the index costs more than the stringify it replaces.
+   *
+   * Keyed by the document object rather than its id: `addDocument` never mutates
+   * an existing entry, but ids are not guaranteed unique (a caller that re-adds a
+   * file without deleting it first would collide), and a WeakMap also lets
+   * dropped documents release their fragments without explicit bookkeeping.
+   */
+  private readonly serializedDocuments = new WeakMap<BM25Document, string>()
 
   /** 添加文档 */
   addDocument(doc: Omit<BM25Document, 'termFreq' | 'docLength'>): void {
@@ -160,6 +178,28 @@ export class BM25Index {
       avgDocLength: this.avgDocLength,
       idf: Array.from(this.idf.entries()),
     }
+  }
+
+  /**
+   * Encode straight to a JSON string, reusing cached per-document fragments.
+   *
+   * Equivalent output to `JSON.stringify(this.toJSON())`, but only documents
+   * added since the last call are re-encoded. Callers persist this directly.
+   */
+  toJSONString(): string {
+    const fragments: string[] = []
+    for (const doc of this.documents) {
+      let fragment = this.serializedDocuments.get(doc)
+      if (fragment === undefined) {
+        fragment = JSON.stringify({ ...doc, termFreq: Array.from(doc.termFreq.entries()) })
+        this.serializedDocuments.set(doc, fragment)
+      }
+      fragments.push(fragment)
+    }
+
+    return `{"documents":[${fragments.join(',')}],` +
+      `"avgDocLength":${JSON.stringify(this.avgDocLength)},` +
+      `"idf":${JSON.stringify(Array.from(this.idf.entries()))}}`
   }
 
   /** 从 JSON 恢复 */

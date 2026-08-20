@@ -208,12 +208,12 @@ export class CodebaseIndexService {
 
   /** 结构化索引缓存的序列化内容 */
   private serializeStructuralIndex(): string {
-    return JSON.stringify({
-      bm25: this.bm25Index.toJSON(),
-      symbols: this.symbolIndex.toJSON(),
-      totalFiles: this.status.totalFiles,
-      savedAt: Date.now(),
-    })
+    // BM25 encodes itself with cached per-document fragments, so a watcher burst
+    // only re-encodes the chunks that actually changed.
+    return `{"bm25":${this.bm25Index.toJSONString()},` +
+      `"symbols":${JSON.stringify(this.symbolIndex.toJSON())},` +
+      `"totalFiles":${JSON.stringify(this.status.totalFiles)},` +
+      `"savedAt":${Date.now()}}`
   }
 
   /** 同步保存（仅用于 destroy 等无法 await 的场景） */

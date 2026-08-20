@@ -14,6 +14,7 @@ import { registerLLMHandlers, cleanupLLMService, cleanupAllLLMServices } from '.
 import { registerIndexingHandlers } from './indexing' // 索引
 import { registerLspHandlers } from './lsp' // LSP
 import { registerHttpHandlers } from './http' // HTTP
+import { registerPreviewHandlers } from './preview' // 本地预览探活
 import { registerMcpHandlers, cleanupMcpHandlers } from './mcp' // MCP
 import { registerResourcesHandlers } from './resources' // 资源
 import { registerDebugHandlers } from './debug' // 调试
@@ -101,6 +102,9 @@ export function registerAllHandlers(context: IPCContext) {
 
   // HTTP 请求（用于 web_search / read_url）
   registerHttpHandlers()
+
+  // 本地预览服务探活
+  registerPreviewHandlers()
 
   // MCP 服务
   registerMcpHandlers(getMainWindow)

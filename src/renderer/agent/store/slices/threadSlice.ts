@@ -132,12 +132,89 @@ const arePreviewArgsEqual = (
     return true
 }
 
+/**
+ * How many threads keep their message bodies in memory.
+ *
+ * Threads are capped at 50 and each stores up to 1000 messages, so a long
+ * session can hold tens of thousands of message objects — including tool results
+ * and base64 images — for conversations the user is not looking at. Message
+ * bodies live on disk (SQLite) and `switchThread` already re-hydrates lazily, so
+ * anything outside this window is recoverable.
+ */
+const HYDRATED_THREAD_LIMIT = 6
+
+/**
+ * A thread must not be unloaded while it is doing work: background plan tasks
+ * and sub-agents append to threads the user is not viewing, and the agent loop
+ * reads their messages to extract output.
+ */
+function isThreadBusy(thread: ChatThread): boolean {
+    return thread.streamState.phase !== 'idle'
+        || thread.executionMeta?.loopState === 'running'
+        || thread.isCompacting === true
+}
+
+/**
+ * Pick hydrated, idle threads to unload, keeping the most recently touched ones.
+ *
+ * `keepThreadId` is the thread being switched to — it is about to be rendered.
+ */
+function selectThreadsToUnload(
+    threads: Record<string, ChatThread>,
+    keepThreadId: string | null,
+): string[] {
+    const candidates = Object.values(threads)
+        .filter(thread => thread.id !== keepThreadId
+            && thread.messagesHydrated !== false
+            && thread.messages.length > 0
+            && !isThreadBusy(thread))
+        .sort((a, b) => b.lastModified - a.lastModified)
+
+    // The kept thread occupies one slot in the window.
+    const budget = keepThreadId ? HYDRATED_THREAD_LIMIT - 1 : HYDRATED_THREAD_LIMIT
+    return candidates.slice(Math.max(0, budget)).map(thread => thread.id)
+}
+
 export const createThreadSlice: StateCreator<
     ThreadSlice & BranchSlice,
     [],
     [],
     ThreadSlice
-> = (set, get) => ({
+> = (set, get) => {
+    /**
+     * Release message bodies for threads outside the hydration window.
+     *
+     * Marking `messagesHydrated: false` is what lets `switchThread` re-load them
+     * later, and it also tells the persistence layer to leave the on-disk history
+     * alone for that thread. Skipped entirely if the repository still has an
+     * uncommitted patch, since that patch is the only copy of those writes.
+     */
+    const unloadColdThreadMessages = (keepThreadId: string | null): void => {
+        const staleIds = selectThreadsToUnload(get().threads, keepThreadId)
+        if (staleIds.length === 0) return
+
+        const released = staleIds.filter(id => agentSessionRepository.releaseThreadMessages(id))
+        if (released.length === 0) return
+
+        set(state => {
+            const threads = { ...state.threads }
+            for (const id of released) {
+                const thread = threads[id]
+                // Re-check: `set` runs after the async gap above.
+                if (!thread || thread.messagesHydrated === false || isThreadBusy(thread)) continue
+                threads[id] = {
+                    ...thread,
+                    messages: [],
+                    messagesHydrated: false,
+                    messageCount: thread.messages.length,
+                }
+            }
+            return { threads }
+        })
+        logger.agent.info(`[ThreadSlice] Unloaded messages for ${released.length} cold thread(s)`)
+    }
+
+    return {
     threads: {},
     currentThreadId: null,
     threadMessageVersions: {},
@@ -237,6 +314,12 @@ export const createThreadSlice: StateCreator<
         if (!state.threads[threadId]) return
         if (state.currentThreadId === threadId) return
         set({ currentThreadId: threadId })
+
+        // Free the message bodies of threads that fell out of the hydration
+        // window. Done on switch rather than on a timer so it never races with an
+        // in-flight render, and always after currentThreadId moved so the new
+        // thread is never a candidate.
+        unloadColdThreadMessages(threadId)
 
         // Lazily hydrate both messages and normalized branch messages.
         const thread = state.threads[threadId]
@@ -585,4 +668,5 @@ export const createThreadSlice: StateCreator<
             }),
         }))
     },
-})
+    }
+}

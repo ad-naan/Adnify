@@ -825,6 +825,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   httpWebSearch: (query: string, maxResults?: number, timeout?: number) => ipcRenderer.invoke('http:webSearch', query, maxResults, timeout),
   httpSetGoogleSearch: (apiKey: string, cx: string) => ipcRenderer.invoke('http:setGoogleSearch', apiKey, cx),
 
+  // 本地预览探活（只允许本机地址，不经过第三方抓取服务）
+  previewProbe: (url: string, timeout?: number) => ipcRenderer.invoke('preview:probe', url, timeout),
+  previewOpenExternal: (url: string) => ipcRenderer.invoke('preview:openExternal', url),
+
   // Health Check API
   healthCheckProvider: (provider: string, apiKey: string, baseUrl?: string, timeout?: number, protocol?: string) =>
     ipcRenderer.invoke('healthCheck:check', provider, apiKey, baseUrl, timeout, protocol),
