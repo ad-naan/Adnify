@@ -111,14 +111,13 @@ export async function saveWorkspaceState(): Promise<void> {
   logger.system.info('[WorkspaceState] Saved:', state.openFiles.length, 'files')
 }
 
-export async function flushWorkspaceStatePersistence(): Promise<void> {
+export async function stageWorkspaceStatePersistence(): Promise<void> {
   if (saveTimeout) {
     clearTimeout(saveTimeout)
     saveTimeout = null
   }
 
   await saveWorkspaceState()
-  await workspaceStateRepository.flush()
 }
 
 export async function restoreWorkspaceState(): Promise<void> {
@@ -199,14 +198,8 @@ export function initWorkspaceStateSync(): () => void {
     }
   )
 
-  const handleBeforeUnload = async () => {
-    await flushWorkspaceStatePersistence()
-  }
-  window.addEventListener('beforeunload', handleBeforeUnload)
-
   return () => {
     unsubscribe()
-    window.removeEventListener('beforeunload', handleBeforeUnload)
     if (saveTimeout) {
       clearTimeout(saveTimeout)
     }

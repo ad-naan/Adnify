@@ -99,6 +99,16 @@ function createGroupedAPI() {
       removeFromRecent: (path: string) => raw.removeFromRecentWorkspaces(path),
     },
 
+    session: {
+      open: () => raw.sessionOpen(),
+      loadCatalog: () => raw.sessionLoadCatalog(),
+      loadMessages: (threadId: string) => raw.sessionLoadMessages(threadId),
+      loadBranchMessages: (threadId: string) => raw.sessionLoadBranchMessages(threadId),
+      getStats: () => raw.sessionGetStats(),
+      applyPatch: (patch: Parameters<typeof raw.sessionApplyPatch>[0]) => raw.sessionApplyPatch(patch),
+      clear: () => raw.sessionClear(),
+    },
+
     // 设置
     settings: {
       get: (key: string) => raw.getSetting(key),

@@ -21,6 +21,7 @@ import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
 import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
 import { registerSkillsHandlers } from './skills' // Skills
 import { registerOpenAIAuthHandlers } from './openaiAuth' // OpenAI OAuth
+import { registerSessionStorageHandlers } from './sessionStorage'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -121,6 +122,11 @@ export function registerAllHandlers(context: IPCContext) {
 
   // OpenAI OAuth
   registerOpenAIAuthHandlers()
+
+  registerSessionStorageHandlers({
+    getWindowWorkspace: context.getWindowWorkspace,
+    workspaceMetaStore,
+  })
 
   logger.ipc.info('[Security] 所有安全IPC处理器已注册')
 }

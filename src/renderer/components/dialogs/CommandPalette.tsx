@@ -16,7 +16,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useAgentHistoryActions } from '@/renderer/hooks/useAgent'
 import { t } from '@/renderer/i18n'
 import { keybindingService, formatShortcut, isMac } from '@/renderer/services/keybindingService'
-import { adnifyDir } from '@/renderer/services/adnifyDirService'
+import { workspaceFiles } from '@/renderer/services/workspaceFileRepository'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { useElevatedToastLayer } from '@/renderer/components/common/toastLayerStore'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
@@ -219,7 +219,7 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
           const { addRoot } = useStore.getState()
           addRoot(path)
           // 初始化新根目录的 .adnify
-          await adnifyDir.initialize(path)
+          await workspaceFiles.initialize(path)
           toast.success(`Added ${path} to workspace`)
         }
       },

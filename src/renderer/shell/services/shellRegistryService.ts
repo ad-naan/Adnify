@@ -1,6 +1,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import type { ShellLink, ShellPreset, ShellState } from '../types'
+import { persistenceCoordinator } from '@renderer/services/persistence/PersistenceCoordinator'
 
 const STORAGE_KEY = 'adnify-shell-registry'
 const SETTINGS_KEY = 'shellRegistry'
@@ -227,3 +228,8 @@ class ShellRegistryService {
 }
 
 export const shellRegistryService = new ShellRegistryService()
+persistenceCoordinator.register({
+  id: 'shell-registry',
+  scope: 'application',
+  flush: () => shellRegistryService.flush(),
+})

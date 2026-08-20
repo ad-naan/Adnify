@@ -1,16 +1,12 @@
-import { adnifyDir, type WorkspaceStateData } from './adnifyDirService'
+import { workspaceFiles, type WorkspaceStateData } from './workspaceFileRepository'
 
 class WorkspaceStateRepository {
   get(): Promise<WorkspaceStateData> {
-    return adnifyDir.getWorkspaceState()
+    return workspaceFiles.getWorkspaceState()
   }
 
   save(state: WorkspaceStateData): Promise<void> {
-    return adnifyDir.saveWorkspaceState(state)
-  }
-
-  flush(): Promise<void> {
-    return adnifyDir.flush()
+    return workspaceFiles.saveWorkspaceState(state)
   }
 }
 

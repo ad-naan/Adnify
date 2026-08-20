@@ -786,7 +786,7 @@ function initializeAgentSessionSync(): void {
 
 export async function initializeAgentStore(): Promise<void> {
     try {
-        // 注意：不在这里调用 rehydrate()，因为此时 adnifyDir 可能还没有初始化
+        // Do not rehydrate here: the workspace persistence boundary is not bound yet.
         // rehydrate() 会在 initService.ts 的 scheduleBackgroundInit() 中延迟调用
 
         initializeAgentSessionSync()

@@ -29,9 +29,10 @@ class StreamingBuffer {
     private timerId: ReturnType<typeof setTimeout> | null = null
     private flushCallback: FlushCallback | null = null
     private reasoningFlushCallback: ReasoningFlushCallback | null = null
-    // 20fps leaves room for Markdown parsing, list measurement and user input
-    // while remaining visually continuous for token output.
-    private readonly flushIntervalMs = 50
+    // Keep the display cadence at ~30fps. Renderer work is reduced downstream
+    // instead of delaying chunks, so the visible text can keep up with fast
+    // model output and still finish on the final flush.
+    private readonly flushIntervalMs = 33
 
     setFlushCallback(callback: FlushCallback) {
         this.flushCallback = callback
@@ -94,7 +95,7 @@ class StreamingBuffer {
     private scheduleFlush(): void {
         if (this.timerId !== null) return
 
-        // 节流到约 20fps（flushIntervalMs）；已排定的 flush 不会被后续 append 推迟，
+        // 节流到约 30fps（flushIntervalMs）；已排定的 flush 不会被后续 append 推迟，
         // 因此持续的 token 流不会让缓冲无界增长。
         this.timerId = setTimeout(() => {
             this.timerId = null

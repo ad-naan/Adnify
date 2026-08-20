@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { emotionAdapter } from '@renderer/agent/emotion/emotionAdapter'
 import { emotionDetectionEngine } from '@renderer/agent/emotion/emotionDetectionEngine'
 import { flushAgentSessionPersistence, flushStreamingBuffer } from '@renderer/agent/store/AgentStore'
-import { adnifyDir } from '@renderer/services/adnifyDirService'
 import { persistAllRuntimeState } from '@renderer/services/appShutdownService'
 import { api } from '@renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
@@ -25,19 +24,13 @@ export function useAppShutdownState(): void {
     const handleUnload = () => {
       // beforeunload is a last-resort fallback — the primary save path is onShutdownRequested.
       // We perform synchronous staging here so that any in-flight data is at least captured
-      // in the adnifyDir cache. The actual disk write may not complete if the process is torn
-      // down immediately, but the IPC shutdown path should have already handled persistence.
+      // in the shared commit queue. The actual durable flush is performed by
+      // the explicit shutdown handshake below.
       try {
         flushStreamingBuffer()
         flushAgentSessionPersistence()
       } catch {
         /* ignore — modules may already be unloaded */
-      }
-
-      try {
-        void adnifyDir.flush()
-      } catch {
-        /* ignore */
       }
 
       try {

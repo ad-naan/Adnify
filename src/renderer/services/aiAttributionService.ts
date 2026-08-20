@@ -1,10 +1,11 @@
 import { api } from '@/renderer/services/electronAPI'
-import { adnifyDir } from './adnifyDirService'
+import { workspaceFiles } from './workspaceFileRepository'
 import { useStore, type WorkspaceConfig } from '@store'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { logger } from '@utils/Logger'
 import { getDirname, getFileName, joinPath, normalizePath, pathStartsWith, toRelativePath } from '@shared/utils/pathUtils'
 import { diffLines, parsePatch } from 'diff'
+import { persistenceCoordinator } from './persistence/PersistenceCoordinator'
 
 const AI_STATS_DIR = 'ai-stats'
 const WRITE_EVENTS_FILE = `${AI_STATS_DIR}/write-events.jsonl`
@@ -524,12 +525,12 @@ class AiAttributionService {
     this.flushPromise = (async () => {
       try {
         await this.ensureStoragePaths()
-        const existing = await adnifyDir.readText(WRITE_EVENTS_FILE)
+        const existing = await workspaceFiles.readText(WRITE_EVENTS_FILE)
         const nextLines = pending.map(event => JSON.stringify(event)).join('\n')
         const nextContent = existing && existing.trim().length > 0
           ? `${existing.trimEnd()}\n${nextLines}\n`
           : `${nextLines}\n`
-        await adnifyDir.writeText(WRITE_EVENTS_FILE, nextContent)
+        await workspaceFiles.writeText(WRITE_EVENTS_FILE, nextContent)
         this.eventsCache = this.eventsCache ? [...this.eventsCache, ...pending] : null
         this.dashboardCache.clear()
       } catch (error) {
@@ -913,11 +914,11 @@ class AiAttributionService {
   }
 
   private async ensureStoragePaths(): Promise<void> {
-    if (!this.workspaceRoot || !adnifyDir.isInitialized()) {
+    if (!this.workspaceRoot || !workspaceFiles.isInitialized()) {
       return
     }
-    await api.file.ensureDir(adnifyDir.getFilePath(AI_STATS_DIR))
-    await api.file.ensureDir(adnifyDir.getFilePath(COMMIT_REPORTS_DIR))
+    await api.file.ensureDir(workspaceFiles.getFilePath(AI_STATS_DIR))
+    await api.file.ensureDir(workspaceFiles.getFilePath(COMMIT_REPORTS_DIR))
   }
 
   private async resolveRepoContext(workspacePath: string | null, filePath: string): Promise<RepoContext | null> {
@@ -994,7 +995,7 @@ class AiAttributionService {
       return this.eventsCache.map(event => ({ ...event }))
     }
 
-    const content = await adnifyDir.readText(WRITE_EVENTS_FILE)
+    const content = await workspaceFiles.readText(WRITE_EVENTS_FILE)
     if (!content) {
       this.eventsCache = []
       return []
@@ -1012,14 +1013,14 @@ class AiAttributionService {
 
   private async writeAllEvents(events: AiWriteEvent[]): Promise<void> {
     await this.ensureStoragePaths()
-    await adnifyDir.writeText(WRITE_EVENTS_FILE, formatJsonl(events))
+    await workspaceFiles.writeText(WRITE_EVENTS_FILE, formatJsonl(events))
     this.eventsCache = events.map(event => ({ ...event }))
     this.dashboardCache.clear()
   }
 
   private async analyzeCommit(repoRoot: string, commitSha: string, source: 'commit' | 'reconcile'): Promise<AiCommitReport | null> {
     const workspaceRoot = this.workspaceRoot || useStore.getState().workspace?.roots?.[0]
-    if (!workspaceRoot || !adnifyDir.isInitialized()) {
+    if (!workspaceRoot || !workspaceFiles.isInitialized()) {
       return null
     }
 
@@ -1169,7 +1170,7 @@ class AiAttributionService {
     if (pending) return pending
 
     const read = (async () => {
-      const local = await adnifyDir.readText(this.getCommitReportPath(repoRoot, commitSha))
+      const local = await workspaceFiles.readText(this.getCommitReportPath(repoRoot, commitSha))
       if (local) {
         const parsed = safeParseJson<AiCommitReport>(local)
         if (parsed) {
@@ -1193,8 +1194,8 @@ class AiAttributionService {
 
   private async writeCommitReport(report: AiCommitReport): Promise<void> {
     await this.ensureStoragePaths()
-    await api.file.ensureDir(adnifyDir.getFilePath(`${COMMIT_REPORTS_DIR}/${report.repoKey}`))
-    const written = await adnifyDir.writeText(
+    await api.file.ensureDir(workspaceFiles.getFilePath(`${COMMIT_REPORTS_DIR}/${report.repoKey}`))
+    const written = await workspaceFiles.writeText(
       this.getCommitReportPath(report.repoRoot, report.commitSha),
       JSON.stringify(report, null, 2)
     )
@@ -1310,3 +1311,8 @@ class AiAttributionService {
 }
 
 export const aiAttributionService = new AiAttributionService()
+persistenceCoordinator.register({
+  id: 'ai-attribution',
+  scope: 'workspace',
+  flush: () => aiAttributionService.flush(),
+})

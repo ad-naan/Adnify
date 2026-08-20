@@ -109,13 +109,23 @@ export async function restoreWorkspaceAgentStore(): Promise<void> {
 export async function hydrateThreadMessages(threadId: string): Promise<void> {
   const state = useAgentStore.getState()
   const thread = state.threads[threadId]
-  if (!thread || thread.messagesHydrated) {
+  if (!thread || (thread.messagesHydrated && agentSessionRepository.areThreadBranchesHydrated(threadId))) {
     return
   }
 
-  let messages: Awaited<ReturnType<typeof agentSessionRepository.loadThreadMessages>>
+  let messages = thread.messages
+  let branches = (state.branches[threadId] || []) as Branch[]
   try {
-    messages = await agentSessionRepository.loadThreadMessages(threadId)
+    const [loadedMessages, loadedBranches] = await Promise.all([
+      thread.messagesHydrated
+        ? Promise.resolve(messages)
+        : agentSessionRepository.loadThreadMessages(threadId),
+      agentSessionRepository.areThreadBranchesHydrated(threadId)
+        ? Promise.resolve(branches)
+        : agentSessionRepository.loadThreadBranches(threadId),
+    ])
+    messages = loadedMessages
+    branches = loadedBranches
   } catch (error) {
     // 标记失败让 UI 退出加载态，但不写入空消息、不标记 hydrated，
     // 这样持久化层不会用空数组覆盖磁盘上的历史。
@@ -142,7 +152,7 @@ export async function hydrateThreadMessages(threadId: string): Promise<void> {
   try {
     useAgentStore.setState(currentState => {
       const currentThread = currentState.threads[threadId]
-      if (!currentThread || currentThread.messagesHydrated) {
+      if (!currentThread) {
         return currentState
       }
 
@@ -154,7 +164,12 @@ export async function hydrateThreadMessages(threadId: string): Promise<void> {
             messages,
             messagesHydrated: true,
             messageCount: messages.length,
+            hydrationFailed: false,
           },
+        },
+        branches: {
+          ...currentState.branches,
+          [threadId]: branches,
         },
         threadMessageVersions: buildThreadMessageVersions({
           ...currentState.threads,

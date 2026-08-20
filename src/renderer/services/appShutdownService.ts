@@ -1,12 +1,14 @@
 import { useStore } from '@store'
 import { logger } from '@utils/Logger'
 import { flushAgentSessionPersistence, flushStreamingBuffer } from '@renderer/agent/store/AgentStore'
-import { flushWorkspaceStatePersistence } from './workspaceStateService'
-import { adnifyDir } from './adnifyDirService'
+import { stageWorkspaceStatePersistence } from './workspaceStateService'
 import { api } from './electronAPI'
-import { shellRegistryService } from '@renderer/shell/services/shellRegistryService'
-import { workspaceAnalyticsService } from './workspaceAnalyticsService'
-import { aiAttributionService } from './aiAttributionService'
+import { persistenceCoordinator } from './persistence/PersistenceCoordinator'
+import '@renderer/shell/services/shellRegistryService'
+import './workspaceAnalyticsService'
+import './aiAttributionService'
+import './workspaceFileRepository'
+import './agentSessionRepository'
 
 async function persistWorkspaceBinding(): Promise<void> {
   const workspace = useStore.getState().workspace
@@ -26,20 +28,13 @@ export async function persistAllRuntimeState(): Promise<void> {
   flushStreamingBuffer()
 
   // 2. Flush the debounced agent session state into the staging layer synchronously.
-  //    This ensures any pending 240ms-debounced snapshot is staged before we write to disk.
+  //    This ensures the current debounced snapshot is staged before durable flush.
   flushAgentSessionPersistence()
 
-  // 3. Persist workspace analytics and workspace state (independent of agent sessions)
-  await workspaceAnalyticsService.flush()
-  await aiAttributionService.flush()
-  await flushWorkspaceStatePersistence()
-
-  // 4. Flush the adnifyDir service FIRST — it owns the actual disk writes for agent sessions.
-  //    agentSessionRepository.flush() delegates to adnifyDir.flush() internally, so calling
-  //    adnifyDir.flush() once is sufficient and avoids a redundant no-op second pass.
+  // 3. Capture the latest UI state, then cross the single lifecycle boundary.
+  await stageWorkspaceStatePersistence()
   await Promise.all([
-    adnifyDir.flush(),
-    shellRegistryService.flush(),
+    persistenceCoordinator.flush('shutdown'),
     persistWorkspaceBinding(),
   ])
 }

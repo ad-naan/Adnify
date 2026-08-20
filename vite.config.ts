@@ -96,6 +96,23 @@ export default defineConfig({
         }
       },
       {
+        entry: 'src/main/services/session/sessionStorage.worker.ts',
+        vite: {
+          resolve: { alias: aliases },
+          build: {
+            outDir: 'dist/main',
+            lib: {
+              entry: 'src/main/services/session/sessionStorage.worker.ts',
+              formats: ['cjs'],
+              fileName: () => 'sessionStorage.worker.js'
+            },
+            rollupOptions: {
+              external: ['node:sqlite']
+            }
+          }
+        }
+      },
+      {
         entry: 'src/main/preload.ts',
         onstart(options) { options.reload() },
         vite: {

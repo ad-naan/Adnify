@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { agentSessionRepository } from './agentSessionRepository'
-import { ADNIFY_DIR_NAME, adnifyDir } from './adnifyDirService'
+import { ADNIFY_DIR_NAME, workspaceFiles } from './workspaceFileRepository'
 import { gitService } from './gitService'
 import { ignoreService } from './ignoreService'
 import { EMPTY_AI_DASHBOARD_DATA, type AiDashboardData, aiAttributionService } from './aiAttributionService'
@@ -8,6 +8,7 @@ import { logger } from '@utils/Logger'
 import { useStore, type WorkspaceConfig } from '@store'
 import { isAssistantMessage, isUserMessage, type AssistantMessage, type ChatMessage } from '@renderer/agent/types'
 import { isFileEditTool } from '@shared/config/tools'
+import { persistenceCoordinator } from './persistence/PersistenceCoordinator'
 
 type DashboardRange = 'daily' | 'weekly' | 'monthly'
 
@@ -180,12 +181,12 @@ class WorkspaceAnalyticsService {
 
     this.flushPromise = (async () => {
       try {
-        const existing = await adnifyDir.readText(STATS_FILE)
+        const existing = await workspaceFiles.readText(STATS_FILE)
         const nextLines = pending.map(event => JSON.stringify(event)).join('\n')
         const nextContent = existing && existing.trim().length > 0
           ? `${existing.trimEnd()}\n${nextLines}\n`
           : `${nextLines}\n`
-        await adnifyDir.writeText(STATS_FILE, nextContent)
+        await workspaceFiles.writeText(STATS_FILE, nextContent)
         this.eventsCache = this.eventsCache ? [...this.eventsCache, ...pending] : null
       } catch (error) {
         logger.system.warn('[WorkspaceAnalytics] Failed to flush analytics events:', error)
@@ -421,7 +422,7 @@ class WorkspaceAnalyticsService {
       return this.eventsCache
     }
 
-    const content = await adnifyDir.readText(STATS_FILE)
+    const content = await workspaceFiles.readText(STATS_FILE)
     if (!content) {
       this.eventsCache = []
       return this.eventsCache
@@ -798,3 +799,8 @@ class WorkspaceAnalyticsService {
 }
 
 export const workspaceAnalyticsService = new WorkspaceAnalyticsService()
+persistenceCoordinator.register({
+  id: 'workspace-analytics',
+  scope: 'workspace',
+  flush: () => workspaceAnalyticsService.flush(),
+})

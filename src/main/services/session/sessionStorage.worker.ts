@@ -1,0 +1,1080 @@
+import { createHash, randomUUID } from 'crypto'
+import { promises as fs } from 'fs'
+import * as path from 'path'
+import { DatabaseSync } from 'node:sqlite'
+import { parentPort } from 'worker_threads'
+import type {
+  SessionBranchMetadata,
+  SessionBranchPatch,
+  SessionCatalogRecord,
+  SessionMessageWrite,
+  SessionPatch,
+  SessionStateRecord,
+  SessionStorageStats,
+  SessionThreadMetadata,
+  SessionWorkerRequest,
+  SessionWorkerResponse,
+  SessionWorkerResult,
+} from '@shared/types/sessionPersistence'
+
+interface OpenDatabase {
+  database: DatabaseSync
+  path: string
+  writesSinceCheckpoint: number
+  dirtySinceBackup: boolean
+  idleCheckpoint: ReturnType<typeof setTimeout> | null
+}
+
+interface BlobDescriptor {
+  hash: string
+  encoding: 'utf8' | 'base64'
+  byteLength: number
+}
+
+interface PreparedMessage extends Omit<SessionMessageWrite, 'payload'> {
+  payloadJson: string
+  blobs: BlobDescriptor[]
+}
+
+interface PreparedBranch extends Omit<SessionBranchPatch, 'messages'> {
+  messages: PreparedMessage[]
+}
+
+interface BlobReference {
+  __adnifyBlob: 1
+  hash: string
+  encoding: BlobDescriptor['encoding']
+}
+
+const databases = new Map<string, OpenDatabase>()
+const DEFAULT_STATE: SessionStateRecord = {
+  currentThreadId: null,
+  activeBranchId: {},
+  version: 0,
+}
+const LATEST_SCHEMA_VERSION = 3
+const BLOB_THRESHOLD_BYTES = 256 * 1024
+const IDLE_CHECKPOINT_MS = 30_000
+const CHECKPOINT_WRITE_THRESHOLD = 32
+const BACKUP_MIN_INTERVAL_MS = 24 * 60 * 60 * 1_000
+
+function configure(database: DatabaseSync): void {
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = FULL;
+    PRAGMA foreign_keys = ON;
+    PRAGMA busy_timeout = 5000;
+    PRAGMA wal_autocheckpoint = 0;
+    PRAGMA journal_size_limit = 16777216;
+    PRAGMA temp_store = MEMORY;
+  `)
+}
+
+function tableExists(database: DatabaseSync, table: string): boolean {
+  return Boolean(database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+  ).get(table))
+}
+
+function migrateV1(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS migration_log (
+      name TEXT PRIMARY KEY,
+      completed_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS session_state (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      payload TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS threads (
+      id TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL,
+      last_modified INTEGER NOT NULL,
+      title TEXT,
+      message_count INTEGER NOT NULL CHECK (message_count >= 0),
+      metadata_json TEXT NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS messages (
+      thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+      message_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      PRIMARY KEY (thread_id, ordinal)
+    ) WITHOUT ROWID, STRICT;
+
+    CREATE INDEX IF NOT EXISTS messages_thread_id_id
+      ON messages(thread_id, message_id);
+  `)
+}
+
+function migrateV2(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS branches (
+      thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+      branch_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+      name TEXT NOT NULL,
+      fork_from_message_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
+      message_count INTEGER NOT NULL CHECK (message_count >= 0),
+      metadata_json TEXT NOT NULL,
+      PRIMARY KEY (thread_id, branch_id)
+    ) WITHOUT ROWID, STRICT;
+
+    CREATE INDEX IF NOT EXISTS branches_thread_ordinal
+      ON branches(thread_id, ordinal);
+
+    CREATE TABLE IF NOT EXISTS branch_messages (
+      thread_id TEXT NOT NULL,
+      branch_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+      message_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      payload_json TEXT NOT NULL,
+      PRIMARY KEY (thread_id, branch_id, ordinal),
+      FOREIGN KEY (thread_id, branch_id)
+        REFERENCES branches(thread_id, branch_id) ON DELETE CASCADE
+    ) WITHOUT ROWID, STRICT;
+  `)
+
+  const row = database.prepare('SELECT payload FROM session_state WHERE singleton = 1').get() as
+    | { payload: string }
+    | undefined
+  if (!row) return
+
+  const legacyState = JSON.parse(row.payload) as SessionStateRecord & {
+    branches?: Record<string, unknown>
+  }
+  const legacyBranches = legacyState.branches || {}
+  const insertBranch = database.prepare(`
+    INSERT OR IGNORE INTO branches(
+      thread_id, branch_id, ordinal, name, fork_from_message_id,
+      created_at, is_active, message_count, metadata_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const insertMessage = database.prepare(`
+    INSERT OR IGNORE INTO branch_messages(
+      thread_id, branch_id, ordinal, message_id, role, timestamp, payload_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  for (const [threadId, value] of Object.entries(legacyBranches)) {
+    if (!Array.isArray(value) || !database.prepare('SELECT 1 FROM threads WHERE id = ?').get(threadId)) continue
+    value.forEach((rawBranch, branchOrdinal) => {
+      if (!rawBranch || typeof rawBranch !== 'object') return
+      const branch = rawBranch as Record<string, unknown>
+      const id = typeof branch.id === 'string' ? branch.id : `${threadId}:${branchOrdinal}`
+      const messages = Array.isArray(branch.messages) ? branch.messages : []
+      const { messages: _messages, ...metadata } = branch
+      insertBranch.run(
+        threadId,
+        id,
+        branchOrdinal,
+        typeof branch.name === 'string' ? branch.name : id,
+        typeof branch.forkFromMessageId === 'string' ? branch.forkFromMessageId : '',
+        typeof branch.createdAt === 'number' ? branch.createdAt : 0,
+        branch.isActive === true ? 1 : 0,
+        messages.length,
+        JSON.stringify(metadata),
+      )
+      messages.forEach((payload, ordinal) => {
+        const message = payload && typeof payload === 'object'
+          ? payload as Record<string, unknown>
+          : {}
+        insertMessage.run(
+          threadId,
+          id,
+          ordinal,
+          typeof message.id === 'string' ? message.id : `${id}:${ordinal}`,
+          typeof message.role === 'string' ? message.role : 'unknown',
+          typeof message.timestamp === 'number' ? message.timestamp : 0,
+          JSON.stringify(payload),
+        )
+      })
+    })
+  }
+
+  const { branches: _branches, ...state } = legacyState
+  database.prepare('UPDATE session_state SET payload = ?, updated_at = ? WHERE singleton = 1')
+    .run(JSON.stringify(state), Date.now())
+  if (tableExists(database, 'schema_info')) database.exec('DROP TABLE schema_info')
+}
+
+function migrateV3(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS blobs (
+      hash TEXT PRIMARY KEY,
+      encoding TEXT NOT NULL CHECK (encoding IN ('utf8', 'base64')),
+      byte_length INTEGER NOT NULL CHECK (byte_length >= 0),
+      ref_count INTEGER NOT NULL CHECK (ref_count >= 0),
+      created_at INTEGER NOT NULL
+    ) STRICT;
+  `)
+}
+
+function migrateSchema(database: DatabaseSync): boolean {
+  let version = Number((database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
+  if (version > LATEST_SCHEMA_VERSION) {
+    throw new Error(`Session database schema ${version} is newer than supported ${LATEST_SCHEMA_VERSION}`)
+  }
+
+  const startingVersion = version
+  const migrations = [migrateV1, migrateV2, migrateV3]
+  while (version < LATEST_SCHEMA_VERSION) {
+    const nextVersion = version + 1
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      migrations[nextVersion - 1](database)
+      database.exec(`PRAGMA user_version = ${nextVersion}`)
+      database.exec('COMMIT')
+      version = nextVersion
+    } catch (error) {
+      database.exec('ROLLBACK')
+      throw error
+    }
+  }
+  return version !== startingVersion
+}
+
+function assertHealthy(database: DatabaseSync): void {
+  const result = database.prepare('PRAGMA quick_check(1)').get() as Record<string, unknown> | undefined
+  if (!result || !Object.values(result).includes('ok')) {
+    throw new Error(`Session database integrity check failed: ${JSON.stringify(result)}`)
+  }
+}
+
+function openCheckedDatabase(databasePath: string): DatabaseSync {
+  const database = new DatabaseSync(databasePath)
+  try {
+    configure(database)
+    assertHealthy(database)
+    return database
+  } catch (error) {
+    try { database.close() } catch { /* preserve original failure */ }
+    throw error
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function syncFile(filePath: string): Promise<void> {
+  const handle = await fs.open(filePath, 'r+')
+  try { await handle.sync() } finally { await handle.close() }
+}
+
+async function syncDirectory(directoryPath: string): Promise<void> {
+  // Directory fsync is supported on POSIX. Windows durably flushes the renamed
+  // file handle, but does not allow opening directories through this API.
+  if (process.platform === 'win32') return
+  const handle = await fs.open(directoryPath, 'r')
+  try { await handle.sync() } finally { await handle.close() }
+}
+
+function assertBackupHealthy(backupPath: string): void {
+  const database = new DatabaseSync(backupPath, { readOnly: true })
+  try { assertHealthy(database) } finally { database.close() }
+}
+
+async function recoverFromBackup(databasePath: string, openError: unknown): Promise<DatabaseSync> {
+  const candidates = [`${databasePath}.bak`, `${databasePath}.bak.previous`]
+  let backupPath: string | undefined
+  for (const candidate of candidates) {
+    if (!await fileExists(candidate)) continue
+    try {
+      assertBackupHealthy(candidate)
+      backupPath = candidate
+      break
+    } catch { /* try the older verified snapshot */ }
+  }
+  if (!backupPath) throw openError
+
+  const suffix = `.corrupt-${Date.now()}`
+  for (const source of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]) {
+    if (await fileExists(source)) await fs.rename(source, `${source}${suffix}`)
+  }
+  await fs.copyFile(backupPath, databasePath)
+  return openCheckedDatabase(databasePath)
+}
+
+async function openHealthyDatabase(databasePath: string): Promise<{ database: DatabaseSync; migrated: boolean }> {
+  let database: DatabaseSync
+  try {
+    database = openCheckedDatabase(databasePath)
+  } catch (error) {
+    database = await recoverFromBackup(databasePath, error)
+  }
+
+  try {
+    if (!tableExists(database, 'threads')) database.exec('PRAGMA auto_vacuum = INCREMENTAL')
+    const schemaMigrated = migrateSchema(database)
+    const payloadsMigrated = await externalizeLegacyPayloads(database, databasePath)
+    return { database, migrated: schemaMigrated || payloadsMigrated }
+  } catch (error) {
+    database.close()
+    // A failed or unsupported migration is not database corruption. Keep the
+    // primary untouched (the migration transaction rolled back) and surface it.
+    throw error
+  }
+}
+
+async function getDatabase(databasePath: string): Promise<OpenDatabase> {
+  const existing = databases.get(databasePath)
+  if (existing) return existing
+  await fs.mkdir(path.dirname(databasePath), { recursive: true })
+  const initialized = await openHealthyDatabase(databasePath)
+  const opened: OpenDatabase = {
+    database: initialized.database,
+    path: databasePath,
+    writesSinceCheckpoint: 0,
+    dirtySinceBackup: initialized.migrated,
+    idleCheckpoint: null,
+  }
+  databases.set(databasePath, opened)
+  return opened
+}
+
+function blobDirectory(databasePath: string): string {
+  return `${databasePath}.blobs`
+}
+
+function blobPath(databasePath: string, hash: string): string {
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Invalid session blob hash')
+  return path.join(blobDirectory(databasePath), hash.slice(0, 2), hash)
+}
+
+async function writeBlob(databasePath: string, bytes: Buffer): Promise<string> {
+  const hash = createHash('sha256').update(bytes).digest('hex')
+  const target = blobPath(databasePath, hash)
+  if (await fileExists(target)) return hash
+
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  const temporary = `${target}.${randomUUID()}.tmp`
+  const handle = await fs.open(temporary, 'wx')
+  try {
+    await handle.writeFile(bytes)
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+  try {
+    await fs.rename(temporary, target)
+    await syncDirectory(path.dirname(target))
+  } catch (error) {
+    await fs.rm(temporary, { force: true })
+    if (!await fileExists(target)) throw error
+  }
+  return hash
+}
+
+function isBlobReference(value: unknown): value is BlobReference {
+  return Boolean(
+    value && typeof value === 'object' &&
+    (value as BlobReference).__adnifyBlob === 1 &&
+    typeof (value as BlobReference).hash === 'string',
+  )
+}
+
+async function externalizeValue(
+  value: unknown,
+  databasePath: string,
+  blobs: BlobDescriptor[],
+  key?: string,
+  parent?: Record<string, unknown>,
+): Promise<unknown> {
+  if (typeof value === 'string') {
+    const isBase64 = key === 'base64' || (key === 'data' && parent?.type === 'base64')
+    const bytes = isBase64 ? Buffer.from(value, 'base64') : Buffer.from(value, 'utf8')
+    if (bytes.byteLength < BLOB_THRESHOLD_BYTES) return value
+    const descriptor: BlobDescriptor = {
+      hash: await writeBlob(databasePath, bytes),
+      encoding: isBase64 ? 'base64' : 'utf8',
+      byteLength: bytes.byteLength,
+    }
+    blobs.push(descriptor)
+    return { __adnifyBlob: 1, hash: descriptor.hash, encoding: descriptor.encoding } satisfies BlobReference
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(value.map(item => externalizeValue(item, databasePath, blobs)))
+  }
+  if (!value || typeof value !== 'object') return value
+
+  const record = value as Record<string, unknown>
+  const entries = await Promise.all(Object.entries(record).map(async ([childKey, child]) => [
+    childKey,
+    await externalizeValue(child, databasePath, blobs, childKey, record),
+  ] as const))
+  return Object.fromEntries(entries)
+}
+
+async function prepareMessage(databasePath: string, message: SessionMessageWrite): Promise<PreparedMessage> {
+  // Preserve JSON.stringify semantics (including rejecting BigInt) before any transaction begins.
+  const compatible = JSON.parse(JSON.stringify(message.payload)) as unknown
+  const blobs: BlobDescriptor[] = []
+  const externalized = await externalizeValue(compatible, databasePath, blobs)
+  return {
+    ordinal: message.ordinal,
+    id: message.id,
+    role: message.role,
+    timestamp: message.timestamp,
+    payloadJson: JSON.stringify(externalized),
+    blobs,
+  }
+}
+
+async function externalizeLegacyPayloads(database: DatabaseSync, databasePath: string): Promise<boolean> {
+  const migrationName = 'externalize-large-payloads-v1'
+  if (database.prepare('SELECT 1 FROM migration_log WHERE name = ?').get(migrationName)) return false
+
+  const messageRows = database.prepare(
+    'SELECT thread_id, ordinal, payload_json FROM messages',
+  ).all() as Array<{ thread_id: string; ordinal: number; payload_json: string }>
+  const branchRows = database.prepare(
+    'SELECT thread_id, branch_id, ordinal, payload_json FROM branch_messages',
+  ).all() as Array<{ thread_id: string; branch_id: string; ordinal: number; payload_json: string }>
+  const preparedMessages: Array<typeof messageRows[number] & { nextJson: string; blobs: BlobDescriptor[] }> = []
+  const preparedBranches: Array<typeof branchRows[number] & { nextJson: string; blobs: BlobDescriptor[] }> = []
+
+  for (const row of messageRows) {
+    const blobs: BlobDescriptor[] = []
+    const nextJson = JSON.stringify(await externalizeValue(JSON.parse(row.payload_json), databasePath, blobs))
+    if (blobs.length > 0) preparedMessages.push({ ...row, nextJson, blobs })
+  }
+  for (const row of branchRows) {
+    const blobs: BlobDescriptor[] = []
+    const nextJson = JSON.stringify(await externalizeValue(JSON.parse(row.payload_json), databasePath, blobs))
+    if (blobs.length > 0) preparedBranches.push({ ...row, nextJson, blobs })
+  }
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    const updateMessage = database.prepare(
+      'UPDATE messages SET payload_json = ? WHERE thread_id = ? AND ordinal = ?',
+    )
+    const updateBranch = database.prepare(
+      'UPDATE branch_messages SET payload_json = ? WHERE thread_id = ? AND branch_id = ? AND ordinal = ?',
+    )
+    for (const row of preparedMessages) {
+      incrementBlobRefs(database, row.blobs)
+      updateMessage.run(row.nextJson, row.thread_id, row.ordinal)
+    }
+    for (const row of preparedBranches) {
+      incrementBlobRefs(database, row.blobs)
+      updateBranch.run(row.nextJson, row.thread_id, row.branch_id, row.ordinal)
+    }
+    database.prepare('INSERT INTO migration_log(name, completed_at) VALUES (?, ?)')
+      .run(migrationName, Date.now())
+    database.exec('COMMIT')
+  } catch (error) {
+    database.exec('ROLLBACK')
+    throw error
+  }
+  return true
+}
+
+async function hydrateValue(value: unknown, databasePath: string): Promise<unknown> {
+  if (isBlobReference(value)) {
+    const bytes = await fs.readFile(blobPath(databasePath, value.hash))
+    return value.encoding === 'base64' ? bytes.toString('base64') : bytes.toString('utf8')
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(item => hydrateValue(item, databasePath)))
+  if (!value || typeof value !== 'object') return value
+  const entries = await Promise.all(Object.entries(value as Record<string, unknown>).map(async ([key, child]) => [
+    key,
+    await hydrateValue(child, databasePath),
+  ] as const))
+  return Object.fromEntries(entries)
+}
+
+function blobReferences(payloadJson: string): BlobReference[] {
+  const found: BlobReference[] = []
+  const visit = (value: unknown): void => {
+    if (isBlobReference(value)) {
+      found.push(value)
+      return
+    }
+    if (Array.isArray(value)) value.forEach(visit)
+    else if (value && typeof value === 'object') Object.values(value).forEach(visit)
+  }
+  visit(JSON.parse(payloadJson))
+  return found
+}
+
+function incrementBlobRefs(database: DatabaseSync, blobs: BlobDescriptor[]): void {
+  const statement = database.prepare(`
+    INSERT INTO blobs(hash, encoding, byte_length, ref_count, created_at)
+    VALUES (?, ?, ?, 1, ?)
+    ON CONFLICT(hash) DO UPDATE SET ref_count = ref_count + 1
+  `)
+  for (const blob of blobs) statement.run(blob.hash, blob.encoding, blob.byteLength, Date.now())
+}
+
+function decrementRowsBlobRefs(database: DatabaseSync, rows: Array<{ payload_json: string }>): void {
+  const decrement = database.prepare(`
+    UPDATE blobs SET ref_count = ref_count - 1 WHERE hash = ? AND ref_count > 0
+  `)
+  for (const row of rows) {
+    for (const reference of blobReferences(row.payload_json)) decrement.run(reference.hash)
+  }
+}
+
+async function collectGarbageBlobs(database: DatabaseSync, databasePath: string): Promise<void> {
+  const protectedHashes = new Set<string>()
+  for (const backupPath of [`${databasePath}.bak`, `${databasePath}.bak.previous`]) {
+    if (!await fileExists(backupPath)) continue
+    let backup: DatabaseSync | undefined
+    try {
+      backup = new DatabaseSync(backupPath, { readOnly: true })
+      assertHealthy(backup)
+      for (const table of ['messages', 'branch_messages'] as const) {
+        if (!tableExists(backup, table)) continue
+        const rows = backup.prepare(`SELECT payload_json FROM ${table}`).all() as Array<{ payload_json: string }>
+        for (const row of rows) for (const reference of blobReferences(row.payload_json)) {
+          protectedHashes.add(reference.hash)
+        }
+      }
+    } catch {
+      // Fail closed: an unreadable snapshot must never cause companion data loss.
+      return
+    } finally {
+      backup?.close()
+    }
+  }
+
+  const rows = database.prepare('SELECT hash FROM blobs WHERE ref_count = 0').all() as Array<{ hash: string }>
+  const removeRow = database.prepare('DELETE FROM blobs WHERE hash = ? AND ref_count = 0')
+  for (const row of rows) {
+    if (protectedHashes.has(row.hash)) continue
+    try {
+      await fs.rm(blobPath(databasePath, row.hash), { force: true })
+      removeRow.run(row.hash)
+    } catch { /* retry during the next maintenance cycle */ }
+  }
+}
+
+function readState(database: DatabaseSync): SessionStateRecord {
+  const row = database.prepare('SELECT payload FROM session_state WHERE singleton = 1').get() as
+    | { payload: string }
+    | undefined
+  if (!row) return { ...DEFAULT_STATE }
+  const parsed = JSON.parse(row.payload) as Partial<SessionStateRecord>
+  return {
+    currentThreadId: typeof parsed.currentThreadId === 'string' ? parsed.currentThreadId : null,
+    activeBranchId: parsed.activeBranchId && typeof parsed.activeBranchId === 'object'
+      ? parsed.activeBranchId
+      : {},
+    version: typeof parsed.version === 'number' ? parsed.version : 0,
+  }
+}
+
+function readThreads(database: DatabaseSync): SessionThreadMetadata[] {
+  const rows = database.prepare(`
+    SELECT id, created_at, last_modified, title, message_count, metadata_json
+    FROM threads ORDER BY last_modified DESC
+  `).all() as Array<{
+    id: string
+    created_at: number
+    last_modified: number
+    title: string | null
+    message_count: number
+    metadata_json: string
+  }>
+  return rows.map(row => ({
+    id: row.id,
+    createdAt: row.created_at,
+    lastModified: row.last_modified,
+    title: row.title ?? undefined,
+    messageCount: row.message_count,
+    data: JSON.parse(row.metadata_json) as Record<string, unknown>,
+  }))
+}
+
+function readBranches(database: DatabaseSync): SessionBranchMetadata[] {
+  const rows = database.prepare(`
+    SELECT thread_id, branch_id, ordinal, name, fork_from_message_id,
+           created_at, is_active, message_count, metadata_json
+    FROM branches ORDER BY thread_id, ordinal
+  `).all() as Array<{
+    thread_id: string
+    branch_id: string
+    ordinal: number
+    name: string
+    fork_from_message_id: string
+    created_at: number
+    is_active: number
+    message_count: number
+    metadata_json: string
+  }>
+  return rows.map(row => ({
+    threadId: row.thread_id,
+    id: row.branch_id,
+    ordinal: row.ordinal,
+    name: row.name,
+    forkFromMessageId: row.fork_from_message_id,
+    createdAt: row.created_at,
+    isActive: row.is_active === 1,
+    messageCount: row.message_count,
+    data: JSON.parse(row.metadata_json) as Record<string, unknown>,
+  }))
+}
+
+function readCatalog(database: DatabaseSync): SessionCatalogRecord {
+  return { state: readState(database), threads: readThreads(database), branches: readBranches(database) }
+}
+
+async function readMessages(database: DatabaseSync, databasePath: string, threadId: string): Promise<unknown[]> {
+  const rows = database.prepare(`
+    SELECT payload_json FROM messages WHERE thread_id = ? ORDER BY ordinal
+  `).all(threadId) as Array<{ payload_json: string }>
+  return Promise.all(rows.map(row => hydrateValue(JSON.parse(row.payload_json), databasePath)))
+}
+
+async function readBranchMessages(
+  database: DatabaseSync,
+  databasePath: string,
+  threadId: string,
+): Promise<Array<{ id: string; messages: unknown[] }>> {
+  const branches = database.prepare(
+    'SELECT branch_id FROM branches WHERE thread_id = ? ORDER BY ordinal',
+  ).all(threadId) as Array<{ branch_id: string }>
+  return Promise.all(branches.map(async branch => {
+    const rows = database.prepare(`
+      SELECT payload_json FROM branch_messages
+      WHERE thread_id = ? AND branch_id = ? ORDER BY ordinal
+    `).all(threadId, branch.branch_id) as Array<{ payload_json: string }>
+    return {
+      id: branch.branch_id,
+      messages: await Promise.all(rows.map(row => hydrateValue(JSON.parse(row.payload_json), databasePath))),
+    }
+  }))
+}
+
+function upsertThread(database: DatabaseSync, thread: SessionThreadMetadata): void {
+  database.prepare(`
+    INSERT INTO threads(id, created_at, last_modified, title, message_count, metadata_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      created_at = excluded.created_at,
+      last_modified = excluded.last_modified,
+      title = excluded.title,
+      message_count = excluded.message_count,
+      metadata_json = excluded.metadata_json
+  `).run(
+    thread.id,
+    thread.createdAt,
+    thread.lastModified,
+    thread.title ?? null,
+    thread.messageCount,
+    JSON.stringify(thread.data),
+  )
+}
+
+function insertMessages(
+  database: DatabaseSync,
+  table: 'messages' | 'branch_messages',
+  threadId: string,
+  messages: PreparedMessage[],
+  branchId?: string,
+): void {
+  if (table === 'branch_messages' && !branchId) {
+    throw new Error('branchId is required for branch messages')
+  }
+  const messageBranchId = branchId ?? ''
+  const insert = table === 'messages'
+    ? database.prepare(`
+        INSERT INTO messages(thread_id, ordinal, message_id, role, timestamp, payload_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+    : database.prepare(`
+        INSERT INTO branch_messages(
+          thread_id, branch_id, ordinal, message_id, role, timestamp, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `)
+  for (const message of messages) {
+    incrementBlobRefs(database, message.blobs)
+    if (table === 'messages') {
+      insert.run(threadId, message.ordinal, message.id, message.role, message.timestamp, message.payloadJson)
+    } else {
+      insert.run(threadId, messageBranchId, message.ordinal, message.id, message.role, message.timestamp, message.payloadJson)
+    }
+  }
+}
+
+function deleteThreadBlobRefs(database: DatabaseSync, threadId: string): void {
+  const rows = [
+    ...database.prepare('SELECT payload_json FROM messages WHERE thread_id = ?').all(threadId),
+    ...database.prepare('SELECT payload_json FROM branch_messages WHERE thread_id = ?').all(threadId),
+  ] as Array<{ payload_json: string }>
+  decrementRowsBlobRefs(database, rows)
+}
+
+async function applyPatch(database: DatabaseSync, databasePath: string, patch: SessionPatch): Promise<void> {
+  const preparedThreads = await Promise.all(patch.threads.map(async thread => ({
+    ...thread,
+    messages: await Promise.all((thread.messages || []).map(message => prepareMessage(databasePath, message))),
+  })))
+  const preparedBranchThreads = await Promise.all(patch.branchThreads.map(async entry => ({
+    threadId: entry.threadId,
+    branches: await Promise.all(entry.branches.map(async branch => ({
+      ...branch,
+      messages: await Promise.all(branch.messages.map(message => prepareMessage(databasePath, message))),
+    } satisfies PreparedBranch))),
+  })))
+
+  database.exec('BEGIN IMMEDIATE')
+  try {
+    const deleteThread = database.prepare('DELETE FROM threads WHERE id = ?')
+    for (const threadId of patch.deletedThreadIds) {
+      deleteThreadBlobRefs(database, threadId)
+      deleteThread.run(threadId)
+    }
+
+    for (const threadPatch of preparedThreads) {
+      upsertThread(database, threadPatch.metadata)
+      if (threadPatch.replaceFrom !== undefined) {
+        const oldRows = database.prepare(`
+          SELECT payload_json FROM messages WHERE thread_id = ? AND ordinal >= ?
+        `).all(threadPatch.metadata.id, threadPatch.replaceFrom) as Array<{ payload_json: string }>
+        decrementRowsBlobRefs(database, oldRows)
+        database.prepare('DELETE FROM messages WHERE thread_id = ? AND ordinal >= ?')
+          .run(threadPatch.metadata.id, threadPatch.replaceFrom)
+        insertMessages(database, 'messages', threadPatch.metadata.id, threadPatch.messages)
+      }
+    }
+
+    const deleteBranches = database.prepare('DELETE FROM branches WHERE thread_id = ?')
+    const insertBranch = database.prepare(`
+      INSERT INTO branches(
+        thread_id, branch_id, ordinal, name, fork_from_message_id,
+        created_at, is_active, message_count, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    for (const entry of preparedBranchThreads) {
+      const oldRows = database.prepare(
+        'SELECT payload_json FROM branch_messages WHERE thread_id = ?',
+      ).all(entry.threadId) as Array<{ payload_json: string }>
+      decrementRowsBlobRefs(database, oldRows)
+      deleteBranches.run(entry.threadId)
+      for (const branch of entry.branches) {
+        insertBranch.run(
+          branch.threadId,
+          branch.id,
+          branch.ordinal,
+          branch.name,
+          branch.forkFromMessageId,
+          branch.createdAt,
+          branch.isActive ? 1 : 0,
+          branch.messageCount,
+          JSON.stringify(branch.data),
+        )
+        insertMessages(database, 'branch_messages', branch.threadId, branch.messages, branch.id)
+      }
+    }
+
+    if (patch.state) {
+      database.prepare(`
+        INSERT INTO session_state(singleton, payload, updated_at) VALUES (1, ?, ?)
+        ON CONFLICT(singleton) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+      `).run(JSON.stringify(patch.state), Date.now())
+    }
+    database.exec('COMMIT')
+  } catch (error) {
+    database.exec('ROLLBACK')
+    throw error
+  }
+  await collectGarbageBlobs(database, databasePath)
+}
+
+async function importLegacy(database: DatabaseSync, databasePath: string, sessionsDir: string): Promise<boolean> {
+  const migrationName = 'workspace-jsonl-v1'
+  if (database.prepare('SELECT 1 FROM migration_log WHERE name = ?').get(migrationName)) return false
+  const markComplete = (): void => {
+    database.prepare('INSERT OR IGNORE INTO migration_log(name, completed_at) VALUES (?, ?)')
+      .run(migrationName, Date.now())
+  }
+  const existing = database.prepare('SELECT COUNT(*) AS count FROM threads').get() as { count: number }
+  if (existing.count > 0) {
+    markComplete()
+    return false
+  }
+
+  let entries
+  try {
+    entries = await fs.readdir(sessionsDir, { withFileTypes: true })
+  } catch {
+    markComplete()
+    return false
+  }
+  const metadataFiles = entries.filter(entry =>
+    entry.isFile() && entry.name.endsWith('.json') && !entry.name.startsWith('_'))
+  if (metadataFiles.length === 0) {
+    markComplete()
+    return false
+  }
+
+  let state = { ...DEFAULT_STATE }
+  let legacyBranches: Record<string, unknown> = {}
+  try {
+    const meta = JSON.parse(await fs.readFile(path.join(sessionsDir, '_meta.json'), 'utf8')) as Partial<SessionStateRecord>
+    let extra: Record<string, unknown> = {}
+    try { extra = JSON.parse(await fs.readFile(path.join(sessionsDir, '_extra.json'), 'utf8')) } catch { /* optional */ }
+    state = {
+      currentThreadId: typeof meta.currentThreadId === 'string' ? meta.currentThreadId : null,
+      activeBranchId: extra.activeBranchId && typeof extra.activeBranchId === 'object'
+        ? extra.activeBranchId as Record<string, unknown>
+        : {},
+      version: typeof meta.version === 'number' ? meta.version : 0,
+    }
+    legacyBranches = extra.branches && typeof extra.branches === 'object'
+      ? extra.branches as Record<string, unknown>
+      : {}
+  } catch { /* catalog can be rebuilt */ }
+
+  const threads: SessionPatch['threads'] = []
+  for (const entry of metadataFiles) {
+    const raw = JSON.parse(await fs.readFile(path.join(sessionsDir, entry.name), 'utf8')) as Record<string, unknown>
+    const id = typeof raw.id === 'string' ? raw.id : entry.name.slice(0, -5)
+    const messages: unknown[] = []
+    try {
+      const content = await fs.readFile(path.join(sessionsDir, `${id}.jsonl`), 'utf8')
+      for (const line of content.split(/\r?\n/)) if (line.trim()) messages.push(JSON.parse(line))
+    } catch (error) {
+      const missing = error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'
+      if (!missing && Number(raw.messageCount || 0) > 0) throw error
+    }
+    const { messages: _messages, ...data } = raw
+    threads.push({
+      metadata: {
+        id,
+        createdAt: typeof raw.createdAt === 'number' ? raw.createdAt : Date.now(),
+        lastModified: typeof raw.lastModified === 'number' ? raw.lastModified : Date.now(),
+        title: typeof raw.title === 'string' ? raw.title : undefined,
+        messageCount: messages.length,
+        data,
+      },
+      replaceFrom: 0,
+      messages: messages.map((payload, ordinal) => {
+        const message = payload as Record<string, unknown>
+        return {
+          ordinal,
+          id: typeof message.id === 'string' ? message.id : `${id}:${ordinal}`,
+          role: typeof message.role === 'string' ? message.role : 'unknown',
+          timestamp: typeof message.timestamp === 'number' ? message.timestamp : 0,
+          payload,
+        }
+      }),
+    })
+  }
+
+  const branchThreads = Object.entries(legacyBranches).flatMap(([threadId, value]) => {
+    if (!Array.isArray(value)) return []
+    return [{
+      threadId,
+      branches: value.flatMap((raw, ordinal): SessionBranchPatch[] => {
+        if (!raw || typeof raw !== 'object') return []
+        const branch = raw as Record<string, unknown>
+        const messages = Array.isArray(branch.messages) ? branch.messages : []
+        const { messages: _messages, ...data } = branch
+        const id = typeof branch.id === 'string' ? branch.id : `${threadId}:${ordinal}`
+        return [{
+          threadId,
+          id,
+          ordinal,
+          name: typeof branch.name === 'string' ? branch.name : id,
+          forkFromMessageId: typeof branch.forkFromMessageId === 'string' ? branch.forkFromMessageId : '',
+          createdAt: typeof branch.createdAt === 'number' ? branch.createdAt : 0,
+          isActive: branch.isActive === true,
+          messageCount: messages.length,
+          data,
+          messages: messages.map((payload, messageOrdinal) => {
+            const message = payload as Record<string, unknown>
+            return {
+              ordinal: messageOrdinal,
+              id: typeof message.id === 'string' ? message.id : `${id}:${messageOrdinal}`,
+              role: typeof message.role === 'string' ? message.role : 'unknown',
+              timestamp: typeof message.timestamp === 'number' ? message.timestamp : 0,
+              payload,
+            }
+          }),
+        }]
+      }),
+    }]
+  })
+
+  await applyPatch(database, databasePath, { state, threads, deletedThreadIds: [], branchThreads })
+  markComplete()
+  return true
+}
+
+function checkpoint(opened: OpenDatabase, truncate: boolean): void {
+  opened.database.exec(`PRAGMA wal_checkpoint(${truncate ? 'TRUNCATE' : 'PASSIVE'})`)
+  opened.writesSinceCheckpoint = 0
+}
+
+function scheduleCheckpoint(opened: OpenDatabase): void {
+  opened.writesSinceCheckpoint += 1
+  opened.dirtySinceBackup = true
+  if (opened.idleCheckpoint) clearTimeout(opened.idleCheckpoint)
+  const delay = opened.writesSinceCheckpoint >= CHECKPOINT_WRITE_THRESHOLD ? 0 : IDLE_CHECKPOINT_MS
+  opened.idleCheckpoint = setTimeout(() => {
+    opened.idleCheckpoint = null
+    try {
+      checkpoint(opened, false)
+      opened.database.exec('PRAGMA incremental_vacuum(256); PRAGMA optimize;')
+    } catch { /* retry on next idle/close */ }
+  }, delay)
+}
+
+async function closeAll(): Promise<void> {
+  for (const opened of databases.values()) {
+    if (opened.idleCheckpoint) clearTimeout(opened.idleCheckpoint)
+    try { checkpoint(opened, true) } catch { /* WAL remains recoverable */ }
+    opened.database.close()
+    try {
+      const backupPath = `${opened.path}.bak`
+      const age = await fs.stat(backupPath)
+        .then(stat => Date.now() - stat.mtimeMs)
+        .catch(() => Number.POSITIVE_INFINITY)
+      if (!opened.dirtySinceBackup || age < BACKUP_MIN_INTERVAL_MS) continue
+      const previous = `${backupPath}.previous`
+      const temporary = `${backupPath}.tmp`
+      await fs.rm(temporary, { force: true })
+      await fs.copyFile(opened.path, temporary)
+      await syncFile(temporary)
+      assertBackupHealthy(temporary)
+      await fs.rm(previous, { force: true })
+      if (await fileExists(backupPath)) await fs.rename(backupPath, previous)
+      await fs.rename(temporary, backupPath)
+      await syncDirectory(path.dirname(backupPath))
+    } catch { /* committed primary remains authoritative */ }
+  }
+  databases.clear()
+}
+
+async function clearDatabase(opened: OpenDatabase): Promise<void> {
+  opened.database.exec('BEGIN IMMEDIATE')
+  try {
+    opened.database.exec(`
+      DELETE FROM branch_messages;
+      DELETE FROM branches;
+      DELETE FROM messages;
+      DELETE FROM threads;
+      DELETE FROM session_state;
+      DELETE FROM blobs;
+    `)
+    opened.database.exec('COMMIT')
+  } catch (error) {
+    opened.database.exec('ROLLBACK')
+    throw error
+  }
+  // Clear is an explicit destructive operation: old recovery points must not
+  // resurrect the deleted conversation on the next corruption recovery.
+  await fs.rm(`${opened.path}.bak`, { force: true })
+  await fs.rm(`${opened.path}.bak.previous`, { force: true })
+  await fs.rm(blobDirectory(opened.path), { recursive: true, force: true })
+}
+
+async function directoryBytes(directory: string): Promise<number> {
+  let total = 0
+  let entries
+  try { entries = await fs.readdir(directory, { withFileTypes: true }) } catch { return 0 }
+  for (const entry of entries) {
+    const target = path.join(directory, entry.name)
+    if (entry.isDirectory()) total += await directoryBytes(target)
+    else if (entry.isFile()) total += await fs.stat(target).then(stat => stat.size).catch(() => 0)
+  }
+  return total
+}
+
+async function readStats(database: DatabaseSync, databasePath: string): Promise<SessionStorageStats> {
+  const scalar = (sql: string, key: string): number => Number(
+    (database.prepare(sql).get() as Record<string, unknown> | undefined)?.[key] || 0,
+  )
+  const fileBytes = async (target: string): Promise<number> => fs.stat(target)
+    .then(stat => stat.size)
+    .catch(() => 0)
+  return {
+    databaseBytes: await fileBytes(databasePath),
+    walBytes: await fileBytes(`${databasePath}-wal`),
+    blobBytes: await directoryBytes(blobDirectory(databasePath)),
+    threadCount: scalar('SELECT COUNT(*) AS value FROM threads', 'value'),
+    messageCount: scalar('SELECT COUNT(*) AS value FROM messages', 'value'),
+    branchCount: scalar('SELECT COUNT(*) AS value FROM branches', 'value'),
+    blobCount: scalar('SELECT COUNT(*) AS value FROM blobs WHERE ref_count > 0', 'value'),
+    pageSize: scalar('PRAGMA page_size', 'page_size'),
+    freePages: scalar('PRAGMA freelist_count', 'freelist_count'),
+  }
+}
+
+export async function executeSessionStorageOperation(
+  operation: SessionWorkerRequest['operation'],
+): Promise<SessionWorkerResult> {
+  if (operation.type === 'closeAll') {
+    await closeAll()
+    return { type: 'ok' }
+  }
+  const opened = await getDatabase(operation.databasePath)
+  switch (operation.type) {
+    case 'open': {
+      const migrated = operation.legacySessionsDir
+        ? await importLegacy(opened.database, opened.path, operation.legacySessionsDir)
+        : false
+      if (migrated) opened.dirtySinceBackup = true
+      return { type: 'opened', catalog: readCatalog(opened.database), migrated }
+    }
+    case 'loadCatalog':
+      return { type: 'catalog', catalog: readCatalog(opened.database) }
+    case 'loadMessages':
+      return { type: 'messages', messages: await readMessages(opened.database, opened.path, operation.threadId) }
+    case 'loadBranchMessages':
+      return {
+        type: 'branchMessages',
+        branches: await readBranchMessages(opened.database, opened.path, operation.threadId),
+      }
+    case 'getStats':
+      return { type: 'stats', stats: await readStats(opened.database, opened.path) }
+    case 'applyPatch':
+      await applyPatch(opened.database, opened.path, operation.patch)
+      scheduleCheckpoint(opened)
+      return { type: 'ok' }
+    case 'clear':
+      await clearDatabase(opened)
+      scheduleCheckpoint(opened)
+      return { type: 'ok' }
+    case 'checkpoint':
+      checkpoint(opened, operation.truncate === true)
+      return { type: 'ok' }
+  }
+}
+
+parentPort?.on('message', async (request: SessionWorkerRequest) => {
+  let response: SessionWorkerResponse
+  try {
+    response = {
+      requestId: request.requestId,
+      ok: true,
+      result: await executeSessionStorageOperation(request.operation),
+    }
+  } catch (error) {
+    response = {
+      requestId: request.requestId,
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+  parentPort?.postMessage(response)
+})

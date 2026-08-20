@@ -83,7 +83,7 @@ function isAllowedGlobalResourcePath(filePath: string): boolean {
  * Previews keep the UI responsive on huge files, but a truncated read is
  * indistinguishable from a short file once it crosses the IPC boundary — so any
  * caller that parses the result or writes it back must opt into a full read.
- * `.adnify` state (session JSONL, settings, indexes) is always read in full:
+ * `.adnify` project files (settings, analytics and indexes) are always read in full:
  * a truncated parse there reads as "empty", and empty round-trips as deletion.
  */
 const PREVIEW_BYTE_LIMIT = 5 * 1024 * 1024
