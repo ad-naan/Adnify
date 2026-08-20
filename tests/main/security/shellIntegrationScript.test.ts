@@ -23,9 +23,20 @@ function hasBash(): boolean {
   return probe.status === 0
 }
 
+function toPosixPath(localPath: string): string {
+  if (process.platform !== 'win32') return localPath
+  const normalized = localPath.replace(/\\/g, '/')
+  const converted = spawnSync('bash', ['-c', `wslpath -u "${normalized}" 2>/dev/null || cygpath -u "${normalized}" 2>/dev/null || echo "${normalized}"`], { encoding: 'utf8' })
+  const result = converted.stdout?.trim()
+  if (result) return result
+  return normalized
+}
+
+const SCRIPT_PATH = toPosixPath(SCRIPT)
+
 /** Run lines in an interactive bash with the integration loaded; return OSC payloads. */
 function collectMarkers(lines: string[]): string[] {
-  const input = [`export PS1='$ '`, `. '${SCRIPT}'`, ...lines, 'exit'].join('\n') + '\n'
+  const input = [`export PS1='$ '`, `. '${SCRIPT_PATH}'`, ...lines, 'exit'].join('\n') + '\n'
   const result = spawnSync('bash', ['--norc', '--noprofile', '-i'], {
     input,
     encoding: 'latin1',
