@@ -45,3 +45,8 @@ package-lock.json
 /tmp
 
 .pnpm-store/
+
+# Shell-integration rc files. secureTerminal writes these into app.getPath('temp'),
+# which the terminal tests mock as '.', so they land in the repo root.
+/adnify-shell-integration-*.bashrc
+/adnify-shell-integration-*/
