@@ -173,6 +173,10 @@ class WorkspaceFileRepository {
     return api.file.write(this.getFilePath(file, rootPath), content)
   }
 
+  async appendText(file: AdnifyFile | string, content: string, rootPath?: string): Promise<boolean> {
+    return api.file.append(this.getFilePath(file, rootPath), content)
+  }
+
   async exists(file: AdnifyFile | string, rootPath?: string): Promise<boolean> {
     return api.file.exists(this.getFilePath(file, rootPath))
   }

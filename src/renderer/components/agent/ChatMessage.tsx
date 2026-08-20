@@ -55,6 +55,7 @@ import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import { ImageLightbox } from './ImageLightbox'
 import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { partitionStreamingMarkdown } from './streamingMarkdownPartition'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -155,9 +156,28 @@ CodeBlock.displayName = 'CodeBlock'
 
 const cleanStreamingContent = (text: string): string => {
   if (!text) return ''
-  const withoutLeaks = stripToolCallLeaks(text)
-  return fixMarkdownTables(withoutLeaks)
+  return stripToolCallLeaks(text)
 }
+
+const StableStreamingMarkdownBlock = React.memo(({
+  content,
+  components,
+}: {
+  content: string
+  components: Record<string, React.ComponentType<any> | keyof React.JSX.IntrinsicElements>
+}) => (
+  <ReactMarkdown
+    className="prose prose-invert max-w-none"
+    remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+    rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+    components={components as any}
+    skipHtml
+  >
+    {fixMarkdownTables(content)}
+  </ReactMarkdown>
+))
+
+StableStreamingMarkdownBlock.displayName = 'StableStreamingMarkdownBlock'
 
 const renderStreamingTailText = (value: string, key: string) => {
   if (!value) return value
@@ -568,9 +588,9 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   // 所有 useMemo 必须在前面
   const cleanedContent = React.useMemo(() => {
-    const cleaned = isStreaming ? cleanStreamingContent(content) : content
-    // 对所有内容应用表格修复（包括非流式内容）
-    return fixMarkdownTables(cleaned)
+    return isStreaming
+      ? cleanStreamingContent(content)
+      : fixMarkdownTables(content)
   }, [content, isStreaming])
 
   // 检测系统警告
@@ -593,6 +613,10 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
   // 平滑流式插入
   const smoothContent = useSmoothStream(contentWithoutAlert || '', !!isStreaming, 1.5)
   const enableBlockReveal = !!isStreaming
+  const streamingPartition = React.useMemo(
+    () => isStreaming ? partitionStreamingMarkdown(smoothContent) : null,
+    [isStreaming, smoothContent],
+  )
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
 
@@ -702,15 +726,44 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
           style={{ fontSize: `${fontSize}px` }}
           className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}
         >
-          <ReactMarkdown
-            className="prose prose-invert max-w-none"
-            remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-            rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-            components={markdownComponents}
-            skipHtml
-          >
-            {smoothContent}
-          </ReactMarkdown>
+          {isStreaming && streamingPartition ? (
+            <>
+              {streamingPartition.completedBlocks.map((block, index) => (
+                <StableStreamingMarkdownBlock
+                  key={index}
+                  content={block}
+                  components={markdownComponents as any}
+                />
+              ))}
+              {streamingPartition.activeBlock && (
+                streamingPartition.hasOpenFence || streamingPartition.activeBlock.length > 4096 ? (
+                  <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
+                    {renderStreamingTailText(streamingPartition.activeBlock, 'markdown-stream-tail')}
+                  </div>
+                ) : (
+                  <ReactMarkdown
+                    className="prose prose-invert max-w-none"
+                    remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+                    rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+                    components={markdownComponents}
+                    skipHtml
+                  >
+                    {streamingPartition.activeBlock}
+                  </ReactMarkdown>
+                )
+              )}
+            </>
+          ) : (
+            <ReactMarkdown
+              className="prose prose-invert max-w-none"
+              remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+              rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+              components={markdownComponents}
+              skipHtml
+            >
+              {smoothContent}
+            </ReactMarkdown>
+          )}
         </div>
       )}
     </>

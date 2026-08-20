@@ -390,6 +390,7 @@ export interface ElectronAPI {
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
   writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
+  appendFile: (path: string, content: string, encoding?: string) => Promise<boolean>
   ensureDir: (path: string) => Promise<boolean>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>

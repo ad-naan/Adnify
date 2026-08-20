@@ -92,10 +92,15 @@ class EmotionContextAnalyzer {
 
     // 2. 监听主 Store — 文件切换 + 项目名
     let prevFile = useStore.getState().activeFilePath
+    let prevWorkspacePath = useStore.getState().workspacePath
+    if (prevWorkspacePath) {
+      emotionDetectionEngine.setProject(prevWorkspacePath.split('/').pop() || '')
+    }
     this.unsubscribers.push(
       useStore.subscribe((state) => {
         // 同步项目名到引擎
-        if (state.workspacePath) {
+        if (state.workspacePath && state.workspacePath !== prevWorkspacePath) {
+          prevWorkspacePath = state.workspacePath
           emotionDetectionEngine.setProject(state.workspacePath.split('/').pop() || '')
         }
         if (state.activeFilePath && state.activeFilePath !== prevFile) {
