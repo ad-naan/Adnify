@@ -329,23 +329,39 @@ Adnify 在主流 AI 编辑器的基础上，实现了多项创新功能：
 
 ### 环境要求
 
-- Node.js >= 18
-- Git
-- Python (可选，用于某些 npm 包的编译)
+| 工具 | 版本 | 说明 |
+|------|------|------|
+| **Node.js** | **24.19.0+**（`^24.19.0`） | Active LTS 基线 **24.19.0**（钉在 `.nvmrc`）。允许更新的 24.x 补丁；拒绝 Node 22 与 25+（Node 26 会导致 Electron `extract-zip` 安装失败）。 |
+| **pnpm** | **9.15.9**（精确） | 与 `packageManager` / `engines.pnpm` 完全一致。推荐 [Corepack](https://nodejs.org/api/corepack.html)：`corepack enable`。 |
+| Git | 较新版本即可 | — |
+| Python | 可选 | 仅在需要从源码编译原生模块时需要 |
+
+`package.json` 的 `engines`、`.npmrc` 的 `engine-strict` / `package-manager-strict-version`，以及 `preinstall`（`scripts/ensure-pnpm.js`）会在安装时拦截：错误的 Node、非 pnpm、或 pnpm 版本不一致。本机若仍是 Node 22 或 26，`pnpm install` 会直接失败——先按 `.nvmrc` 切到 **24.19.0+**。
 
 ### 开发环境运行
 
 ```bash
 # 1. 克隆项目
-git clone https://gitee.com/adnaan/adnify.git
+git clone https://github.com/ad-naan/adnify.git
+# 或：git clone https://gitee.com/adnaan/adnify.git
 cd adnify
 
-# 2. 安装依赖
-npm install
+# 2. 切换到仓库钉死的 Node（任选其一）
+# nvm use          # 读取 .nvmrc
+# fnm use          # 读取 .node-version
+# mise install     # 读取 mise.toml
 
-# 3. 启动开发服务器
-npm run dev
+# 3. 启用 Corepack，保证 pnpm 与 packageManager 一致
+corepack enable
+
+# 4. 安装依赖
+pnpm install
+
+# 5. 启动开发服务器
+pnpm dev
 ```
+
+若出现 Electron `failed to install correctly`，请在 Node **24.19.0+** 下删除 `node_modules/electron` 后重新执行 `pnpm install`。
 
 ### 打包发布
 
@@ -355,7 +371,7 @@ npm run dev
 # icons/ 应用图标，logos/ 应用内 Logo，ip/ IP 形象，welcome/ 欢迎/启动页素材
 
 # 2. 构建安装包
-npm run dist
+pnpm dist
 
 # 生成的文件位于 release/ 目录
 ```
@@ -407,7 +423,7 @@ Adnify 的品牌资源统一收纳在 `public/brand/`，README 首屏、欢迎�
 图标资源由 `public/brand/logos/*.png` 生成。替换 Logo 后可运行：
 
 ```bash
-npm run assets:icons
+pnpm assets:icons
 ```
 
 更多资源说明见 [public/brand/README.md](public/brand/README.md)。

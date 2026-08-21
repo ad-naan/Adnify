@@ -105,18 +105,18 @@ tests/
 
 ```bash
 # 运行所有测试
-npm test
+pnpm test
 
 # 运行特定模块
-npm test agent/
-npm test services/
+pnpm test agent/
+pnpm test services/
 
 # 运行单个文件
-npm test agent/core/Agent.test.ts
+pnpm test agent/core/Agent.test.ts
 
 # 监听模式
-npm run test:watch
+pnpm test:watch
 
 # 覆盖率报告
-npm run test:coverage
+pnpm test:coverage
 ```

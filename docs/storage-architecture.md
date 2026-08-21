@@ -103,6 +103,6 @@ second authoritative cache.
 The reproducible write-amplification benchmark is:
 
 ```sh
-npm run build
+pnpm build
 node scripts/benchmark-session-storage.cjs
 ```
