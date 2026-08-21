@@ -3,6 +3,14 @@ import fs from 'fs'
 import path from 'path'
 import { pipeline } from 'stream/promises'
 import type { Client as Ssh2Client, ConnectConfig, FileEntry, SFTPWrapper, Stats } from 'ssh2'
+import {
+  REMOTE_DIR_DOWNLOAD_MAX_DEPTH,
+  REMOTE_DIR_DOWNLOAD_MAX_ENTRIES,
+  assertSafeRemoteName,
+  buildDirectoryDownloadTarget,
+  isSftpSymbolicLinkMode,
+  safeJoinUnderDownloadRoot,
+} from '@shared/utils/remoteDownloadPath'
 import { remoteHostTrustService } from '../services/remoteHostTrustService'
 
 interface RemoteServerConfig {
@@ -32,6 +40,9 @@ interface RemoteUploadResult {
 interface RemoteDownloadResult {
   canceled: boolean
   localPath?: string
+  isDirectory?: boolean
+  downloadedCount?: number
+  skippedSymlinks?: number
 }
 
 function getSsh2Client(): typeof Ssh2Client {
@@ -291,6 +302,55 @@ async function downloadRemoteFile(sftp: SFTPWrapper, remotePath: string, localPa
   await pipeline(sftp.createReadStream(remotePath), fs.createWriteStream(localPath))
 }
 
+interface DirectoryDownloadStats {
+  downloadedCount: number
+  skippedSymlinks: number
+  entryCount: number
+}
+
+async function downloadRemoteDirectory(
+  sftp: SFTPWrapper,
+  remoteDir: string,
+  localDir: string,
+  stats: DirectoryDownloadStats = { downloadedCount: 0, skippedSymlinks: 0, entryCount: 0 },
+  depth = 0,
+): Promise<DirectoryDownloadStats> {
+  if (depth > REMOTE_DIR_DOWNLOAD_MAX_DEPTH) {
+    throw new Error(`Remote directory exceeds max depth (${REMOTE_DIR_DOWNLOAD_MAX_DEPTH})`)
+  }
+
+  await fs.promises.mkdir(localDir, { recursive: true })
+  const entries = await readdir(sftp, remoteDir)
+
+  for (const entry of entries) {
+    if (entry.filename === '.' || entry.filename === '..') continue
+
+    stats.entryCount += 1
+    if (stats.entryCount > REMOTE_DIR_DOWNLOAD_MAX_ENTRIES) {
+      throw new Error(`Remote directory exceeds max entry limit (${REMOTE_DIR_DOWNLOAD_MAX_ENTRIES})`)
+    }
+
+    const name = assertSafeRemoteName(entry.filename)
+    const remoteChild = joinRemotePath(remoteDir, name)
+    const localChild = safeJoinUnderDownloadRoot(localDir, name)
+
+    if (isSftpSymbolicLinkMode(entry.attrs?.mode)) {
+      stats.skippedSymlinks += 1
+      continue
+    }
+
+    if (isDirectoryLike(entry.attrs)) {
+      await downloadRemoteDirectory(sftp, remoteChild, localChild, stats, depth + 1)
+      continue
+    }
+
+    await downloadRemoteFile(sftp, remoteChild, localChild)
+    stats.downloadedCount += 1
+  }
+
+  return stats
+}
+
 export function registerRemoteShellHandlers(): void {
   ipcMain.handle('remoteHostTrust:getStatus', async (_, server: RemoteServerConfig): Promise<{ known: boolean; fingerprintSha256?: string }> => {
     return await remoteHostTrustService.getStatus(server.host, server.port)
@@ -395,24 +455,65 @@ export function registerRemoteShellHandlers(): void {
   ipcMain.handle('remoteShell:download', async (event, server: RemoteServerConfig, remotePath: string): Promise<RemoteDownloadResult> => {
     const normalizedRemotePath = assertSafeExplicitRemotePath(remotePath, 'download')
     const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
+
+    const isDirectory = await withSftp(server, async (sftp) => {
+      const attrs = await stat(sftp, normalizedRemotePath)
+      return attrs.isDirectory()
+    })
+
+    if (isDirectory) {
+      const folderResult = await dialog.showOpenDialog(window as BrowserWindow, {
+        title: 'Choose folder for remote directory download',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+
+      if (folderResult.canceled || folderResult.filePaths.length === 0) {
+        return { canceled: true, isDirectory: true }
+      }
+
+      const localPath = buildDirectoryDownloadTarget(folderResult.filePaths[0], normalizedRemotePath)
+      try {
+        await fs.promises.access(localPath)
+        throw new Error(
+          `Destination already exists: ${localPath}. Choose another folder or remove the existing directory first.`,
+        )
+      } catch (accessError) {
+        if ((accessError as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw accessError
+        }
+      }
+
+      const stats = await withSftp(server, async (sftp) => (
+        downloadRemoteDirectory(sftp, normalizedRemotePath, localPath)
+      ))
+
+      return {
+        canceled: false,
+        localPath,
+        isDirectory: true,
+        downloadedCount: stats.downloadedCount,
+        skippedSymlinks: stats.skippedSymlinks,
+      }
+    }
+
     const saveResult = await dialog.showSaveDialog(window as BrowserWindow, {
       title: 'Download remote file',
       defaultPath: path.basename(normalizedRemotePath),
     })
 
     if (saveResult.canceled || !saveResult.filePath) {
-      return { canceled: true }
+      return { canceled: true, isDirectory: false }
     }
 
     await withSftp(server, async (sftp) => {
-      const attrs = await stat(sftp, normalizedRemotePath)
-      if (attrs.isDirectory()) {
-        throw new Error('Downloading directories is not supported yet')
-      }
-
-      await downloadRemoteFile(sftp, normalizedRemotePath, saveResult.filePath)
+      await downloadRemoteFile(sftp, normalizedRemotePath, saveResult.filePath!)
     })
 
-    return { canceled: false, localPath: saveResult.filePath }
+    return {
+      canceled: false,
+      localPath: saveResult.filePath,
+      isDirectory: false,
+      downloadedCount: 1,
+    }
   })
 }

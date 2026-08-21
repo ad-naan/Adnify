@@ -638,10 +638,11 @@ For long-running servers or watch tasks:
     download_from_remote: {
         name: 'download_from_remote',
         displayName: 'Download From Remote',
-        description: 'Download a remote file through the native save dialog. Requires approval.',
-        detailedDescription: `Download a remote file to the local machine.
+        description: 'Download a remote file or directory through the native save/folder dialog. Requires approval.',
+        detailedDescription: `Download a remote file or directory to the local machine.
 - Requires dangerous approval
-- Opens the desktop save dialog for the user to choose the local destination
+- Files open the desktop save dialog; directories open a folder picker and recurse into the selected destination
+- Symlinks inside directories are skipped
 - Uses remote SFTP only
 - Never falls back to a local file copy`,
         category: 'write',
@@ -655,7 +656,7 @@ For long-running servers or watch tasks:
         requiresWorkspace: false,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'Remote file path to download', required: true },
+            path: { type: 'string', description: 'Remote file or directory path to download', required: true },
             server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
         },
     },

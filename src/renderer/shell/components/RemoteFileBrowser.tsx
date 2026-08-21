@@ -71,6 +71,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
   const [selectedFileContent, setSelectedFileContent] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
 
@@ -254,22 +255,26 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
   }, [currentPath, language, loadEntries, server])
 
   const handleDownload = useCallback(async (entry: RemoteFileEntry) => {
-    if (entry.isDirectory) {
-      toast.error(language === 'zh' ? '暂不支持下载目录' : 'Directory download is not supported yet')
-      return
-    }
-
+    if (downloading) return
+    setDownloading(true)
     try {
       const result = await api.remoteShell.download(server, entry.path)
       if (result.canceled) return
+      const detail = result.isDirectory
+        ? (language === 'zh'
+          ? `已下载 ${result.downloadedCount ?? 0} 个文件到 ${result.localPath || ''}${result.skippedSymlinks ? `（跳过 ${result.skippedSymlinks} 个符号链接）` : ''}`
+          : `Downloaded ${result.downloadedCount ?? 0} file(s) to ${result.localPath || ''}${result.skippedSymlinks ? ` (${result.skippedSymlinks} symlink(s) skipped)` : ''}`)
+        : result.localPath || undefined
       toast.success(
         language === 'zh' ? '下载完成' : 'Download completed',
-        result.localPath || undefined,
+        detail,
       )
     } catch (downloadError) {
       toast.error(language === 'zh' ? '下载失败' : 'Download failed', downloadError instanceof Error ? downloadError.message : String(downloadError))
+    } finally {
+      setDownloading(false)
     }
-  }, [language, server])
+  }, [downloading, language, server])
 
   const pathSegments = useMemo(() => {
     const normalized = normalizePath(currentPath)
@@ -342,11 +347,23 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
                     <div className="truncate text-xs text-text-muted">{entry.isDirectory ? (language === 'zh' ? '目录' : 'Directory') : formatSize(entry.size)}</div>
                   </div>
                 </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={downloading}
+                  onClick={() => handleDownload(entry)}
+                  title={
+                    downloading
+                      ? (language === 'zh' ? '正在下载…' : 'Downloading…')
+                      : language === 'zh'
+                        ? (entry.isDirectory ? '下载目录' : '下载文件')
+                        : (entry.isDirectory ? 'Download folder' : 'Download file')
+                  }
+                >
+                      <Download className={`h-3.5 w-3.5 ${downloading ? 'animate-pulse' : ''}`} />
+                    </Button>
                 {!entry.isDirectory && (
                   <>
-                    <Button variant="ghost" size="icon" onClick={() => handleDownload(entry)} title={language === 'zh' ? '下载文件' : 'Download file'}>
-                      <Download className="h-3.5 w-3.5" />
-                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => void openInEditor(entry.path)} title={language === 'zh' ? '在编辑器打开' : 'Open in editor'}>
                       <SquareArrowOutUpRight className="h-3.5 w-3.5" />
                     </Button>
@@ -365,7 +382,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           <div className="flex items-center justify-between gap-2">
             <Input value={selectedFilePath} readOnly className="text-xs" />
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => handleDownload({ name: selectedFilePath.split('/').pop() || selectedFilePath, path: selectedFilePath, isDirectory: false, size: selectedFileContent.length })} leftIcon={<Download className="h-4 w-4" />}>{language === 'zh' ? '下载' : 'Download'}</Button>
+              <Button variant="ghost" size="sm" disabled={downloading} onClick={() => handleDownload({ name: selectedFilePath.split('/').pop() || selectedFilePath, path: selectedFilePath, isDirectory: false, size: selectedFileContent.length })} leftIcon={<Download className="h-4 w-4" />}>{downloading ? (language === 'zh' ? '下载中…' : 'Downloading…') : (language === 'zh' ? '下载' : 'Download')}</Button>
               <Button variant="ghost" size="sm" onClick={() => void openInEditor(selectedFilePath)} leftIcon={<SquareArrowOutUpRight className="h-4 w-4" />}>{language === 'zh' ? '打开到编辑器' : 'Open in editor'}</Button>
               <Button variant="primary" size="sm" onClick={saveFile} disabled={saving || !dirty} leftIcon={<Save className="h-4 w-4" />}>{saving ? (language === 'zh' ? '保存中…' : 'Saving…') : (language === 'zh' ? '保存' : 'Save')}</Button>
             </div>
