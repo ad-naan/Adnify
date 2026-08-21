@@ -332,23 +332,39 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 
 ### Requirements
 
-- Node.js >= 18
-- Git
-- Python (optional, for compiling certain npm packages)
+| Tool | Version | Notes |
+|------|---------|--------|
+| **Node.js** | **22.x** (`^22.12.0`) | CI-tested major only. Floor `22.12.0` matches Vite 8 / `@electron/rebuild`. Node 23+ is out of support (Node 26 breaks Electron’s `extract-zip` install). Pin via `.nvmrc` / `.node-version` / `mise.toml`. |
+| **pnpm** | **9.15.9** (exact) | Must match `packageManager` / `engines.pnpm`. Prefer [Corepack](https://nodejs.org/api/corepack.html): `corepack enable`. |
+| Git | any recent | — |
+| Python | optional | Needed only when native addons must compile from source |
+
+`engines`, `.npmrc` (`engine-strict`, `package-manager-strict-version`), and `preinstall` (`scripts/ensure-pnpm.js`) reject the wrong Node, non-pnpm clients, or a mismatched pnpm version at install time. If your shell is still on Node 26, `pnpm install` will fail until you switch to 22.x via `.nvmrc`.
 
 ### Development Environment
 
 ```bash
 # 1. Clone project
-git clone https://gitee.com/adnaan/adnify.git
+git clone https://github.com/ad-naan/adnify.git
+# or: git clone https://gitee.com/adnaan/adnify.git
 cd adnify
 
-# 2. Install dependencies
-npm install
+# 2. Use the repo-pinned Node (pick one)
+# nvm use          # reads .nvmrc
+# fnm use          # reads .node-version
+# mise install     # reads mise.toml
 
-# 3. Start dev server
-npm run dev
+# 3. Enable Corepack so pnpm matches packageManager
+corepack enable
+
+# 4. Install dependencies
+pnpm install
+
+# 5. Start dev server
+pnpm dev
 ```
+
+If Electron reports `failed to install correctly`, delete `node_modules/electron` and re-run `pnpm install` on Node 22.x.
 
 ### Build & Package
 
@@ -358,7 +374,7 @@ npm run dev
 # icons/ app icons, logos/ in-app logos, ip/ character assets, welcome/ splash/welcome assets
 
 # 2. Build installer
-npm run dist
+pnpm dist
 
 # Generated files in release/ directory
 ```
@@ -410,7 +426,7 @@ Adnify keeps its brand resources in `public/brand/`. The README hero, welcome sc
 Icons are generated from `public/brand/logos/*.png`. After replacing the logo source files, run:
 
 ```bash
-npm run assets:icons
+pnpm assets:icons
 ```
 
 See [public/brand/README.md](public/brand/README.md) for more details.

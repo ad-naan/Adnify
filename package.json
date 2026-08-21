@@ -7,7 +7,8 @@
   "license": "SEE LICENSE IN LICENSE",
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=22"
+    "node": "^22.12.0",
+    "pnpm": "9.15.9"
   },
   "homepage": "https://github.com/ad-naan/adnify",
   "repository": {
@@ -16,6 +17,7 @@
   },
   "main": "dist/main/main.js",
   "scripts": {
+    "preinstall": "node scripts/ensure-pnpm.js",
     "dev": "concurrently \"pnpm dev:main\" \"pnpm dev:renderer\"",
     "dev:main": "node --max-old-space-size=8192 ./node_modules/typescript/bin/tsc -p tsconfig.main.json --noEmit --watch",
     "dev:renderer": "vite",

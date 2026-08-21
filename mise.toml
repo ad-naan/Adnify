@@ -1,0 +1,5 @@
+# Single source of truth for the major: .nvmrc (also used by CI).
+# mise resolves "22" to the latest installed 22.x that satisfies engines (^22.12.0).
+[tools]
+node = "22"
+pnpm = "9.15.9"

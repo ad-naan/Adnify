@@ -2,12 +2,18 @@
 packages:
   - '.'
 
+# 与 .npmrc 双写：pnpm 9 读 .npmrc；pnpm 11+ 以 workspace 为准。
+# 强制本机 Node/pnpm 与 package.json engines + packageManager 一致。
+engineStrict: true
+packageManagerStrict: true
+packageManagerStrictVersion: true
+
 # 安全 override：把传递依赖顶到已修复的补丁版本。
 #
 # 必须与 package.json 的 pnpm.overrides 保持一致 —— 两份不是冗余：
 # pnpm 9 只读 package.json 的 pnpm.overrides，pnpm 11 只读这里。
-# 本仓库用 packageManager 钉在 9.15.9，但全局 pnpm 已是 11；
-# 哪天钉子松了，只写一处会被静默忽略，15 个漏洞悄悄回来且不报错。
+# 本仓库用 packageManager 钉在 9.15.9；安装时 packageManagerStrictVersion
+# 会拒绝其它 pnpm 大/小版本。overrides 仍双写，避免钉子松动后静默失效。
 overrides:
   brace-expansion@<1.1.18: ^1.1.18
   brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
