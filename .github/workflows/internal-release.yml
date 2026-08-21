@@ -96,7 +96,7 @@ jobs:
           pnpm config set supportedArchitectures.os win32
           pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
-      - name: Install dependencies
+      - name: Configure pnpm for target platform
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pnpm install
         env:
@@ -176,7 +176,7 @@ jobs:
           pnpm config set supportedArchitectures.os darwin
           pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
-      - name: Install dependencies
+      - name: Configure pnpm for target platform
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pnpm install
         env:
@@ -266,7 +266,7 @@ jobs:
           pnpm config set supportedArchitectures.os linux
           pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
-      - name: Install dependencies
+      - name: Configure pnpm for target platform
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pnpm install
         env:

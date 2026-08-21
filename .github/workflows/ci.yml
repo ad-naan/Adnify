@@ -25,7 +25,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
+<<<<<<< HEAD
           node-version-file: '.nvmrc'
+=======
+          node-version: 22
+>>>>>>> master
           cache: 'pnpm'
 
       - name: Install dependencies
