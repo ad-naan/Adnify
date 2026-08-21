@@ -217,6 +217,7 @@ function createGroupedAPI() {
     security: {
       getPermissions: () => raw.getPermissions(),
       resetPermissions: () => raw.resetPermissions(),
+      requestExternalFileAccess: (filePath: string) => raw.requestExternalFileAccess(filePath),
     },
 
     // 索引

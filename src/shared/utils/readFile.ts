@@ -85,7 +85,21 @@ export function resolveReadFileRequest(data: Record<string, unknown>): ReadFileR
   }
 
   if (typeof start_line === 'number' && typeof end_line === 'number' && start_line > end_line) {
-    return { ok: false, normalized, error: 'start_line must be <= end_line' }
+    // Models frequently invert the range; auto-correct for reads instead of failing the tool call.
+    return {
+      ok: true,
+      mode: 'single',
+      normalized: {
+        ...normalized,
+        start_line: end_line,
+        end_line: start_line,
+      },
+      args: {
+        path: parsedPath,
+        start_line: end_line,
+        end_line: start_line,
+      },
+    }
   }
 
   return {

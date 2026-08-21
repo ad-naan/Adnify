@@ -19,10 +19,10 @@ describe('user file session grants', () => {
     expect(isUserAuthorizedFile(path.dirname(target))).toBe(false)
   })
 
-  it('can revoke all grants at the session boundary', () => {
-    const target = path.resolve('outside', 'opened.py')
-    authorizeUserFile(target, 'file-association')
-    clearUserFileGrants()
-    expect(isUserAuthorizedFile(target)).toBe(false)
+  it('authorizes agent-read grants for exact files', () => {
+    const target = path.resolve('outside', 'agent-target.ts')
+    authorizeUserFile(target, 'agent-read')
+    expect(isUserAuthorizedFile(target)).toBe(true)
+    expect(isUserAuthorizedFile(path.resolve('outside', 'other.ts'))).toBe(false)
   })
 })

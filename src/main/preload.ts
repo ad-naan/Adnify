@@ -739,6 +739,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   getPermissions: () => ipcRenderer.invoke('security:getPermissions'),
   resetPermissions: () => ipcRenderer.invoke('security:resetPermissions'),
+  requestExternalFileAccess: (filePath: string) =>
+    ipcRenderer.invoke('security:requestExternalFileAccess', filePath) as Promise<{
+      allowed: boolean
+      reason: 'invalid-path' | 'sensitive-path' | 'already-granted' | 'granted' | 'denied'
+    }>,
 
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => {
     const handler = (_: IpcRendererEvent, data: { event: 'create' | 'update' | 'delete'; path: string }) => callback(data)

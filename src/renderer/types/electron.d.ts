@@ -552,6 +552,10 @@ export interface ElectronAPI {
   // Security
   getPermissions: () => Promise<Record<string, string>>
   resetPermissions: () => Promise<boolean>
+  requestExternalFileAccess: (filePath: string) => Promise<{
+    allowed: boolean
+    reason: 'invalid-path' | 'sensitive-path' | 'already-granted' | 'granted' | 'denied'
+  }>
 
   // Index
   indexInitialize: (workspacePath: string) => Promise<{ success: boolean; error?: string }>

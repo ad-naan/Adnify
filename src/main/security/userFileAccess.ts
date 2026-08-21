@@ -1,6 +1,7 @@
 import * as path from 'path'
 
-export type UserFileGrantSource = 'file-association' | 'file-picker' | 'save-picker' | 'lsp-navigation'
+export type UserFileGrantSource = 'file-association' | 'file-picker' | 'save-picker' | 'lsp-navigation' | 'agent-read'
+
 
 interface UserFileGrant {
   source: UserFileGrantSource
