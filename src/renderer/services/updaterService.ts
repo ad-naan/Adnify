@@ -14,6 +14,7 @@ export interface UpdateStatus {
   error?: string
   requiresManualDownload: boolean
   isPortable: boolean
+  usingDownloadMirror?: boolean
 }
 
 class UpdaterService {
