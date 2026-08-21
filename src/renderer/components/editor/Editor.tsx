@@ -496,7 +496,10 @@ export default function Editor() {
             diff={{
               original: activeFile.originalContent || '',
               modified: activeFile.content || '',
-              filePath: activeFile.path.replace(/^(git-)?diff:\/\//, '')
+              filePath: activeFile.path
+                .replace(/^(git-)?diff:\/\//, '')
+                .replace(/^commit\/[^/]+\//, '')
+                .replace(/^stash@\{\d+\}\//, ''),
             }}
             isPending={activeFile.path.startsWith('diff://') && pendingChanges.some(c => c.filePath === activeFile.path.replace(/^(git-)?diff:\/\//, ''))}
             readOnly={activeFile.path.startsWith('git-diff://')}

@@ -15,7 +15,7 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t, type TranslationKey } from '@renderer/i18n'
-import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry, type GitRepository } from '@renderer/services/gitService'
+import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry, type GitRepository, type GitFileChange } from '@renderer/services/gitService'
 import { workspaceManager } from '@renderer/services/WorkspaceManager'
 import { getEditorConfig } from '@renderer/settings'
 import { DEFAULT_GIT_COMMIT_PROMPT } from '@shared/config/defaults'
@@ -272,13 +272,21 @@ const CommitItem = memo(function CommitItem({
     onCherryPick,
     onRevert,
     onCopyHash,
-    onClick,
+    files,
+    filesLoading,
+    expanded,
+    onToggle,
+    onOpenFile,
 }: {
     commit: GitCommit
     onCherryPick: () => void
     onRevert: () => void
     onCopyHash: () => void
-    onClick: () => void
+    files: GitFileChange[] | null
+    filesLoading: boolean
+    expanded: boolean
+    onToggle: () => void
+    onOpenFile: (file: GitFileChange) => void
 }) {
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
@@ -287,56 +295,90 @@ const CommitItem = memo(function CommitItem({
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
     const timeAgo = getTimeAgo(commit.date, language)
 
-    // 使用性能 hook 处理点击外部关闭
     useClickOutside(() => setShowMenu(false), showMenu, [menuRef, buttonRef])
 
     return (
-        <div
-            className="group px-3 py-2 hover:bg-surface-hover cursor-pointer border-l-2 border-transparent hover:border-accent transition-colors"
-            onClick={onClick}
-        >
-            <div className="flex items-start gap-2">
-                <GitCommitIcon className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <div className="text-xs text-text-primary truncate font-medium">{commit.message}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-accent font-mono">{commit.shortHash}</span>
-                        <span className="text-[10px] text-text-muted">{commit.author}</span>
-                        <span className="text-[10px] text-text-muted opacity-60">{timeAgo}</span>
+        <div className="border-l-2 border-transparent hover:border-accent transition-colors">
+            <div
+                className="group px-3 py-2 hover:bg-surface-hover cursor-pointer"
+                onClick={onToggle}
+            >
+                <div className="flex items-start gap-2">
+                    {expanded
+                        ? <ChevronDown className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />}
+                    <GitCommitIcon className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs text-text-primary truncate font-medium">{commit.message}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-accent font-mono">{commit.shortHash}</span>
+                            <span className="text-[10px] text-text-muted">{commit.author}</span>
+                            <span className="text-[10px] text-text-muted opacity-60">{timeAgo}</span>
+                        </div>
+                    </div>
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            ref={buttonRef}
+                            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+                            className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <MoreHorizontal className="w-3 h-3 text-text-muted" />
+                        </button>
+                        {showMenu && (
+                            <div className="absolute right-0 top-full mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onCopyHash(); setShowMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                                >
+                                    <Copy className="w-3 h-3" /> {tt('git.copyHash')}
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onCherryPick(); setShowMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                                >
+                                    <GitPullRequest className="w-3 h-3" /> {tt('git.cherryPick')}
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onRevert(); setShowMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                                >
+                                    <Undo2 className="w-3 h-3" /> {tt('git.revert')}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
-                <div className="relative" ref={menuRef}>
-                    <button
-                        ref={buttonRef}
-                        onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-                        className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <MoreHorizontal className="w-3 h-3 text-text-muted" />
-                    </button>
-                    {showMenu && (
-                        <div className="absolute right-0 top-full mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onCopyHash(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <Copy className="w-3 h-3" /> {tt('git.copyHash')}
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onCherryPick(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <GitPullRequest className="w-3 h-3" /> {tt('git.cherryPick')}
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onRevert(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <Undo2 className="w-3 h-3" /> {tt('git.revert')}
-                            </button>
+            </div>
+            {expanded && (
+                <div className="pb-2 pl-8 pr-3 space-y-0.5">
+                    {filesLoading && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-text-muted">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            {tt('git.loadingDiff')}
                         </div>
                     )}
+                    {!filesLoading && files && files.length === 0 && (
+                        <div className="px-2 py-1 text-[10px] text-text-muted">{tt('git.noChangedFiles')}</div>
+                    )}
+                    {!filesLoading && files?.map((file) => (
+                        <button
+                            key={`${file.status}:${file.oldPath || ''}:${file.path}`}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onOpenFile(file) }}
+                            className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-surface-hover text-[11px]"
+                        >
+                            <span className={`font-mono w-3 flex-shrink-0 ${
+                                file.status === 'added' ? 'text-status-success'
+                                    : file.status === 'deleted' ? 'text-status-error'
+                                        : 'text-status-warning'
+                            }`}>
+                                {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : file.status === 'renamed' ? 'R' : 'M'}
+                            </span>
+                            <span className="truncate text-text-secondary">{file.path}</span>
+                        </button>
+                    ))}
                 </div>
-            </div>
+            )}
         </div>
     )
 })
@@ -347,13 +389,21 @@ const StashItem = memo(function StashItem({
     onApply,
     onPop,
     onDrop,
-    onView,
+    files,
+    filesLoading,
+    expanded,
+    onToggle,
+    onOpenFile,
 }: {
     stash: GitStashEntry
     onApply: () => void
     onPop: () => void
     onDrop: () => void
-    onView: () => void
+    files: GitFileChange[] | null
+    filesLoading: boolean
+    expanded: boolean
+    onToggle: () => void
+    onOpenFile: (file: GitFileChange) => void
 }) {
     const [showMenu, setShowMenu] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
@@ -361,53 +411,87 @@ const StashItem = memo(function StashItem({
     const language = useStore(s => s.language)
     const tt = useCallback((key: TranslationKey) => t(key, language), [language])
 
-    // 使用性能 hook 处理点击外部关闭
     useClickOutside(() => setShowMenu(false), showMenu, [menuRef, buttonRef])
 
     return (
-        <div className="group px-3 py-2 hover:bg-surface-hover cursor-pointer" onClick={onView}>
-            <div className="flex items-start gap-2">
-                <Archive className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <div className="text-xs text-text-primary truncate">{stash.message || 'WIP'}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-accent font-mono">stash@{`{${stash.index}}`}</span>
-                        <span className="text-[10px] text-text-muted">on {stash.branch}</span>
+        <div>
+            <div className="group px-3 py-2 hover:bg-surface-hover cursor-pointer" onClick={onToggle}>
+                <div className="flex items-start gap-2">
+                    {expanded
+                        ? <ChevronDown className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
+                        : <ChevronRight className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />}
+                    <Archive className="w-3.5 h-3.5 text-text-muted mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                        <div className="text-xs text-text-primary truncate">{stash.message || 'WIP'}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-accent font-mono">stash@{`{${stash.index}}`}</span>
+                            <span className="text-[10px] text-text-muted">on {stash.branch}</span>
+                        </div>
+                    </div>
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            ref={buttonRef}
+                            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+                            className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <MoreHorizontal className="w-3 h-3 text-text-muted" />
+                        </button>
+                        {showMenu && (
+                            <div className="absolute right-0 top-full mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onApply(); setShowMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                                >
+                                    <Play className="w-3 h-3" /> {tt('git.stashApply')}
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onPop(); setShowMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
+                                >
+                                    <ArrowUp className="w-3 h-3" /> {tt('git.stashPop')}
+                                </button>
+                                <div className="border-t border-border-subtle my-1" />
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onDrop(); setShowMenu(false) }}
+                                    className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover text-red-400 flex items-center gap-2"
+                                >
+                                    <Trash2 className="w-3 h-3" /> {tt('git.stashDrop')}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
-                <div className="relative" ref={menuRef}>
-                    <button
-                        ref={buttonRef}
-                        onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
-                        className="p-1 hover:bg-surface-active rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                        <MoreHorizontal className="w-3 h-3 text-text-muted" />
-                    </button>
-                    {showMenu && (
-                        <div className="absolute right-0 top-full mt-1 bg-surface border border-border-subtle rounded-lg shadow-xl z-50 py-1 min-w-[120px]">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onApply(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <Play className="w-3 h-3" /> {tt('git.stashApply')}
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onPop(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover flex items-center gap-2"
-                            >
-                                <ArrowUp className="w-3 h-3" /> {tt('git.stashPop')}
-                            </button>
-                            <div className="border-t border-border-subtle my-1" />
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onDrop(); setShowMenu(false) }}
-                                className="w-full px-3 py-1.5 text-xs text-left hover:bg-surface-hover text-red-400 flex items-center gap-2"
-                            >
-                                <Trash2 className="w-3 h-3" /> {tt('git.stashDrop')}
-                            </button>
+            </div>
+            {expanded && (
+                <div className="pb-2 pl-8 pr-3 space-y-0.5">
+                    {filesLoading && (
+                        <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-text-muted">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            {tt('git.loadingDiff')}
                         </div>
                     )}
+                    {!filesLoading && files && files.length === 0 && (
+                        <div className="px-2 py-1 text-[10px] text-text-muted">{tt('git.noChangedFiles')}</div>
+                    )}
+                    {!filesLoading && files?.map((file) => (
+                        <button
+                            key={`${file.status}:${file.oldPath || ''}:${file.path}`}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onOpenFile(file) }}
+                            className="w-full flex items-center gap-2 px-2 py-1 rounded text-left hover:bg-surface-hover text-[11px]"
+                        >
+                            <span className={`font-mono w-3 flex-shrink-0 ${
+                                file.status === 'added' ? 'text-status-success'
+                                    : file.status === 'deleted' ? 'text-status-error'
+                                        : 'text-status-warning'
+                            }`}>
+                                {file.status === 'added' ? 'A' : file.status === 'deleted' ? 'D' : file.status === 'renamed' ? 'R' : 'M'}
+                            </span>
+                            <span className="truncate text-text-secondary">{file.path}</span>
+                        </button>
+                    ))}
                 </div>
-            </div>
+            )}
         </div>
     )
 })
@@ -544,6 +628,14 @@ export function GitView() {
     // Stash 消息
     const [showStashInput, setShowStashInput] = useState(false)
     const [stashMessage, setStashMessage] = useState('')
+
+    // Commit / Stash 展开与按文件 diff
+    const [expandedCommitHash, setExpandedCommitHash] = useState<string | null>(null)
+    const [commitFilesByHash, setCommitFilesByHash] = useState<Record<string, GitFileChange[]>>({})
+    const [commitFilesLoading, setCommitFilesLoading] = useState<string | null>(null)
+    const [expandedStashIndex, setExpandedStashIndex] = useState<number | null>(null)
+    const [stashFilesByIndex, setStashFilesByIndex] = useState<Record<number, GitFileChange[]>>({})
+    const [stashFilesLoading, setStashFilesLoading] = useState<number | null>(null)
 
     // 冲突解决
     const [conflictFile, setConflictFile] = useState<string | null>(null)
@@ -1541,6 +1633,101 @@ Commit message:`
         }
     }
 
+    const openRevisionFileDiff = useCallback(async (
+        uri: string,
+        sides: { original: string; modified: string } | null,
+    ) => {
+        if (!sides) {
+            toast.error(tt('git.openDiffFailed'))
+            return
+        }
+        openFile(uri, sides.modified, sides.original)
+        setActiveFile(uri)
+    }, [openFile, setActiveFile, tt])
+
+    const toggleCommitExpanded = useCallback(async (commit: GitCommit) => {
+        if (expandedCommitHash === commit.hash) {
+            setExpandedCommitHash(null)
+            return
+        }
+        setExpandedCommitHash(commit.hash)
+        if (commitFilesByHash[commit.hash]) return
+
+        const root = selectedRepoRoot || workspacePath || undefined
+        setCommitFilesLoading(commit.hash)
+        try {
+            const files = await gitService.getCommitChangedFiles(commit.hash, root)
+            setCommitFilesByHash(prev => ({ ...prev, [commit.hash]: files }))
+            if (files.length === 1) {
+                const file = files[0]
+                const sides = await gitService.getCommitFileSides(commit.hash, file.path, {
+                    oldPath: file.oldPath,
+                    status: file.status,
+                    rootPath: root,
+                })
+                await openRevisionFileDiff(
+                    `git-diff://commit/${commit.shortHash}/${file.path}`,
+                    sides,
+                )
+            }
+        } catch (e) {
+            logger.ui.error('Failed to load commit files:', e)
+            toast.error(tt('git.openDiffFailed'))
+        } finally {
+            setCommitFilesLoading(null)
+        }
+    }, [commitFilesByHash, expandedCommitHash, openRevisionFileDiff, selectedRepoRoot, tt, workspacePath])
+
+    const openCommitFile = useCallback(async (commit: GitCommit, file: GitFileChange) => {
+        const root = selectedRepoRoot || workspacePath || undefined
+        const sides = await gitService.getCommitFileSides(commit.hash, file.path, {
+            oldPath: file.oldPath,
+            status: file.status,
+            rootPath: root,
+        })
+        await openRevisionFileDiff(`git-diff://commit/${commit.shortHash}/${file.path}`, sides)
+    }, [openRevisionFileDiff, selectedRepoRoot, workspacePath])
+
+    const toggleStashExpanded = useCallback(async (stash: GitStashEntry) => {
+        if (expandedStashIndex === stash.index) {
+            setExpandedStashIndex(null)
+            return
+        }
+        setExpandedStashIndex(stash.index)
+        if (stashFilesByIndex[stash.index]) return
+
+        setStashFilesLoading(stash.index)
+        try {
+            const root = selectedRepoRoot || workspacePath || undefined
+            const files = await gitService.getStashChangedFiles(stash.index, root)
+            setStashFilesByIndex(prev => ({ ...prev, [stash.index]: files }))
+            if (files.length === 1) {
+                const file = files[0]
+                const sides = await gitService.getStashFileSides(stash.index, file.path, {
+                    oldPath: file.oldPath,
+                    status: file.status,
+                    rootPath: root,
+                })
+                await openRevisionFileDiff(`git-diff://stash@{${stash.index}}/${file.path}`, sides)
+            }
+        } catch (e) {
+            logger.ui.error('Failed to load stash files:', e)
+            toast.error(tt('git.openDiffFailed'))
+        } finally {
+            setStashFilesLoading(null)
+        }
+    }, [expandedStashIndex, openRevisionFileDiff, selectedRepoRoot, stashFilesByIndex, tt, workspacePath])
+
+    const openStashFile = useCallback(async (stash: GitStashEntry, file: GitFileChange) => {
+        const root = selectedRepoRoot || workspacePath || undefined
+        const sides = await gitService.getStashFileSides(stash.index, file.path, {
+            oldPath: file.oldPath,
+            status: file.status,
+            rootPath: root,
+        })
+        await openRevisionFileDiff(`git-diff://stash@{${stash.index}}/${file.path}`, sides)
+    }, [openRevisionFileDiff, selectedRepoRoot, workspacePath])
+
     // 计算统计
     const stats = useMemo(() => {
         if (!status) return { staged: 0, unstaged: 0, untracked: 0, total: 0 }
@@ -2424,15 +2611,11 @@ Commit message:`
                                         onApply={() => handleStashApply(stash.index)}
                                         onPop={() => handleStashPop(stash.index)}
                                         onDrop={() => handleStashDrop(stash.index)}
-                                        onView={async () => {
-                                            const diff = await gitService.getStashDiff(stash.index, workspacePath || undefined)
-                                            if (diff) {
-                                                openFile(`git-diff://stash@{${stash.index}}`, diff, '')
-                                                setActiveFile(`git-diff://stash@{${stash.index}}`)
-                                            } else {
-                                                toast.info(tt('git.stash'), stash.message || 'WIP')
-                                            }
-                                        }}
+                                        files={stashFilesByIndex[stash.index] ?? null}
+                                        filesLoading={stashFilesLoading === stash.index}
+                                        expanded={expandedStashIndex === stash.index}
+                                        onToggle={() => { void toggleStashExpanded(stash) }}
+                                        onOpenFile={(file) => { void openStashFile(stash, file) }}
                                     />
                                 ))}
                             </div>
@@ -2456,20 +2639,16 @@ Commit message:`
                                         commit={commit}
                                         onCherryPick={() => handleCherryPick(commit.hash)}
                                         onRevert={() => handleRevertCommit(commit.hash)}
-                                          onCopyHash={async () => {
+                                        onCopyHash={async () => {
                                             const success = await writeClipboardText(commit.hash)
                                             if (!success) return
                                             toast.success(tt('git.hashCopied'))
-                                          }}
-                                        onClick={async () => {
-                                            const diff = await gitService.getCommitDiff(commit.hash, currentRepoRoot || undefined)
-                                            if (diff) {
-                                                openFile(`git-diff://commit/${commit.shortHash}`, diff, '')
-                                                setActiveFile(`git-diff://commit/${commit.shortHash}`)
-                                            } else {
-                                                toast.info(commit.shortHash, commit.message)
-                                            }
                                         }}
+                                        files={commitFilesByHash[commit.hash] ?? null}
+                                        filesLoading={commitFilesLoading === commit.hash}
+                                        expanded={expandedCommitHash === commit.hash}
+                                        onToggle={() => { void toggleCommitExpanded(commit) }}
+                                        onOpenFile={(file) => { void openCommitFile(commit, file) }}
                                     />
                                 ))}
                             </div>

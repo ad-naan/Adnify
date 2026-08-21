@@ -2,6 +2,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { toAppError } from '@shared/utils/errorHandler'
 import { logger } from '@utils/Logger'
 import { normalizePath, toRelativePath } from '@shared/utils/pathUtils'
+import { parseGitNameStatus } from '@shared/utils/gitNameStatus'
 import { aiAttributionService, type AiCommitReport, type AiHookStatus } from './aiAttributionService'
 
 /**
@@ -439,12 +440,107 @@ class GitService {
     }
 
     /**
-     * 获取两个 commit 之间的 diff
+     * 获取两个 commit 之间的 diff（原始 patch，供调试/导出）
      */
     async getCommitDiff(commitHash: string, rootPath?: string): Promise<string | null> {
         try {
             const result = await this.exec(['show', '--format=', '--patch', commitHash], rootPath)
             return result.exitCode === 0 ? result.stdout : null
+        } catch {
+            return null
+        }
+    }
+
+    /**
+     * List files changed in a commit (`git show --name-status`).
+     */
+    async getCommitChangedFiles(commitHash: string, rootPath?: string): Promise<GitFileChange[]> {
+        try {
+            const result = await this.exec(
+                ['show', '--name-status', '--format=', '--find-renames', commitHash],
+                rootPath,
+            )
+            if (result.exitCode !== 0 || !result.stdout) return []
+            return parseGitNameStatus(result.stdout).map((entry) => ({
+                path: entry.path,
+                oldPath: entry.oldPath,
+                status: entry.status === 'unknown' ? 'modified' : entry.status,
+            }))
+        } catch {
+            return []
+        }
+    }
+
+    /**
+     * Side-by-side contents for one file in a commit (parent vs commit).
+     */
+    async getCommitFileSides(
+        commitHash: string,
+        filePath: string,
+        options?: { oldPath?: string; status?: GitFileChange['status']; rootPath?: string },
+    ): Promise<{ original: string; modified: string } | null> {
+        const rootPath = options?.rootPath
+        const status = options?.status
+        const oldPath = options?.oldPath || filePath
+
+        try {
+            const [original, modified] = await Promise.all([
+                status === 'added'
+                    ? Promise.resolve('')
+                    : this.getFileContentAtCommit(oldPath, `${commitHash}^`, rootPath).then((c) => c ?? ''),
+                status === 'deleted'
+                    ? Promise.resolve('')
+                    : this.getFileContentAtCommit(filePath, commitHash, rootPath).then((c) => c ?? ''),
+            ])
+            return { original, modified }
+        } catch {
+            return null
+        }
+    }
+
+    /**
+     * List files changed in a stash entry.
+     */
+    async getStashChangedFiles(index: number, rootPath?: string): Promise<GitFileChange[]> {
+        try {
+            const result = await this.exec(
+                ['stash', 'show', '--name-status', '--find-renames', `stash@{${index}}`],
+                rootPath,
+            )
+            if (result.exitCode !== 0 || !result.stdout) return []
+            return parseGitNameStatus(result.stdout).map((entry) => ({
+                path: entry.path,
+                oldPath: entry.oldPath,
+                status: entry.status === 'unknown' ? 'modified' : entry.status,
+            }))
+        } catch {
+            return []
+        }
+    }
+
+    /**
+     * Side-by-side contents for one file in a stash (parent WIP base vs stash).
+     */
+    async getStashFileSides(
+        index: number,
+        filePath: string,
+        options?: { oldPath?: string; status?: GitFileChange['status']; rootPath?: string },
+    ): Promise<{ original: string; modified: string } | null> {
+        const rootPath = options?.rootPath
+        const status = options?.status
+        const oldPath = options?.oldPath || filePath
+        const stashRef = `stash@{${index}}`
+
+        try {
+            const [original, modified] = await Promise.all([
+                status === 'added'
+                    ? Promise.resolve('')
+                    : this.getFileContentAtCommit(oldPath, `${stashRef}^1`, rootPath).then((c) => c ?? ''),
+                status === 'deleted'
+                    ? Promise.resolve('')
+                    : this.getFileContentAtCommit(filePath, stashRef, rootPath).then((c) => c ?? ''),
+            ])
+            return { original, modified }
         } catch {
             return null
         }
