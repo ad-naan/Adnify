@@ -39,5 +39,5 @@ public/brand/
 1. Export the new design using the same filenames above.
 2. Keep icon files square; `1024x1024` PNG is preferred for `app.png`.
 3. Keep transparent backgrounds unless the design intentionally needs a solid plate.
-4. Run `npm run build:renderer` after replacing web-facing assets.
-5. Run `npm run dist` when you need to verify installer/app icons.
+4. Run `pnpm build:renderer` after replacing web-facing assets.
+5. Run `pnpm dist` when you need to verify installer/app icons.

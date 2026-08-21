@@ -33,7 +33,7 @@ Operating systems generally do not auto-switch Electron app icons by light/dark 
 Run:
 
 ```bash
-npm run assets:icons
+pnpm assets:icons
 ```
 
 The script generates lossless PNG outputs plus `.ico` and `.icns`. Root `icons/app.*` outputs are generated from `logos/app-light.png`.
