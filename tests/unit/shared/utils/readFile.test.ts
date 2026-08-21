@@ -39,16 +39,17 @@ describe('readFile utils', () => {
     }
   })
 
-  it('rejects inverted line ranges', () => {
+  it('auto-swaps inverted line ranges instead of failing', () => {
     const result = resolveReadFileRequest({
       path: 'src/main.ts',
       start_line: 9,
       end_line: 5,
     })
 
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.error).toContain('start_line must be <=')
+    expect(result.ok).toBe(true)
+    if (result.ok && result.mode === 'single') {
+      expect(result.args.start_line).toBe(5)
+      expect(result.args.end_line).toBe(9)
     }
   })
 })

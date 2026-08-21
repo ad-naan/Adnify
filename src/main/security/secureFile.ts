@@ -5,7 +5,7 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError, ErrorCode } from '@shared/utils/errorHandler'
-import { ipcMain, dialog, shell } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
 import { pathToFileURL } from 'url'
 import { promises as fsPromises } from 'fs'
@@ -82,7 +82,8 @@ type FileAccessKind = 'read' | 'write' | 'manage'
 
 /**
  * Single policy entry point for renderer-originated file access.
- * Agent tools retain their own workspace-only validation before reaching IPC.
+ * Agent read tools may request an external-file grant under strict mode,
+ * or read freely when strict workspace mode is disabled (still blocking sensitive paths).
  */
 function canAccessFile(
   filePath: string,
@@ -831,6 +832,48 @@ export function registerSecureFileHandlers(
     const securityStore = new Store({ name: 'security' })
     securityStore.delete('permissions')
     return true
+  })
+
+  /**
+   * Agent tools may need a one-shot external-file grant under strict workspace mode.
+   * Shows a native confirmation dialog; on allow, persists a session grant so IPC reads succeed.
+   */
+  ipcMain.handle('security:requestExternalFileAccess', async (_event, filePath: string) => {
+    if (!filePath || typeof filePath !== 'string') {
+      return { allowed: false, reason: 'invalid-path' as const }
+    }
+    if (securityManager.isSensitivePath(filePath)) {
+      return { allowed: false, reason: 'sensitive-path' as const }
+    }
+    if (isUserAuthorizedFile(filePath)) {
+      return { allowed: true, reason: 'already-granted' as const }
+    }
+
+    const mainWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['允许', '拒绝'],
+      defaultId: 1,
+      cancelId: 1,
+      title: '外部路径访问确认',
+      message: 'Agent 请求读取工作区外的文件',
+      detail: `路径：${filePath}\n\n允许后仅授权该文件的读取（会话内有效）。`,
+    })
+
+    const allowed = response === 0
+    if (allowed) {
+      authorizeUserFile(filePath, 'agent-read')
+      securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
+        reason: 'external-path-granted',
+        source: 'agent-read',
+      })
+    } else {
+      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
+        reason: 'external-path-denied',
+        source: 'agent-read',
+      })
+    }
+    return { allowed, reason: allowed ? ('granted' as const) : ('denied' as const) }
   })
 }
 

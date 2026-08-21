@@ -9,7 +9,7 @@ import { resolveEditFileRequest } from '@/shared/utils/editFile'
 import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
 import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
-import { validatePath, isSensitivePath, platform, getDirname } from '@shared/utils/pathUtils'
+import { validatePath, isSensitivePath, platform, getDirname, toFullPath, isPathInWorkspace } from '@shared/utils/pathUtils'
 import { pathToLspUri } from '@shared/utils/uriUtils'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
@@ -200,9 +200,55 @@ function formatDirTree(nodes: DirTreeNode[], prefix = ''): string {
     return result
 }
 
-function resolvePath(p: unknown, workspacePath: string | null, allowRead = false): string {
+/**
+ * Resolve a tool path with workspace security policy.
+ * - Writes stay workspace-bound.
+ * - Reads may leave the workspace when strict mode is off, or after an explicit user grant.
+ */
+async function resolvePath(p: unknown, workspacePath: string | null, allowRead = false): Promise<string> {
     if (typeof p !== 'string') throw new Error('Invalid path: not a string')
-    const validation = validatePath(p, workspacePath, { allowSensitive: false, allowOutsideWorkspace: false })
+
+    let validation = validatePath(p, workspacePath, {
+        allowSensitive: false,
+        allowOutsideWorkspace: false,
+    })
+
+    if (!validation.valid && validation.error === 'Path is outside workspace') {
+        if (!allowRead) {
+            throw new Error(`Security: ${validation.error}`)
+        }
+
+        const fullPath = toFullPath(p, workspacePath)
+        const strictWorkspaceMode = useStore.getState().securitySettings?.strictWorkspaceMode !== false
+
+        if (!strictWorkspaceMode) {
+            validation = validatePath(p, workspacePath, {
+                allowSensitive: false,
+                allowOutsideWorkspace: true,
+            })
+        } else {
+            // Already inside workspace after normalization? (shouldn't happen, but keep safe)
+            if (workspacePath && isPathInWorkspace(fullPath, workspacePath)) {
+                validation = validatePath(p, workspacePath, {
+                    allowSensitive: false,
+                    allowOutsideWorkspace: false,
+                })
+            } else {
+                const decision = await api.security.requestExternalFileAccess(fullPath)
+                if (!decision.allowed) {
+                    throw new Error(
+                        `Security: External path access ${decision.reason === 'denied' ? 'denied by user' : 'rejected'} (${fullPath}). ` +
+                        'Open the file in the IDE, or disable Strict workspace mode in Settings → Security.',
+                    )
+                }
+                validation = validatePath(p, workspacePath, {
+                    allowSensitive: false,
+                    allowOutsideWorkspace: true,
+                })
+            }
+        }
+    }
+
     if (!validation.valid) throw new Error(`Security: ${validation.error}`)
     if (!allowRead && isSensitivePath(validation.sanitizedPath!)) {
         throw new Error('Security: Cannot modify sensitive files')
@@ -857,7 +903,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             meta?: Record<string, unknown>
             error?: string
         }> => {
-            const validPath = resolvePath(inputPath, ctx.workspacePath, true)
+            const validPath = await resolvePath(inputPath, ctx.workspacePath, true)
             const extension = getFileExtension(validPath)
 
             if (IMAGE_EXTENSIONS.has(extension)) {
@@ -1036,7 +1082,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             }
         }
 
-        const validPath = resolvePath(pathArg, ctx.workspacePath, true)
+        const validPath = await resolvePath(pathArg, ctx.workspacePath, true)
         const prompt = typeof args.prompt === 'string' ? args.prompt : undefined
         const result = await analyzeImageSource({
             path: validPath,
@@ -1060,7 +1106,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async list_directory(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        const path = await resolvePath(args.path, ctx.workspacePath, true)
         const recursive = args.recursive as boolean | undefined
         const maxDepth = (args.max_depth as number) || 3
 
@@ -1082,7 +1128,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async search_files(args, ctx) {
         const pathArg = args.path as string
-        const resolvedPath = resolvePath(pathArg, ctx.workspacePath, true)
+        const resolvedPath = await resolvePath(pathArg, ctx.workspacePath, true)
         const pattern = args.pattern as string
         // 自动启用 regex 模式（如果包含 | 符号）
         const isRegex = !!args.is_regex || pattern.includes('|')
@@ -1138,7 +1184,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async edit_file(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath)
+        const path = await resolvePath(args.path, ctx.workspacePath)
         // 编辑会把结果整体写回，读取截断等于把文件尾部删掉。
         const originalContent = await api.file.read(path, undefined, { full: true })
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
@@ -1556,7 +1602,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     async write_file(args, ctx) {
         // write_file 的职责被严格限定为“新建文件 / 整文件重写”。
         // 因此在真正落盘前，先经过统一策略守卫，避免把局部修改误用成整文件覆盖。
-        const path = resolvePath(args.path, ctx.workspacePath)
+        const path = await resolvePath(args.path, ctx.workspacePath)
         const content = args.content as string
         const originalContent = await api.file.read(path, undefined, { full: true }) || ''
         const writeDecision = guardWriteFile({
@@ -1626,7 +1672,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async create_directory(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath)
+        const path = await resolvePath(args.path, ctx.workspacePath)
         const normalizedPath = path.endsWith('/') || path.endsWith('\\')
             ? path.slice(0, -1)
             : path
@@ -1643,7 +1689,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async delete_file_or_folder(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath)
+        const path = await resolvePath(args.path, ctx.workspacePath)
         const success = await api.file.delete(path)
         if (success) {
             notifyComposerChange({ filePath: path, workspacePath: ctx.workspacePath || '', oldContent: null, newContent: null, changeType: 'delete', linesAdded: 0, linesRemoved: 0 })
@@ -1677,7 +1723,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             remoteServerForTrust = remoteLink?.remote || null
             const resolvedCwd = remoteLink
                 ? null
-                : (args.cwd ? resolvePath(args.cwd, ctx.workspacePath, true) : null)
+                : (args.cwd ? await resolvePath(args.cwd, ctx.workspacePath, true) : null)
 
             if (!remoteLink && !isLongRunningProcess) {
                 const directExecutionResult = await runInlineScriptViaTempFile(command, ctx, timeout)
@@ -2225,7 +2271,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async get_lint_errors(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        const path = await resolvePath(args.path, ctx.workspacePath, true)
         const { errors, notInstalled } = await lintService.getLintErrors(path, args.refresh as boolean)
         if (notInstalled) {
             return { success: true, result: notInstalled }
@@ -2245,7 +2291,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async find_references(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        const path = await resolvePath(args.path, ctx.workspacePath, true)
         const locations = await api.lsp.references({
             uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
         })
@@ -2267,7 +2313,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async go_to_definition(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        const path = await resolvePath(args.path, ctx.workspacePath, true)
         const locations = await api.lsp.definition({
             uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
         })
@@ -2289,7 +2335,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async get_hover_info(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        const path = await resolvePath(args.path, ctx.workspacePath, true)
         const hover = await api.lsp.hover({
             uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
         })
@@ -2299,7 +2345,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async get_document_symbols(args, ctx) {
-        const path = resolvePath(args.path, ctx.workspacePath, true)
+        const path = await resolvePath(args.path, ctx.workspacePath, true)
         const symbols = await api.lsp.documentSymbol({ uri: pathToLspUri(path), workspacePath: ctx.workspacePath })
         if (!symbols?.length) return { success: true, result: 'No symbols found' }
 
