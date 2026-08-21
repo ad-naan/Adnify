@@ -334,12 +334,12 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 
 | Tool | Version | Notes |
 |------|---------|--------|
-| **Node.js** | **22.x** (`^22.12.0`) | CI-tested major only. Floor `22.12.0` matches Vite 8 / `@electron/rebuild`. Node 23+ is out of support (Node 26 breaks Electron’s `extract-zip` install). Pin via `.nvmrc` / `.node-version` / `mise.toml`. |
+| **Node.js** | **24.19.0+** (`^24.19.0`) | Active LTS baseline **24.19.0** (pinned in `.nvmrc`). Allows newer 24.x patches; rejects Node 22 and 25+ (Node 26 breaks Electron’s `extract-zip` install). |
 | **pnpm** | **9.15.9** (exact) | Must match `packageManager` / `engines.pnpm`. Prefer [Corepack](https://nodejs.org/api/corepack.html): `corepack enable`. |
 | Git | any recent | — |
 | Python | optional | Needed only when native addons must compile from source |
 
-`engines`, `.npmrc` (`engine-strict`, `package-manager-strict-version`), and `preinstall` (`scripts/ensure-pnpm.js`) reject the wrong Node, non-pnpm clients, or a mismatched pnpm version at install time. If your shell is still on Node 26, `pnpm install` will fail until you switch to 22.x via `.nvmrc`.
+`engines`, `.npmrc` (`engine-strict`, `package-manager-strict-version`), and `preinstall` (`scripts/ensure-pnpm.js`) reject the wrong Node, non-pnpm clients, or a mismatched pnpm version at install time. If your shell is still on Node 22 or 26, `pnpm install` will fail until you switch to **24.19.0+** via `.nvmrc`.
 
 ### Development Environment
 
@@ -364,7 +364,7 @@ pnpm install
 pnpm dev
 ```
 
-If Electron reports `failed to install correctly`, delete `node_modules/electron` and re-run `pnpm install` on Node 22.x.
+If Electron reports `failed to install correctly`, delete `node_modules/electron` and re-run `pnpm install` on Node **24.19.0+**.
 
 ### Build & Package
 

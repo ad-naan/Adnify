@@ -331,12 +331,12 @@ Adnify 在主流 AI 编辑器的基础上，实现了多项创新功能：
 
 | 工具 | 版本 | 说明 |
 |------|------|------|
-| **Node.js** | **22.x**（`^22.12.0`） | 仅支持 CI 验证过的大版本。下限 `22.12.0` 对齐 Vite 8 / `@electron/rebuild`。Node 23+ 不在支持范围（已在 Node 26 上复现 Electron `extract-zip` 安装失败）。版本钉在 `.nvmrc` / `.node-version` / `mise.toml`。 |
+| **Node.js** | **24.19.0+**（`^24.19.0`） | Active LTS 基线 **24.19.0**（钉在 `.nvmrc`）。允许更新的 24.x 补丁；拒绝 Node 22 与 25+（Node 26 会导致 Electron `extract-zip` 安装失败）。 |
 | **pnpm** | **9.15.9**（精确） | 与 `packageManager` / `engines.pnpm` 完全一致。推荐 [Corepack](https://nodejs.org/api/corepack.html)：`corepack enable`。 |
 | Git | 较新版本即可 | — |
 | Python | 可选 | 仅在需要从源码编译原生模块时需要 |
 
-`package.json` 的 `engines`、`.npmrc` 的 `engine-strict` / `package-manager-strict-version`，以及 `preinstall`（`scripts/ensure-pnpm.js`）会在安装时拦截：错误的 Node、非 pnpm、或 pnpm 版本不一致。本机若仍是 Node 26，`pnpm install` 会直接失败——先按 `.nvmrc` 切到 22.x。
+`package.json` 的 `engines`、`.npmrc` 的 `engine-strict` / `package-manager-strict-version`，以及 `preinstall`（`scripts/ensure-pnpm.js`）会在安装时拦截：错误的 Node、非 pnpm、或 pnpm 版本不一致。本机若仍是 Node 22 或 26，`pnpm install` 会直接失败——先按 `.nvmrc` 切到 **24.19.0+**。
 
 ### 开发环境运行
 
@@ -361,7 +361,7 @@ pnpm install
 pnpm dev
 ```
 
-若出现 Electron `failed to install correctly`，请在 Node 22.x 下删除 `node_modules/electron` 后重新执行 `pnpm install`。
+若出现 Electron `failed to install correctly`，请在 Node **24.19.0+** 下删除 `node_modules/electron` 后重新执行 `pnpm install`。
 
 ### 打包发布
 
