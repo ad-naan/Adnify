@@ -17,6 +17,16 @@ import { ErrorCode, toAppError } from '@shared/utils/errorHandler'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fetchLatestRelease } from '../githubApiService'
+import {
+  GITHUB_DOWNLOAD_MIRRORS,
+  applyGithubDownloadMirror,
+  buildMirroredGithubLatestFeedUrl,
+  resolveUpdateDownloadSource,
+  type UpdateDownloadSource,
+} from '@shared/utils/githubDownloadMirror'
+
+const UPDATE_OWNER = 'ad-naan'
+const UPDATE_REPO = 'adnify'
 
 export interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
@@ -28,6 +38,8 @@ export interface UpdateStatus {
   error?: string
   requiresManualDownload: boolean
   isPortable: boolean
+  /** Whether downloads are routed through a GitHub mirror. */
+  usingDownloadMirror?: boolean
 }
 
 class UpdateService {
@@ -35,10 +47,13 @@ class UpdateService {
     status: 'idle',
     requiresManualDownload: false,
     isPortable: false,
+    usingDownloadMirror: false,
   }
 
   private mainWindow: BrowserWindow | null = null
   private updateCheckInterval: NodeJS.Timeout | null = null
+  private downloadSource: UpdateDownloadSource = 'github'
+  private activeMirrorIndex = 0
 
   initialize(mainWindow: BrowserWindow): void {
     this.mainWindow = mainWindow
@@ -48,8 +63,14 @@ class UpdateService {
     // Backward-compatible alias for existing consumers.
     this.status.isPortable = requiresManualDownload
 
+    this.downloadSource = resolveUpdateDownloadSource({
+      locale: app.getLocale(),
+      envForce: process.env.ADNIFY_UPDATE_MIRROR,
+    })
+    this.status.usingDownloadMirror = this.downloadSource === 'mirror'
+
     logger.system.info(
-      `[Updater] Initialized, requiresManualDownload: ${requiresManualDownload}, platform: ${process.platform}`
+      `[Updater] Initialized, requiresManualDownload: ${requiresManualDownload}, platform: ${process.platform}, downloadSource: ${this.downloadSource}`
     )
 
     if (requiresManualDownload) {
@@ -94,11 +115,7 @@ class UpdateService {
 
     const channel = this.getUpdateChannel()
     autoUpdater.channel = channel
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'ad-naan',
-      repo: 'adnify',
-    })
+    this.applyUpdateFeed(this.downloadSource, this.activeMirrorIndex)
 
     logger.system.info(`[Updater] Using update channel: ${channel}`)
 
@@ -304,19 +321,48 @@ class UpdateService {
 
   async downloadUpdate(): Promise<void> {
     if (this.status.requiresManualDownload) {
-      throw new Error('当前安装方式不支持自动下载，请前往发布页手动下载。')
+      throw new Error('当前安装方式不支持应用内自动更新。请点击「前往下载页」获取对应安装包（已尽量使用加速链接）。')
     }
 
-    if (this.status.status !== 'available') {
+    if (this.status.status !== 'available' && !(this.status.status === 'error' && this.status.version)) {
       throw new Error('No update available')
     }
 
-    await autoUpdater.downloadUpdate()
+    this.updateStatus({ status: 'downloading', progress: 0, error: undefined })
+
+    try {
+      await autoUpdater.downloadUpdate()
+      return
+    } catch (primaryError) {
+      logger.system.warn('[Updater] Primary download failed, trying mirror fallback:', primaryError)
+
+      if (this.downloadSource === 'github') {
+        this.downloadSource = 'mirror'
+        this.activeMirrorIndex = 0
+        this.applyUpdateFeed('mirror', 0)
+        this.updateStatus({ usingDownloadMirror: true })
+        await autoUpdater.checkForUpdates()
+        await autoUpdater.downloadUpdate()
+        return
+      }
+
+      // Already on mirror: rotate to the next mirror prefix once.
+      const nextIndex = this.activeMirrorIndex + 1
+      if (nextIndex < GITHUB_DOWNLOAD_MIRRORS.length) {
+        this.activeMirrorIndex = nextIndex
+        this.applyUpdateFeed('mirror', nextIndex)
+        await autoUpdater.checkForUpdates()
+        await autoUpdater.downloadUpdate()
+        return
+      }
+
+      throw primaryError
+    }
   }
 
   quitAndInstall(): void {
     if (this.status.requiresManualDownload) {
-      throw new Error('当前安装方式不支持自动安装。')
+      throw new Error('当前安装方式不支持应用内自动安装。请使用下载页中的安装包完成升级。')
     }
 
     if (this.status.status !== 'downloaded') {
@@ -398,13 +444,40 @@ class UpdateService {
     }
 
     const regexes = patterns[key] || []
+    let directUrl = `https://github.com/${UPDATE_OWNER}/${UPDATE_REPO}/releases/latest`
     for (const asset of assets) {
       if (regexes.some(regex => regex.test(asset.name))) {
-        return asset.browser_download_url
+        directUrl = asset.browser_download_url
+        break
       }
     }
 
-    return 'https://github.com/ad-naan/adnify/releases/latest'
+    if (this.downloadSource === 'mirror') {
+      return applyGithubDownloadMirror(directUrl, GITHUB_DOWNLOAD_MIRRORS[this.activeMirrorIndex] || GITHUB_DOWNLOAD_MIRRORS[0])
+    }
+    return directUrl
+  }
+
+  private applyUpdateFeed(source: UpdateDownloadSource, mirrorIndex = 0): void {
+    if (source === 'mirror') {
+      const mirror = GITHUB_DOWNLOAD_MIRRORS[mirrorIndex] || GITHUB_DOWNLOAD_MIRRORS[0]
+      const feedUrl = buildMirroredGithubLatestFeedUrl(UPDATE_OWNER, UPDATE_REPO, mirror)
+      autoUpdater.setFeedURL({
+        provider: 'generic',
+        url: feedUrl,
+      })
+      logger.system.info(`[Updater] Feed set to mirrored generic URL: ${feedUrl}`)
+      this.updateStatus({ usingDownloadMirror: true })
+      return
+    }
+
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: UPDATE_OWNER,
+      repo: UPDATE_REPO,
+    })
+    logger.system.info('[Updater] Feed set to GitHub provider')
+    this.updateStatus({ usingDownloadMirror: false })
   }
 
   private getUpdateChannel(): string {

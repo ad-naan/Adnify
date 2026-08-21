@@ -70,7 +70,13 @@ export default function UpdateIndicator() {
     openPage: language === 'zh' ? '前往下载页' : 'Open Download Page',
     checkNow: language === 'zh' ? '检查更新' : 'Check for Updates',
     manualHint:
-      language === 'zh' ? '当前安装方式不支持应用内更新，请前往发布页下载最新版本。' : 'This install type cannot update in-app. Please download the latest release manually.',
+      language === 'zh'
+        ? '当前是便携版 / 非标准安装，无法在应用内自动安装。请下载对应安装包后手动覆盖或重新安装。下载链接已尽量走加速镜像。'
+        : 'This is a portable or non-standard install, so in-app auto-install is unavailable. Download the matching package and replace/reinstall manually. Download links use an acceleration mirror when available.',
+    mirrorHint:
+      language === 'zh'
+        ? '已启用 GitHub 下载加速，可显著改善国内网络下的更新速度。'
+        : 'GitHub download acceleration is enabled to improve update speed on restricted networks.',
     current: language === 'zh' ? '当前版本' : 'Current',
   }
 
@@ -199,8 +205,14 @@ export default function UpdateIndicator() {
               )}
 
               {hasUpdate && status?.requiresManualDownload && (
-                <div className="mb-6 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/80 leading-relaxed text-center">
+                <div className="mb-4 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/80 leading-relaxed text-center">
                   {t.manualHint}
+                </div>
+              )}
+
+              {status?.usingDownloadMirror && (
+                <div className="mb-4 px-4 py-2.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-[11px] text-sky-200/80 leading-relaxed text-center">
+                  {t.mirrorHint}
                 </div>
               )}
 
