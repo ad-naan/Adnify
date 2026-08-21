@@ -26,12 +26,12 @@
 
 ## 开发环境
 
-本仓库与 CI 统一钉在 **Node.js 22.x**（`engines`: `^22.12.0`）与 **pnpm 9.15.9**（精确）。不要使用 Node 23+：仓库只验证 22；Node 26 上 Electron 安装（`extract-zip`）会失败。本机 Node 不对时，`engine-strict` 会让 `pnpm install` 直接失败。
+本仓库与 CI 统一钉在 **Node.js 24.19.0**（Active LTS，`engines`: `^24.19.0`）与 **pnpm 9.15.9**（精确）。不要使用 Node 22 或 25+：CI / `.nvmrc` 钉 24.19.0；Node 26 上 Electron 安装（`extract-zip`）会失败。本机 Node 不对时，`engine-strict` 会让 `pnpm install` 直接失败。
 
 | 配置来源 | 文件 |
 |----------|------|
-| Node 大版本 | `.nvmrc` / `.node-version` / `mise.toml` |
-| 引擎约束 | `package.json` → `engines`（`node`: `^22.12.0`，`pnpm`: `9.15.9`） |
+| Node 精确版本 | `.nvmrc` / `.node-version` / `mise.toml` → **24.19.0** |
+| 引擎约束 | `package.json` → `engines`（`node`: `^24.19.0`，`pnpm`: `9.15.9`） |
 | 强制校验 | `.npmrc` + `pnpm-workspace.yaml` → `engineStrict` / `packageManagerStrictVersion` |
 | 包管理器门禁 | `preinstall` → `scripts/ensure-pnpm.js`（拒绝 npm/yarn） |
 | pnpm 精确版本 | `package.json` → `packageManager` |
@@ -56,9 +56,9 @@ pnpm dev
 
 常见问题：
 
-- **`Unsupported engine` / install 被拒绝**：当前 Node 不是 22.x，或 pnpm 不是 9.15.9。先 `nvm use` / `mise install`，再 `corepack enable`。
+- **`Unsupported engine` / install 被拒绝**：当前 Node 低于 24.19.0 或不在 24.x，或 pnpm 不是 9.15.9。先 `nvm use` / `mise install`，再 `corepack enable`。
 - **`This repository requires pnpm`**：用了 npm/yarn。改用 `pnpm install`。
-- **`Electron failed to install correctly`**：确认 Node 22.x 后执行：
+- **`Electron failed to install correctly`**：确认 Node **24.19.0+** 后执行：
 
 ```bash
 rm -rf node_modules/electron

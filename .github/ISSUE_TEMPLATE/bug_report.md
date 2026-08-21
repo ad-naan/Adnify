@@ -27,7 +27,7 @@ assignees: ''
 ## 环境信息
 - 操作系统：[例如 Windows 11 / macOS 15 / Ubuntu 24.04]
 - Adnify 版本：[例如 1.7.60]
-- Node.js 版本：[例如 22.15.1；需为 22.x，见 `.nvmrc`]
+- Node.js 版本：[例如 24.19.0；需满足 `^24.19.0`，见 `.nvmrc`]
 - pnpm 版本：[例如 9.15.9；见 `packageManager`]
 
 ## 日志信息
