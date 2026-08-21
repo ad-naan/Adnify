@@ -75,9 +75,13 @@ export const EditorTabs = memo(function EditorTabs({
           }
         }
 
-        const isDiff = file.path.startsWith('diff://')
+        const isDiff = file.path.startsWith('diff://') || file.path.startsWith('git-diff://')
         if (isDiff) {
-          fileName = `Diff: ${getFileName(file.path.slice(7))}`
+          const raw = file.path
+            .replace(/^(git-)?diff:\/\//, '')
+            .replace(/^commit\/[^/]+\//, '')
+            .replace(/^stash@\{\d+\}\//, '')
+          fileName = `Diff: ${getFileName(raw) || raw}`
         }
 
         const isPreview = file.kind === 'preview' || isPreviewDocumentPath(file.path)
