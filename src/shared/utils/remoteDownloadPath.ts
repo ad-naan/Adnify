@@ -1,10 +1,16 @@
 import path from 'path'
 
-/** Max files/directories entries processed in one remote directory download. */
-export const REMOTE_DIR_DOWNLOAD_MAX_ENTRIES = 5000
+/** Max entries processed in one remote directory transfer (upload or download). */
+export const REMOTE_DIR_TRANSFER_MAX_ENTRIES = 5000
 
-/** Max nesting depth for remote directory downloads. */
-export const REMOTE_DIR_DOWNLOAD_MAX_DEPTH = 40
+/** Max nesting depth for remote directory transfers. */
+export const REMOTE_DIR_TRANSFER_MAX_DEPTH = 40
+
+/** @deprecated Prefer REMOTE_DIR_TRANSFER_MAX_ENTRIES */
+export const REMOTE_DIR_DOWNLOAD_MAX_ENTRIES = REMOTE_DIR_TRANSFER_MAX_ENTRIES
+
+/** @deprecated Prefer REMOTE_DIR_TRANSFER_MAX_DEPTH */
+export const REMOTE_DIR_DOWNLOAD_MAX_DEPTH = REMOTE_DIR_TRANSFER_MAX_DEPTH
 
 /**
  * Local folder that will receive a remote directory tree:
@@ -16,6 +22,15 @@ export function buildDirectoryDownloadTarget(selectedParentDir: string, remoteDi
   return path.join(parent, baseName)
 }
 
+/** Remote destination for a local directory upload: `<remoteParent>/<localDirBasename>`. */
+export function buildDirectoryUploadRemoteTarget(remoteParentDir: string, localDirectoryPath: string): string {
+  const baseName = assertSafeRemoteName(path.basename(path.resolve(localDirectoryPath)))
+  if (!remoteParentDir || remoteParentDir === '.') return baseName
+  if (remoteParentDir === '/') return `/${baseName}`
+  const parent = remoteParentDir.replace(/\\/g, '/').replace(/\/+$/, '')
+  return `${parent}/${baseName}`
+}
+
 export function remoteDirectoryBasename(remoteDirectoryPath: string): string {
   const normalized = remoteDirectoryPath.replace(/\\/g, '/').replace(/\/+$/, '')
   if (!normalized || normalized === '/' || normalized === '.') return 'remote-download'
@@ -23,11 +38,12 @@ export function remoteDirectoryBasename(remoteDirectoryPath: string): string {
   return parts[parts.length - 1] || 'remote-download'
 }
 
-/** Reject unsafe single path segments (no traversal, no separators). */
+/** Reject unsafe single path segments (no traversal, no separators, no padding). */
 export function assertSafeRemoteName(name: string): string {
   const trimmed = name.trim()
   if (
     !trimmed
+    || trimmed !== name
     || trimmed === '.'
     || trimmed === '..'
     || trimmed.includes('/')

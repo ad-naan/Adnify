@@ -4,10 +4,11 @@ import path from 'path'
 import { pipeline } from 'stream/promises'
 import type { Client as Ssh2Client, ConnectConfig, FileEntry, SFTPWrapper, Stats } from 'ssh2'
 import {
-  REMOTE_DIR_DOWNLOAD_MAX_DEPTH,
-  REMOTE_DIR_DOWNLOAD_MAX_ENTRIES,
+  REMOTE_DIR_TRANSFER_MAX_DEPTH,
+  REMOTE_DIR_TRANSFER_MAX_ENTRIES,
   assertSafeRemoteName,
   buildDirectoryDownloadTarget,
+  buildDirectoryUploadRemoteTarget,
   isSftpSymbolicLinkMode,
   safeJoinUnderDownloadRoot,
 } from '@shared/utils/remoteDownloadPath'
@@ -35,7 +36,13 @@ let CachedClient: typeof Ssh2Client | null = null
 interface RemoteUploadResult {
   canceled: boolean
   uploaded: string[]
+  uploadedCount?: number
+  skippedSymlinks?: number
+  isDirectory?: boolean
 }
+
+export type RemoteUploadMode = 'files' | 'directory'
+
 
 interface RemoteDownloadResult {
   canceled: boolean
@@ -297,6 +304,60 @@ async function uploadLocalFile(sftp: SFTPWrapper, localPath: string, remotePath:
   await pipeline(fs.createReadStream(localPath), sftp.createWriteStream(remotePath))
 }
 
+interface DirectoryTransferStats {
+  uploadedCount: number
+  skippedSymlinks: number
+  entryCount: number
+}
+
+async function uploadLocalDirectory(
+  sftp: SFTPWrapper,
+  localDir: string,
+  remoteDir: string,
+  stats: DirectoryTransferStats = { uploadedCount: 0, skippedSymlinks: 0, entryCount: 0 },
+  depth = 0,
+): Promise<DirectoryTransferStats> {
+  if (depth > REMOTE_DIR_TRANSFER_MAX_DEPTH) {
+    throw new Error(`Local directory exceeds max depth (${REMOTE_DIR_TRANSFER_MAX_DEPTH})`)
+  }
+
+  await mkdirRecursive(sftp, remoteDir)
+  const entries = await fs.promises.readdir(localDir, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.name === '.' || entry.name === '..') continue
+
+    stats.entryCount += 1
+    if (stats.entryCount > REMOTE_DIR_TRANSFER_MAX_ENTRIES) {
+      throw new Error(`Local directory exceeds max entry limit (${REMOTE_DIR_TRANSFER_MAX_ENTRIES})`)
+    }
+
+    const name = assertSafeRemoteName(entry.name)
+    const localChild = path.join(localDir, entry.name)
+    const remoteChild = joinRemotePath(remoteDir, name)
+
+    if (entry.isSymbolicLink()) {
+      stats.skippedSymlinks += 1
+      continue
+    }
+
+    if (entry.isDirectory()) {
+      await uploadLocalDirectory(sftp, localChild, remoteChild, stats, depth + 1)
+      continue
+    }
+
+    if (!entry.isFile()) {
+      stats.skippedSymlinks += 1
+      continue
+    }
+
+    await uploadLocalFile(sftp, localChild, remoteChild)
+    stats.uploadedCount += 1
+  }
+
+  return stats
+}
+
 async function downloadRemoteFile(sftp: SFTPWrapper, remotePath: string, localPath: string): Promise<void> {
   await fs.promises.mkdir(path.dirname(localPath), { recursive: true })
   await pipeline(sftp.createReadStream(remotePath), fs.createWriteStream(localPath))
@@ -315,8 +376,8 @@ async function downloadRemoteDirectory(
   stats: DirectoryDownloadStats = { downloadedCount: 0, skippedSymlinks: 0, entryCount: 0 },
   depth = 0,
 ): Promise<DirectoryDownloadStats> {
-  if (depth > REMOTE_DIR_DOWNLOAD_MAX_DEPTH) {
-    throw new Error(`Remote directory exceeds max depth (${REMOTE_DIR_DOWNLOAD_MAX_DEPTH})`)
+  if (depth > REMOTE_DIR_TRANSFER_MAX_DEPTH) {
+    throw new Error(`Remote directory exceeds max depth (${REMOTE_DIR_TRANSFER_MAX_DEPTH})`)
   }
 
   await fs.promises.mkdir(localDir, { recursive: true })
@@ -326,8 +387,8 @@ async function downloadRemoteDirectory(
     if (entry.filename === '.' || entry.filename === '..') continue
 
     stats.entryCount += 1
-    if (stats.entryCount > REMOTE_DIR_DOWNLOAD_MAX_ENTRIES) {
-      throw new Error(`Remote directory exceeds max entry limit (${REMOTE_DIR_DOWNLOAD_MAX_ENTRIES})`)
+    if (stats.entryCount > REMOTE_DIR_TRANSFER_MAX_ENTRIES) {
+      throw new Error(`Remote directory exceeds max entry limit (${REMOTE_DIR_TRANSFER_MAX_ENTRIES})`)
     }
 
     const name = assertSafeRemoteName(entry.filename)
@@ -427,30 +488,72 @@ export function registerRemoteShellHandlers(): void {
     }
   })
 
-  ipcMain.handle('remoteShell:upload', async (event, server: RemoteServerConfig, remoteDirectory: string): Promise<RemoteUploadResult> => {
-    const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
-    const selection = await dialog.showOpenDialog(window as BrowserWindow, {
-      title: 'Upload files to remote server',
-      properties: ['openFile', 'multiSelections'],
-    })
+  ipcMain.handle(
+    'remoteShell:upload',
+    async (
+      event,
+      server: RemoteServerConfig,
+      remoteDirectory: string,
+      mode: RemoteUploadMode = 'files',
+    ): Promise<RemoteUploadResult> => {
+      const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
+      const uploadMode: RemoteUploadMode = mode === 'directory' ? 'directory' : 'files'
+      const selection = await dialog.showOpenDialog(window as BrowserWindow, {
+        title: uploadMode === 'directory' ? 'Upload folder to remote server' : 'Upload files to remote server',
+        properties: uploadMode === 'directory'
+          ? ['openDirectory']
+          : ['openFile', 'multiSelections'],
+      })
 
-    if (selection.canceled || selection.filePaths.length === 0) {
-      return { canceled: true, uploaded: [] }
-    }
-
-    const targetDirectory = normalizeRemotePath(remoteDirectory || server.remotePath || '.')
-    const uploaded = await withSftp(server, async (sftp) => {
-      const completed: string[] = []
-      for (const localPath of selection.filePaths) {
-        const remotePath = joinRemotePath(targetDirectory, path.basename(localPath))
-        await uploadLocalFile(sftp, localPath, remotePath)
-        completed.push(remotePath)
+      if (selection.canceled || selection.filePaths.length === 0) {
+        return { canceled: true, uploaded: [], isDirectory: uploadMode === 'directory' }
       }
-      return completed
-    })
 
-    return { canceled: false, uploaded }
-  })
+      const targetDirectory = normalizeRemotePath(remoteDirectory || server.remotePath || '.')
+
+      if (uploadMode === 'directory') {
+        const localDir = selection.filePaths[0]
+        const localStat = await fs.promises.lstat(localDir)
+        if (!localStat.isDirectory() || localStat.isSymbolicLink()) {
+          throw new Error('Selected path is not a regular directory')
+        }
+
+        const remotePath = buildDirectoryUploadRemoteTarget(targetDirectory, localDir)
+        const stats = await withSftp(server, async (sftp) => (
+          uploadLocalDirectory(sftp, localDir, remotePath)
+        ))
+
+        return {
+          canceled: false,
+          uploaded: [remotePath],
+          uploadedCount: stats.uploadedCount,
+          skippedSymlinks: stats.skippedSymlinks,
+          isDirectory: true,
+        }
+      }
+
+      const uploaded = await withSftp(server, async (sftp) => {
+        const completed: string[] = []
+        for (const localPath of selection.filePaths) {
+          const localStat = await fs.promises.lstat(localPath)
+          if (!localStat.isFile() || localStat.isSymbolicLink()) {
+            throw new Error(`Skipping non-file selection is not supported in file upload mode: ${localPath}`)
+          }
+          const remotePath = joinRemotePath(targetDirectory, path.basename(localPath))
+          await uploadLocalFile(sftp, localPath, remotePath)
+          completed.push(remotePath)
+        }
+        return completed
+      })
+
+      return {
+        canceled: false,
+        uploaded,
+        uploadedCount: uploaded.length,
+        isDirectory: false,
+      }
+    },
+  )
 
   ipcMain.handle('remoteShell:download', async (event, server: RemoteServerConfig, remotePath: string): Promise<RemoteDownloadResult> => {
     const normalizedRemotePath = assertSafeExplicitRemotePath(remotePath, 'download')
