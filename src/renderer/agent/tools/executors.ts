@@ -2240,17 +2240,23 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         try {
             const downloadResult = await api.remoteShell.download(routeResolution.remoteLink!.remote, remotePath)
             const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
+            const successMessage = downloadResult.canceled
+                ? 'Remote download canceled by user'
+                : downloadResult.isDirectory
+                    ? `Remote directory downloaded to ${downloadResult.localPath || 'local folder'} (${downloadResult.downloadedCount ?? 0} file(s)${downloadResult.skippedSymlinks ? `, ${downloadResult.skippedSymlinks} symlink(s) skipped` : ''})`
+                    : downloadResult.localPath || 'Remote file downloaded successfully'
             return {
                 success: true,
-                result: downloadResult.canceled
-                    ? 'Remote download canceled by user'
-                    : downloadResult.localPath || 'Remote file downloaded successfully',
+                result: successMessage,
                 meta: {
                     ...routeResolution.routeMeta,
                     ...trustMeta,
                     path: remotePath,
                     canceled: downloadResult.canceled,
                     localPath: downloadResult.localPath,
+                    isDirectory: downloadResult.isDirectory,
+                    downloadedCount: downloadResult.downloadedCount,
+                    skippedSymlinks: downloadResult.skippedSymlinks,
                 },
             }
         } catch (error) {

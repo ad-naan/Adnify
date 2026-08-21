@@ -342,7 +342,13 @@ export interface ElectronAPI {
   remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
   remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<{ canceled: boolean; uploaded: string[] }>
-  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<{ canceled: boolean; localPath?: string }>
+  remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<{
+    canceled: boolean
+    localPath?: string
+    isDirectory?: boolean
+    downloadedCount?: number
+    skippedSymlinks?: number
+  }>
   remoteHostTrustGetStatus: (server: RemoteShellServer) => Promise<{ known: boolean; fingerprintSha256?: string }>
   remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>
 

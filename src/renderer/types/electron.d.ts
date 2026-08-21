@@ -221,6 +221,9 @@ export interface RemoteShellUploadResult {
 export interface RemoteShellDownloadResult {
   canceled: boolean
   localPath?: string
+  isDirectory?: boolean
+  downloadedCount?: number
+  skippedSymlinks?: number
 }
 
 export type RemoteHostTrustStatus = 'known' | 'accepted_new' | 'mismatch_rejected'

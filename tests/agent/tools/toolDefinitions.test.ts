@@ -93,17 +93,18 @@ describe('Tool Definitions', () => {
       expect(result.success).toBe(true)
     })
 
-    it('should reject inverted line ranges in read_file', () => {
+    it('should accept inverted line ranges in read_file', () => {
       const readFileSchema = TOOL_SCHEMAS.read_file
       expect(readFileSchema).toBeDefined()
 
+      // Runtime resolveReadFileRequest auto-swaps; schema must not reject the call.
       const result = readFileSchema.safeParse({
         path: 'src/main.ts',
         start_line: 20,
         end_line: 10,
       })
 
-      expect(result.success).toBe(false)
+      expect(result.success).toBe(true)
     })
 
     it('should validate read_image path and optional prompt', () => {
