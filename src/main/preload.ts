@@ -341,7 +341,13 @@ export interface ElectronAPI {
   remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
   remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
-  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<{ canceled: boolean; uploaded: string[] }>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string, mode?: 'files' | 'directory') => Promise<{
+    canceled: boolean
+    uploaded: string[]
+    uploadedCount?: number
+    skippedSymlinks?: number
+    isDirectory?: boolean
+  }>
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<{
     canceled: boolean
     localPath?: string
@@ -733,7 +739,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => ipcRenderer.invoke('remoteShell:rename', server, oldPath, newPath),
   remoteShellDelete: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:delete', server, remotePath),
   remoteShellTestConnection: (server: RemoteShellServer) => ipcRenderer.invoke('remoteShell:testConnection', server),
-  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => ipcRenderer.invoke('remoteShell:upload', server, remoteDirectory),
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string, mode?: 'files' | 'directory') => ipcRenderer.invoke('remoteShell:upload', server, remoteDirectory, mode),
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => ipcRenderer.invoke('remoteShell:download', server, remotePath),
   remoteHostTrustGetStatus: (server: RemoteShellServer) => ipcRenderer.invoke('remoteHostTrust:getStatus', server),
   remoteHostTrustGetLastDecision: (server: RemoteShellServer) => ipcRenderer.invoke('remoteHostTrust:getLastDecision', server),

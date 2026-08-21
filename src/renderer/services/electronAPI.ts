@@ -7,6 +7,7 @@ import type {
   ElectronAPI,
   RemoteShellEntry,
   RemoteShellServer,
+  RemoteShellUploadMode,
   RemoteShellUploadResult,
   RemoteShellDownloadResult,
   RemoteHostTrustDecision,
@@ -20,7 +21,7 @@ type ElectronAPIWithRemoteShell = ElectronAPI & {
   remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
   remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
-  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string, mode?: RemoteShellUploadMode) => Promise<RemoteShellUploadResult>
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
   remoteHostTrustGetStatus: (server: RemoteShellServer) => Promise<{ known: boolean; fingerprintSha256?: string }>
   remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>
@@ -191,7 +192,8 @@ function createGroupedAPI() {
       rename: (server: RemoteShellServer, oldPath: string, newPath: string) => raw.remoteShellRename(server, oldPath, newPath),
       delete: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDelete(server, remotePath),
       testConnection: (server: RemoteShellServer) => raw.remoteShellTestConnection(server),
-      upload: (server: RemoteShellServer, remoteDirectory: string) => raw.remoteShellUpload(server, remoteDirectory),
+      upload: (server: RemoteShellServer, remoteDirectory: string, mode?: RemoteShellUploadMode) =>
+        raw.remoteShellUpload(server, remoteDirectory, mode),
       download: (server: RemoteShellServer, remotePath: string) => raw.remoteShellDownload(server, remotePath),
     },
 

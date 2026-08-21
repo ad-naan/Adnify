@@ -216,7 +216,12 @@ export interface RemoteShellServer {
 export interface RemoteShellUploadResult {
   canceled: boolean
   uploaded: string[]
+  uploadedCount?: number
+  skippedSymlinks?: number
+  isDirectory?: boolean
 }
+
+export type RemoteShellUploadMode = 'files' | 'directory'
 
 export interface RemoteShellDownloadResult {
   canceled: boolean
@@ -512,7 +517,7 @@ export interface ElectronAPI {
   remoteShellRename: (server: RemoteShellServer, oldPath: string, newPath: string) => Promise<boolean>
   remoteShellDelete: (server: RemoteShellServer, remotePath: string) => Promise<boolean>
   remoteShellTestConnection: (server: RemoteShellServer) => Promise<{ success: boolean; error?: string }>
-  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string) => Promise<RemoteShellUploadResult>
+  remoteShellUpload: (server: RemoteShellServer, remoteDirectory: string, mode?: RemoteShellUploadMode) => Promise<RemoteShellUploadResult>
   remoteShellDownload: (server: RemoteShellServer, remotePath: string) => Promise<RemoteShellDownloadResult>
   remoteHostTrustGetStatus: (server: RemoteShellServer) => Promise<{ known: boolean; fingerprintSha256?: string }>
   remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>

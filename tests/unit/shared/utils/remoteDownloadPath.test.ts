@@ -3,6 +3,7 @@ import path from 'path'
 import {
   assertSafeRemoteName,
   buildDirectoryDownloadTarget,
+  buildDirectoryUploadRemoteTarget,
   isSftpSymbolicLinkMode,
   remoteDirectoryBasename,
   safeJoinUnderDownloadRoot,
@@ -17,9 +18,16 @@ describe('remoteDownloadPath', () => {
     expect(remoteDirectoryBasename('/var/log/')).toBe('log')
   })
 
+  it('builds a remote upload target from the local basename', () => {
+    expect(buildDirectoryUploadRemoteTarget('/var/www', '/tmp/my-app')).toBe('/var/www/my-app')
+    expect(buildDirectoryUploadRemoteTarget('.', '/tmp/my-app')).toBe('my-app')
+    expect(buildDirectoryUploadRemoteTarget('/', '/tmp/my-app')).toBe('/my-app')
+  })
+
   it('rejects unsafe remote names and path escapes', () => {
     expect(() => assertSafeRemoteName('..')).toThrow(/Unsafe/)
     expect(() => assertSafeRemoteName('a/b')).toThrow(/Unsafe/)
+    expect(() => assertSafeRemoteName(' padded ')).toThrow(/Unsafe/)
     expect(() => safeJoinUnderDownloadRoot('/tmp/out', '..')).toThrow()
     expect(safeJoinUnderDownloadRoot('/tmp/out', 'src', 'main.ts')).toBe(
       path.join('/tmp/out', 'src', 'main.ts'),

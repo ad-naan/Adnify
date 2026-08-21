@@ -613,10 +613,12 @@ For long-running servers or watch tasks:
     upload_to_remote: {
         name: 'upload_to_remote',
         displayName: 'Upload To Remote',
-        description: 'Open the native file picker and upload one or more local files to a remote directory. Requires approval.',
-        detailedDescription: `Upload local files to a remote directory.
+        description: 'Open the native picker and upload local files or a folder to a remote directory. Requires approval.',
+        detailedDescription: `Upload local files or a directory to a remote directory.
 - Requires dangerous approval
-- Opens the desktop file picker for the user to choose local files
+- mode=files (default): multi-file picker
+- mode=directory: folder picker; uploads recursively as <remote>/<folder-name>/
+- Symlinks and special files inside folders are skipped
 - Uses remote SFTP only
 - Never writes into the local workspace on fallback`,
         category: 'write',
@@ -631,6 +633,7 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'Remote destination directory. Defaults to the server remotePath or "." when omitted.', default: '.' },
+            mode: { type: 'string', description: 'Upload mode: "files" (default) or "directory".', enum: ['files', 'directory'], default: 'files' },
             server_name: { type: 'string', description: 'Optional Shell Studio remote server name.' },
         },
     },

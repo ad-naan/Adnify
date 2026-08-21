@@ -2195,21 +2195,30 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const trustMetaBase = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
 
         try {
-            const uploadResult = await api.remoteShell.upload(routeResolution.remoteLink!.remote, remotePath)
+            const mode = args.mode === 'directory' ? 'directory' : 'files'
+            const uploadResult = await api.remoteShell.upload(routeResolution.remoteLink!.remote, remotePath, mode)
             const trustMeta = await buildRemoteTrustMeta(routeResolution.remoteLink!.remote)
-            return {
-                success: true,
-                result: uploadResult.canceled
-                    ? 'Remote upload canceled by user'
+            const count = uploadResult.uploadedCount ?? uploadResult.uploaded.length
+            const successMessage = uploadResult.canceled
+                ? 'Remote upload canceled by user'
+                : uploadResult.isDirectory
+                    ? `Remote directory uploaded to ${uploadResult.uploaded[0] || remotePath} (${count} file(s)${uploadResult.skippedSymlinks ? `, ${uploadResult.skippedSymlinks} symlink(s) skipped` : ''})`
                     : uploadResult.uploaded.length > 0
                         ? uploadResult.uploaded.join('\n')
-                        : 'No files were uploaded',
+                        : 'No files were uploaded'
+            return {
+                success: true,
+                result: successMessage,
                 meta: {
                     ...routeResolution.routeMeta,
                     ...trustMeta,
                     path: remotePath,
                     canceled: uploadResult.canceled,
                     uploaded: uploadResult.uploaded,
+                    uploadedCount: count,
+                    isDirectory: uploadResult.isDirectory,
+                    skippedSymlinks: uploadResult.skippedSymlinks,
+                    mode,
                 },
             }
         } catch (error) {
