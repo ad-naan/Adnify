@@ -243,7 +243,7 @@ async function resolvePath(
             const decision = await api.security.requestExternalFileAccess(fullPath, grantAccess, approval)
             if (!decision.allowed) {
                 throw new Error(
-                    `Security: Path access ${decision.reason === 'denied' ? 'denied by user' : 'rejected'} (${fullPath}). ` +
+                    `Security: Path access rejected (${decision.reason}, ${fullPath}). ` +
                     'Approve the exact target, or disable Strict workspace mode for ordinary external paths.',
                 )
             }

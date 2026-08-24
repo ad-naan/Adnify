@@ -467,6 +467,7 @@ For long-running servers or watch tasks:
             'Use cwd parameter instead of cd — NEVER write "cd path && command" or "cd path; command" inside command field',
             'NEVER use && in command — it is not supported on Windows PowerShell 5 (use cwd parameter for directory changes)',
             'Always use is_background=true for servers and dev tasks',
+            'When a safe family of similar commands is obvious, include approval_scope with the executable, a literal argument prefix, and a short description. Never put regex, wildcards, shell operators, paths, secrets, or dangerous flags in approval_scope. Omit it when uncertain.',
         ],
         category: 'terminal',
         approvalType: 'terminal',
@@ -484,6 +485,15 @@ For long-running servers or watch tasks:
             server_name: { type: 'string', description: 'Optional remote server name from Shell Studio. When set, command must run on that remote server instead of locally.' },
             timeout: { type: 'number', description: 'Timeout seconds (default: 60). Increase for slow commands like installs.', default: 60 },
             is_background: { type: 'boolean', description: 'Run in background as a visible UI terminal. Required for long-running processes like servers or watchers.', default: false },
+            approval_scope: {
+                type: 'object',
+                description: 'Optional structured suggestion for a persistent low-risk approval rule. This is only a proposal: the app validates it against the actual command and the user must approve it.',
+                properties: {
+                    executable: { type: 'string', description: 'Literal executable name from command, such as git or pnpm.', required: true },
+                    argument_prefix: { type: 'array', description: 'Literal leading arguments that define the safe command family, such as ["status"] or ["run", "test"]. Do not include wildcards.', required: true, items: { type: 'string', description: 'One literal argument.' } },
+                    description: { type: 'string', description: 'Short user-facing explanation of what this rule allows.', required: true },
+                },
+            },
         },
     },
 

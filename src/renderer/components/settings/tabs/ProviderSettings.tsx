@@ -24,6 +24,7 @@ import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
+import { ProgressiveReveal } from '../ProgressiveReveal'
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
@@ -972,7 +973,7 @@ function InlineCustomProviderForm({
           <label className="text-xs font-medium text-text-secondary">
             {language === 'zh' ? `已添加模型 (${customModels.length})` : `Added Models (${customModels.length})`}
           </label>
-          <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-background/30 rounded-xl border border-border/50 custom-scrollbar">
+          <div className="flex flex-wrap gap-2 rounded-xl border border-border/50 bg-background/30 p-2">
             {customModels.map(m => (
               <div key={m} className="group flex items-center gap-1.5 px-2 py-1 bg-surface/50 rounded-md border border-border text-xs text-text-secondary hover:border-accent/30 transition-all">
                 <span className="truncate max-w-[150px]">{m}</span>
@@ -1016,7 +1017,6 @@ export function ProviderSettings({
 }: ProviderSettingsProps) {
   const [newModelName, setNewModelName] = useState('')
   const [isAddingCustom, setIsAddingCustom] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [logitBiasString, setLogitBiasString] = useState('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [editingProviderName, setEditingProviderName] = useState('')
@@ -1708,15 +1708,11 @@ export function ProviderSettings({
       {/* 配置区域（非添加模式时显示） */}
       {!isAddingCustom && (
         <div className="space-y-6">
-          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+          <section className="relative overflow-hidden rounded-xl border border-border/70 bg-surface/25 p-5">
             <div className="relative">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Box className="w-4 h-4 text-accent" />
-                  <h5 className="sr-only text-sm font-medium text-text-primary">
-                    {language === 'zh' ? '模型配置' : 'Model Configuration'}
-                  </h5>
                   <h5 className="text-sm font-medium text-text-primary">
                     {language === 'zh' ? '模型配置' : 'Model Configuration'}
                   </h5>
@@ -1790,8 +1786,7 @@ export function ProviderSettings({
           </section>
 
           {/* 认证 & 网络配置 */}
-          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+          <section className="relative overflow-hidden rounded-xl border border-border/70 bg-surface/25 p-5">
             <div className="relative">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
@@ -1851,8 +1846,7 @@ export function ProviderSettings({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border/50 bg-surface/20 p-6 backdrop-blur-xl shadow-sm relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+          <section className="relative overflow-hidden rounded-xl border border-border/70 bg-surface/25 p-5">
             <div className="relative space-y-4">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -1919,13 +1913,14 @@ export function ProviderSettings({
             </div>
           </section>
 
-          <section className="rounded-2xl border border-border/50 bg-surface/20 backdrop-blur-xl shadow-sm relative overflow-hidden group">
-            <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+          <ProgressiveReveal
+            language={language}
+            collapsedHeight={520}
+            expandLabel={language === 'zh' ? '展开全部生成参数' : 'Show all generation parameters'}
+          >
+          <section className="relative overflow-hidden rounded-xl border border-border/70 bg-surface/25">
 
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="w-full flex items-center justify-between p-6 cursor-pointer focus:outline-none relative z-10"
-            >
+            <div className="relative z-10 flex items-center gap-2.5 p-5 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-accent/10 rounded-lg text-accent">
                   <Sliders className="w-4 h-4" />
@@ -1939,22 +1934,11 @@ export function ProviderSettings({
                   </p>
                 </div>
               </div>
-              <div className={`p-1.5 rounded-full bg-surface-hover transition-transform duration-300 ${showAdvanced ? 'rotate-180' : ''}`}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-            </button>
+            </div>
 
-            <div className={`grid transition-all duration-300 ease-in-out ${showAdvanced ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-              <div className="overflow-hidden">
-                <div className="p-6 pt-0 space-y-6 relative z-10">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Sliders className="w-4 h-4 text-accent" />
-                    <h5 className="text-sm font-medium text-text-primary">
-                      {language === 'zh' ? '生成参数' : 'Generation Parameters'}
-                    </h5>
-                  </div>
+            <div>
+              <div>
+                <div className="relative z-10 space-y-6 p-5 pt-2">
 
                   <div className="space-y-5">
 
@@ -2833,6 +2817,7 @@ export function ProviderSettings({
               </div>
             </div>
           </section>
+          </ProgressiveReveal>
 
         </div>
       )}

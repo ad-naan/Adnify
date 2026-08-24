@@ -1,6 +1,6 @@
 import * as path from 'path'
 
-export type UserFileGrantSource = 'file-association' | 'file-picker' | 'save-picker' | 'lsp-navigation' | 'agent-read' | 'agent-write' | 'agent-manage'
+export type UserFileGrantSource = 'file-association' | 'file-picker' | 'save-picker' | 'settings-editor' | 'lsp-navigation' | 'agent-read' | 'agent-write' | 'agent-manage'
 export type UserFileGrantAccess = 'read' | 'write' | 'manage'
 
 

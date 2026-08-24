@@ -7,6 +7,8 @@
 import { sanitizePersistedLLMConfig } from './llmPersistence'
 import { sanitizePersistedModelRoutingConfig } from './modelRouting'
 import { normalizeSecuritySettings } from './securitySettings'
+import type { TerminalCommandRule } from './types'
+import { legacyTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 
 // ============================================
 // EditorConfig 清理
@@ -283,7 +285,7 @@ export interface AppSettingsSchema {
   }
   language?: string
   autoApprove?: {
-    terminalCommandRules?: string[]
+    terminalCommandRules?: TerminalCommandRule[]
   }
   promptTemplateId?: string
   agentConfig?: AgentConfigSchema
@@ -328,10 +330,28 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
       ? aa.terminalCommandRules
       : (Array.isArray(aa.terminalCommands) ? aa.terminalCommands : [])
     if (terminalRules.length > 0) {
-      cleaned.autoApprove.terminalCommandRules = terminalRules
-        .filter((rule): rule is string => typeof rule === 'string')
-        .map(rule => rule.trim())
-        .filter(Boolean)
+      const normalizedRules = terminalRules.flatMap((rule): TerminalCommandRule[] => {
+        if (typeof rule === 'string') {
+          const migrated = legacyTerminalCommandRule(rule)
+          return migrated ? [migrated] : []
+        }
+        if (!rule || typeof rule !== 'object') return []
+        const candidate = rule as Record<string, unknown>
+        if (typeof candidate.executable !== 'string' || !Array.isArray(candidate.argumentPrefix)) return []
+        const executable = candidate.executable.trim().toLowerCase()
+        const argumentPrefix = candidate.argumentPrefix
+          .filter((value): value is string => typeof value === 'string')
+          .map(value => value.trim())
+          .filter(Boolean)
+        if (!executable || argumentPrefix.length === 0) return []
+        const description = typeof candidate.description === 'string'
+          ? candidate.description.trim().slice(0, 120)
+          : undefined
+        return [{ executable, argumentPrefix, ...(description ? { description } : {}) }]
+      })
+      cleaned.autoApprove.terminalCommandRules = Array.from(
+        new Map(normalizedRules.map(rule => [terminalCommandRuleKey(rule), rule])).values(),
+      )
     }
   }
 

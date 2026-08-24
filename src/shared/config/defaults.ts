@@ -233,7 +233,7 @@ export const AGENT_DEFAULTS = {
 // ============================================
 
 export const AUTO_APPROVE_DEFAULTS = {
-  terminalCommandRules: [] as string[],
+  terminalCommandRules: [] as import('./types').TerminalCommandRule[],
 } as const
 
 /**

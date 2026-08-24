@@ -252,14 +252,9 @@ export function SystemSettings({
     }
 
     const handleOpenLogFile = async () => {
-        try {
-            if (logPath) {
-                await api.file.showInFolder(logPath)
-            }
-        } catch (err) {
-            logger.settings.error('Failed to open log file:', err)
-            toast.error(language === 'zh' ? '打开日志文件失败' : 'Failed to open log file')
-        }
+        if (!logPath) return
+        const shown = await api.file.showInFolder(logPath)
+        if (!shown) toast.error(language === 'zh' ? '无法定位日志文件' : 'Could not locate the log file')
     }
 
     const handleExportLogs = async () => {
@@ -284,16 +279,16 @@ export function SystemSettings({
     }
 
     return (
-        <div className="space-y-8 animate-fade-in pb-10">
+        <div className="space-y-6 animate-fade-in pb-10">
             <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
+                <div className="flex items-center gap-2 mb-3 ml-1">
                     <ExternalLink className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                    <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
                         {language === 'zh' ? 'GitHub 集成' : 'GitHub Integration'}
                     </h4>
                 </div>
                 <div className="space-y-4">
-                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                    <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div>
                             <div className="text-sm font-bold text-text-primary">
                                 {language === 'zh' ? 'GitHub Token' : 'GitHub Token'}
@@ -328,14 +323,14 @@ export function SystemSettings({
             </section>
 
             <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
+                <div className="flex items-center gap-2 mb-3 ml-1">
                     <Globe className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                    <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
                         {language === 'zh' ? '网络代理' : 'Network Proxy'}
                     </h4>
                 </div>
                 <div className="space-y-4">
-                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                    <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">
@@ -401,14 +396,14 @@ export function SystemSettings({
             </section>
 
             <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
+                <div className="flex items-center gap-2 mb-3 ml-1">
                     <HardDrive className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                    <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
                         {language === 'zh' ? '存储与缓存' : 'Storage & Cache'}
                     </h4>
                 </div>
                 <div className="space-y-4">
-                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                    <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '配置存储路径' : 'Config Storage Path'}</div>
@@ -449,7 +444,7 @@ export function SystemSettings({
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
                             <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '清除缓存' : 'Clear Cache'}</div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">{language === 'zh' ? '清除业务缓存、索引数据和临时文件' : 'Clear app caches, index data, and temporary files'}</div>
@@ -464,7 +459,7 @@ export function SystemSettings({
                         </div>
                     </div>
 
-                    <div className="flex items-center justify-between p-6 bg-red-500/10 rounded-2xl border border-red-500/20 shadow-sm">
+                    <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/[0.07] p-5">
                         <div>
                             <div className="text-sm font-bold text-red-400">{language === 'zh' ? '重置所有设置' : 'Reset All Settings'}</div>
                             <div className="text-xs text-red-400/70 mt-1">{language === 'zh' ? '恢复出厂设置，不可撤销' : 'Restore factory settings, irreversible'}</div>
@@ -478,14 +473,14 @@ export function SystemSettings({
 
             {/* 日志管理 */}
             <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
+                <div className="flex items-center gap-2 mb-3 ml-1">
                     <FileText className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                    <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
                         {language === 'zh' ? '日志管理' : 'Log Management'}
                     </h4>
                 </div>
                 <div className="space-y-4">
-                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                    <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">
@@ -526,10 +521,11 @@ export function SystemSettings({
                                         variant="secondary"
                                         size="sm"
                                         onClick={handleOpenLogFile}
+                                        disabled={!logPath}
                                         className="rounded-xl px-4 flex-1"
                                     >
                                         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                                        {language === 'zh' ? '打开日志文件' : 'Open Log File'}
+                                        {language === 'zh' ? '在资源管理器中显示' : 'Reveal in Explorer'}
                                     </Button>
                                     <Button
                                         variant="secondary"
@@ -569,14 +565,14 @@ export function SystemSettings({
 
             {/* 配置导出/导入 */}
             <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
+                <div className="flex items-center gap-2 mb-3 ml-1">
                     <Download className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                    <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
                         {language === 'zh' ? '配置备份' : 'Settings Backup'}
                     </h4>
                 </div>
                 <div className="space-y-4">
-                    <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-5 shadow-sm">
+                    <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导出配置' : 'Export Settings'}</div>
@@ -610,7 +606,7 @@ export function SystemSettings({
                         )}
                     </div>
 
-                    <div className="flex items-center justify-between p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border shadow-sm">
+                    <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
                             <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导入配置' : 'Import Settings'}</div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">
@@ -634,13 +630,13 @@ export function SystemSettings({
 
             {/* 版本与更新日志 */}
             <section>
-                <div className="flex items-center gap-2 mb-5 ml-1">
+                <div className="flex items-center gap-2 mb-3 ml-1">
                     <BookOpen className="w-4 h-4 text-accent" />
-                    <h4 className="text-[11px] font-bold text-text-muted uppercase tracking-[0.2em]">
+                    <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
                         {language === 'zh' ? '版本记录' : 'Version History'}
                     </h4>
                 </div>
-                <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border flex items-center justify-between shadow-sm">
+                <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                     <div>
                         <div className="text-sm font-bold text-text-primary">
                             {language === 'zh' ? '软件更新日志' : 'Release Notes & Changelog'}

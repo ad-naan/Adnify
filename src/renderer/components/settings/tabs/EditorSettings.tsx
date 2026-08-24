@@ -127,12 +127,12 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
     }
 
     // 通用 Section 样式类
-    const sectionClass = "p-6 bg-surface/30 backdrop-blur-sm rounded-xl border border-border/50 space-y-5 shadow-sm hover:border-border transition-colors duration-300"
+    const sectionClass = "space-y-5 rounded-xl border border-border/70 bg-surface/25 p-5"
     const labelClass = "text-xs font-semibold text-text-secondary uppercase tracking-wider ml-1 mb-2 block"
     const inputClass = "bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
 
     return (
-        <div className="space-y-8 animate-fade-in pb-10">
+        <div className="space-y-6 animate-fade-in pb-10">
             {/* Theme Section */}
             <section>
                 <div className="flex items-center gap-2 mb-5 ml-1">
@@ -200,7 +200,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                 </div>
             </section>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
                 {/* Left Column */}
                 <div className="space-y-6">
                     {/* Typography & Layout */}
@@ -368,7 +368,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                 {/* Right Column */}
                 <div className="space-y-6">
                     {/* AI Completion */}
-                    <section className="p-6 bg-gradient-to-br from-accent/5 to-transparent backdrop-blur-sm rounded-xl border border-accent/20 space-y-5 shadow-sm">
+                    <section className="space-y-5 rounded-xl border border-accent/20 bg-accent/[0.04] p-5">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-accent" />

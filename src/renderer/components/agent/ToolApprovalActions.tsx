@@ -164,8 +164,8 @@ export function ToolApprovalActions({
                   >
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                     <span className="min-w-0">
-                      <span className="block text-[11px] font-semibold">{zh ? '配置相似命令规则' : 'Configure similar-command rule'}</span>
-                      <span className="mt-0.5 block text-[10px] leading-4 text-text-muted">{zh ? '保存到安全设置，执行前仍检查危险参数' : 'Saved in Security settings; dangerous arguments are still checked'}</span>
+                      <span className="block text-[11px] font-semibold">{zh ? '保存 AI 建议的命令范围' : 'Save AI-proposed command scope'}</span>
+                      <span className="mt-0.5 block text-[10px] leading-4 text-text-muted">{zh ? '确认结构化范围并保存；危险参数仍会审批' : 'Review the structured scope; risky arguments are still checked'}</span>
                     </span>
                   </button>
                 )}

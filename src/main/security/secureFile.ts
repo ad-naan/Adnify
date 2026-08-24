@@ -773,11 +773,38 @@ export function registerSecureFileHandlers(
   // 在文件管理器中显示
   ipcMain.handle('file:showInFolder', async (_, filePath: string) => {
     try {
+      await fsPromises.access(filePath)
       shell.showItemInFolder(filePath)
       return true
     } catch {
       return false
     }
+  })
+
+  // 设置面板中的明确“在编辑器中打开”操作，只为当前工作区或受信任的
+  // Adnify 配置资源授予本次应用会话内的精确文件写权限。
+  ipcMain.handle('file:authorizeSettingsEdit', async (event, filePath: string, initialContent?: string) => {
+    if (!filePath || typeof filePath !== 'string') return false
+    if (securityManager.isSensitivePath(filePath)) return false
+    const workspace = getWorkspaceSessionFn(event)
+    if (!securityManager.validateWorkspacePath(filePath, workspace?.roots || []) && !isAllowedGlobalResourcePath(filePath)) {
+      return false
+    }
+    authorizeUserFile(filePath, 'settings-editor', 'write')
+
+    if (typeof initialContent === 'string') {
+      try {
+        await fsPromises.mkdir(path.dirname(filePath), { recursive: true })
+        await fsPromises.writeFile(filePath, initialContent, { encoding: 'utf-8', flag: 'wx' })
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== 'EEXIST') {
+          logger.security.error('[File] Failed to initialize settings file:', filePath, toAppError(error).message)
+          return false
+        }
+      }
+    }
+    return true
   })
 
   // 在浏览器中打开文件

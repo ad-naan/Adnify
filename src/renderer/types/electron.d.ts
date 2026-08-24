@@ -403,7 +403,8 @@ export interface ElectronAPI {
   ensureDir: (path: string) => Promise<boolean>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
-  showItemInFolder: (path: string) => Promise<void>
+  showItemInFolder: (path: string) => Promise<boolean>
+  authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<boolean>
   openInBrowser: (path: string) => Promise<boolean>
   mkdir: (path: string) => Promise<boolean>
   deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<boolean>

@@ -18,8 +18,10 @@ import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { themeManager } from '../../config/themeConfig'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { resolveWriteFileStatusText } from '@renderer/agent/utils/fileWriteDisplay'
-import { suggestTerminalCommandRule } from '@renderer/agent/utils/commandApproval'
+import { validateTerminalCommandRuleProposal } from '@renderer/agent/utils/commandApproval'
+import { formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ToolApprovalActions } from './ToolApprovalActions'
+import { assessShellCommand } from '@shared/security/executionPolicy'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -1019,23 +1021,27 @@ const ToolCallCard = memo(function ToolCallCard({
     const { args, effectiveName, isSuccess, isError, isRejected, isRunning, isStreaming } = useToolDisplayState(toolCall)
     const isActive = isRunning || isStreaming
     const commandText = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
+    const shellDecision = effectiveName === 'run_command' ? assessShellCommand(commandText, []) : null
+    const canConfigureCommandRule = shellDecision?.kind !== 'deny' && shellDecision?.risk !== 'dangerous'
+    const approvalRule = effectiveName === 'run_command'
+        ? validateTerminalCommandRuleProposal(commandText, toolCall.arguments.approval_scope)
+        : null
     const [showApproveRule, setShowApproveRule] = useState(false)
-    const [approveRule, setApproveRule] = useState(() => suggestTerminalCommandRule(commandText))
     const handleApproveAlways = async () => {
-        const rule = approveRule.trim()
-        if (!rule) return
+        if (!approvalRule) return
         const store = useStore.getState()
         const current = store.autoApprove.terminalCommandRules || []
-        if (!current.includes(rule)) {
+        const ruleKey = terminalCommandRuleKey(approvalRule)
+        if (!current.some(rule => terminalCommandRuleKey(rule) === ruleKey)) {
             store.set('autoApprove', {
                 ...store.autoApprove,
-                terminalCommandRules: [...current, rule],
+                terminalCommandRules: [...current, approvalRule],
             })
             await useStore.getState().save()
         }
         toast.success(
-            language === 'zh' ? '已始终允许此命令' : 'Command always allowed',
-            rule,
+            language === 'zh' ? '已保存相似命令范围' : 'Similar-command scope saved',
+            formatTerminalCommandRule(approvalRule),
         )
         onApprove?.()
     }
@@ -1155,25 +1161,24 @@ const ToolCallCard = memo(function ToolCallCard({
 
             {isAwaitingApproval && (
                 <div className="border-t border-yellow-500/10 bg-yellow-500/5 px-3 py-2">
-                    {showApproveRule && effectiveName === 'run_command' && (
+                    {showApproveRule && approvalRule && (
                         <div className="mb-2.5 rounded-lg border border-accent/25 bg-background/75 p-2.5">
                             <div className="mb-1 text-[11px] font-medium text-text-primary">
-                                {language === 'zh' ? '始终允许相似命令' : 'Always allow similar commands'}
+                                {language === 'zh' ? '保存 AI 建议的命令范围' : 'Save AI-proposed command scope'}
                             </div>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    value={approveRule}
-                                    onChange={(event) => setApproveRule(event.target.value)}
-                                    className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-[11px] text-text-primary outline-none focus:border-accent/60"
-                                />
+                            <div className="flex items-center gap-2 rounded-md border border-border/70 bg-surface/60 p-2">
+                                <div className="min-w-0 flex-1">
+                                    <code className="block truncate text-[11px] text-text-primary">{formatTerminalCommandRule(approvalRule)} <span className="text-text-muted">…</span></code>
+                                    {approvalRule.description && <p className="mt-1 text-[10px] leading-4 text-text-muted">{approvalRule.description}</p>}
+                                </div>
                                 <button onClick={() => void handleApproveAlways()} className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hover">
                                     {language === 'zh' ? '保存并运行' : 'Save & run'}
                                 </button>
                             </div>
                             <p className="mt-1.5 text-[10px] leading-4 text-text-muted">
                                 {language === 'zh'
-                                    ? '* 匹配相似参数；复合命令的每一段仍需分别命中规则。'
-                                    : '* matches similar arguments; every part of a compound command must be allowed.'}
+                                    ? '仅固定程序和参数前缀；AI 建议已经过本地校验，危险参数仍会再次审批。'
+                                    : 'Only the executable and literal argument prefix are stored. Risky arguments still require approval.'}
                             </p>
                         </div>
                     )}
@@ -1181,7 +1186,7 @@ const ToolCallCard = memo(function ToolCallCard({
                         language={language}
                         onApprove={onApprove}
                         onApproveForTask={onApproveForTask}
-                        onApproveAlways={effectiveName === 'run_command' ? () => setShowApproveRule(true) : undefined}
+                        onApproveAlways={effectiveName === 'run_command' && canConfigureCommandRule && approvalRule ? () => setShowApproveRule(true) : undefined}
                         onReject={onReject}
                         onStop={onStop}
                     />

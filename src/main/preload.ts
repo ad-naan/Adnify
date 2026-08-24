@@ -288,7 +288,8 @@ export interface ElectronAPI {
   ensureDir: (path: string) => Promise<boolean>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
-  showItemInFolder: (path: string) => Promise<void>
+  showItemInFolder: (path: string) => Promise<boolean>
+  authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<boolean>
   mkdir: (path: string) => Promise<boolean>
   deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<boolean>
   copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
@@ -617,6 +618,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveFile: (content: string, path?: string, encoding?: string) => ipcRenderer.invoke('file:save', content, path, encoding),
   fileExists: (path: string) => ipcRenderer.invoke('file:exists', path),
   showItemInFolder: (path: string) => ipcRenderer.invoke('file:showInFolder', path),
+  authorizeSettingsEdit: (path: string, initialContent?: string) => ipcRenderer.invoke('file:authorizeSettingsEdit', path, initialContent),
   openInBrowser: (path: string) => ipcRenderer.invoke('file:openInBrowser', path),
   mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
   deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => ipcRenderer.invoke('file:delete', path, approval),

@@ -207,7 +207,7 @@ export function LspSettings({ language }: LspSettingsProps) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 pb-10">
       {/* 错误提示 */}
       {error && (
         <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
@@ -220,15 +220,15 @@ export function LspSettings({ language }: LspSettingsProps) {
       )}
 
       {/* 安装路径配置 */}
-      <section className="space-y-4">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
         <div className="flex items-center gap-2">
           <HardDrive className="w-5 h-5 text-accent" />
-          <h3 className="text-lg font-medium text-text-primary">{tt('installPath')}</h3>
+          <h3 className="text-sm font-medium text-text-primary">{tt('installPath')}</h3>
         </div>
 
-        <p className="text-sm text-text-muted">{tt('pathNote')}</p>
+        <p className="text-xs leading-5 text-text-muted">{tt('pathNote')}</p>
 
-        <div className="space-y-3 p-4 bg-surface/30 rounded-lg border border-border">
+        <div className="space-y-3 rounded-lg border border-border/60 bg-background/25 p-4">
           {/* 当前路径 */}
           <div className="space-y-1">
             <label className="text-xs text-text-muted uppercase tracking-wider">{tt('currentPath')}</label>
@@ -278,11 +278,11 @@ export function LspSettings({ language }: LspSettingsProps) {
       </section>
 
       {/* 语言服务器列表 */}
-      <section className="space-y-4">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Server className="w-5 h-5 text-accent" />
-            <h3 className="text-lg font-medium text-text-primary">{tt('lspServers')}</h3>
+            <h3 className="text-sm font-medium text-text-primary">{tt('lspServers')}</h3>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={loadStatus} disabled={loading}>
@@ -305,7 +305,7 @@ export function LspSettings({ language }: LspSettingsProps) {
           </div>
         </div>
 
-        <p className="text-sm text-text-muted">{tt('installNote')}</p>
+        <p className="text-xs leading-5 text-text-muted">{tt('installNote')}</p>
 
         <div className="space-y-2">
           {LSP_SERVER_DEFINITIONS.map((server) => {

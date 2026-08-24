@@ -12,6 +12,8 @@ import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Modal, Select } from '@components/ui'
 import { SettingsTab, EditorSettingsState, LANGUAGES } from './types'
 import { SETTINGS_SEARCH_INDEX, type SettingsSearchEntry } from './settingsSearchIndex'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
+import { api } from '@renderer/services/electronAPI'
 
 const ProviderSettings = lazy(() =>
     import('./tabs/ProviderSettings').then(module => ({ default: module.ProviderSettings })),
@@ -401,6 +403,46 @@ export default function SettingsModal() {
         void requestClose()
     }, [requestClose])
 
+    const handleOpenFileFromSettings = useCallback(async (
+        filePath: string,
+        options?: { initialContent?: string },
+    ): Promise<boolean> => {
+        if (isClosing) return false
+
+        setIsClosing(true)
+        try {
+            if (isDirty) {
+                const confirmed = await globalConfirm({
+                    title: language === 'zh' ? '打开文件' : 'Open file',
+                    message: language === 'zh'
+                        ? '当前设置有未保存的更改。放弃这些更改并在编辑器中打开文件吗？'
+                        : 'There are unsaved settings. Discard them and open the file in the editor?',
+                    confirmText: language === 'zh' ? '放弃并打开' : 'Discard and open',
+                    cancelText: t('cancel', language as Language),
+                    variant: 'warning',
+                })
+                if (!confirmed) return false
+            }
+
+            const authorized = await api.file.authorizeSettingsEdit(filePath, options?.initialContent)
+            if (!authorized) {
+                toast.error(
+                    language === 'zh' ? '无法编辑此配置文件' : 'Cannot edit this configuration file',
+                    language === 'zh' ? '仅支持当前工作区或 Adnify 管理的配置文件。' : 'Only workspace files and configuration managed by Adnify can be edited here.',
+                )
+                return false
+            }
+
+            const result = await safeOpenFile(filePath, { language: language as Language })
+            if (!result.success) return false
+
+            setShowSettings(false)
+            return true
+        } finally {
+            setIsClosing(false)
+        }
+    }, [isClosing, isDirty, language, setShowSettings])
+
     const providers = useMemo(() =>
         Object.entries(PROVIDERS).map(([id, provider]) => ({
             id,
@@ -414,18 +456,25 @@ export default function SettingsModal() {
         [localConfig.provider, providers])
 
     const tabs = useMemo(() => [
-        { id: 'provider', label: language === 'zh' ? '模型提供商' : 'Providers', icon: <Cpu className="w-4 h-4" /> },
-        { id: 'editor', label: language === 'zh' ? '编辑器' : 'Editor', icon: <Code className="w-4 h-4" /> },
-        { id: 'snippets', label: language === 'zh' ? '代码片段' : 'Snippets', icon: <FileCode className="w-4 h-4" /> },
-        { id: 'agent', label: language === 'zh' ? '智能体' : 'Agent', icon: <Settings2 className="w-4 h-4" /> },
-        { id: 'rules', label: language === 'zh' ? '规则与记忆' : 'Rules & Memory', icon: <Brain className="w-4 h-4" /> },
-        { id: 'skills', label: 'Skills', icon: <Zap className="w-4 h-4" /> },
-        { id: 'mcp', label: 'MCP', icon: <Plug className="w-4 h-4" /> },
-        { id: 'lsp', label: language === 'zh' ? '语言服务' : 'LSP', icon: <Braces className="w-4 h-4" /> },
-        { id: 'keybindings', label: language === 'zh' ? '快捷键' : 'Keybindings', icon: <Keyboard className="w-4 h-4" /> },
-        { id: 'indexing', label: language === 'zh' ? '代码索引' : 'Indexing', icon: <Database className="w-4 h-4" /> },
-        { id: 'security', label: language === 'zh' ? '安全设置' : 'Security', icon: <Shield className="w-4 h-4" /> },
-        { id: 'system', label: language === 'zh' ? '系统' : 'System', icon: <Monitor className="w-4 h-4" /> },
+        { id: 'provider', group: 'ai', label: language === 'zh' ? '模型与提供商' : 'Models & Providers', description: language === 'zh' ? '连接模型、密钥、路由与请求参数' : 'Connections, credentials, routing, and requests', icon: <Cpu className="w-4 h-4" /> },
+        { id: 'agent', group: 'ai', label: language === 'zh' ? 'Agent 行为' : 'Agent Behavior', description: language === 'zh' ? '自动化、上下文、检索与执行策略' : 'Automation, context, retrieval, and execution', icon: <Settings2 className="w-4 h-4" /> },
+        { id: 'rules', group: 'ai', label: language === 'zh' ? '指令与记忆' : 'Instructions & Memory', description: language === 'zh' ? '项目规则、长期记忆与行为约束' : 'Project rules, durable memory, and guidance', icon: <Brain className="w-4 h-4" /> },
+        { id: 'editor', group: 'workspace', label: language === 'zh' ? '外观与编辑器' : 'Appearance & Editor', description: language === 'zh' ? '主题、动画、排版、编辑和终端体验' : 'Theme, motion, typography, editing, and terminal', icon: <Code className="w-4 h-4" /> },
+        { id: 'keybindings', group: 'workspace', label: language === 'zh' ? '快捷键' : 'Keyboard Shortcuts', description: language === 'zh' ? '查看和修改操作快捷键' : 'View and customize keyboard actions', icon: <Keyboard className="w-4 h-4" /> },
+        { id: 'snippets', group: 'workspace', label: language === 'zh' ? '代码片段' : 'Code Snippets', description: language === 'zh' ? '管理可复用的代码模板' : 'Manage reusable code templates', icon: <FileCode className="w-4 h-4" /> },
+        { id: 'lsp', group: 'workspace', label: language === 'zh' ? '语言服务' : 'Language Services', description: language === 'zh' ? '安装并管理语言服务器' : 'Install and manage language servers', icon: <Braces className="w-4 h-4" /> },
+        { id: 'indexing', group: 'workspace', label: language === 'zh' ? '代码索引' : 'Code Indexing', description: language === 'zh' ? '语义索引、嵌入模型与索引状态' : 'Semantic index, embeddings, and status', icon: <Database className="w-4 h-4" /> },
+        { id: 'skills', group: 'extensions', label: 'Skills', description: language === 'zh' ? '管理 Agent 可调用的专业能力' : 'Manage specialized agent capabilities', icon: <Zap className="w-4 h-4" /> },
+        { id: 'mcp', group: 'extensions', label: 'MCP', description: language === 'zh' ? '连接和管理外部工具服务器' : 'Connect and manage external tool servers', icon: <Plug className="w-4 h-4" /> },
+        { id: 'security', group: 'app', label: language === 'zh' ? '安全与审批' : 'Security & Approvals', description: language === 'zh' ? '审批策略、工作区边界与可信范围' : 'Approval policy, workspace boundaries, and trust', icon: <Shield className="w-4 h-4" /> },
+        { id: 'system', group: 'app', label: language === 'zh' ? '应用与数据' : 'App & Data', description: language === 'zh' ? '网络、存储、日志、备份与维护' : 'Network, storage, logs, backup, and maintenance', icon: <Monitor className="w-4 h-4" /> },
+    ] as const, [language])
+
+    const tabGroups = useMemo(() => [
+        { id: 'ai', label: language === 'zh' ? 'AI 与工作流' : 'AI & Workflow' },
+        { id: 'workspace', label: language === 'zh' ? '工作区体验' : 'Workspace' },
+        { id: 'extensions', label: language === 'zh' ? '扩展能力' : 'Extensions' },
+        { id: 'app', label: language === 'zh' ? '应用管理' : 'Application' },
     ] as const, [language])
 
     // 搜索逻辑：按关键词筛选设置项，按 Tab 分组
@@ -506,9 +555,9 @@ export default function SettingsModal() {
             case 'rules':
                 return <RulesMemorySettings language={language} />
             case 'skills':
-                return <SkillSettings language={language} />
+                return <SkillSettings language={language} onOpenFile={handleOpenFileFromSettings} />
             case 'mcp':
-                return <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} />
+                return <McpSettings language={language} mcpConfig={localMcpConfig} setMcpConfig={setLocalMcpConfig} onOpenFile={handleOpenFileFromSettings} />
             case 'lsp':
                 return <LspSettings language={language} />
             case 'keybindings':
@@ -543,10 +592,10 @@ export default function SettingsModal() {
     }
 
     return (
-        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden border border-border/50 shadow-2xl shadow-black/20 rounded-3xl">
-            <div className="flex h-[75vh] max-h-[800px]">
-                <div className="w-64 bg-surface/30 border-r border-border/50 flex flex-col pt-8 pb-6">
-                    <div className="px-6 mb-6">
+        <Modal isOpen={true} onClose={handleClose} title="" size="5xl" noPadding className="overflow-hidden border border-border/50 shadow-2xl shadow-black/20 rounded-2xl">
+            <div className="flex h-[82vh] max-h-[880px] min-h-[600px]">
+                <div className="w-60 shrink-0 bg-surface/30 border-r border-border/50 flex flex-col pt-6 pb-5">
+                    <div className="px-5 mb-4">
                         <h2 className="text-lg font-semibold text-text-primary tracking-tight flex items-center gap-2.5">
                             <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">
                                 <Settings2 className="w-5 h-5 text-accent" />
@@ -555,7 +604,7 @@ export default function SettingsModal() {
                         </h2>
                     </div>
 
-                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto no-scrollbar">
+                    <nav className="flex-1 px-3 pb-3 overflow-y-auto custom-scrollbar">
                         {/* 搜索输入框 */}
                         <div className="relative mb-3">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
@@ -580,20 +629,25 @@ export default function SettingsModal() {
 
                         {searchResults === null ? (
                             /* 无搜索时：原有 Tab 列表 */
-                            <>
-                            {tabs.map(tab => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-200 group ${activeTab === tab.id ? 'bg-accent/10 text-text-primary border border-accent/20' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary border border-transparent'}`}
-                                >
-                                    <span className={`transition-colors duration-200 ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>
-                                        {tab.icon}
-                                    </span>
-                                    <span>{tab.label}</span>
-                                </button>
-                            ))}
-                            </>
+                            <div className="space-y-4">
+                                {tabGroups.map(group => (
+                                    <div key={group.id}>
+                                        <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted/70">{group.label}</div>
+                                        <div className="space-y-0.5">
+                                            {tabs.filter(tab => tab.group === group.id).map(tab => (
+                                                <button
+                                                    key={tab.id}
+                                                    onClick={() => setActiveTab(tab.id)}
+                                                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors duration-150 group ${activeTab === tab.id ? 'bg-accent/10 text-text-primary' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'}`}
+                                                >
+                                                    <span className={`transition-colors ${activeTab === tab.id ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`}>{tab.icon}</span>
+                                                    <span className="truncate">{tab.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         ) : searchResults.size === 0 ? (
                             /* 无匹配结果 */
                             <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -629,7 +683,7 @@ export default function SettingsModal() {
                         )}
                     </nav>
 
-                    <div className="mt-auto px-6 pt-6 border-t border-border/50 space-y-3">
+                    <div className="mt-auto px-4 pt-4 border-t border-border/50 space-y-2">
                         <div className="flex items-center gap-2 px-1 text-text-muted opacity-80">
                             <Globe className="w-3.5 h-3.5" />
                             <span className="text-xs font-bold uppercase tracking-widest">{language === 'zh' ? '语言' : 'Language'}</span>
@@ -644,17 +698,17 @@ export default function SettingsModal() {
                 </div>
 
                 <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
-                    <div className="settings-scroll-region flex-1 overflow-y-auto px-8 py-8 custom-scrollbar pb-28">
-                        <div className="mb-6 pb-5 border-b border-border/40">
-                            <h3 className="text-2xl font-semibold text-text-primary tracking-tight">
+                    <div className="settings-scroll-region flex-1 overflow-y-auto px-6 py-6 custom-scrollbar pb-28 lg:px-8">
+                        <div className="mb-6 border-b border-border/50 pb-4">
+                            <h3 className="text-lg font-semibold text-text-primary tracking-tight">
                                 {tabs.find(tab => tab.id === activeTab)?.label}
                             </h3>
-                            <p className="text-sm text-text-muted mt-1.5 opacity-80">
-                                {t('settings.managePreferences', language as Language)}
+                            <p className="mt-1 text-xs leading-5 text-text-muted">
+                                {tabs.find(tab => tab.id === activeTab)?.description}
                             </p>
                         </div>
 
-                        <div className="settings-tab-panel space-y-6">
+                        <div className="settings-tab-panel mx-auto max-w-4xl space-y-6">
                             <Suspense fallback={<SettingsTabFallback language={language as Language} />}>
                                 {renderActiveTab()}
                             </Suspense>

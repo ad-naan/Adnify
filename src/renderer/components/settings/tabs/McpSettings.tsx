@@ -3,7 +3,6 @@
  * 管理 MCP 服务器配置和状态
  */
 
-import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect } from 'react'
 import { logger } from '@shared/utils/Logger'
 import {
@@ -34,16 +33,19 @@ import { isRemoteConfig, isLocalConfig } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { ProgressiveReveal } from '../ProgressiveReveal'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
   mcpConfig: { autoConnect?: boolean }
   setMcpConfig: (config: { autoConnect?: boolean }) => void
+  onOpenFile: (path: string, options?: { initialContent?: string }) => Promise<boolean>
 }
 
-export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSettingsProps) {
+const EMPTY_MCP_CONFIG = `${JSON.stringify({ mcpServers: {} }, null, 2)}\n`
+
+export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenFile }: McpSettingsProps) {
   const { mcpServers, mcpLoading, mcpError } = useStore(useShallow(s => ({ mcpServers: s.mcpServers, mcpLoading: s.mcpLoading, mcpError: s.mcpError })))
-  const [expandedServer, setExpandedServer] = useState<string | null>(null)
   const [configPaths, setConfigPaths] = useState<{ user: string; workspace: string[] } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -139,14 +141,6 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
     setActionLoading(null)
   }
 
-  const openConfigFile = async (path: string) => {
-    try {
-      await api.file.showInFolder(path)
-    } catch (err) {
-      logger.settings.error('Failed to open config file:', err)
-    }
-  }
-
   const getStatusIcon = (status: McpServerStatus) => {
     switch (status) {
       case 'connected':
@@ -194,7 +188,6 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
   }
 
   const renderServerCard = (server: McpServerState) => {
-    const isExpanded = expandedServer === server.id
     const isLoading = actionLoading?.startsWith(server.id) || actionLoading === `refresh-${server.id}` || actionLoading === `oauth-${server.id}`
     const isDeleting = actionLoading === `delete-${server.id}`
     const showDeleteConfirm = deleteConfirm === server.id
@@ -222,10 +215,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
 
         {/* Header */}
         <div className="flex items-start justify-between p-5">
-          <div
-            className="flex gap-4 flex-1 cursor-pointer"
-            onClick={() => setExpandedServer(isExpanded ? null : server.id)}
-          >
+          <div className="flex min-w-0 flex-1 gap-4">
             <div className="relative">
               <div className={`p-2.5 rounded-xl ${server.config.disabled ? 'bg-white/5' : isRemote ? 'bg-blue-500/10' : 'bg-accent/10'}`}>
                 {isRemote ? (
@@ -422,9 +412,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
           </div>
         )}
 
-        {/* Expanded Content */}
-        {isExpanded && !showDeleteConfirm && (
-          <div className="border-t border-border/50 p-5 space-y-6 animate-slide-down">
+        {!showDeleteConfirm && (
+          <ProgressiveReveal language={language} collapsedHeight={420} expandLabel={language === 'zh' ? '展开服务器全部详情' : 'Show all server details'}>
+          <div className="space-y-6 border-t border-border/50 p-5">
             {/* OAuth Pending Banner */}
             {isOAuthPending && (
               <div className="flex items-start gap-3 p-4 bg-orange-500/10 rounded-xl border border-orange-500/20 text-orange-300 text-xs font-medium">
@@ -617,6 +607,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
               </div>
             )}
           </div>
+          </ProgressiveReveal>
         )}
       </div>
     )
@@ -625,9 +616,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
   const existingServerIds = mcpServers.map(s => s.id)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 pb-10">
       {/* Auto Connect Setting */}
-      <div className="p-4 bg-surface/20 rounded-xl border border-border">
+      <section className="rounded-xl border border-border/70 bg-surface/25 p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-accent/10">
@@ -649,7 +640,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
             onChange={(e) => setMcpConfig({ autoConnect: e.target.checked })}
           />
         </div>
-      </div>
+      </section>
 
       {/* Header Actions */}
       <div className="flex items-center justify-between">
@@ -720,14 +711,14 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
             </Button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-4">
             {mcpServers.map(renderServerCard)}
           </div>
         )}
       </div>
 
       {/* Tips */}
-      <div className="p-4 rounded-xl bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-2">
+      <aside className="space-y-2 rounded-xl border border-accent/20 bg-accent/[0.04] p-4 text-xs text-text-muted">
         <p className="font-bold text-sm text-accent/90 flex items-center gap-1.5">
           <OtterAsset asset="question" className="h-6 w-6 object-contain" />
           {language === 'zh' ? '使用提示' : 'Tips'}
@@ -740,8 +731,8 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
           </li>
           <li>
             {language === 'zh'
-              ? '快速状态排查：卡片左侧指示灯代表当前状态，若遇到错误，点击展开卡片即可查看详细的服务器 stderr 日志。'
-              : 'Status monitoring: The left dot indicates connection status. Click the card to expand details and view stderr logs if errors occur.'}
+              ? '快速状态排查：卡片左侧指示灯代表当前状态，服务器详情与 stderr 日志始终显示在卡片下方。'
+              : 'Status monitoring: The left dot indicates connection status. Server details and stderr logs stay visible below.'}
           </li>
           <li>
             {language === 'zh'
@@ -749,11 +740,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
               : 'Config merging: Global and workspace server configs are merged. Workspace configs take precedence in case of duplicate names.'}
           </li>
         </ul>
-      </div>
+      </aside>
 
       {/* Local MCP Config Directories */}
       {configPaths && (
-        <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
           <div className="flex items-center gap-2">
             <FolderOpen className="w-4 h-4 text-accent" />
             <h5 className="text-sm font-medium text-text-primary">
@@ -763,8 +754,8 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
 
           <p className="text-xs text-text-muted leading-relaxed">
             {language === 'zh'
-              ? '已有 MCP 配置文件存储在本地 JSON 目录中。你可以点击下方卡片，定位并手动编辑这些文件以进行高级参数微调。'
-              : 'MCP server configurations are stored in local JSON files. Click the cards below to locate and manually edit these files for advanced tuning.'}
+              ? 'MCP 配置存储在本地 JSON 文件中。文件尚未生成时会自动创建；打开成功后设置面板会关闭。'
+              : 'MCP configuration is stored in local JSON files. Missing files are created automatically; Settings closes after the file opens.'}
           </p>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -787,11 +778,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => openConfigFile(configPaths.user)}
+                onClick={() => void onOpenFile(configPaths.user, { initialContent: EMPTY_MCP_CONFIG })}
                 className="w-full text-xs justify-center gap-1.5"
               >
-                <FolderOpen className="w-3.5 h-3.5" />
-                {language === 'zh' ? '在文件夹中定位用户配置' : 'Locate User Config'}
+                <FileText className="w-3.5 h-3.5" />
+                {language === 'zh' ? '在编辑器中打开' : 'Open in editor'}
               </Button>
             </div>
 
@@ -816,11 +807,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig }: McpSe
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => openConfigFile(path)}
+                    onClick={() => void onOpenFile(path, { initialContent: EMPTY_MCP_CONFIG })}
                     className="w-full text-xs justify-center gap-1.5"
                   >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                    {language === 'zh' ? '在文件夹中定位项目配置' : 'Locate Project Config'}
+                    <FileText className="w-3.5 h-3.5" />
+                    {language === 'zh' ? '在编辑器中打开' : 'Open in editor'}
                   </Button>
                 </div>
               ))

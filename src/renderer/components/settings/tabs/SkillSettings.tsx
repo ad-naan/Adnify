@@ -16,12 +16,14 @@ import {
     ToggleLeft, ToggleRight, ExternalLink, Github, FolderOpen
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { ProgressiveReveal } from '../ProgressiveReveal'
 
 interface SkillSettingsProps {
     language: string
+    onOpenFile: (path: string) => Promise<boolean>
 }
 
-export function SkillSettings({ language }: SkillSettingsProps) {
+export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
     const workspacePath = useStore(s => s.workspacePath)
     const projectSkillsDir = workspacePath ? joinPath(workspacePath, '.adnify/skills') : ''
@@ -134,10 +136,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
             setNewSkillName('')
             setInstallMode(null)
             if (result.filePath) {
-                const content = await api.file.read(result.filePath)
-                if (content !== null) {
-                    useStore.getState().openFile(result.filePath, content)
-                }
+                await onOpenFile(result.filePath)
             }
         } else {
             showMessage('error', result.error || t('创建失败', 'Create failed'))
@@ -201,7 +200,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
     return (
         <div className="space-y-6 animate-fade-in pb-10">
             {/* Header */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Zap className="w-4 h-4 text-accent" />
@@ -241,7 +240,12 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                 )}
 
                 {/* Skills list */}
-                <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                <ProgressiveReveal
+                    language={language}
+                    collapsedHeight={280}
+                    expandLabel={t('查看全部已安装 Skills', 'Show all installed skills')}
+                >
+                <div className="space-y-2">
                     {loading ? (
                         <div className="h-20 flex items-center justify-center text-text-muted">
                             <RefreshCw className="w-4 h-4 animate-spin" />
@@ -302,12 +306,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
-                                        onClick={async () => {
-                                            const content = await api.file.read(skill.filePath)
-                                            if (content !== null) {
-                                                useStore.getState().openFile(skill.filePath, content)
-                                            }
-                                        }}
+                                        onClick={() => void onOpenFile(skill.filePath)}
                                         className="p-1 text-text-muted hover:text-accent hover:bg-accent/10 rounded transition-colors"
                                         title={t('编辑', 'Edit')}
                                     >
@@ -326,10 +325,11 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                         ))
                     )}
                 </div>
+                </ProgressiveReveal>
             </section>
 
             {/* Install Section */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div className="flex items-center gap-2">
                     <Download className="w-4 h-4 text-accent" />
                     <h5 className="text-sm font-medium text-text-primary">
@@ -397,7 +397,12 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                         </div>
 
                         {searchResults.length > 0 && (
-                            <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                            <ProgressiveReveal
+                                language={language}
+                                collapsedHeight={220}
+                                expandLabel={t('查看全部搜索结果', 'Show all search results')}
+                            >
+                            <div className="space-y-2">
                                 {searchResults.map((result) => (
                                     <div key={result.package} className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border">
                                         <div className="min-w-0 flex-1">
@@ -425,6 +430,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                                     </div>
                                 ))}
                             </div>
+                            </ProgressiveReveal>
                         )}
                     </div>
                 )}
@@ -515,7 +521,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
             </div>
 
             {/* Local Skills Directories */}
-            <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div className="flex items-center gap-2">
                     <FolderOpen className="w-4 h-4 text-accent" />
                     <h5 className="text-sm font-medium text-text-primary">
@@ -552,7 +558,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                             {openingDir === 'project'
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <FolderOpen className="w-3.5 h-3.5 mr-1.5" />}
-                            {t('打开项目 Skills 目录', 'Open Project Skills Directory')}
+                            {t('在资源管理器中显示项目目录', 'Reveal project folder in Explorer')}
                         </Button>
 
                         {!workspacePath && (
@@ -583,7 +589,7 @@ export function SkillSettings({ language }: SkillSettingsProps) {
                             {openingDir === 'global'
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <FolderOpen className="w-3.5 h-3.5 mr-1.5" />}
-                            {t('打开全局 Skills 目录', 'Open Global Skills Directory')}
+                            {t('在资源管理器中显示全局目录', 'Reveal global folder in Explorer')}
                         </Button>
                     </div>
                 </div>

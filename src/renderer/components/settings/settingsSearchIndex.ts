@@ -50,7 +50,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ========== agent（智能体）==========
   { id: 'agent.automation', tab: 'agent', label: { en: 'Agent Automation', zh: 'Agent 自动化' }, keywords: ['auto', 'automation', '自动化', 'fix', '修复'] },
   { id: 'agent.autoFix', tab: 'agent', label: { en: 'Auto-check & Fix', zh: '自动检查与修复' }, keywords: ['auto', 'fix', 'check', '自动', '修复', '检查', 'lint'] },
-  { id: 'agent.terminalRules', tab: 'agent', label: { en: 'Terminal Command Rules', zh: '终端命令规则' }, keywords: ['terminal', 'command', 'rule', '终端', '命令', '规则', 'whitelist', '白名单'] },
   { id: 'agent.promptTemplate', tab: 'agent', label: { en: 'Prompt Template', zh: 'Prompt 模板' }, keywords: ['prompt', 'template', '模板', '提示词', 'system prompt'] },
   { id: 'agent.instructions', tab: 'agent', label: { en: 'Custom Instructions', zh: '自定义系统指令' }, keywords: ['instruction', 'custom', '指令', '自定义', 'system', '系统'] },
   { id: 'agent.webSearch', tab: 'agent', label: { en: 'Web Search', zh: '网络搜索' }, keywords: ['web', 'search', '搜索', '网络', 'google', 'api'] },
@@ -92,13 +91,11 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'indexing.status', tab: 'indexing', label: { en: 'Index Status', zh: '索引状态' }, keywords: ['status', '状态', 'progress', '进度', 'rebuild', '重建'] },
 
   // ========== security（安全设置）==========
-  { id: 'security.sandbox', tab: 'security', label: { en: 'Security Sandbox', zh: '安全沙箱' }, keywords: ['security', '安全', 'sandbox', '沙箱'] },
-  { id: 'security.confirmation', tab: 'security', label: { en: 'Permission Confirmation', zh: '操作确认' }, keywords: ['permission', '权限', 'confirmation', '确认', 'approve', '批准'] },
+  { id: 'security.approvalPolicy', tab: 'security', label: { en: 'Tool Approval Policy', zh: '工具审批策略' }, keywords: ['permission', '权限', 'confirmation', '确认', 'approve', '批准', 'dock', '工具'] },
   { id: 'security.strictWorkspace', tab: 'security', label: { en: 'Strict Workspace Mode', zh: '严格工作区模式' }, keywords: ['strict', '严格', 'workspace', '工作区', 'mode', '模式'] },
-  { id: 'security.warnings', tab: 'security', label: { en: 'Security Warnings', zh: '安全警告' }, keywords: ['warning', '警告', 'security', '安全', 'alert', '提醒'] },
   { id: 'security.shellWhitelist', tab: 'security', label: { en: 'Trusted Shell Executables', zh: 'Shell 可信程序' }, keywords: ['shell', 'command', '命令', 'trusted', '可信', 'executable', '程序', 'whitelist', '白名单'] },
   { id: 'security.gitWhitelist', tab: 'security', label: { en: 'Trusted Git Subcommands', zh: 'Git 可信子命令' }, keywords: ['git', 'subcommand', '子命令', 'trusted', '可信', 'whitelist', '白名单'] },
-  { id: 'security.terminalRules', tab: 'security', label: { en: 'Terminal Auto-approval Rules', zh: '终端免审批规则' }, keywords: ['terminal', 'command', 'rule', 'approve', '终端', '命令', '规则', '审批'] },
+  { id: 'security.commandScopes', tab: 'security', label: { en: 'Approved Command Scopes', zh: '已批准的命令范围' }, keywords: ['terminal', 'command', 'scope', 'approve', 'agent', '终端', '命令', '范围', '审批', 'ai'] },
 
   // ========== system（系统）==========
   { id: 'system.githubToken', tab: 'system', label: { en: 'GitHub Token', zh: 'GitHub Token' }, keywords: ['github', 'token', 'pat', 'personal access', '令牌'] },
@@ -108,4 +105,5 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'system.resetAll', tab: 'system', label: { en: 'Reset All Settings', zh: '重置所有设置' }, keywords: ['reset', '重置', 'factory', '出厂', 'restore', '恢复', 'default', '默认'] },
   { id: 'system.logging', tab: 'system', label: { en: 'Log Management', zh: '日志管理' }, keywords: ['log', '日志', 'file', '文件', 'export', '导出', 'debug', '调试'] },
   { id: 'system.backup', tab: 'system', label: { en: 'Settings Backup', zh: '配置备份' }, keywords: ['backup', '备份', 'export', '导出', 'import', '导入', 'restore', '恢复'] },
+  { id: 'system.changelog', tab: 'system', label: { en: 'Release Notes', zh: '更新日志' }, keywords: ['version', 'release', 'changelog', '版本', '更新', '日志'] },
 ]

@@ -77,6 +77,7 @@ function createGroupedAPI() {
       copy: (sourcePath: string, destinationPath: string) => raw.copyFile(sourcePath, destinationPath),
       rename: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
       showInFolder: (path: string) => raw.showItemInFolder(path),
+      authorizeSettingsEdit: (path: string, initialContent?: string) => raw.authorizeSettingsEdit(path, initialContent),
       openInBrowser: (path: string) => raw.openInBrowser(path),
       search: (query: string, rootPath: string | string[], options?: Parameters<typeof raw.searchFiles>[2]) =>
         raw.searchFiles(query, rootPath, options),

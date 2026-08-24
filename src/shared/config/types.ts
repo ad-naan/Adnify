@@ -58,8 +58,17 @@ export interface ProviderConfig {
 }
 
 export interface AutoApproveSettings {
-  /** Claude Code-style command rules, for example `git status *`. */
-  terminalCommandRules: string[]
+  /** Structured, user-approved command scopes proposed by the agent. */
+  terminalCommandRules: TerminalCommandRule[]
+}
+
+export interface TerminalCommandRule {
+  /** Executable name only, without a path or shell syntax. */
+  executable: string
+  /** Literal argument prefix. Remaining arguments may vary. */
+  argumentPrefix: string[]
+  /** Optional human-readable explanation supplied with the proposal. */
+  description?: string
 }
 
 export interface LoopDetectionConfig {

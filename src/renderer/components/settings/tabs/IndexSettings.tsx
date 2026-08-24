@@ -39,7 +39,6 @@ export function IndexSettings({ language }: IndexSettingsProps) {
   const [showApiKey, setShowApiKey] = useState(false)
   const [isIndexing, setIsIndexing] = useState(false)
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const EMBEDDING_PROVIDERS = [
     { id: 'jina', name: 'Jina AI', description: language === 'zh' ? '免费 100万 tokens/月' : 'Free 100M tokens/month' },
@@ -171,10 +170,10 @@ export function IndexSettings({ language }: IndexSettingsProps) {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in pb-10">
       {/* 索引模式选择 */}
-      <section>
-        <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
+        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
           {language === 'zh' ? '索引模式' : 'Index Mode'}
         </h4>
         <div className="grid grid-cols-2 gap-3">
@@ -221,11 +220,11 @@ export function IndexSettings({ language }: IndexSettingsProps) {
 
       {/* 语义模式配置 */}
       {indexMode === 'semantic' && (
-        <section className="animate-slide-down">
-          <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5 animate-fade-in">
+          <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
             {language === 'zh' ? 'Embedding 配置' : 'Embedding Configuration'}
           </h4>
-          <div className="p-4 bg-surface/30 rounded-xl border border-border-subtle space-y-4">
+          <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-text-primary block mb-2">
                 {language === 'zh' ? '提供商' : 'Provider'}
@@ -272,17 +271,11 @@ export function IndexSettings({ language }: IndexSettingsProps) {
               </div>
             )}
 
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center gap-2 text-xs text-text-muted hover:text-accent transition-colors"
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-              <span className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>▶</span>
-              {language === 'zh' ? '高级配置' : 'Advanced'}
-            </button>
-
-            {(showAdvanced || embeddingConfig.provider === 'transformers') && (
-              <div className="space-y-3 animate-slide-down">
+            <div className="space-y-3 border-t border-border/50 pt-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="w-3.5 h-3.5 text-accent" />
+                <span className="text-xs font-medium text-text-secondary">{language === 'zh' ? '模型配置' : 'Model configuration'}</span>
+              </div>
                 <div>
                   <label className="text-xs text-text-muted block mb-1">
                     {language === 'zh' ? '模型名称' : 'Model Name'}
@@ -327,7 +320,6 @@ export function IndexSettings({ language }: IndexSettingsProps) {
                   )}
                 </div>
               </div>
-            )}
 
             <Button variant="secondary" size="sm" onClick={handleSaveEmbeddingConfig}>
               {language === 'zh' ? '保存配置' : 'Save Configuration'}
@@ -337,8 +329,8 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       )}
 
       {/* 索引状态和操作 */}
-      <section>
-        <h4 className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">
+      <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
+        <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
           {language === 'zh' ? '索引状态' : 'Index Status'}
         </h4>
 

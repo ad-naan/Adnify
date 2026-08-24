@@ -14,6 +14,7 @@ import {
   RefreshCw, AlertCircle, ToggleLeft, ToggleRight
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { ProgressiveReveal } from '../ProgressiveReveal'
 
 interface RulesMemorySettingsProps {
   language: string
@@ -117,10 +118,10 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in pb-10">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-6 animate-fade-in pb-10">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         {/* Left: Project Rules */}
-        <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-accent" />
@@ -190,7 +191,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
         </section>
 
         {/* Right: Project Memory */}
-        <section className="p-5 bg-surface/30 rounded-xl border border-border space-y-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 text-accent" />
@@ -230,7 +231,12 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           </div>
 
           {/* Memory list */}
-          <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar">
+          <ProgressiveReveal
+            language={language}
+            collapsedHeight={260}
+            expandLabel={t('查看全部项目记忆', 'Show all project memories')}
+          >
+          <div className="space-y-2">
             {memoryLoading ? (
               <div className="h-20 flex items-center justify-center text-text-muted">
                 <RefreshCw className="w-4 h-4 animate-spin" />
@@ -310,6 +316,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
               ))
             )}
           </div>
+          </ProgressiveReveal>
 
           {/* Tips */}
           <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">

@@ -49,7 +49,7 @@ vi.mock('@store', () => ({
   useStore: {
     getState: vi.fn(() => ({
       // 终端只按显式规则自动批准；危险文件操作仍由测试统一放行。
-      autoApprove: { terminalCommandRules: ['tsc *'] },
+      autoApprove: { terminalCommandRules: [{ executable: 'tsc', argumentPrefix: ['--noEmit'] }] },
       securitySettings: { allowedShellCommands: ['tsc'], strictWorkspaceMode: true },
       agentConfig: { autoApprove: true },
       addToolCallLog: vi.fn(),
@@ -93,7 +93,7 @@ describe('工具执行状态判定', () => {
     })
 
     const toolCalls: ToolCall[] = [
-      { id: 'tc1', name: 'run_command', arguments: { command: 'tsc' }, status: 'success' },
+      { id: 'tc1', name: 'run_command', arguments: { command: 'tsc --noEmit' }, status: 'success' },
     ]
     const { results } = await executeTools(toolCalls, context, getStore())
 

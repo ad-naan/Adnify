@@ -11,6 +11,7 @@ import { toast } from '@components/common/ToastProvider'
 import { snippetService, type CodeSnippet } from '@services/snippetService'
 import { Language } from '@renderer/i18n'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { ProgressiveReveal } from '../ProgressiveReveal'
 
 interface SnippetSettingsProps {
   language: Language
@@ -53,7 +54,6 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState<SnippetFormData>(defaultFormData)
   const [showForm, setShowForm] = useState(false)
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -173,15 +173,6 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
     e.target.value = ''
   }
 
-  const toggleExpand = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   const toggleLanguage = (lang: string) => {
     setFormData(prev => ({
       ...prev,
@@ -194,8 +185,8 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       {/* Header Actions */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-1">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
             <Input
@@ -212,7 +203,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
             className="w-40"
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={handleImport}>
             <Upload className="w-4 h-4 mr-1" />
             {language === 'zh' ? '导入' : 'Import'}
@@ -237,7 +228,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
       {/* Snippet Form */}
       {showForm && (
-        <div className="p-6 bg-surface/20 backdrop-blur-md rounded-2xl border border-border space-y-4">
+        <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-bold text-text-primary">
               {editingId ? (language === 'zh' ? '编辑片段' : 'Edit Snippet') : (language === 'zh' ? '新建片段' : 'New Snippet')}
@@ -325,7 +316,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
               {language === 'zh' ? '保存' : 'Save'}
             </Button>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Snippet List - Card Wall */}
@@ -344,8 +335,8 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
                 key={snippet.id}
                 onClick={() => !isDefault && handleEdit(snippet)}
                 className={`
-                  group relative flex flex-col h-48 bg-surface/30 backdrop-blur-sm rounded-xl border border-border/50 overflow-hidden transition-all duration-300
-                  ${!isDefault ? 'hover:border-accent/40 hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-1 cursor-pointer' : 'opacity-80'}
+                  group relative flex min-h-48 flex-col overflow-hidden rounded-xl border border-border/70 bg-surface/25 transition-colors
+                  ${!isDefault ? 'cursor-pointer hover:border-accent/40' : 'opacity-80'}
                 `}
               >
                 {/* Header */}
@@ -362,7 +353,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
                         e.stopPropagation()
                         handleDelete(snippet.id)
                       }}
-                      className="p-1.5 rounded-lg text-text-muted hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                      className="p-1.5 rounded-lg text-text-muted/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -370,25 +361,16 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
                 </div>
 
                 {/* Code Preview */}
-                <div 
-                  className="flex-1 p-0 overflow-hidden bg-black/5 relative group-hover:bg-black/10 transition-colors cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleExpand(snippet.id)
-                  }}
+                <ProgressiveReveal
+                  language={language}
+                  collapsedHeight={170}
+                  expandLabel={language === 'zh' ? '展开完整代码' : 'Show full code'}
+                  className="flex-1 bg-black/5 transition-colors group-hover:bg-black/10"
                 >
-                  <pre className={`p-4 text-[11px] font-mono text-text-secondary leading-relaxed opacity-80 group-hover:opacity-100 transition-all ${
-                    expandedIds.has(snippet.id) ? 'max-h-none' : 'max-h-[120px]'
-                  }`}>
-                    {expandedIds.has(snippet.id) ? snippet.body : snippet.body.split('\n').slice(0, 8).join('\n')}
+                  <pre className="p-4 text-[11px] font-mono text-text-secondary leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity whitespace-pre-wrap break-words">
+                    {snippet.body}
                   </pre>
-                  {/* Fade out bottom or expand indicator */}
-                  {!expandedIds.has(snippet.id) && snippet.body.split('\n').length > 8 && (
-                    <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-surface/30 to-transparent flex items-end justify-center pb-2">
-                      <span className="text-[10px] text-text-muted/60 font-medium">Click to expand...</span>
-                    </div>
-                  )}
-                </div>
+                </ProgressiveReveal>
 
                 {/* Footer Tags */}
                 <div className="px-4 py-2 bg-surface/20 border-t border-border/30 flex gap-1.5 overflow-hidden">
