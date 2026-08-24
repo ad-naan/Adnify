@@ -351,6 +351,10 @@ function createGroupedAPI() {
       resolveRuntimePath: (workspacePath: string, languageId: string) => raw.lspResolveRuntimePath(workspacePath, languageId),
     },
 
+    formatter: {
+      formatDocument: (request: Parameters<typeof raw.formatterFormatDocument>[0]) => raw.formatterFormatDocument(request),
+    },
+
     // Debug
     debug: {
       createSession: (config: Parameters<typeof raw.debugCreateSession>[0]) => raw.debugCreateSession(config),

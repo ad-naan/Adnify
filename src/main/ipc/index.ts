@@ -23,6 +23,7 @@ import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SF
 import { registerSkillsHandlers } from './skills' // Skills
 import { registerOpenAIAuthHandlers } from './openaiAuth' // OpenAI OAuth
 import { registerSessionStorageHandlers } from './sessionStorage'
+import { registerFormatterHandlers } from './formatter'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -97,6 +98,14 @@ export function registerAllHandlers(context: IPCContext) {
 
   // LSP 语言服务
   registerLspHandlers(preferencesStore)
+
+  // 项目级格式化工具（Prettier、Biome 及各语言原生 formatter）
+  registerFormatterHandlers(event =>
+    resolveWorkspaceFromEvent(event, {
+      getWindowWorkspace: context.getWindowWorkspace,
+      workspaceMetaStore,
+    }),
+  )
 
   // HTTP 请求（用于 web_search / read_url）
   registerHttpHandlers()

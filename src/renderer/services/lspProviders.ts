@@ -7,6 +7,9 @@ import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
 import type * as Monaco from 'monaco-editor'
 import { lspUriToPath } from '@shared/utils/uriUtils'
+import { api } from '@renderer/services/electronAPI'
+import { toast } from '@components/common/ToastProvider'
+import { useStore } from '@store'
 
 // 扩展 CompletionItem 类型以支持 LSP data 字段
 interface CompletionItemWithData extends Monaco.languages.CompletionItem {
@@ -154,6 +157,10 @@ export function registerLspProviders(monaco: typeof Monaco) {
     // Data
     'json', 'yaml',
   ]
+  const formatterLanguages = Array.from(new Set([
+    ...languages,
+    'markdown', 'mdx', 'shell', 'lua', 'graphql', 'protobuf',
+  ]))
 
   // 定义提供者（Ctrl+Click / F12 Go to Definition）
   // 注意：provideDefinition 会在 hover 预览、F12、Ctrl+Click 等多种场景被调用。
@@ -436,9 +443,29 @@ export function registerLspProviders(monaco: typeof Monaco) {
   })
 
   // 文档格式化提供者
-  monaco.languages.registerDocumentFormattingEditProvider(languages, {
+  monaco.languages.registerDocumentFormattingEditProvider(formatterLanguages, {
     provideDocumentFormattingEdits: async (model, options) => {
       const filePath = lspUriToPath(model.uri.toString())
+      const projectResult = await api.formatter.formatDocument({
+        filePath,
+        content: model.getValue(),
+      })
+
+      if (projectResult.status === 'formatted') {
+        if (projectResult.content === undefined || projectResult.content === model.getValue()) return []
+        return [{ range: model.getFullModelRange(), text: projectResult.content }]
+      }
+
+      if (projectResult.status === 'error') {
+        const language = useStore.getState().language
+        logger.lsp.warn('[Formatter] Project formatter failed', projectResult)
+        toast.error(
+          language === 'zh' ? `${projectResult.formatter || '项目格式化工具'}执行失败` : `${projectResult.formatter || 'Project formatter'} failed`,
+          projectResult.message,
+        )
+        return []
+      }
+
       const result = await formatDocument(filePath, {
         tabSize: options.tabSize,
         insertSpaces: options.insertSpaces,
@@ -459,7 +486,7 @@ export function registerLspProviders(monaco: typeof Monaco) {
   })
 
   // 选区格式化提供者
-  monaco.languages.registerDocumentRangeFormattingEditProvider(languages, {
+  monaco.languages.registerDocumentRangeFormattingEditProvider(formatterLanguages, {
     provideDocumentRangeFormattingEdits: async (model, range, options) => {
       const filePath = lspUriToPath(model.uri.toString())
       const lspRange = {

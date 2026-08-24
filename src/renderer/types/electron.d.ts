@@ -43,6 +43,7 @@ import type {
 } from '@shared/types/sessionPersistence'
 
 import type { PreviewProbeResult } from '@shared/types/preview'
+import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
 
 // 从 @shared/types/llm 重新导出
 export type {
@@ -610,6 +611,7 @@ export interface ElectronAPI {
   lspCodeAction: (params: { uri: string; range: LspRange; diagnostics?: LspDiagnostic[]; workspacePath?: string | null }) => Promise<LspCodeAction[] | null>
   lspFormatting: (params: { uri: string; options?: LspFormattingOptions; workspacePath?: string | null }) => Promise<LspTextEdit[] | null>
   lspRangeFormatting: (params: { uri: string; range: LspRange; options?: LspFormattingOptions; workspacePath?: string | null }) => Promise<LspTextEdit[] | null>
+  formatterFormatDocument: (request: FormatDocumentRequest) => Promise<FormatDocumentResult>
   lspDocumentHighlight: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<LspDocumentHighlight[] | null>
   lspFoldingRange: (params: { uri: string; workspacePath?: string | null }) => Promise<LspFoldingRange[] | null>
   lspInlayHint: (params: { uri: string; range: LspRange; workspacePath?: string | null }) => Promise<LspInlayHint[] | null>

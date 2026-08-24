@@ -9,6 +9,7 @@ import type {
   SessionStorageStats,
   SessionWorkerResult,
 } from '@shared/types/sessionPersistence'
+import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
 
 // 本地类型定义（避免从 renderer 导入）
 type Language = 'en' | 'zh'
@@ -425,6 +426,7 @@ export interface ElectronAPI {
   lspCodeAction: (params: { uri: string; range: any; diagnostics?: any[]; workspacePath?: string | null }) => Promise<any>
   lspFormatting: (params: { uri: string; options?: any; workspacePath?: string | null }) => Promise<any>
   lspRangeFormatting: (params: { uri: string; range: any; options?: any; workspacePath?: string | null }) => Promise<any>
+  formatterFormatDocument: (request: FormatDocumentRequest) => Promise<FormatDocumentResult>
   lspDocumentHighlight: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any>
   lspFoldingRange: (params: { uri: string; workspacePath?: string | null }) => Promise<any>
   lspInlayHint: (params: { uri: string; range: any; workspacePath?: string | null }) => Promise<any>
@@ -806,6 +808,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   lspCodeAction: (params: any) => ipcRenderer.invoke('lsp:codeAction', params),
   lspFormatting: (params: any) => ipcRenderer.invoke('lsp:formatting', params),
   lspRangeFormatting: (params: any) => ipcRenderer.invoke('lsp:rangeFormatting', params),
+  formatterFormatDocument: (request: FormatDocumentRequest) => ipcRenderer.invoke('formatter:formatDocument', request),
   lspDocumentHighlight: (params: any) => ipcRenderer.invoke('lsp:documentHighlight', params),
   lspFoldingRange: (params: any) => ipcRenderer.invoke('lsp:foldingRange', params),
   lspInlayHint: (params: any) => ipcRenderer.invoke('lsp:inlayHint', params),

@@ -334,7 +334,14 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <div className="space-y-4 px-1">
                             <Switch label={language === 'zh' ? '显示小地图' : 'Show Minimap'} checked={settings.minimap} onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })} />
                             <Switch label={language === 'zh' ? '括号配对着色' : 'Bracket Pair Colorization'} checked={settings.bracketPairColorization} onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })} />
-                            <Switch label={language === 'zh' ? '保存时格式化' : 'Format on Save'} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
+                            <div className="space-y-1.5">
+                                <Switch label={language === 'zh' ? '保存时格式化' : 'Format on Save'} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
+                                <p className="pl-1 text-[10px] leading-4 text-text-muted">
+                                    {language === 'zh'
+                                        ? '按当前语言选择格式化工具：优先项目的 Biome、Prettier 或语言原生 formatter，未检测到时回退语言服务。'
+                                        : 'Chooses by language: project Biome, Prettier, or a native formatter first, then falls back to the language server.'}
+                                </p>
+                            </div>
                         </div>
 
                         <div className="pt-4 border-t border-border/50">
