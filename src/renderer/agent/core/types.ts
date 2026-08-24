@@ -60,7 +60,7 @@ export interface LoopCheckResult {
   suggestion?: string
   warning?: string
   details?: {
-    category: 'exact_repeat' | 'same_tool_warning' | 'content_cycle' | 'pattern_loop'
+    category: 'exact_repeat' | 'same_tool_warning' | 'content_cycle' | 'pattern_loop' | 'semantic_navigation'
     toolName?: string
     count?: number
     threshold?: number

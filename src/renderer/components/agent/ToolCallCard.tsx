@@ -22,6 +22,7 @@ import { validateTerminalCommandRuleProposal } from '@renderer/agent/utils/comma
 import { formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { assessShellCommand } from '@shared/security/executionPolicy'
+import { parseSymbolToolResult } from '@renderer/agent/presentation/symbolToolDisplay'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
@@ -55,10 +56,13 @@ const TOOL_LABELS: Record<string, string> = {
     delete_remote_path: 'Delete Remote Path',
     upload_to_remote: 'Upload To Remote',
     download_from_remote: 'Download From Remote',
-    get_lint_errors: 'Lint Errors',
+    get_diagnostics: 'Diagnostics',
+    find_symbol: 'Find Symbol',
     find_references: 'Find References',
-    go_to_definition: 'Go to Definition',
+    navigate_symbol: 'Navigate Symbol',
     get_hover_info: 'Hover Info',
+    edit_symbol: 'Edit Symbol',
+    rename_symbol: 'Rename Symbol',
     get_document_symbols: 'Document Symbols',
     web_search: 'Web Search',
     read_url: 'Read URL',
@@ -335,7 +339,14 @@ function getStatusText(name: string, args: ToolArgs, status: ToolCall['status'],
         return `Reading ${hostname}`
     }
 
-    if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(name)) {
+    if (name === 'find_symbol') {
+        const symbol = asString(args.name_path)
+        if (isRunning) return symbol ? `Finding ${symbol}...` : 'Finding symbol...'
+        if (isSuccess) return symbol ? `Found ${symbol}` : 'Symbol search complete'
+        if (isError) return symbol ? `Failed to find ${symbol}` : 'Symbol search failed'
+    }
+
+    if (['get_diagnostics', 'find_references', 'navigate_symbol', 'get_hover_info', 'get_document_symbols'].includes(name)) {
         if (!path) return isRunning ? 'Analyzing...' : ''
         if (isRunning) return `Analyzing ${path}...`
         if (isSuccess) return `Analyzed ${path}`
@@ -928,7 +939,46 @@ function ToolPreview({
         )
     }
 
-    if (['get_lint_errors', 'find_references', 'go_to_definition', 'get_hover_info', 'get_document_symbols'].includes(effectiveName)) {
+    if (effectiveName === 'find_symbol' || effectiveName === 'get_document_symbols') {
+        const symbols = parseSymbolToolResult(stringResult)
+        const argumentPath = asString(args.relative_path) || getPrimaryToolPath(args)
+        const resultPaths = [...new Set(symbols.map(symbol => symbol.relativePath).filter(Boolean))]
+        const scopeLabel = argumentPath || (resultPaths.length === 1 ? resultPaths[0] : resultPaths.length > 1 ? `${resultPaths.length} files` : '')
+
+        return (
+            <div className="space-y-1.5 text-[11px]">
+                <div className="flex min-w-0 items-center gap-1.5 text-text-muted">
+                    <FileCode className="h-3 w-3 shrink-0" />
+                    <span className="min-w-0 truncate">
+                        {scopeLabel ? <TextWithFileLinks text={scopeLabel} /> : (language === 'zh' ? '工作区符号' : 'Workspace symbols')}
+                    </span>
+                    {symbols.length > 0 && <span className="shrink-0 text-text-muted/60">· {symbols.length}</span>}
+                </div>
+                {symbols.length > 0 ? (
+                    <div className="space-y-1">
+                        {symbols.map((symbol, index) => (
+                            <div key={`${symbol.relativePath}-${symbol.namePath}-${index}`} className="rounded-md bg-text-primary/[0.025] px-2 py-1.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <code className="min-w-0 flex-1 truncate font-mono text-text-primary">{symbol.namePath}</code>
+                                    {symbol.kindName && <span className="shrink-0 text-[9px] text-text-muted/60">{symbol.kindName}</span>}
+                                </div>
+                                {symbol.relativePath && <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                                    <TextWithFileLinks text={`${symbol.relativePath}${symbol.line ? `:${symbol.line}` : ''}`} />
+                                </div>}
+                                {symbol.body && <ExpandablePreviewContainer language={language} maxHeight="max-h-[180px]">
+                                    <pre className="overflow-auto whitespace-pre p-2 font-mono text-[10px] leading-4 text-text-secondary custom-scrollbar">{symbol.body}</pre>
+                                </ExpandablePreviewContainer>}
+                            </div>
+                        ))}
+                    </div>
+                ) : toolCall.result ? (
+                    <div className="rounded-md bg-text-primary/[0.025] px-2 py-1.5 text-text-muted">{toolCall.result}</div>
+                ) : (isRunning || isStreaming) && pendingPreview('Analyzing...')}
+            </div>
+        )
+    }
+
+    if (['get_diagnostics', 'find_references', 'navigate_symbol', 'get_hover_info'].includes(effectiveName)) {
         const path = getPrimaryToolPath(args)
         const line = typeof args.line === 'number' ? args.line : undefined
 

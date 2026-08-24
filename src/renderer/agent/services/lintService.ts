@@ -1,6 +1,6 @@
 /**
  * Lint 错误服务
- * 参考 void 编辑器的 get_lint_errors 功能
+ * 为编辑循环和问题面板提供缓存的 TypeScript/ESLint 检查
  */
 
 import { api } from '@/renderer/services/electronAPI'

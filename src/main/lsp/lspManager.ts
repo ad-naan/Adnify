@@ -19,7 +19,7 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { createHash } from 'crypto'
 import { BrowserWindow } from 'electron'
-import { LanguageId } from '@shared/languages'
+import { LanguageId, LSP_SERVER_DEFINITIONS, LspServerId } from '@shared/languages'
 import { LSP_DEFAULTS } from '@shared/config/defaults'
 import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
@@ -28,6 +28,19 @@ import {
   getLspBinDir,
   commandExists,
 } from './installer'
+import {
+  JSON_RPC_METHOD_NOT_FOUND,
+  JsonRpcMessage,
+  createJsonRpcError,
+  createJsonRpcResult,
+  encodeLspMessage,
+  isClientResponse,
+  isCoalescibleReadMethod,
+  isServerNotification,
+  isServerRequest,
+  shouldRetryContentModified,
+} from './protocol'
+import { DocumentOwnership, ReleasedDocument } from './documentOwnership'
 
 // 重新导出 LanguageId 供其他模块使用
 export type { LanguageId } from '@shared/languages'
@@ -35,8 +48,7 @@ export type { LanguageId } from '@shared/languages'
 // ============ 类型定义 ============
 
 interface LspServerConfig {
-  name: string
-  languages: LanguageId[]
+  name: LspServerId
   getCommand: (workspacePath: string) => Promise<{ command: string; args: string[] } | null>
   /** 智能根目录检测函数，返回 null 表示不应该使用此服务器 */
   findRoot?: (filePath: string, workspacePath: string) => Promise<string | null>
@@ -48,15 +60,33 @@ interface LspServerInstance {
   config: LspServerConfig
   process: ChildProcess | null
   requestId: number
-  pendingRequests: Map<number, { resolve: Function; reject: Function; timeout: NodeJS.Timeout }>
+  pendingRequests: Map<number, PendingRequest>
   buffer: Buffer
   contentLength: number
   initialized: boolean
   workspacePath: string
-  // 自动重启相关
-  crashCount: number
-  lastCrashTime: number
 }
+
+interface PendingRequest {
+  resolve: (value: any) => void
+  reject: (reason?: unknown) => void
+  timeout: NodeJS.Timeout
+}
+
+interface CrashState {
+  count: number
+  lastCrashTime: number
+  restartTimer?: NodeJS.Timeout
+}
+
+interface ResolvedServerRoute {
+  serverName: LspServerId
+  workspacePath: string
+}
+
+export type DocumentSyncResult =
+  | { action: 'open' | 'change'; version: number }
+  | { action: 'none'; version: number }
 
 // ============ 智能根目录检测辅助函数 ============
 
@@ -248,20 +278,8 @@ async function getGoplsCommand(): Promise<{ command: string; args: string[] } | 
 
 // Rust LSP (rust-analyzer)
 async function getRustAnalyzerCommand(): Promise<{ command: string; args: string[] } | null> {
-  if (commandExists('rust-analyzer')) {
-    return { command: 'rust-analyzer', args: [] }
-  }
-
-  const raName = getExecutableName('rust-analyzer')
-  const cargoHome =
-    process.env.CARGO_HOME || path.join(process.env.HOME || process.env.USERPROFILE || '', '.cargo')
-  const raPath = path.join(cargoHome, 'bin', raName)
-
-  if (fs.existsSync(raPath)) {
-    return { command: raPath, args: [] }
-  }
-
-  return null
+  const serverPath = getInstalledServerPath('rust')
+  return serverPath ? { command: serverPath, args: [] } : null
 }
 
 // Java LSP (Eclipse JDT LS)
@@ -384,7 +402,6 @@ async function getPhpServerCommand(): Promise<{ command: string; args: string[] 
 const LSP_SERVERS: LspServerConfig[] = [
   {
     name: 'typescript',
-    languages: ['typescript', 'typescriptreact', 'javascript', 'javascriptreact'],
     getCommand: getTypeScriptServerCommand,
     // 智能根目录检测：查找 package.json 或 lock 文件，排除 deno 项目
     findRoot: async (filePath, workspacePath) => {
@@ -400,22 +417,18 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'html',
-    languages: ['html'],
     getCommand: getHtmlServerCommand,
   },
   {
     name: 'css',
-    languages: ['css', 'scss', 'less'],
     getCommand: getCssServerCommand,
   },
   {
     name: 'json',
-    languages: ['json', 'jsonc'],
     getCommand: getJsonServerCommand,
   },
   {
     name: 'python',
-    languages: ['python'],
     getCommand: getPythonServerCommand,
     // 智能根目录检测：查找 Python 项目配置文件
     findRoot: async (filePath, workspacePath) => {
@@ -430,7 +443,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'go',
-    languages: ['go'],
     getCommand: getGoplsCommand,
     // 智能根目录检测：优先查找 go.work，然后 go.mod
     findRoot: async (filePath, workspacePath) => {
@@ -445,7 +457,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'rust',
-    languages: ['rust'],
     getCommand: getRustAnalyzerCommand,
     // 智能根目录检测：查找 Cargo.toml，优先查找 workspace
     findRoot: async (filePath, workspacePath) => {
@@ -475,7 +486,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'jdtls',
-    languages: ['java'],
     getCommand: getJdtlsCommand,
     findRoot: async (filePath, workspacePath) => {
       const fileDir = path.dirname(filePath)
@@ -489,7 +499,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'clangd',
-    languages: ['cpp', 'c'],
     getCommand: getClangdCommand,
     // 智能根目录检测：查找编译数据库或构建配置
     findRoot: async (filePath, workspacePath) => {
@@ -504,7 +513,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'vue',
-    languages: ['vue'],
     getCommand: getVueServerCommand,
     findRoot: async (filePath, workspacePath) => {
       const fileDir = path.dirname(filePath)
@@ -518,7 +526,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'zig',
-    languages: ['zig'],
     getCommand: getZlsCommand,
     findRoot: async (filePath, workspacePath) => {
       const fileDir = path.dirname(filePath)
@@ -528,7 +535,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'csharp',
-    languages: ['csharp'],
     getCommand: getCsharpLsCommand,
     findRoot: async (filePath, workspacePath) => {
       const fileDir = path.dirname(filePath)
@@ -538,7 +544,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'deno',
-    languages: [], // 不注册为默认服务器，通过 findBestRoot 动态选择
     getCommand: getDenoCommand,
     // Deno 项目检测：查找 deno.json 或 deno.jsonc
     findRoot: async (filePath, workspacePath) => {
@@ -549,7 +554,6 @@ const LSP_SERVERS: LspServerConfig[] = [
   },
   {
     name: 'php',
-    languages: ['php'],
     getCommand: getPhpServerCommand,
     // 智能根目录检测：查找 PHP 项目配置文件
     findRoot: async (filePath, workspacePath) => {
@@ -568,13 +572,18 @@ const LSP_SERVERS: LspServerConfig[] = [
 
 class LspManager {
   private servers: Map<string, LspServerInstance> = new Map() // key: serverName:workspacePath
-  private languageToServer: Map<LanguageId, string> = new Map()
+  private languageToServer: Map<LanguageId, LspServerId> = new Map()
   private documentVersions: Map<string, number> = new Map() // 启用文档版本管理
   private diagnosticsCache: CacheService<any[]>
   private startingServers: Map<string, Promise<boolean>> = new Map()
+  private inFlightReadRequests = new Map<string, Promise<any>>()
+  private serverRouteCache = new Map<string, { expiresAt: number; route: Promise<ResolvedServerRoute> }>()
+  private static readonly SERVER_ROUTE_CACHE_TTL_MS = 30_000
+  private static readonly SERVER_ROUTE_CACHE_MAX_SIZE = 500
 
   // 跟踪每个服务器打开的文档
   private serverOpenedDocuments: Map<string, Map<string, { languageId: string; version: number; text: string }>> = new Map()
+  private documentOwnership = new DocumentOwnership()
 
   // 空闲关闭配置
   private serverLastActivity: Map<string, number> = new Map()
@@ -584,6 +593,8 @@ class LspManager {
   // 自动重启配置
   private static readonly MAX_CRASH_COUNT = 3
   private static readonly CRASH_COOLDOWN_MS = LSP_DEFAULTS.crashCooldownMs
+  private crashStates = new Map<string, CrashState>()
+  private stoppingServers = new Set<string>()
 
   // waitForDiagnostics 相关
   private diagnosticsWaiters: Map<string, { resolve: () => void; timeout: NodeJS.Timeout }[]> = new Map()
@@ -603,9 +614,9 @@ class LspManager {
       cleanupInterval: cacheConfig.cleanupInterval || 0,
     })
 
-    for (const config of LSP_SERVERS) {
-      for (const lang of config.languages) {
-        this.languageToServer.set(lang, config.name)
+    for (const definition of LSP_SERVER_DEFINITIONS) {
+      for (const languageId of definition.languages) {
+        this.languageToServer.set(languageId, definition.id)
       }
     }
 
@@ -645,7 +656,7 @@ class LspManager {
     return `${serverName}:${workspacePath.replace(/\\/g, '/')}`
   }
 
-  getServerForLanguage(languageId: LanguageId): string | undefined {
+  getServerForLanguage(languageId: LanguageId): LspServerId | undefined {
     return this.languageToServer.get(languageId)
   }
 
@@ -720,8 +731,6 @@ class LspManager {
       contentLength: -1,
       initialized: false,
       workspacePath,
-      crashCount: 0,
-      lastCrashTime: 0,
     }
 
     this.servers.set(key, instance)
@@ -740,45 +749,25 @@ class LspManager {
 
     proc.on('close', (code) => {
       logger.lsp.debug(`[LSP ${key}] Closed with code: ${code}`)
-      const inst = this.servers.get(key)
-      this.servers.delete(key)
+      this.rejectPendingRequests(instance, new Error(`LSP server ${key} exited with code ${code ?? 'unknown'}`))
+      if (this.servers.get(key) === instance) this.servers.delete(key)
 
-      // 自动重启逻辑（改进版）
-      if (code !== 0 && code !== null && inst) {
-        const now = Date.now()
-
-        // 如果距离上次崩溃超过冷却时间，重置计数
-        if (now - inst.lastCrashTime > LspManager.CRASH_COOLDOWN_MS) {
-          inst.crashCount = 1
-        } else {
-          inst.crashCount++
-        }
-        inst.lastCrashTime = now
-
-        // 只有在崩溃次数未超限时才重启
-        if (inst.crashCount <= LspManager.MAX_CRASH_COUNT) {
-          const delay = Math.min(1000 * inst.crashCount, 5000) // 递增延迟，最大 5 秒
-          logger.lsp.warn(`[LSP ${key}] Server crashed (${inst.crashCount}/${LspManager.MAX_CRASH_COUNT}), restarting in ${delay}ms...`)
-
-          setTimeout(() => {
-            // 再次检查是否应该重启（可能用户已手动停止）
-            if (!this.servers.has(key)) {
-              this.startServer(inst.config.name, inst.workspacePath).catch(e => {
-                logger.lsp.error(`[LSP ${key}] Restart failed:`, e)
-              })
-            }
-          }, delay)
-        } else {
-          logger.lsp.error(`[LSP ${key}] Server crashed ${inst.crashCount} times, giving up`)
-        }
+      const stoppedIntentionally = this.stoppingServers.delete(key)
+      if (!stoppedIntentionally && code !== 0 && code !== null) {
+        this.scheduleRestart(key, instance)
       }
     })
 
-    proc.stdin.on('error', (err) => logger.lsp.warn(`[LSP ${key}] stdin error:`, toAppError(err).message))
+    proc.stdin.on('error', (err) => {
+      const error = toAppError(err)
+      logger.lsp.warn(`[LSP ${key}] stdin error:`, error.message)
+      this.rejectPendingRequests(instance, error)
+    })
 
     try {
       await this.initializeServer(key, workspacePath)
       instance.initialized = true
+      this.restoreOpenedDocuments(key)
       logger.lsp.debug(`[LSP ${key}] Initialized successfully`)
       return true
     } catch (err) {
@@ -822,11 +811,15 @@ class LspManager {
     }
   }
 
-  private handleServerMessage(key: string, message: any): void {
+  private handleServerMessage(key: string, message: JsonRpcMessage): void {
     const instance = this.servers.get(key)
     if (!instance) return
 
-    if (message.id !== undefined && instance.pendingRequests.has(message.id)) {
+    if (
+      isClientResponse(message)
+      && typeof message.id === 'number'
+      && instance.pendingRequests.has(message.id)
+    ) {
       const { resolve, reject, timeout } = instance.pendingRequests.get(message.id)!
       instance.pendingRequests.delete(message.id)
       clearTimeout(timeout)
@@ -841,10 +834,23 @@ class LspManager {
         reject(responseError)
       }
       else resolve(message.result)
-    } else if (message.method === 'workspace/configuration' && message.id !== undefined) {
-      // 处理 workspace/configuration 请求（某些 LSP 服务器需要）
-      const items = message.params?.items || []
-      const settings = items.map((item: any) => {
+    } else if (isServerRequest(message)) {
+      this.handleServerRequest(key, instance, message)
+    } else if (isServerNotification(message)) {
+      this.handleNotification(key, message)
+    }
+  }
+
+  private handleServerRequest(
+    key: string,
+    instance: LspServerInstance,
+    message: JsonRpcMessage,
+  ): void {
+    const id = message.id!
+
+    if (message.method === 'workspace/configuration') {
+      const params = message.params as { items?: Array<{ section?: string }> } | undefined
+      const settings = (params?.items ?? []).map((item) => {
         const section = item.section || ''
 
         // Python (Pyright) — 使用检测到的虚拟环境路径
@@ -901,30 +907,46 @@ class LspManager {
         return null
       })
 
-      // 发送响应
-      const response = {
-        jsonrpc: '2.0',
-        id: message.id,
-        result: settings
-      }
-      const body = JSON.stringify(response)
-      const responseMessage = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
-
-      try {
-        if (instance.process?.stdin) {
-          instance.process.stdin.write(responseMessage)
-        }
-      } catch (e) {
-        logger.lsp.error(`[LSP ${key}] Failed to send configuration response:`, e)
-      }
-    } else if (message.method) {
-      this.handleNotification(key, message)
+      this.writeMessage(key, instance, createJsonRpcResult(id, settings))
+      return
     }
+
+    if (
+      message.method === 'client/registerCapability'
+      || message.method === 'client/unregisterCapability'
+      || message.method === 'window/workDoneProgress/create'
+      || message.method === 'window/showMessageRequest'
+    ) {
+      this.writeMessage(key, instance, createJsonRpcResult(id, null))
+      return
+    }
+
+    if (message.method === 'workspace/applyEdit') {
+      this.writeMessage(key, instance, createJsonRpcResult(id, {
+        applied: false,
+        failureReason: 'Client does not support server-initiated workspace edits',
+      }))
+      return
+    }
+
+    if (message.method === 'workspace/workspaceFolders') {
+      this.writeMessage(key, instance, createJsonRpcResult(id, [{
+        uri: pathToLspUri(instance.workspacePath),
+        name: path.basename(instance.workspacePath),
+      }]))
+      return
+    }
+
+    this.writeMessage(
+      key,
+      instance,
+      createJsonRpcError(id, JSON_RPC_METHOD_NOT_FOUND, `Unsupported server request: ${message.method}`),
+    )
   }
 
-  private handleNotification(key: string, message: any): void {
+  private handleNotification(key: string, message: JsonRpcMessage): void {
     if (message.method === 'textDocument/publishDiagnostics') {
-      let { uri, diagnostics } = message.params
+      let { uri, diagnostics } = message.params as { uri: string; diagnostics: any[] }
 
       // 规范化 URI：处理不同 LSP 服务器返回的 URI 格式差异
       uri = normalizeLspUri(uri)
@@ -991,6 +1013,30 @@ class LspManager {
     // 更新活动时间
     this.updateActivity(key)
 
+    const execute = async () => {
+      try {
+        return await this.sendRequestOnce(key, method, params, timeoutMs)
+      } catch (error) {
+        if (!shouldRetryContentModified(method, error)) throw error
+        return this.sendRequestOnce(key, method, params, timeoutMs)
+      }
+    }
+
+    if (!isCoalescibleReadMethod(method)) return execute()
+    const requestKey = `${key}\0${method}\0${JSON.stringify(params)}`
+    const existing = this.inFlightReadRequests.get(requestKey)
+    if (existing) return existing
+
+    const request = execute().finally(() => {
+      if (this.inFlightReadRequests.get(requestKey) === request) {
+        this.inFlightReadRequests.delete(requestKey)
+      }
+    })
+    this.inFlightReadRequests.set(requestKey, request)
+    return request
+  }
+
+  private sendRequestOnce(key: string, method: string, params: any, timeoutMs: number): Promise<any> {
     return new Promise((resolve, reject) => {
       const instance = this.servers.get(key)
       if (!instance?.process?.stdin || !instance.process.stdin.writable) {
@@ -1001,15 +1047,18 @@ class LspManager {
       const id = ++instance.requestId
       const timeout = setTimeout(() => {
         instance.pendingRequests.delete(id)
+        this.writeMessage(key, instance, {
+          jsonrpc: '2.0',
+          method: '$/cancelRequest',
+          params: { id },
+        })
         reject(new Error(`Request ${method} timed out`))
       }, timeoutMs)
 
       instance.pendingRequests.set(id, { resolve, reject, timeout })
-      const body = JSON.stringify({ jsonrpc: '2.0', id, method, params })
-      const message = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
 
       try {
-        instance.process.stdin.write(message)
+        instance.process.stdin.write(encodeLspMessage({ jsonrpc: '2.0', id, method, params }))
       } catch (err) {
         instance.pendingRequests.delete(id)
         clearTimeout(timeout)
@@ -1025,10 +1074,65 @@ class LspManager {
     const instance = this.servers.get(key)
     if (!instance?.process?.stdin || !instance.process.stdin.writable) return
 
-    const body = JSON.stringify({ jsonrpc: '2.0', method, params })
-    const message = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
+    this.writeMessage(key, instance, { jsonrpc: '2.0', method, params })
+  }
 
-    try { instance.process.stdin.write(message) } catch { }
+  private writeMessage(key: string, instance: LspServerInstance, payload: JsonRpcMessage): boolean {
+    const stdin = instance.process?.stdin
+    if (!stdin?.writable) return false
+
+    try {
+      stdin.write(encodeLspMessage(payload))
+      return true
+    } catch (error) {
+      logger.lsp.error(`[LSP ${key}] Failed to write message:`, toAppError(error).message)
+      return false
+    }
+  }
+
+  private rejectPendingRequests(instance: LspServerInstance, reason: Error): void {
+    for (const pending of instance.pendingRequests.values()) {
+      clearTimeout(pending.timeout)
+      pending.reject(reason)
+    }
+    instance.pendingRequests.clear()
+  }
+
+  private scheduleRestart(key: string, instance: LspServerInstance): void {
+    const now = Date.now()
+    const previous = this.crashStates.get(key)
+    const count = previous && now - previous.lastCrashTime <= LspManager.CRASH_COOLDOWN_MS
+      ? previous.count + 1
+      : 1
+    if (previous?.restartTimer) clearTimeout(previous.restartTimer)
+
+    const state: CrashState = { count, lastCrashTime: now }
+    this.crashStates.set(key, state)
+    if (count > LspManager.MAX_CRASH_COUNT) {
+      logger.lsp.error(`[LSP ${key}] Server crashed ${count} times, giving up`)
+      return
+    }
+
+    const delay = Math.min(1000 * count, 5000)
+    logger.lsp.warn(`[LSP ${key}] Server crashed (${count}/${LspManager.MAX_CRASH_COUNT}), restarting in ${delay}ms...`)
+    state.restartTimer = setTimeout(() => {
+      state.restartTimer = undefined
+      if (this.stoppingServers.has(key) || this.servers.has(key)) return
+      this.startServer(instance.config.name, instance.workspacePath).catch(error => {
+        logger.lsp.error(`[LSP ${key}] Restart failed:`, error)
+      })
+    }, delay)
+  }
+
+  private restoreOpenedDocuments(key: string): void {
+    const documents = this.serverOpenedDocuments.get(key)
+    if (!documents?.size) return
+
+    for (const [uri, document] of documents) {
+      this.sendNotification(key, 'textDocument/didOpen', {
+        textDocument: { uri, ...document },
+      })
+    }
   }
 
   private async initializeServer(key: string, workspacePath: string): Promise<void> {
@@ -1098,7 +1202,7 @@ class LspManager {
       },
       workspace: {
         workspaceFolders: true,
-        applyEdit: true,
+        applyEdit: false,
         configuration: true,
         // 文件监视支持
         didChangeWatchedFiles: {
@@ -1111,6 +1215,10 @@ class LspManager {
   async stopServerByKey(key: string): Promise<void> {
     const instance = this.servers.get(key)
     if (!instance?.process) return
+    this.stoppingServers.add(key)
+    const crashState = this.crashStates.get(key)
+    if (crashState?.restartTimer) clearTimeout(crashState.restartTimer)
+    this.crashStates.delete(key)
 
     // 清除该服务器相关的诊断缓存（按前缀删除）
     const workspaceUri = pathToLspUri(instance.workspacePath)
@@ -1134,12 +1242,24 @@ class LspManager {
 
     // 清除文档跟踪（服务器关闭后文档状态无效）
     this.serverOpenedDocuments.delete(key)
+    this.documentOwnership.clearServer(key)
 
     try {
       await this.sendRequest(key, 'shutdown', null, 3000)
       this.sendNotification(key, 'exit', null)
     } catch { }
+    this.rejectPendingRequests(instance, new Error(`LSP server ${key} stopped`))
+    const processClosed = instance.process.exitCode !== null
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 2000)
+        instance.process!.once('close', () => {
+          clearTimeout(timeout)
+          resolve()
+        })
+      })
     instance.process.kill()
+    await processClosed
     this.servers.delete(key)
     this.serverLastActivity.delete(key)
 
@@ -1177,8 +1297,16 @@ class LspManager {
     }
   }
 
-  getRunningServers(): string[] {
-    return Array.from(this.servers.keys())
+  getRunningServers(workspacePath?: string): string[] {
+    if (!workspacePath) return Array.from(this.servers.keys())
+
+    const requestedRoot = path.resolve(workspacePath)
+    return Array.from(this.servers.entries())
+      .filter(([, instance]) => {
+        const relative = path.relative(requestedRoot, path.resolve(instance.workspacePath))
+        return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+      })
+      .map(([key]) => key)
   }
 
   getDiagnostics(uri: string): any[] {
@@ -1205,35 +1333,53 @@ class LspManager {
     this.documentVersions.delete(uri)
   }
 
-  // 跟踪文档打开状态
-  trackDocumentOpen(serverKey: string, uri: string, languageId: string, version: number, text: string): void {
-    if (!this.serverOpenedDocuments.has(serverKey)) {
-      this.serverOpenedDocuments.set(serverKey, new Map())
+  syncDocument(
+    serverKey: string,
+    uri: string,
+    languageId: string,
+    text: string,
+    ownerId: number,
+  ): DocumentSyncResult {
+    this.documentOwnership.acquire(serverKey, uri, ownerId)
+    let documents = this.serverOpenedDocuments.get(serverKey)
+    if (!documents) {
+      documents = new Map()
+      this.serverOpenedDocuments.set(serverKey, documents)
     }
-    this.serverOpenedDocuments.get(serverKey)!.set(uri, { languageId, version, text })
-  }
 
-  trackDocumentChange(serverKey: string, uri: string, version: number, text: string): void {
-    const docs = this.serverOpenedDocuments.get(serverKey)
-    if (docs?.has(uri)) {
-      const doc = docs.get(uri)!
-      doc.version = version
-      doc.text = text
+    const existing = documents.get(uri)
+    if (!existing) {
+      documents.set(uri, { languageId, version: 1, text })
+      return { action: 'open', version: 1 }
     }
+    if (existing.text === text) return { action: 'none', version: existing.version }
+
+    existing.version++
+    existing.languageId = languageId
+    existing.text = text
+    return { action: 'change', version: existing.version }
   }
 
-  trackDocumentClose(serverKey: string, uri: string): void {
-    this.serverOpenedDocuments.get(serverKey)?.delete(uri)
+  releaseDocument(serverKey: string, uri: string, ownerId: number): boolean {
+    const shouldClose = this.documentOwnership.release(serverKey, uri, ownerId)
+    if (shouldClose) this.serverOpenedDocuments.get(serverKey)?.delete(uri)
+    return shouldClose
   }
 
-  // 检查文档是否已在服务器上打开
-  isDocumentOpen(serverKey: string, uri: string): boolean {
-    return this.serverOpenedDocuments.get(serverKey)?.has(uri) || false
+  releaseDocumentForOwner(uri: string, ownerId: number): ReleasedDocument[] {
+    const released = this.documentOwnership.releaseOwnerDocument(ownerId, uri)
+    for (const { serverKey, uri: releasedUri } of released) {
+      this.serverOpenedDocuments.get(serverKey)?.delete(releasedUri)
+    }
+    return released
   }
 
-  // 获取服务器打开的所有文档（用于重启后恢复）
-  getOpenedDocuments(serverKey: string): Map<string, { languageId: string; version: number; text: string }> | undefined {
-    return this.serverOpenedDocuments.get(serverKey)
+  releaseDocumentOwner(ownerId: number): ReleasedDocument[] {
+    const released = this.documentOwnership.releaseOwner(ownerId)
+    for (const { serverKey, uri } of released) {
+      this.serverOpenedDocuments.get(serverKey)?.delete(uri)
+    }
+    return released
   }
 
   // ============ Call Hierarchy 支持 ============
@@ -1285,35 +1431,64 @@ class LspManager {
 
   // ============ 智能根目录检测 ============
 
-  /**
-   * 根据文件路径和语言获取最佳的工作区根目录
-   */
-  async findBestRoot(filePath: string, languageId: LanguageId, workspacePath: string): Promise<string> {
+  async resolveServerRouteForFile(
+    filePath: string,
+    languageId: LanguageId,
+    workspacePath: string,
+  ): Promise<ResolvedServerRoute | null> {
     const serverName = this.getServerForLanguage(languageId)
-    if (!serverName) return workspacePath
+    if (!serverName) return null
 
-    const config = LSP_SERVERS.find(c => c.name === serverName)
-    if (!config?.findRoot) return workspacePath
+    const cacheKey = [
+      languageId,
+      path.resolve(path.dirname(filePath)),
+      path.resolve(workspacePath),
+    ].join('\0')
+    const cached = this.serverRouteCache.get(cacheKey)
+    if (cached && cached.expiresAt > Date.now()) return cached.route
+    if (cached) this.serverRouteCache.delete(cacheKey)
 
-    try {
-      const root = await config.findRoot(filePath, workspacePath)
-      return root || workspacePath
-    } catch {
-      return workspacePath
+    const route = (async (): Promise<ResolvedServerRoute> => {
+      try {
+        if (serverName === 'typescript') {
+          const denoConfig = LSP_SERVERS.find(config => config.name === 'deno')
+          const denoRoot = await denoConfig?.findRoot?.(filePath, workspacePath)
+          if (denoRoot) return { serverName: 'deno', workspacePath: denoRoot }
+        }
+
+        const config = LSP_SERVERS.find(candidate => candidate.name === serverName)
+        const root = await config?.findRoot?.(filePath, workspacePath)
+        return { serverName, workspacePath: root || workspacePath }
+      } catch {
+        return { serverName, workspacePath }
+      }
+    })()
+
+    if (this.serverRouteCache.size >= LspManager.SERVER_ROUTE_CACHE_MAX_SIZE) {
+      const oldestKey = this.serverRouteCache.keys().next().value
+      if (oldestKey !== undefined) this.serverRouteCache.delete(oldestKey)
     }
+    this.serverRouteCache.set(cacheKey, {
+      expiresAt: Date.now() + LspManager.SERVER_ROUTE_CACHE_TTL_MS,
+      route,
+    })
+    return route
+  }
+
+  async findBestRoot(filePath: string, languageId: LanguageId, workspacePath: string): Promise<string> {
+    const route = await this.resolveServerRouteForFile(filePath, languageId, workspacePath)
+    return route?.workspacePath || workspacePath
   }
 
   /**
    * 为指定文件启动 LSP 服务器（使用智能根目录检测）
    */
   async ensureServerForFile(filePath: string, languageId: LanguageId, workspacePath: string): Promise<string | null> {
-    const serverName = this.getServerForLanguage(languageId)
-    if (!serverName) return null
+    const route = await this.resolveServerRouteForFile(filePath, languageId, workspacePath)
+    if (!route) return null
 
-    // 使用智能根目录检测
-    const bestRoot = await this.findBestRoot(filePath, languageId, workspacePath)
-    const success = await this.startServer(serverName, bestRoot)
-    return success ? this.getInstanceKey(serverName, bestRoot) : null
+    const success = await this.startServer(route.serverName, route.workspacePath)
+    return success ? this.getInstanceKey(route.serverName, route.workspacePath) : null
   }
 
   // ============ 文件监视通知 ============

@@ -59,6 +59,21 @@ vi.mock('@/renderer/store', () => ({
   useStore: {
     getState: vi.fn(() => ({
       setTerminalVisible: vi.fn(),
+      llmConfig: {},
+    })),
+  },
+}))
+
+vi.mock('@/renderer/agent/orchestration', () => ({
+  SubAgentManager: {
+    spawn: vi.fn(() => new Promise(resolve => {
+      setTimeout(() => resolve({
+        success: true,
+        output: 'sub-agent complete',
+        subAgentId: 'sub-1',
+        threadId: 'thread-1',
+        durationMs: 50,
+      }), 50)
     })),
   },
 }))
@@ -133,5 +148,17 @@ describe('toolExecutors timeout wrapper', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('Tool execution error')
+  })
+
+  it('lets the sub-agent manager own task timeouts', async () => {
+    const resultPromise = toolExecutors.task(
+      { description: 'inspect symbols', prompt: 'inspect the project' },
+      { workspacePath: '/workspace' } as any,
+    )
+    await vi.advanceTimersByTimeAsync(50)
+    const result = await resultPromise
+
+    expect(result.success).toBe(true)
+    expect(result.result).toBe('sub-agent complete')
   })
 })

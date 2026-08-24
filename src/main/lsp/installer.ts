@@ -8,7 +8,7 @@
  * - 配置持久化
  */
 
-import { spawn, execSync } from 'child_process'
+import { spawn, execFileSync, execSync } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { logger } from '@shared/utils/Logger'
@@ -682,10 +682,27 @@ export function getInstalledServerPath(serverType: string): string | null {
   if (!config) return null
 
   if (config.systemCommand) {
-    return resolveCommandPath(config.systemCommand)
+    const commandPath = resolveCommandPath(config.systemCommand)
+    if (
+      serverType === 'rust'
+      && commandPath
+      && !isRunnableCommand(commandPath, ['--version'])
+    ) {
+      return null
+    }
+    return commandPath
   }
 
   return null
+}
+
+function isRunnableCommand(command: string, args: string[]): boolean {
+  try {
+    execFileSync(command, args, { stdio: 'ignore', timeout: 3000 })
+    return true
+  } catch {
+    return false
+  }
 }
 
 function getInstalledServerPathInActiveDir(serverType: string): string | null {

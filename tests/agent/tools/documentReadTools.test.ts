@@ -8,9 +8,16 @@ vi.mock('@renderer/services/electronAPI', () => ({
       readImageAnalysis: vi.fn(),
       write: vi.fn(),
       readDir: vi.fn(),
+      stat: vi.fn(),
     },
     index: {
+      initialize: vi.fn(),
+      searchSymbols: vi.fn(),
       parseCallGraph: vi.fn(async () => []),
+    },
+    lsp: {
+      documentSymbol: vi.fn(),
+      workspaceSymbol: vi.fn(),
     },
   },
 }))
@@ -117,6 +124,7 @@ vi.mock('@utils/Logger', () => ({
 
 import { api } from '@renderer/services/electronAPI'
 import { analyzeImageSource, getReadRichContentOptions } from '@renderer/agent/services/imageReadService'
+import { didOpenDocument } from '@renderer/services/lspService'
 import { toolExecutors } from '@renderer/agent/tools/executors'
 
 describe('document read tool executors', () => {
@@ -127,6 +135,80 @@ describe('document read tool executors', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('opens a source document before requesting semantic symbols', async () => {
+    vi.mocked(api.file.read).mockResolvedValue('export class Cache { get() {} }')
+    vi.mocked(didOpenDocument).mockResolvedValue(true)
+    vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
+      name: 'Cache',
+      kind: 5,
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 31 } },
+      selectionRange: { start: { line: 0, character: 13 }, end: { line: 0, character: 18 } },
+      children: [],
+    }])
+
+    const result = await toolExecutors.get_document_symbols({ path: 'src/cache.ts' }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(didOpenDocument).toHaveBeenCalledWith(
+      '/workspace/src/cache.ts',
+      'export class Cache { get() {} }',
+    )
+    expect(api.lsp.documentSymbol).toHaveBeenCalled()
+    expect(result.result).toContain('"namePath": "Cache"')
+  })
+
+  it('reports an unavailable language server as a failure instead of an empty success', async () => {
+    vi.mocked(api.file.read).mockResolvedValue('export const value = 1')
+    vi.mocked(didOpenDocument).mockResolvedValue(false)
+
+    const result = await toolExecutors.get_document_symbols({ path: 'src/value.ts' }, ctx)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Language server is unavailable')
+    expect(api.lsp.documentSymbol).not.toHaveBeenCalled()
+  })
+
+  it('guides uncertain document paths back to workspace symbol search', async () => {
+    vi.mocked(api.file.read).mockResolvedValue(null)
+
+    const result = await toolExecutors.get_document_symbols({ path: 'src/GuessedController.ts' }, ctx)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('use find_symbol without relative_path')
+  })
+
+  it('uses a directory relative_path as a scoped symbol search', async () => {
+    vi.mocked(api.file.stat).mockResolvedValue({ size: 0, isDirectory: true, isFile: false, mtimeMs: 0 })
+    vi.mocked(api.index.searchSymbols).mockResolvedValue([
+      { relativePath: 'src/infrastructure/llm/Gateway.ts' },
+      { relativePath: 'src/presentation/GatewayView.ts' },
+    ] as any)
+    vi.mocked(api.file.read).mockResolvedValue('export class Gateway { stream() {} }')
+    vi.mocked(didOpenDocument).mockResolvedValue(true)
+    vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
+      name: 'Gateway',
+      kind: 5,
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 38 } },
+      selectionRange: { start: { line: 0, character: 13 }, end: { line: 0, character: 20 } },
+      children: [{
+        name: 'stream',
+        kind: 6,
+        range: { start: { line: 0, character: 23 }, end: { line: 0, character: 34 } },
+        selectionRange: { start: { line: 0, character: 23 }, end: { line: 0, character: 29 } },
+      }],
+    }])
+
+    const result = await toolExecutors.find_symbol({
+      name_path: 'Gateway/stream',
+      relative_path: 'src/infrastructure/llm',
+    }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(result.result).toContain('src/infrastructure/llm/Gateway.ts')
+    expect(api.file.read).toHaveBeenCalledTimes(1)
+    expect(api.file.read).not.toHaveBeenCalledWith('/workspace/src/presentation/GatewayView.ts', expect.anything(), expect.anything())
   })
 
   it('routes rich documents through readRichContent', async () => {

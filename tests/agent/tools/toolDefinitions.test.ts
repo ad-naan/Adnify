@@ -9,6 +9,7 @@ import {
   initializeToolProviders,
 } from '@renderer/agent/tools'
 import { TOOL_SCHEMAS, TOOL_CONFIGS } from '@/shared/config/tools'
+import { getToolsForContext } from '@/shared/config/toolGroups'
 
 // Mock dependencies that tools need
 vi.mock('@renderer/services/WorkspaceManager', () => ({
@@ -70,6 +71,28 @@ describe('Tool Definitions', () => {
     it('should have run_command in configs', () => {
       expect(TOOL_CONFIGS.run_command).toBeDefined()
       expect(TOOL_CONFIGS.run_command.name).toBe('run_command')
+    })
+
+    it('should expose semantic symbol tools with valid schemas', () => {
+      expect(TOOL_CONFIGS.find_symbol).toBeDefined()
+      expect(getToolsForContext({ mode: 'agent' })).toContain('find_symbol')
+      expect(getToolsForContext({ mode: 'plan' })).toContain('find_symbol')
+      expect(TOOL_SCHEMAS.find_symbol.safeParse({ name_path: 'Editor/render' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.get_document_symbols.safeParse({ path: 'src/editor.ts', depth: 1 }).success).toBe(true)
+      expect(TOOL_SCHEMAS.find_references.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.find_references.safeParse({ path: 'src/editor.ts', line: 1, column: 1 }).success).toBe(false)
+      expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'definition' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'references' }).success).toBe(false)
+      expect(TOOL_SCHEMAS.get_hover_info.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/types.ts', name_path: 'Editor', relation: 'implementation' }).success).toBe(true)
+      expect(getToolsForContext({ mode: 'agent' })).toContain('navigate_symbol')
+      expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'replace', body: 'run() {}' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'remove', body: '' }).success).toBe(false)
+      expect(TOOL_SCHEMAS.rename_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', new_name: 'execute' }).success).toBe(true)
+      expect(getToolsForContext({ mode: 'agent' })).toContain('edit_symbol')
+      expect(getToolsForContext({ mode: 'plan' })).not.toContain('edit_symbol')
+      expect(TOOL_SCHEMAS.get_diagnostics.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', min_severity: 2 }).success).toBe(true)
+      expect(getToolsForContext({ mode: 'plan' })).toContain('get_diagnostics')
     })
 
     it('should generate schemas from configs', () => {

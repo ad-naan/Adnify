@@ -10,6 +10,7 @@ import { getIndexService } from '../indexing/indexService'
 import { lspManager } from '../lsp/lspManager'
 import * as watcher from '@parcel/watcher'
 import picomatch from 'picomatch'
+import * as path from 'path'
 
 export interface FileWatcherEvent {
   event: 'create' | 'update' | 'delete'
@@ -29,6 +30,7 @@ interface WatcherEntry {
   subscription: watcher.AsyncSubscription
   buffer: FileChangeBuffer
   root: string
+  subscribers: Map<string, (data: FileWatcherEvent) => void>
 }
 
 const DEFAULT_CONFIG: FileWatcherConfig = {
@@ -41,6 +43,8 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
 }
 
 const watcherEntries = new Map<string, WatcherEntry>()
+const watcherRootsById = new Map<string, string>()
+const pendingWatcherEntries = new Map<string, Promise<WatcherEntry>>()
 
 const LSP_FILE_CHANGE_TYPE = {
   create: 1,
@@ -62,8 +66,11 @@ function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => b
   }
 }
 
-function notifyLspFileChanges(changes: Array<{ path: string; type: 'create' | 'update' | 'delete' }>): void {
-  const runningServers = lspManager.getRunningServers()
+function notifyLspFileChanges(
+  workspaceRoot: string,
+  changes: Array<{ path: string; type: 'create' | 'update' | 'delete' }>,
+): void {
+  const runningServers = lspManager.getRunningServers(workspaceRoot)
   if (runningServers.length === 0) return
 
   const lspChanges = changes.map(c => ({
@@ -97,6 +104,59 @@ function getBackend(): watcher.BackendType | undefined {
   }
 }
 
+function getRootKey(workspaceRoot: string): string {
+  const normalized = path.resolve(workspaceRoot).replace(/[\\/]+$/, '')
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+async function createWatcherEntry(
+  workspaceRoot: string,
+  config?: Partial<FileWatcherConfig>,
+): Promise<WatcherEntry> {
+  const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+  const shouldIgnore = createIgnoreMatcher(mergedConfig.ignored)
+  const indexService = getIndexService(workspaceRoot)
+  const fileChangeBuffer = createFileChangeHandler(indexService, {
+    bufferTimeMs: mergedConfig.bufferTimeMs,
+    maxBufferSize: mergedConfig.maxBufferSize,
+    maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
+  })
+  const subscribers = new Map<string, (data: FileWatcherEvent) => void>()
+  const watcherOptions: watcher.Options = {
+    ignore: mergedConfig.ignored.filter((p): p is string => typeof p === 'string'),
+    backend: getBackend(),
+  }
+
+  try {
+    const subscription = await watcher.subscribe(workspaceRoot, (err, events) => {
+      if (err) {
+        logger.security.error('[Watcher] Error:', err)
+        return
+      }
+
+      const lspChanges: Array<{ path: string; type: 'create' | 'update' | 'delete' }> = []
+      for (const event of events) {
+        if (shouldIgnore(event.path)) continue
+
+        const eventType = event.type === 'create' ? 'create' : event.type === 'delete' ? 'delete' : 'update'
+        const data = { event: eventType, path: event.path } as FileWatcherEvent
+        for (const callback of subscribers.values()) {
+          try { callback(data) } catch { /* one window must not break the shared watcher */ }
+        }
+        fileChangeBuffer.add({ type: eventType, path: event.path, timestamp: Date.now() })
+        lspChanges.push({ path: event.path, type: eventType })
+      }
+
+      if (lspChanges.length > 0) notifyLspFileChanges(workspaceRoot, lspChanges)
+    }, watcherOptions)
+
+    return { subscription, buffer: fileChangeBuffer, root: workspaceRoot, subscribers }
+  } catch (error) {
+    fileChangeBuffer.destroy()
+    throw error
+  }
+}
+
 export async function setupFileWatcher(
   watcherId: string,
   workspaceRoot: string,
@@ -106,62 +166,53 @@ export async function setupFileWatcher(
   if (!watcherId || !workspaceRoot) return
 
   await cleanupFileWatcher(watcherId)
-
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config }
-  const shouldIgnore = createIgnoreMatcher(mergedConfig.ignored)
-  const indexService = getIndexService(workspaceRoot)
-  const fileChangeBuffer = createFileChangeHandler(indexService, {
-    bufferTimeMs: mergedConfig.bufferTimeMs,
-    maxBufferSize: mergedConfig.maxBufferSize,
-    maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
-  })
-
-  const watcherOptions: watcher.Options = {
-    ignore: mergedConfig.ignored.filter((p): p is string => typeof p === 'string'),
-    backend: getBackend(),
+  const rootKey = getRootKey(workspaceRoot)
+  let entry = watcherEntries.get(rootKey)
+  if (!entry) {
+    let pending = pendingWatcherEntries.get(rootKey)
+    if (!pending) {
+      pending = createWatcherEntry(workspaceRoot, config)
+      pendingWatcherEntries.set(rootKey, pending)
+    }
+    try {
+      entry = await pending
+      watcherEntries.set(rootKey, entry)
+    } finally {
+      pendingWatcherEntries.delete(rootKey)
+    }
   }
 
-  const subscription = await watcher.subscribe(workspaceRoot, (err, events) => {
-    if (err) {
-      logger.security.error('[Watcher] Error:', err)
-      return
-    }
-
-    const lspChanges: Array<{ path: string; type: 'create' | 'update' | 'delete' }> = []
-
-    for (const event of events) {
-      if (shouldIgnore(event.path)) continue
-
-      const eventType = event.type === 'create' ? 'create' : event.type === 'delete' ? 'delete' : 'update'
-      callback({ event: eventType, path: event.path })
-      fileChangeBuffer.add({ type: eventType, path: event.path, timestamp: Date.now() })
-      lspChanges.push({ path: event.path, type: eventType })
-    }
-
-    if (lspChanges.length > 0) {
-      notifyLspFileChanges(lspChanges)
-    }
-  }, watcherOptions)
-
-  watcherEntries.set(watcherId, {
-    subscription,
-    buffer: fileChangeBuffer,
-    root: workspaceRoot,
-  })
-
-  logger.security.info('[Watcher] File watcher started for:', workspaceRoot, 'id:', watcherId)
+  entry.subscribers.set(watcherId, callback)
+  watcherRootsById.set(watcherId, rootKey)
+  logger.security.info('[Watcher] File watcher subscribed:', workspaceRoot, 'id:', watcherId, 'subscribers:', entry.subscribers.size)
 }
 
 export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
-  const entries = watcherId
-    ? (watcherEntries.has(watcherId) ? [[watcherId, watcherEntries.get(watcherId)!] as const] : [])
-    : Array.from(watcherEntries.entries())
+  if (watcherId) {
+    const rootKey = watcherRootsById.get(watcherId)
+    if (!rootKey) return
 
-  await Promise.all(entries.map(async ([id, entry]) => {
+    watcherRootsById.delete(watcherId)
+    const entry = watcherEntries.get(rootKey)
+    entry?.subscribers.delete(watcherId)
+    if (!entry || entry.subscribers.size > 0) return
+
+    watcherEntries.delete(rootKey)
     entry.buffer.destroy()
-    watcherEntries.delete(id)
+    logger.security.info('[Watcher] Cleaning up shared file watcher...', 'root:', entry.root)
+    try {
+      await entry.subscription.unsubscribe()
+    } catch (err) {
+      logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
+    }
+    return
+  }
 
-    logger.security.info('[Watcher] Cleaning up file watcher...', 'id:', id, 'root:', entry.root)
+  watcherRootsById.clear()
+  const entries = Array.from(watcherEntries.values())
+  watcherEntries.clear()
+  await Promise.all(entries.map(async (entry) => {
+    entry.buffer.destroy()
     try {
       await entry.subscription.unsubscribe()
     } catch (err) {
@@ -186,7 +237,8 @@ export function getWatcherStatus(): {
 
 export function flushBuffer(watcherId?: string): void {
   if (watcherId) {
-    watcherEntries.get(watcherId)?.buffer.flush()
+    const rootKey = watcherRootsById.get(watcherId)
+    if (rootKey) watcherEntries.get(rootKey)?.buffer.flush()
     return
   }
 

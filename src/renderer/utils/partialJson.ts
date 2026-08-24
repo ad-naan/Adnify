@@ -246,8 +246,8 @@ function detectContentStrategy(
       // 文件内容：保持平衡，但稍微偏向头部
       return { headRatio: 0.7, tailRatio: 0.25 }
 
-    case 'get_lint_errors':
-      // Lint 错误：通常按文件顺序，保持平衡
+    case 'get_diagnostics':
+      // Diagnostics are grouped by source symbol, so retain both ends.
       return { headRatio: 0.6, tailRatio: 0.35 }
 
     case 'list_directory':

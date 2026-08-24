@@ -66,6 +66,7 @@ export const TOOL_TRUNCATE_DEFAULTS: Record<string, ToolTruncateConfig> = {
   // 搜索结果
   search_files: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
   codebase_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
+  find_symbol: { maxLength: 16000, headRatio: 0.9, tailRatio: 0.05 },
   find_references: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
   grep_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
   // 目录结构
@@ -78,8 +79,11 @@ export const TOOL_TRUNCATE_DEFAULTS: Record<string, ToolTruncateConfig> = {
   get_document_symbols: { maxLength: 8000, headRatio: 0.6, tailRatio: 0.35 },
   get_definition: { maxLength: 5000, headRatio: 0.7, tailRatio: 0.25 },
   get_hover_info: { maxLength: 3000, headRatio: 0.7, tailRatio: 0.25 },
+  navigate_symbol: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
+  edit_symbol: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
+  rename_symbol: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
   // Lint
-  get_lint_errors: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
+  get_diagnostics: { maxLength: 10000, headRatio: 0.85, tailRatio: 0.1 },
   // 默认
   default: { maxLength: 12000, headRatio: 0.7, tailRatio: 0.25 },
 }

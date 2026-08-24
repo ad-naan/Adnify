@@ -112,7 +112,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     read_file: {
         name: 'read_file',
         displayName: 'Read File',
-        description: 'Read one or more local files. Supports code/text, PDF/Office documents, and safely delegates image paths to visual analysis. Prefer read_image when the target is known to be an image. MUST read before editing.',
+        description: 'Read exact file contents before editing or when semantic tools cannot answer. For code discovery, prefer find_symbol or get_document_symbols instead of reading whole files.',
         detailedDescription: `Read file contents from the filesystem.
 - Single file: path="src/main.ts"
 - Multiple files: path=["src/a.ts", "src/b.ts"]
@@ -743,75 +743,63 @@ For long-running servers or watch tasks:
     },
 
     // ===== LSP 工具 =====
-    get_lint_errors: {
-        name: 'get_lint_errors',
-        displayName: 'Lint Errors',
-        description: 'Get TypeScript/ESLint errors for a file. Use after editing to verify code. If results seem stale, pass refresh=true to force re-check.',
-        detailedDescription: `Get diagnostics (errors, warnings) for a file.
-- Shows TypeScript/ESLint errors
-- Use after editing to verify code
-- Use refresh=true if results seem outdated`,
-        criticalRules: [
-            'Call once after editing, not repeatedly',
-            'If errors persist after a fix, use refresh=true to force re-check',
-        ],
+    get_diagnostics: {
+        name: 'get_diagnostics',
+        displayName: 'Diagnostics',
+        description: 'Get fresh LSP diagnostics for a source file or one symbol, grouped by containing symbol.',
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root to check (e.g., "src/main.ts")', required: true },
-            refresh: { type: 'boolean', description: 'Force re-check instead of using cached diagnostics (default: false)', default: false },
+            relative_path: { type: 'string', description: 'Source file to inspect', required: true },
+            name_path: { type: 'string', description: 'Optional exact symbol name path to restrict diagnostics' },
+            min_severity: { type: 'number', description: 'Include severity values up to this level: 1 error, 2 warning, 3 info, 4 hint', default: 4 },
         },
     },
 
     find_references: {
         name: 'find_references',
         displayName: 'Find References',
-        description: 'Find all references to a symbol across the codebase. TIP: Use read_file to see the line/column of the symbol first, or use get_document_symbols to find symbol positions.',
-        detailedDescription: `Find all usages of a symbol across codebase.
-- Requires exact file position (line, column)
-- To find the position: use read_file and note the line number, column is the 1-indexed character offset within the line
-- Or use get_document_symbols to list all symbols with their positions
-- Useful for refactoring`,
+        description: 'Find references to a symbol by stable name path and identify the function, method, or class containing each reference.',
+        detailedDescription: `Find all usages of a symbol without calculating line and column positions.
+- Identify the source symbol with relative_path and name_path
+- Each result includes its file, one-based position, and containing symbol when available
+- Use find_symbol first if the source file or exact name path is unknown`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
-            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
+            relative_path: { type: 'string', description: 'File containing the source symbol', required: true },
+            name_path: { type: 'string', description: 'Exact symbol name or name path in that file', required: true },
         },
     },
 
-    go_to_definition: {
-        name: 'go_to_definition',
-        displayName: 'Go to Definition',
-        description: 'Get the definition location of a symbol. TIP: Use read_file to find the line/column where the symbol is used, or use get_document_symbols to list positions.',
-        detailedDescription: `Navigate to where a symbol is defined.
-- To find position: read_file and note line number; column is 1-indexed character offset within the line
-- Or use get_document_symbols to find symbol positions in a file`,
+    navigate_symbol: {
+        name: 'navigate_symbol',
+        displayName: 'Navigate Symbol',
+        description: 'Find a symbol definition or implementation by stable name path.',
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
-            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
+            relative_path: { type: 'string', description: 'File containing the source symbol', required: true },
+            name_path: { type: 'string', description: 'Exact symbol name or name path in that file', required: true },
+            relation: { type: 'string', description: 'Location relation to retrieve', required: true, enum: ['definition', 'implementation'] },
         },
     },
 
     get_hover_info: {
         name: 'get_hover_info',
         displayName: 'Hover Info',
-        description: 'Get type info and documentation for a symbol at a position. TIP: Use read_file to find the line/column, or get_document_symbols for symbol positions.',
+        description: 'Get type information and documentation for a symbol by stable name path.',
         detailedDescription: `Get TypeScript type info, signatures, and JSDoc for a symbol.
-- To find position: read_file and note line number; column is 1-indexed character offset within the line
+- Identify the source with relative_path and name_path
 - Useful for understanding unfamiliar types or APIs`,
         category: 'lsp',
         approvalType: 'none',
@@ -819,18 +807,65 @@ For long-running servers or watch tasks:
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            line: { type: 'number', description: 'Line number (1-indexed). Use read_file to find it.', required: true },
-            column: { type: 'number', description: 'Column (character offset, 1-indexed). Count from start of line to the symbol.', required: true },
+            relative_path: { type: 'string', description: 'File containing the source symbol', required: true },
+            name_path: { type: 'string', description: 'Exact symbol name or name path in that file', required: true },
+        },
+    },
+
+    edit_symbol: {
+        name: 'edit_symbol',
+        displayName: 'Edit Symbol',
+        description: 'Replace a complete symbol definition or insert code immediately before or after it.',
+        criticalRules: ['For action=replace, call find_symbol with include_body=true first'],
+        category: 'write',
+        approvalType: 'none',
+        parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            relative_path: { type: 'string', description: 'File containing the symbol', required: true },
+            name_path: { type: 'string', description: 'Exact symbol name path', required: true },
+            action: { type: 'string', description: 'Edit operation', required: true, enum: ['replace', 'insert_before', 'insert_after'] },
+            body: { type: 'string', description: 'Replacement definition or code to insert', required: true },
+        },
+    },
+
+    rename_symbol: {
+        name: 'rename_symbol',
+        displayName: 'Rename Symbol',
+        description: 'Rename a symbol across the workspace using LSP, applying all file edits atomically.',
+        category: 'write',
+        approvalType: 'none',
+        parallel: false,
+        concurrencyMode: 'serialized',
+        resourceScope: ['filesystem:write'],
+        resultSemantics: 'file-write',
+        retryPolicy: { maxAttempts: 1 },
+        validationLevel: 'strict',
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            relative_path: { type: 'string', description: 'File containing the symbol', required: true },
+            name_path: { type: 'string', description: 'Exact symbol name path', required: true },
+            new_name: { type: 'string', description: 'New identifier name', required: true },
         },
     },
 
     get_document_symbols: {
         name: 'get_document_symbols',
         displayName: 'Document Symbols',
-        description: 'List all functions, classes, interfaces, and variables defined in a file. Use to understand file structure.',
-        detailedDescription: `List all symbols defined in a file.
-- Shows functions, classes, interfaces, variables`,
+        description: 'Get an agent-friendly symbol overview for a file, including stable name paths and one-based source ranges.',
+        detailedDescription: `Get the semantic structure of a source file without reading the entire file.
+- Returns stable name paths such as ClassName/methodName
+- Includes symbol kinds and one-based source ranges
+- The file path must already be known and must identify a source file; do not guess paths
+- Use depth=0 for top-level symbols or a larger depth for descendants`,
+        criticalRules: ['If the exact source file path is unknown, use find_symbol without relative_path instead of guessing a path'],
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -838,6 +873,36 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
+            depth: { type: 'number', description: 'Descendant depth to include (default: 1)', default: 1 },
+        },
+    },
+
+    find_symbol: {
+        name: 'find_symbol',
+        displayName: 'Find Symbol',
+        description: 'Find a class, function, method, or other code symbol by name path without calculating line and column positions.',
+        detailedDescription: `Find symbols using stable semantic name paths.
+- Simple name: "render" matches symbols named render
+- Relative path: "Editor/render" matches that path suffix
+- Absolute path: "/Editor/render" requires the full path in a file
+- Set include_body=true to retrieve exact source code only for matched symbols
+- Optionally restrict the search to one source file or directory with relative_path`,
+        criticalRules: [
+            'Prefer this tool over read_file when looking for a known class, function, or method',
+            'Use include_body only when the implementation is needed',
+        ],
+        category: 'lsp',
+        approvalType: 'none',
+        parallel: true,
+        requiresWorkspace: true,
+        enabled: true,
+        parameters: {
+            name_path: { type: 'string', description: 'Symbol name or nested path. Prefer "Class/method"; "Class.method" is also accepted.', required: true },
+            relative_path: { type: 'string', description: 'Optional source file or directory path to restrict the search' },
+            include_body: { type: 'boolean', description: 'Include exact source code for matched symbols', default: false },
+            depth: { type: 'number', description: 'Descendant depth to include when include_body is false', default: 0 },
+            substring_matching: { type: 'boolean', description: 'Allow substring matching on the final name segment', default: false },
+            max_matches: { type: 'number', description: 'Maximum symbols to return (default: 20)', default: 20 },
         },
     },
 

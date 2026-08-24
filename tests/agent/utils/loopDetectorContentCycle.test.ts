@@ -115,7 +115,7 @@ describe('LoopDetector never terminates a turn', () => {
     // The classic long-task rhythm: edit, lint, edit, lint...
     for (let i = 0; i < 12; i++) {
       detector.recordExecutedTool({ name: 'edit_file', arguments: { path: RELATIVE } }, true)
-      detector.recordExecutedTool({ name: 'get_lint_errors', arguments: { path: RELATIVE } }, true)
+      detector.recordExecutedTool({ name: 'get_diagnostics', arguments: { relative_path: RELATIVE } }, true)
     }
     const result = detector.checkLoop([
       { name: 'edit_file', arguments: { path: RELATIVE } } as never,

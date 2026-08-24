@@ -8,9 +8,11 @@ import { toAppError } from '@shared/utils/errorHandler'
 import { resolveEditFileRequest } from '@/shared/utils/editFile'
 import { resolveReadFileRequest } from '@/shared/utils/readFile'
 import { logger } from '@utils/Logger'
-import type { ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
-import { validatePath, platform, getDirname, toFullPath } from '@shared/utils/pathUtils'
-import { pathToLspUri } from '@shared/utils/uriUtils'
+import type { AgentSymbol, LspDocumentSymbol, LspSymbolInformation, LspTextEdit, LspWorkspaceEdit, ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
+import { validatePath, platform, getDirname, toFullPath, toRelativePath } from '@shared/utils/pathUtils'
+import { lspUriToPath, pathToLspUri } from '@shared/utils/uriUtils'
+import { extractLspRange, findAgentSymbols, findContainingAgentSymbol, limitAgentSymbolDepth, normalizeAgentNamePathPattern, toAgentSymbols } from '@shared/lsp/agentSymbols'
+import { applyLspTextEdits, collectWorkspaceTextEdits } from '@shared/lsp/textEdits'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
@@ -18,7 +20,6 @@ import {
 import { smartReplace, normalizeLineEndings, checkLineReplaceWarnings } from '@/renderer/utils/smartReplace'
 import { getAgentConfig } from '../utils/AgentConfig'
 import { fileCacheService } from '../services/fileCacheService'
-import { lintService } from '../services/lintService'
 import { memoryService, normalizeMemoryContentInput } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
@@ -860,6 +861,303 @@ async function guardedWriteFile(opts: {
             preHash: originalHash,
             postHash: hashContent(opts.nextContent),
         }
+    }
+}
+
+async function loadAgentSymbolsForFile(
+    inputPath: string,
+    ctx: ToolExecutionContext,
+): Promise<{ fullPath: string; relativePath: string; symbols: AgentSymbol[] }> {
+    const fullPath = await resolvePath(inputPath, ctx.workspacePath, 'read', ctx.securityApproval)
+    const relativePath = toRelativePath(fullPath, ctx.workspacePath).replace(/\\/g, '/')
+    const content = await api.file.read(fullPath, undefined, { full: true })
+    if (content === null || content === undefined) {
+        throw new Error(`Source file not found or unreadable: ${relativePath}. If the exact file path is uncertain, use find_symbol without relative_path.`)
+    }
+    const opened = await didOpenDocument(fullPath, content)
+    if (!opened) {
+        throw new Error(`Language server is unavailable for ${relativePath}. Install or enable its LSP server, then retry.`)
+    }
+    const rawSymbols = await api.lsp.documentSymbol({
+        uri: pathToLspUri(fullPath),
+        workspacePath: ctx.workspacePath,
+    }) as LspDocumentSymbol[] | null
+    if (!Array.isArray(rawSymbols)) {
+        throw new Error(`Language server failed to return document symbols for ${relativePath}`)
+    }
+
+    return {
+        fullPath,
+        relativePath,
+        symbols: toAgentSymbols(rawSymbols ?? [], relativePath),
+    }
+}
+
+function getSymbolSearchQuery(namePathPattern: string): string {
+    const normalizedPattern = normalizeAgentNamePathPattern(namePathPattern)
+    const lastSegment = normalizedPattern.replace(/^\//, '').split('/').at(-1) ?? normalizedPattern
+    return lastSegment.replace(/\[\d+\]$/, '')
+}
+
+async function findCandidateSymbolFiles(
+    namePathPattern: string,
+    workspacePath: string,
+): Promise<string[]> {
+    const query = getSymbolSearchQuery(namePathPattern)
+    await api.index.initialize(workspacePath)
+    const indexed = await api.index.searchSymbols(workspacePath, query, 100) as Array<{ relativePath: string }>
+    const paths = new Set(indexed.map(symbol => symbol.relativePath).filter(Boolean))
+
+    if (paths.size === 0) {
+        const workspaceSymbols = await api.lsp.workspaceSymbol({ query, workspacePath }) as LspSymbolInformation[] | null
+        for (const symbol of workspaceSymbols ?? []) {
+            const filePath = lspUriToPath(symbol.location.uri)
+            const relativePath = toRelativePath(filePath, workspacePath).replace(/\\/g, '/')
+            if (relativePath && !relativePath.startsWith('..')) paths.add(relativePath)
+        }
+    }
+
+    return [...paths].slice(0, 50)
+}
+
+async function resolveSymbolCandidateFiles(
+    namePathPattern: string,
+    relativePath: string | undefined,
+    ctx: ToolExecutionContext,
+): Promise<string[]> {
+    if (!ctx.workspacePath) throw new Error('No workspace open')
+    const workspacePath = ctx.workspacePath
+    if (!relativePath) return findCandidateSymbolFiles(namePathPattern, workspacePath)
+
+    const fullPath = await resolvePath(relativePath, workspacePath, 'read', ctx.securityApproval)
+    const stats = await api.file.stat(fullPath)
+    if (!stats) throw new Error(`Symbol search scope does not exist: ${relativePath}`)
+    if (stats.isFile) return [toRelativePath(fullPath, workspacePath).replace(/\\/g, '/')]
+    if (!stats.isDirectory) throw new Error(`Symbol search scope is not a file or directory: ${relativePath}`)
+
+    const directory = toRelativePath(fullPath, workspacePath).replace(/\\/g, '/').replace(/\/$/, '')
+    const prefix = directory ? `${directory}/` : ''
+    const candidates = await findCandidateSymbolFiles(namePathPattern, workspacePath)
+    return candidates.filter(candidate => candidate.replace(/\\/g, '/').startsWith(prefix))
+}
+
+async function includeSymbolBodies(symbols: AgentSymbol[], ctx: ToolExecutionContext): Promise<AgentSymbol[]> {
+    const contentByPath = new Map<string, string>()
+    const results: AgentSymbol[] = []
+
+    for (const symbol of symbols) {
+        let content = contentByPath.get(symbol.relativePath)
+        if (content === undefined) {
+            const fullPath = await resolvePath(symbol.relativePath, ctx.workspacePath, 'read', ctx.securityApproval)
+            content = await api.file.read(fullPath, undefined, { full: true }) ?? ''
+            fileCacheService.markFileAsRead(fullPath, content)
+            contentByPath.set(symbol.relativePath, content)
+        }
+        results.push({ ...symbol, body: extractLspRange(content, symbol.range) })
+    }
+
+    return results
+}
+
+async function resolveAgentSymbolPosition(
+    relativePath: string,
+    namePath: string,
+    ctx: ToolExecutionContext,
+): Promise<{ loaded: Awaited<ReturnType<typeof loadAgentSymbolsForFile>>; symbol: AgentSymbol }> {
+    const loaded = await loadAgentSymbolsForFile(relativePath, ctx)
+    const matches = findAgentSymbols(loaded.symbols, namePath)
+    if (matches.length === 0) throw new Error(`Symbol not found: ${namePath}`)
+    if (matches.length > 1) {
+        throw new Error(`Symbol is ambiguous: ${namePath}. Matches: ${matches.map(symbol => symbol.namePath).join(', ')}`)
+    }
+    return { loaded, symbol: matches[0] }
+}
+
+async function formatNavigationLocations(
+    locations: unknown,
+    ctx: ToolExecutionContext,
+): Promise<string> {
+    const values = Array.isArray(locations) ? locations : locations ? [locations] : []
+    if (!values.length) return 'No locations found'
+
+    const symbolTreesByPath = new Map<string, AgentSymbol[]>()
+    const results = []
+    for (const value of values as Array<{
+        uri?: string
+        targetUri?: string
+        range?: { start: { line: number; character: number } }
+        targetRange?: { start: { line: number; character: number } }
+        targetSelectionRange?: { start: { line: number; character: number } }
+    }>) {
+        const uri = value.targetUri ?? value.uri
+        const start = value.targetSelectionRange?.start ?? value.targetRange?.start ?? value.range?.start
+        if (!uri || !start) continue
+
+        const fullPath = lspUriToPath(uri)
+        const relativePath = toRelativePath(fullPath, ctx.workspacePath).replace(/\\/g, '/')
+        let symbols = symbolTreesByPath.get(relativePath)
+        if (!symbols) {
+            symbols = (await loadAgentSymbolsForFile(relativePath, ctx)).symbols
+            symbolTreesByPath.set(relativePath, symbols)
+        }
+        const line = start.line + 1
+        const column = start.character + 1
+        const symbol = findContainingAgentSymbol(symbols, line, column)
+        results.push({
+            relativePath,
+            line,
+            column,
+            ...(symbol ? { namePath: symbol.namePath, kind: symbol.kindName } : {}),
+        })
+    }
+
+    return results.length ? JSON.stringify(results, null, 2) : 'No locations found'
+}
+
+interface PreparedWorkspaceFile {
+    path: string
+    originalContent: string
+    nextContent: string
+    diagnosticsBefore: unknown[]
+}
+
+function diagnosticKey(diagnostic: any): string {
+    return JSON.stringify({
+        range: diagnostic?.range,
+        severity: diagnostic?.severity,
+        code: diagnostic?.code,
+        message: diagnostic?.message,
+    })
+}
+
+async function applyWorkspaceEditAtomically(
+    workspaceEdit: LspWorkspaceEdit,
+    ctx: ToolExecutionContext,
+    toolName: string,
+): Promise<ToolExecutionResult> {
+    const editsByUri = collectWorkspaceTextEdits(workspaceEdit)
+    if (editsByUri.size === 0) return { success: false, result: '', error: 'Language server returned no text edits' }
+
+    const prepared: PreparedWorkspaceFile[] = []
+    for (const [uri, edits] of editsByUri) {
+        const path = await resolvePath(lspUriToPath(uri), ctx.workspacePath, 'write', ctx.securityApproval)
+        const originalContent = await api.file.read(path, undefined, { full: true })
+        if (originalContent === null || originalContent === undefined) {
+            return { success: false, result: '', error: `Cannot edit missing file: ${path}` }
+        }
+        prepared.push({
+            path,
+            originalContent,
+            nextContent: applyLspTextEdits(originalContent, edits),
+            diagnosticsBefore: await api.lsp.getDiagnostics(path) ?? [],
+        })
+    }
+
+    const written: PreparedWorkspaceFile[] = []
+    const rollback = async (): Promise<string[]> => {
+        const conflicts: string[] = []
+        for (const committed of [...written].reverse()) {
+            const current = await api.file.read(committed.path, undefined, { full: true })
+            if (hashContent(current) !== hashContent(committed.nextContent)) {
+                conflicts.push(committed.path)
+                continue
+            }
+            internalWriteTracker.mark(committed.path)
+            const restored = await api.file.write(committed.path, committed.originalContent)
+            if (!restored) {
+                conflicts.push(committed.path)
+                continue
+            }
+            fileCacheService.markFileAsRead(committed.path, committed.originalContent)
+            await notifyLspAfterWrite(committed.path, committed.originalContent)
+        }
+        return conflicts
+    }
+
+    try {
+        for (const file of prepared) {
+            const write = await guardedWriteFile({
+                path: file.path,
+                originalContent: file.originalContent,
+                nextContent: file.nextContent,
+                staleMessage: `Atomic symbol edit conflict: ${file.path} changed before commit`,
+            })
+            if (write.success) {
+                written.push(file)
+                continue
+            }
+            const rollbackConflicts = await rollback()
+            return {
+                success: false,
+                result: '',
+                error: rollbackConflicts.length
+                    ? `${write.result.error ?? 'Atomic edit failed'}; rollback conflict in: ${rollbackConflicts.join(', ')}`
+                    : write.result.error ?? 'Atomic edit failed',
+            }
+        }
+    } catch (error) {
+        const rollbackConflicts = await rollback()
+        const message = toAppError(error).message
+        return {
+            success: false,
+            result: '',
+            error: rollbackConflicts.length
+                ? `${message}; rollback conflict in: ${rollbackConflicts.join(', ')}`
+                : message,
+        }
+    }
+
+    let newDiagnostics = 0
+    const postCommitLimit = pLimit(4)
+    await Promise.all(prepared.map(file => postCommitLimit(async () => {
+        fileCacheService.markFileAsRead(file.path, file.nextContent)
+        const lineChanges = getLineChangesForWrite(file.originalContent, file.nextContent)
+        notifyComposerChange({
+            filePath: file.path,
+            workspacePath: ctx.workspacePath || '',
+            oldContent: file.originalContent,
+            newContent: file.nextContent,
+            changeType: 'modify',
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+            ...getWritePreviewFlags(file.originalContent, file.nextContent),
+            toolCallId: ctx.toolCallId,
+        })
+        await notifyLspAfterWrite(file.path, file.nextContent)
+        const beforeKeys = new Set(file.diagnosticsBefore.map(diagnosticKey))
+        const after = await api.lsp.getDiagnostics(file.path) ?? []
+        newDiagnostics += after.filter((diagnostic: unknown) => !beforeKeys.has(diagnosticKey(diagnostic))).length
+        await aiAttributionService.recordWriteEvent({
+            workspacePath: ctx.workspacePath || null,
+            filePath: file.path,
+            toolName,
+            toolCallId: ctx.toolCallId,
+            threadId: ctx.threadId,
+            assistantId: ctx.currentAssistantId ?? ctx.assistantId,
+            requestId: ctx.requestId,
+            oldContent: file.originalContent,
+            newContent: file.nextContent,
+            preHash: hashContent(file.originalContent),
+            postHash: hashContent(file.nextContent),
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+        })
+    })))
+
+    return {
+        success: true,
+        result: `Updated ${prepared.length} file(s) atomically; new diagnostics: ${newDiagnostics}`,
+        meta: { filesChanged: prepared.map(file => file.path), newDiagnostics },
+    }
+}
+
+function symbolRangeEdit(symbol: AgentSymbol, newText: string): LspTextEdit {
+    return {
+        range: {
+            start: { line: symbol.range.start.line - 1, character: symbol.range.start.column - 1 },
+            end: { line: symbol.range.end.line - 1, character: symbol.range.end.column - 1 },
+        },
+        newText,
     }
 }
 
@@ -2308,13 +2606,51 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         }
     },
 
-    async get_lint_errors(args, ctx) {
-        const path = await resolvePath(args.path, ctx.workspacePath, 'read', ctx.securityApproval)
-        const { errors, notInstalled } = await lintService.getLintErrors(path, args.refresh as boolean)
-        if (notInstalled) {
-            return { success: true, result: notInstalled }
+    async get_diagnostics(args, ctx) {
+        const loaded = await loadAgentSymbolsForFile(args.relative_path as string, ctx)
+        const content = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''
+        await didOpenDocument(loaded.fullPath, content)
+        await waitForDiagnostics(loaded.fullPath)
+
+        const minSeverity = Math.max(1, Math.min(4, Number(args.min_severity ?? 4)))
+        const targetNamePath = typeof args.name_path === 'string' ? args.name_path : undefined
+        let target: AgentSymbol | undefined
+        if (targetNamePath) {
+            const matches = findAgentSymbols(loaded.symbols, targetNamePath)
+            if (matches.length !== 1) {
+                return {
+                    success: false,
+                    result: '',
+                    error: matches.length ? `Symbol is ambiguous: ${targetNamePath}` : `Symbol not found: ${targetNamePath}`,
+                }
+            }
+            target = matches[0]
         }
-        return { success: true, result: errors.length ? errors.map((e) => `[${e.severity}] ${e.message} (Line ${e.startLine})`).join('\n') : 'No lint errors found.' }
+
+        const diagnostics = (await api.lsp.getDiagnostics(loaded.fullPath) ?? []) as any[]
+        const grouped: Record<string, any[]> = {}
+        for (const diagnostic of diagnostics) {
+            if (typeof diagnostic.severity === 'number' && diagnostic.severity > minSeverity) continue
+            const line = Number(diagnostic.range?.start?.line ?? 0) + 1
+            const column = Number(diagnostic.range?.start?.character ?? 0) + 1
+            if (target && !findContainingAgentSymbol([target], line, column)) continue
+            const owner = findContainingAgentSymbol(loaded.symbols, line, column)
+            const ownerPath = owner?.namePath ?? '<file>'
+            ;(grouped[ownerPath] ??= []).push({
+                severity: diagnostic.severity,
+                message: diagnostic.message,
+                code: diagnostic.code,
+                line,
+                column,
+            })
+        }
+
+        const count = Object.values(grouped).reduce((sum, items) => sum + items.length, 0)
+        return {
+            success: true,
+            result: count ? JSON.stringify({ relativePath: loaded.relativePath, count, diagnostics: grouped }, null, 2) : 'No diagnostics found',
+            meta: { diagnosticCount: count },
+        }
     },
 
     async codebase_search(args, ctx) {
@@ -2329,70 +2665,193 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async find_references(args, ctx) {
-        const path = await resolvePath(args.path, ctx.workspacePath, 'read', ctx.securityApproval)
+        const loaded = await loadAgentSymbolsForFile(args.relative_path as string, ctx)
+        const sourceSymbols = findAgentSymbols(loaded.symbols, args.name_path as string)
+        if (sourceSymbols.length !== 1) {
+            return {
+                success: false,
+                result: '',
+                error: sourceSymbols.length === 0
+                    ? `Symbol not found: ${args.name_path}`
+                    : `Symbol is ambiguous: ${args.name_path}. Matches: ${sourceSymbols.map(symbol => symbol.namePath).join(', ')}`,
+            }
+        }
+
+        const source = sourceSymbols[0]
         const locations = await api.lsp.references({
-            uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
+            uri: pathToLspUri(loaded.fullPath),
+            line: source.selectionRange.start.line - 1,
+            character: source.selectionRange.start.column - 1,
+            workspacePath: ctx.workspacePath,
         })
         if (!locations?.length) return { success: true, result: 'No references found' }
 
-        // 转换 URI 为相对路径
-        const formatLocation = (loc: { uri: string; range: { start: { line: number; character: number } } }) => {
-            let filePath = loc.uri
-            if (filePath.startsWith('file:///')) filePath = filePath.slice(8)
-            else if (filePath.startsWith('file://')) filePath = filePath.slice(7)
-            try { filePath = decodeURIComponent(filePath) } catch { }
-            // 转为相对路径
-            if (ctx.workspacePath && filePath.toLowerCase().startsWith(ctx.workspacePath.toLowerCase().replace(/\\/g, '/'))) {
-                filePath = filePath.slice(ctx.workspacePath.length).replace(/^[/\\]+/, '')
+        const symbolTreesByPath = new Map<string, AgentSymbol[]>()
+        const references = []
+        for (const location of locations as Array<{ uri: string; range: { start: { line: number; character: number } } }>) {
+            const fullPath = lspUriToPath(location.uri)
+            const relativePath = toRelativePath(fullPath, ctx.workspacePath).replace(/\\/g, '/')
+            let symbolTrees = symbolTreesByPath.get(relativePath)
+            if (!symbolTrees) {
+                symbolTrees = (await loadAgentSymbolsForFile(relativePath, ctx)).symbols
+                symbolTreesByPath.set(relativePath, symbolTrees)
             }
-            return `${filePath}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`
+            const line = location.range.start.line + 1
+            const column = location.range.start.character + 1
+            const container = findContainingAgentSymbol(symbolTrees, line, column)
+            references.push({
+                relativePath,
+                line,
+                column,
+                ...(container ? { containingSymbol: container.namePath, containingKind: container.kindName } : {}),
+            })
         }
-        return { success: true, result: locations.map(formatLocation).join('\n') }
+
+        return {
+            success: true,
+            result: JSON.stringify({ symbol: source.namePath, referenceCount: references.length, references }, null, 2),
+            meta: { referenceCount: references.length },
+        }
     },
 
-    async go_to_definition(args, ctx) {
-        const path = await resolvePath(args.path, ctx.workspacePath, 'read', ctx.securityApproval)
-        const locations = await api.lsp.definition({
-            uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
+    async navigate_symbol(args, ctx) {
+        const { loaded, symbol } = await resolveAgentSymbolPosition(
+            args.relative_path as string,
+            args.name_path as string,
+            ctx,
+        )
+        const request = args.relation === 'implementation' ? api.lsp.implementation : api.lsp.definition
+        const locations = await request({
+            uri: pathToLspUri(loaded.fullPath),
+            line: symbol.selectionRange.start.line - 1,
+            character: symbol.selectionRange.start.column - 1,
+            workspacePath: ctx.workspacePath,
         })
-        if (!locations?.length) return { success: true, result: 'Definition not found' }
-
-        // 转换 URI 为相对路径
-        const formatLocation = (loc: { uri: string; range: { start: { line: number; character: number } } }) => {
-            let filePath = loc.uri
-            if (filePath.startsWith('file:///')) filePath = filePath.slice(8)
-            else if (filePath.startsWith('file://')) filePath = filePath.slice(7)
-            try { filePath = decodeURIComponent(filePath) } catch { }
-            // 转为相对路径
-            if (ctx.workspacePath && filePath.toLowerCase().startsWith(ctx.workspacePath.toLowerCase().replace(/\\/g, '/'))) {
-                filePath = filePath.slice(ctx.workspacePath.length).replace(/^[/\\]+/, '')
-            }
-            return `${filePath}:${loc.range.start.line + 1}:${loc.range.start.character + 1}`
-        }
-        return { success: true, result: locations.map(formatLocation).join('\n') }
+        return { success: true, result: await formatNavigationLocations(locations, ctx) }
     },
 
     async get_hover_info(args, ctx) {
-        const path = await resolvePath(args.path, ctx.workspacePath, 'read', ctx.securityApproval)
+        const { loaded, symbol } = await resolveAgentSymbolPosition(
+            args.relative_path as string,
+            args.name_path as string,
+            ctx,
+        )
         const hover = await api.lsp.hover({
-            uri: pathToLspUri(path), line: (args.line as number) - 1, character: (args.column as number) - 1, workspacePath: ctx.workspacePath
+            uri: pathToLspUri(loaded.fullPath),
+            line: symbol.selectionRange.start.line - 1,
+            character: symbol.selectionRange.start.column - 1,
+            workspacePath: ctx.workspacePath,
         })
         if (!hover?.contents) return { success: true, result: 'No hover info' }
         const contents = Array.isArray(hover.contents) ? hover.contents.join('\n') : (typeof hover.contents === 'string' ? hover.contents : hover.contents.value)
         return { success: true, result: contents }
     },
 
-    async get_document_symbols(args, ctx) {
-        const path = await resolvePath(args.path, ctx.workspacePath, 'read', ctx.securityApproval)
-        const symbols = await api.lsp.documentSymbol({ uri: pathToLspUri(path), workspacePath: ctx.workspacePath })
-        if (!symbols?.length) return { success: true, result: 'No symbols found' }
-
-        const format = (s: { name: string; kind: number; children?: unknown[] }, depth: number): string => {
-            let out = `${'  '.repeat(depth)}${s.name} (${s.kind})\n`
-            if (s.children) out += (s.children as typeof s[]).map((c: typeof s) => format(c, depth + 1)).join('')
-            return out
+    async edit_symbol(args, ctx) {
+        const { loaded, symbol } = await resolveAgentSymbolPosition(
+            args.relative_path as string,
+            args.name_path as string,
+            ctx,
+        )
+        const action = args.action as 'replace' | 'insert_before' | 'insert_after'
+        if (action === 'replace' && !fileCacheService.hasValidCache(loaded.fullPath)) {
+            return { success: false, result: '', error: 'Retrieve the symbol with find_symbol(include_body=true) before replacing it' }
         }
-        return { success: true, result: symbols.map((s: { name: string; kind: number; children?: unknown[] }) => format(s, 0)).join('') }
+        let edit = symbolRangeEdit(symbol, args.body as string)
+        if (action !== 'replace') {
+            const original = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''
+            const eol = original.includes('\r\n') ? '\r\n' : '\n'
+            if (action === 'insert_before') {
+                edit = symbolRangeEdit(symbol, `${args.body as string}${eol}`)
+                edit.range.end = { ...edit.range.start }
+            } else {
+                edit = symbolRangeEdit(symbol, `${eol}${args.body as string}`)
+                edit.range.start = { ...edit.range.end }
+            }
+        }
+        return applyWorkspaceEditAtomically(
+            { changes: { [pathToLspUri(loaded.fullPath)]: [edit] } },
+            ctx,
+            'edit_symbol',
+        )
+    },
+
+    async rename_symbol(args, ctx) {
+        const { loaded, symbol } = await resolveAgentSymbolPosition(
+            args.relative_path as string,
+            args.name_path as string,
+            ctx,
+        )
+        const position = {
+            uri: pathToLspUri(loaded.fullPath),
+            line: symbol.selectionRange.start.line - 1,
+            character: symbol.selectionRange.start.column - 1,
+            workspacePath: ctx.workspacePath,
+        }
+        const prepared = await api.lsp.prepareRename(position)
+        if (!prepared) return { success: false, result: '', error: 'Language server rejected rename at this symbol' }
+        const workspaceEdit = await api.lsp.rename({ ...position, newName: args.new_name as string }) as LspWorkspaceEdit | null
+        if (!workspaceEdit) return { success: false, result: '', error: 'Language server returned no rename edits' }
+        return applyWorkspaceEditAtomically(workspaceEdit, ctx, 'rename_symbol')
+    },
+
+    async get_document_symbols(args, ctx) {
+        const loaded = await loadAgentSymbolsForFile(args.path as string, ctx)
+        if (!loaded.symbols.length) return { success: true, result: 'No symbols found' }
+
+        const depth = typeof args.depth === 'number' ? args.depth : 1
+        return {
+            success: true,
+            result: JSON.stringify(limitAgentSymbolDepth(loaded.symbols, depth), null, 2),
+            meta: { relativePath: loaded.relativePath, symbolCount: loaded.symbols.length },
+        }
+    },
+
+    async find_symbol(args, ctx) {
+        if (!ctx.workspacePath) return { success: false, result: '', error: 'No workspace open' }
+
+        const namePathPattern = normalizeAgentNamePathPattern(String(args.name_path || ''))
+        const includeBody = args.include_body === true
+        const depth = includeBody ? 0 : Math.max(0, Number(args.depth ?? 0))
+        const maxMatches = Math.max(1, Number(args.max_matches ?? 20))
+        const candidatePaths = await resolveSymbolCandidateFiles(
+            namePathPattern,
+            typeof args.relative_path === 'string' ? args.relative_path : undefined,
+            ctx,
+        )
+
+        const matches: AgentSymbol[] = []
+        let loadedCandidateCount = 0
+        let firstLoadError: unknown
+        for (const candidatePath of candidatePaths) {
+            try {
+                const loaded = await loadAgentSymbolsForFile(candidatePath, ctx)
+                loadedCandidateCount++
+                matches.push(...findAgentSymbols(loaded.symbols, namePathPattern, {
+                    depth,
+                    substringMatching: args.substring_matching === true,
+                }))
+            } catch (error) {
+                firstLoadError ??= error
+                if (candidatePaths.length === 1) throw error
+            }
+        }
+
+        if (candidatePaths.length > 0 && loadedCandidateCount === 0 && firstLoadError) throw firstLoadError
+
+        if (!matches.length) return { success: true, result: 'No matching symbols found' }
+
+        const visibleMatches = matches.slice(0, maxMatches)
+        const symbols = includeBody ? await includeSymbolBodies(visibleMatches, ctx) : visibleMatches
+        return {
+            success: true,
+            result: JSON.stringify({
+                matchedCount: matches.length,
+                truncated: matches.length > maxMatches,
+                symbols,
+            }, null, 2),
+            meta: { matchedCount: matches.length, returnedCount: symbols.length },
+        }
     },
 
     async web_search(args) {
@@ -3106,6 +3565,9 @@ export const toolExecutors = Object.fromEntries(
             let timer: ReturnType<typeof setTimeout>
 
             try {
+                // SubAgentManager owns task cancellation and its five-minute lifecycle timeout.
+                // Applying the generic tool timeout here would terminate healthy sub-agents early.
+                if (name === 'task') return await executor(args, ctx)
                 return await Promise.race([
                     executor(args, ctx),
                     new Promise<ToolExecutionResult>((_, reject) => {

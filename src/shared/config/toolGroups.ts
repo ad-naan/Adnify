@@ -78,12 +78,15 @@ const CORE_TOOLS: string[] = [
   'delete_remote_path',
   'upload_to_remote',
   'download_from_remote',
-  'get_lint_errors',
+  'get_diagnostics',
   // 代码智能
+  'find_symbol',
   'find_references',
-  'go_to_definition',
+  'navigate_symbol',
   'get_hover_info',
   'get_document_symbols',
+  'edit_symbol',
+  'rename_symbol',
 
   // 搜索
   'codebase_search',
@@ -125,10 +128,12 @@ const PLAN_EXPLORATION_TOOLS: string[] = [
   'list_directory',
   'search_files',
   'codebase_search',
+  'find_symbol',
   'find_references',
-  'go_to_definition',
+  'navigate_symbol',
   'get_hover_info',
   'get_document_symbols',
+  'get_diagnostics',
 ]
 
 /**

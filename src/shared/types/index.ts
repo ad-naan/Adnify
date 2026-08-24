@@ -209,6 +209,26 @@ export interface LspDocumentSymbol {
     children?: LspDocumentSymbol[]
 }
 
+/** Agent-facing symbol descriptor with stable, one-based source locations. */
+export interface AgentSymbol {
+    name: string
+    namePath: string
+    kind: number
+    kindName: string
+    relativePath: string
+    range: {
+        start: { line: number; column: number }
+        end: { line: number; column: number }
+    }
+    selectionRange: {
+        start: { line: number; column: number }
+        end: { line: number; column: number }
+    }
+    detail?: string
+    body?: string
+    children?: AgentSymbol[]
+}
+
 export interface LspSymbolInformation {
     name: string
     kind: number

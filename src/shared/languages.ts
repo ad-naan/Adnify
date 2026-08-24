@@ -152,7 +152,7 @@ export interface LspServerDefinition {
     id: string
     name: string
     description: string
-    languages: string[]        // 支持的语言 ID
+    languages: readonly LanguageId[] // 支持的语言 ID
     displayLanguages: string[] // UI 显示的语言名称
     builtin: boolean           // 是否随应用包交付
     installable: boolean       // 是否可通过 npm 安装
@@ -162,7 +162,7 @@ export interface LspServerDefinition {
  * 所有 LSP 服务器的统一配置
  * 这是唯一的真实来源，其他地方应该引用这里
  */
-export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
+export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'typescript',
         name: 'TypeScript / JavaScript',
@@ -289,13 +289,17 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         builtin: false,
         installable: true,
     },
-]
+] as const satisfies readonly LspServerDefinition[]
+
+export type LspServerId = (typeof LSP_SERVER_DEFINITIONS)[number]['id']
 
 // ==========================================
 // LSP 支持的语言（从定义自动生成）
 // ==========================================
 
-export const LSP_SUPPORTED_LANGUAGES = LSP_SERVER_DEFINITIONS.flatMap(s => s.languages) as readonly string[]
+export const LSP_SUPPORTED_LANGUAGES: readonly LanguageId[] = LSP_SERVER_DEFINITIONS.flatMap(
+    server => server.languages,
+)
 
 // 可扩展支持（需要额外 LSP 服务器，暂未实现自动安装）
 export const LSP_EXTENSIBLE_LANGUAGES = [
@@ -309,7 +313,9 @@ export const LSP_EXTENSIBLE_LANGUAGES = [
  * 根据语言 ID 获取对应的 LSP 服务器 ID
  */
 export function getServerIdForLanguage(languageId: string): string | null {
-    const server = LSP_SERVER_DEFINITIONS.find(s => s.languages.includes(languageId))
+    const server = LSP_SERVER_DEFINITIONS.find(
+        definition => (definition.languages as readonly string[]).includes(languageId),
+    )
     return server?.id || null
 }
 
@@ -387,27 +393,6 @@ export const IGNORED_DIRECTORIES = [
     '.DS_Store',
     'Thumbs.db',
 ] as const
-
-// ==========================================
-// 语言 ID -> LSP 语言 ID 映射 (用于 LSP 通信)
-// ==========================================
-
-export const LANGUAGE_TO_LSP_ID: Record<string, string> = {
-    typescript: 'typescript',
-    typescriptreact: 'typescriptreact',
-    javascript: 'javascript',
-    javascriptreact: 'javascriptreact',
-    html: 'html',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    json: 'json',
-    jsonc: 'jsonc',
-    python: 'python',
-    rust: 'rust',
-    go: 'go',
-    java: 'java',
-}
 
 // ==========================================
 // 辅助函数

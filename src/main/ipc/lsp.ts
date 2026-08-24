@@ -6,7 +6,7 @@ import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { ipcMain } from 'electron'
 import { lspManager, LanguageId } from '../lsp/lspManager'
-import { EXTENSION_TO_LANGUAGE } from '@shared/languages'
+import { getLanguageFromPath, isLspSupported } from '@shared/languages'
 import {
   getLspServerStatus,
   installServer,
@@ -60,10 +60,8 @@ function getFallbackRoot(filePath: string): string {
 }
 
 function getLanguageId(filePath: string): LanguageId | null {
-  const ext = filePath.split('.').pop()?.toLowerCase() || ''
-  const lang = EXTENSION_TO_LANGUAGE[ext]
-  // 只返回 LSP 支持的语言
-  return lang as LanguageId | null
+  const languageId = getLanguageFromPath(filePath)
+  return isLspSupported(languageId) ? languageId as LanguageId : null
 }
 
 function getLanguageIdFromUri(uri: string): string {
@@ -91,6 +89,25 @@ let _preferencesStore: any = null
 
 export function registerLspHandlers(preferencesStore?: any): void {
   _preferencesStore = preferencesStore
+  const observedDocumentOwners = new Set<number>()
+
+  const closeReleasedDocuments = (documents: Array<{ serverKey: string; uri: string }>) => {
+    for (const { serverKey, uri } of documents) {
+      lspManager.sendNotification(serverKey, 'textDocument/didClose', {
+        textDocument: { uri },
+      })
+    }
+  }
+
+  const observeDocumentOwner = (sender: Electron.WebContents) => {
+    if (observedDocumentOwners.has(sender.id)) return
+    const ownerId = sender.id
+    observedDocumentOwners.add(ownerId)
+    sender.once('destroyed', () => {
+      observedDocumentOwners.delete(ownerId)
+      closeReleasedDocuments(lspManager.releaseDocumentOwner(ownerId))
+    })
+  }
 
   // 启动服务器
   ipcMain.handle('lsp:start', async (_, workspacePath: string) => {
@@ -115,7 +132,7 @@ export function registerLspHandlers(preferencesStore?: any): void {
 
   // ============ 文档同步 ============
 
-  ipcMain.handle('lsp:didOpen', async (_, params: { uri: string; languageId: string; version: number; text: string; workspacePath?: string }) => {
+  ipcMain.handle('lsp:didOpen', async (event, params: { uri: string; languageId: string; version: number; text: string; workspacePath?: string }) => {
     const serverName = await getServerForUri(params.uri, params.workspacePath || '')
     if (!serverName) {
       logger.lsp.warn('[LSP IPC] didOpen skipped: no server available', {
@@ -126,48 +143,44 @@ export function registerLspHandlers(preferencesStore?: any): void {
       return { success: false, serverName: null }
     }
 
-    // 跟踪文档打开状态
-    lspManager.trackDocumentOpen(serverName, params.uri, params.languageId, params.version, params.text)
-
-    lspManager.sendNotification(serverName, 'textDocument/didOpen', {
-      textDocument: { uri: params.uri, languageId: params.languageId, version: params.version, text: params.text },
-    })
+    observeDocumentOwner(event.sender)
+    const sync = lspManager.syncDocument(serverName, params.uri, params.languageId, params.text, event.sender.id)
+    if (sync.action === 'open') {
+      lspManager.sendNotification(serverName, 'textDocument/didOpen', {
+        textDocument: { uri: params.uri, languageId: params.languageId, version: sync.version, text: params.text },
+      })
+    } else if (sync.action === 'change') {
+      lspManager.sendNotification(serverName, 'textDocument/didChange', {
+        textDocument: { uri: params.uri, version: sync.version },
+        contentChanges: [{ text: params.text }],
+      })
+    }
     return { success: true, serverName }
   })
 
-  ipcMain.handle('lsp:didChange', async (_, params: { uri: string; version: number; text: string; workspacePath?: string }) => {
+  ipcMain.handle('lsp:didChange', async (event, params: { uri: string; version: number; text: string; workspacePath?: string }) => {
     const serverName = await getServerForUri(params.uri, params.workspacePath || '')
     if (!serverName) return
 
-    // 如果文档未在服务器上打开（可能服务器重启过），先打开它
-    if (!lspManager.isDocumentOpen(serverName, params.uri)) {
-      const languageId = getLanguageIdFromUri(params.uri)
-      lspManager.trackDocumentOpen(serverName, params.uri, languageId, params.version, params.text)
+    observeDocumentOwner(event.sender)
+    const languageId = getLanguageIdFromUri(params.uri)
+    const sync = lspManager.syncDocument(serverName, params.uri, languageId, params.text, event.sender.id)
+    if (sync.action === 'open') {
       lspManager.sendNotification(serverName, 'textDocument/didOpen', {
-        textDocument: { uri: params.uri, languageId, version: params.version, text: params.text },
+        textDocument: { uri: params.uri, languageId, version: sync.version, text: params.text },
       })
       return
     }
-
-    // 更新跟踪状态
-    lspManager.trackDocumentChange(serverName, params.uri, params.version, params.text)
-
-    lspManager.sendNotification(serverName, 'textDocument/didChange', {
-      textDocument: { uri: params.uri, version: params.version },
-      contentChanges: [{ text: params.text }],
-    })
+    if (sync.action === 'change') {
+      lspManager.sendNotification(serverName, 'textDocument/didChange', {
+        textDocument: { uri: params.uri, version: sync.version },
+        contentChanges: [{ text: params.text }],
+      })
+    }
   })
 
-  ipcMain.handle('lsp:didClose', async (_, params: { uri: string; workspacePath?: string }) => {
-    const serverName = await getServerForUri(params.uri, params.workspacePath || '')
-    if (!serverName) return
-
-    // 移除跟踪
-    lspManager.trackDocumentClose(serverName, params.uri)
-
-    lspManager.sendNotification(serverName, 'textDocument/didClose', {
-      textDocument: { uri: params.uri },
-    })
+  ipcMain.handle('lsp:didClose', async (event, params: { uri: string; workspacePath?: string }) => {
+    closeReleasedDocuments(lspManager.releaseDocumentForOwner(params.uri, event.sender.id))
   })
 
   // 文档保存通知
@@ -264,8 +277,8 @@ export function registerLspHandlers(preferencesStore?: any): void {
     }
   })
 
-  ipcMain.handle('lsp:workspaceSymbol', async (_, params: { query: string }) => {
-    const running = lspManager.getRunningServers()
+  ipcMain.handle('lsp:workspaceSymbol', async (_, params: { query: string; workspacePath?: string }) => {
+    const running = lspManager.getRunningServers(params.workspacePath)
     if (running.length === 0) return []
 
     const results = await Promise.all(
@@ -456,7 +469,7 @@ export function registerLspHandlers(preferencesStore?: any): void {
   // ============ 文件监视通知 ============
 
   ipcMain.handle('lsp:didChangeWatchedFiles', async (_, params: { changes: Array<{ uri: string; type: number }>; workspacePath?: string }) => {
-    const running = lspManager.getRunningServers()
+    const running = lspManager.getRunningServers(params.workspacePath)
     for (const serverKey of running) {
       lspManager.notifyDidChangeWatchedFiles(serverKey, params.changes)
     }

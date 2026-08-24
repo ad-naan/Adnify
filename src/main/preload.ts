@@ -422,7 +422,7 @@ export interface ElectronAPI {
   lspRename: (params: { uri: string; line: number; character: number; newName: string; workspacePath?: string | null }) => Promise<any>
   lspPrepareRename: (params: { uri: string; line: number; character: number; workspacePath?: string | null }) => Promise<any>
   lspDocumentSymbol: (params: { uri: string; workspacePath?: string | null }) => Promise<any>
-  lspWorkspaceSymbol: (params: { query: string }) => Promise<any>
+  lspWorkspaceSymbol: (params: { query: string; workspacePath?: string | null }) => Promise<any>
   lspCodeAction: (params: { uri: string; range: any; diagnostics?: any[]; workspacePath?: string | null }) => Promise<any>
   lspFormatting: (params: { uri: string; options?: any; workspacePath?: string | null }) => Promise<any>
   lspRangeFormatting: (params: { uri: string; range: any; options?: any; workspacePath?: string | null }) => Promise<any>
