@@ -1,11 +1,12 @@
-/**
+﻿/**
  * 代码片段服务
  * 管理用户自定义代码模板
  */
 
-import { api } from './electronAPI'
 import { logger } from '@utils/Logger'
 import * as monaco from 'monaco-editor'
+import { createPersistentPreference } from '@/renderer/settings/persistentPreference'
+import { USER_PREFERENCE_KEYS } from '@/renderer/settings/preferenceKeys'
 
 // ============ 类型定义 ============
 
@@ -34,6 +35,24 @@ export interface SnippetGroup {
   /** 分组内的片段 */
   snippets: CodeSnippet[]
 }
+
+export function normalizeCodeSnippets(value: unknown): CodeSnippet[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is CodeSnippet =>
+        !!item &&
+        typeof item === 'object' &&
+        typeof (item as CodeSnippet).id === 'string' &&
+        typeof (item as CodeSnippet).name === 'string' &&
+        typeof (item as CodeSnippet).prefix === 'string' &&
+        typeof (item as CodeSnippet).body === 'string')
+    : []
+}
+
+const preference = createPersistentPreference<CodeSnippet[]>({
+  ...USER_PREFERENCE_KEYS.snippets,
+  fallback: [],
+  normalize: normalizeCodeSnippets,
+})
 
 // ============ 默认片段 ============
 
@@ -138,12 +157,15 @@ export function use\${1:Hook}(\${2:params}) {
 
 // ============ 服务类 ============
 
-const STORAGE_KEY = 'adnify-snippets'
-
 class SnippetService {
   private snippets: CodeSnippet[] = []
   private disposables: monaco.IDisposable[] = []
   private initialized = false
+
+  private getUserSnippets(): CodeSnippet[] {
+    return this.snippets.filter(snippet =>
+      !DEFAULT_SNIPPETS.some(defaultSnippet => defaultSnippet.id === snippet.id))
+  }
 
   async init(): Promise<void> {
     if (this.initialized) return
@@ -158,55 +180,19 @@ class SnippetService {
   }
 
   private async loadSnippets(): Promise<void> {
-    try {
-      // 从 localStorage 加载
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        const parsed = JSON.parse(saved) as CodeSnippet[]
-        this.snippets = [...DEFAULT_SNIPPETS, ...parsed.filter(s => !s.id.startsWith('default-'))]
-      } else {
-        this.snippets = [...DEFAULT_SNIPPETS]
-      }
-      
-      // 异步从文件同步
-      this.syncFromFile().catch(() => {})
-    } catch (e) {
-      logger.system.error('[SnippetService] Failed to load snippets:', e)
-      this.snippets = [...DEFAULT_SNIPPETS]
-    }
-  }
-
-  private async syncFromFile(): Promise<void> {
-    try {
-      const saved = await api.settings.get('snippets') as CodeSnippet[] | null
-      if (saved && Array.isArray(saved)) {
-        // 合并用户片段（不覆盖默认片段）
-        const userSnippets = saved.filter(s => !DEFAULT_SNIPPETS.some(d => d.id === s.id))
-        this.snippets = [...DEFAULT_SNIPPETS, ...userSnippets]
-        this.saveToLocalStorage()
-      }
-    } catch {
-      // 忽略同步错误
-    }
-  }
-
-  private saveToLocalStorage(): void {
-    try {
-      // 只保存用户自定义的片段
-      const userSnippets = this.snippets.filter(s => !DEFAULT_SNIPPETS.some(d => d.id === s.id))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(userSnippets))
-    } catch {
-      // 忽略错误
-    }
+    this.snippets = [...DEFAULT_SNIPPETS, ...normalizeCodeSnippets(preference.load())]
+    preference.subscribe(next => {
+      this.snippets = [...DEFAULT_SNIPPETS, ...normalizeCodeSnippets(next)]
+      this.registerCompletionProviders()
+    })
   }
 
   private async saveToFile(): Promise<void> {
-    try {
-      const userSnippets = this.snippets.filter(s => !DEFAULT_SNIPPETS.some(d => d.id === s.id))
-      await api.settings.set('snippets', userSnippets)
-    } catch (e) {
-      logger.system.error('[SnippetService] Failed to save snippets:', e)
-    }
+    preference.save(this.getUserSnippets())
+  }
+
+  private persistSnippets(): void {
+    void this.saveToFile()
   }
 
   private registerCompletionProviders(): void {
@@ -308,8 +294,7 @@ class SnippetService {
     }
 
     this.snippets.push(newSnippet)
-    this.saveToLocalStorage()
-    await this.saveToFile()
+    this.persistSnippets()
     this.registerCompletionProviders()
 
     logger.system.info('[SnippetService] Added snippet:', newSnippet.name)
@@ -333,8 +318,7 @@ class SnippetService {
       updatedAt: Date.now(),
     }
 
-    this.saveToLocalStorage()
-    await this.saveToFile()
+    this.persistSnippets()
     this.registerCompletionProviders()
 
     return this.snippets[index]
@@ -351,8 +335,7 @@ class SnippetService {
     if (index === -1) return false
 
     this.snippets.splice(index, 1)
-    this.saveToLocalStorage()
-    await this.saveToFile()
+    this.persistSnippets()
     this.registerCompletionProviders()
 
     logger.system.info('[SnippetService] Deleted snippet:', id)

@@ -41,6 +41,7 @@ export interface EditorConfigSchema {
   }
   git?: {
     autoRefresh?: boolean
+    commitPrompt?: string
   }
   lsp?: {
     timeoutMs?: number
@@ -122,6 +123,7 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
     const g = config.git as Record<string, unknown>
     cleaned.git = {}
     if (typeof g.autoRefresh === 'boolean') cleaned.git.autoRefresh = g.autoRefresh
+    if (typeof g.commitPrompt === 'string') cleaned.git.commitPrompt = g.commitPrompt
   }
 
   // lsp 子对象
@@ -178,7 +180,6 @@ export interface AgentConfigSchema {
   maxFileContentChars?: number
   maxTotalContextChars?: number
   maxContextTokens?: number
-  maxSingleFileChars?: number
   maxContextFiles?: number
   maxSemanticResults?: number
   maxTerminalChars?: number
@@ -204,7 +205,7 @@ export function cleanAgentConfig(config: Record<string, unknown>): AgentConfigSc
 
   const numFields = [
     'maxToolLoops', 'maxHistoryMessages', 'maxToolResultChars', 'maxFileContentChars',
-    'maxTotalContextChars', 'maxContextTokens', 'maxSingleFileChars', 'maxContextFiles',
+    'maxTotalContextChars', 'maxContextTokens', 'maxContextFiles',
     'maxSemanticResults', 'maxTerminalChars', 'maxRetries', 'retryDelayMs', 'toolTimeoutMs',
     'keepRecentTurns', 'deepCompressionTurns', 'maxImportantOldTurns'
   ] as const
@@ -424,6 +425,45 @@ export function cleanConfigValue(key: string, value: unknown): unknown {
 
     case 'securitySettings':
       return typeof value === 'object' ? cleanSecuritySettings(value as Record<string, unknown>) : value
+
+    case 'keybindings': {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+      const keybindings = value as Record<string, unknown>
+      const cleanedKeybindings: Record<string, string> = {}
+      for (const [commandId, key] of Object.entries(keybindings)) {
+        if (typeof key === 'string' && key.trim()) cleanedKeybindings[commandId] = key
+      }
+      return cleanedKeybindings
+    }
+    case 'snippets':
+    case 'customThemes':
+    case 'emotionPanelSettings':
+    case 'emotionWelcome':
+    case 'previewSettings':
+    case 'shellRegistry':
+    case 'userProfile':
+    case 'modeStore.currentMode':
+    case 'indexConfig':
+      return value
+
+    case 'themeId': {
+      return typeof value === 'string' && value ? value : undefined
+    }
+
+    case 'settingsPersistence': {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+      const input = value as Record<string, unknown>
+      const cleaned: Record<string, unknown> = {}
+      if (input.legacyCacheMigrated === true) cleaned.legacyCacheMigrated = true
+      if (input.legacyMigrated && typeof input.legacyMigrated === 'object' && !Array.isArray(input.legacyMigrated)) {
+        const migrations: Record<string, boolean> = {}
+        for (const [name, migrated] of Object.entries(input.legacyMigrated)) {
+          if (migrated === true) migrations[name] = true
+        }
+        if (Object.keys(migrations).length > 0) cleaned.legacyMigrated = migrations
+      }
+      return cleaned
+    }
 
     default:
       return value

@@ -3,6 +3,7 @@
  * 管理面板尺寸、可见性等布局状态
  */
 import { StateCreator } from 'zustand'
+import { loadUserProfile, saveUserProfile } from '@renderer/settings/userProfile'
 
 export type SidePanel = 'explorer' | 'search' | 'git' | 'problems' | 'outline' | 'history' | 'extensions' | 'emotion' | 'shell' | null
 
@@ -39,9 +40,9 @@ export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> =
   sidebarWidth: 260,
   chatWidth: 450,
   terminalLayout: 'tabs',
-  userAvatarStyle: localStorage.getItem('userAvatarStyle') || 'adventurer',
-  userAvatarSeed: localStorage.getItem('userAvatarSeed') || 'Adnify',
-  userDisplayName: localStorage.getItem('userDisplayName') || 'You',
+  userAvatarStyle: loadUserProfile().avatarStyle,
+  userAvatarSeed: loadUserProfile().avatarSeed,
+  userDisplayName: loadUserProfile().displayName,
 
   setActiveSidePanel: (panel) => set({ activeSidePanel: panel }),
   setTerminalVisible: (visible) => set({ terminalVisible: visible }),
@@ -53,12 +54,11 @@ export const createLayoutSlice: StateCreator<LayoutSlice, [], [], LayoutSlice> =
   toggleTerminal: () => set((state) => ({ terminalVisible: !state.terminalVisible })),
   toggleDebug: () => set((state) => ({ debugVisible: !state.debugVisible })),
   setUserAvatar: (style, seed) => {
-    localStorage.setItem('userAvatarStyle', style)
-    localStorage.setItem('userAvatarSeed', seed)
+    saveUserProfile({ ...loadUserProfile(), avatarStyle: style, avatarSeed: seed })
     set({ userAvatarStyle: style, userAvatarSeed: seed })
   },
   setUserDisplayName: (name) => {
-    localStorage.setItem('userDisplayName', name)
+    saveUserProfile({ ...loadUserProfile(), displayName: name })
     set({ userDisplayName: name })
   },
 })

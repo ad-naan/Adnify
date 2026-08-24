@@ -1,8 +1,8 @@
-import { api } from '@/renderer/services/electronAPI'
-import { logger } from '@utils/Logger'
 import { platform } from '@shared/utils/pathUtils'
+import { logger } from '@shared/utils/Logger'
+import { createPersistentPreference } from '@/renderer/settings/persistentPreference'
+import { USER_PREFERENCE_KEYS } from '@/renderer/settings/preferenceKeys'
 
-const LOCAL_STORAGE_KEY = 'adnify-keybindings'
 const isMac = platform.isMac
 
 export interface Command {
@@ -18,6 +18,30 @@ export interface Keybinding {
     key: string
 }
 
+export function normalizeKeybindingOverrides(value: unknown): Record<string, string> {
+    if (Array.isArray(value)) {
+        return Object.fromEntries(
+            value
+                .filter((item): item is { commandId?: unknown; key?: unknown } =>
+                    Boolean(item) && typeof item === 'object')
+                .filter(item => typeof item.commandId === 'string' && item.commandId.trim() &&
+                    typeof item.key === 'string' && item.key.trim())
+                .map(item => [item.commandId as string, item.key as string]),
+        )
+    }
+
+    if (!value || typeof value !== 'object') return {}
+
+    return Object.fromEntries(
+        Object.entries(value)
+            .filter(([, key]) => typeof key === 'string' && key.trim())
+            .map(([commandId, key]) => [commandId, key]),
+    )
+}
+
+const preference = createPersistentPreference<Record<string, string>>({
+    ...USER_PREFERENCE_KEYS.keybindings, fallback: {}, normalize: normalizeKeybindingOverrides,
+})
 class KeybindingService {
     private commands: Map<string, Command> = new Map()
     private overrides: Map<string, string> = new Map()
@@ -129,47 +153,13 @@ class KeybindingService {
     }
 
     private async loadOverrides() {
-        // 优先从 localStorage 读取（快速）
-        try {
-            const localData = localStorage.getItem(LOCAL_STORAGE_KEY)
-            if (localData) {
-                const parsed = JSON.parse(localData)
-                this.overrides = new Map(Object.entries(parsed))
-                // 异步同步到文件（不阻塞）
-                api.settings.set('keybindings', parsed).catch(() => { })
-                return
-            }
-        } catch (e) {
-            // localStorage 读取失败，继续从文件读取
-        }
-
-        // 从文件读取
-        try {
-            const saved = await api.settings.get('keybindings') as Record<string, string>
-            if (saved) {
-                this.overrides = new Map(Object.entries(saved))
-                // 同步到 localStorage
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(saved))
-            }
-        } catch (e) {
-            logger.system.error('Failed to load keybindings:', e)
-        }
+        this.overrides = new Map(Object.entries(preference.load()))
+        preference.subscribe(next => {
+            this.overrides = new Map(Object.entries(next))
+        })
     }
-
     private async saveOverrides() {
-        const obj = Object.fromEntries(this.overrides)
-        // 同步写入 localStorage（快速）
-        try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(obj))
-        } catch (e) {
-            logger.system.error('Failed to save keybindings to localStorage:', e)
-        }
-        // 异步写入文件（持久化）
-        try {
-            await api.settings.set('keybindings', obj)
-        } catch (e) {
-            logger.system.error('Failed to save keybindings:', e)
-        }
+        preference.save(Object.fromEntries(this.overrides))
     }
 }
 

@@ -12,6 +12,7 @@ import { Button, Switch } from '@components/ui'
 import { Language } from '@renderer/i18n'
 import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
+import { importUserPreferences, resetUserPreferences } from '@/renderer/services/preferenceService'
 import { Agent } from '@/renderer/agent/core'
 import { memoryService } from '@/renderer/agent/services/memoryService'
 import { runCacheCleanupPhase } from '@renderer/services/cacheLifecycleService'
@@ -119,9 +120,9 @@ export function SystemSettings({
         }
     }
 
-    const handleExport = () => {
+    const handleExport = async () => {
         try {
-            downloadSettings(getCurrentSettings(), includeApiKeys)
+            await downloadSettings(getCurrentSettings(), includeApiKeys)
             toast.success(language === 'zh' ? '配置已导出' : 'Settings exported')
         } catch (error) {
             logger.settings.error('Failed to export settings:', error)
@@ -147,6 +148,10 @@ export function SystemSettings({
             }
 
             const settings = result.settings
+
+            if (result.userPreferences) {
+                await importUserPreferences(result.userPreferences)
+            }
 
             // 应用导入的设置
             if (settings.language) getStore().set('language', settings.language as 'en' | 'zh')
@@ -208,7 +213,6 @@ export function SystemSettings({
                 } catch { }
             }
 
-            await api.settings.set('editorConfig', undefined)
             Agent.clearSession()
             memoryService.clearCache()
 
@@ -242,10 +246,12 @@ export function SystemSettings({
         })
         if (confirmed) {
             // 清除所有持久化数据
-            await api.settings.set('app-settings', undefined)
-            await api.settings.set('editorConfig', undefined)
-            await api.settings.set('securitySettings', undefined)
-            await api.settings.set('themeId', undefined)
+            await Promise.all([
+                api.settings.set('app-settings', undefined),
+                api.settings.set('editorConfig', undefined),
+                api.settings.set('securitySettings', undefined),
+                resetUserPreferences(),
+            ])
             localStorage.clear()
             window.location.reload()
         }

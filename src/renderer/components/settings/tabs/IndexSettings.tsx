@@ -10,6 +10,7 @@ import { useStore } from '@store'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
 import { Language } from '@renderer/i18n'
+import { loadIndexPreference, saveIndexPreference } from '@/renderer/settings/indexPreference'
 import type { EmbeddingConfigInput, IndexStatus } from '@renderer/types/electron'
 
 interface IndexSettingsProps {
@@ -60,12 +61,9 @@ export function IndexSettings({ language }: IndexSettingsProps) {
 
   // 加载配置
   useEffect(() => {
-    api.settings.get('indexConfig').then(config => {
-      if (config) {
-        const cfg = config as { mode?: IndexMode; embedding?: Partial<EmbeddingConfigState> }
-        if (cfg.mode) setIndexMode(cfg.mode)
-        if (cfg.embedding) setEmbeddingConfig(prev => ({ ...prev, ...cfg.embedding }))
-      }
+    loadIndexPreference().then(config => {
+      if (config.mode) setIndexMode(config.mode)
+      if (config.embedding) setEmbeddingConfig(prev => ({ ...prev, ...config.embedding }))
     })
   }, [])
 
@@ -96,8 +94,8 @@ export function IndexSettings({ language }: IndexSettingsProps) {
   const handleModeChange = useCallback(async (mode: IndexMode) => {
     setIndexMode(mode)
     // 保存到配置文件
-    const currentConfig = await api.settings.get('indexConfig') as { mode?: string; embedding?: object } || {}
-    await api.settings.set('indexConfig', { ...currentConfig, mode })
+    const currentConfig = await loadIndexPreference()
+    await saveIndexPreference({ ...currentConfig, mode })
     // 同步到索引服务
     if (workspacePath) {
       await api.index.setMode(workspacePath, mode)
@@ -123,8 +121,8 @@ export function IndexSettings({ language }: IndexSettingsProps) {
 
     try {
       // 保存到配置文件（统一使用 indexConfig）
-      const currentConfig = await api.settings.get('indexConfig') as { mode?: string; embedding?: object } || {}
-      await api.settings.set('indexConfig', { ...currentConfig, embedding: configToSave })
+      const currentConfig = await loadIndexPreference()
+      await saveIndexPreference({ ...currentConfig, embedding: configToSave })
       // 同步到索引服务
       if (workspacePath) {
         await api.index.updateEmbeddingConfig(workspacePath, configToSave)

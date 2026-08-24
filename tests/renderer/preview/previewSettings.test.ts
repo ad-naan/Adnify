@@ -5,6 +5,7 @@ import {
   dismissOrigin,
   isOriginDismissed,
   loadPreviewSettings,
+  normalizePreviewSettings,
   savePreviewSettings,
   subscribePreviewSettings,
   updatePreviewSettings,
@@ -27,13 +28,15 @@ describe('previewSettings', () => {
   })
 
   it('drops fields of the wrong type', () => {
-    localStorage.setItem('adnify-preview-settings', JSON.stringify({
+    // The durable store is the source of truth now, so type-dropping is asserted
+    // on the normalizer that runs at the persistence boundary rather than by
+    // poking a value into localStorage and reading it back synchronously.
+    const settings = normalizePreviewSettings({
       autoPrompt: 'yes',
       dismissedOrigins: ['http://127.0.0.1:5173', 42, null],
       zoomLevel: 'big',
-    }))
+    })
 
-    const settings = loadPreviewSettings()
     expect(settings.autoPrompt).toBe(false)
     expect(settings.dismissedOrigins).toEqual(['http://127.0.0.1:5173'])
     expect(settings.zoomLevel).toBe(0)

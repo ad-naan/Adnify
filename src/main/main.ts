@@ -171,7 +171,6 @@ function findWindowByWorkspace(roots: string[]): BrowserWindow | null {
 function getThemeBackgroundColor(): string {
   try {
     const themeId = getPersistedThemeId()
-    const themeBg = normalizeRgbColor(configStore?.get('themeBg'), '')
     const themes: Record<string, string> = {
       'adnify-dark': '#121215',
       'midnight': '#161b22',
@@ -179,33 +178,38 @@ function getThemeBackgroundColor(): string {
       'dawn': '#ffffff'
     };
 
-    if (themeBg) {
-      if (themeBg.includes(' ')) {
-        const [r, g, b] = themeBg.split(' ').map(Number);
-        const toHex = (n: number) => n.toString(16).padStart(2, '0');
-        if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
-          return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
-        }
+    if (themes[themeId]) return themes[themeId]
+
+    const customThemes = configStore?.get('customThemes')
+    if (Array.isArray(customThemes)) {
+      const theme = customThemes.find(
+        item => item?.id === themeId && typeof item?.colors?.background === 'string',
+      )
+      const rgb = typeof theme?.colors.background === 'string'
+        ? theme.colors.background.trim().split(/\s+/).map((channel: string) => Number(channel))
+        : []
+      if (rgb.length === 3 && rgb.every((channel: number) => (
+        Number.isInteger(channel) && channel >= 0 && channel <= 255
+      ))) {
+        return `#${rgb.map((channel: number) => channel.toString(16).padStart(2, '0')).join('')}`
       }
-      return themeBg;
     }
 
-    return themes[themeId] || WINDOW_CONFIG.BG_COLOR;
+    return WINDOW_CONFIG.BG_COLOR;
   } catch {
     return WINDOW_CONFIG.BG_COLOR;
   }
 }
 
 function getPersistedThemeId(): string {
-  const currentTheme = typeof configStore?.get('currentTheme') === 'string'
-    ? String(configStore.get('currentTheme'))
-    : ''
-  if (currentTheme) return currentTheme
-
   const themeId = typeof configStore?.get('themeId') === 'string'
     ? String(configStore.get('themeId'))
     : ''
-  return themeId
+  if (themeId) return themeId
+
+  return typeof configStore?.get('currentTheme') === 'string'
+    ? String(configStore.get('currentTheme'))
+    : ''
 }
 
 function normalizeRgbColor(value: unknown, fallback: string): string {
@@ -257,13 +261,19 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
 }
 
 function getShutdownFallbackPresentation(): ShutdownWindowPresentation {
-  const themeBg = normalizeRgbColor(configStore?.get('themeBg'), '18 18 21')
   const themeType = getPersistedThemeId() === 'dawn' ? 'light' : 'dark'
+  const themeId = getPersistedThemeId()
+  const themeBackground: Record<string, string> = {
+    'adnify-dark': '18 18 21',
+    midnight: '22 27 34',
+    cyberpunk: '3 3 5',
+    dawn: '255 255 255',
+  }
 
   return {
     language: configStore?.get('language') === 'en' ? 'en' : 'zh',
     themeType,
-    background: themeBg,
+    background: themeBackground[themeId] || '18 18 21',
     surface: themeType === 'light' ? '248 249 250' : '25 25 29',
     border: themeType === 'light' ? '222 226 230' : '40 40 48',
     text: themeType === 'light' ? '33 37 41' : '242 242 247',
@@ -522,12 +532,10 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 /** 加载窗口页面内容 */
 function loadWindowContent(win: BrowserWindow, isEmpty: boolean) {
   const themeId = getPersistedThemeId()
-  const themeBg = typeof configStore?.get('themeBg') === 'string' ? String(configStore.get('themeBg')) : ''
   const themeType = themeId === 'dawn' ? 'light' : 'dark'
   const query = new URLSearchParams({
     ...(isEmpty ? { empty: '1' } : {}),
     ...(themeId ? { currentTheme: themeId, themeId } : {}),
-    ...(themeBg ? { themeBg } : {}),
     ...(themeId ? { currentThemeType: themeType } : {}),
     themeType,
   }).toString()
@@ -841,6 +849,21 @@ app.on('window-all-closed', () => {
     return
   }
   if (process.platform !== 'darwin') {
+    // 兜底：当多窗口同时关闭时，各窗口的 isLastWindowQuit 可能都判定为 false，
+    // 导致 performGlobalCleanup 从未执行。在这里确保全局清理一定执行后再退出。
+    if (!cleanupStarted) {
+      appQuitInProgress = true
+      void (async () => {
+        try {
+          await withTimeout(performGlobalCleanup(), 5000, 'performGlobalCleanup total')
+        } catch (err) {
+          logger.system.error('[Main] window-all-closed cleanup error:', err)
+        }
+        isCleanupDone = true
+        app.quit()
+      })()
+      return
+    }
     app.quit()
   }
 })

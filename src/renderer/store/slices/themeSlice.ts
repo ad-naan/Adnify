@@ -13,17 +13,8 @@ export interface ThemeSlice {
 }
 
 export const createThemeSlice: StateCreator<ThemeSlice, [], [], ThemeSlice> = (set) => {
-    const savedTheme = typeof localStorage !== 'undefined'
-        ? (localStorage.getItem('adnify-current-theme') || localStorage.getItem('adnify-theme-id'))
-        : null
-    const validIds = builtinThemes.map(t => t.id)
-    // 允许内置主题或已保存的自定义主题 ID
-    const initialTheme = savedTheme && (validIds.includes(savedTheme) || savedTheme.startsWith('custom-'))
-        ? savedTheme
-        : 'adnify-dark'
-
     return {
-        currentTheme: initialTheme,
+        currentTheme: builtinThemes[0].id,
         setTheme: (theme) => set({ currentTheme: theme }),
     }
 }

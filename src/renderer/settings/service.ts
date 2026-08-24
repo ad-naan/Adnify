@@ -48,6 +48,7 @@ const STORAGE_KEYS = {
 } as const
 
 const LOCAL_CACHE_KEY = 'adnify-settings-cache'
+const LEGACY_CACHE_MIGRATED_KEY = 'settingsPersistence.legacyCacheMigrated'
 
 function deepMerge<T extends object>(target: T, source: Partial<T>): T {
   const result = { ...target }
@@ -184,20 +185,10 @@ function buildPersistedSettingsPayload(
 
 class SettingsService {
   private cache: SettingsState | null = null
+  private migrationPromise: Promise<void> | null = null
 
   async load(): Promise<SettingsState> {
-    try {
-      const cached = localStorage.getItem(LOCAL_CACHE_KEY)
-      if (cached) {
-        const parsed = JSON.parse(cached) as Record<string, unknown>
-        const merged = this.merge(parsed)
-        this.cache = merged
-        this.syncFromFile()
-        return merged
-      }
-    } catch {
-      // ignore local cache corruption
-    }
+    await this.migrateLegacyCacheOnce()
 
     try {
       const [appSettings, editorConfig, securitySettings] = await Promise.all([
@@ -213,12 +204,63 @@ class SettingsService {
       })
 
       this.cache = merged
-      this.saveToLocalStorage(merged)
       return merged
     } catch (error) {
-      logger.settings.error('[SettingsService] Load failed:', error)
-      return getAllDefaults()
+      logger.settings.warn('[SettingsService] File load failed, trying local cache:', error)
     }
+
+    try {
+      const cached = localStorage.getItem(LOCAL_CACHE_KEY)
+      if (cached) {
+        const merged = this.merge(JSON.parse(cached) as Record<string, unknown>)
+        this.cache = merged
+        return merged
+      }
+    } catch {
+      // ignore local cache corruption
+    }
+
+    logger.settings.error('[SettingsService] Load failed, using cached/defaults')
+    return this.cache ?? getAllDefaults()
+  }
+
+  private readLegacyCache(): Record<string, unknown> | null {
+    try {
+      const cached = localStorage.getItem(LOCAL_CACHE_KEY)
+      if (!cached) return null
+      const parsed = JSON.parse(cached) as Record<string, unknown>
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
+  private async migrateLegacyCacheOnce(): Promise<void> {
+    this.migrationPromise ??= (async () => {
+      try {
+        const migrated = await api.settings.get(LEGACY_CACHE_MIGRATED_KEY)
+        if (migrated === true) {
+          localStorage.removeItem(LOCAL_CACHE_KEY)
+          return
+        }
+
+        const legacy = this.readLegacyCache()
+        if (legacy) {
+          // The old application used localStorage as its live writer. On the
+          // first corrected launch, that snapshot is authoritative even when a
+          // partial durable file already exists.
+          await this.save(this.merge(legacy))
+        }
+
+        await api.settings.set(LEGACY_CACHE_MIGRATED_KEY, true)
+        localStorage.removeItem(LOCAL_CACHE_KEY)
+      } catch (error) {
+        logger.settings.warn('[SettingsService] Legacy cache migration deferred:', error)
+        this.migrationPromise = null
+      }
+    })()
+
+    return this.migrationPromise
   }
 
   async save(settings: SettingsState): Promise<void> {
@@ -233,7 +275,6 @@ class SettingsService {
       const appSettings = buildPersistedSettingsPayload(settings, cleanedProviderConfigs)
 
       this.cache = settings
-      this.saveToLocalStorage(settings)
 
       await Promise.all([
         api.settings.set(STORAGE_KEYS.APP, appSettings),
@@ -242,6 +283,11 @@ class SettingsService {
       ])
 
       await this.syncToMain(settings)
+      try {
+        localStorage.removeItem(LOCAL_CACHE_KEY)
+      } catch {
+        // LocalStorage is no longer authoritative.
+      }
 
       logger.settings.info('[SettingsService] Saved')
     } catch (error) {
@@ -313,44 +359,6 @@ class SettingsService {
       proxySettings: saved.proxySettings
         ? deepMerge(defaults.proxySettings, saved.proxySettings as object)
         : defaults.proxySettings,
-    }
-  }
-
-  private async syncFromFile(): Promise<void> {
-    try {
-      const [appSettings, editorConfig, securitySettings] = await Promise.all([
-        api.settings.get(STORAGE_KEYS.APP),
-        api.settings.get(STORAGE_KEYS.EDITOR),
-        api.settings.get(STORAGE_KEYS.SECURITY),
-      ])
-
-      if (!appSettings && !editorConfig && !securitySettings) return
-
-      const merged = this.merge({
-        ...(appSettings as object || {}),
-        editorConfig,
-        securitySettings,
-      })
-
-      this.cache = merged
-      this.saveToLocalStorage(merged)
-    } catch {
-      // ignore file refresh failures
-    }
-  }
-
-  private saveToLocalStorage(settings: SettingsState): void {
-    try {
-      localStorage.setItem(
-        LOCAL_CACHE_KEY,
-        JSON.stringify({
-          ...buildPersistedSettingsPayload(settings, settings.providerConfigs),
-          editorConfig: settings.editorConfig,
-          securitySettings: settings.securitySettings,
-        }),
-      )
-    } catch {
-      // ignore local cache write failures
     }
   }
 

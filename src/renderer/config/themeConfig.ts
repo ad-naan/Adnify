@@ -173,8 +173,38 @@ export const builtinThemes: Theme[] = [
   },
 ]
 
-const LOCAL_STORAGE_THEME_KEY = 'adnify-theme-id'
-const LOCAL_STORAGE_CUSTOM_THEMES_KEY = 'adnify-custom-themes'
+const LEGACY_THEME_KEY = 'adnify-theme-id'
+const LEGACY_CUSTOM_THEMES_KEY = 'adnify-custom-themes'
+
+export function normalizeThemeId(value: unknown): string {
+  return typeof value === 'string' && value ? value : builtinThemes[0].id
+}
+
+export function normalizeCustomThemes(value: unknown): Theme[] {
+  return Array.isArray(value) ? value.filter(isValidTheme) : []
+}
+
+function readLegacyValue(storageKey: string): unknown {
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return undefined
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return raw
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function removeFromLocalStorage(storageKey: string): void {
+  try {
+    localStorage.removeItem(storageKey)
+  } catch {
+    // The durable store remains authoritative.
+  }
+}
 
 function isValidTheme(themeInput: unknown): themeInput is Theme {
   if (!themeInput || typeof themeInput !== 'object') return false
@@ -193,8 +223,8 @@ class ThemeManager {
 
   constructor() {
     try {
-      const savedThemeId = localStorage.getItem(LOCAL_STORAGE_THEME_KEY)
-      const savedCustomThemes = localStorage.getItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY)
+      const savedThemeId = localStorage.getItem(LEGACY_THEME_KEY)
+      const savedCustomThemes = localStorage.getItem(LEGACY_CUSTOM_THEMES_KEY)
 
       if (savedCustomThemes) {
         const parsed = JSON.parse(savedCustomThemes)
@@ -223,21 +253,42 @@ class ThemeManager {
         api.settings.get('customThemes'),
       ])
 
-      if (savedCustomThemes && Array.isArray(savedCustomThemes)) {
-        this.customThemes = savedCustomThemes.filter(isValidTheme)
-      }
+      const legacyCustomThemes = savedCustomThemes === undefined
+        ? normalizeCustomThemes(readLegacyValue(LEGACY_CUSTOM_THEMES_KEY))
+        : normalizeCustomThemes(savedCustomThemes)
+      const legacyThemeId = savedThemeId === undefined && savedCurrentTheme === undefined
+        ? normalizeThemeId(readLegacyValue(LEGACY_THEME_KEY))
+        : null
 
-      const themeId = typeof savedCurrentTheme === 'string'
-        ? savedCurrentTheme
-        : typeof savedThemeId === 'string'
-          ? savedThemeId
-          : null
+      this.customThemes = legacyCustomThemes
+
+      const themeId = typeof savedThemeId === 'string' && savedThemeId
+        ? savedThemeId
+        : typeof savedCurrentTheme === 'string'
+          ? savedCurrentTheme
+          : legacyThemeId
       const theme = themeId ? this.getThemeById(themeId) : null
       if (theme) {
         this.currentTheme = theme
       }
 
-      this.applyTheme(this.currentTheme)
+      // One-time migration. Legacy keys are removed only after the durable
+      // writes succeed, so a crash cannot lose the old value.
+      if (savedThemeId === undefined) {
+        await api.settings.set('themeId', this.currentTheme.id)
+      }
+      if (savedCustomThemes === undefined) {
+        await api.settings.set('customThemes', legacyCustomThemes)
+      }
+      removeFromLocalStorage(LEGACY_THEME_KEY)
+      removeFromLocalStorage(LEGACY_CUSTOM_THEMES_KEY)
+      if (savedCurrentTheme !== undefined) {
+        await api.settings.set('currentTheme', undefined)
+      }
+      if (await api.settings.get('themeBg') !== undefined) {
+        await api.settings.set('themeBg', undefined)
+      }
+
       this.initialized = true
     } catch (error) {
       logger.settings.warn('[ThemeManager] Failed to load theme config:', error)
@@ -270,24 +321,10 @@ class ThemeManager {
     this.currentTheme = theme
     this.applyTheme(theme)
 
-    try {
-      localStorage.setItem(LOCAL_STORAGE_THEME_KEY, theme.id)
-      localStorage.setItem('adnify-current-theme', theme.id)
-      localStorage.setItem('adnify-theme-type', theme.type)
-      localStorage.setItem('adnify-theme-bg', theme.colors.background)
-    } catch {
-      // Ignore localStorage errors.
-    }
-
     api.settings.set('themeId', theme.id).catch(error => {
       logger.settings.warn('[ThemeManager] Failed to persist theme:', error)
     })
-    api.settings.set('themeBg', theme.colors.background).catch(error => {
-      logger.settings.warn('[ThemeManager] Failed to persist theme background:', error)
-    })
-    api.settings.set('currentTheme', theme.id).catch(error => {
-      logger.settings.warn('[ThemeManager] Failed to persist current theme:', error)
-    })
+    this.applyTheme(theme)
 
     this.listeners.forEach(listener => listener(theme))
   }
@@ -338,12 +375,6 @@ class ThemeManager {
   }
 
   private persistCustomThemes() {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_CUSTOM_THEMES_KEY, JSON.stringify(this.customThemes))
-    } catch {
-      // Ignore localStorage errors.
-    }
-
     api.settings.set('customThemes', this.customThemes).catch(error => {
       logger.settings.warn('[ThemeManager] Failed to persist custom themes:', error)
     })

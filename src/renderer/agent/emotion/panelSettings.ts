@@ -1,6 +1,9 @@
 /**
- * 情绪感知面板设置：localStorage 持久化
+ * 情绪感知面板设置：electron-store 持久化，localStorage 仅作启动缓存。
  */
+
+import { createPersistentPreference } from '@/renderer/settings/persistentPreference'
+import { USER_PREFERENCE_KEYS } from '@/renderer/settings/preferenceKeys'
 
 export type EmotionPanelSensitivity = 'low' | 'medium' | 'high'
 
@@ -37,48 +40,41 @@ export function isEmotionPrivacyMode(): boolean {
   return loadEmotionPanelSettings().privacyMode
 }
 
-const EMOTION_SETTINGS_KEY = 'adnify-emotion-panel-settings'
-const EMOTION_SETTINGS_EVENT = 'adnify:emotion-settings-changed'
-
 function isValidSensitivity(value: unknown): value is EmotionPanelSensitivity {
   return value === 'low' || value === 'medium' || value === 'high'
 }
 
-export function loadEmotionPanelSettings(): EmotionPanelSettings {
-  try {
-    if (typeof localStorage === 'undefined') return DEFAULT_EMOTION_PANEL_SETTINGS
-    const raw = localStorage.getItem(EMOTION_SETTINGS_KEY)
-    if (!raw) return DEFAULT_EMOTION_PANEL_SETTINGS
-    const parsed = JSON.parse(raw) as Partial<EmotionPanelSettings>
-    return {
-      ...DEFAULT_EMOTION_PANEL_SETTINGS,
-      ...parsed,
-      sensitivity: isValidSensitivity(parsed.sensitivity) ? parsed.sensitivity : 'medium',
-    }
-  } catch {
-    return DEFAULT_EMOTION_PANEL_SETTINGS
+export function normalizeEmotionPanelSettings(value: unknown): EmotionPanelSettings {
+  const parsed = (value && typeof value === 'object' ? value : {}) as Partial<EmotionPanelSettings>
+  return {
+    ambientGlow: typeof parsed.ambientGlow === 'boolean' ? parsed.ambientGlow : DEFAULT_EMOTION_PANEL_SETTINGS.ambientGlow,
+    soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : DEFAULT_EMOTION_PANEL_SETTINGS.soundEnabled,
+    companionEnabled: typeof parsed.companionEnabled === 'boolean' ? parsed.companionEnabled : DEFAULT_EMOTION_PANEL_SETTINGS.companionEnabled,
+    autoAdapt: typeof parsed.autoAdapt === 'boolean' ? parsed.autoAdapt : DEFAULT_EMOTION_PANEL_SETTINGS.autoAdapt,
+    privacyMode: typeof parsed.privacyMode === 'boolean' ? parsed.privacyMode : DEFAULT_EMOTION_PANEL_SETTINGS.privacyMode,
+    sensitivity: isValidSensitivity(parsed.sensitivity) ? parsed.sensitivity : 'medium',
+    decorativeAnimations: typeof parsed.decorativeAnimations === 'boolean'
+      ? parsed.decorativeAnimations
+      : DEFAULT_EMOTION_PANEL_SETTINGS.decorativeAnimations,
   }
+}
+
+const preference = createPersistentPreference<EmotionPanelSettings>({
+  ...USER_PREFERENCE_KEYS.emotionPanelSettings, fallback: DEFAULT_EMOTION_PANEL_SETTINGS, normalize: normalizeEmotionPanelSettings,
+})
+
+export function loadEmotionPanelSettings(): EmotionPanelSettings {
+  return preference.load()
 }
 
 export function saveEmotionPanelSettings(settings: EmotionPanelSettings): void {
-  try {
-    localStorage.setItem(EMOTION_SETTINGS_KEY, JSON.stringify(settings))
-    window.dispatchEvent(new CustomEvent(EMOTION_SETTINGS_EVENT, { detail: settings }))
-  } catch (_) {}
+  preference.save(settings)
 }
 
 export function updateEmotionPanelSettings(patch: Partial<EmotionPanelSettings>): EmotionPanelSettings {
-  const next = { ...loadEmotionPanelSettings(), ...patch }
-  saveEmotionPanelSettings(next)
-  return next
+  return preference.update(patch)
 }
 
 export function subscribeEmotionPanelSettings(listener: (settings: EmotionPanelSettings) => void): () => void {
-  const handler = (event: Event) => {
-    const detail = (event as CustomEvent<EmotionPanelSettings>).detail
-    listener(detail || loadEmotionPanelSettings())
-  }
-
-  window.addEventListener(EMOTION_SETTINGS_EVENT, handler)
-  return () => window.removeEventListener(EMOTION_SETTINGS_EVENT, handler)
+  return preference.subscribe(listener)
 }

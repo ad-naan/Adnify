@@ -78,28 +78,19 @@ class ShellRegistryService {
     this.listeners.forEach(listener => listener(snapshot))
   }
 
-  private saveToLocalStorage(state: ShellState) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch (error) {
-      logger.system.warn('[ShellRegistry] Failed to save local cache:', error)
-    }
-  }
-
-  private loadFromLocalStorage(): ShellState | null {
+  private readLegacyValue(): ShellState | null {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return null
       return this.normalizeState(JSON.parse(raw))
     } catch (error) {
-      logger.system.warn('[ShellRegistry] Failed to load local cache:', error)
+      logger.system.warn('[ShellRegistry] Failed to read legacy data:', error)
       return null
     }
   }
 
   private async persist() {
     const snapshot = this.getState()
-    this.saveToLocalStorage(snapshot)
 
     try {
       await api.settings.set(SETTINGS_KEY, snapshot)
@@ -117,20 +108,19 @@ class ShellRegistryService {
     if (this.loadingPromise) return this.loadingPromise
 
     this.loadingPromise = (async () => {
-      const local = this.loadFromLocalStorage()
-      if (local) {
-        this.state = local
-        this.notify()
-      }
+      const local = this.readLegacyValue()
 
       try {
         const saved = await api.settings.get(SETTINGS_KEY)
         if (saved && typeof saved === 'object') {
           this.state = this.normalizeState(saved as Partial<ShellState>)
-          this.saveToLocalStorage(this.state)
         } else if (local) {
           this.state = local
         }
+        if (saved !== undefined || local) {
+          await api.settings.set(SETTINGS_KEY, this.state)
+        }
+        try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
       } catch (error) {
         logger.system.warn('[ShellRegistry] Failed to load settings:', error)
       }

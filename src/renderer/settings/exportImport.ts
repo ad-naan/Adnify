@@ -5,17 +5,22 @@
 import { isBuiltinProvider } from '@shared/config/providers'
 import type { SettingsState, ProviderModelConfig } from '@shared/config/settings'
 import type { AppSettings } from '@shared/config/types'
+import { exportUserPreferences } from '@/renderer/services/preferenceService'
 
 export interface ExportedSettings {
   version: string
   exportedAt: string
   settings: Partial<SettingsState>
+  userPreferences: Record<string, unknown>
 }
 
 /**
  * 导出配置（不包含敏感信息如 API Key）
  */
-export function exportSettings(settings: SettingsState, includeApiKeys = false): ExportedSettings {
+export async function exportSettings(
+  settings: SettingsState,
+  includeApiKeys = false,
+): Promise<ExportedSettings> {
   const exported: Partial<SettingsState> = {
     language: settings.language,
     autoApprove: settings.autoApprove,
@@ -36,6 +41,7 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
     modelRouting: settings.modelRouting,
     providerConfigs: {},
   }
+  const providerConfigs: Record<string, ProviderModelConfig> = {}
 
   for (const [id, config] of Object.entries(settings.providerConfigs)) {
     const cleanedConfig: Partial<ProviderModelConfig> = {
@@ -56,26 +62,36 @@ export function exportSettings(settings: SettingsState, includeApiKeys = false):
       cleanedConfig.protocol = config.protocol
     }
 
-    exported.providerConfigs![id] = cleanedConfig as ProviderModelConfig
+    providerConfigs[id] = cleanedConfig as ProviderModelConfig
   }
 
   return {
     version: 'export-v1',
     exportedAt: new Date().toISOString(),
     settings: exported,
+    userPreferences: await exportUserPreferences(includeApiKeys),
   }
 }
 
 /**
  * 从 JSON 导入配置
  */
-export function importSettings(json: string): { success: boolean; settings?: Partial<AppSettings>; error?: string } {
+export function importSettings(json: string): {
+  success: boolean
+  settings?: Partial<AppSettings>
+  userPreferences?: Record<string, unknown>
+  error?: string
+} {
   try {
     const parsed = JSON.parse(json) as Record<string, unknown>
 
     // 判断是否是新的带 version 格式
     if (parsed.version && parsed.settings && typeof parsed.settings === 'object') {
-      return { success: true, settings: parsed.settings as Partial<AppSettings> }
+      return {
+        success: true,
+        settings: parsed.settings as Partial<AppSettings>,
+        userPreferences: parsed.userPreferences as Record<string, unknown> | undefined,
+      }
     }
 
     // 尝试识别旧格式的 config.json (包含 llmConfig, providerConfigs 等)
@@ -93,8 +109,8 @@ export function importSettings(json: string): { success: boolean; settings?: Par
 /**
  * 下载配置文件
  */
-export function downloadSettings(settings: SettingsState, includeApiKeys = false): void {
-  const exported = exportSettings(settings, includeApiKeys)
+export async function downloadSettings(settings: SettingsState, includeApiKeys = false): Promise<void> {
+  const exported = await exportSettings(settings, includeApiKeys)
   const json = JSON.stringify(exported, null, 2)
   const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

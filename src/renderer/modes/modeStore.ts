@@ -37,8 +37,26 @@ type ModeStore = ModeState & ModeActions
 const electronStoreStorage = {
     getItem: async (name: string): Promise<string | null> => {
         try {
-            const value = await api.settings.get(`${STORE_KEY}.${name}`)
-            return value ? JSON.stringify(value) : null
+            const storageKey = `${STORE_KEY}.${name}`
+            let value = await api.settings.get(storageKey)
+            if (value !== undefined && value !== null) {
+                removeLegacyModeValue()
+                return JSON.stringify(value)
+            }
+
+            const legacyDurable = await api.settings.get(`${STORE_KEY}.adnify-mode-store`)
+            const legacyMode = (legacyDurable as { state?: { currentMode?: unknown } } | undefined)
+                ?.state?.currentMode
+            if (legacyMode !== undefined) {
+                const currentMode = normalizeMode(legacyMode)
+                await api.settings.set(storageKey, currentMode)
+                await api.settings.set(`${STORE_KEY}.adnify-mode-store`, undefined)
+                removeLegacyModeValue()
+                return JSON.stringify({ [name]: currentMode })
+            }
+
+            value = readLegacyModeValue(name)
+            return JSON.stringify(value)
         } catch {
             return null
         }
@@ -47,6 +65,7 @@ const electronStoreStorage = {
         try {
             const parsed = JSON.parse(value)
             await api.settings.set(`${STORE_KEY}.${name}`, parsed)
+            removeLegacyModeValue()
         } catch { /* ignore */ }
     },
     removeItem: async (name: string): Promise<void> => {
@@ -54,6 +73,25 @@ const electronStoreStorage = {
             await api.settings.set(`${STORE_KEY}.${name}`, undefined)
         } catch { /* ignore */ }
     },
+}
+
+function removeLegacyModeValue(): void {
+    try {
+        localStorage.removeItem('adnify-mode-store')
+    } catch { /* ignore */ }
+}
+
+function readLegacyModeValue(name: string): unknown {
+    if (typeof localStorage === 'undefined') return null
+        try {
+            const raw = localStorage.getItem('adnify-mode-store')
+            if (!raw) return null
+            const parsed = JSON.parse(raw) as { state?: Record<string, unknown> }
+            const value = parsed?.state?.[name]
+            return value === undefined ? null : value
+    } catch {
+        return null
+    }
 }
 
 export const useModeStore = create<ModeStore>()(

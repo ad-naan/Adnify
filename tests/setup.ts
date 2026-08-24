@@ -207,6 +207,11 @@ vi.stubGlobal('self', globalThis)
     onTerminalError: vi.fn(() => vi.fn()),
     onShellOutput: vi.fn(() => vi.fn()),
     indexParseCallGraph: vi.fn(async () => []),
+    // Settings: the persistent-preference layer subscribes at module scope, so
+    // these must exist for any module that creates a preference to be importable.
+    getSetting: vi.fn(async () => undefined),
+    setSetting: vi.fn(async () => true),
+    onSettingsChanged: vi.fn(() => vi.fn()),
   }
 
 // Mock performance API

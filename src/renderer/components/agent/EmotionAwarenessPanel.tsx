@@ -33,6 +33,10 @@ import {
 } from '@/renderer/agent/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EmotionVisualization } from './EmotionVisualization'
+import {
+  loadEmotionWelcomePreference,
+  dismissEmotionWelcome,
+} from '@/renderer/agent/emotion/welcomePreference'
 
 const WELCOME_DATA_SPAN_MS = 15 * 60 * 1000
 
@@ -53,15 +57,11 @@ export const EmotionAwarenessPanel: React.FC = () => {
   const isWelcomeState = !hasEnoughData
 
   const [preferencesOpen, setPreferencesOpen] = useState(false)
-  const [welcomeDismissed, setWelcomeDismissed] = useState(() =>
-    typeof localStorage !== 'undefined' && localStorage.getItem('adnify-emotion-welcome-dismissed') === '1'
-  )
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => loadEmotionWelcomePreference().dismissed)
 
   const handleStartWorking = () => {
     setWelcomeDismissed(true)
-    try {
-      localStorage.setItem('adnify-emotion-welcome-dismissed', '1')
-    } catch (_) { }
+    dismissEmotionWelcome()
   }
 
   const toggleSetting = (key: keyof typeof settings) => {

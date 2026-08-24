@@ -52,6 +52,69 @@ export interface ShellState {
   links: ShellLink[];
 }
 
+export const DEFAULT_SHELL_STATE: ShellState = {
+  defaultShell: undefined,
+  presets: [],
+  links: [],
+}
+
+function normalizePreset(input: unknown): ShellPreset | null {
+  if (!input || typeof input !== 'object') return null
+  const preset = input as Partial<ShellPreset>
+  if (typeof preset.id !== 'string' || typeof preset.name !== 'string') return null
+  return {
+    id: preset.id,
+    name: preset.name,
+    shellPath: typeof preset.shellPath === 'string' ? preset.shellPath : undefined,
+    cwd: typeof preset.cwd === 'string' ? preset.cwd : undefined,
+    args: Array.isArray(preset.args) ? preset.args.filter((item): item is string => typeof item === 'string') : undefined,
+    isDefault: preset.isDefault,
+    visibleInMenu: preset.visibleInMenu !== false,
+    group: typeof preset.group === 'string' ? preset.group.trim() || undefined : undefined,
+    favorite: preset.favorite === true,
+  }
+}
+
+function normalizeLink(input: unknown): ShellLink | null {
+  if (!input || typeof input !== 'object') return null
+  const link = input as Partial<ShellLink> & { remote?: Partial<RemoteServerConfig> }
+  if (typeof link.id !== 'string' || typeof link.name !== 'string' || typeof link.type !== 'string') return null
+  const remote = link.remote && typeof link.remote === 'object' ? link.remote : undefined
+  return {
+    id: link.id,
+    name: link.name,
+    type: link.type,
+    target: typeof link.target === 'string' ? link.target : '',
+    shellPath: typeof link.shellPath === 'string' ? link.shellPath : undefined,
+    args: Array.isArray(link.args) ? link.args.filter((item): item is string => typeof item === 'string') : undefined,
+    visibleInMenu: link.visibleInMenu !== false,
+    remote: remote ? {
+      host: typeof remote.host === 'string' ? remote.host : '',
+      port: remote.port,
+      username: typeof remote.username === 'string' ? remote.username : undefined,
+      password: typeof remote.password === 'string' ? remote.password : undefined,
+      privateKeyPath: typeof remote.privateKeyPath === 'string' ? remote.privateKeyPath : undefined,
+      remotePath: typeof remote.remotePath === 'string' ? remote.remotePath : undefined,
+    } : undefined,
+    group: typeof link.group === 'string' ? link.group.trim() || undefined : undefined,
+    favorite: link.favorite === true,
+    cwd: typeof link.cwd === 'string' ? link.cwd : undefined,
+  }
+}
+
+export function normalizeShellState(value: unknown): ShellState {
+  const parsed = value && typeof value === 'object' ? value as Partial<ShellState> : {}
+  return {
+    defaultShell: typeof parsed.defaultShell === 'string' ? parsed.defaultShell : undefined,
+    presets: Array.isArray(parsed.presets)
+      ? parsed.presets.map(normalizePreset).filter((item): item is ShellPreset => item !== null)
+      : [],
+    links: Array.isArray(parsed.links)
+      ? parsed.links.map(normalizeLink).filter((item): item is ShellLink => item !== null)
+      : [],
+  }
+}
+
 export interface CreateShellSessionOptions {
   name: string;
   cwd: string;
