@@ -115,7 +115,7 @@ function pushPaths(items: OpenFilesPayload['items']): void {
     pendingItems.set(item.path.toLowerCase(), item)
     // 将用户主动打开的文件路径加入授权集合
     if (item.kind === 'file') {
-      authorizeUserFile(item.path, 'file-association')
+      authorizeUserFile(item.path, 'file-association', 'write')
     }
   }
 }

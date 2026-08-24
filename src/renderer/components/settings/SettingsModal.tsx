@@ -492,8 +492,6 @@ export default function SettingsModal() {
             case 'agent':
                 return (
                     <AgentSettings
-                        autoApprove={localAutoApprove}
-                        setAutoApprove={setLocalAutoApprove}
                         aiInstructions={localAiInstructions}
                         setAiInstructions={setLocalAiInstructions}
                         promptTemplateId={localPromptTemplateId}
@@ -523,6 +521,8 @@ export default function SettingsModal() {
                         language={language}
                         securitySettings={localSecuritySettings}
                         setSecuritySettings={setLocalSecuritySettings}
+                        autoApprove={localAutoApprove}
+                        setAutoApprove={setLocalAutoApprove}
                     />
                 )
             case 'system':

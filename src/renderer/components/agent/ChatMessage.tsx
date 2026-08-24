@@ -63,7 +63,9 @@ interface ChatMessageProps {
   onRegenerate?: (messageId: string) => void
   onRestore?: (messageId: string) => void
   onApproveTool?: () => void
+  onApproveToolForTask?: () => void
   onRejectTool?: () => void
+  onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   onSelectOption?: (messageId: string, selectedIds: string[]) => void
   pendingToolId?: string
@@ -76,7 +78,9 @@ interface RenderPartProps {
   index: number
   pendingToolId?: string
   onApproveTool?: () => void
+  onApproveToolForTask?: () => void
   onRejectTool?: () => void
+  onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   fontSize: number
   isStreaming?: boolean
@@ -834,7 +838,9 @@ const RenderPart = React.memo(({
   index,
   pendingToolId,
   onApproveTool,
+  onApproveToolForTask,
   onRejectTool,
+  onStopTool,
   onOpenDiff,
   fontSize,
   isStreaming,
@@ -909,7 +915,9 @@ const RenderPart = React.memo(({
         {renderToolCallCard(tc, {
           pendingToolId,
           onApproveTool,
+          onApproveToolForTask,
           onRejectTool,
+          onStopTool,
           onOpenDiff,
           messageId,
         })}
@@ -927,7 +935,9 @@ const AssistantMessageContent = React.memo(({
   parts,
   pendingToolId,
   onApproveTool,
+  onApproveToolForTask,
   onRejectTool,
+  onStopTool,
   onOpenDiff,
   fontSize,
   isStreaming,
@@ -936,7 +946,9 @@ const AssistantMessageContent = React.memo(({
   parts: AssistantPart[]
   pendingToolId?: string
   onApproveTool?: () => void
+  onApproveToolForTask?: () => void
   onRejectTool?: () => void
+  onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   fontSize: number
   isStreaming?: boolean
@@ -983,7 +995,9 @@ const AssistantMessageContent = React.memo(({
                 index={group.index}
                 pendingToolId={pendingToolId}
                 onApproveTool={onApproveTool}
+                onApproveToolForTask={onApproveToolForTask}
                 onRejectTool={onRejectTool}
+                onStopTool={onStopTool}
                 onOpenDiff={onOpenDiff}
                 fontSize={fontSize}
                 isStreaming={isStreaming}
@@ -1001,7 +1015,9 @@ const AssistantMessageContent = React.memo(({
                 index={group.startIndex}
                 pendingToolId={pendingToolId}
                 onApproveTool={onApproveTool}
+                onApproveToolForTask={onApproveToolForTask}
                 onRejectTool={onRejectTool}
+                onStopTool={onStopTool}
                 onOpenDiff={onOpenDiff}
                 fontSize={fontSize}
                 isStreaming={isStreaming}
@@ -1017,7 +1033,9 @@ const AssistantMessageContent = React.memo(({
               toolCalls={group.toolCalls}
               pendingToolId={pendingToolId}
               onApproveTool={onApproveTool}
+              onApproveToolForTask={onApproveToolForTask}
               onRejectTool={onRejectTool}
+              onStopTool={onStopTool}
               onOpenDiff={onOpenDiff}
               messageId={messageId}
             />
@@ -1035,7 +1053,9 @@ const ChatMessage = React.memo(({
   onRegenerate,
   onRestore,
   onApproveTool,
+  onApproveToolForTask,
   onRejectTool,
+  onStopTool,
   onOpenDiff,
   pendingToolId,
   hasCheckpoint,
@@ -1477,7 +1497,9 @@ const ChatMessage = React.memo(({
                         parts={processAssistantParts}
                         pendingToolId={pendingToolId}
                         onApproveTool={onApproveTool}
+                        onApproveToolForTask={onApproveToolForTask}
                         onRejectTool={onRejectTool}
+                        onStopTool={onStopTool}
                         onOpenDiff={onOpenDiff}
                         fontSize={fontSize}
                         isStreaming={false}
@@ -1491,7 +1513,9 @@ const ChatMessage = React.memo(({
                     parts={alertAssistantParts}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
+                    onApproveToolForTask={onApproveToolForTask}
                     onRejectTool={onRejectTool}
+                    onStopTool={onStopTool}
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
                     isStreaming={message.isStreaming}
@@ -1503,7 +1527,9 @@ const ChatMessage = React.memo(({
                     parts={visibleAssistantParts}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
+                    onApproveToolForTask={onApproveToolForTask}
                     onRejectTool={onRejectTool}
+                    onStopTool={onStopTool}
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
                     isStreaming={message.isStreaming}
@@ -1515,7 +1541,9 @@ const ChatMessage = React.memo(({
                     toolCalls={previewToolCalls}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
+                    onApproveToolForTask={onApproveToolForTask}
                     onRejectTool={onRejectTool}
+                    onStopTool={onStopTool}
                     onOpenDiff={onOpenDiff}
                     messageId={message.id}
                   />

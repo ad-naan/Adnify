@@ -283,7 +283,7 @@ export const zh = {
   'error.quotaExceeded': 'API 配额已用尽，请检查账单',
   'error.fileNotFound': '文件未找到：{path}',
   'error.permissionDenied': '权限被拒绝',
-  'error.whitelistBlocked': '命令不在白名单中，请在设置 > 安全中添加',
+  'error.whitelistBlocked': '命令不在可信自动执行列表中，需要单次授权',
 
   // Success Messages (新增)
   'success.fileSaved': '文件保存成功',

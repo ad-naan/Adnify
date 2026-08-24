@@ -37,6 +37,7 @@ import type { PendingChange, TodoItem } from '@/renderer/agent/types'
 import type { QueuedMessage } from '@/renderer/agent/types/queue'
 import { useStore } from '@store'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
+import { ToolApprovalActions } from './ToolApprovalActions'
 
 type TabView = 'files' | 'tasks' | 'queue'
 
@@ -52,6 +53,7 @@ interface UnifiedStatusTrayProps {
   onUndoAll?: () => void
   onKeepAll?: () => void
   onApproveTool?: () => void
+  onApproveToolForTask?: () => void
   onRejectTool?: () => void
   onQueueSendNow?: (id: string) => void
 }
@@ -68,6 +70,7 @@ function UnifiedStatusTray({
   onUndoAll,
   onKeepAll,
   onApproveTool,
+  onApproveToolForTask,
   onRejectTool,
   onQueueSendNow,
 }: UnifiedStatusTrayProps) {
@@ -198,24 +201,14 @@ function UnifiedStatusTray({
 
             {/* 审批按钮 */}
             {!isStreaming && isAwaitingApproval && (onApproveTool || onRejectTool) && (
-              <div className="flex items-center gap-1">
-                {onRejectTool && (
-                  <button
-                    onClick={onRejectTool}
-                    className="px-2 py-1 text-[10px] font-medium text-text-muted/70 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
-                  >
-                    Cancel
-                  </button>
-                )}
-                {onApproveTool && (
-                  <button
-                    onClick={onApproveTool}
-                    className="px-2.5 py-1 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover rounded-md transition-all"
-                  >
-                    Approve
-                  </button>
-                )}
-              </div>
+              <ToolApprovalActions
+                language={language}
+                compact
+                onApprove={onApproveTool}
+                onApproveForTask={onApproveToolForTask}
+                onReject={onRejectTool}
+                onStop={onStop}
+              />
             )}
 
             {/* Files tab 批量操作 */}

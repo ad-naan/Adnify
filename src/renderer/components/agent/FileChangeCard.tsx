@@ -15,12 +15,15 @@ import { api } from '@/renderer/services/electronAPI'
 import { toast } from '@components/common/ToastProvider'
 import { isCreateActionLabel, resolveFileChangeActionLabel } from '@renderer/agent/utils/fileWriteDisplay'
 import { RollingNumber } from '@components/ui'
+import { ToolApprovalActions } from './ToolApprovalActions'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
     onApprove?: () => void
+    onApproveForTask?: () => void
     onReject?: () => void
+    onStop?: () => void
     onOpenInEditor?: (path: string, oldContent: string, newContent: string) => void
     messageId?: string
 }
@@ -29,7 +32,9 @@ function FileChangeCard({
     toolCall,
     isAwaitingApproval,
     onApprove,
+    onApproveForTask,
     onReject,
+    onStop,
     onOpenInEditor,
 }: FileChangeCardProps) {
     const { openFile, setActiveFile, workspacePath, language, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
@@ -371,19 +376,14 @@ function FileChangeCard({
 
             {/* Approval Actions */}
             {isAwaitingApproval && (
-                <div className="flex items-center justify-end gap-2 px-3 py-2 border-t border-yellow-500/10 bg-yellow-500/5">
-                    <button
-                        onClick={onReject}
-                        className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all active:scale-95"
-                    >
-                        Reject
-                    </button>
-                    <button
-                        onClick={onApprove}
-                        className="px-3 py-1.5 text-xs font-medium bg-accent text-white hover:bg-accent-hover rounded-md transition-all shadow-sm shadow-accent/20 active:scale-95 hover:shadow-accent/40"
-                    >
-                        Accept
-                    </button>
+                <div className="border-t border-yellow-500/10 bg-yellow-500/5 px-3 py-2">
+                    <ToolApprovalActions
+                        language={language}
+                        onApprove={onApprove}
+                        onApproveForTask={onApproveForTask}
+                        onReject={onReject}
+                        onStop={onStop}
+                    />
                 </div>
             )}
         </div>

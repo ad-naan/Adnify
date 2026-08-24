@@ -290,7 +290,7 @@ export interface ElectronAPI {
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<void>
   mkdir: (path: string) => Promise<boolean>
-  deleteFile: (path: string) => Promise<boolean>
+  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<boolean>
   copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
@@ -301,7 +301,6 @@ export interface ElectronAPI {
   getConfigPath: () => Promise<string>
   setConfigPath: (path: string) => Promise<boolean>
   onSettingsChanged: (callback: (event: { key: string; value: unknown }) => void) => () => void
-  getWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
 
   // LLM
@@ -364,7 +363,6 @@ export interface ElectronAPI {
     args?: string[]
     cwd?: string
     timeout?: number
-    requireConfirm?: boolean
   }) => Promise<{
     success: boolean
     output?: string
@@ -381,10 +379,6 @@ export interface ElectronAPI {
     exitCode?: number
     error?: string
   }>
-
-  // Security Management
-  getPermissions: () => Promise<Record<string, string>>
-  resetPermissions: () => Promise<boolean>
 
   // File watcher
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => () => void
@@ -625,7 +619,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showItemInFolder: (path: string) => ipcRenderer.invoke('file:showInFolder', path),
   openInBrowser: (path: string) => ipcRenderer.invoke('file:openInBrowser', path),
   mkdir: (path: string) => ipcRenderer.invoke('file:mkdir', path),
-  deleteFile: (path: string) => ipcRenderer.invoke('file:delete', path),
+  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => ipcRenderer.invoke('file:delete', path, approval),
   copyFile: (sourcePath: string, destinationPath: string) => ipcRenderer.invoke('file:copy', sourcePath, destinationPath),
   renameFile: (oldPath: string, newPath: string) => ipcRenderer.invoke('file:rename', oldPath, newPath),
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) =>
@@ -653,7 +647,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('settings:changed', handler)
     return () => ipcRenderer.removeListener('settings:changed', handler)
   },
-  getWhitelist: () => ipcRenderer.invoke('settings:getWhitelist'),
   resetWhitelist: () => ipcRenderer.invoke('settings:resetWhitelist'),
   getUserDataPath: () => ipcRenderer.invoke('settings:getUserDataPath'),
   getRecentLogs: () => ipcRenderer.invoke('settings:getRecentLogs'),
@@ -705,7 +698,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
     ipcRenderer.invoke('shell:executeBackground', params),
-  runPiped: (params: { command: string; cwd?: string; timeout?: number; shell?: string; maxOutputChars?: number }) =>
+  runPiped: (params: { command: string; cwd?: string; timeout?: number; shell?: string; maxOutputChars?: number; authorizationId?: string }) =>
     ipcRenderer.invoke('shell:runPiped', params),
   onShellOutput: (callback: (event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => void) => {
     const handler = (_: IpcRendererEvent, event: { command: string; type: 'stdout' | 'stderr'; data: string; timestamp: number }) => callback(event)
@@ -744,17 +737,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   remoteHostTrustGetStatus: (server: RemoteShellServer) => ipcRenderer.invoke('remoteHostTrust:getStatus', server),
   remoteHostTrustGetLastDecision: (server: RemoteShellServer) => ipcRenderer.invoke('remoteHostTrust:getLastDecision', server),
 
-  executeSecureCommand: (request: { command: string; args?: string[]; cwd?: string; timeout?: number; requireConfirm?: boolean }) =>
+  executeSecureCommand: (request: { command: string; args?: string[]; cwd?: string; timeout?: number }) =>
     ipcRenderer.invoke('shell:executeSecure', request),
 
   gitExecSecure: (args: string[], cwd: string) => ipcRenderer.invoke('git:execSecure', args, cwd),
 
-  getPermissions: () => ipcRenderer.invoke('security:getPermissions'),
-  resetPermissions: () => ipcRenderer.invoke('security:resetPermissions'),
-  requestExternalFileAccess: (filePath: string) =>
-    ipcRenderer.invoke('security:requestExternalFileAccess', filePath) as Promise<{
+  requestExternalFileAccess: (filePath: string, access: 'read' | 'write' | 'manage' = 'read', approval?: import('@shared/security/executionPolicy').AgentApprovalProof) =>
+    ipcRenderer.invoke('security:requestExternalFileAccess', filePath, access, approval) as Promise<{
       allowed: boolean
-      reason: 'invalid-path' | 'sensitive-path' | 'already-granted' | 'granted' | 'denied'
+      reason: 'invalid-path' | 'already-granted' | 'agent-approved' | 'approval-required' | 'approval-invalid'
+    }>,
+  authorizeCommand: (request: { command: string; cwd?: string; approval?: import('@shared/security/executionPolicy').AgentApprovalProof }) =>
+    ipcRenderer.invoke('security:authorizeCommand', request) as Promise<{
+      allowed: boolean
+      authorizationId?: string
+      reason?: string
+      risk?: string
     }>,
 
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => {

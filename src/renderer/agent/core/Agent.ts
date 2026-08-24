@@ -349,6 +349,19 @@ export class AgentClass {
     }
   }
 
+  /** 在当前任务内批准完全相同的操作。 */
+  approveForTask(requestId?: string): void {
+    const state = useAgentStore.getState()
+    const currentThread = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
+    const effectiveRequestId = requestId
+      || currentThread?.streamState?.requestId
+      || currentThread?.executionMeta?.requestId
+
+    if (effectiveRequestId) {
+      approvalService.approveForTask(effectiveRequestId)
+    }
+  }
+
   /**
    * 拒绝当前待审批的工具
    */

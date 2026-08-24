@@ -33,7 +33,6 @@ import {
   cleanupSecureFileWatcher,
   cleanupTerminals,
   updateWhitelist,
-  getWhitelist,
 } from '../security'
 // 上下文类型
 export interface IPCContext {
@@ -76,8 +75,7 @@ export function registerAllHandlers(context: IPCContext) {
   // 设置（传入 resolveStore 和各 store 引用）
   registerSettingsHandlers(resolveStore, preferencesStore, bootstrapStore, {
     securityManager,
-    updateWhitelist,
-    getWhitelist
+    updateWhitelist
   })
 
   // 终端（安全版）- 传入窗口工作区获取函数实现多窗口隔离

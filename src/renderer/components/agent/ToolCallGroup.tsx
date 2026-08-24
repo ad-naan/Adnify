@@ -16,6 +16,29 @@ import { MemoryApprovalInline } from './MemoryApprovalInline'
 import { needsDiffPreview } from '@/shared/config/tools'
 import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
 import SubAgentTaskCard from './SubAgentTaskCard'
+import { assessShellCommand } from '@shared/security/executionPolicy'
+
+const NON_REUSABLE_APPROVAL_TOOLS = new Set([
+  'delete_file_or_folder',
+  'list_remote_directory',
+  'read_remote_file',
+  'write_remote_file',
+  'rename_remote_path',
+  'delete_remote_path',
+  'upload_to_remote',
+  'download_from_remote',
+])
+
+export function supportsTaskApproval(toolCall: ToolCall): boolean {
+  if (NON_REUSABLE_APPROVAL_TOOLS.has(toolCall.name)) return false
+  if (toolCall.name === 'run_command') {
+    if (toolCall.arguments.server_name) return false
+    const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
+    const decision = assessShellCommand(command, [])
+    return decision.kind !== 'deny' && decision.risk !== 'dangerous'
+  }
+  return typeof toolCall.arguments.path === 'string'
+}
 
 /**
  * 渲染单个工具调用卡片的统一入口。
@@ -27,7 +50,9 @@ export function renderToolCallCard(
   opts: {
     pendingToolId?: string
     onApproveTool?: () => void
+    onApproveToolForTask?: () => void
     onRejectTool?: () => void
+    onStopTool?: () => void
     onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
     messageId?: string
   },
@@ -42,7 +67,9 @@ export function renderToolCallCard(
         toolCall={tc}
         isAwaitingApproval={isPending}
         onApprove={isPending ? opts.onApproveTool : undefined}
+        onApproveForTask={isPending && supportsTaskApproval(tc) ? opts.onApproveToolForTask : undefined}
         onReject={isPending ? opts.onRejectTool : undefined}
+        onStop={isPending ? opts.onStopTool : undefined}
         onOpenInEditor={opts.onOpenDiff}
         messageId={opts.messageId}
       />
@@ -85,7 +112,9 @@ export function renderToolCallCard(
       toolCall={tc}
       isAwaitingApproval={isPending}
       onApprove={isPending ? opts.onApproveTool : undefined}
+      onApproveForTask={isPending && supportsTaskApproval(tc) ? opts.onApproveToolForTask : undefined}
       onReject={isPending ? opts.onRejectTool : undefined}
+      onStop={isPending ? opts.onStopTool : undefined}
     />
   )
 }
@@ -94,7 +123,9 @@ interface ToolCallGroupProps {
   toolCalls: ToolCall[]
   pendingToolId?: string
   onApproveTool?: () => void
+  onApproveToolForTask?: () => void
   onRejectTool?: () => void
+  onStopTool?: () => void
   onOpenDiff?: (path: string, oldContent: string, newContent: string) => void
   messageId?: string
 }
@@ -103,11 +134,13 @@ function ToolCallGroup({
   toolCalls,
   pendingToolId,
   onApproveTool,
+  onApproveToolForTask,
   onRejectTool,
+  onStopTool,
   onOpenDiff,
   messageId,
 }: ToolCallGroupProps) {
-  const opts = { pendingToolId, onApproveTool, onRejectTool, onOpenDiff, messageId }
+  const opts = { pendingToolId, onApproveTool, onApproveToolForTask, onRejectTool, onStopTool, onOpenDiff, messageId }
 
   return (
     <div className="my-2 space-y-2">

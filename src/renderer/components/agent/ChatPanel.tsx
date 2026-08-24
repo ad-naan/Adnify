@@ -59,6 +59,7 @@ import { isPlanBoardPath } from '@/shared/types/planBoard'
 import { findMostRecentThreadForMode, isTopLevelThreadForMode } from '@/renderer/agent/threads/threadModeProjection'
 import type { WorkMode } from '@/shared/types/workMode'
 import { findThreadIdForMessage } from '@/renderer/agent/utils/interactiveResponse'
+import { supportsTaskApproval } from './ToolCallGroup'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -147,7 +148,8 @@ export default function ChatPanel() {
   const visibleContextItems = useMemo(() => contextItems.filter(item => !(
     item.type === 'File' && isPlanBoardPath((item as FileContext).uri)
   )), [contextItems])
-  const { sendMessage, abort, approveCurrentTool, rejectCurrentTool } = useAgentCommands()
+  const { sendMessage, abort, approveCurrentTool, approveCurrentToolForTask, rejectCurrentTool } = useAgentCommands()
+  const canApprovePendingToolForTask = pendingToolCall ? supportsTaskApproval(pendingToolCall) : false
   const {
     createThread,
     clearMessages,
@@ -1223,14 +1225,16 @@ export default function ChatPanel() {
         onRegenerate={handleRegenerate}
         onRestore={handleRestore}
         onApproveTool={approveCurrentTool}
+        onApproveToolForTask={canApprovePendingToolForTask ? approveCurrentToolForTask : undefined}
         onRejectTool={rejectCurrentTool}
+        onStopTool={abort}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
         hasCheckpoint={item.item.hasCheckpoint}
         isAwaitingApproval={isAwaitingApproval}
       />
     )
-  }, [approveCurrentTool, handleEditMessage, handleRegenerate, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, rejectCurrentTool, renderArchiveItem])
+  }, [abort, approveCurrentTool, approveCurrentToolForTask, canApprovePendingToolForTask, handleEditMessage, handleRegenerate, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, rejectCurrentTool, renderArchiveItem])
 
   const handleTimelineRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
     visibleRangeRef.current = range
@@ -1497,6 +1501,7 @@ export default function ChatPanel() {
                 onUndoAll={handleUndoAll}
                 onKeepAll={handleKeepAll}
                 onApproveTool={approveCurrentTool}
+                onApproveToolForTask={canApprovePendingToolForTask ? approveCurrentToolForTask : undefined}
                 onRejectTool={rejectCurrentTool}
                 onQueueSendNow={(id) => {
                   useMessageQueueStore.getState().promote(id)

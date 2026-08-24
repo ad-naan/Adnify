@@ -5,7 +5,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { executeTools } from '@renderer/agent/core/tools'
+import { approvalService } from '@renderer/agent/core/approvalService'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
+import { toolManager } from '@renderer/agent/tools/providers'
 import type { ToolCall } from '@shared/types'
 import type { ToolExecutionContext } from '@renderer/agent/core/types'
 
@@ -111,6 +113,82 @@ describe('Tools Core - Parallel Execution', () => {
   })
 
   describe('Parallel Tool Execution Performance', () => {
+    it('passes the Dock approval proof into the tool execution context', async () => {
+      const requestId = 'request-with-command-approval'
+      const command = 'adnify-security-probe --version'
+      const execution = executeTools(
+        [{ id: 'approved-command', name: 'run_command', arguments: { command }, status: 'pending' }],
+        { ...context, requestId },
+        getStore(),
+      )
+
+      setTimeout(() => approvalService.approve(requestId), 0)
+      await execution
+
+      expect(toolManager.execute).toHaveBeenCalledWith(
+        'run_command',
+        expect.objectContaining({ command }),
+        expect.objectContaining({
+          requestId,
+          toolCallId: 'approved-command',
+          securityApproval: expect.objectContaining({
+            requestId,
+            toolCallId: 'approved-command',
+            scope: `command:/test/workspace:${command}`,
+          }),
+        }),
+      )
+    })
+
+    it('returns a rejection to the model and skips later approval calls in the batch', async () => {
+      const requestId = 'request-rejects-command-batch'
+      const execution = executeTools(
+        [
+          { id: 'rejected-command', name: 'run_command', arguments: { command: 'adnify-reject-probe --one' }, status: 'pending' },
+          { id: 'skipped-command', name: 'run_command', arguments: { command: 'adnify-reject-probe --two' }, status: 'pending' },
+        ],
+        { ...context, requestId },
+        getStore(),
+      )
+
+      setTimeout(() => approvalService.reject(requestId), 0)
+      const outcome = await execution
+
+      expect(outcome.hadRejectedTool).toBe(true)
+      expect(outcome.results.map(result => result.result.status)).toEqual(['rejected', 'rejected'])
+      expect(outcome.results[0].result.content).toContain('Do not retry')
+      expect(outcome.results[1].result.content).toContain('another approval in this batch')
+      expect(toolManager.execute).not.toHaveBeenCalled()
+
+      const retry = await executeTools(
+        [{ id: 'semantic-retry', name: 'run_command', arguments: { command: 'adnify-reject-probe --one' }, status: 'pending' }],
+        { ...context, requestId },
+        getStore(),
+      )
+      expect(retry.results[0].result.content).toContain('Rejected earlier in this turn')
+      expect(toolManager.execute).not.toHaveBeenCalled()
+    })
+
+    it('reuses an exact approval for the rest of the current task when requested', async () => {
+      const requestId = 'request-task-scoped-command'
+      const command = 'adnify-task-scope-probe --version'
+      const execution = executeTools(
+        [
+          { id: 'task-command-one', name: 'run_command', arguments: { command }, status: 'pending' },
+          { id: 'task-command-two', name: 'run_command', arguments: { command }, status: 'pending' },
+        ],
+        { ...context, requestId },
+        getStore(),
+      )
+
+      setTimeout(() => approvalService.approveForTask(requestId), 0)
+      const outcome = await execution
+
+      expect(outcome.hadRejectedTool).toBe(false)
+      expect(outcome.results).toHaveLength(2)
+      expect(toolManager.execute).toHaveBeenCalledTimes(2)
+    })
+
     it('should execute multiple fast tools in parallel efficiently', async () => {
       // 创建 5 个快速工具
       const toolCalls: ToolCall[] = [

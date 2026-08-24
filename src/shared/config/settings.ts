@@ -165,11 +165,9 @@ const defaultEditorConfig: EditorConfig = {
 }
 
 const defaultSecuritySettings: SecuritySettings = {
-  enablePermissionConfirm: SECURITY_SETTINGS_DEFAULTS.enablePermissionConfirm,
   strictWorkspaceMode: SECURITY_SETTINGS_DEFAULTS.strictWorkspaceMode,
   allowedShellCommands: [...SECURITY_SETTINGS_DEFAULTS.allowedShellCommands],
   allowedGitSubcommands: [...SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands],
-  showSecurityWarnings: SECURITY_SETTINGS_DEFAULTS.showSecurityWarnings,
 }
 
 const defaultAutoApprove: AutoApproveSettings = { ...AUTO_APPROVE_DEFAULTS }

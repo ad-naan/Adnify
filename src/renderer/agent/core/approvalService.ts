@@ -1,7 +1,9 @@
-class ApprovalServiceClass {
-  private pendingResolves = new Map<string, (approved: boolean) => void>()
+export type ApprovalDecision = 'approve' | 'approve_for_task' | 'reject'
 
-  async waitForApproval(requestId?: string): Promise<boolean> {
+class ApprovalServiceClass {
+  private pendingResolves = new Map<string, (decision: ApprovalDecision) => void>()
+
+  async waitForApproval(requestId?: string): Promise<ApprovalDecision> {
     const id = requestId || crypto.randomUUID()
     return new Promise((resolve) => {
       this.pendingResolves.set(id, resolve)
@@ -10,28 +12,42 @@ class ApprovalServiceClass {
 
   approve(requestId?: string): void {
     if (requestId) {
-      this.pendingResolves.get(requestId)?.(true)
+      this.pendingResolves.get(requestId)?.('approve')
       this.pendingResolves.delete(requestId)
       return
     }
 
     const lastKey = Array.from(this.pendingResolves.keys()).pop()
     if (lastKey) {
-      this.pendingResolves.get(lastKey)?.(true)
+      this.pendingResolves.get(lastKey)?.('approve')
+      this.pendingResolves.delete(lastKey)
+    }
+  }
+
+  approveForTask(requestId?: string): void {
+    if (requestId) {
+      this.pendingResolves.get(requestId)?.('approve_for_task')
+      this.pendingResolves.delete(requestId)
+      return
+    }
+
+    const lastKey = Array.from(this.pendingResolves.keys()).pop()
+    if (lastKey) {
+      this.pendingResolves.get(lastKey)?.('approve_for_task')
       this.pendingResolves.delete(lastKey)
     }
   }
 
   reject(requestId?: string): void {
     if (requestId) {
-      this.pendingResolves.get(requestId)?.(false)
+      this.pendingResolves.get(requestId)?.('reject')
       this.pendingResolves.delete(requestId)
       return
     }
 
     const lastKey = Array.from(this.pendingResolves.keys()).pop()
     if (lastKey) {
-      this.pendingResolves.get(lastKey)?.(false)
+      this.pendingResolves.get(lastKey)?.('reject')
       this.pendingResolves.delete(lastKey)
     }
   }

@@ -48,7 +48,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'snippets.add', tab: 'snippets', label: { en: 'Add Snippet', zh: '添加代码片段' }, keywords: ['add', 'create', '添加', '创建', 'new', '新建', 'snippet', '片段'] },
 
   // ========== agent（智能体）==========
-  { id: 'agent.autoApprove', tab: 'agent', label: { en: 'Automation Permissions', zh: '自动化权限' }, keywords: ['auto', 'approve', '自动', '批准', 'permission', '权限', 'dangerous', '危险'] },
+  { id: 'agent.automation', tab: 'agent', label: { en: 'Agent Automation', zh: 'Agent 自动化' }, keywords: ['auto', 'automation', '自动化', 'fix', '修复'] },
   { id: 'agent.autoFix', tab: 'agent', label: { en: 'Auto-check & Fix', zh: '自动检查与修复' }, keywords: ['auto', 'fix', 'check', '自动', '修复', '检查', 'lint'] },
   { id: 'agent.terminalRules', tab: 'agent', label: { en: 'Terminal Command Rules', zh: '终端命令规则' }, keywords: ['terminal', 'command', 'rule', '终端', '命令', '规则', 'whitelist', '白名单'] },
   { id: 'agent.promptTemplate', tab: 'agent', label: { en: 'Prompt Template', zh: 'Prompt 模板' }, keywords: ['prompt', 'template', '模板', '提示词', 'system prompt'] },
@@ -96,8 +96,9 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'security.confirmation', tab: 'security', label: { en: 'Permission Confirmation', zh: '操作确认' }, keywords: ['permission', '权限', 'confirmation', '确认', 'approve', '批准'] },
   { id: 'security.strictWorkspace', tab: 'security', label: { en: 'Strict Workspace Mode', zh: '严格工作区模式' }, keywords: ['strict', '严格', 'workspace', '工作区', 'mode', '模式'] },
   { id: 'security.warnings', tab: 'security', label: { en: 'Security Warnings', zh: '安全警告' }, keywords: ['warning', '警告', 'security', '安全', 'alert', '提醒'] },
-  { id: 'security.shellWhitelist', tab: 'security', label: { en: 'Shell Command Whitelist', zh: 'Shell 命令白名单' }, keywords: ['shell', 'command', '命令', 'whitelist', '白名单', 'allow', '允许'] },
-  { id: 'security.gitWhitelist', tab: 'security', label: { en: 'Git Subcommand Whitelist', zh: 'Git 子命令白名单' }, keywords: ['git', 'subcommand', '子命令', 'whitelist', '白名单'] },
+  { id: 'security.shellWhitelist', tab: 'security', label: { en: 'Trusted Shell Executables', zh: 'Shell 可信程序' }, keywords: ['shell', 'command', '命令', 'trusted', '可信', 'executable', '程序', 'whitelist', '白名单'] },
+  { id: 'security.gitWhitelist', tab: 'security', label: { en: 'Trusted Git Subcommands', zh: 'Git 可信子命令' }, keywords: ['git', 'subcommand', '子命令', 'trusted', '可信', 'whitelist', '白名单'] },
+  { id: 'security.terminalRules', tab: 'security', label: { en: 'Terminal Auto-approval Rules', zh: '终端免审批规则' }, keywords: ['terminal', 'command', 'rule', 'approve', '终端', '命令', '规则', '审批'] },
 
   // ========== system（系统）==========
   { id: 'system.githubToken', tab: 'system', label: { en: 'GitHub Token', zh: 'GitHub Token' }, keywords: ['github', 'token', 'pat', 'personal access', '令牌'] },

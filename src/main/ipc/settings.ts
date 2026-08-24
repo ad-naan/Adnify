@@ -14,7 +14,6 @@ import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/c
 interface SecurityModuleRef {
   securityManager: any
   updateWhitelist: (shell: string[], git: string[]) => void
-  getWhitelist: () => { shell: string[]; git: string[] }
 }
 
 const RECENT_LOG_MAX_BYTES = 1024 * 1024
@@ -157,13 +156,6 @@ export function registerSettingsHandlers(
       logger.ipc.error('[Settings] settings:set failed', { key, error: e })
       throw e
     }
-  })
-
-  ipcMain.handle('settings:getWhitelist', () => {
-    if (!securityRef) {
-      return { shell: [], git: [] }
-    }
-    return securityRef.getWhitelist()
   })
 
   ipcMain.handle('settings:resetWhitelist', () => {

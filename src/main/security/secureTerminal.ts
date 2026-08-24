@@ -18,6 +18,16 @@ import { normalizePipeTerminalInput } from './terminalInput'
 import { runPipedShellCommand } from './pipedShell'
 import { exec as gitExec } from 'dugite'
 import { remoteHostTrustService } from '../services/remoteHostTrustService'
+import {
+  assessGitCommand,
+  assessShellCommand,
+  commandApprovalScope,
+  isRecentAgentApprovalProof,
+  requireExternalPathApproval,
+  type AgentApprovalProof,
+  type ExecutionDecision,
+} from '@shared/security/executionPolicy'
+import { randomUUID } from 'node:crypto'
 
 
 interface SecureShellRequest {
@@ -25,7 +35,6 @@ interface SecureShellRequest {
   args?: string[]
   cwd?: string
   timeout?: number
-  requireConfirm?: boolean
 }
 
 /**
@@ -42,6 +51,7 @@ interface PipedShellRequest {
   timeout?: number
   shell?: string
   maxOutputChars?: number
+  authorizationId?: string
 }
 
 interface PipedShellResult {
@@ -77,19 +87,43 @@ export function updateWhitelist(shellCommands: string[], gitCommands: string[]) 
   })
 }
 
-// 获取当前白名单
-export function getWhitelist() {
-  return {
-    shell: Array.from(WHITELIST.shell),
-    git: Array.from(WHITELIST.git)
-  }
-}
-
 // Terminal instances storage (模块级别，便于清理)
 const terminals = new Map<string, any>() // IPty instances
 const backgroundProcesses = new Map<number, import('child_process').ChildProcess>() // shell:executeBackground 子进程
 /** PIDs of in-flight shell:runPiped children, so app shutdown can reap them. */
 const pipedShellPids = new Set<number>()
+const commandAuthorizations = new Map<string, { command: string; cwd: string; expiresAt: number }>()
+const COMMAND_AUTHORIZATION_TTL_MS = 2 * 60 * 1000
+
+function normalizeAuthorizationCwd(cwd: string): string {
+  const resolved = path.resolve(cwd)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+function issueCommandAuthorization(command: string, cwd: string): string {
+  const now = Date.now()
+  for (const [id, authorization] of commandAuthorizations) {
+    if (authorization.expiresAt <= now) commandAuthorizations.delete(id)
+  }
+  const id = randomUUID()
+  commandAuthorizations.set(id, {
+    command: command.trim(),
+    cwd: normalizeAuthorizationCwd(cwd),
+    expiresAt: now + COMMAND_AUTHORIZATION_TTL_MS,
+  })
+  return id
+}
+
+function consumeCommandAuthorization(id: string | undefined, command: string, cwd: string): boolean {
+  if (!id) return false
+  const authorization = commandAuthorizations.get(id)
+  commandAuthorizations.delete(id)
+  if (!authorization || authorization.expiresAt <= Date.now()) {
+    return false
+  }
+  return authorization.command === command.trim()
+    && authorization.cwd === normalizeAuthorizationCwd(cwd)
+}
 
 function getShellIntegrationResourcePath(scriptName: string): string {
   return app.isPackaged
@@ -211,98 +245,10 @@ export function cleanupTerminals(): void {
   logger.security.info(`[Terminal] All terminals and background processes cleaned up`)
 }
 
-// 危险命令模式列表
-const DANGEROUS_PATTERNS = [
-  /rm\s+-rf\s+.*\//i,  // rm -rf /
-  /wget\s+.*\s+-O\s+/i,  // 下载文件
-  /curl\s+.*\s+(-o\s+|--output\s+)/i,  // 下载文件
-  /curl\s+.*\|\s*(bash|sh|python|node)/i,  // curl | sh 远程执行
-  /wget\s+.*\|\s*(bash|sh|python|node)/i,  // wget | sh 远程执行
-  /powershell\s+-e(ncodedCommand)?.*frombase64/i,  // PowerShell 编码命令
-  /\/etc\/passwd|\/etc\/shadow/i,
-  /Windows\\System32/i,
-  /registry/i,
-  /\beval\s*\(/i,  // eval 执行
-  /\bchmod\s+[0-7]*7[0-7]*\s/i,  // chmod 危险权限
-  /\bsudo\b/i,  // sudo 提权
-]
-
-// Shell 注入字符检测（用于 args 参数）
-const SHELL_INJECTION_CHARS = /[;&|`$(){}<>]/
-
-// Git 参数注入检测（仅检测真正危险的 shell 执行字符，允许 git ref 语法如 @{upstream}、HEAD~1）
-const GIT_ARG_INJECTION_CHARS = /[;&|`$]/
-
-/**
- * 检测单个参数是否包含 shell 注入字符
- */
-function containsShellInjection(arg: string): boolean {
-  return SHELL_INJECTION_CHARS.test(arg)
-}
-
-/**
- * 检测 git 参数是否包含注入字符（比通用检测更宽松，允许 {} <> () 用于 git ref）
- */
-function containsGitArgInjection(arg: string): boolean {
-  return GIT_ARG_INJECTION_CHARS.test(arg)
-}
-
-// 命令安全检查结果
-interface SecurityCheckResult {
-  safe: boolean
-  reason?: string
-  sanitizedCommand?: string
-}
-
 /**
  * 安全命令解析器
  */
 class SecureCommandParser {
-  private static normalizeCommandForWhitelist(baseCommand: string): string {
-    const normalized = path.basename(baseCommand).toLowerCase()
-    if (process.platform === 'win32') {
-      return normalized.replace(/\.(cmd|bat|exe)$/i, '')
-    }
-    return normalized
-  }
-
-  /**
-   * 验证命令是否在白名单中
-   */
-  static validateCommand(baseCommand: string, type: 'shell' | 'git'): SecurityCheckResult {
-    const normalizedCommand = this.normalizeCommandForWhitelist(baseCommand)
-
-    if (type === 'git') {
-      const allowed = WHITELIST.git.has(normalizedCommand)
-      return {
-        safe: allowed,
-        reason: allowed ? undefined : `Git子命令"${baseCommand}"不在白名单中`,
-      }
-    }
-
-    const allowed = WHITELIST.shell.has(normalizedCommand)
-    return {
-      safe: allowed,
-      reason: allowed ? undefined : `Shell命令"${baseCommand}"不在白名单中`,
-    }
-  }
-
-  /**
-   * 检测危险命令模式
-   */
-  static detectDangerousPatterns(command: string): SecurityCheckResult {
-    for (const pattern of DANGEROUS_PATTERNS) {
-      if (pattern.test(command)) {
-        return {
-          safe: false,
-          reason: `检测到危险模式: ${pattern}`,
-        }
-      }
-    }
-
-    return { safe: true }
-  }
-
   /**
    * 安全执行命令
    */
@@ -381,8 +327,75 @@ export function registerSecureTerminalHandlers(
   getWorkspace: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
   getWindowWorkspace?: (windowId: number) => string[] | null
 ) {
+  const authorizeDecision = async (
+    operation: OperationType,
+    target: string,
+    decision: ExecutionDecision,
+  ): Promise<{ allowed: boolean; error?: string }> => {
+    if (decision.kind === 'deny') {
+      securityManager.logOperation(operation, target, false, {
+        reason: decision.reason,
+        code: decision.code,
+      })
+      return { allowed: false, error: decision.reason }
+    }
+    if (decision.kind === 'ask') {
+      const allowed = await securityManager.requestApproval(operation, target, decision.reason)
+      return { allowed, error: allowed ? undefined : '用户拒绝了此次高风险操作' }
+    }
+    return { allowed: true }
+  }
+
+  const assessShellExecution = (
+    command: string,
+    cwd: string,
+    workspace: { roots: string[] } | null,
+  ): ExecutionDecision => {
+    const base = assessShellCommand(command, WHITELIST.shell)
+    const outsideWorkspace = Boolean(
+      workspace?.roots.length
+      && !securityManager.validateWorkspacePath(cwd, workspace.roots),
+    )
+    return requireExternalPathApproval(base, outsideWorkspace)
+  }
+
+  const executionTarget = (command: string, cwd: string): string =>
+    `${command}\n工作目录：${cwd}`
+
+  safeIpcHandle('security:authorizeCommand', async (
+    event,
+    request: { command: string; cwd?: string; approval?: AgentApprovalProof },
+  ): Promise<{ allowed: boolean; authorizationId?: string; reason?: string; risk?: string }> => {
+    const command = typeof request?.command === 'string' ? request.command.trim() : ''
+    const workspace = getWorkspace(event)
+    const cwd = request?.cwd || workspace?.roots[0] || process.cwd()
+    const decision = assessShellExecution(command, cwd, workspace)
+    const hasDockApproval = isRecentAgentApprovalProof(
+      request?.approval,
+      commandApprovalScope(command, cwd),
+    )
+    const authorization = decision.kind === 'ask'
+      ? hasDockApproval
+        ? { allowed: true }
+        : { allowed: false, error: '需要在工具 Dock 中批准，或审批凭据已过期' }
+      : await authorizeDecision(
+          OperationType.SHELL_EXECUTE,
+          executionTarget(command, cwd),
+          decision,
+        )
+    if (!authorization.allowed) {
+      return { allowed: false, reason: authorization.error || decision.reason, risk: decision.risk }
+    }
+    return {
+      allowed: true,
+      authorizationId: issueCommandAuthorization(command, cwd),
+      reason: decision.reason,
+      risk: decision.risk,
+    }
+  })
+
   /**
-   * 安全的命令执行（白名单 + 工作区边界）
+   * 安全的命令执行（可信自动执行列表 + 风险审批 + 工作区边界）
    * 替代原来的 shell:execute
    */
   safeIpcHandle('shell:executeSecure', async (
@@ -395,7 +408,7 @@ export function registerSecureTerminalHandlers(
     exitCode?: number
     error?: string
   }> => {
-    const { command, args = [], cwd, timeout = 30000, requireConfirm = true } = request
+    const { command, args = [], cwd, timeout = 30000 } = request
     const mainWindow = getMainWindow()
     const workspace = getWorkspace(event)
 
@@ -407,61 +420,20 @@ export function registerSecureTerminalHandlers(
     let targetPath: string
     if (workspace) {
       targetPath = cwd || workspace.roots[0]
-      if (!securityManager.validateWorkspacePath(targetPath, workspace.roots)) {
-        securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
-          reason: '路径在工作区外',
-          targetPath,
-          workspace: workspace.roots,
-        })
-        return { success: false, error: '不允许在工作区外执行命令' }
-      }
     } else {
       // 无工作区模式：使用 cwd 或当前进程工作目录
       targetPath = cwd || process.cwd()
       logger.security.info(`[Security] No workspace set, using: ${targetPath}`)
     }
 
-    // 2. 检测危险模式
     const fullCommand = [command, ...args].join(' ')
-    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(fullCommand)
-    if (!dangerousCheck.safe) {
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, {
-        reason: dangerousCheck.reason,
-      })
-      return { success: false, error: dangerousCheck.reason }
-    }
-
-    // 3. 白名单验证
-    const baseCommand = command.toLowerCase()
-    const whitelistCheck = SecureCommandParser.validateCommand(baseCommand, 'shell')
-    if (!whitelistCheck.safe) {
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, {
-        reason: whitelistCheck.reason,
-      })
-      return { success: false, error: whitelistCheck.reason }
-    }
-
-    // 3.5. args 注入字符检测（防止通过参数注入 shell 特殊字符）
-    const injectedArg = args.find(containsShellInjection)
-    if (injectedArg) {
-      const reason = `参数包含危险字符: "${injectedArg}"`
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, { reason })
-      return { success: false, error: reason }
-    }
-
-    // 4. 权限检查（用户确认）
-    if (requireConfirm) {
-      const hasPermission = await securityManager.checkPermission(
-        OperationType.SHELL_EXECUTE,
-        fullCommand
-      )
-
-      if (!hasPermission) {
-        securityManager.logOperation(OperationType.SHELL_EXECUTE, fullCommand, false, {
-          reason: '用户拒绝',
-        })
-        return { success: false, error: '用户拒绝执行命令' }
-      }
+    const policyAuthorization = await authorizeDecision(
+      OperationType.SHELL_EXECUTE,
+      executionTarget(fullCommand, targetPath),
+      assessShellExecution(fullCommand, targetPath, workspace),
+    )
+    if (!policyAuthorization.allowed) {
+      return { success: false, error: policyAuthorization.error }
     }
 
     try {
@@ -531,76 +503,20 @@ export function registerSecureTerminalHandlers(
     if (!workspace || workspace.roots.length === 0) {
       // 无工作区时信任传入的cwd路径
       logger.security.info('[Git] No workspace set, trusting cwd:', cwd)
-    } else {
-      // 2. 验证工作区边界
-      if (!securityManager.validateWorkspacePath(cwd, workspace.roots)) {
-        logger.security.warn('[Git] Path validation failed:', { cwd, roots: workspace.roots })
-        securityManager.logOperation(OperationType.GIT_EXEC, args.join(' '), false, {
-          reason: '路径在工作区外',
-          cwd,
-          workspace: workspace.roots,
-        })
-        return { success: false, error: '不允许在工作区外执行Git命令' }
-      }
     }
 
-    // 2. Git 子命令白名单验证
-    if (args.length === 0) {
-      return { success: false, error: '缺少Git命令' }
-    }
-
-    // 跳过全局选项探测真正的子命令
-    let cmdIdx = 0
-    while (cmdIdx < args.length && args[cmdIdx].startsWith('-')) {
-      if (args[cmdIdx] === '-c' || args[cmdIdx] === '-C') {
-        cmdIdx += 2
-      } else {
-        cmdIdx += 1
-      }
-    }
-    if (cmdIdx >= args.length) {
-      return { success: false, error: '未找到Git子命令' }
-    }
-
-    const gitSubCommand = args[cmdIdx].toLowerCase()
-    const whitelistCheck = SecureCommandParser.validateCommand(gitSubCommand, 'git')
-
-    if (!whitelistCheck.safe) {
-      securityManager.logOperation(OperationType.GIT_EXEC, args.join(' '), false, {
-        reason: whitelistCheck.reason,
-      })
-      return { success: false, error: whitelistCheck.reason }
-    }
-
-    // 3. 检测危险模式（防止参数注入）
     const fullCommand = args.join(' ')
-    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(fullCommand)
-    if (!dangerousCheck.safe) {
-      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
-        reason: dangerousCheck.reason,
-      })
-      return { success: false, error: dangerousCheck.reason }
-    }
-
-    // 3.5. args 注入字符检测（git 使用宽松规则，允许 @{upstream} 等 ref 语法）
-    const injectedArg = args.find(containsGitArgInjection)
-    if (injectedArg) {
-      const reason = `参数包含危险字符: "${injectedArg}"`
-      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, { reason })
-      return { success: false, error: reason }
-    }
-
-    // 4. 权限检查
-    const hasPermission = await securityManager.checkPermission(
-      OperationType.GIT_EXEC,
-      `git ${fullCommand}`
+    const outsideWorkspace = Boolean(
+      workspace?.roots.length
+      && !securityManager.validateWorkspacePath(cwd, workspace.roots),
     )
-
-    if (!hasPermission) {
-      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
-        reason: '用户拒绝',
-      })
-      return { success: false, error: '用户拒绝执行Git命令' }
+    const policyAuthorization = await authorizeDecision(
+      OperationType.GIT_EXEC,
+      executionTarget(`git ${fullCommand}`, cwd),
+      requireExternalPathApproval(assessGitCommand(args, WHITELIST.git), outsideWorkspace),
+    )
+    if (!policyAuthorization.allowed) {
+      return { success: false, error: policyAuthorization.error }
     }
 
     // 5. 执行 Git 命令（优先 dugite，若已探测不可用则直接使用系统安全的 spawn）
@@ -1462,17 +1378,15 @@ export function registerSecureTerminalHandlers(
   /**
    * Run an agent command through pipes instead of the interactive PTY.
    *
-   * Reached only when terminal shell integration cannot frame the command, so it
-   * carries no command whitelist: the caller is the same `run_command` tool call
-   * that the PTY path serves, gated by the same approval UI. Dangerous-pattern
-   * detection and the workspace boundary still apply, matching what the PTY path
-   * enforces.
+   * Reached only when terminal shell integration cannot frame the command. The
+   * renderer passes a one-use authorization minted by the same policy preflight;
+   * a missing, expired, reused, or mismatched token triggers a fresh decision.
    */
   safeIpcHandle('shell:runPiped', async (
     event,
     request: PipedShellRequest,
   ): Promise<PipedShellResult> => {
-    const { command, cwd, timeout = 120_000, shell: customShell, maxOutputChars = 120_000 } = request || {}
+    const { command, cwd, timeout = 120_000, shell: customShell, maxOutputChars = 120_000, authorizationId } = request || {}
     const fail = (error: string): PipedShellResult => ({
       success: false,
       stdout: '',
@@ -1492,21 +1406,18 @@ export function registerSecureTerminalHandlers(
     const workspace = getWorkspace(event)
     const workingDir = cwd || workspace?.roots[0] || process.cwd()
 
-    if (workspace && !securityManager.validateWorkspacePath(workingDir, workspace.roots)) {
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
-        reason: 'Working directory outside workspace',
-        source: 'runPiped',
-      })
-      return fail('Working directory outside workspace')
-    }
-
-    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(command)
-    if (!dangerousCheck.safe) {
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
-        reason: dangerousCheck.reason,
-        source: 'runPiped',
-      })
-      return fail(dangerousCheck.reason || 'Command rejected')
+    if (!consumeCommandAuthorization(authorizationId, command, workingDir)) {
+      if (authorizationId) {
+        return fail('Command authorization is expired, reused, or does not match the requested command')
+      }
+      const policyAuthorization = await authorizeDecision(
+        OperationType.SHELL_EXECUTE,
+        executionTarget(command, workingDir),
+        assessShellExecution(command, workingDir, workspace),
+      )
+      if (!policyAuthorization.allowed) {
+        return fail(policyAuthorization.error || 'Command was not approved')
+      }
     }
 
     const outcome = await runPipedShellCommand({
@@ -1552,30 +1463,13 @@ export function registerSecureTerminalHandlers(
     const workspace = getWorkspace(event)
     const workingDir = cwd || workspace?.roots[0] || process.cwd()
 
-    // 验证工作目录
-    if (workspace && !securityManager.validateWorkspacePath(workingDir, workspace.roots)) {
-      return { success: false, output: '', exitCode: 1, error: 'Working directory outside workspace' }
-    }
-
-    // 安全检查：检测危险模式
-    const dangerousCheck = SecureCommandParser.detectDangerousPatterns(command)
-    if (!dangerousCheck.safe) {
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
-        reason: dangerousCheck.reason,
-        source: 'executeBackground',
-      })
-      return { success: false, output: '', exitCode: 1, error: dangerousCheck.reason }
-    }
-
-    // 安全检查：白名单验证（提取命令的基础命令名）
-    const baseCommand = command.trim().split(/\s+/)[0].toLowerCase()
-    const whitelistCheck = SecureCommandParser.validateCommand(baseCommand, 'shell')
-    if (!whitelistCheck.safe) {
-      securityManager.logOperation(OperationType.SHELL_EXECUTE, command, false, {
-        reason: whitelistCheck.reason,
-        source: 'executeBackground',
-      })
-      return { success: false, output: '', exitCode: 1, error: whitelistCheck.reason }
+    const policyAuthorization = await authorizeDecision(
+      OperationType.SHELL_EXECUTE,
+      executionTarget(command, workingDir),
+      assessShellExecution(command, workingDir, workspace),
+    )
+    if (!policyAuthorization.allowed) {
+      return { success: false, output: '', exitCode: 1, error: policyAuthorization.error }
     }
 
     return new Promise((resolve) => {

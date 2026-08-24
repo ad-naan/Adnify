@@ -14,7 +14,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { toolManager } from '../tools/providers'
 import { getToolApprovalType, getToolMetadata, isFileEditTool, needsFileSnapshot } from '@/shared/config/tools'
-import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
+import { pathStartsWith, joinPath, isPathInWorkspace, isSensitivePath, toFullPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
 import { truncateToolResult } from '@/renderer/utils/partialJson'
@@ -28,7 +28,14 @@ import { streamingEditService } from '../services/streamingEditService'
 import { resolveStreamingEditFilePath } from '../services/streamingEditPreview'
 import { shellServerRoutingService } from '../services/shellServerRoutingService'
 import { sanitizeToolRichContent, sanitizeToolTextOutput } from '../tools/toolOutputSanitizer'
-import { isTerminalCommandAutoApproved } from '../utils/commandApproval'
+import { isTerminalCommandEligibleForAutoApproval } from '../utils/commandApproval'
+import {
+  assessShellCommand,
+  commandApprovalScope,
+  fileApprovalScope,
+  isAlwaysApprovalTool,
+  type AgentApprovalProof,
+} from '@shared/security/executionPolicy'
 
 // ===== 文件快照 =====
 
@@ -159,6 +166,120 @@ const REMOTE_ONLY_TOOL_NAMES = new Set([
   'download_from_remote',
 ])
 
+const reusableApprovals = new Map<string, { approvedAt: number; forTask: boolean }>()
+const taskApprovals = new Set<string>()
+const rejectedApprovalScopes = new Set<string>()
+const REUSABLE_APPROVAL_TTL_MS = 2 * 60_000
+
+function toolApprovalScope(toolCall: ToolCall, context: ToolExecutionContext): string {
+  if (toolCall.name === 'run_command' && !toolCall.arguments.server_name) {
+    const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
+    const cwdArg = typeof toolCall.arguments.cwd === 'string' ? toolCall.arguments.cwd : context.workspacePath || ''
+    return commandApprovalScope(command, toFullPath(cwdArg, context.workspacePath))
+  }
+
+  if (!REMOTE_ONLY_TOOL_NAMES.has(toolCall.name) && typeof toolCall.arguments?.path === 'string') {
+    const metadata = getToolMetadata(toolCall.name)
+    const access = toolCall.name === 'delete_file_or_folder' || toolCall.name === 'create_directory'
+      ? 'manage'
+      : (metadata?.resourceScope || []).some(item => item.includes('write')) ? 'write' : 'read'
+    return fileApprovalScope(toFullPath(toolCall.arguments.path, context.workspacePath), access)
+  }
+
+  return `tool:${toolCall.name}:${JSON.stringify(toolCall.arguments)}`
+}
+
+function rejectedApprovalKey(toolCall: ToolCall, context: ToolExecutionContext): string | null {
+  if (!context.requestId) return null
+  return `${context.requestId}:${toolApprovalScope(toolCall, context)}`
+}
+
+function taskApprovalKey(toolCall: ToolCall, context: ToolExecutionContext): string | null {
+  const key = rejectedApprovalKey(toolCall, context)
+  if (!key || toolCall.name === 'delete_file_or_folder' || REMOTE_ONLY_TOOL_NAMES.has(toolCall.name)) return null
+  if (toolCall.name === 'run_command') {
+    if (toolCall.arguments.server_name) return null
+    const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
+    const decision = assessShellCommand(command, [])
+    if (decision.risk === 'dangerous' || decision.kind === 'deny') return null
+  }
+  return typeof toolCall.arguments?.path === 'string' || toolCall.name === 'run_command' ? key : null
+}
+
+function reusableApprovalKey(toolCall: ToolCall, context: ToolExecutionContext): string | null {
+  if (!context.requestId) return null
+
+  if (toolCall.name === 'run_command' && !toolCall.arguments.server_name) {
+    const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command.trim() : ''
+    if (!command || assessShellCommand(command, []).risk !== 'elevated') return null
+    const cwd = typeof toolCall.arguments.cwd === 'string' ? toolCall.arguments.cwd : context.workspacePath || ''
+    return `${context.requestId}:command:${cwd}:${command}`
+  }
+
+  if (toolCall.name === 'delete_file_or_folder' || REMOTE_ONLY_TOOL_NAMES.has(toolCall.name)) return null
+  const pathArg = toolCall.arguments?.path
+  if (typeof pathArg !== 'string' || !context.workspacePath) return null
+  const fullPath = toFullPath(pathArg, context.workspacePath)
+  const strictWorkspaceMode = useStore.getState().securitySettings?.strictWorkspaceMode !== false
+  if (isSensitivePath(fullPath) || (strictWorkspaceMode && !isPathInWorkspace(fullPath, context.workspacePath))) {
+    return `${context.requestId}:path:${toolCall.name}:${fullPath}`
+  }
+  return null
+}
+
+function hasReusableApproval(toolCall: ToolCall, context: ToolExecutionContext): boolean {
+  const taskKey = taskApprovalKey(toolCall, context)
+  if (taskKey && taskApprovals.has(taskKey)) return true
+  const key = reusableApprovalKey(toolCall, context)
+  if (!key) return false
+  const approval = reusableApprovals.get(key)
+  if (!approval || (!approval.forTask && Date.now() - approval.approvedAt > REUSABLE_APPROVAL_TTL_MS)) {
+    reusableApprovals.delete(key)
+    return false
+  }
+  return true
+}
+
+function buildApprovedExecutionContext(toolCall: ToolCall, context: ToolExecutionContext): ToolExecutionContext {
+  const approval: AgentApprovalProof = {
+    requestId: context.requestId || toolCall.id,
+    toolCallId: toolCall.id,
+    approvedAt: Date.now(),
+    scope: toolApprovalScope(toolCall, context),
+  }
+  return { ...context, securityApproval: approval }
+}
+
+function rememberReusableApproval(key: string, forTask = false): void {
+  reusableApprovals.delete(key)
+  reusableApprovals.set(key, { approvedAt: Date.now(), forTask })
+  while (reusableApprovals.size > 512) {
+    const oldest = reusableApprovals.keys().next().value
+    if (typeof oldest !== 'string') break
+    reusableApprovals.delete(oldest)
+  }
+}
+
+function rememberTaskApproval(key: string): void {
+  taskApprovals.delete(key)
+  taskApprovals.add(key)
+  while (taskApprovals.size > 512) {
+    const oldest = taskApprovals.values().next().value
+    if (typeof oldest !== 'string') break
+    taskApprovals.delete(oldest)
+  }
+}
+
+function rememberRejectedApproval(key: string): void {
+  rejectedApprovalScopes.delete(key)
+  rejectedApprovalScopes.add(key)
+  while (rejectedApprovalScopes.size > 512) {
+    const oldest = rejectedApprovalScopes.values().next().value
+    if (typeof oldest !== 'string') break
+    rejectedApprovalScopes.delete(oldest)
+  }
+}
+
 function buildShellRouteMeta(target: {
   executionTarget: 'local' | 'remote'
   resolvedBy: 'arg' | 'explicit_context' | 'last_active_server' | 'auto_routing' | 'local_default'
@@ -230,8 +351,26 @@ async function enrichToolArgumentsWithRoutingMeta(
  * 检查工具是否需要审批
  * 基于 TOOL_CONFIGS 中的 approvalType 配置和用户的 autoApprove 设置
  */
-function needsApproval(toolCall: ToolCall): boolean {
+function needsApproval(toolCall: ToolCall, context: ToolExecutionContext): boolean {
   const approvalType = getToolApprovalType(toolCall.name)
+
+  if (hasReusableApproval(toolCall, context)) return false
+
+  // Local destructive actions and exceptional paths use the existing tool Dock.
+  // The resulting proof suppresses a second native main-process dialog.
+  if (toolCall.name === 'delete_file_or_folder') return true
+
+  const pathArg = toolCall.arguments?.path
+  if (typeof pathArg === 'string' && context.workspacePath && !REMOTE_ONLY_TOOL_NAMES.has(toolCall.name)) {
+    const fullPath = toFullPath(pathArg, context.workspacePath)
+    const strictWorkspaceMode = useStore.getState().securitySettings?.strictWorkspaceMode !== false
+    if (isSensitivePath(fullPath) || (strictWorkspaceMode && !isPathInWorkspace(fullPath, context.workspacePath))) {
+      return true
+    }
+  }
+
+  // This invariant is stronger than per-user auto-approval preferences.
+  if (isAlwaysApprovalTool(toolCall.name)) return true
 
   // 如果工具本身不需要审批，直接返回 false
   if (approvalType === 'none') return false
@@ -242,13 +381,28 @@ function needsApproval(toolCall: ToolCall): boolean {
 
   // 根据工具类型检查对应的 autoApprove 设置
   if (toolCall.name === 'run_command') {
-    if (isTerminalCommandAutoApproved(toolCall.arguments.command, autoApprove?.terminalCommandRules)) {
+    if (toolCall.arguments.server_name) return true
+    const cwd = toolCall.arguments.cwd
+    if (typeof cwd === 'string' && context.workspacePath && !isPathInWorkspace(cwd, context.workspacePath)) {
+      return true
+    }
+    const trustedCommands = mainStore.securitySettings?.allowedShellCommands || []
+    const shellDecision = typeof toolCall.arguments.command === 'string'
+      ? assessShellCommand(toolCall.arguments.command, trustedCommands)
+      : null
+    // Structurally invalid input is rejected by the main process and should not
+    // waste the user's time with an approval that cannot make it executable.
+    if (shellDecision?.kind === 'deny') return false
+    if (
+      shellDecision?.kind === 'allow'
+      && isTerminalCommandEligibleForAutoApproval(
+        toolCall.arguments.command,
+        autoApprove?.terminalCommandRules,
+        trustedCommands,
+      )
+    ) {
       return false
     }
-  }
-
-  if (approvalType === 'dangerous' && autoApprove?.dangerous) {
-    return false // 危险操作已设置自动批准
   }
 
   // 默认需要审批
@@ -434,6 +588,7 @@ async function executeSingle(
         requestId: context.requestId,
         toolCallId: toolCall.id,
         chatMode: context.chatMode,
+        securityApproval: context.securityApproval,
       }
     )
 
@@ -559,12 +714,12 @@ export async function executeTools(
   context: ToolExecutionContext,
   store: import('../store/AgentStore').ThreadBoundStore,
   abortSignal?: AbortSignal
-): Promise<{ results: AgentToolExecutionResult[]; userRejected: boolean }> {
+): Promise<{ results: AgentToolExecutionResult[]; hadRejectedTool: boolean }> {
   const results: AgentToolExecutionResult[] = []
-  let userRejected = false
+  let hadRejectedTool = false
 
   if (toolCalls.length === 0) {
-    return { results, userRejected }
+    return { results, hadRejectedTool }
   }
 
   // 分析依赖
@@ -575,8 +730,8 @@ export async function executeTools(
   const pending = new Set(toolCalls.map(tc => tc.id))
 
   // 分离需要审批和不需要审批的工具
-  const approvalRequired = toolCalls.filter(tc => needsApproval(tc))
-  const noApprovalRequired = toolCalls.filter(tc => !needsApproval(tc))
+  const approvalRequired = toolCalls.filter(tc => needsApproval(tc, context))
+  const noApprovalRequired = toolCalls.filter(tc => !needsApproval(tc, context))
 
   // 在执行前保存文件快照
   await saveFileSnapshots(toolCalls, context)
@@ -642,7 +797,10 @@ export async function executeTools(
 
         const run = async () => {
           try {
-            const result = await executeSingle(tc, context, store)
+            const executionContext = hasReusableApproval(tc, context)
+              ? buildApprovedExecutionContext(tc, context)
+              : context
+            const result = await executeSingle(tc, executionContext, store)
             results.push(result)
             pending.delete(result.toolCall.id)
             if (result.result.status === 'success') {
@@ -706,6 +864,22 @@ export async function executeTools(
   for (const tc of approvalRequired) {
     if (abortSignal?.aborted) break
 
+    if (hadRejectedTool) {
+      const content = 'Skipped because another approval in this batch was rejected by the user.'
+      rejected.add(tc.id)
+      pending.delete(tc.id)
+      if (context.currentAssistantId) {
+        store.updateToolCall(context.currentAssistantId, tc.id, {
+          status: 'rejected',
+          result: content,
+          streamingState: undefined,
+        })
+      }
+      emitToolEvent({ type: 'tool:rejected', id: tc.id, ...buildToolExecutionIdentity(tc, context) })
+      results.push({ toolCall: tc, result: { content, status: 'rejected' } })
+      continue
+    }
+
     // 检查依赖是否满足（依赖的工具必须已完成且未失败/未被拒绝）
     const tcDeps = deps.get(tc.id) || new Set()
     const depsOk = Array.from(tcDeps).every(dep => completed.has(dep) && !rejected.has(dep) && !failed.has(dep))
@@ -728,6 +902,43 @@ export async function executeTools(
         error: skipped.result.content,
         ...buildToolExecutionIdentity(tc, context),
       })
+      continue
+    }
+
+    // The approval-required partition is built before the first Dock decision.
+    // Re-check here so exact duplicates later in the same batch can reuse the
+    // newly approved request-scoped decision instead of opening another Dock.
+    if (hasReusableApproval(tc, context)) {
+      store.setStreamState({
+        phase: 'tool_running',
+        currentToolCall: undefined,
+        statusText: undefined,
+        requestId: context.requestId,
+        assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+      })
+      const reusedResult = await executeSingle(tc, buildApprovedExecutionContext(tc, context), store)
+      results.push(reusedResult)
+      pending.delete(tc.id)
+      if (reusedResult.result.status === 'success') completed.add(tc.id)
+      else failed.add(tc.id)
+      continue
+    }
+
+    const rejectionKey = rejectedApprovalKey(tc, context)
+    if (rejectionKey && rejectedApprovalScopes.has(rejectionKey)) {
+      const content = 'Rejected earlier in this turn. Do not retry this operation without a new user instruction.'
+      hadRejectedTool = true
+      rejected.add(tc.id)
+      pending.delete(tc.id)
+      if (context.currentAssistantId) {
+        store.updateToolCall(context.currentAssistantId, tc.id, {
+          status: 'rejected',
+          result: content,
+          streamingState: undefined,
+        })
+      }
+      emitToolEvent({ type: 'tool:rejected', id: tc.id, ...buildToolExecutionIdentity(tc, context) })
+      results.push({ toolCall: tc, result: { content, status: 'rejected' } })
       continue
     }
 
@@ -755,11 +966,12 @@ export async function executeTools(
     })
 
     // 等待用户审批
-    const approved = await approvalService.waitForApproval(context.requestId)
+    const decision = await approvalService.waitForApproval(context.requestId)
 
-    if (!approved || abortSignal?.aborted) {
+    if (decision === 'reject' || abortSignal?.aborted) {
       // 用户拒绝了这个工具
-      userRejected = true
+      hadRejectedTool = true
+      if (rejectionKey) rememberRejectedApproval(rejectionKey)
       rejected.add(tc.id)
       if (context.currentAssistantId) {
         store.updateToolCall(context.currentAssistantId, tc.id, {
@@ -768,10 +980,16 @@ export async function executeTools(
         })
       }
       emitToolEvent({ type: 'tool:rejected', id: tc.id, ...buildToolExecutionIdentity(tc, context) })
-      results.push({ toolCall: tc, result: { content: 'Rejected by user', status: 'rejected' } })
+      results.push({
+        toolCall: tc,
+        result: {
+          content: 'Rejected by user. Do not retry the same operation in this turn; explain the rejection or choose a genuinely safer alternative.',
+          status: 'rejected',
+        },
+      })
       pending.delete(tc.id)
 
-      // 继续处理下一个工具，而不是中断整个流程
+      // 剩余待审批操作会被跳过，结果统一返回给模型重新规划。
       continue
     }
 
@@ -783,7 +1001,11 @@ export async function executeTools(
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })
-    const result = await executeSingle(tc, context, store)
+    const reuseKey = reusableApprovalKey(tc, context)
+    const taskKey = taskApprovalKey(tc, context)
+    if (decision === 'approve_for_task' && taskKey) rememberTaskApproval(taskKey)
+    else if (reuseKey) rememberReusableApproval(reuseKey)
+    const result = await executeSingle(tc, buildApprovedExecutionContext(tc, context), store)
     results.push(result)
     pending.delete(tc.id)
     if (result.result.status === 'success') {
@@ -805,5 +1027,5 @@ export async function executeTools(
     })
   }
 
-  return { results, userRejected }
+  return { results, hadRejectedTool }
 }

@@ -27,6 +27,12 @@ function fallbackCopyText(text: string): boolean {
 
 export async function writeClipboardText(text: string): Promise<boolean> {
   try {
+    return await api.clipboard.writeText(text)
+  } catch {
+    // fall through
+  }
+
+  try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text)
       return true
@@ -35,11 +41,7 @@ export async function writeClipboardText(text: string): Promise<boolean> {
     // fall through
   }
 
-  try {
-    return await api.clipboard.writeText(text)
-  } catch {
-    return fallbackCopyText(text)
-  }
+  return fallbackCopyText(text)
 }
 
 export async function readClipboardText(): Promise<string> {

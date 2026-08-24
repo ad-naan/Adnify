@@ -9,11 +9,11 @@ import { ipcMain, dialog, shell, BrowserWindow } from 'electron'
 import * as path from 'path'
 import { pathToFileURL } from 'url'
 import { promises as fsPromises } from 'fs'
-import Store from 'electron-store'
 import { securityManager, OperationType } from './securityModule'
 import { authorizeUserFile, isUserAuthorizedFile } from './userFileAccess'
 import * as os from 'os'
 import { getUserConfigDir } from '../services/configPath'
+import { fileApprovalScope, isRecentAgentApprovalProof, type AgentApprovalProof } from '@shared/security/executionPolicy'
 
 // 导入拆分的模块
 import { readFileWithEncodingInfo, readFileSized, readLargeFile, safeWriteFile, getFileStats } from './fileUtils'
@@ -90,9 +90,10 @@ function canAccessFile(
   workspace: { roots: string[] } | null,
   kind: FileAccessKind,
 ): boolean {
-  if (!filePath || securityManager.isSensitivePath(filePath)) return false
+  if (!filePath) return false
+  if (isUserAuthorizedFile(filePath, kind)) return true
+  if (securityManager.isSensitivePath(filePath)) return false
   if (securityManager.validateWorkspacePath(filePath, workspace?.roots || [])) return true
-  if (kind !== 'manage' && isUserAuthorizedFile(filePath)) return true
   return kind === 'read' && isAllowedGlobalResourcePath(filePath)
 }
 
@@ -210,13 +211,18 @@ export function registerSecureFileHandlers(
     if (!result.canceled && result.filePaths[0]) {
       const filePath = result.filePaths[0]
       if (securityManager.isSensitivePath(filePath)) {
-        showSecurityError(mainWindow, '安全警告', '不允许访问系统敏感路径')
-        return null
+        const approved = await securityManager.requestApproval(
+          OperationType.FILE_READ,
+          filePath,
+          '用户选择的文件位于系统或凭据敏感路径',
+        )
+        if (!approved) return null
       }
 
       try {
         const content = await fsPromises.readFile(filePath, 'utf-8')
-        authorizeUserFile(filePath, 'file-picker')
+        // Opening a file in the editor implies exact-file read/write authority.
+        authorizeUserFile(filePath, 'file-picker', 'write')
         securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
           userAction: true,
           size: content.length,
@@ -545,7 +551,7 @@ export function registerSecureFileHandlers(
       try {
         const success = await safeWriteFile(savePath, content, (encoding as any) || 'utf-8')
         if (!success) return null
-        authorizeUserFile(savePath, 'save-picker')
+        authorizeUserFile(savePath, 'save-picker', 'write')
         securityManager.logOperation(OperationType.FILE_WRITE, savePath, true, {
           isNewFile: true,
           bypass: true,
@@ -625,10 +631,11 @@ export function registerSecureFileHandlers(
     return totalSize
   }
 
-  // 删除文件/目录（无弹窗，仅底线检查）
-  ipcMain.handle('file:delete', async (event, filePath: string) => {
+  // 删除文件/目录：主进程边界做单次审批，避免依赖可绕过的渲染层状态。
+  ipcMain.handle('file:delete', async (event, filePath: string, approval?: AgentApprovalProof) => {
     if (!filePath) return false
     const workspace = getWorkspaceSessionFn(event)
+    const hasExactManageGrant = isUserAuthorizedFile(filePath, 'manage')
     if (!canAccessFile(filePath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
         reason: '安全底线：超出工作区边界',
@@ -636,43 +643,64 @@ export function registerSecureFileHandlers(
       return false
     }
 
-    // 关键配置文件保护
+    const riskReasons: string[] = []
+
+    // 关键配置文件需要更明确的审批，而不是直接拒绝。
     const criticalFiles = [/\.env$/i, /package-lock\.json$/i, /yarn\.lock$/i, /pnpm-lock\.yaml$/i]
     for (const pattern of criticalFiles) {
       if (pattern.test(filePath)) {
-        securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-          reason: '安全底线：关键配置文件',
-        })
-        return false
+        riskReasons.push('目标是关键配置文件')
+        break
       }
     }
 
-    // 大目录保护
+    // 大目录同样进入审批；无效或不可访问的目标才直接失败。
+    let targetStat: Awaited<ReturnType<typeof fsPromises.lstat>>
     try {
-      const stat = await fsPromises.lstat(filePath)
-      if (stat.isDirectory()) {
+      targetStat = await fsPromises.lstat(filePath)
+      if (targetStat.isDirectory()) {
         const dirSize = await calculateDirectorySize(filePath)
         if (dirSize > 100 * 1024 * 1024) {
-          securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
-            reason: `安全底线：目录过大 (${(dirSize / 1024 / 1024).toFixed(1)}MB)`,
-          })
-          return false
+          riskReasons.push(`目录较大（${(dirSize / 1024 / 1024).toFixed(1)} MB）`)
         }
       }
     } catch {
       return false
     }
 
+    const normalizedFilePath = path.resolve(filePath)
+    const relativeToWorkspace = workspace?.roots.some(root => {
+      const relative = path.relative(path.resolve(root), normalizedFilePath)
+      return !relative.startsWith('..') && !path.isAbsolute(relative)
+        && /^\.adnify[\\/]agent-temp[\\/]inline-[^\\/]+$/i.test(relative)
+    }) ?? false
+    const hasAgentApproval = isRecentAgentApprovalProof(
+      approval,
+      fileApprovalScope(normalizedFilePath, 'manage'),
+    )
+    if (approval && !hasAgentApproval) {
+      securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
+        reason: 'Agent Dock 审批凭据无效、已过期或目标不匹配',
+      })
+      return false
+    }
+    if (!hasExactManageGrant && !hasAgentApproval && !relativeToWorkspace) {
+      const reason = riskReasons.length > 0
+        ? `删除操作不可恢复；${riskReasons.join('；')}`
+        : '删除文件或目录属于不可恢复操作'
+      const approved = await securityManager.requestApproval(OperationType.FILE_DELETE, filePath, reason)
+      if (!approved) return false
+    }
+
     try {
-      const stat = await fsPromises.lstat(filePath)
-      if (stat.isDirectory()) {
+      if (targetStat.isDirectory()) {
         await fsPromises.rm(filePath, { recursive: true, force: true })
       } else {
         await fsPromises.unlink(filePath)
       }
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, true, {
-        size: stat.size,
-        bypass: true,
+        size: targetStat.size,
+        approval: hasExactManageGrant ? 'exact-path-grant' : 'approved-once',
       })
       return true
     } catch (err) {
@@ -821,59 +849,31 @@ export function registerSecureFileHandlers(
     }
   })
 
-  // ========== 安全权限功能 ==========
-
-  ipcMain.handle('security:getPermissions', () => {
-    const securityStore = new Store({ name: 'security' })
-    return securityStore.get('permissions', {})
-  })
-
-  ipcMain.handle('security:resetPermissions', () => {
-    const securityStore = new Store({ name: 'security' })
-    securityStore.delete('permissions')
-    return true
-  })
-
   /**
-   * Agent tools may need a one-shot external-file grant under strict workspace mode.
-   * Shows a native confirmation dialog; on allow, persists a session grant so IPC reads succeed.
+   * Agent tools may need an exact external-file grant under strict workspace mode.
+   * Approval is rendered in the existing tool Dock; this handler only validates
+   * its scoped proof and never opens a second native dialog.
    */
-  ipcMain.handle('security:requestExternalFileAccess', async (_event, filePath: string) => {
+  ipcMain.handle('security:requestExternalFileAccess', async (
+    _event,
+    filePath: string,
+    access: FileAccessKind = 'read',
+    approval?: AgentApprovalProof,
+  ) => {
     if (!filePath || typeof filePath !== 'string') {
       return { allowed: false, reason: 'invalid-path' as const }
     }
-    if (securityManager.isSensitivePath(filePath)) {
-      return { allowed: false, reason: 'sensitive-path' as const }
-    }
-    if (isUserAuthorizedFile(filePath)) {
+    if (isUserAuthorizedFile(filePath, access)) {
       return { allowed: true, reason: 'already-granted' as const }
     }
 
-    const mainWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const { response } = await dialog.showMessageBox(mainWindow, {
-      type: 'warning',
-      buttons: ['允许', '拒绝'],
-      defaultId: 1,
-      cancelId: 1,
-      title: '外部路径访问确认',
-      message: 'Agent 请求读取工作区外的文件',
-      detail: `路径：${filePath}\n\n允许后仅授权该文件的读取（会话内有效）。`,
-    })
-
-    const allowed = response === 0
-    if (allowed) {
-      authorizeUserFile(filePath, 'agent-read')
-      securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
-        reason: 'external-path-granted',
-        source: 'agent-read',
-      })
-    } else {
-      securityManager.logOperation(OperationType.FILE_READ, filePath, false, {
-        reason: 'external-path-denied',
-        source: 'agent-read',
-      })
+    const normalizedFilePath = path.resolve(filePath)
+    if (isRecentAgentApprovalProof(approval, fileApprovalScope(normalizedFilePath, access))) {
+      const source = access === 'read' ? 'agent-read' : access === 'write' ? 'agent-write' : 'agent-manage'
+      authorizeUserFile(filePath, source, access)
+      return { allowed: true, reason: 'agent-approved' as const }
     }
-    return { allowed, reason: allowed ? ('granted' as const) : ('denied' as const) }
+    return { allowed: false, reason: approval ? ('approval-invalid' as const) : ('approval-required' as const) }
   })
 }
 

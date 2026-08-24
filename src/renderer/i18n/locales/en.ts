@@ -284,7 +284,7 @@ export const en = {
   'error.quotaExceeded': 'API quota exceeded. Please check your billing.',
   'error.fileNotFound': 'File not found: {path}',
   'error.permissionDenied': 'Permission denied',
-  'error.whitelistBlocked': 'Command not in whitelist. Add it in Settings > Security.',
+  'error.whitelistBlocked': 'Command is not on the trusted auto-run list and requires one-time approval.',
 
   // Success Messages (新增)
   'success.fileSaved': 'File saved successfully',

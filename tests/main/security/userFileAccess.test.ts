@@ -25,4 +25,24 @@ describe('user file session grants', () => {
     expect(isUserAuthorizedFile(target)).toBe(true)
     expect(isUserAuthorizedFile(path.resolve('outside', 'other.ts'))).toBe(false)
   })
+
+  it('does not let a read grant silently escalate to writes or deletion', () => {
+    const target = path.resolve('outside', 'read-only.ts')
+    authorizeUserFile(target, 'agent-read', 'read')
+
+    expect(isUserAuthorizedFile(target, 'read')).toBe(true)
+    expect(isUserAuthorizedFile(target, 'write')).toBe(false)
+    expect(isUserAuthorizedFile(target, 'manage')).toBe(false)
+  })
+
+  it('scopes write and manage grants by capability', () => {
+    const writeTarget = path.resolve('outside', 'write.ts')
+    const manageTarget = path.resolve('outside', 'manage.ts')
+    authorizeUserFile(writeTarget, 'agent-write', 'write')
+    authorizeUserFile(manageTarget, 'agent-manage', 'manage')
+
+    expect(isUserAuthorizedFile(writeTarget, 'write')).toBe(true)
+    expect(isUserAuthorizedFile(writeTarget, 'manage')).toBe(false)
+    expect(isUserAuthorizedFile(manageTarget, 'manage')).toBe(true)
+  })
 })

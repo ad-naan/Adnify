@@ -1,10 +1,12 @@
 import * as path from 'path'
 
-export type UserFileGrantSource = 'file-association' | 'file-picker' | 'save-picker' | 'lsp-navigation' | 'agent-read'
+export type UserFileGrantSource = 'file-association' | 'file-picker' | 'save-picker' | 'lsp-navigation' | 'agent-read' | 'agent-write' | 'agent-manage'
+export type UserFileGrantAccess = 'read' | 'write' | 'manage'
 
 
 interface UserFileGrant {
   source: UserFileGrantSource
+  access: UserFileGrantAccess
   grantedAt: number
 }
 
@@ -17,11 +19,11 @@ function keyFor(filePath: string): string {
 }
 
 /** Grant this exact file for the lifetime of the application process. */
-export function authorizeUserFile(filePath: string, source: UserFileGrantSource): void {
+export function authorizeUserFile(filePath: string, source: UserFileGrantSource, access: UserFileGrantAccess = 'read'): void {
   try {
     const key = keyFor(filePath)
     grants.delete(key)
-    grants.set(key, { source, grantedAt: Date.now() })
+    grants.set(key, { source, access, grantedAt: Date.now() })
     while (grants.size > MAX_SESSION_GRANTS) {
       const oldest = grants.keys().next().value
       if (typeof oldest !== 'string') break
@@ -32,9 +34,12 @@ export function authorizeUserFile(filePath: string, source: UserFileGrantSource)
   }
 }
 
-export function isUserAuthorizedFile(filePath: string): boolean {
+export function isUserAuthorizedFile(filePath: string, requiredAccess: UserFileGrantAccess = 'read'): boolean {
   try {
-    return grants.has(keyFor(filePath))
+    const grant = grants.get(keyFor(filePath))
+    if (!grant) return false
+    const rank: Record<UserFileGrantAccess, number> = { read: 1, write: 2, manage: 3 }
+    return rank[grant.access] >= rank[requiredAccess]
   } catch {
     return false
   }

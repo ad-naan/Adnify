@@ -283,8 +283,6 @@ export interface AppSettingsSchema {
   }
   language?: string
   autoApprove?: {
-    terminal?: boolean
-    dangerous?: boolean
     terminalCommandRules?: string[]
   }
   promptTemplateId?: string
@@ -326,8 +324,6 @@ export function cleanAppSettings(config: Record<string, unknown>): AppSettingsSc
   if (config.autoApprove && typeof config.autoApprove === 'object') {
     const aa = config.autoApprove as Record<string, unknown>
     cleaned.autoApprove = {}
-    if (typeof aa.terminal === 'boolean') cleaned.autoApprove.terminal = aa.terminal
-    if (typeof aa.dangerous === 'boolean') cleaned.autoApprove.dangerous = aa.dangerous
     const terminalRules = Array.isArray(aa.terminalCommandRules)
       ? aa.terminalCommandRules
       : (Array.isArray(aa.terminalCommands) ? aa.terminalCommands : [])

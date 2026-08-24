@@ -7,7 +7,6 @@ import {
 describe('security settings normalization', () => {
   it('upgrades the legacy git default whitelist to the current default set', () => {
     const normalized = normalizeSecuritySettings({
-      enablePermissionConfirm: true,
       strictWorkspaceMode: true,
       allowedShellCommands: [...SECURITY_SETTINGS_DEFAULTS.allowedShellCommands],
       allowedGitSubcommands: [
@@ -17,7 +16,6 @@ describe('security settings normalization', () => {
         'branch', 'checkout', 'switch', 'merge', 'rebase', 'cherry-pick',
         'clone', 'init', 'stash', 'tag', 'config',
       ],
-      showSecurityWarnings: true,
     })
 
     expect(normalized.allowedGitSubcommands).toEqual(
@@ -61,5 +59,15 @@ describe('security settings normalization', () => {
 
     expect(normalized.allowedGitSubcommands).toEqual(['status', 'log'])
     expect(normalized.allowedShellCommands).toEqual(['bash', 'node'])
+  })
+
+  it('drops removed legacy confirmation flags', () => {
+    const normalized = normalizeSecuritySettings({
+      enablePermissionConfirm: false,
+      showSecurityWarnings: false,
+    })
+
+    expect(normalized).not.toHaveProperty('enablePermissionConfirm')
+    expect(normalized).not.toHaveProperty('showSecurityWarnings')
   })
 })

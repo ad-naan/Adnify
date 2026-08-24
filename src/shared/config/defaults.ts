@@ -233,8 +233,6 @@ export const AGENT_DEFAULTS = {
 // ============================================
 
 export const AUTO_APPROVE_DEFAULTS = {
-  terminal: false,
-  dangerous: false,
   terminalCommandRules: [] as string[],
 } as const
 

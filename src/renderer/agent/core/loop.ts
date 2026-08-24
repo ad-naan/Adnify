@@ -838,7 +838,7 @@ Try again with the corrected tool call.`,
       })),
     })
 
-    const { results: toolResults, userRejected } = await executeTools(
+    const { results: toolResults, hadRejectedTool } = await executeTools(
       result.toolCalls,
       {
         workspacePath: context.workspacePath,
@@ -928,7 +928,7 @@ Try again with the corrected tool call.`,
       }
     }
 
-    if (enableAutoFix && !userRejected && context.workspacePath) {
+    if (enableAutoFix && !hadRejectedTool && context.workspacePath) {
       const autoFixResult = await autoFix(result.toolCalls, context.workspacePath)
       if (autoFixResult) {
         // Key on the error set itself: a changing signature means the model is
@@ -958,12 +958,6 @@ Try again with the corrected tool call.`,
           `[Loop] Auto-fix gave up after ${attempts - 1} attempts on an unchanged lint error set; continuing without re-reporting.`
         )
       }
-    }
-
-    if (userRejected) {
-      threadStore.updateExecutionMeta({ loopState: 'aborted' })
-      EventBus.emit({ type: 'loop:end', reason: 'user_rejected', threadId, assistantId, requestId, planTaskId: context.planTaskId })
-      break
     }
 
     shouldContinue = true

@@ -58,8 +58,6 @@ export interface ProviderConfig {
 }
 
 export interface AutoApproveSettings {
-  terminal: boolean
-  dangerous: boolean
   /** Claude Code-style command rules, for example `git status *`. */
   terminalCommandRules: string[]
 }
@@ -187,11 +185,9 @@ export interface EditorConfig {
 }
 
 export interface SecuritySettings {
-  enablePermissionConfirm: boolean
   strictWorkspaceMode: boolean
   allowedShellCommands: string[]
   allowedGitSubcommands: string[]
-  showSecurityWarnings: boolean
 }
 export interface WebSearchConfig {
   googleApiKey?: string

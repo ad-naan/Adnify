@@ -73,7 +73,7 @@ function createGroupedAPI() {
       exists: (path: string) => raw.fileExists(path),
       mkdir: (path: string) => raw.mkdir(path),
       ensureDir: (path: string) => raw.ensureDir(path),
-      delete: (path: string) => raw.deleteFile(path),
+      delete: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => raw.deleteFile(path, approval),
       copy: (sourcePath: string, destinationPath: string) => raw.copyFile(sourcePath, destinationPath),
       rename: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
       showInFolder: (path: string) => raw.showItemInFolder(path),
@@ -120,7 +120,6 @@ function createGroupedAPI() {
       set: (key: string, value: unknown) => raw.setSetting(key, value),
       getConfigPath: () => raw.getConfigPath(),
       setConfigPath: (path: string) => raw.setConfigPath(path),
-      getWhitelist: () => raw.getWhitelist(),
       resetWhitelist: () => raw.resetWhitelist(),
       getUserDataPath: () => raw.getUserDataPath(),
       getRecentLogs: () => raw.getRecentLogs(),
@@ -217,9 +216,8 @@ function createGroupedAPI() {
 
     // 安全管理
     security: {
-      getPermissions: () => raw.getPermissions(),
-      resetPermissions: () => raw.resetPermissions(),
-      requestExternalFileAccess: (filePath: string) => raw.requestExternalFileAccess(filePath),
+      requestExternalFileAccess: (filePath: string, access?: 'read' | 'write' | 'manage', approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => raw.requestExternalFileAccess(filePath, access, approval),
+      authorizeCommand: (request: { command: string; cwd?: string; approval?: import('@shared/security/executionPolicy').AgentApprovalProof }) => raw.authorizeCommand(request),
     },
 
     // 索引

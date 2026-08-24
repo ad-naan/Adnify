@@ -19,12 +19,12 @@ describe('approvalService request targeting', () => {
     const second = approvalService.waitForApproval('req-thread-b')
 
     approvalService.reject('req-thread-a')
-    expect(await first).toBe(false)
+    expect(await first).toBe('reject')
 
     // The unrelated thread's approval must still be pending; settle it here so
     // the promise does not dangle.
     approvalService.approve('req-thread-b')
-    expect(await second).toBe(true)
+    expect(await second).toBe('approve')
   })
 
   it('falls back to the most recent pending approval when no id is given', async () => {
@@ -34,10 +34,10 @@ describe('approvalService request targeting', () => {
     // This is the cross-thread hazard: an abort that cannot resolve its own
     // requestId silently rejects whichever approval registered last.
     approvalService.reject()
-    expect(await newer).toBe(false)
+    expect(await newer).toBe('reject')
 
     approvalService.approve('req-older')
-    expect(await older).toBe(true)
+    expect(await older).toBe('approve')
   })
 
   it('is a no-op when the requestId has no pending approval', async () => {
@@ -47,6 +47,14 @@ describe('approvalService request targeting', () => {
     approvalService.reject('req-already-gone')
 
     approvalService.approve('req-live')
-    expect(await pending).toBe(true)
+    expect(await pending).toBe('approve')
+  })
+
+  it('distinguishes task-scoped approval from a normal approval', async () => {
+    const pending = approvalService.waitForApproval('req-task-scope')
+
+    approvalService.approveForTask('req-task-scope')
+
+    expect(await pending).toBe('approve_for_task')
   })
 })

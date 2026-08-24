@@ -49,7 +49,8 @@ vi.mock('@store', () => ({
   useStore: {
     getState: vi.fn(() => ({
       // 终端只按显式规则自动批准；危险文件操作仍由测试统一放行。
-      autoApprove: { terminal: false, dangerous: true, terminalCommandRules: ['tsc *'] },
+      autoApprove: { terminalCommandRules: ['tsc *'] },
+      securitySettings: { allowedShellCommands: ['tsc'], strictWorkspaceMode: true },
       agentConfig: { autoApprove: true },
       addToolCallLog: vi.fn(),
     })),

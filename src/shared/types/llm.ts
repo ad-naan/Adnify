@@ -404,6 +404,7 @@ export interface ToolExecutionContext {
     requestId?: string
     assistantId?: string | null
     checkpointId?: string
+    securityApproval?: import('@shared/security/executionPolicy').AgentApprovalProof
 }
 
 export type ToolExecutor = (

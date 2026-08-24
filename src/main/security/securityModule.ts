@@ -4,12 +4,11 @@
  */
 
 import { logger } from '@shared/utils/Logger'
-import Store from 'electron-store'
 import * as path from 'path'
 import { dialog, BrowserWindow } from 'electron'
 import { isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
-import { SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
+import type { SecuritySettings } from '@shared/config/types'
 
 // 敏感操作类型
 export enum OperationType {
@@ -26,44 +25,10 @@ export enum OperationType {
   // Git
   GIT_EXEC = 'git:exec',
 
-  // 系统
-  SYSTEM_SHELL = 'system:shell',
-}
-
-// 安全配置接口
-export interface SecurityConfig {
-  enablePermissionConfirm: boolean
-  strictWorkspaceMode: boolean
-  allowedShellCommands?: string[]
-  showSecurityWarnings?: boolean
-}
-
-// 安全存储（独立于主配置）
-const securityStore = new Store({ name: 'security' })
-
-// 权限等级
-export enum PermissionLevel {
-  ALLOWED = 'allowed',      // 允许，无需确认
-  ASK = 'ask',              // 每次需要用户确认
-  DENIED = 'denied'         // 永远拒绝
-}
-
-interface PermissionConfig {
-  [key: string]: PermissionLevel
-}
-
-// 来自 settingsSlice.ts 的定义
-export interface SecuritySettings {
-  enablePermissionConfirm: boolean
-  strictWorkspaceMode: boolean
-  allowedShellCommands?: string[]
-  showSecurityWarnings?: boolean
 }
 
 interface SecurityModule {
-  // 权限管理（主进程底线检查，不弹窗）
-  checkPermission: (operation: OperationType, target: string) => Promise<boolean>
-  setPermission: (operation: OperationType, level: PermissionLevel) => void
+  requestApproval: (operation: OperationType, target: string, reason: string) => Promise<boolean>
 
   // 工作区设置
   setWorkspacePath: (workspacePath: string | null) => void
@@ -75,39 +40,12 @@ interface SecurityModule {
   validateWorkspacePath: (filePath: string, workspace: string | string[]) => boolean
   isSensitivePath: (filePath: string) => boolean
 
-  // 白名单管理
-  isAllowedCommand: (command: string, type: 'shell' | 'git') => boolean
-
   // 配置更新
   updateConfig: (config: Partial<SecuritySettings>) => void
 }
 
-// 默认权限配置
-const DEFAULT_PERMISSIONS: PermissionConfig = {
-  [OperationType.FILE_READ]: PermissionLevel.ALLOWED,
-  [OperationType.FILE_WRITE]: PermissionLevel.ALLOWED,
-  [OperationType.FILE_RENAME]: PermissionLevel.ALLOWED,
-  [OperationType.FILE_DELETE]: PermissionLevel.ASK,
-  [OperationType.SHELL_EXECUTE]: PermissionLevel.ALLOWED,
-  [OperationType.TERMINAL_INTERACTIVE]: PermissionLevel.ALLOWED,
-  [OperationType.GIT_EXEC]: PermissionLevel.ALLOWED,
-  [OperationType.SYSTEM_SHELL]: PermissionLevel.DENIED,
-}
-
-// 命令白名单（已统一到 shared/config/securitySettings.ts）
-const ALLOWED_SHELL_COMMANDS = new Set(SECURITY_SETTINGS_DEFAULTS.allowedShellCommands.map(cmd => cmd.toLowerCase()))
-
-const ALLOWED_GIT_SUBCOMMANDS = new Set(SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands.map(cmd => cmd.toLowerCase()))
-
-function normalizeCommandName(command: string): string {
-  const baseName = path.basename(command).toLowerCase()
-  return process.platform === 'win32'
-    ? baseName.replace(/\.(cmd|bat|exe)$/i, '')
-    : baseName
-}
-
 class SecurityManager implements SecurityModule {
-  private sessionStorage: Map<string, boolean> = new Map()
+  private pendingApprovals = new Map<string, Promise<boolean>>()
   private config: Partial<SecuritySettings> = {}
 
   /**
@@ -126,68 +64,42 @@ class SecurityManager implements SecurityModule {
   }
 
   /**
-   * 检查权限
+   * Explicit risk approval. Unlike legacy permission levels, this is always
+   * shown for an elevated decision and is never cached as a broad grant.
    */
-  async checkPermission(operation: OperationType, target: string): Promise<boolean> {
-    const sessionKey = `${operation}:${target}`
-    if (this.sessionStorage.has(sessionKey)) {
-      return this.sessionStorage.get(sessionKey)!
-    }
+  async requestApproval(operation: OperationType, target: string, reason: string): Promise<boolean> {
+    const key = `${operation}:${target}`
+    const pending = this.pendingApprovals.get(key)
+    if (pending) return pending
 
-    const config = this.getPermissionConfig(operation)
-
-    if (config === PermissionLevel.DENIED) {
-      this.logOperation(operation, target, false, { reason: 'Permission denied by policy' })
-      return false
-    }
-
-    if (config === PermissionLevel.ASK) {
-      if (this.config.enablePermissionConfirm === false) {
-        return true
-      }
-      // 调用 Electron 原生对话框进行确认，避免引入 IPC 循环
+    const approval = (async () => {
       const mainWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      const operationLabels: Partial<Record<OperationType, string>> = {
-        [OperationType.FILE_DELETE]: '删除文件',
-        [OperationType.SHELL_EXECUTE]: '执行命令',
-        [OperationType.GIT_EXEC]: '执行 Git 命令',
-      }
-      const label = operationLabels[operation] ?? operation
-      const { response } = await dialog.showMessageBox(mainWindow, {
-        type: 'warning',
-        buttons: ['允许', '拒绝'],
+      const options = {
+        type: 'warning' as const,
+        buttons: ['仅此次允许', '拒绝'],
         defaultId: 1,
         cancelId: 1,
-        title: '操作确认',
-        message: `是否允许以下操作？`,
-        detail: `操作类型：${label}\n目标：${target}`,
+        title: '安全审批',
+        message: '此操作需要明确授权',
+        detail: `原因：${reason}\n\n操作：${operation}\n目标：${target}`,
+        noLink: true,
+      }
+      const result = mainWindow
+        ? await dialog.showMessageBox(mainWindow, options)
+        : await dialog.showMessageBox(options)
+      const allowed = result.response === 0
+      this.logOperation(operation, target, allowed, {
+        reason,
+        decision: allowed ? 'approved-once' : 'denied',
       })
-      const allowed = response === 0
-      this.sessionStorage.set(sessionKey, allowed)
       return allowed
+    })()
+    this.pendingApprovals.set(key, approval)
+    try {
+      return await approval
+    } finally {
+      this.pendingApprovals.delete(key)
     }
-
-    return true
-  }
-
-  /**
-   * 设置权限
-   */
-  setPermission(operation: OperationType, level: PermissionLevel): void {
-    const permissions = securityStore.get('permissions', {}) as PermissionConfig
-    permissions[operation] = level
-    securityStore.set('permissions', permissions)
-  }
-
-  /**
-   * 获取权限配置
-   */
-  private getPermissionConfig(operation: OperationType): PermissionLevel {
-    const permissions = securityStore.get('permissions', {}) as PermissionConfig
-    if (permissions[operation]) {
-      return permissions[operation]
-    }
-    return DEFAULT_PERMISSIONS[operation] || PermissionLevel.ASK
   }
 
   /**
@@ -239,40 +151,6 @@ class SecurityManager implements SecurityModule {
     return sharedIsSensitivePath(filePath)
   }
 
-  /**
-   * 检查允许的命令
-   */
-  isAllowedCommand(command: string, type: 'shell' | 'git'): boolean {
-    const parts = command.trim().split(/\s+/)
-    const baseCommand = normalizeCommandName(parts[0] || '')
-
-    if (type === 'git') {
-      const subCommand = normalizeCommandName(parts[1] || '')
-      return ALLOWED_GIT_SUBCOMMANDS.has(subCommand)
-    }
-
-    if (type === 'shell') {
-      if (this.config.allowedShellCommands && Array.isArray(this.config.allowedShellCommands)) {
-        return this.config.allowedShellCommands
-          .map(cmd => normalizeCommandName(cmd))
-          .includes(baseCommand)
-      }
-      return ALLOWED_SHELL_COMMANDS.has(baseCommand)
-    }
-
-    return false
-  }
 }
 
 export const securityManager = new SecurityManager()
-
-export async function checkWorkspacePermission(
-  filePath: string,
-  workspace: string | string[] | null,
-  operation: OperationType
-): Promise<boolean> {
-  if (!workspace) return false
-  if (!securityManager.validateWorkspacePath(filePath, workspace)) return false
-  if (securityManager.isSensitivePath(filePath)) return false
-  return await securityManager.checkPermission(operation, filePath)
-}

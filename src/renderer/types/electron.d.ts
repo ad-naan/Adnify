@@ -185,7 +185,6 @@ export interface SecureCommandRequest {
   args?: string[]
   cwd?: string
   timeout?: number
-  requireConfirm?: boolean
 }
 
 export interface WorkspaceConfig {
@@ -407,7 +406,7 @@ export interface ElectronAPI {
   showItemInFolder: (path: string) => Promise<void>
   openInBrowser: (path: string) => Promise<boolean>
   mkdir: (path: string) => Promise<boolean>
-  deleteFile: (path: string) => Promise<boolean>
+  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<boolean>
   copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
@@ -422,7 +421,6 @@ export interface ElectronAPI {
   getConfigPath: () => Promise<string>
   setConfigPath: (path: string) => Promise<boolean>
   onSettingsChanged: (callback: (event: { key: string; value: unknown }) => void) => () => void
-  getWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   getUserDataPath: () => Promise<string>
   getRecentLogs: () => Promise<string>
@@ -537,6 +535,7 @@ export interface ElectronAPI {
     timeout?: number
     shell?: string
     maxOutputChars?: number
+    authorizationId?: string
   }) => Promise<{
     success: boolean
     stdout: string
@@ -558,11 +557,15 @@ export interface ElectronAPI {
   }>
 
   // Security
-  getPermissions: () => Promise<Record<string, string>>
-  resetPermissions: () => Promise<boolean>
-  requestExternalFileAccess: (filePath: string) => Promise<{
+  requestExternalFileAccess: (filePath: string, access?: 'read' | 'write' | 'manage', approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<{
     allowed: boolean
-    reason: 'invalid-path' | 'sensitive-path' | 'already-granted' | 'granted' | 'denied'
+    reason: 'invalid-path' | 'already-granted' | 'agent-approved' | 'approval-required' | 'approval-invalid'
+  }>
+  authorizeCommand: (request: { command: string; cwd?: string; approval?: import('@shared/security/executionPolicy').AgentApprovalProof }) => Promise<{
+    allowed: boolean
+    authorizationId?: string
+    reason?: string
+    risk?: string
   }>
 
   // Index

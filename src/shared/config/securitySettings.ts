@@ -43,11 +43,9 @@ export const DEFAULT_SECURITY_GIT_SUBCOMMANDS = [
 ] as const
 
 export const SECURITY_SETTINGS_DEFAULTS = {
-  enablePermissionConfirm: true,
   strictWorkspaceMode: true,
   allowedShellCommands: [...DEFAULT_SECURITY_SHELL_COMMANDS],
   allowedGitSubcommands: [...DEFAULT_SECURITY_GIT_SUBCOMMANDS],
-  showSecurityWarnings: true,
 } as const satisfies SecuritySettings
 
 function normalizeCommandList(
@@ -100,16 +98,10 @@ export function normalizeSecuritySettings(settings: unknown): SecuritySettings {
   )
 
   return {
-    enablePermissionConfirm: typeof candidate.enablePermissionConfirm === 'boolean'
-      ? candidate.enablePermissionConfirm
-      : SECURITY_SETTINGS_DEFAULTS.enablePermissionConfirm,
     strictWorkspaceMode: typeof candidate.strictWorkspaceMode === 'boolean'
       ? candidate.strictWorkspaceMode
       : SECURITY_SETTINGS_DEFAULTS.strictWorkspaceMode,
     allowedShellCommands,
     allowedGitSubcommands,
-    showSecurityWarnings: typeof candidate.showSecurityWarnings === 'boolean'
-      ? candidate.showSecurityWarnings
-      : SECURITY_SETTINGS_DEFAULTS.showSecurityWarnings,
   }
 }

@@ -144,6 +144,10 @@ export function useAgentCommands() {
     Agent.approve(pendingApprovalRequestId)
   }, [pendingApprovalRequestId])
 
+  const approveCurrentToolForTask = useCallback(() => {
+    Agent.approveForTask(pendingApprovalRequestId)
+  }, [pendingApprovalRequestId])
+
   const rejectCurrentTool = useCallback(() => {
     Agent.reject(pendingApprovalRequestId)
   }, [pendingApprovalRequestId])
@@ -152,6 +156,7 @@ export function useAgentCommands() {
     sendMessage,
     abort,
     approveCurrentTool,
+    approveCurrentToolForTask,
     rejectCurrentTool,
   }
 }

@@ -38,6 +38,7 @@ import {
   type ReleaseCategory,
 } from '@/shared/config/changelogData'
 import { api } from '@/renderer/services/electronAPI'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface ChangelogDialogProps {
   onClose: () => void
@@ -179,7 +180,8 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
     }
 
     try {
-      await navigator.clipboard.writeText(text)
+      const success = await writeClipboardText(text)
+      if (!success) throw new Error('Clipboard write failed')
       setCopied(true)
       toast.success(t('changelog.copied', language))
       setTimeout(() => setCopied(false), 2000)

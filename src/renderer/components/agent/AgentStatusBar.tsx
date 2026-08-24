@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
 import type { PendingChange } from '@/renderer/agent/types'
 import { useStore } from '@store'
+import { ToolApprovalActions } from './ToolApprovalActions'
 
 interface AgentStatusBarProps {
   pendingChanges: PendingChange[]
@@ -39,6 +40,7 @@ interface AgentStatusBarProps {
   onKeepAll?: () => void
   // 新增：兜底的工具审批按钮（当工具审批卡片未显示时，仍可在状态栏中批准/取消）
   onApproveTool?: () => void
+  onApproveToolForTask?: () => void
   onRejectTool?: () => void
   /** 插入到 header 左侧的额外内容（如切换图标） */
   headerPrefix?: React.ReactNode
@@ -55,10 +57,12 @@ function AgentStatusBar({
   onUndoAll,
   onKeepAll,
   onApproveTool,
+  onApproveToolForTask,
   onRejectTool,
   headerPrefix,
 }: AgentStatusBarProps) {
   const expandAgentBlocksByDefault = useStore(s => s.agentConfig.expandAgentBlocksByDefault ?? false)
+  const language = useStore(s => s.language)
   const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
 
@@ -171,24 +175,14 @@ function AgentStatusBar({
 
               {/* 兜底的审批操作：当审批卡片因异常未显示时，用户仍可在此批准/取消 */}
               {!isStreaming && isAwaitingApproval && (onApproveTool || onRejectTool) && (
-                <div className="flex items-center gap-1">
-                  {onRejectTool && (
-                    <button
-                      onClick={onRejectTool}
-                      className="px-2 py-1 text-[10px] font-medium text-text-muted/70 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  {onApproveTool && (
-                    <button
-                      onClick={onApproveTool}
-                      className="px-2.5 py-1 text-[10px] font-medium bg-accent text-white hover:bg-accent-hover rounded-md transition-all"
-                    >
-                      Approve
-                    </button>
-                  )}
-                </div>
+                <ToolApprovalActions
+                  language={language}
+                  compact
+                  onApprove={onApproveTool}
+                  onApproveForTask={onApproveToolForTask}
+                  onReject={onRejectTool}
+                  onStop={onStop}
+                />
               )}
             </div>
           </div>

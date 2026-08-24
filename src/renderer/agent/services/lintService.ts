@@ -386,7 +386,6 @@ class LintService {
 				args: resolvedCommand.args,
 				cwd: resolvedCommand.cwd,
 				timeout: 60000,
-				requireConfirm: false
 			})
 			const output = (result.output || '') + (result.errorOutput || '')
 			const errors = lintConfig.parser(output, filePath)

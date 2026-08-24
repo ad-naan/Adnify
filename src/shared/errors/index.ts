@@ -201,9 +201,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, { title: string; description: str
     description: 'You do not have permission to perform this action.',
   },
   [ErrorCode.SECURITY_WHITELIST_BLOCKED]: {
-    title: 'Command Blocked',
-    description: 'This command is not in the whitelist.',
-    suggestion: 'Add the command to Settings > Security > Shell Command Whitelist.',
+    title: 'Command Approval Required',
+    description: 'This command is not on the trusted auto-run list.',
+    suggestion: 'Approve it once, or add it to Settings > Security > Trusted Shell Auto-run List.',
   },
   [ErrorCode.SECURITY_WORKSPACE_VIOLATION]: {
     title: 'Workspace Violation',

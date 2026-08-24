@@ -19,12 +19,15 @@ import { themeManager } from '../../config/themeConfig'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { resolveWriteFileStatusText } from '@renderer/agent/utils/fileWriteDisplay'
 import { suggestTerminalCommandRule } from '@renderer/agent/utils/commandApproval'
+import { ToolApprovalActions } from './ToolApprovalActions'
 
 interface ToolCallCardProps {
     toolCall: ToolCall
     isAwaitingApproval?: boolean
     onApprove?: () => void
+    onApproveForTask?: () => void
     onReject?: () => void
+    onStop?: () => void
     defaultExpanded?: boolean
 }
 
@@ -1002,7 +1005,9 @@ const ToolCallCard = memo(function ToolCallCard({
     toolCall,
     isAwaitingApproval,
     onApprove,
+    onApproveForTask,
     onReject,
+    onStop,
     defaultExpanded,
 }: ToolCallCardProps) {
     const { language, setTerminalVisible, currentTheme, expandAgentBlocksByDefault } = useStore(useShallow(state => ({
@@ -1172,19 +1177,14 @@ const ToolCallCard = memo(function ToolCallCard({
                             </p>
                         </div>
                     )}
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                        <button onClick={onReject} className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all">
-                            {t('toolReject', language as any)}
-                        </button>
-                        <button onClick={onApprove} className="px-3 py-1.5 text-xs font-medium bg-accent text-white hover:bg-accent-hover rounded-md transition-all">
-                            {t('toolApprove', language as any)}
-                        </button>
-                        {effectiveName === 'run_command' && (
-                            <button onClick={() => setShowApproveRule(value => !value)} className="px-3 py-1.5 text-xs font-medium border border-accent/40 text-accent hover:bg-accent/10 rounded-md transition-all">
-                                {language === 'zh' ? '始终允许…' : 'Approve always…'}
-                            </button>
-                        )}
-                    </div>
+                    <ToolApprovalActions
+                        language={language}
+                        onApprove={onApprove}
+                        onApproveForTask={onApproveForTask}
+                        onApproveAlways={effectiveName === 'run_command' ? () => setShowApproveRule(true) : undefined}
+                        onReject={onReject}
+                        onStop={onStop}
+                    />
                 </div>
             )}
         </div>
