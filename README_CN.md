@@ -255,7 +255,7 @@ Adnify 在主流 AI 编辑器的基础上，实现了多项创新功能：
 ### 📝 专业代码编辑
 
 - **Monaco Editor**: VS Code 同款编辑器内核，完整的编辑器功能
-- **多语言 LSP 支持**: TypeScript/JavaScript、Python、Go、Rust、C/C++、HTML/CSS/JSON、Vue、Zig、C# 等 10+ 语言
+- **多语言 LSP 支持**: TypeScript/JavaScript、Java（需 JDK 21+）、Python、Go、Rust、C/C++、HTML/CSS/JSON、Vue、Zig、C# 等 10+ 语言
 - **完整 LSP 功能**: 智能补全、跳转定义、查找引用、悬停提示、代码诊断、格式化、重命名等
 - **智能根目录检测**: 自动识别 monorepo 子项目，为每个子项目启动独立 LSP
 - **AI 代码补全**: 基于上下文的智能代码建议（Ghost Text），实时显示 AI 建议

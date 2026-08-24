@@ -17,6 +17,7 @@ import { normalizeLspUri, pathToLspUri } from '@shared/utils/uriUtils'
 import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
+import { createHash } from 'crypto'
 import { BrowserWindow } from 'electron'
 import { LanguageId } from '@shared/languages'
 import { LSP_DEFAULTS } from '@shared/config/defaults'
@@ -24,6 +25,7 @@ import { CacheService } from '@shared/utils/CacheService'
 import { getCacheConfig } from '@shared/config/agentConfig'
 import {
   getInstalledServerPath,
+  getLspBinDir,
   commandExists,
 } from './installer'
 
@@ -35,7 +37,7 @@ export type { LanguageId } from '@shared/languages'
 interface LspServerConfig {
   name: string
   languages: LanguageId[]
-  getCommand: () => Promise<{ command: string; args: string[] } | null>
+  getCommand: (workspacePath: string) => Promise<{ command: string; args: string[] } | null>
   /** 智能根目录检测函数，返回 null 表示不应该使用此服务器 */
   findRoot?: (filePath: string, workspacePath: string) => Promise<string | null>
   /** 自动安装函数 */
@@ -262,6 +264,51 @@ async function getRustAnalyzerCommand(): Promise<{ command: string; args: string
   return null
 }
 
+// Java LSP (Eclipse JDT LS)
+async function getJdtlsCommand(workspacePath: string): Promise<{ command: string; args: string[] } | null> {
+  const serverPath = getInstalledServerPath('jdtls')
+  if (!serverPath) return null
+
+  const dataDir = path.join(
+    getLspBinDir(),
+    'jdtls-workspaces',
+    createHash('sha1').update(path.resolve(workspacePath)).digest('hex'),
+  )
+  fs.mkdirSync(dataDir, { recursive: true })
+
+  // System packages commonly expose a wrapper executable.
+  if (!serverPath.toLowerCase().endsWith('.jar')) {
+    return { command: serverPath, args: ['-data', dataDir] }
+  }
+
+  const configuredRuntime = resolveRuntimePath(workspacePath, 'java')
+  const javaExecutableName = process.platform === 'win32' ? 'java.exe' : 'java'
+  const javaExecutable = fs.existsSync(configuredRuntime) && fs.statSync(configuredRuntime).isDirectory()
+    ? path.join(configuredRuntime, 'bin', javaExecutableName)
+    : configuredRuntime
+  const jdtlsRoot = path.resolve(path.dirname(serverPath), '..')
+  const platformConfig = process.platform === 'win32'
+    ? 'config_win'
+    : process.platform === 'darwin' ? 'config_mac' : 'config_linux'
+
+  return {
+    command: javaExecutable,
+    args: [
+      '-Declipse.application=org.eclipse.jdt.ls.core.id1',
+      '-Dosgi.bundles.defaultStartLevel=4',
+      '-Declipse.product=org.eclipse.jdt.ls.core.product',
+      '-Dlog.level=INFO',
+      '-Xmx1G',
+      '--add-modules=ALL-SYSTEM',
+      '--add-opens', 'java.base/java.util=ALL-UNNAMED',
+      '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+      '-jar', serverPath,
+      '-configuration', path.join(jdtlsRoot, platformConfig),
+      '-data', dataDir,
+    ],
+  }
+}
+
 // C/C++ LSP (clangd)
 async function getClangdCommand(): Promise<{ command: string; args: string[] } | null> {
   if (commandExists('clangd')) {
@@ -424,6 +471,20 @@ const LSP_SERVERS: LspServerConfig[] = [
       }
 
       return crateRoot
+    },
+  },
+  {
+    name: 'jdtls',
+    languages: ['java'],
+    getCommand: getJdtlsCommand,
+    findRoot: async (filePath, workspacePath) => {
+      const fileDir = path.dirname(filePath)
+      const root = await findNearestRoot(
+        fileDir,
+        workspacePath,
+        ['pom.xml', 'mvnw', 'gradlew', 'settings.gradle', 'settings.gradle.kts', 'build.gradle', 'build.gradle.kts']
+      )
+      return root || workspacePath
     },
   },
   {
@@ -621,7 +682,7 @@ class LspManager {
   }
 
   private async spawnServer(config: LspServerConfig, workspacePath: string): Promise<boolean> {
-    const cmdInfo = await config.getCommand()
+    const cmdInfo = await config.getCommand(workspacePath)
     if (!cmdInfo) {
       logger.lsp.warn(`[LSP ${config.name}] No command available for server`)
       return false
@@ -769,7 +830,16 @@ class LspManager {
       const { resolve, reject, timeout } = instance.pendingRequests.get(message.id)!
       instance.pendingRequests.delete(message.id)
       clearTimeout(timeout)
-      if (message.error) reject(message.error)
+      if (message.error) {
+        const responseError = new Error(
+          typeof message.error.message === 'string'
+            ? message.error.message
+            : `LSP request failed with code ${message.error.code ?? 'unknown'}`
+        ) as Error & { code?: number; data?: unknown }
+        if (typeof message.error.code === 'number') responseError.code = message.error.code
+        if (message.error.data !== undefined) responseError.data = message.error.data
+        reject(responseError)
+      }
       else resolve(message.result)
     } else if (message.method === 'workspace/configuration' && message.id !== undefined) {
       // 处理 workspace/configuration 请求（某些 LSP 服务器需要）

@@ -117,8 +117,19 @@ function autoDetectRuntime(workspacePath: string, languageId: string): string | 
     case 'python': return detectPythonRuntime(workspacePath)
     case 'go': return detectGoRuntime(workspacePath)
     case 'rust': return detectRustRuntime(workspacePath)
+    case 'java': return detectJavaRuntime()
     default: return null
   }
+}
+
+function detectJavaRuntime(): string | null {
+  const executable = process.platform === 'win32' ? 'java.exe' : 'java'
+  const javaHome = process.env.JAVA_HOME
+  if (javaHome) {
+    const javaPath = path.join(javaHome, 'bin', executable)
+    if (fs.existsSync(javaPath)) return javaPath
+  }
+  return resolveExecutable('java')
 }
 
 function detectPythonRuntime(workspacePath: string): string | null {
@@ -232,6 +243,7 @@ function getSystemDefault(languageId: string): string {
     case 'python': return resolveExecutable(isWin ? 'python' : 'python3') || (isWin ? 'python' : 'python3')
     case 'go': return resolveExecutable('go') || 'go'
     case 'rust': return resolveExecutable('rustc') || 'rustc'
+    case 'java': return detectJavaRuntime() || 'java'
     case 'cpp':
     case 'c': return isWin ? 'cl' : 'gcc'
     default: return languageId

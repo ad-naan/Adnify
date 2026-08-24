@@ -258,7 +258,7 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 ### 📝 Professional Code Editing
 
 - **Monaco Editor**: Same editor core as VS Code with complete editing features
-- **Multi-Language LSP Support**: TypeScript/JavaScript, Python, Go, Rust, C/C++, HTML/CSS/JSON, Vue, Zig, C#, and 10+ languages
+- **Multi-Language LSP Support**: TypeScript/JavaScript, Java (JDK 21+), Python, Go, Rust, C/C++, HTML/CSS/JSON, Vue, Zig, C#, and 10+ languages
 - **Complete LSP Features**: Intelligent completion, go to definition, find references, hover info, code diagnostics, formatting, rename, etc.
 - **Smart Root Detection**: Auto-detect monorepo sub-projects, start independent LSP for each
 - **AI Code Completion**: Context-based intelligent code suggestions (Ghost Text) with real-time AI suggestions

@@ -12,7 +12,7 @@
 export type LanguageId =
     | 'typescript' | 'typescriptreact' | 'javascript' | 'javascriptreact'
     | 'html' | 'css' | 'scss' | 'less' | 'json' | 'jsonc'
-    | 'python' | 'go' | 'rust' | 'cpp' | 'c' | 'vue' | 'php'
+    | 'python' | 'go' | 'rust' | 'java' | 'cpp' | 'c' | 'vue' | 'php'
     | 'zig' | 'csharp'
 
 // ==========================================
@@ -236,6 +236,15 @@ export const LSP_SERVER_DEFINITIONS: LspServerDefinition[] = [
         installable: false, // 需要用户自行安装
     },
     {
+        id: 'jdtls',
+        name: 'Java',
+        description: 'Eclipse JDT Language Server (需要 JDK 21+)',
+        languages: ['java'],
+        displayLanguages: ['Java'],
+        builtin: false,
+        installable: true, // 从 Eclipse milestone 站点自动下载
+    },
+    {
         id: 'clangd',
         name: 'C / C++',
         description: 'clangd (自动下载)',
@@ -290,7 +299,6 @@ export const LSP_SUPPORTED_LANGUAGES = LSP_SERVER_DEFINITIONS.flatMap(s => s.lan
 
 // 可扩展支持（需要额外 LSP 服务器，暂未实现自动安装）
 export const LSP_EXTENSIBLE_LANGUAGES = [
-    'java',    // jdtls
     'kotlin',  // kotlin-language-server
     'swift',   // sourcekit-lsp
     'ruby',    // solargraph

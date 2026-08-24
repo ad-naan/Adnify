@@ -32,6 +32,7 @@ const LANGUAGE_TO_SERVER: Record<string, string> = {
   python: 'python',
   go: 'go',
   rust: 'rust',
+  java: 'jdtls',
   c: 'clangd',
   cpp: 'clangd',
   vue: 'vue',
@@ -47,6 +48,7 @@ const SERVER_NAMES: Record<string, string> = {
   python: 'Pyright (Python)',
   go: 'gopls (Go)',
   rust: 'rust-analyzer',
+  jdtls: 'Eclipse JDT LS (Java)',
   clangd: 'clangd (C/C++)',
   vue: 'Vue Language Server',
   php: 'Intelephense (PHP)',
@@ -61,6 +63,7 @@ const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boo
   python: { auto: true, hint: '可自动安装 Pyright' },
   go: { auto: true, hint: '需要系统已安装 Go' },
   rust: { auto: false, hint: '请运行: rustup component add rust-analyzer' },
+  jdtls: { auto: true, hint: '可自动安装，需要 JDK 21+' },
   clangd: { auto: false, hint: '请安装 LLVM/Clang' },
   vue: { auto: true, hint: '可自动安装' },
   php: { auto: true, hint: '可自动安装 Intelephense' },
@@ -172,6 +175,7 @@ export default function LspStatusIndicator() {
       case 'python': return 'Python'
       case 'rust': return 'Rust'
       case 'go': return 'Go'
+      case 'java': return 'Java'
       case 'vue': return 'Vue'
       case 'cpp': return 'C++'
       case 'c': return 'C'

@@ -208,6 +208,11 @@
         "role": "Editor"
       },
       {
+        "ext": "java",
+        "name": "Java Source",
+        "role": "Editor"
+      },
+      {
         "ext": "md",
         "name": "Markdown Document",
         "role": "Editor"

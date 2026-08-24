@@ -181,6 +181,21 @@ const MANAGED_NPM_PACKAGES = [
   'intelephense',
 ] as const
 
+const MANAGED_TYPESCRIPT_LANGUAGE_SERVER_VERSION = '5.3.0'
+const MANAGED_TYPESCRIPT_VERSION = '5.9.3'
+
+function getManagedPackageVersion(targetDir: string, packageName: string): string | null {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(
+      path.join(targetDir, 'node_modules', packageName, 'package.json'),
+      'utf8',
+    )) as { version?: string }
+    return packageJson.version || null
+  } catch {
+    return null
+  }
+}
+
 function includeExistingManagedPackages(packages: string[], targetDir: string): string[] {
   const installPackages = [...packages]
   for (const packageName of MANAGED_NPM_PACKAGES) {
@@ -581,6 +596,12 @@ const SERVER_PATHS: Record<string, ServerPathConfig> = {
     userPaths: [],
     systemCommand: 'rust-analyzer',
   },
+  jdtls: {
+    userPaths: [
+      'jdtls/plugins/org.eclipse.equinox.launcher_*.jar',
+    ],
+    systemCommand: 'jdtls',
+  },
   clangd: {
     userPaths: [
       getExecutableName('clangd'),
@@ -623,19 +644,24 @@ function getInstalledServerPathFromDirs(serverType: string, binDirs: string[]): 
     }
 
     for (const p of config.userPaths) {
-      // 处理通配符路径（如 clangd_*/bin/clangd）
+      // 处理通配符路径（如 clangd_*/bin/clangd 或 plugins/launcher_*.jar）
       if (p.includes('*')) {
-        const [prefix] = p.split('*')
-        const parentDir = path.join(binDir, path.dirname(prefix))
-        if (fs.existsSync(parentDir)) {
-          const entries = fs.readdirSync(parentDir)
-          for (const entry of entries) {
-            if (entry.startsWith(path.basename(prefix))) {
-              const fullPath = path.join(parentDir, entry, p.split('*/')[1] || '')
-              if (fs.existsSync(fullPath)) return fullPath
-            }
+        const segments = p.split(/[\\/]/)
+        const findMatch = (currentDir: string, index: number): string | null => {
+          if (index >= segments.length) return fs.existsSync(currentDir) ? currentDir : null
+          const segment = segments[index]
+          if (!segment.includes('*')) return findMatch(path.join(currentDir, segment), index + 1)
+          if (!fs.existsSync(currentDir)) return null
+          const pattern = new RegExp(`^${segment.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`)
+          for (const entry of fs.readdirSync(currentDir)) {
+            if (!pattern.test(entry)) continue
+            const match = findMatch(path.join(currentDir, entry), index + 1)
+            if (match) return match
           }
+          return null
         }
+        const wildcardPath = findMatch(binDir, 0)
+        if (wildcardPath) return wildcardPath
       } else {
         const fullPath = path.join(binDir, p)
         if (fs.existsSync(fullPath)) return fullPath
@@ -684,6 +710,70 @@ export interface LspInstallResult {
   error?: string
 }
 
+function compareSemverDescending(a: string, b: string): number {
+  const left = a.split('.').map(Number)
+  const right = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const difference = (right[i] || 0) - (left[i] || 0)
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+async function getLatestJdtlsDownload(): Promise<{ version: string; url: string; fileName: string }> {
+  const baseUrl = 'https://download.eclipse.org/jdtls/milestones'
+  const versionsResponse = await fetch(`${baseUrl}/`)
+  if (!versionsResponse.ok) throw new Error(`Eclipse download index returned HTTP ${versionsResponse.status}`)
+  const versionsHtml = await versionsResponse.text()
+  const versions = Array.from(versionsHtml.matchAll(/href=["'][^"']*(\d+\.\d+\.\d+)\/?["']/g), match => match[1])
+    .filter((version, index, all) => all.indexOf(version) === index)
+    .sort(compareSemverDescending)
+  const version = versions[0]
+  if (!version) throw new Error('No JDT LS milestone was found on the Eclipse download site')
+
+  const releaseResponse = await fetch(`${baseUrl}/${version}/`)
+  if (!releaseResponse.ok) throw new Error(`JDT LS ${version} index returned HTTP ${releaseResponse.status}`)
+  const releaseHtml = await releaseResponse.text()
+  const fileName = releaseHtml.match(/jdt-language-server-[^"'<>\s]+\.tar\.gz/)?.[0]
+  if (!fileName) throw new Error(`No JDT LS archive was found for milestone ${version}`)
+  return { version, fileName, url: `${baseUrl}/${version}/${fileName}` }
+}
+
+/**
+ * 安装 Eclipse JDT Language Server (Java LSP)
+ */
+export async function installJdtls(): Promise<LspInstallResult> {
+  logger.lsp.info('[LSP Installer] Starting Eclipse JDT LS installation')
+  logEnvironmentInfo()
+
+  const existing = getInstallCheckServerPath('jdtls')
+  if (existing) return { success: true, path: existing }
+
+  const installDir = path.join(getLspBinDir(), 'jdtls')
+  try {
+    const release = await getLatestJdtlsDownload()
+    logger.lsp.info(`[LSP Installer] Latest JDT LS milestone: ${release.version}`)
+    const archivePath = path.join(getLspBinDir(), release.fileName)
+    if (!await downloadFile(release.url, archivePath)) {
+      return { success: false, error: 'Failed to download JDT LS. Check network connection.' }
+    }
+
+    const extracted = await extractTarXz(archivePath, installDir)
+    try { fs.unlinkSync(archivePath) } catch { /* archive cleanup is best-effort */ }
+    if (!extracted) return { success: false, error: 'Failed to extract the JDT LS archive.' }
+
+    const serverPath = getInstalledServerPathInActiveDir('jdtls')
+    if (!serverPath) {
+      return { success: false, error: 'JDT LS launcher was not found after extraction.' }
+    }
+    return { success: true, path: serverPath }
+  } catch (err) {
+    const error = toAppError(err)
+    logger.lsp.error(`[LSP Installer] JDT LS installation failed: ${error.code}`, error)
+    return { success: false, error: `Installation error: ${error.message}` }
+  }
+}
+
 // ============ 各语言服务器安装函数 ============
 
 /**
@@ -694,15 +784,32 @@ export async function installTypeScriptServer(): Promise<LspInstallResult> {
   logEnvironmentInfo()
 
   const existing = getInstallCheckServerPath('typescript')
-  if (existing) {
+  const binDir = getLspBinDir()
+  const installedServerVersion = getManagedPackageVersion(binDir, 'typescript-language-server')
+  const installedTypeScriptVersion = getManagedPackageVersion(binDir, 'typescript')
+  const hasCompatibleVersions =
+    installedServerVersion === MANAGED_TYPESCRIPT_LANGUAGE_SERVER_VERSION &&
+    installedTypeScriptVersion === MANAGED_TYPESCRIPT_VERSION
+
+  if (existing && hasCompatibleVersions) {
     logger.lsp.info(`[LSP Installer] TypeScript server already installed at: ${existing}`)
     return { success: true, path: existing }
   }
 
-  const binDir = getLspBinDir()
+  if (existing) {
+    logger.lsp.warn('[LSP Installer] Repairing incompatible TypeScript LSP versions', {
+      installedServerVersion,
+      installedTypeScriptVersion,
+      expectedServerVersion: MANAGED_TYPESCRIPT_LANGUAGE_SERVER_VERSION,
+      expectedTypeScriptVersion: MANAGED_TYPESCRIPT_VERSION,
+    })
+  }
   logger.lsp.info(`[LSP Installer] Installing to: ${binDir}`)
 
-  const installResult = await npmInstall(['typescript-language-server', 'typescript'], binDir)
+  const installResult = await npmInstall([
+    `typescript-language-server@${MANAGED_TYPESCRIPT_LANGUAGE_SERVER_VERSION}`,
+    `typescript@${MANAGED_TYPESCRIPT_VERSION}`,
+  ], binDir)
 
   if (installResult.success) {
     logger.lsp.debug('[LSP Installer] npm install completed, verifying installation...')
@@ -1304,6 +1411,8 @@ export async function installServer(serverId: string): Promise<LspInstallResult>
     case 'rust':
       logger.lsp.warn('[LSP Installer] rust-analyzer requires manual installation')
       return { success: false, error: 'rust-analyzer must be installed manually via rustup. Run: rustup component add rust-analyzer' }
+    case 'jdtls':
+      return installJdtls()
     case 'deno':
       logger.lsp.warn('[LSP Installer] Deno requires manual installation')
       return { success: false, error: 'Deno must be installed manually from https://deno.land' }
