@@ -2,21 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
 
 describe('readFile utils', () => {
-  it('normalizes JSON array path strings into arrays', () => {
+  it('normalizes explicit multi-file paths without line ranges', () => {
     const normalized = normalizeReadFileArgs({
-      path: '["src/a.ts","src/b.ts"]',
+      paths: ['src/a.ts', 'src/b.ts'],
       start_line: 10,
       end_line: 20,
     })
 
-    expect(normalized.path).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(normalized.paths).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(normalized.path).toBeUndefined()
     expect(normalized.start_line).toBeUndefined()
     expect(normalized.end_line).toBeUndefined()
   })
 
   it('resolves multi-file requests from array payloads', () => {
     const result = resolveReadFileRequest({
-      path: ['src/a.ts', 'src/b.ts'],
+      paths: ['src/a.ts', 'src/b.ts'],
     })
 
     expect(result.ok).toBe(true)

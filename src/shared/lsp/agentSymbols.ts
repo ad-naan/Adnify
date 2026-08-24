@@ -131,6 +131,36 @@ export function limitAgentSymbolDepth(symbols: AgentSymbol[], depth: number): Ag
   return symbols.map(symbol => limitDepth(symbol, normalizedDepth))
 }
 
+export interface CompactAgentSymbol {
+  namePath: string
+  kind: string
+  range: string
+  detail?: string
+  location?: string
+  body?: string
+  children?: CompactAgentSymbol[]
+}
+
+function formatAgentRange(range: AgentSymbol['range']): string {
+  return `${range.start.line}:${range.start.column}-${range.end.line}:${range.end.column}`
+}
+
+/** Removes LSP bookkeeping that is useful internally but redundant in read-only tool results. */
+export function compactAgentSymbols(
+  symbols: AgentSymbol[],
+  options: { includeLocation?: boolean } = {},
+): CompactAgentSymbol[] {
+  return symbols.map(symbol => ({
+    namePath: symbol.namePath,
+    kind: symbol.kindName,
+    range: formatAgentRange(symbol.range),
+    ...(symbol.detail ? { detail: symbol.detail } : {}),
+    ...(options.includeLocation ? { location: `${symbol.relativePath}:${formatAgentRange(symbol.range)}` } : {}),
+    ...(symbol.body !== undefined ? { body: symbol.body } : {}),
+    ...(symbol.children?.length ? { children: compactAgentSymbols(symbol.children, options) } : {}),
+  }))
+}
+
 export function findAgentSymbols(
   symbolTrees: AgentSymbol[],
   namePathPattern: string,

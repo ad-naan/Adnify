@@ -13,61 +13,34 @@ export type ReadFileResolution =
   | { ok: true; mode: 'multi'; normalized: Record<string, unknown>; args: ReadFileMultiArgs }
   | { ok: false; normalized: Record<string, unknown>; error: string }
 
-function parsePathValue(path: unknown): string | string[] | undefined {
-  if (Array.isArray(path) && path.every((item) => typeof item === 'string')) {
-    return path
-  }
-
-  if (typeof path !== 'string') {
-    return undefined
-  }
-
-  const trimmed = path.trim()
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    try {
-      const parsed = JSON.parse(trimmed)
-      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
-        return parsed
-      }
-    } catch {
-      // Fall back to the raw string path.
-    }
-  }
-
-  return path
-}
-
 export function normalizeReadFileArgs(data: Record<string, unknown>): Record<string, unknown> {
   const normalized = { ...data }
-  const parsedPath = parsePathValue(normalized.path)
-
-  if (Array.isArray(parsedPath)) {
-    normalized.path = parsedPath
+  if (Array.isArray(normalized.paths)) {
+    delete normalized.path
     delete normalized.start_line
     delete normalized.end_line
-  } else if (typeof parsedPath === 'string') {
-    normalized.path = parsedPath
   }
-
   return normalized
 }
 
 export function resolveReadFileRequest(data: Record<string, unknown>): ReadFileResolution {
   const normalized = normalizeReadFileArgs(data)
-  const parsedPath = normalized.path
+  const paths = normalized.paths
 
-  if (Array.isArray(parsedPath)) {
-    if (parsedPath.length === 0) {
-      return { ok: false, normalized, error: 'path array must not be empty' }
+  if (Array.isArray(paths)) {
+    if (paths.length === 0) {
+      return { ok: false, normalized, error: 'paths must not be empty' }
     }
 
     return {
       ok: true,
       mode: 'multi',
       normalized,
-      args: { paths: parsedPath },
+      args: { paths: paths as string[] },
     }
   }
+
+  const parsedPath = normalized.path
 
   if (typeof parsedPath !== 'string' || parsedPath.length === 0) {
     return { ok: false, normalized, error: 'path is required' }

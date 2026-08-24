@@ -11,7 +11,7 @@ import { logger } from '@utils/Logger'
 import type { AgentSymbol, LspDocumentSymbol, LspSymbolInformation, LspTextEdit, LspWorkspaceEdit, ToolExecutionResult, ToolExecutionContext } from '@/shared/types'
 import { validatePath, platform, getDirname, toFullPath, toRelativePath } from '@shared/utils/pathUtils'
 import { lspUriToPath, pathToLspUri } from '@shared/utils/uriUtils'
-import { extractLspRange, findAgentSymbols, findContainingAgentSymbol, limitAgentSymbolDepth, normalizeAgentNamePathPattern, toAgentSymbols } from '@shared/lsp/agentSymbols'
+import { compactAgentSymbols, extractLspRange, findAgentSymbols, findContainingAgentSymbol, limitAgentSymbolDepth, normalizeAgentNamePathPattern, toAgentSymbols } from '@shared/lsp/agentSymbols'
 import { applyLspTextEdits, collectWorkspaceTextEdits } from '@shared/lsp/textEdits'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
@@ -2799,10 +2799,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const loaded = await loadAgentSymbolsForFile(args.path as string, ctx)
         if (!loaded.symbols.length) return { success: true, result: 'No symbols found' }
 
-        const depth = typeof args.depth === 'number' ? args.depth : 1
+        const depth = typeof args.depth === 'number' ? args.depth : 0
         return {
             success: true,
-            result: JSON.stringify(limitAgentSymbolDepth(loaded.symbols, depth), null, 2),
+            result: JSON.stringify({
+                relativePath: loaded.relativePath,
+                symbols: compactAgentSymbols(limitAgentSymbolDepth(loaded.symbols, depth)),
+            }),
             meta: { relativePath: loaded.relativePath, symbolCount: loaded.symbols.length },
         }
     },
@@ -2848,8 +2851,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             result: JSON.stringify({
                 matchedCount: matches.length,
                 truncated: matches.length > maxMatches,
-                symbols,
-            }, null, 2),
+                symbols: compactAgentSymbols(symbols, { includeLocation: true }),
+            }),
             meta: { matchedCount: matches.length, returnedCount: symbols.length },
         }
     },

@@ -5,6 +5,7 @@ import { useAgentStore } from '../store/AgentStore'
 import { useStore } from '@store'
 import { getAgentConfig, READ_TOOLS } from '../utils/AgentConfig'
 import { LoopDetector } from '../utils/LoopDetector'
+import { isInternalToolRoutingCategory, ToolRoutingAdvisor } from '../utils/ToolRoutingAdvisor'
 import { getReadOnlyTools, isFileEditTool } from '@/shared/config/tools'
 import { pathStartsWith, joinPath } from '@shared/utils/pathUtils'
 import { createStreamProcessor } from './stream'
@@ -73,6 +74,14 @@ function getLoopCheckMessage(language: string, loopCheck: LoopCheckResult): stri
       return translate(language, 'agent.loop.patternLoop', {
         pattern: details.pattern || '',
       })
+    case 'semantic_navigation':
+      return translate(language, details.pattern === 'fallback_source_read_burst'
+        ? 'agent.routing.fallbackReadBurst'
+        : 'agent.routing.sourceReadBurst')
+    case 'tool_routing':
+      return translate(language, details.pattern === 'shell_file_discovery'
+        ? 'agent.routing.shellDiscovery'
+        : 'agent.routing.recursiveDirectory')
     default:
       return loopCheck.reason || loopCheck.warning || translate(language, 'agent.loop.generic')
   }
@@ -89,6 +98,14 @@ function getLoopCheckSuggestion(language: string, loopCheck: LoopCheckResult): s
       return translate(language, 'agent.loop.suggestion.contentCycle')
     case 'pattern_loop':
       return translate(language, 'agent.loop.suggestion.patternLoop')
+    case 'semantic_navigation':
+      return translate(language, details.pattern === 'fallback_source_read_burst'
+        ? 'agent.routing.suggestion.fallbackReadBurst'
+        : 'agent.routing.suggestion.sourceReadBurst')
+    case 'tool_routing':
+      return translate(language, details.pattern === 'shell_file_discovery'
+        ? 'agent.routing.suggestion.shellDiscovery'
+        : 'agent.routing.suggestion.recursiveDirectory')
     default:
       return loopCheck.suggestion
   }
@@ -115,6 +132,15 @@ function buildSoftLimitFeedback(language: string, title: string, detail: string,
     'Do not abort the conversation and do not treat this limit as a fatal error.',
     'Finish by concluding with the information already available.',
     'Prioritize the current conclusion, completed work, missing information, or a more efficient next step.',
+  ].filter(Boolean).join('\n')
+}
+
+function buildToolRoutingFeedback(language: string, detail: string, suggestion?: string): string {
+  return [
+    translate(language, 'agent.routing.feedback.intro'),
+    detail,
+    suggestion ? translate(language, 'agent.routing.feedback.suggestion', { suggestion }) : '',
+    translate(language, 'agent.routing.feedback.continue'),
   ].filter(Boolean).join('\n')
 }
 
@@ -417,6 +443,7 @@ export async function runLoop(
   const agentTools = toolRuntime.toolManager.getAllToolDefinitions()
   const executeTools = await importExecuteTools()
   const loopDetector = new LoopDetector()
+  const toolRoutingAdvisor = new ToolRoutingAdvisor()
   let requestMessages = llmMessages
   let iteration = 0
   let shouldContinue = true
@@ -795,31 +822,36 @@ Try again with the corrected tool call.`,
     // the turn on that signal made long tasks unfinishable. `isLoop` is retained
     // on the result type for callers that want to inspect it, but the loop does
     // not branch on it.
-    const loopCheck = loopDetector.checkLoop(result.toolCalls)
+    const routingCheck = toolRoutingAdvisor.check(result.toolCalls)
+    const loopCheck = routingCheck.warning ? routingCheck : loopDetector.checkLoop(result.toolCalls)
 
     if (loopCheck.warning) {
       const { language } = useStore.getState()
-      const warningTitle = getLocalizedText(language, '循环预警', 'Loop Warning')
+      const isRoutingCorrection = isInternalToolRoutingCategory(loopCheck.details?.category)
+      const warningTitle = isRoutingCorrection
+        ? translate(language, 'agent.routing.title')
+        : translate(language, 'agent.loop.title')
       const warningMessage = getLoopCheckMessage(language, loopCheck)
       const warningSuggestion = getLoopCheckSuggestion(language, loopCheck)
 
       logger.agent.warn(`[Loop] Non-blocking loop warning: ${loopCheck.warning}`)
       clearUnexecutedToolCards(result.toolCalls)
-      threadStore.addSystemAlertPart(assistantId, {
-        alertType: 'warning',
-        title: warningTitle,
-        message: warningMessage,
-        suggestion: warningSuggestion,
-        compact: true,
-      })
-      EventBus.emit({ type: 'loop:warning', message: warningMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      if (!isRoutingCorrection) {
+        threadStore.addSystemAlertPart(assistantId, {
+          alertType: 'warning',
+          title: warningTitle,
+          message: warningMessage,
+          suggestion: warningSuggestion,
+          compact: true,
+        })
+        EventBus.emit({ type: 'loop:warning', message: warningMessage, threadId, assistantId, requestId, planTaskId: context.planTaskId })
+      }
 
       requestMessages.push({
         role: 'user',
-        content: [
-          buildSoftLimitFeedback(language, warningTitle, warningMessage, warningSuggestion),
-          formatLoopDiagnostic(language, loopCheck),
-        ].filter(Boolean).join('\n\n'),
+        content: isRoutingCorrection
+          ? [buildToolRoutingFeedback(language, warningMessage, warningSuggestion), formatLoopDiagnostic(language, loopCheck)].filter(Boolean).join('\n\n')
+          : [buildSoftLimitFeedback(language, warningTitle, warningMessage, warningSuggestion), formatLoopDiagnostic(language, loopCheck)].filter(Boolean).join('\n\n'),
       })
 
       shouldContinue = true
@@ -896,6 +928,10 @@ Try again with the corrected tool call.`,
       // loopDetector 的 failureRate。
       const success = toolResult.status === 'success'
       loopDetector.recordExecutedTool({
+        name: toolCall.name,
+        arguments: toolCall.arguments,
+      }, success)
+      toolRoutingAdvisor.recordExecutedTool({
         name: toolCall.name,
         arguments: toolCall.arguments,
       }, success)

@@ -27,7 +27,7 @@ export interface LoopCheckResult {
   suggestion?: string
   warning?: string
   details?: {
-    category: 'exact_repeat' | 'same_tool_warning' | 'content_cycle' | 'pattern_loop' | 'semantic_navigation'
+    category: 'exact_repeat' | 'same_tool_warning' | 'content_cycle' | 'pattern_loop'
     toolName?: string
     count?: number
     threshold?: number
@@ -96,19 +96,6 @@ const WRITE_OPERATIONS = new Set([
   'rename_symbol',
 ])
 
-const SYMBOLIC_OPERATIONS = new Set([
-  'find_symbol',
-  'find_references',
-  'navigate_symbol',
-  'get_hover_info',
-  'get_document_symbols',
-])
-
-const SOURCE_EXTENSIONS = new Set([
-  'c', 'cc', 'cpp', 'cs', 'dart', 'ex', 'exs', 'fs', 'go', 'h', 'hpp', 'java', 'js', 'jsx',
-  'kt', 'kts', 'lua', 'php', 'py', 'rb', 'rs', 'scala', 'swift', 'ts', 'tsx', 'vue', 'svelte', 'zig',
-])
-
 /**
  * How many trailing path segments form a content-hash key. Two is enough to tell
  * `src/a.ts` from `test/a.ts` while remaining independent of the absolute prefix
@@ -133,9 +120,6 @@ export class LoopDetector {
 
     for (const tc of toolCalls) {
       const record = this.createRecord(tc, fileContents)
-
-      const semanticNavigationResult = this.checkSemanticNavigationBurst(record)
-      if (semanticNavigationResult.warning) return semanticNavigationResult
 
       // All rules are advisory and surface via `warning`; `isLoop` is kept in the
       // condition only so a future hard-stop rule would still be routed here.
@@ -309,43 +293,6 @@ export class LoopDetector {
     }
 
     return { isLoop: false }
-  }
-
-  private checkSemanticNavigationBurst(record: ToolCallRecord): LoopCheckResult {
-    if (record.name !== 'read_file' || !record.target || !this.isSourcePath(record.target)) {
-      return { isLoop: false }
-    }
-
-    let lastSymbolicIndex = -1
-    for (let index = this.history.length - 1; index >= 0; index--) {
-      if (SYMBOLIC_OPERATIONS.has(this.history[index].name)) {
-        lastSymbolicIndex = index
-        break
-      }
-    }
-    const recentSourceReads = this.history
-      .slice(lastSymbolicIndex + 1)
-      .filter(entry => entry.success && entry.name === 'read_file' && entry.target && this.isSourcePath(entry.target))
-
-    if (recentSourceReads.length !== 2) return { isLoop: false }
-    return {
-      isLoop: false,
-      warning: 'Three source files are being read consecutively without semantic navigation.',
-      suggestion: 'Use find_symbol for a known symbol or get_document_symbols for an unfamiliar source file before reading more files.',
-      details: {
-        category: 'semantic_navigation',
-        toolName: record.name,
-        count: 3,
-        threshold: 3,
-        target: record.target,
-      },
-    }
-  }
-
-  private isSourcePath(filePath: string): boolean {
-    const normalized = filePath.split(/[?#]/, 1)[0]
-    const extension = normalized.slice(normalized.lastIndexOf('.') + 1).toLowerCase()
-    return SOURCE_EXTENSIONS.has(extension)
   }
 
   private checkContentChange(record: ToolCallRecord): LoopCheckResult {

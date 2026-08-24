@@ -79,6 +79,7 @@ describe('Tool Definitions', () => {
       expect(getToolsForContext({ mode: 'plan' })).toContain('find_symbol')
       expect(TOOL_SCHEMAS.find_symbol.safeParse({ name_path: 'Editor/render' }).success).toBe(true)
       expect(TOOL_SCHEMAS.get_document_symbols.safeParse({ path: 'src/editor.ts', depth: 1 }).success).toBe(true)
+      expect(TOOL_SCHEMAS.get_document_symbols.parse({ path: 'src/editor.ts' }).depth).toBe(0)
       expect(TOOL_SCHEMAS.find_references.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render' }).success).toBe(true)
       expect(TOOL_SCHEMAS.find_references.safeParse({ path: 'src/editor.ts', line: 1, column: 1 }).success).toBe(false)
       expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'definition' }).success).toBe(true)
@@ -105,15 +106,16 @@ describe('Tool Definitions', () => {
       expect(schemaKeys.length).toBeGreaterThanOrEqual(configKeys.length * 0.5)
     })
 
-    it('should allow read_file path arrays', () => {
+    it('should allow read_file paths arrays', () => {
       const readFileSchema = TOOL_SCHEMAS.read_file
       expect(readFileSchema).toBeDefined()
 
       const result = readFileSchema.safeParse({
-        path: ['src/a.ts', 'src/b.ts'],
+        paths: ['src/a.ts', 'src/b.ts'],
       })
 
       expect(result.success).toBe(true)
+      expect(readFileSchema.safeParse({ path: 'src/a.ts', paths: ['src/b.ts'] }).success).toBe(false)
     })
 
     it('should accept inverted line ranges in read_file', () => {

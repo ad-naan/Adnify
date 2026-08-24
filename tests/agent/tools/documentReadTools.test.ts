@@ -156,7 +156,9 @@ describe('document read tool executors', () => {
       'export class Cache { get() {} }',
     )
     expect(api.lsp.documentSymbol).toHaveBeenCalled()
-    expect(result.result).toContain('"namePath": "Cache"')
+    expect(result.result).toContain('"namePath":"Cache"')
+    expect(result.result).toContain('"relativePath":"src/cache.ts"')
+    expect(result.result).not.toContain('selectionRange')
   })
 
   it('reports an unavailable language server as a failure instead of an empty success', async () => {
@@ -250,7 +252,7 @@ describe('document read tool executors', () => {
     })
 
     const result = await toolExecutors.read_file({
-      path: ['src/app.ts', 'docs/report.pdf'],
+      paths: ['src/app.ts', 'docs/report.pdf'],
     }, ctx)
 
     expect(result.success).toBe(true)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractLspRange, findAgentSymbols, findContainingAgentSymbol, toAgentSymbols } from '@shared/lsp/agentSymbols'
+import { compactAgentSymbols, extractLspRange, findAgentSymbols, findContainingAgentSymbol, toAgentSymbols } from '@shared/lsp/agentSymbols'
 import type { LspDocumentSymbol } from '@shared/types'
 
 const range = (startLine: number, startCharacter: number, endLine: number, endCharacter: number) => ({
@@ -55,5 +55,20 @@ describe('agent symbols', () => {
     expect(findContainingAgentSymbol(tree, 3, 8)?.namePath).toBe('UserService/find[0]')
     expect(findContainingAgentSymbol(tree, 8, 1)?.namePath).toBe('UserService')
     expect(findContainingAgentSymbol(tree, 20, 1)).toBeNull()
+  })
+
+  it('keeps precise internal symbols but emits compact read-only results', () => {
+    const tree = toAgentSymbols(symbols, 'src/user.ts')
+    const compact = compactAgentSymbols(tree, { includeLocation: true })
+
+    expect(compact[0]).toMatchObject({
+      namePath: 'UserService',
+      kind: 'Class',
+      range: '1:1-8:2',
+      location: 'src/user.ts:1:1-8:2',
+    })
+    expect(compact[0]).not.toHaveProperty('name')
+    expect(compact[0]).not.toHaveProperty('selectionRange')
+    expect(compact[0].children?.[0].namePath).toBe('UserService/find[0]')
   })
 })

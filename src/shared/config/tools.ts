@@ -115,20 +115,23 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         description: 'Read exact file contents before editing or when semantic tools cannot answer. For code discovery, prefer find_symbol or get_document_symbols instead of reading whole files.',
         detailedDescription: `Read file contents from the filesystem.
 - Single file: path="src/main.ts"
-- Multiple files: path=["src/a.ts", "src/b.ts"]
+- Multiple files: paths=["src/a.ts", "src/b.ts"]
 - Code files default to line-numbered output for precise edits
 - PDF/Office files are parsed into readable extracted text
 - Standalone image paths are automatically delegated to visual analysis if this tool is selected by mistake
 - If a rich document contains embedded images and a multimodal model is configured, Adnify will append embedded-image analyses automatically
 - Large files will be truncated, use search_files to locate target first`,
         customSchema: z.object({
-            path: z.union([
-                z.string().min(1, 'path is required'),
-                z.array(z.string().min(1, 'path items must be non-empty')).min(1, 'path array must not be empty')
-            ]),
+            path: z.string().min(1, 'path is required').optional(),
+            paths: z.array(z.string().min(1, 'path items must be non-empty')).min(1, 'paths must not be empty').optional(),
             start_line: z.number().optional(),
             end_line: z.number().optional(),
         }).passthrough()
+            .superRefine((data, ctx) => {
+                if (Boolean(data.path) === Boolean(data.paths)) {
+                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide exactly one of path or paths' })
+                }
+            })
             .transform((data) => normalizeReadFileArgs(data as Record<string, unknown>))
             .refine(
                 (data) => resolveReadFileRequest(data as Record<string, unknown>).ok,
@@ -150,9 +153,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         parameters: {
             path: {
                 type: 'string',
-                description: 'File path string OR JSON array of paths. Single: "src/main.ts". Multiple: ["src/a.ts", "src/b.ts"]. start_line/end_line only apply to single-file reads.',
-                required: true
+                description: 'Single file path. Use paths instead for multiple files.'
             },
+            paths: { type: 'array', description: 'Multiple file paths. Do not combine with path or line ranges.', items: { type: 'string', description: 'File path relative to workspace root' } },
             start_line: { type: 'number', description: 'Starting line (1-indexed, single file only)' },
             end_line: { type: 'number', description: 'Ending line inclusive (single file only)' },
         },
@@ -189,7 +192,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         description: 'List directory contents. Use recursive=true for tree view of subdirectories. Use recursive=false (default) for single level.',
         detailedDescription: `List directory contents with file types and sizes.
 - Non-recursive: shows immediate children only
-- Recursive: shows full tree up to max_depth`,
+- Recursive: shows full tree up to max_depth
+- Use for filesystem layout, not for discovering code structure or call chains`,
+        criticalRules: ['After one recursive project overview, switch to semantic navigation or targeted search instead of recursively listing narrower source directories'],
         category: 'read',
         approvalType: 'none',
         parallel: true,
@@ -864,7 +869,8 @@ For long-running servers or watch tasks:
 - Returns stable name paths such as ClassName/methodName
 - Includes symbol kinds and one-based source ranges
 - The file path must already be known and must identify a source file; do not guess paths
-- Use depth=0 for top-level symbols or a larger depth for descendants`,
+- Returns compact ranges as startLine:startColumn-endLine:endColumn
+- Starts with top-level symbols; request a larger depth only when descendants are needed`,
         criticalRules: ['If the exact source file path is unknown, use find_symbol without relative_path instead of guessing a path'],
         category: 'lsp',
         approvalType: 'none',
@@ -873,7 +879,7 @@ For long-running servers or watch tasks:
         enabled: true,
         parameters: {
             path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
-            depth: { type: 'number', description: 'Descendant depth to include (default: 1)', default: 1 },
+            depth: { type: 'number', description: 'Descendant depth to include (default: 0 for top-level only)', default: 0 },
         },
     },
 
@@ -1469,7 +1475,7 @@ export const SEARCH_DECISION_GUIDE = `
 
 **ANTI-FRAGMENTATION:**
 - Combine multiple patterns with | instead of making multiple calls
-- Pass an array to \`read_file\` (path=["a.ts","b.ts"]) instead of multiple read_file calls
+- Pass an array to \`read_file\` with paths=["a.ts","b.ts"] instead of multiple read_file calls
 `
 
 // ============================================
