@@ -51,7 +51,7 @@ export function ProgressiveReveal({
 
       {canCollapse && !expanded && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 flex h-24 items-end justify-center pb-2"
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex h-24 items-end justify-center pb-2"
           style={{ background: 'linear-gradient(to top, rgb(var(--surface)) 12%, rgb(var(--surface) / 0.94) 48%, transparent)' }}
         >
           <button
