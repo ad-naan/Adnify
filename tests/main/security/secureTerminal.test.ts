@@ -174,6 +174,39 @@ describe('secureTerminal', () => {
     )
   })
 
+  it('treats a non-repository git query as an expected miss', async () => {
+    const workspaceRoot = process.cwd()
+    const args = [
+      '-c',
+      'core.quotePath=false',
+      'log',
+      '-240',
+      '--pretty=format:%H%x00%h%x00%s%x00%an%x00%ae%x00%aI%x00%P',
+    ]
+    dugiteExecMock.mockResolvedValue({
+      exitCode: 128,
+      stdout: '',
+      stderr: 'fatal: not a git repository (or any of the parent directories): .git\n',
+    })
+
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const handler = handlers.get('git:execSecure')
+    const result = await handler?.({ sender: { id: 1 } }, args, workspaceRoot)
+
+    expect(result).toMatchObject({ success: false, exitCode: 128 })
+    expect(logger.security.debug).toHaveBeenCalledWith('[Git] dugite query returned non-zero:', args)
+    expect(logger.security.error).not.toHaveBeenCalledWith(
+      '[Git] dugite exec failed:',
+      args,
+      'fatal: not a git repository (or any of the parent directories): .git\n',
+    )
+  })
+
   it('launches Windows cmd and bat shims through cmd.exe', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
     vi.stubEnv('ComSpec', 'C:\\Windows\\System32\\cmd.exe')

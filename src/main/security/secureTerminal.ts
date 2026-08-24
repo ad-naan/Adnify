@@ -367,6 +367,12 @@ function shouldLogGitNonZeroAsWarning(args: string[], stderr: string, stdout: st
   return false
 }
 
+function isExpectedGitQueryMiss(args: string[], stderr: string, stdout: string): boolean {
+  const output = `${stderr}\n${stdout}`.toLowerCase()
+  return args.some(arg => arg === '--verify' || arg === '--is-inside-work-tree')
+    || output.includes('not a git repository')
+}
+
 /**
  * 注册安全的终端处理程序
  */
@@ -609,7 +615,7 @@ export function registerSecureTerminalHandlers(
 
         if (result.exitCode !== 0) {
           // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
-          const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+          const isQueryCommand = isExpectedGitQueryMiss(args, result.stderr || '', result.stdout || '')
           if (isQueryCommand) {
             logger.security.debug('[Git] dugite query returned non-zero:', args)
           } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
@@ -641,7 +647,7 @@ export function registerSecureTerminalHandlers(
       })
 
       if (result.exitCode !== 0) {
-        const isQueryCommand = args.some(a => a === '--verify' || a === '--is-inside-work-tree')
+        const isQueryCommand = isExpectedGitQueryMiss(args, result.stderr || '', result.stdout || '')
         if (isQueryCommand) {
           logger.security.debug('[Git] spawn query returned non-zero:', args)
         } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {

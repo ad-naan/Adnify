@@ -459,7 +459,10 @@ class WorkspaceAnalyticsService {
     for (const root of workspaceRoots) {
       const discovered = await gitService.discoverRepositories(root, 2).catch(() => [])
       if (discovered.length === 0) {
-        repositories.add(root)
+        const isRepository = await gitService.isGitRepo(root).catch(() => false)
+        if (isRepository) {
+          repositories.add(root)
+        }
         continue
       }
 
