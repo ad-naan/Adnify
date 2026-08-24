@@ -13,10 +13,11 @@ vi.mock('@renderer/services/WorkspaceManager', () => ({
 }))
 
 let prepareLLMRequestMessages: typeof import('@renderer/agent/core/loop').prepareLLMRequestMessages
+let clearUnexecutedToolCards: typeof import('@renderer/agent/core/loop').clearUnexecutedToolCards
 
 beforeAll(async () => {
   vi.stubGlobal('self', globalThis)
-  ;({ prepareLLMRequestMessages } = await import('@renderer/agent/core/loop'))
+  ;({ prepareLLMRequestMessages, clearUnexecutedToolCards } = await import('@renderer/agent/core/loop'))
 })
 
 describe('Agent Loop', () => {
@@ -43,6 +44,41 @@ describe('Agent Loop', () => {
   })
 
   describe('Loop Detection', () => {
+    it('clears only the rejected proposal and preserves calls from earlier iterations', () => {
+      const calls = [
+        { id: 'completed-call', name: 'find_symbol', arguments: {}, status: 'success' },
+        { id: 'earlier-running-call', name: 'read_file', arguments: {}, status: 'running' },
+        { id: 'rejected-call', name: 'read_file', arguments: {}, status: 'pending' },
+      ] as const
+      const updateMessage = vi.fn()
+      const clearToolStreamingPreview = vi.fn()
+
+      clearUnexecutedToolCards({
+        getMessages: () => [{
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          parts: calls.map(toolCall => ({ type: 'tool_call' as const, toolCall })),
+          toolCalls: [...calls],
+          timestamp: Date.now(),
+        }],
+        updateMessage,
+        clearToolStreamingPreview,
+      }, 'assistant-1', [{ id: 'rejected-call' }])
+
+      const updates = updateMessage.mock.calls[0][1]
+      expect(updates.parts.map((part: { toolCall: { id: string } }) => part.toolCall.id)).toEqual([
+        'completed-call',
+        'earlier-running-call',
+      ])
+      expect(updates.toolCalls.map((toolCall: { id: string }) => toolCall.id)).toEqual([
+        'completed-call',
+        'earlier-running-call',
+      ])
+      expect(clearToolStreamingPreview).toHaveBeenCalledOnce()
+      expect(clearToolStreamingPreview).toHaveBeenCalledWith('rejected-call')
+    })
+
     it('should detect infinite loops', () => {
       // 测试循环检测逻辑
       expect(true).toBe(true)

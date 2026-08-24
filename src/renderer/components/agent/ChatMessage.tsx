@@ -1118,7 +1118,7 @@ const ChatMessage = React.memo(({
   const [typingIndex, setTypingIndex] = useState(0)
   // selector 提到了 chatMessageLiveSelector.ts —— 它有引用稳定性要求需要被测试
   // 覆盖（静态消息必须返回恒等引用，否则 overscan 内的每条消息都会跟着流式重渲染）
-  const { isStreaming, previewMap, liveParts, liveInteractive } = useAgentStore(
+  const { isStreaming, liveParts, liveInteractive } = useAgentStore(
     useShallow(state =>
       selectLiveState(
         state as unknown as LiveSelectorState,
@@ -1161,22 +1161,6 @@ const ChatMessage = React.memo(({
       return () => window.clearTimeout(timer)
     }
   }, [isStreaming, message])
-
-  const previewToolCalls = React.useMemo(() => {
-    if (!isAssistantMessage(message)) return []
-
-    const persistedIds = new Set((message.toolCalls || []).map(tc => tc.id))
-
-    return Object.entries(previewMap)
-      .filter(([id, preview]) => preview?.isStreaming && !persistedIds.has(id))
-      .sort(([, left], [, right]) => (left.lastUpdateTime || 0) - (right.lastUpdateTime || 0))
-      .map(([id, preview]) => ({
-        id,
-        name: preview.name || '...',
-        arguments: preview.partialArgs || {},
-        status: 'pending' as const,
-      }))
-  }, [message, previewMap])
 
   const hasMetaGroup = React.useMemo(() => {
     if (!isAssistantMessage(message)) return false
@@ -1533,18 +1517,6 @@ const ChatMessage = React.memo(({
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
                     isStreaming={message.isStreaming}
-                    messageId={message.id}
-                  />
-                )}
-                {previewToolCalls.length > 0 && (
-                  <ToolCallGroup
-                    toolCalls={previewToolCalls}
-                    pendingToolId={pendingToolId}
-                    onApproveTool={onApproveTool}
-                    onApproveToolForTask={onApproveToolForTask}
-                    onRejectTool={onRejectTool}
-                    onStopTool={onStopTool}
-                    onOpenDiff={onOpenDiff}
                     messageId={message.id}
                   />
                 )}

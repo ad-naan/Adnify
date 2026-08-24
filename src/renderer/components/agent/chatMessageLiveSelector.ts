@@ -24,9 +24,6 @@
 
 import type { AssistantPart } from '@renderer/agent/types'
 import type { InteractiveContent } from '@renderer/agent/types/interactive'
-import type { ToolStreamingPreview } from '@shared/types'
-
-const EMPTY_PREVIEWS: Record<string, ToolStreamingPreview> = {}
 
 /** 这些 phase 才算「流式进行中」 */
 export const ACTIVE_STREAM_PHASES = new Set(['streaming', 'tool_running', 'tool_pending'])
@@ -47,7 +44,6 @@ export interface LiveSelectorState {
           parts?: AssistantPart[]
           interactive?: InteractiveContent
         }>
-        toolStreamingPreviews?: Record<string, ToolStreamingPreview>
       }
     | undefined
   >
@@ -55,7 +51,6 @@ export interface LiveSelectorState {
 
 export interface LiveSelectorResult {
   isStreaming: boolean
-  previewMap: Record<string, ToolStreamingPreview>
   liveParts: AssistantPart[] | undefined
   liveInteractive: InteractiveContent | undefined
 }
@@ -63,7 +58,6 @@ export interface LiveSelectorResult {
 /** 非流式情况的固定结果——每次返回同一批引用，浅比较恒等 */
 const INERT: LiveSelectorResult = {
   isStreaming: false,
-  previewMap: EMPTY_PREVIEWS,
   liveParts: undefined,
   liveInteractive: undefined,
 }
@@ -98,6 +92,5 @@ export function selectLiveState(
     isStreaming: true,
     liveParts: liveMessage?.parts,
     liveInteractive: liveMessage?.interactive,
-    previewMap: thread?.toolStreamingPreviews || EMPTY_PREVIEWS,
   }
 }

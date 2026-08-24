@@ -44,7 +44,6 @@ function makeState(opts: {
             interactive: INTERACTIVE,
           },
         ],
-        toolStreamingPreviews: {},
       },
     },
   }
@@ -62,7 +61,6 @@ describe('selectLiveState — 引用稳定性（卡顿的根因）', () => {
 
     expect(r1.liveParts).toBe(r2.liveParts)
     expect(r1.liveInteractive).toBe(r2.liveInteractive)
-    expect(r1.previewMap).toBe(r2.previewMap)
     expect(r1.isStreaming).toBe(r2.isStreaming)
   })
 
@@ -70,7 +68,6 @@ describe('selectLiveState — 引用稳定性（卡顿的根因）', () => {
     const r1 = selectLiveState(makeState({}), 'm1', false, false)
     const r2 = selectLiveState(makeState({ partsContent: 'changed' }), 'm1', false, false)
 
-    expect(r1.previewMap).toBe(r2.previewMap)
     expect(r1.liveParts).toBeUndefined()
     expect(r2.liveParts).toBeUndefined()
   })
@@ -85,7 +82,6 @@ describe('selectLiveState — 引用稳定性（卡顿的根因）', () => {
 
     expect(r1.isStreaming).toBe(false)
     expect(r1.liveParts).toBe(r2.liveParts) // 都是 undefined
-    expect(r1.previewMap).toBe(r2.previewMap)
   })
 
   it('phase 不在活跃集合内时不算流式', () => {
@@ -105,7 +101,6 @@ describe('selectLiveState — 流式中仍要拿到实时数据', () => {
     expect(r.isStreaming).toBe(true)
     expect(r.liveParts).toEqual([{ type: 'text', content: 'live text' }])
     expect(r.liveInteractive).toBe(INTERACTIVE)
-    expect(r.previewMap).toEqual({})
   })
 
   it('流式期间 parts 变化必须被看到（不能过度缓存）', () => {
@@ -155,22 +150,6 @@ describe('selectLiveState — 边界情况', () => {
     const r = selectLiveState(state, 'm1', true, true)
     expect(r.isStreaming).toBe(true)
     expect(r.liveParts).toBeUndefined()
-  })
-
-  it('toolStreamingPreviews 缺失时回退到稳定空对象', () => {
-    const state: LiveSelectorState = {
-      currentThreadId: 't1',
-      threads: {
-        t1: {
-          streamState: { assistantId: 'm1', phase: 'streaming' },
-          messages: [{ id: 'm1', role: 'assistant', parts: [] }],
-        },
-      },
-    }
-    const r1 = selectLiveState(state, 'm1', true, true)
-    const r2 = selectLiveState(state, 'm1', true, true)
-    expect(r1.previewMap).toBe(r2.previewMap) // 同一个 EMPTY_PREVIEWS
-    expect(r1.previewMap).toEqual({})
   })
 
   it('只匹配 role=assistant 的同 id 消息', () => {

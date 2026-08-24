@@ -34,10 +34,45 @@ import {
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
 import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
+import type { ThreadBoundStore } from '../store/AgentStore'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
 const importLintService = () => import('../services/lintService').then(m => m.lintService)
+
+type ToolCardCleanupStore = Pick<
+  ThreadBoundStore,
+  'getMessages' | 'updateMessage' | 'clearToolStreamingPreview'
+>
+
+export function clearUnexecutedToolCards(
+  threadStore: ToolCardCleanupStore,
+  assistantId: string | undefined,
+  toolCallsToClear?: Array<{ id: string }>
+): void {
+  if (!assistantId) return
+
+  const assistantMessage = threadStore.getMessages().find(message => message.id === assistantId)
+  if (assistantMessage?.role !== 'assistant') return
+
+  const cancelledIds = new Set((toolCallsToClear || []).map(toolCall => toolCall.id).filter(Boolean))
+  if (cancelledIds.size === 0) return
+
+  threadStore.updateMessage(assistantId, {
+    parts: assistantMessage.parts.filter(part =>
+      part.type !== 'tool_call' || !cancelledIds.has(part.toolCall.id)
+    ),
+    toolCalls: (assistantMessage.toolCalls || []).filter(toolCall =>
+      !cancelledIds.has(toolCall.id)
+    ),
+  })
+
+  // Streaming previews are stored outside the message. Clear both representations
+  // for this rejected proposal without touching calls from earlier iterations.
+  for (const toolCallId of cancelledIds) {
+    threadStore.clearToolStreamingPreview(toolCallId)
+  }
+}
 
 function getLocalizedText(language: string, zh: string, en: string): string {
   return pickLocalizedText(zh, en, language as 'en' | 'zh')
@@ -553,24 +588,6 @@ export async function runLoop(
     EventBus.emit({ type: 'loop:end', reason: 'complete', threadId, assistantId, requestId, planTaskId: context.planTaskId })
   }
 
-  const clearUnexecutedToolCards = (toolCallsToClear?: Array<{ id: string }>) => {
-    if (!assistantId) return
-
-    const assistantMessage = threadStore.getMessages().find(m => m.id === assistantId)
-    if (assistantMessage?.role !== 'assistant') return
-
-    const pendingIds = new Set((toolCallsToClear || []).map(tc => tc.id))
-    threadStore.updateMessage(assistantId, {
-      parts: assistantMessage.parts.filter(part =>
-        part.type !== 'tool_call'
-        || (!pendingIds.has(part.toolCall.id) && !['pending', 'running', 'awaiting'].includes(part.toolCall.status))
-      ),
-      toolCalls: (assistantMessage.toolCalls || []).filter(tc =>
-        !pendingIds.has(tc.id) && !['pending', 'running', 'awaiting'].includes(tc.status)
-      ),
-    })
-  }
-
   EventBus.emit({ type: 'loop:start', threadId, assistantId, requestId, planTaskId: context.planTaskId })
 
   while (shouldContinue && iteration < maxIterations && !context.abortSignal?.aborted) {
@@ -835,7 +852,7 @@ Try again with the corrected tool call.`,
       const warningSuggestion = getLoopCheckSuggestion(language, loopCheck)
 
       logger.agent.warn(`[Loop] Non-blocking loop warning: ${loopCheck.warning}`)
-      clearUnexecutedToolCards(result.toolCalls)
+      clearUnexecutedToolCards(threadStore, assistantId, result.toolCalls)
       if (!isRoutingCorrection) {
         threadStore.addSystemAlertPart(assistantId, {
           alertType: 'warning',

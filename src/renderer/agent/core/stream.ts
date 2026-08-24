@@ -65,77 +65,8 @@ export function createStreamProcessor(
   }>()
   const streamingEditPreviewCoordinator = new StreamingEditPreviewCoordinator()
 
-  let toolUpdateRafId: number | null = null
-  let lastFlushTimestamp = 0
-  let maxStreamingArgsLen = 0
-  const pendingToolPreviewUpdates = new Map<string, {
-    partialArgs?: Record<string, unknown>
-    name?: string
-    timestamp: number
-  }>()
-
   // Cleanup callbacks for request-scoped listeners.
   const cleanups: (() => void)[] = []
-
-  const flushToolPreviewUpdates = () => {
-    if (toolUpdateRafId !== null) {
-      clearTimeout(toolUpdateRafId)
-      toolUpdateRafId = null
-    }
-
-    if (!assistantId || pendingToolPreviewUpdates.size === 0) return
-
-    for (const [toolId, update] of pendingToolPreviewUpdates) {
-      store.setToolStreamingPreview(toolId, {
-        isStreaming: true,
-        ...(update.partialArgs ? { partialArgs: update.partialArgs } : {}),
-        ...(update.name ? { name: update.name } : {}),
-        lastUpdateTime: update.timestamp,
-      })
-    }
-
-    pendingToolPreviewUpdates.clear()
-    lastFlushTimestamp = Date.now()
-  }
-
-  // Adaptive throttle interval based on the largest in-flight args string.
-  // Small args flush near-real-time; very large writes back off to keep the
-  // main thread responsive during streaming diff rendering.
-  const getFlushIntervalMs = (): number => {
-    if (maxStreamingArgsLen > 131072) return 600
-    if (maxStreamingArgsLen > 32768) return 300
-    return 150
-  }
-
-  const scheduleToolPreviewUpdates = () => {
-    if (toolUpdateRafId !== null) return
-
-    const interval = getFlushIntervalMs()
-    const elapsed = Date.now() - lastFlushTimestamp
-    const delay = Math.max(0, interval - elapsed)
-
-    toolUpdateRafId = window.setTimeout(() => {
-      toolUpdateRafId = null
-      flushToolPreviewUpdates()
-    }, delay) as unknown as number
-  }
-
-  const queueToolPreviewUpdate = (
-    toolId: string,
-    update: {
-      partialArgs?: Record<string, unknown>
-      name?: string
-      timestamp: number
-    }
-  ) => {
-    const current = pendingToolPreviewUpdates.get(toolId)
-    pendingToolPreviewUpdates.set(toolId, {
-      ...current,
-      ...update,
-      timestamp: update.timestamp,
-    })
-    scheduleToolPreviewUpdates()
-  }
 
   const syncStreamingEditPreview = async (toolId: string, toolName: string, partialArgs?: Record<string, unknown>) => {
     await streamingEditPreviewCoordinator.sync(
@@ -150,11 +81,6 @@ export function createStreamProcessor(
     if (isCleanedUp) return
     isCleanedUp = true
 
-    if (toolUpdateRafId !== null) {
-      clearTimeout(toolUpdateRafId)
-      toolUpdateRafId = null
-    }
-    pendingToolPreviewUpdates.clear()
     streamingEditPreviewCoordinator.releaseAll()
 
     for (const fn of cleanups) {
@@ -248,13 +174,6 @@ export function createStreamProcessor(
           argsString: '',
         })
 
-        if (assistantId) {
-          store.setToolStreamingPreview(toolId, {
-            isStreaming: true,
-            name: toolName,
-            lastUpdateTime: Date.now(),
-          })
-        }
         EventBus.emit({ type: 'stream:tool_start', id: toolId, name: toolName })
         break
       }
@@ -272,19 +191,12 @@ export function createStreamProcessor(
           if (tc) {
             if (argsDelta) {
               tc.argsString += argsDelta
-              if (tc.argsString.length > maxStreamingArgsLen) {
-                maxStreamingArgsLen = tc.argsString.length
-              }
 
               if (assistantId) {
                 const partialArgs = parsePartialJsonArgs(tc.argsString)
                 if (partialArgs && Object.keys(partialArgs).length > 0) {
                   if (!arePartialArgsEqual(tc.lastPreviewArgs, partialArgs)) {
                     tc.lastPreviewArgs = partialArgs
-                    queueToolPreviewUpdate(tc.id, {
-                      partialArgs,
-                      timestamp: Date.now(),
-                    })
                     void syncStreamingEditPreview(tc.id, tc.name, partialArgs)
                   }
                 }
@@ -292,12 +204,6 @@ export function createStreamProcessor(
             }
             if (data.name && data.name !== tc.name) {
               tc.name = data.name
-              if (assistantId) {
-                queueToolPreviewUpdate(tc.id, {
-                  name: data.name,
-                  timestamp: Date.now(),
-                })
-              }
             }
             EventBus.emit({ type: 'stream:tool_delta', id: tc.id, args: tc.argsString })
           }
@@ -314,15 +220,8 @@ export function createStreamProcessor(
         if (tcId && assistantId) {
           const tc = streamingToolCalls.get(tcId)
           if (tc) {
-            flushToolPreviewUpdates()
             const finalArgs = parseFinalJsonArgs(tc.argsString) || {}
             void syncStreamingEditPreview(tc.id, tc.name, finalArgs)
-            if (finalArgs) {
-              store.updateToolCall(assistantId, tc.id, {
-                arguments: finalArgs,
-                streamingState: undefined,
-              })
-            }
 
             const toolCall: ToolCall = {
               id: tc.id,
@@ -349,10 +248,7 @@ export function createStreamProcessor(
         const toolName = data.name || ''
         const args = data.arguments as Record<string, unknown>
 
-        if (tcId) {
-          flushToolPreviewUpdates()
-          streamingToolCalls.delete(tcId)
-        }
+        if (tcId) streamingToolCalls.delete(tcId)
 
         const toolCall: ToolCall = {
           id: tcId,
@@ -364,15 +260,6 @@ export function createStreamProcessor(
         // Avoid duplicate tool calls in the final array.
         if (!toolCalls.find(tc => tc.id === tcId)) {
           toolCalls.push(toolCall)
-        }
-
-        if (assistantId && tcId) {
-          store.setToolStreamingPreview(tcId, {
-            isStreaming: true,
-            name: toolName,
-            partialArgs: args,
-            lastUpdateTime: Date.now(),
-          })
         }
 
         void syncStreamingEditPreview(tcId, toolName, args)
@@ -474,8 +361,6 @@ export function createStreamProcessor(
     if (result?.reasoningSignature) {
       reasoningSignature = result.reasoningSignature
     }
-    flushToolPreviewUpdates()
-
     // `llm:done:*` and `llm:stream:*` are delivered on different IPC channels.
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
