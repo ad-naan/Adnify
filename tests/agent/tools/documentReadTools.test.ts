@@ -42,7 +42,7 @@ vi.mock('@renderer/services/lspService', () => ({
 
 vi.mock('@renderer/agent/utils/AgentConfig', () => ({
   getAgentConfig: vi.fn(() => ({
-    maxSingleFileChars: 10000,
+    maxToolResultChars: 10000,
     toolTimeoutMs: 1000,
     ignoredDirectories: [],
   })),
@@ -148,7 +148,7 @@ describe('document read tool executors', () => {
       children: [],
     }])
 
-    const result = await toolExecutors.get_document_symbols({ path: 'src/cache.ts' }, ctx)
+    const result = await toolExecutors.get_document_symbols({ relative_path: 'src/cache.ts' }, ctx)
 
     expect(result.success).toBe(true)
     expect(didOpenDocument).toHaveBeenCalledWith(
@@ -165,7 +165,7 @@ describe('document read tool executors', () => {
     vi.mocked(api.file.read).mockResolvedValue('export const value = 1')
     vi.mocked(didOpenDocument).mockResolvedValue(false)
 
-    const result = await toolExecutors.get_document_symbols({ path: 'src/value.ts' }, ctx)
+    const result = await toolExecutors.get_document_symbols({ relative_path: 'src/value.ts' }, ctx)
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('Language server is unavailable')
@@ -175,7 +175,7 @@ describe('document read tool executors', () => {
   it('guides uncertain document paths back to workspace symbol search', async () => {
     vi.mocked(api.file.read).mockResolvedValue(null)
 
-    const result = await toolExecutors.get_document_symbols({ path: 'src/GuessedController.ts' }, ctx)
+    const result = await toolExecutors.get_document_symbols({ relative_path: 'src/GuessedController.ts' }, ctx)
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('use find_symbol without relative_path')

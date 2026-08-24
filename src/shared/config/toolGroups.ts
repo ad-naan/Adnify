@@ -71,6 +71,11 @@ const CORE_TOOLS: string[] = [
   'delete_file_or_folder',
   // 终端
   'run_command',
+  // 后台进程的交互链路。run_command(is_background=true) 返回的提示直接指名这三个
+  // 工具，不注册它们等于让模型去调一个不存在的工具，长进程就此失联。
+  'read_terminal_output',
+  'send_terminal_input',
+  'stop_terminal',
   'list_remote_directory',
   'read_remote_file',
   'write_remote_file',

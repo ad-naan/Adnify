@@ -34,7 +34,7 @@ vi.mock('@renderer/services/lspService', () => ({
 
 vi.mock('@renderer/agent/utils/AgentConfig', () => ({
   getAgentConfig: vi.fn(() => ({
-    maxSingleFileChars: 10000,
+    maxToolResultChars: 10000,
     toolTimeoutMs: 20,
     ignoredDirectories: [],
   })),

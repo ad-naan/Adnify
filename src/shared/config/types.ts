@@ -85,7 +85,6 @@ export interface AgentConfig {
   maxFileContentChars: number
   maxTotalContextChars: number
   maxContextTokens: number
-  maxSingleFileChars: number
   maxContextFiles: number
   maxSemanticResults: number
   maxTerminalChars: number

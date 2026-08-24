@@ -17,8 +17,12 @@ import { getToolApprovalType, getToolMetadata, isFileEditTool, needsFileSnapshot
 import { pathStartsWith, joinPath, isPathInWorkspace, isSensitivePath, toFullPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { EventBus } from './EventBus'
-import { truncateToolResult } from '@/renderer/utils/partialJson'
 import { getAgentConfig } from '../utils/AgentConfig'
+import {
+  boundTextOutput,
+  clampOutputBudget,
+  replaceOversizedJsonOutput,
+} from '@shared/utils/toolOutput'
 import type { ToolCall } from '@/shared/types'
 import type { ToolExecutionContext, AgentToolExecutionResult } from './types'
 import { approvalService } from './approvalService'
@@ -532,6 +536,33 @@ async function executeWithRetry(
 }
 
 /**
+ * 工具结果进入模型上下文前的唯一收敛点。
+ *
+ * 按工具声明的 outputFormat 分派：
+ *  - json: 执行器已经用降级阶梯把结果压进预算，这里只做兜底校验。超预算说明有
+ *    未预期的巨大载荷（典型是 MCP 工具），此时整体替换成合法信封 —— 结构化数据
+ *    被「留头 + 留尾」切开之后不再可解析，模型拿到的是语法残骸，UI 的 JSON.parse
+ *    也会静默失败退成空列表。丢掉整个结果反而是更诚实的失败。
+ *  - text: 保留工具声明的信号端，中间插入省略说明。
+ *
+ * 失败结果一律按 text 处理：错误信息本身是给人读的，而不是原工具的结构化输出。
+ */
+function boundToolOutput(toolName: string, rawContent: string, success: boolean): string {
+  const budget = clampOutputBudget(getAgentConfig().maxToolResultChars)
+  const metadata = getToolMetadata(toolName)
+
+  if (success && metadata?.outputFormat === 'json') {
+    if (rawContent.length <= budget) return rawContent
+    logger.agent.warn(
+      `[Tools] ${toolName} returned ${rawContent.length} chars of JSON, over the ${budget} budget; replaced rather than cut mid-structure`
+    )
+    return replaceOversizedJsonOutput(rawContent.length, budget)
+  }
+
+  return boundTextOutput(rawContent, budget, metadata?.outputSignal ?? 'head')
+}
+
+/**
  * 执行单个工具
  */
 async function executeSingle(
@@ -598,12 +629,10 @@ async function executeSingle(
       ? (result.result !== undefined && result.result !== null ? result.result : 'Success')
       : `Error: ${result.error || 'Unknown error'}`)
 
-    // 截断过长的工具结果（防止单轮对话过长）
-    const config = getAgentConfig()
-    const content = truncateToolResult(rawContent, toolCall.name, config.maxToolResultChars)
+    const content = boundToolOutput(toolCall.name, rawContent, result.success)
 
     if (content.length < rawContent.length) {
-      logger.agent.info(`[Tools] Truncated ${toolCall.name} result: ${rawContent.length} -> ${content.length} chars`)
+      logger.agent.info(`[Tools] Bounded ${toolCall.name} result: ${rawContent.length} -> ${content.length} chars`)
     }
 
     // 记录响应日志

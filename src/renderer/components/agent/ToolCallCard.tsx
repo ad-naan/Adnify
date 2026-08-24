@@ -113,7 +113,9 @@ const getToolPathList = (args: ToolArgs): string[] => {
     const pluralPaths = getPathList(args.paths)
     if (pluralPaths.length > 0) return pluralPaths
 
-    return []
+    // The LSP family addresses files as relative_path. Without this the symbol and
+    // diagnostics cards fall through to '<unknown path>'.
+    return getPathList(args.relative_path)
 }
 
 const getPrimaryToolPath = (args: ToolArgs): string => getToolPathList(args)[0] || ''
@@ -941,7 +943,7 @@ function ToolPreview({
 
     if (effectiveName === 'find_symbol' || effectiveName === 'get_document_symbols') {
         const symbols = parseSymbolToolResult(stringResult)
-        const argumentPath = asString(args.relative_path) || getPrimaryToolPath(args)
+        const argumentPath = getPrimaryToolPath(args)
         const resultPaths = [...new Set(symbols.map(symbol => symbol.relativePath).filter(Boolean))]
         const scopeLabel = argumentPath || (resultPaths.length === 1 ? resultPaths[0] : resultPaths.length > 1 ? `${resultPaths.length} files` : '')
 

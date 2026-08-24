@@ -13,6 +13,7 @@ import { validatePath, platform, getDirname, toFullPath, toRelativePath } from '
 import { lspUriToPath, pathToLspUri } from '@shared/utils/uriUtils'
 import { compactAgentSymbols, extractLspRange, findAgentSymbols, findContainingAgentSymbol, limitAgentSymbolDepth, normalizeAgentNamePathPattern, toAgentSymbols } from '@shared/lsp/agentSymbols'
 import { applyLspTextEdits, collectWorkspaceTextEdits } from '@shared/lsp/textEdits'
+import { boundFileExcerpt, boundJsonOutput, clampOutputBudget, type JsonOutputStage } from '@shared/utils/toolOutput'
 import { waitForDiagnostics, isLanguageSupported, getLanguageId, didOpenDocument } from '@/renderer/services/lspService'
 import {
     calculateLineChanges,
@@ -899,10 +900,24 @@ function getSymbolSearchQuery(namePathPattern: string): string {
     return lastSegment.replace(/\[\d+\]$/, '')
 }
 
+/**
+ * 一次符号搜索最多打开的候选文件数。
+ *
+ * 每个候选都要 read 全文 + didOpen + documentSymbol，成本是线性的，所以必须有上限。
+ * 但上限被触发这件事必须让模型知道 —— 否则「没找到」和「没找完」无法区分。
+ */
+const MAX_SYMBOL_CANDIDATE_FILES = 50
+
+interface SymbolCandidateFiles {
+    paths: string[]
+    /** 索引/LSP 给出的候选总数。大于 paths.length 即表示搜索范围被截断。 */
+    totalCandidates: number
+}
+
 async function findCandidateSymbolFiles(
     namePathPattern: string,
     workspacePath: string,
-): Promise<string[]> {
+): Promise<SymbolCandidateFiles> {
     const query = getSymbolSearchQuery(namePathPattern)
     await api.index.initialize(workspacePath)
     const indexed = await api.index.searchSymbols(workspacePath, query, 100) as Array<{ relativePath: string }>
@@ -917,14 +932,17 @@ async function findCandidateSymbolFiles(
         }
     }
 
-    return [...paths].slice(0, 50)
+    return {
+        paths: [...paths].slice(0, MAX_SYMBOL_CANDIDATE_FILES),
+        totalCandidates: paths.size,
+    }
 }
 
 async function resolveSymbolCandidateFiles(
     namePathPattern: string,
     relativePath: string | undefined,
     ctx: ToolExecutionContext,
-): Promise<string[]> {
+): Promise<SymbolCandidateFiles> {
     if (!ctx.workspacePath) throw new Error('No workspace open')
     const workspacePath = ctx.workspacePath
     if (!relativePath) return findCandidateSymbolFiles(namePathPattern, workspacePath)
@@ -932,13 +950,19 @@ async function resolveSymbolCandidateFiles(
     const fullPath = await resolvePath(relativePath, workspacePath, 'read', ctx.securityApproval)
     const stats = await api.file.stat(fullPath)
     if (!stats) throw new Error(`Symbol search scope does not exist: ${relativePath}`)
-    if (stats.isFile) return [toRelativePath(fullPath, workspacePath).replace(/\\/g, '/')]
+    if (stats.isFile) {
+        const scoped = [toRelativePath(fullPath, workspacePath).replace(/\\/g, '/')]
+        return { paths: scoped, totalCandidates: scoped.length }
+    }
     if (!stats.isDirectory) throw new Error(`Symbol search scope is not a file or directory: ${relativePath}`)
 
     const directory = toRelativePath(fullPath, workspacePath).replace(/\\/g, '/').replace(/\/$/, '')
     const prefix = directory ? `${directory}/` : ''
     const candidates = await findCandidateSymbolFiles(namePathPattern, workspacePath)
-    return candidates.filter(candidate => candidate.replace(/\\/g, '/').startsWith(prefix))
+    // 目录范围是在候选集之上再过滤，所以这里报告过滤后的数量：模型关心的是
+    // 「这个目录里还有没有没看到的」，而不是全工作区的候选总数。
+    const scoped = candidates.paths.filter(candidate => candidate.replace(/\\/g, '/').startsWith(prefix))
+    return { paths: scoped, totalCandidates: scoped.length }
 }
 
 async function includeSymbolBodies(symbols: AgentSymbol[], ctx: ToolExecutionContext): Promise<AgentSymbol[]> {
@@ -973,6 +997,15 @@ async function resolveAgentSymbolPosition(
     return { loaded, symbol: matches[0] }
 }
 
+/** 一个已解析到源码位置、并尽力标注了所属符号的引用点。 */
+interface SymbolLocation {
+    relativePath: string
+    line: number
+    column: number
+    namePath?: string
+    kind?: string
+}
+
 async function formatNavigationLocations(
     locations: unknown,
     ctx: ToolExecutionContext,
@@ -981,7 +1014,7 @@ async function formatNavigationLocations(
     if (!values.length) return 'No locations found'
 
     const symbolTreesByPath = new Map<string, AgentSymbol[]>()
-    const results = []
+    const results: SymbolLocation[] = []
     for (const value of values as Array<{
         uri?: string
         targetUri?: string
@@ -1011,7 +1044,60 @@ async function formatNavigationLocations(
         })
     }
 
-    return results.length ? JSON.stringify(results, null, 2) : 'No locations found'
+    if (!results.length) return 'No locations found'
+
+    return boundJsonOutput([
+        { build: () => ({ locationCount: results.length, locations: results }) },
+        {
+            build: () => ({
+                locationCount: results.length,
+                locations: results.map(({ relativePath, line, column }) => ({ relativePath, line, column })),
+            }),
+            hint: 'Containing symbols were omitted. Call get_document_symbols on a listed file to recover them.',
+        },
+        {
+            build: () => ({ locationCount: results.length, files: countByFile(results) }),
+            hint: 'Only per-file counts fit. Narrow the query to one file to see individual locations.',
+        },
+    ], toolOutputBudget())
+}
+
+/** 工具结果预算。与边界层同源，避免执行器和边界层各自算出不同的上限。 */
+function toolOutputBudget(): number {
+    return clampOutputBudget(getAgentConfig().maxToolResultChars)
+}
+
+/** 把位置列表折叠成 `{ 文件: 命中数 }`，用于阶梯最省的那一级。 */
+function countByFile(entries: Array<{ relativePath: string }>): Record<string, number> {
+    const counts: Record<string, number> = {}
+    for (const entry of entries) counts[entry.relativePath] = (counts[entry.relativePath] ?? 0) + 1
+    return counts
+}
+
+/**
+ * 搜索命中的条数上限。单文件放宽是因为同一文件内的命中通常就是模型要找的那一组，
+ * 而跨目录的前 N 条只是入口，模型应当据此缩小范围而不是指望一次拿全。
+ */
+const MAX_SEARCH_MATCHES_PER_FILE = 100
+const MAX_SEARCH_MATCHES_PER_DIRECTORY = 50
+
+/** `\n--- File: ` + ` ---\n` + 结尾换行的固定开销，用于多文件读取的预算分配。 */
+const MULTI_FILE_SEPARATOR_CHARS = 20
+
+/**
+ * 渲染搜索结果，并在触顶时明确说明总数。
+ *
+ * 「找到 3 条」和「找到 300 条只给你看 50 条」对模型是完全不同的信号：前者可以直接
+ * 下结论，后者必须先缩小范围。静默 slice 会把后者伪装成前者。
+ */
+function formatSearchMatches(lines: string[], limit: number, scopeLabel: string): string {
+    if (lines.length <= limit) return `Found ${lines.length} matches:\n${lines.join('\n')}`
+    return [
+        `Found ${lines.length} matches ${scopeLabel}, showing the first ${limit}.`,
+        'Refine the pattern or narrow the path to see the rest.',
+        '',
+        lines.slice(0, limit).join('\n'),
+    ].join('\n')
 }
 
 interface PreparedWorkspaceFile {
@@ -1194,6 +1280,17 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         const paths = resolution.mode === 'multi' ? resolution.args.paths : [resolution.args.path]
 
+        // 每个文件分到的预算。多文件读取必须先分预算再拼接：否则 N 个文件各自按
+        // 全预算截断、拼成 N 倍长度，再被边界层从整体头尾切一刀 —— 结果是第一个
+        // 文件基本完整、后面的只剩碎片，而提示词却在鼓励模型批量读。
+        //
+        // 分母里要扣掉 `--- File: x ---` 这类分隔符，否则各文件之和恰好等于预算、
+        // 加上分隔符就溢出，又被边界层从尾部切掉最后一个文件。
+        const separatorOverhead = paths.length > 1
+            ? paths.reduce((sum, path) => sum + MULTI_FILE_SEPARATOR_CHARS + path.length, 0)
+            : 0
+        const perFileBudget = Math.floor((toolOutputBudget() - separatorOverhead) / paths.length)
+
         const readOnePath = async (
             inputPath: string,
             allowLineRange: boolean,
@@ -1300,20 +1397,19 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             const endLine = allowLineRange && resolution.mode === 'single' && typeof resolution.args.end_line === 'number'
                 ? Math.min(lines.length, resolution.args.end_line)
                 : lines.length
-            let numberedContent = lines.slice(startLine - 1, endLine).map((line, i) => `${startLine + i}: ${line}`).join('\n')
+            const numberedContent = lines.slice(startLine - 1, endLine).map((line, i) => `${startLine + i}: ${line}`).join('\n')
 
-            const config = getAgentConfig()
-            if (numberedContent.length > config.maxSingleFileChars) {
-                const totalLines = lines.length
-                const readLines = endLine - startLine + 1
-                numberedContent = numberedContent.slice(0, config.maxSingleFileChars) +
-                    `\n\n⚠️ FILE TRUNCATED (showing ${readLines} of ${totalLines} lines, ~${config.maxSingleFileChars} chars)\n` +
-                    'To read more: use search_files to find target location, then read_file with start_line/end_line'
-            }
+            const bounded = boundFileExcerpt(numberedContent, perFileBudget, retained => {
+                const shownLines = numberedContent.slice(0, retained).split('\n').length
+                return [
+                    `⚠️ TRUNCATED: showing lines ${startLine}-${startLine + shownLines - 1} of ${lines.length}.`,
+                    `To continue, call read_file with start_line=${startLine + shownLines}, or use search_files to jump straight to the target.`,
+                ].join('\n')
+            })
 
             return {
                 success: true,
-                result: numberedContent + graphContent,
+                result: bounded + graphContent,
                 meta: {
                     filePath: validPath,
                     contentKind: 'code',
@@ -1466,22 +1562,30 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 if (matched) matches.push(`${pathArg}:${index + 1}: ${line.trim()}`)
             })
 
+            if (!matches.length) return { success: true, result: `No matches found for "${pattern}"` }
+
             return {
                 success: true,
-                result: matches.length
-                    ? `Found ${matches.length} matches:\n${matches.slice(0, 100).join('\n')}`
-                    : `No matches found for "${pattern}"`
+                result: formatSearchMatches(matches, MAX_SEARCH_MATCHES_PER_FILE, 'in this file'),
+                meta: { matchCount: matches.length },
             }
         }
 
-        // 目录搜索模式（原有逻辑）
+        // 目录搜索模式
         const results = await api.file.search(pattern, resolvedPath, {
             isRegex,
             include: args.file_pattern as string | undefined,
             isCaseSensitive: false
         })
         if (!results) return { success: false, result: '', error: 'Search failed' }
-        return { success: true, result: results.slice(0, 50).map(r => `${r.path}:${r.line}: ${r.text.trim()}`).join('\n') || 'No matches found' }
+        if (!results.length) return { success: true, result: 'No matches found' }
+
+        const lines = results.map(r => `${r.path}:${r.line}: ${r.text.trim()}`)
+        return {
+            success: true,
+            result: formatSearchMatches(lines, MAX_SEARCH_MATCHES_PER_DIRECTORY, 'across the searched files'),
+            meta: { matchCount: results.length },
+        }
     },
 
     async edit_file(args, ctx) {
@@ -2646,9 +2750,37 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         }
 
         const count = Object.values(grouped).reduce((sum, items) => sum + items.length, 0)
+        if (!count) return { success: true, result: 'No diagnostics found', meta: { diagnosticCount: 0 } }
+
         return {
             success: true,
-            result: count ? JSON.stringify({ relativePath: loaded.relativePath, count, diagnostics: grouped }, null, 2) : 'No diagnostics found',
+            result: boundJsonOutput([
+                { build: () => ({ relativePath: loaded.relativePath, count, diagnostics: grouped }) },
+                {
+                    // 诊断的价值全在 message 上，位置可以由 name_path 重查，所以先丢位置。
+                    build: () => ({
+                        relativePath: loaded.relativePath,
+                        count,
+                        diagnostics: Object.fromEntries(
+                            Object.entries(grouped).map(([owner, items]) => [
+                                owner,
+                                items.map((item: any) => ({ severity: item.severity, message: item.message })),
+                            ]),
+                        ),
+                    }),
+                    hint: 'Positions and codes were omitted. Pass name_path to inspect one symbol in full.',
+                },
+                {
+                    build: () => ({
+                        relativePath: loaded.relativePath,
+                        count,
+                        diagnosticsPerSymbol: Object.fromEntries(
+                            Object.entries(grouped).map(([owner, items]) => [owner, items.length]),
+                        ),
+                    }),
+                    hint: 'Only per-symbol counts fit. Pass name_path to read one symbol\'s diagnostics, or raise min_severity to 1 for errors only.',
+                },
+            ], toolOutputBudget()),
             meta: { diagnosticCount: count },
         }
     },
@@ -2686,31 +2818,66 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         })
         if (!locations?.length) return { success: true, result: 'No references found' }
 
-        const symbolTreesByPath = new Map<string, AgentSymbol[]>()
-        const references = []
-        for (const location of locations as Array<{ uri: string; range: { start: { line: number; character: number } } }>) {
+        const rawLocations = locations as Array<{ uri: string; range: { start: { line: number; character: number } } }>
+        const maxReferences = Math.max(1, Number(args.max_references ?? 50))
+        const positions = rawLocations.map(location => {
             const fullPath = lspUriToPath(location.uri)
-            const relativePath = toRelativePath(fullPath, ctx.workspacePath).replace(/\\/g, '/')
-            let symbolTrees = symbolTreesByPath.get(relativePath)
-            if (!symbolTrees) {
-                symbolTrees = (await loadAgentSymbolsForFile(relativePath, ctx)).symbols
-                symbolTreesByPath.set(relativePath, symbolTrees)
+            return {
+                relativePath: toRelativePath(fullPath, ctx.workspacePath).replace(/\\/g, '/'),
+                line: location.range.start.line + 1,
+                column: location.range.start.character + 1,
             }
-            const line = location.range.start.line + 1
-            const column = location.range.start.character + 1
-            const container = findContainingAgentSymbol(symbolTrees, line, column)
+        })
+
+        // 只为要返回的那部分解析所属符号。每个引用文件都要 read 全文 + documentSymbol，
+        // 对一个被广泛使用的符号来说，为不会出现在结果里的引用付这份钱是纯浪费。
+        const visible = positions.slice(0, maxReferences)
+        const symbolTreesByPath = new Map<string, AgentSymbol[]>()
+        const references: Array<{
+            relativePath: string
+            line: number
+            column: number
+            containingSymbol?: string
+            containingKind?: string
+        }> = []
+        for (const position of visible) {
+            let symbolTrees = symbolTreesByPath.get(position.relativePath)
+            if (!symbolTrees) {
+                symbolTrees = (await loadAgentSymbolsForFile(position.relativePath, ctx)).symbols
+                symbolTreesByPath.set(position.relativePath, symbolTrees)
+            }
+            const container = findContainingAgentSymbol(symbolTrees, position.line, position.column)
             references.push({
-                relativePath,
-                line,
-                column,
+                ...position,
                 ...(container ? { containingSymbol: container.namePath, containingKind: container.kindName } : {}),
             })
         }
 
+        const total = positions.length
+        const stages: JsonOutputStage[] = [
+            { build: () => ({ symbol: source.namePath, referenceCount: total, references }) },
+        ]
+        if (references.length < total) {
+            stages[0] = {
+                build: () => ({ symbol: source.namePath, referenceCount: total, returnedCount: references.length, references }),
+                hint: `Showing ${references.length} of ${total} references. Raise max_references or narrow the scope to see the rest.`,
+            }
+        }
+        stages.push(
+            {
+                build: () => ({ symbol: source.namePath, referenceCount: total, references: visible }),
+                hint: 'Containing symbols were omitted. Call get_document_symbols on a listed file to recover them.',
+            },
+            {
+                build: () => ({ symbol: source.namePath, referenceCount: total, files: countByFile(positions) }),
+                hint: 'Only per-file counts fit. Restrict the search to one of these files to see individual references.',
+            },
+        )
+
         return {
             success: true,
-            result: JSON.stringify({ symbol: source.namePath, referenceCount: references.length, references }, null, 2),
-            meta: { referenceCount: references.length },
+            result: boundJsonOutput(stages, toolOutputBudget()),
+            meta: { referenceCount: total, returnedCount: references.length },
         }
     },
 
@@ -2796,17 +2963,52 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     },
 
     async get_document_symbols(args, ctx) {
-        const loaded = await loadAgentSymbolsForFile(args.path as string, ctx)
+        const loaded = await loadAgentSymbolsForFile(args.relative_path as string, ctx)
         if (!loaded.symbols.length) return { success: true, result: 'No symbols found' }
 
         const depth = typeof args.depth === 'number' ? args.depth : 0
+        const maxSymbols = Math.max(1, Number(args.max_symbols ?? 200))
+        const total = loaded.symbols.length
+        const visible = loaded.symbols.slice(0, maxSymbols)
+
+        const stages: JsonOutputStage[] = [
+            {
+                build: () => ({
+                    relativePath: loaded.relativePath,
+                    symbolCount: total,
+                    ...(visible.length < total ? { returnedCount: visible.length } : {}),
+                    symbols: compactAgentSymbols(limitAgentSymbolDepth(visible, depth)),
+                }),
+                ...(visible.length < total
+                    ? { hint: `Showing ${visible.length} of ${total} top-level symbols. Raise max_symbols or use find_symbol to target one symbol.` }
+                    : {}),
+            },
+        ]
+        // 后续每一级都把 depth 再收一层，直到只剩顶层。子节点是体积的主要来源，
+        // 而顶层结构才是这个工具存在的理由，所以先丢深度、再丢名字。
+        for (let reduced = depth - 1; reduced >= 0; reduced--) {
+            stages.push({
+                build: () => ({
+                    relativePath: loaded.relativePath,
+                    symbolCount: total,
+                    symbols: compactAgentSymbols(limitAgentSymbolDepth(visible, reduced)),
+                }),
+                hint: `Descendants beyond depth ${reduced} were omitted. Call find_symbol on a listed name path to expand one subtree.`,
+            })
+        }
+        stages.push({
+            build: () => ({
+                relativePath: loaded.relativePath,
+                symbolCount: total,
+                namePaths: visible.map(symbol => symbol.namePath),
+            }),
+            hint: 'Only name paths fit. Call find_symbol with one of these to get its kind, range, and body.',
+        })
+
         return {
             success: true,
-            result: JSON.stringify({
-                relativePath: loaded.relativePath,
-                symbols: compactAgentSymbols(limitAgentSymbolDepth(loaded.symbols, depth)),
-            }),
-            meta: { relativePath: loaded.relativePath, symbolCount: loaded.symbols.length },
+            result: boundJsonOutput(stages, toolOutputBudget()),
+            meta: { relativePath: loaded.relativePath, symbolCount: total, returnedCount: visible.length },
         }
     },
 
@@ -2817,7 +3019,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const includeBody = args.include_body === true
         const depth = includeBody ? 0 : Math.max(0, Number(args.depth ?? 0))
         const maxMatches = Math.max(1, Number(args.max_matches ?? 20))
-        const candidatePaths = await resolveSymbolCandidateFiles(
+        const candidates = await resolveSymbolCandidateFiles(
             namePathPattern,
             typeof args.relative_path === 'string' ? args.relative_path : undefined,
             ctx,
@@ -2826,7 +3028,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         const matches: AgentSymbol[] = []
         let loadedCandidateCount = 0
         let firstLoadError: unknown
-        for (const candidatePath of candidatePaths) {
+        for (const candidatePath of candidates.paths) {
             try {
                 const loaded = await loadAgentSymbolsForFile(candidatePath, ctx)
                 loadedCandidateCount++
@@ -2836,24 +3038,67 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }))
             } catch (error) {
                 firstLoadError ??= error
-                if (candidatePaths.length === 1) throw error
+                if (candidates.paths.length === 1) throw error
             }
         }
 
-        if (candidatePaths.length > 0 && loadedCandidateCount === 0 && firstLoadError) throw firstLoadError
+        if (candidates.paths.length > 0 && loadedCandidateCount === 0 && firstLoadError) throw firstLoadError
 
-        if (!matches.length) return { success: true, result: 'No matching symbols found' }
+        const searchedFileCount = candidates.paths.length
+        const skippedFileCount = candidates.totalCandidates - searchedFileCount
+
+        if (!matches.length) {
+            // 「没有匹配」和「搜索范围被裁剪所以可能漏了」是两件事，必须区分：
+            // 模型据此决定是换名字重搜，还是缩小 relative_path 再搜同一个名字。
+            return {
+                success: true,
+                result: skippedFileCount > 0
+                    ? `No matching symbols found in the ${searchedFileCount} highest-ranked candidate files, but ${skippedFileCount} further candidates were not searched. Narrow the search with relative_path, or use search_files for an exact text match.`
+                    : 'No matching symbols found',
+                meta: { matchedCount: 0, searchedFileCount, skippedFileCount },
+            }
+        }
 
         const visibleMatches = matches.slice(0, maxMatches)
         const symbols = includeBody ? await includeSymbolBodies(visibleMatches, ctx) : visibleMatches
+        const base = {
+            matchedCount: matches.length,
+            ...(skippedFileCount > 0 ? { searchedFileCount, skippedFileCount } : {}),
+        }
+        const overflowHints = [
+            ...(matches.length > maxMatches
+                ? [`Showing ${visibleMatches.length} of ${matches.length} matches; raise max_matches or narrow with relative_path.`]
+                : []),
+            ...(skippedFileCount > 0
+                ? [`${skippedFileCount} candidate files were not searched; narrow with relative_path to cover them.`]
+                : []),
+        ]
+
+        const stages: JsonOutputStage[] = [
+            {
+                build: () => ({ ...base, symbols: compactAgentSymbols(symbols, { includeLocation: true }) }),
+                ...(overflowHints.length ? { hint: overflowHints.join(' ') } : {}),
+            },
+        ]
+        if (includeBody) {
+            // body 是这里唯一的重量级字段，先只丢它，位置信息足以让模型逐个重取。
+            stages.push({
+                build: () => ({
+                    ...base,
+                    symbols: compactAgentSymbols(visibleMatches, { includeLocation: true }),
+                }),
+                hint: 'Symbol bodies were omitted. Call find_symbol with include_body=true on a single name path to read one body.',
+            })
+        }
+        stages.push({
+            build: () => ({ ...base, locations: symbols.map(symbol => `${symbol.relativePath}:${symbol.namePath}`) }),
+            hint: 'Only name paths and files fit. Call find_symbol with relative_path set to one of these files.',
+        })
+
         return {
             success: true,
-            result: JSON.stringify({
-                matchedCount: matches.length,
-                truncated: matches.length > maxMatches,
-                symbols: compactAgentSymbols(symbols, { includeLocation: true }),
-            }),
-            meta: { matchedCount: matches.length, returnedCount: symbols.length },
+            result: boundJsonOutput(stages, toolOutputBudget()),
+            meta: { matchedCount: matches.length, returnedCount: symbols.length, searchedFileCount, skippedFileCount },
         }
     },
 

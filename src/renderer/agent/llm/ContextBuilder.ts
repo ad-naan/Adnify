@@ -361,7 +361,7 @@ async function processSymbolsContext(workspacePath: string | null): Promise<stri
 
     if (currentFile) {
       const symbols = await toolRegistry.execute('get_document_symbols', {
-        path: currentFile
+        relative_path: currentFile
       }, { workspacePath })
 
       if (symbols.success && symbols.result) {

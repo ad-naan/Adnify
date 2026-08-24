@@ -49,44 +49,6 @@ export const CACHE_DEFAULTS: CacheConfigs = {
   healthCheck: { maxSize: 20, ttlMs: 300000, evictionPolicy: 'fifo' },
 }
 
-// ============================================
-// 工具结果截断配置（Agent 专用，不暴露给用户 UI）
-// ============================================
-
-export interface ToolTruncateConfig {
-  maxLength: number
-  headRatio: number
-  tailRatio: number
-}
-
-export const TOOL_TRUNCATE_DEFAULTS: Record<string, ToolTruncateConfig> = {
-  // 文件读取
-  read_file: { maxLength: 60000, headRatio: 0.85, tailRatio: 0.1 },
-  read_multiple_files: { maxLength: 120000, headRatio: 0.9, tailRatio: 0.05 },
-  // 搜索结果
-  search_files: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
-  codebase_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
-  find_symbol: { maxLength: 16000, headRatio: 0.9, tailRatio: 0.05 },
-  find_references: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  grep_search: { maxLength: 10000, headRatio: 0.9, tailRatio: 0.05 },
-  // 目录结构
-  get_dir_tree: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  list_directory: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  // 命令输出
-  run_command: { maxLength: 15000, headRatio: 0.2, tailRatio: 0.75 },
-  execute_command: { maxLength: 15000, headRatio: 0.2, tailRatio: 0.75 },
-  // 符号/定义
-  get_document_symbols: { maxLength: 8000, headRatio: 0.6, tailRatio: 0.35 },
-  get_definition: { maxLength: 5000, headRatio: 0.7, tailRatio: 0.25 },
-  get_hover_info: { maxLength: 3000, headRatio: 0.7, tailRatio: 0.25 },
-  navigate_symbol: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  edit_symbol: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  rename_symbol: { maxLength: 8000, headRatio: 0.85, tailRatio: 0.1 },
-  // Lint
-  get_diagnostics: { maxLength: 10000, headRatio: 0.85, tailRatio: 0.1 },
-  // 默认
-  default: { maxLength: 12000, headRatio: 0.7, tailRatio: 0.25 },
-}
 
 // ============================================
 // 模式后处理钩子配置
@@ -133,7 +95,6 @@ export interface AgentRuntimeConfig {
   maxFileContentChars: number
   maxTotalContextChars: number
   maxContextTokens: number
-  maxSingleFileChars: number
   maxContextFiles: number
   maxSemanticResults: number
   maxTerminalChars: number
@@ -192,7 +153,6 @@ export interface AgentRuntimeConfig {
 
   // 子配置（可选覆盖）
   cache?: Partial<CacheConfigs>
-  toolTruncate?: Partial<Record<string, ToolTruncateConfig>>
 
   // 自动上下文（隐式 RAG）
   enableAutoContext?: boolean
@@ -230,8 +190,4 @@ export const DEFAULT_AGENT_CONFIG: AgentRuntimeConfig = {
 export function getCacheConfig(type: keyof CacheConfigs, override?: Partial<CacheConfigDef>): CacheConfigDef {
   const base = CACHE_DEFAULTS[type]
   return override ? { ...base, ...override } : base
-}
-
-export function getToolTruncateConfig(toolName: string): ToolTruncateConfig {
-  return TOOL_TRUNCATE_DEFAULTS[toolName] || TOOL_TRUNCATE_DEFAULTS.default
 }

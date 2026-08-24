@@ -9,6 +9,7 @@
 
 import { z } from 'zod'
 import type { ToolApprovalType } from '@/shared/types/llm'
+import type { ToolOutputFormat, ToolOutputSignal } from '@/shared/utils/toolOutput'
 import { normalizeEditFileArgs, resolveEditFileRequest } from '@/shared/utils/editFile'
 import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
 import { PLAN_ACTIVITY_STAGES, PLAN_ACTIVITY_STATUSES } from '@/shared/types/planActivity'
@@ -45,6 +46,19 @@ export interface ToolConfig {
     category: ToolCategory
     approvalType: ToolApprovalType
     parallel: boolean
+    /**
+     * 结果形态。决定超预算时如何收敛（见 shared/utils/toolOutput.ts）。
+     *
+     * 'json' 的结果永不被中间截断 —— 执行器负责给出降级阶梯，边界只负责校验。
+     * 省略即 'text'，因为绝大多数工具返回的是给人和模型直接读的文本。
+     */
+    outputFormat?: ToolOutputFormat
+    /**
+     * 文本结果的信号所在端，超预算时保留这一端。省略即 'head'。
+     *
+     * 只有命令类工具是 'tail'：报错和退出码在最后。对 outputFormat: 'json' 无意义。
+     */
+    outputSignal?: ToolOutputSignal
     concurrencyMode?: import('@/shared/types/llm').ToolConcurrencyMode
     resourceScope?: string[]
     resultSemantics?: import('@/shared/types/llm').ToolResultSemantics
@@ -120,7 +134,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 - PDF/Office files are parsed into readable extracted text
 - Standalone image paths are automatically delegated to visual analysis if this tool is selected by mistake
 - If a rich document contains embedded images and a multimodal model is configured, Adnify will append embedded-image analyses automatically
-- Large files will be truncated, use search_files to locate target first`,
+- The result budget is shared across paths, so a large batch returns less of each file; locate the target with find_symbol or search_files first, then read a line range`,
         customSchema: z.object({
             path: z.string().min(1, 'path is required').optional(),
             paths: z.array(z.string().min(1, 'path items must be non-empty')).min(1, 'paths must not be empty').optional(),
@@ -478,6 +492,7 @@ For long-running servers or watch tasks:
         category: 'terminal',
         approvalType: 'terminal',
         parallel: false,
+        outputSignal: 'tail',
         concurrencyMode: 'approval-gated',
         resourceScope: ['process:command'],
         resultSemantics: 'command',
@@ -690,6 +705,7 @@ For long-running servers or watch tasks:
         category: 'terminal',
         approvalType: 'none',
         parallel: true,
+        outputSignal: 'tail',
         concurrencyMode: 'parallel-safe',
         resourceScope: ['process:terminal-read'],
         resultSemantics: 'command',
@@ -756,6 +772,7 @@ For long-running servers or watch tasks:
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
+        outputFormat: 'json',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -772,15 +789,18 @@ For long-running servers or watch tasks:
         detailedDescription: `Find all usages of a symbol without calculating line and column positions.
 - Identify the source symbol with relative_path and name_path
 - Each result includes its file, one-based position, and containing symbol when available
-- Use find_symbol first if the source file or exact name path is unknown`,
+- Use find_symbol first if the source file or exact name path is unknown
+- referenceCount is always the true total; lower max_references when a symbol is widely used and per-file counts are enough`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
+        outputFormat: 'json',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
             relative_path: { type: 'string', description: 'File containing the source symbol', required: true },
             name_path: { type: 'string', description: 'Exact symbol name or name path in that file', required: true },
+            max_references: { type: 'number', description: 'Maximum individual references to return (default: 50). The reported referenceCount is the true total regardless.', default: 50 },
         },
     },
 
@@ -791,6 +811,7 @@ For long-running servers or watch tasks:
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
+        outputFormat: 'json',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
@@ -876,16 +897,19 @@ For long-running servers or watch tasks:
 - Includes symbol kinds and one-based source ranges
 - The file path must already be known and must identify a source file; do not guess paths
 - Returns compact ranges as startLine:startColumn-endLine:endColumn
-- Starts with top-level symbols; request a larger depth only when descendants are needed`,
+- Starts with top-level symbols; request a larger depth only when descendants are needed
+- symbolCount is always the true total; a large file may return fewer symbols than that, in which case narrow the scope with find_symbol`,
         criticalRules: ['If the exact source file path is unknown, use find_symbol without relative_path instead of guessing a path'],
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
+        outputFormat: 'json',
         requiresWorkspace: true,
         enabled: true,
         parameters: {
-            path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
+            relative_path: { type: 'string', description: 'File path relative to workspace root (e.g., "src/main.ts")', required: true },
             depth: { type: 'number', description: 'Descendant depth to include (default: 0 for top-level only)', default: 0 },
+            max_symbols: { type: 'number', description: 'Maximum top-level symbols to return (default: 200). The reported symbolCount is the true total regardless.', default: 200 },
         },
     },
 

@@ -78,8 +78,10 @@ describe('Tool Definitions', () => {
       expect(getToolsForContext({ mode: 'agent' })).toContain('find_symbol')
       expect(getToolsForContext({ mode: 'plan' })).toContain('find_symbol')
       expect(TOOL_SCHEMAS.find_symbol.safeParse({ name_path: 'Editor/render' }).success).toBe(true)
-      expect(TOOL_SCHEMAS.get_document_symbols.safeParse({ path: 'src/editor.ts', depth: 1 }).success).toBe(true)
-      expect(TOOL_SCHEMAS.get_document_symbols.parse({ path: 'src/editor.ts' }).depth).toBe(0)
+      expect(TOOL_SCHEMAS.get_document_symbols.safeParse({ relative_path: 'src/editor.ts', depth: 1 }).success).toBe(true)
+      expect(TOOL_SCHEMAS.get_document_symbols.parse({ relative_path: 'src/editor.ts' }).depth).toBe(0)
+      // The whole LSP family addresses files as relative_path; `path` was an outlier.
+      expect(TOOL_SCHEMAS.get_document_symbols.safeParse({ path: 'src/editor.ts' }).success).toBe(false)
       expect(TOOL_SCHEMAS.find_references.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render' }).success).toBe(true)
       expect(TOOL_SCHEMAS.find_references.safeParse({ path: 'src/editor.ts', line: 1, column: 1 }).success).toBe(false)
       expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'definition' }).success).toBe(true)

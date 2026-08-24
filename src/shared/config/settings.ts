@@ -117,7 +117,6 @@ const defaultAgentConfig: AgentConfig = {
   maxFileContentChars: AGENT_DEFAULTS.maxFileContentChars,
   maxTotalContextChars: AGENT_DEFAULTS.maxTotalContextChars,
   maxContextTokens: AGENT_DEFAULTS.maxContextTokens,
-  maxSingleFileChars: AGENT_DEFAULTS.maxSingleFileChars,
   maxContextFiles: AGENT_DEFAULTS.maxContextFiles,
   maxSemanticResults: AGENT_DEFAULTS.maxSemanticResults,
   maxTerminalChars: AGENT_DEFAULTS.maxTerminalChars,
