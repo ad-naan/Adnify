@@ -28,7 +28,10 @@ export function ToolApprovalActions({
   const [menuPosition, setMenuPosition] = useState({ left: 0, top: 0, ready: false })
   const zh = language === 'zh'
   const closeMenu = () => setMenuOpen(false)
-  const buttonHeight = compact ? 'h-7' : 'h-8'
+  // 审批条是卡片里的操作区，不是页面级主按钮：外层已有卡片边框和背景，
+  // 这里再用大按钮会和内容抢视觉重量。次要动作（拒绝/停止）走无边框浅色文字，
+  // 只有「允许」保留主色实心，一眼就能锁定主操作。
+  const buttonHeight = compact ? 'h-6' : 'h-[26px]'
 
   useLayoutEffect(() => {
     if (!menuOpen || !triggerRef.current || !menuRef.current) return
@@ -79,9 +82,9 @@ export function ToolApprovalActions({
           type="button"
           onClick={onReject}
           title={zh ? '仅拒绝当前操作，Agent 会收到拒绝结果并重新规划' : 'Reject only this action and let the agent re-plan'}
-          className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-[11px] font-medium text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50`}
+          className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded px-1.5 text-[11px] text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/50`}
         >
-          <X className="h-3.5 w-3.5 shrink-0" />
+          <X className="h-3 w-3 shrink-0" />
           <span>{zh ? '拒绝' : 'Reject'}</span>
         </button>
       )}
@@ -91,22 +94,22 @@ export function ToolApprovalActions({
           type="button"
           onClick={onStop}
           title={zh ? '停止当前任务，保留对话和已经完成的结果' : 'Stop this task but keep the conversation and completed results'}
-          className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded-md px-2 text-[11px] font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border`}
+          className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded px-1.5 text-[11px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border`}
         >
-          <Square className="h-3 w-3 shrink-0 fill-current" />
-          <span>{zh ? (compact ? '停止' : '停止任务') : (compact ? 'Stop' : 'Stop task')}</span>
+          <Square className="h-2.5 w-2.5 shrink-0 fill-current" />
+          <span>{zh ? '停止' : 'Stop'}</span>
         </button>
       )}
 
       {onApprove && (
-        <div className="flex shrink-0 items-stretch rounded-md border border-accent/25 bg-accent/10 text-accent">
+        <div className="ml-0.5 flex shrink-0 items-stretch overflow-hidden rounded border border-accent/25 bg-accent/10 text-accent">
           <button
             type="button"
             onClick={onApprove}
             title={zh ? '允许当前操作；符合复用条件的相同操作两分钟内不再询问' : 'Allow this action; eligible identical actions are reused for two minutes'}
-            className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded-l-md px-2.5 text-[11px] font-semibold transition-colors hover:bg-accent/15 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50`}
+            className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors hover:bg-accent/20 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
           >
-            <Check className="h-3.5 w-3.5 shrink-0" />
+            <Check className="h-3 w-3 shrink-0" />
             <span>{zh ? '允许' : 'Allow'}</span>
           </button>
 
@@ -123,9 +126,9 @@ export function ToolApprovalActions({
                   if (!value) setMenuPosition(position => ({ ...position, ready: false }))
                   return !value
                 })}
-                className={`${buttonHeight} flex w-7 cursor-pointer items-center justify-center rounded-r-md border-l border-accent/20 transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50`}
+                className={`${buttonHeight} flex w-5 cursor-pointer items-center justify-center border-l border-accent/20 transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
               >
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3 w-3 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
               </button>
               {menuOpen && typeof document !== 'undefined' && createPortal(
                 <div

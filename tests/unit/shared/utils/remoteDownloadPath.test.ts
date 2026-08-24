@@ -11,8 +11,11 @@ import {
 
 describe('remoteDownloadPath', () => {
   it('builds a destination folder from the remote basename', () => {
+    // buildDirectoryDownloadTarget resolves the parent to an absolute path, so the
+    // expectation must resolve too — otherwise on Windows `path.join` yields a
+    // drive-letter-less `\tmp\...` while `resolve` prepends the current drive.
     expect(buildDirectoryDownloadTarget('/tmp/downloads', '/home/ubuntu/project')).toBe(
-      path.join('/tmp/downloads', 'project'),
+      path.join(path.resolve('/tmp/downloads'), 'project'),
     )
     expect(remoteDirectoryBasename('/')).toBe('remote-download')
     expect(remoteDirectoryBasename('/var/log/')).toBe('log')
@@ -30,7 +33,7 @@ describe('remoteDownloadPath', () => {
     expect(() => assertSafeRemoteName(' padded ')).toThrow(/Unsafe/)
     expect(() => safeJoinUnderDownloadRoot('/tmp/out', '..')).toThrow()
     expect(safeJoinUnderDownloadRoot('/tmp/out', 'src', 'main.ts')).toBe(
-      path.join('/tmp/out', 'src', 'main.ts'),
+      path.join(path.resolve('/tmp/out'), 'src', 'main.ts'),
     )
   })
 

@@ -88,7 +88,7 @@ export const LintCheckCard = memo(({ part }: LintCheckCardProps) => {
                             transition={{ duration: 0.15 }}
                             className="overflow-hidden"
                         >
-                            <div className="px-3 pb-2.5 space-y-2">
+                            <div className="max-h-[260px] overflow-y-auto custom-scrollbar px-3 pb-2.5 space-y-2">
                                 {filesWithErrors.map((file, fi) => (
                                     <div key={fi} className="space-y-0.5">
                                         {/* File name */}

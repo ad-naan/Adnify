@@ -957,22 +957,24 @@ function ToolPreview({
                     {symbols.length > 0 && <span className="shrink-0 text-text-muted/60">· {symbols.length}</span>}
                 </div>
                 {symbols.length > 0 ? (
-                    <div className="space-y-1">
-                        {symbols.map((symbol, index) => (
-                            <div key={`${symbol.relativePath}-${symbol.namePath}-${index}`} className="rounded-md bg-text-primary/[0.025] px-2 py-1.5">
-                                <div className="flex min-w-0 items-center gap-2">
-                                    <code className="min-w-0 flex-1 truncate font-mono text-text-primary">{symbol.namePath}</code>
-                                    {symbol.kindName && <span className="shrink-0 text-[9px] text-text-muted/60">{symbol.kindName}</span>}
+                    <ExpandablePreviewContainer language={language} maxHeight="max-h-[220px]" expandedHeight="max-h-[440px]">
+                        <div className="space-y-1">
+                            {symbols.map((symbol, index) => (
+                                <div key={`${symbol.relativePath}-${symbol.namePath}-${index}`} className="rounded-md bg-text-primary/[0.025] px-2 py-1.5">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <code className="min-w-0 flex-1 truncate font-mono text-text-primary">{symbol.namePath}</code>
+                                        {symbol.kindName && <span className="shrink-0 text-[9px] text-text-muted/60">{symbol.kindName}</span>}
+                                    </div>
+                                    {symbol.relativePath && <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                                        <TextWithFileLinks text={`${symbol.relativePath}${symbol.line ? `:${symbol.line}` : ''}`} />
+                                    </div>}
+                                    {symbol.body && <ExpandablePreviewContainer language={language} maxHeight="max-h-[180px]">
+                                        <pre className="overflow-auto whitespace-pre p-2 font-mono text-[10px] leading-4 text-text-secondary custom-scrollbar">{symbol.body}</pre>
+                                    </ExpandablePreviewContainer>}
                                 </div>
-                                {symbol.relativePath && <div className="mt-0.5 truncate text-[10px] text-text-muted">
-                                    <TextWithFileLinks text={`${symbol.relativePath}${symbol.line ? `:${symbol.line}` : ''}`} />
-                                </div>}
-                                {symbol.body && <ExpandablePreviewContainer language={language} maxHeight="max-h-[180px]">
-                                    <pre className="overflow-auto whitespace-pre p-2 font-mono text-[10px] leading-4 text-text-secondary custom-scrollbar">{symbol.body}</pre>
-                                </ExpandablePreviewContainer>}
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    </ExpandablePreviewContainer>
                 ) : toolCall.result ? (
                     <div className="rounded-md bg-text-primary/[0.025] px-2 py-1.5 text-text-muted">{toolCall.result}</div>
                 ) : (isRunning || isStreaming) && pendingPreview('Analyzing...')}
