@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
-import type { PendingChange, TodoItem } from '@/renderer/agent/types'
+import type { PendingChange, TodoItem, ToolCall } from '@/renderer/agent/types'
 import type { QueuedMessage } from '@/renderer/agent/types/queue'
 import { useStore } from '@store'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
@@ -46,6 +46,7 @@ interface UnifiedStatusTrayProps {
   todos: TodoItem[]
   isStreaming: boolean
   isAwaitingApproval: boolean
+  pendingToolCall?: ToolCall
   onStop?: () => void
   onReviewFile?: (filePath: string) => void
   onAcceptFile?: (filePath: string) => void
@@ -63,6 +64,7 @@ function UnifiedStatusTray({
   todos,
   isStreaming,
   isAwaitingApproval,
+  pendingToolCall,
   onStop,
   onReviewFile,
   onAcceptFile,
@@ -87,6 +89,10 @@ function UnifiedStatusTray({
   const hasTodos = todos.length > 0
   const hasQueue = queue.length > 0
   const hasStatus = isStreaming || isAwaitingApproval
+  const pendingCommand = isAwaitingApproval && pendingToolCall?.name === 'run_command'
+    && typeof pendingToolCall.arguments.command === 'string'
+    ? pendingToolCall.arguments.command
+    : null
 
   // 计算可用的 tabs
   const availableTabs = useMemo(() => {
@@ -256,6 +262,15 @@ function UnifiedStatusTray({
             </button>
           </div>
         </div>
+
+        {pendingCommand && (
+          <div className="border-t border-yellow-500/10 bg-yellow-500/[0.04] px-3 py-2">
+            <code className="block select-text whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-text-primary">
+              <span className="mr-1.5 select-none text-accent/60">$</span>
+              {pendingCommand}
+            </code>
+          </div>
+        )}
 
         {/* Content Area */}
         <AnimatePresence mode="wait">

@@ -1494,6 +1494,7 @@ export default function ChatPanel() {
                 todos={todos}
                 isStreaming={isStreaming}
                 isAwaitingApproval={isAwaitingApproval}
+                pendingToolCall={pendingToolCall}
                 onStop={abort}
                 onReviewFile={handleReviewFile}
                 onAcceptFile={handleAcceptFile}

@@ -28,4 +28,27 @@ describe('PromptBuilder', () => {
     expect(prompt).not.toContain('## Current Task List')
     expect(prompt).not.toContain('do NOT recreate the list')
   })
+
+  it('separates complete symbol edits from small local edits', () => {
+    const prompt = buildSystemPrompt({
+      os: 'Windows',
+      workspacePath: 'E:\\Project\\adnify',
+      activeFile: null,
+      openFiles: [],
+      date: '2026-08-24',
+      mode: 'agent',
+      personality: 'You are a coding assistant.',
+      projectRules: null,
+      memories: [],
+      autoSkills: [],
+      mentionedSkills: [],
+      customInstructions: null,
+      templateId: 'default',
+      projectSummary: null,
+    } satisfies PromptContext)
+
+    expect(prompt).toContain('Complete named symbol → use find_symbol(include_body=true) before edit_symbol')
+    expect(prompt).toContain('edit_file`: change a few local lines inside a symbol')
+    expect(prompt).not.toContain('use edit_file for any partial change to an existing file')
+  })
 })

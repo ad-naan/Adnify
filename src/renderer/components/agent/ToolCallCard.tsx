@@ -1069,7 +1069,7 @@ const ToolCallCard = memo(function ToolCallCard({
         expandAgentBlocksByDefault: state.agentConfig.expandAgentBlocksByDefault ?? false,
     })))
     const { args, effectiveName, isSuccess, isError, isRejected, isRunning, isStreaming } = useToolDisplayState(toolCall)
-    const isActive = isRunning || isStreaming
+    const isActive = isRunning || isStreaming || Boolean(isAwaitingApproval)
     const commandText = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
     const shellDecision = effectiveName === 'run_command' ? assessShellCommand(commandText, []) : null
     const canConfigureCommandRule = shellDecision?.kind !== 'deny' && shellDecision?.risk !== 'dangerous'
@@ -1096,7 +1096,7 @@ const ToolCallCard = memo(function ToolCallCard({
         onApprove?.()
     }
     const { isExpanded, animateContent, handleToggleExpanded } = useToolCardExpansion({
-        defaultExpanded: defaultExpanded ?? expandAgentBlocksByDefault,
+        defaultExpanded: defaultExpanded ?? (Boolean(isAwaitingApproval) || expandAgentBlocksByDefault),
         isActive,
     })
 

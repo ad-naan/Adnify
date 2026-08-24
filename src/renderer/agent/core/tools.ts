@@ -942,21 +942,29 @@ export async function executeTools(
       continue
     }
 
-    // 设置当前工具为待审批状态
-    store.setStreamState({
-      phase: 'tool_pending',
-      currentToolCall: tc,
-      statusText: undefined,
-      requestId: context.requestId,
-      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
-    })
     const pendingArguments = await enrichToolArgumentsWithRoutingMeta(tc, context)
     if (context.currentAssistantId) {
+      store.finalizeTextBeforeToolCall(context.currentAssistantId)
+      store.addToolCallPart(context.currentAssistantId, {
+        id: tc.id,
+        name: tc.name,
+        arguments: pendingArguments,
+      })
       store.updateToolCall(context.currentAssistantId, tc.id, {
         arguments: pendingArguments,
         status: 'awaiting',
       })
     }
+    // The approval card is a validated tool call, not a streaming proposal.
+    // Persist it before entering tool_pending so the user can inspect the exact
+    // command or file operation before deciding whether to allow it.
+    store.setStreamState({
+      phase: 'tool_pending',
+      currentToolCall: { ...tc, arguments: pendingArguments, status: 'awaiting' },
+      statusText: undefined,
+      requestId: context.requestId,
+      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    })
     emitToolEvent({
       type: 'tool:pending',
       id: tc.id,

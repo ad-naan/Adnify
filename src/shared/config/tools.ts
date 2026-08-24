@@ -285,11 +285,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     edit_file: {
         name: 'edit_file',
         displayName: 'Edit File',
-        description: `Edit part of an existing file after reading it first.
+        description: `Edit a small local part of an existing file after inspecting the exact text.
 Choose one mode only: string mode (old_string + new_string), line mode (start_line + end_line + content), or batch mode (edits array).
-Never mix modes, never send empty placeholder edits, and never use edit_file to replace a whole file; use write_file for full replacement.`,
+Never mix modes, never send identical old/new text, and use edit_symbol instead when replacing a complete named function, method, or class.`,
         detailedDescription: `When to use:
-- Use edit_file for partial changes to an existing file after read_file.
+- Use edit_file for a few local lines inside a symbol, config/non-code text, or small non-overlapping edits after targeted read_file.
+- Use edit_symbol after find_symbol(include_body=true) when replacing a complete named function, method, or class, or inserting beside it.
 - Use write_file for new files or intentional full rewrite.
 - Use create_directory when you need a new folder.
 
@@ -821,6 +822,11 @@ For long-running servers or watch tasks:
         name: 'edit_symbol',
         displayName: 'Edit Symbol',
         description: 'Replace a complete symbol definition or insert code immediately before or after it.',
+        detailedDescription: `Use stable semantic name paths for structural edits.
+- Replace a complete function, method, class, interface, or other named definition
+- Insert a new definition immediately before or after an existing symbol
+- Call find_symbol(include_body=true) first for replacement
+- For a one-to-few-line change inside a symbol, use edit_file instead`,
         criticalRules: ['For action=replace, call find_symbol with include_body=true first'],
         category: 'write',
         approvalType: 'none',

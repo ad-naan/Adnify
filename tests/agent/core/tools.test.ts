@@ -140,6 +140,36 @@ describe('Tools Core - Parallel Execution', () => {
       )
     })
 
+    it('persists the exact command before waiting for approval', async () => {
+      const requestId = 'request-shows-command-before-approval'
+      const command = 'bun test src/presentation/ink/terminalText.test.ts'
+      const execution = executeTools(
+        [{ id: 'visible-pending-command', name: 'run_command', arguments: { command }, status: 'pending' }],
+        { ...context, requestId },
+        getStore(),
+      )
+
+      await vi.waitFor(() => {
+        const message = getStore().getMessages().find(item => item.id === assistantId)
+        const pendingCall = message?.role === 'assistant'
+          ? message.toolCalls?.find(item => item.id === 'visible-pending-command')
+          : undefined
+        expect(pendingCall).toEqual(expect.objectContaining({
+          name: 'run_command',
+          arguments: expect.objectContaining({ command }),
+          status: 'awaiting',
+        }))
+      })
+
+      const thread = useAgentStore.getState().threads[threadId]
+      expect(thread.streamState.phase).toBe('tool_pending')
+      expect(thread.streamState.currentToolCall?.arguments.command).toBe(command)
+
+      approvalService.reject(requestId)
+      await execution
+      expect(toolManager.execute).not.toHaveBeenCalled()
+    })
+
     it('returns a rejection to the model and skips later approval calls in the batch', async () => {
       const requestId = 'request-rejects-command-batch'
       const execution = executeTools(
