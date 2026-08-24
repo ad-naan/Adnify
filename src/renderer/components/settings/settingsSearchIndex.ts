@@ -25,6 +25,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // ========== editor（编辑器）==========
   { id: 'editor.theme', tab: 'editor', label: { en: 'Appearance Theme', zh: '外观主题' }, keywords: ['theme', '主题', 'appearance', '外观', 'dark', 'light', '深色', '浅色'] },
+  { id: 'editor.decorativeAnimations', tab: 'editor', label: { en: 'Decorative Animations', zh: '装饰性动画' }, keywords: ['animation', 'motion', '动画', '动效', 'gpu', 'performance', '性能'] },
   { id: 'editor.fontSize', tab: 'editor', label: { en: 'Font Size', zh: '字体大小' }, keywords: ['font', 'size', '字体', '大小', 'fontSize'] },
   { id: 'editor.tabSize', tab: 'editor', label: { en: 'Tab Size', zh: 'Tab 大小' }, keywords: ['tab', 'size', '缩进', 'indent', 'spaces', '空格'] },
   { id: 'editor.wordWrap', tab: 'editor', label: { en: 'Word Wrap', zh: '自动换行' }, keywords: ['word', 'wrap', '换行', '自动换行', 'wordwrap'] },

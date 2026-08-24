@@ -51,7 +51,6 @@ export default function LocalServersIndicator({ language }: { language: Language
       }
       tooltip={t('preview.servers.title', language)}
       title={t('preview.servers.title', language)}
-      badge={readyCount > 0 ? readyCount : undefined}
       width={320}
       height={340}
       language={language as 'en' | 'zh'}

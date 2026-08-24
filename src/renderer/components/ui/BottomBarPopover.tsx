@@ -19,7 +19,6 @@ export interface BottomBarPopoverProps {
     children: ReactNode
     width?: number
     height?: number
-    badge?: string | number
     language?: 'en' | 'zh'
     scrollable?: boolean
 }
@@ -35,7 +34,6 @@ export default memo(function BottomBarPopover({
     children,
     width = 400,
     height,
-    badge,
     scrollable = true,
 }: BottomBarPopoverProps) {
     const [isOpen, setIsOpen] = useState(false)
@@ -144,11 +142,6 @@ export default memo(function BottomBarPopover({
                 title={tooltip}
             >
                 {icon}
-                {badge !== undefined && (
-                    <span className="absolute -right-1 -top-1 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-medium text-white">
-                        {badge}
-                    </span>
-                )}
             </button>
 
             {panel}

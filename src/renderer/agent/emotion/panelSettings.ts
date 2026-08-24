@@ -67,6 +67,12 @@ export function saveEmotionPanelSettings(settings: EmotionPanelSettings): void {
   } catch (_) {}
 }
 
+export function updateEmotionPanelSettings(patch: Partial<EmotionPanelSettings>): EmotionPanelSettings {
+  const next = { ...loadEmotionPanelSettings(), ...patch }
+  saveEmotionPanelSettings(next)
+  return next
+}
+
 export function subscribeEmotionPanelSettings(listener: (settings: EmotionPanelSettings) => void): () => void {
   const handler = (event: Event) => {
     const detail = (event as CustomEvent<EmotionPanelSettings>).detail

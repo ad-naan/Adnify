@@ -12,7 +12,12 @@ import { api } from '@/renderer/services/electronAPI'
 import { t, type Language } from '@/renderer/i18n'
 import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
 import { previewSessionService } from '@/renderer/preview/previewSessionService'
-import { loadPreviewSettings, subscribePreviewSettings, updatePreviewSettings } from '@/renderer/preview/previewSettings'
+import {
+  clearDismissedOrigins,
+  loadPreviewSettings,
+  subscribePreviewSettings,
+  updatePreviewSettings,
+} from '@/renderer/preview/previewSettings'
 import { Switch } from '../ui'
 import type { PreviewServerCandidate, PreviewServerStatus } from '@shared/types/preview'
 
@@ -35,10 +40,10 @@ function statusLabel(status: PreviewServerStatus, language: Language): string {
 export default function LocalServersContent({ language }: { language: Language }) {
   const workspaceRoots = useStore((state) => state.workspace?.roots)
   const [state, setState] = useState(() => devServerDiscoveryService.getState())
-  const [autoPrompt, setAutoPrompt] = useState(() => loadPreviewSettings().autoPrompt)
+  const [previewSettings, setPreviewSettings] = useState(loadPreviewSettings)
 
   useEffect(() => devServerDiscoveryService.subscribe(setState), [])
-  useEffect(() => subscribePreviewSettings((settings) => setAutoPrompt(settings.autoPrompt)), [])
+  useEffect(() => subscribePreviewSettings(setPreviewSettings), [])
 
   const rescan = useCallback(() => {
     if (!workspaceRoots?.length) return
@@ -121,11 +126,22 @@ export default function LocalServersContent({ language }: { language: Language }
         <label className="flex items-center justify-between gap-2 px-1 cursor-pointer">
           <span className="text-[10px] leading-snug text-text-muted">{t('preview.servers.autoPrompt', language)}</span>
           <Switch
-            checked={autoPrompt}
+            checked={previewSettings.autoPrompt}
             onChange={(event) => updatePreviewSettings({ autoPrompt: event.target.checked })}
             className="scale-[0.6] origin-right"
           />
         </label>
+        {previewSettings.dismissedOrigins.length > 0 && (
+          <button
+            type="button"
+            onClick={clearDismissedOrigins}
+            className="mt-1 w-full rounded-md px-1 py-1 text-left text-[10px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"
+          >
+            {language === 'zh'
+              ? `清除 ${previewSettings.dismissedOrigins.length} 个已忽略地址`
+              : `Clear ${previewSettings.dismissedOrigins.length} muted address(es)`}
+          </button>
+        )}
       </div>
     </div>
   )

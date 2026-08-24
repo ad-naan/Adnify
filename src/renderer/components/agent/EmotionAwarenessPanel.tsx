@@ -12,7 +12,7 @@
  * - 智能浮窗（EmotionCompanion）
  */
 
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import {
   Zap, Activity, Frown, Sun, Eye, EyeOff,
   Volume2, VolumeX, Palette, Clock, TrendingUp, Play, ChevronDown, ChevronRight, Shield
@@ -26,7 +26,8 @@ import { useEmotionHistory } from '@/renderer/hooks/useEmotionHistory'
 import {
   EMOTION_COLORS,
   loadEmotionPanelSettings,
-  saveEmotionPanelSettings,
+  subscribeEmotionPanelSettings,
+  updateEmotionPanelSettings,
   computeInflectionPoints,
   type InflectionPoint,
 } from '@/renderer/agent/emotion'
@@ -40,6 +41,8 @@ export const EmotionAwarenessPanel: React.FC = () => {
   const { history, productivity } = useEmotionHistory()
   const emotion = useEmotionState()
   const [settings, setSettings] = useState(loadEmotionPanelSettings)
+
+  useEffect(() => subscribeEmotionPanelSettings(setSettings), [])
 
   const inflectionPoints = useMemo(() => computeInflectionPoints(history), [history])
   const hasEnoughData = useMemo(() => {
@@ -62,19 +65,12 @@ export const EmotionAwarenessPanel: React.FC = () => {
   }
 
   const toggleSetting = (key: keyof typeof settings) => {
-    setSettings(prev => {
-      const next = { ...prev, [key]: !prev[key] }
-      saveEmotionPanelSettings(next)
-      return next
-    })
+    const current = loadEmotionPanelSettings()
+    updateEmotionPanelSettings({ ...current, [key]: !current[key] })
   }
 
   const setSensitivity = (sensitivity: 'low' | 'medium' | 'high') => {
-    setSettings(prev => {
-      const next = { ...prev, sensitivity }
-      saveEmotionPanelSettings(next)
-      return next
-    })
+    updateEmotionPanelSettings({ sensitivity })
   }
 
   return (

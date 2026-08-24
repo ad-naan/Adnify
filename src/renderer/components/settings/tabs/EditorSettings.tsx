@@ -3,7 +3,8 @@
  */
 
 import { api } from '@/renderer/services/electronAPI'
-import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap, RotateCcw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Layout, Type, Sparkles, Terminal, Check, Settings2, Zap, RotateCcw, AlertTriangle } from 'lucide-react'
 import { useStore, type ThemeName } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { themeManager } from '@/renderer/config/themeConfig'
@@ -11,6 +12,11 @@ import { Input, Select, Switch } from '@components/ui'
 import { EditorSettingsProps } from '../types'
 import { CODE_FONT_PRESETS, DEFAULT_GIT_COMMIT_PROMPT } from '@shared/config/defaults'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
+import {
+    loadEmotionPanelSettings,
+    subscribeEmotionPanelSettings,
+    updateEmotionPanelSettings,
+} from '@/renderer/agent/emotion/panelSettings'
 
 const CUSTOM_FONT_VALUE = '__custom__'
 
@@ -97,6 +103,14 @@ const TRIGGER_CHAR_OPTIONS = [
 export function EditorSettings({ settings, setSettings, advancedConfig, setAdvancedConfig, language }: EditorSettingsProps) {
     const { currentTheme, setTheme } = useStore(useShallow(s => ({ currentTheme: s.currentTheme, setTheme: s.setTheme })))
     const allThemes = themeManager.getAllThemes().map(t => t.id)
+    const [decorativeAnimations, setDecorativeAnimations] = useState(
+        () => loadEmotionPanelSettings().decorativeAnimations,
+    )
+
+    useEffect(
+        () => subscribeEmotionPanelSettings(next => setDecorativeAnimations(next.decorativeAnimations)),
+        [],
+    )
 
     const handleThemeChange = (themeId: string) => {
         setTheme(themeId as ThemeName)
@@ -153,6 +167,36 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             </button>
                         )
                     })}
+                </div>
+            </section>
+
+            <section className={sectionClass}>
+                <div className="flex items-center justify-between gap-5">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-accent" />
+                            <h5 className="text-sm font-bold text-text-primary">
+                                {language === 'zh' ? '装饰性动画' : 'Decorative Animations'}
+                            </h5>
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed text-text-muted">
+                            {language === 'zh'
+                                ? '控制呼吸光晕、漂浮粒子和脉冲指示点等循环装饰动效；加载与流式输出等状态动画不受影响。'
+                                : 'Controls looping effects such as breathing glows, floating particles, and pulsing dots. Loading and streaming indicators are unaffected.'}
+                        </p>
+                    </div>
+                    <Switch
+                        checked={decorativeAnimations}
+                        onChange={(event) => updateEmotionPanelSettings({ decorativeAnimations: event.target.checked })}
+                    />
+                </div>
+                <div className="flex items-start gap-2 border-t border-border/50 pt-4 text-[10px] leading-relaxed text-text-muted">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                        {language === 'zh'
+                            ? '系统启用“减少动态效果”时也会自动停用这些动画。'
+                            : 'These animations also stop automatically when your system enables reduced motion.'}
+                    </span>
                 </div>
             </section>
 

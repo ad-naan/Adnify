@@ -157,7 +157,6 @@ export default function StatusBar() {
     [currentThreadId, toolCallLogs]
   )
   const plans = useAgentStore(state => state.plans)
-  const activePlanId = useAgentStore(state => state.activePlanId)
   const loadPlansFromStorage = useAgentStore(state => state.loadPlansFromStorage)
 
   useEffect(() => {
@@ -365,11 +364,14 @@ export default function StatusBar() {
           </BottomBarPopover>
 
           {messageCount > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1 h-6 rounded-md cursor-default group hover:bg-white/5 transition-colors">
-              <div className="flex items-center justify-center w-4 h-4 transition-colors">
-                <MessageSquare className="w-3 h-3 text-text-muted group-hover:text-text-primary transition-colors" />
+            <div
+              className="flex items-center justify-center w-7 h-7 rounded-md cursor-default group hover:bg-white/5 transition-colors"
+              title={language === 'zh' ? `${messageCount} 条消息` : `${messageCount} messages`}
+            >
+              <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
+                <MessageSquare className="w-3 h-3 text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.5)] transition-colors" />
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-400 shadow-[0_0_6px_currentColor] rounded-full" />
               </div>
-              <span className="font-medium text-text-muted group-hover:text-text-primary transition-colors">{messageCount}</span>
             </div>
           )}
 
@@ -387,7 +389,6 @@ export default function StatusBar() {
               }
               tooltip={language === 'zh' ? '任务计划' : 'Task Plans'}
               title={language === 'zh' ? '任务计划' : 'Task Plans'}
-              badge={activePlanId ? undefined : plans.length}
               width={340}
               height={360}
               language={language as 'en' | 'zh'}
@@ -480,7 +481,6 @@ export default function StatusBar() {
                 </AnimatePresence>
               </div>
             }
-            badge={undefined}
             width={360}
             height={420}
             language={language as 'en' | 'zh'}

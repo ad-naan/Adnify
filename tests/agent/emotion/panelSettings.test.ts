@@ -4,6 +4,7 @@ import {
   isEmotionPrivacyMode,
   loadEmotionPanelSettings,
   saveEmotionPanelSettings,
+  updateEmotionPanelSettings,
 } from '@renderer/agent/emotion/panelSettings'
 
 describe('emotion panelSettings', () => {
@@ -23,5 +24,19 @@ describe('emotion panelSettings', () => {
     })
     expect(loadEmotionPanelSettings().privacyMode).toBe(true)
     expect(isEmotionPrivacyMode()).toBe(true)
+  })
+
+  it('persists decorative animation changes without resetting other preferences', () => {
+    saveEmotionPanelSettings({
+      ...DEFAULT_EMOTION_PANEL_SETTINGS,
+      privacyMode: true,
+    })
+
+    updateEmotionPanelSettings({ decorativeAnimations: false })
+
+    expect(loadEmotionPanelSettings()).toEqual(expect.objectContaining({
+      decorativeAnimations: false,
+      privacyMode: true,
+    }))
   })
 })
