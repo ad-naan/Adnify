@@ -56,6 +56,8 @@ import { ImageLightbox } from './ImageLightbox'
 import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { partitionStreamingMarkdown } from './streamingMarkdownPartition'
+import { skillService } from '@/renderer/agent/services/skillService'
+import { logger } from '@shared/utils/Logger'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -271,11 +273,12 @@ interface MessageMetaGroupProps {
 
 const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, isSearchStreaming }: MessageMetaGroupProps) => {
   // Hooks 必须在所有条件返回之前调用（React 规则）
-  const { openFile, setActiveFile, workspacePath, expandAgentBlocksByDefault } = useStore(useShallow(s => ({
+  const { openFile, setActiveFile, workspacePath, expandAgentBlocksByDefault, language } = useStore(useShallow(s => ({
     openFile: s.openFile,
     setActiveFile: s.setActiveFile,
     workspacePath: s.workspacePath,
     expandAgentBlocksByDefault: s.agentConfig.expandAgentBlocksByDefault ?? false,
+    language: s.language,
   })))
   const [isExpanded, setIsExpanded] = useState(expandAgentBlocksByDefault)
 
@@ -289,12 +292,80 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
 
   const handleOpenSkill = async (e: React.MouseEvent, skillId: string) => {
     e.stopPropagation()
-    if (!workspacePath) return
-    const filePath = `${workspacePath}/.adnify/skills/${skillId}/SKILL.md`.replace(/\//g, '\\')
-    const content = await api.file.read(filePath)
-    if (content !== null) {
-      openFile(filePath, content)
-      setActiveFile(filePath)
+    try {
+      // 1. 优先通过 skillService 扫描定位技能文件
+      const loadedSkills = await skillService.getAllSkills()
+      const matched = loadedSkills.find(
+        s => s.name === skillId || s.name.toLowerCase() === skillId.toLowerCase()
+      )
+
+      let targetPath: string | null = matched?.filePath || null
+
+      // 2. 候选项目路径主动探测
+      if (!targetPath && workspacePath) {
+        const candidates = [
+          `${workspacePath}/.adnify/skills/${skillId}/SKILL.md`,
+          `${workspacePath}/.claude/skills/${skillId}/SKILL.md`,
+          `${workspacePath}/.cursor/skills/${skillId}/SKILL.md`,
+          `${workspacePath}/.codex/skills/${skillId}/SKILL.md`,
+          `${workspacePath}/skills/${skillId}/SKILL.md`,
+        ]
+        for (const c of candidates) {
+          const norm = c.replace(/\//g, '\\')
+          try {
+            if (await api.file.exists(norm)) {
+              targetPath = norm
+              break
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      // 3. 全局候选目录主动探测
+      if (!targetPath) {
+        try {
+          const globalDirs = await api.skills.getGlobalDirs()
+          for (const gDir of globalDirs) {
+            if (!gDir) continue
+            const cPath = `${gDir}/${skillId}/SKILL.md`.replace(/\//g, '\\')
+            if (await api.file.exists(cPath)) {
+              targetPath = cPath
+              break
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (targetPath) {
+        try {
+          await api.file.authorizeSettingsEdit(targetPath)
+        } catch {
+          // ignore
+        }
+
+        const content = await api.file.read(targetPath)
+        if (content !== null) {
+          openFile(targetPath, content)
+          setActiveFile(targetPath)
+          return
+        }
+      }
+
+      // 如果有技能内容但文件路径不可访问，使用 fallback 方式在编辑器打开
+      if (matched?.content) {
+        const fallbackPath = `${workspacePath || '.'}/.adnify/skills/${skillId}/SKILL.md`.replace(/\//g, '\\')
+        openFile(fallbackPath, matched.content)
+        setActiveFile(fallbackPath)
+        return
+      }
+
+      logger.agent.warn(`[ChatMessage] Skill not found: ${skillId}`)
+    } catch (err) {
+      logger.agent.error(`[ChatMessage] Failed to open skill ${skillId}:`, err)
     }
   }
 
@@ -307,35 +378,31 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
       {/* 标题行 */}
       <div
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex w-full items-center gap-2 py-1.5 cursor-pointer select-none group rounded-md hover:bg-text-primary/[0.03] transition-colors"
+        className="flex w-full items-center gap-1.5 py-1 cursor-pointer select-none group text-text-muted/50 hover:text-text-secondary transition-colors"
       >
         <motion.div animate={{ rotate: isExpanded ? 0 : -90 }} transition={{ duration: 0.15 }} className="shrink-0 text-text-muted/40 group-hover:text-text-muted transition-colors">
           <ChevronDown className="w-3.5 h-3.5" />
         </motion.div>
 
-        <div className="shrink-0 w-4 h-4 flex items-center justify-center">
-          {isStreaming ? (
-            <div className="w-3.5 h-3.5 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30">
-              <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-            </div>
-          ) : (
-            <Wrench className="w-3 h-3 text-text-muted/50" />
-          )}
-        </div>
+        {isStreaming && (
+          <div className="shrink-0 w-3 h-3 rounded-full bg-accent/20 flex items-center justify-center border border-accent/30 mr-0.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          </div>
+        )}
 
-        <span className={`text-[12px] ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
-          Context
+        <span className={`text-[12px] shrink-0 whitespace-nowrap ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
+          {language === 'zh' ? '上下文' : 'Context'}
         </span>
 
-        {/* 折叠时显示 skill 名称列表 */}
-        {!isExpanded && skillNames && (
-          <span className="text-[11px] text-text-muted/40 truncate ml-0.5">
-            — {skillNames}
+        {/* 折叠时低噪极简摘要 */}
+        {!isExpanded && (
+          <span className="text-[11px] text-text-muted/40 truncate min-w-0 flex-1 ml-1 font-mono whitespace-nowrap">
+            {hasSkills ? `— ${skillNames}` : (hasSearch ? (language === 'zh' ? '— 文件检索' : '— File search') : '')}
           </span>
         )}
       </div>
 
-      {/* 展开内容 — 每行一个类别摘要 */}
+      {/* 展开内容 */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
@@ -350,38 +417,43 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -2 }}
               transition={{ duration: 0.12, ease: 'easeOut' }}
-              className="pb-1.5 pl-[38px] pr-3 space-y-0.5"
+              className="pt-1 pb-1.5 pl-[20px] pr-2 space-y-2"
             >
-              {/* Skill Referenced */}
+              {/* 引用技能 */}
               {hasSkills && (
-                <div className="flex items-center gap-1.5 text-[11px]">
-                  <span className="text-text-muted/35 shrink-0">Skill Referenced</span>
-                  {allSkills.map((item: any, i: number) => (
-                    <React.Fragment key={item.skillId || i}>
-                      {i > 0 && <span className="text-text-muted/20">,</span>}
+                <div className="space-y-1">
+                  <div className="text-[11px] text-text-muted/60 select-none whitespace-nowrap">
+                    {language === 'zh' ? '引用技能' : 'Skill Referenced'}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allSkills.map((item: any, i: number) => (
                       <button
+                        key={item.skillId || i}
                         onClick={(e) => handleOpenSkill(e, item.skillId)}
-                        className="font-mono text-text-muted/55 hover:text-accent transition-colors focus:outline-none"
+                        className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface/70 hover:bg-surface-hover text-text-muted hover:text-text-primary font-mono text-[11px] border border-border/40 hover:border-border/70 transition-colors cursor-pointer select-none whitespace-nowrap focus:outline-none"
+                        title={language === 'zh' ? `查看技能: ${item.skillId}` : `View skill: ${item.skillId}`}
                       >
-                        {item.skillId}
+                        @{item.skillId}
                       </button>
-                    </React.Fragment>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* File Referenced */}
+              {/* 相关文件 */}
               {hasSearch && (
-                <div className="text-[11px]">
+                <div className="space-y-1">
+                  <div className="text-[11px] text-text-muted/60 select-none whitespace-nowrap">
+                    {language === 'zh' ? '相关文件' : 'File Referenced'}
+                  </div>
                   {searchContent ? (
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-text-muted/35 shrink-0">File Referenced</span>
-                      <div className="text-text-muted/40 leading-relaxed max-h-32 overflow-auto custom-scrollbar whitespace-pre-wrap">
-                        {searchContent}
-                      </div>
+                    <div className="text-[11px] text-text-muted/70 leading-relaxed font-mono whitespace-pre-wrap break-words max-h-32 overflow-auto custom-scrollbar">
+                      {searchContent}
                     </div>
                   ) : (
-                    <span className="text-text-muted/25 italic">Searching files...</span>
+                    <div className="text-text-muted/40 italic text-[11px]">
+                      {language === 'zh' ? '正在检索相关文件...' : 'Searching files...'}
+                    </div>
                   )}
                 </div>
               )}

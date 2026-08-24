@@ -52,7 +52,7 @@ function FileChangeCard({
     })
 
     const meta = args._meta as Record<string, unknown> | undefined
-    const filePath = (args.path || meta?.filePath) as string || ''
+    const filePath = (args.path || args.relative_path || meta?.filePath) as string || ''
     const resolvedStreamingFilePath = useMemo(() => {
         return resolveStreamingEditFilePath(filePath, workspacePath) || ''
     }, [filePath, workspacePath])
@@ -102,7 +102,7 @@ function FileChangeCard({
 
         // Hide unrelated old-content noise while partial edits are still streaming.
         if ((isRunning || isStreaming) && !meta?.oldContent && !args.old_string) {
-            const isPartialEdit = toolCall.name === 'edit_file'
+            const isPartialEdit = toolCall.name === 'edit_file' || toolCall.name === 'edit_symbol'
             if (isPartialEdit) return ''
         }
 
@@ -115,7 +115,7 @@ function FileChangeCard({
             return streamingContent
         }
         if (meta?.newContent) return meta.newContent as string
-        return (args.content || args.code || args.new_string || args.replacement || args.source) as string || ''
+        return (args.content || args.code || args.new_string || args.replacement || args.source || args.body || args.new_name) as string || ''
     }, [args, meta, streamingContent, isRunning, isStreaming])
 
     const openFullFile = useMemo(() => async () => {

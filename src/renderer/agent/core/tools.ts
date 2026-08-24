@@ -61,12 +61,12 @@ async function saveFileSnapshots(
 
   // 并行读取所有文件的当前内容
   const snapshotPromises = snapshotTools.map(async (tc) => {
-    const path = tc.arguments?.path as string
-    if (!path) return null
+    const rawPath = (tc.arguments?.path || tc.arguments?.relative_path) as string
+    if (!rawPath) return null
 
-    const fullPath = workspacePath && !pathStartsWith(path, workspacePath)
-      ? joinPath(workspacePath, path)
-      : path
+    const fullPath = workspacePath && !pathStartsWith(rawPath, workspacePath)
+      ? joinPath(workspacePath, rawPath)
+      : rawPath
 
     try {
       const content = await api.file.read(fullPath)

@@ -1,5 +1,5 @@
 export type WriteIntentLike = 'create' | 'full-rewrite' | 'partial-update'
-export type FileChangeActionLabel = 'Create' | 'Rewrite' | 'Update'
+export type FileChangeActionLabel = 'Create' | 'Rewrite' | 'Update' | 'Rename'
 
 function normalizeWriteIntent(meta?: Record<string, unknown>): WriteIntentLike | null {
   const value = meta?.writeIntent
@@ -15,8 +15,12 @@ export function resolveFileChangeActionLabel(
   oldContent = '',
   newContent = ''
 ): FileChangeActionLabel {
-  if (toolName === 'edit_file') {
+  if (toolName === 'edit_file' || toolName === 'edit_symbol') {
     return 'Update'
+  }
+
+  if (toolName === 'rename_symbol') {
+    return 'Rename'
   }
 
   if (toolName === 'write_file') {

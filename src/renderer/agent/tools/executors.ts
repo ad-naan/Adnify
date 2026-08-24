@@ -1139,6 +1139,13 @@ async function applyWorkspaceEditAtomically(
         })
     }
 
+    if (ctx.checkpointId) {
+        const agentStore = useAgentStore.getState()
+        for (const file of prepared) {
+            agentStore.addSnapshotToCheckpoint(ctx.checkpointId, file.path, file.originalContent)
+        }
+    }
+
     const written: PreparedWorkspaceFile[] = []
     const rollback = async (): Promise<string[]> => {
         const conflicts: string[] = []
@@ -1195,17 +1202,30 @@ async function applyWorkspaceEditAtomically(
 
     let newDiagnostics = 0
     const postCommitLimit = pLimit(4)
-    await Promise.all(prepared.map(file => postCommitLimit(async () => {
-        fileCacheService.markFileAsRead(file.path, file.nextContent)
+    const fileChanges = prepared.map(file => {
         const lineChanges = getLineChangesForWrite(file.originalContent, file.nextContent)
+        return {
+            filePath: file.path,
+            oldContent: file.originalContent,
+            newContent: file.nextContent,
+            linesAdded: lineChanges.added,
+            linesRemoved: lineChanges.removed,
+            preHash: hashContent(file.originalContent),
+            postHash: hashContent(file.nextContent),
+        }
+    })
+
+    await Promise.all(prepared.map((file, idx) => postCommitLimit(async () => {
+        fileCacheService.markFileAsRead(file.path, file.nextContent)
+        const lineChanges = fileChanges[idx]
         notifyComposerChange({
             filePath: file.path,
             workspacePath: ctx.workspacePath || '',
             oldContent: file.originalContent,
             newContent: file.nextContent,
             changeType: 'modify',
-            linesAdded: lineChanges.added,
-            linesRemoved: lineChanges.removed,
+            linesAdded: lineChanges.linesAdded,
+            linesRemoved: lineChanges.linesRemoved,
             ...getWritePreviewFlags(file.originalContent, file.nextContent),
             toolCallId: ctx.toolCallId,
         })
@@ -1225,15 +1245,28 @@ async function applyWorkspaceEditAtomically(
             newContent: file.nextContent,
             preHash: hashContent(file.originalContent),
             postHash: hashContent(file.nextContent),
-            linesAdded: lineChanges.added,
-            linesRemoved: lineChanges.removed,
+            linesAdded: lineChanges.linesAdded,
+            linesRemoved: lineChanges.linesRemoved,
         })
     })))
+
+    const primaryFile = fileChanges[0]
+    const totalLinesAdded = fileChanges.reduce((sum, f) => sum + f.linesAdded, 0)
+    const totalLinesRemoved = fileChanges.reduce((sum, f) => sum + f.linesRemoved, 0)
 
     return {
         success: true,
         result: `Updated ${prepared.length} file(s) atomically; new diagnostics: ${newDiagnostics}`,
-        meta: { filesChanged: prepared.map(file => file.path), newDiagnostics },
+        meta: {
+            filePath: primaryFile?.filePath,
+            oldContent: primaryFile?.oldContent,
+            newContent: primaryFile?.newContent,
+            linesAdded: totalLinesAdded,
+            linesRemoved: totalLinesRemoved,
+            filesChanged: prepared.map(file => file.path),
+            fileChanges,
+            newDiagnostics,
+        },
     }
 }
 

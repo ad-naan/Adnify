@@ -4,6 +4,76 @@
 
 ---
 
+## [1.7.61] - 2026-08-25 全局偏好持久化架构重构、多窗口任务隔离、Java 语言与 Formatter 体系、Agent 语义路由与工具流升级
+
+> **版本亮点**：统一用户偏好持久化架构至 electron-store 单一数据源并支持多窗口实时热同步，彻底修复 Windows 多窗口任务退出与终端通道绑定问题，重构消息上下文为极简排版并支持多源技能直达，新增 Java 语言支持与 Eclipse JDT LS 集成，上线统一项目级 Formatter 格式化体系，引入 Agent 语义路由（ToolRoutingAdvisor）与结构化 JSON 工具输出无损降级，增强远程 SFTP 传输与更新服务 GitHub 镜像加速
+
+### 核心新特性 / Features
+- **全局用户偏好持久化架构统一重构（Preference Persistence Layer）**
+  - 彻底废除 localStorage 长期镜像，统一将 scoped electron-store 作为用户偏好的唯一单一数据源（Single Source of Truth），实现偏好设置与作者数据的可靠持久化
+  - 建立两层解耦注册表（preferenceKeys.ts 与 userPreferences.ts），提供强类型校验、默认值正规化与循环引用阻断
+  - 基于 api.settings.onChanged 实现多窗口间偏好的跨进程实时双向热同步；引入乐观更新写队列，防止并发快速切换导致默认值覆盖磁盘持久化数据
+  - 引入持久化迁移标记（Migration Markers），实现 localStorage 旧版本数据单次安全无损迁移与自动清理，杜绝历史缓存回滚覆盖
+  - 偏好导出默认脱敏凭据信息，导入时智能与本地持久化存储合并敏感字段，防止 API Key 等敏感配置被覆盖丢失
+  - 全面迁移主题配置（Theme）、布局状态（Layout）、代码片段（Snippets）、快捷键映射（Keybindings）、代码索引配置（IndexConfig）、本地预览策略（PreviewChoices）、Shell 服务注册表（ShellRegistry）与情绪/欢迎偏好
+- **多窗口任务稳定性与生命周期加固**
+  - 重构主进程终端与后台命令的窗口绑定逻辑，由全局最后活跃窗口改为精准绑定至发起请求的来源窗口，杜绝多窗口并发任务时的通信串扰与通道断裂
+  - 修复多窗口快速关闭时 isLastWindowQuit 条件竞态跳过全局清理的缺陷，在 window-all-closed 中加入可靠异步清理兜底，彻底解决 Windows 上多窗口跑任务导致软件直接终止的严重 Bug
+- **Java 语言支持与 Eclipse JDT LS 深度集成**
+  - 新增 Java 语言服务器集成，支持 Eclipse JDT LS 自动配置、环境检测与跨平台运行时解析
+  - 全面支持 Java 项目的代码高亮、智能补全、定义跳转、符号查找、错误诊断与代码动作
+- **项目级代码格式化体系（Formatter Service）**
+  - 主进程与渲染端新增统一格式化调度器，智能探测项目本地或全局的 Prettier、Biome 及各类语言原生格式化工具
+  - 支持保存时自动格式化（Format on Save）与快捷键格式化当前选区/文档，支持与 LSP 格式化平滑降级
+- **Agent 语义路由与 LSP 符号导航引擎升级**
+  - 引入 ToolRoutingAdvisor（工具路由顾问），根据模型上下文意图提供最优工具调用建议，减少试探性交互与调用回路
+  - 全面接入 LSP 符号级编辑工具（edit_symbol / rename_symbol）至 Diff 差异预览、卡片审批与检查点（Checkpoint）快照系统，支持原子替换、前后插入与跨文件重命名的行级差异对比和一键撤销
+  - 增强 LSP 文本编辑与 Agent 符号提取处理，支持深度嵌套符号与紧凑符号路径解析
+  - 新增 read_terminal_output / send_terminal_input / stop_terminal 工具组与后台命令交互支持
+- **远程服务器 SFTP 文件与目录双向传输**
+  - 远程主机连接新增可靠的 SFTP 文件与多层目录上传/下载能力，支持进度反馈与传输状态感知
+  - 增强远程主机公钥信任与指纹校验安全机制，杜绝未经验证的非法连接
+- **更新服务 GitHub 镜像源加速支持**
+  - 自动更新检测与安装支持多镜像源降级，显著提升国内网络环境下新版本发布与安装包下载的成功率（修复 #153）
+- **外部文件受控访问安全申请（External File Access）**
+  - 针对工作区外的文件读写请求引入显式权限申请弹窗与持久化白名单（修复 #158）
+
+### 体验与性能优化 / Improvements
+- **Agent 工具输出集中式安全约束与无损降级（Tool Output Bounding）**
+  - 新增 toolOutput.ts 集中式输出约束器，淘汰分散冲突的硬截断逻辑
+  - 结构化 JSON 降级梯（完整内容 -> 去除 body -> 去除行列坐标 -> 仅保留名称/数量），确保每一阶梯均为合法的 JSON 结构，并附带引导模型获取完整信息的提示，彻底杜绝中间硬切导致的 JSON 解析崩溃与卡片白屏
+  - 多文件读取（read_file）在拼接前按文件平分预算，杜绝后续文件被全部截断丢失的问题
+  - 统一 get_document_symbols、find_references、find_symbol 参数与相对路径规范，修正卡片显示 <unknown path> 的问题
+- **工具调用审批卡片与长列表视觉降级**
+  - 优化工具审批操作栏尺寸（32px -> 26px，图标 14px -> 12px），拒绝/停止采用轻量静音按钮，仅允许保留 Accent 强调色
+  - 符号列表与 LintCheckCard 展开详情引入 ExpandablePreviewContainer 最大高度约束（max-h 220px/260px 带渐变滚动），避免超长错误或上百个符号撑爆卡片
+  - 引入未执行工具卡片状态清理（clearUnexecutedToolCards），保持消息时间线整洁
+- **消息上下文（Context）极简排版与多源 Skills 导航**
+  - 全面重构折叠式上下文面板，去除冗余图标与大圆点修饰，采用标准的 @skill-name 标签芯片与防挤压弹性布局
+  - 接入 skillService 多层扫描，支持一键点击直接打开并定位全局目录、.claude/skills、.cursor/skills 及项目级 SKILL.md 文档
+- **Git Diff 与文件变更增强**
+  - 支持 Commit 与 Stash 差异比对，引入 git --name-status 结构化解析器（修复 #159）
+  - 安全终端对非 Git 仓库查询命令优雅降级，避免产生无意义的错误红字
+- **设置面板与交互体验打磨**
+  - 在 Skills 和代码片段等长列表设置中引入渐进式折叠（ProgressiveReveal）组件，优化底部渐变遮罩层级
+  - 情绪感知面板配置支持实时双向同步，设置页与浮动面板无缝联动
+  - Node.js 运行时基线升级至 24.19.0，严格强制使用 pnpm 进行项目构建与依赖管理
+
+### 问题修复 / Bug Fixes
+- **多窗口与终端生命周期修复**
+  - 修复 Windows 下多窗口运行任务时软件直接关闭退出的问题
+  - 修复多窗口快速关闭时跳过资源清理导致应用直接退出的竞态 Bug
+  - 修复点击引用技能标签无法打开全局技能文件的问题
+  - 修复标题“上下文”在特定宽度下被挤压成纵向排列的排版缺陷
+- **工具输出与路径解析修复**
+  - 修复工具输出在 JSON 结构中间被切断导致的解析错误与符号卡片空白
+  - 修复多文件读取时后续文件内容被过度截断的问题
+  - 修复非仓库目录下执行 Git 查询时的非零退出码告警问题
+  - 修复 ProgressiveReveal 组件底部渐变遮罩层级遮挡下方交互元素的问题
+  - 修复 Windows 下远程文件下载路径解析匹配异常的测试问题
+
+---
+
 ## [1.7.60] - 2026-08-21 Webview 本地预览重构、管道式 Shell 降级与会话冷热内存管理
 
 > **版本亮点**：全面重构内置浏览器预览为 Webview 沙箱架构并支持 Dev Server 智能探测，新增 Agent 终端管道式执行降级通道，引入线程消息分层冷热卸载与零冗余元数据持久化，显著削减长会话内存与主进程卡顿

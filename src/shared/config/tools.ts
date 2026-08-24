@@ -1882,17 +1882,17 @@ export function isWriteTool(toolName: string): boolean {
 
 /** 检查工具是否为文件编辑工具（会产生文件内容变更，不包括删除） */
 export function isFileEditTool(toolName: string): boolean {
-    return ['edit_file', 'write_file'].includes(toolName)
+    return ['edit_file', 'write_file', 'edit_symbol', 'rename_symbol'].includes(toolName)
 }
 
 /** 检查工具是否需要保存文件快照（用于撤销功能） */
 export function needsFileSnapshot(toolName: string): boolean {
-    return ['edit_file', 'write_file', 'delete_file_or_folder'].includes(toolName)
+    return ['edit_file', 'write_file', 'delete_file_or_folder', 'edit_symbol', 'rename_symbol'].includes(toolName)
 }
 
 /** 检查工具是否需要 Diff 预览（使用 FileChangeCard） */
 export function needsDiffPreview(toolName: string): boolean {
-    return ['edit_file', 'write_file'].includes(toolName)
+    return ['edit_file', 'write_file', 'edit_symbol', 'rename_symbol'].includes(toolName)
 }
 
 /** 获取工具元数据 */
