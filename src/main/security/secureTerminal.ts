@@ -409,10 +409,11 @@ export function registerSecureTerminalHandlers(
     error?: string
   }> => {
     const { command, args = [], cwd, timeout = 30000 } = request
-    const mainWindow = getMainWindow()
+    // 使用发起请求的窗口，确保多窗口场景下命令绑定到正确的窗口
+    const mainWindow = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
     const workspace = getWorkspace(event)
 
-    if (!mainWindow) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       return { success: false, error: '主窗口未就绪' }
     }
 
@@ -1079,7 +1080,8 @@ export function registerSecureTerminalHandlers(
     event,
     options: InteractiveTerminalOptions
   ) => {
-    const mainWindow = getMainWindow()
+    // 使用发起请求的窗口，而非全局最后活跃窗口，确保多窗口场景下终端绑定到正确的窗口
+    const mainWindow = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
     const workspace = getWorkspace(event)
     const { id, cwd, shell, remote } = options
     const backend = options.backend ?? (process.platform === 'darwin' ? 'pipe' : 'pty')
@@ -1459,7 +1461,8 @@ export function registerSecureTerminalHandlers(
       shell?: string
     }
   ): Promise<{ success: boolean; output: string; exitCode: number; error?: string }> => {
-    const mainWindow = getMainWindow()
+    // 使用发起请求的窗口，确保多窗口场景下输出推送到正确的窗口
+    const mainWindow = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
     const workspace = getWorkspace(event)
     const workingDir = cwd || workspace?.roots[0] || process.cwd()
 

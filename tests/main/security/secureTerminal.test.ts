@@ -22,7 +22,9 @@ vi.mock('electron', () => ({
     getPath: vi.fn(() => '.'),
     isPackaged: false,
   },
-  BrowserWindow: class MockBrowserWindow {},
+  BrowserWindow: class MockBrowserWindow {
+    static fromWebContents = vi.fn(() => null)
+  },
   ipcMain: {
     on: vi.fn(),
   },
