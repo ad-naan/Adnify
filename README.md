@@ -9,7 +9,7 @@
   <p><a href="README_CN.md">中文</a> | <strong>English</strong></p>
 
   <p><strong>Connect AI to Your Code.</strong></p>
-  <p>A next-generation code editor with stunning visual experience and deeply integrated AI Agent.</p>
+  <p>An AI-native engineering workspace for direct execution and governed multi-agent planning.</p>
 
   <p>
     <a href="https://github.com/ad-naan/adnify"><img src="https://img.shields.io/github/stars/ad-naan/adnify?logo=github&color=181717" alt="GitHub" /></a>
@@ -23,7 +23,7 @@
   </p>
 </div>
 
-Adnify is more than just an editor—it's your **intelligent programming companion**. It replicates and surpasses traditional IDE experiences, blending Cyberpunk glassmorphism design with a powerful built-in AI Agent that supports full-process automation from code generation to file operations.
+Adnify is more than an editor with a chat sidebar. It combines a production-grade code workspace with two focused AI workflows: **Agent Mode** for direct implementation and **Plan Mode** for requirement clarification, reviewed task graphs, dependency-aware execution, and result validation.
 
 <!-- Main Interface Demo -->
 <div align="center">
@@ -70,7 +70,7 @@ Join our community to discuss Adnify usage and development!
 
 - [Architecture Design](#-architecture-design)
 - [Core Features](#-core-features)
-- [Unique Advantages](#-unique-advantages-vs-cursorwindsurfclaude-code)
+- [What Makes Adnify Different](#-what-makes-adnify-different)
 - [Quick Start](#-quick-start)
 - [Brand Assets](#-brand-assets)
 - [Feature Details](#-feature-details)
@@ -91,13 +91,16 @@ Join our community to discuss Adnify usage and development!
 ### Core Module Overview
 
 **Renderer UI**
-- React components in `src/renderer` own panels, editor surfaces, chat, plan views, and user-facing interaction flows.
+- React components in `src/renderer` own the editor, Agent surfaces, Plan Workbench, terminal, previews, and user-facing interaction flows.
 
 **Agent Runtime**
-- `src/renderer/agent` is now a first-class runtime subsystem covering orchestration, planning, context flow, tool invocation, and application-level coordination.
+- `src/renderer/agent` provides the shared execution kernel for Agent and Plan task workers, including model routing, context flow, tool policies, approvals, budgets, and recovery.
+
+**Plan Runtime**
+- The Plan domain models requirements, task dependencies, execution state, artifacts, validation, and history independently from the UI, while reusing the same proven Agent kernel for each task.
 
 **State and Session**
-- Renderer-side stores and modes manage UI state, conversation state, checkpoints, branches, and session lifecycle.
+- Renderer-side stores manage UI state, threads, checkpoints, branches, and session lifecycle. A single-writer SQLite worker persists long-running sessions, while hot/cold message windows keep memory usage predictable.
 
 **Frontend Services**
 - Lightweight client services in the renderer coordinate terminal UX, completions, workspace/session helpers, and requests that cross into Electron APIs.
@@ -151,109 +154,50 @@ Join our community to discuss Adnify usage and development!
 ![alt text](images/theme3.png)
 ![alt text](images/theme4.png)
 
-### 🤖 Deep AI Agent Integration
+### 🤖 Two Purpose-Built AI Workflows
 
-- **Three Core Working Modes**:
-  - **Chat Mode** 💬: Pure conversation mode for quick Q&A and code discussions, direct responses without active tool calls
-  - **Agent Mode** 🤖: Intelligent agent mode with single-thread task focus, full file system read/write and terminal execution permissions, ideal for clear development tasks
-  - **Plan Mode** 🧠: **[NEW]** Task orchestration mode supporting multi-turn interactive requirement gathering, automatically creates deep step-by-step execution plans, decomposes complex tasks into multiple sub-tasks with parallel/serial execution, supports task dependency management and progress tracking
+Adnify intentionally exposes two modes. The former standalone Chat mode has been merged into Agent, so questions, investigation, and implementation share one continuous context instead of forcing users to choose between conversation and action.
 
-- **24+ Built-in Native Core Tools**: Building a universal foundation allowing AI to fully take over projects
-  - 📂 **File System Management**: `read_file` (supports single/batch file reading), `list_directory` (supports recursive traversal)
-- ✍️ **Smart Code Editing**: `edit_file` (9-strategy intelligent matching), `write_file`, `create_directory`, `delete_file_or_folder`
-  - 🔎 **Full-scale Search Engine**: `search_files` (ultra-fast regex scan, supports | pattern combination), `codebase_search` (LanceDB vector semantic insight)
-  - 🧠 **Language Service (LSP)**: `find_references`, `go_to_definition`, `get_hover_info`, `get_document_symbols`, `get_lint_errors` (supports force refresh)
-  - 💻 **Sandbox Terminal Control**: `run_command` (supports background execution), `read_terminal_output`, `send_terminal_input` (supports Ctrl key combinations), `stop_terminal`
-  - 🌐 **Knowledge Networking**: `web_search` (multi-strategy fusion), `read_url` (Jina deep parsing)
-  - 🤝 **Human-like Interaction**: `ask_user` (supports manual approval and confirmation)
-  - ✨ **Task Planning System**: `create_task_plan`, `update_task_plan`, `start_task_execution` (supports task dependencies and parallel execution)
-  - 🎨 **UI/UX Design Search**: `uiux_search` (global design aesthetics knowledge base and industry best practices)
-  - 💾 **Project Memory Management**: `read_memory`, `write_memory` (supports manual approval mechanism)
+- **Agent Mode 🤖 — execute directly**
+  - Ask questions, inspect a codebase, edit files, run commands, search documentation, and verify results in one thread.
+  - Permission-aware tools, checkpoints, diagnostics, loop detection, and recovery keep autonomous work observable and reversible.
+  - Progressive context compression and summary/handoff support long-running tasks without losing key decisions.
 
-- **Smart Context References**:
-  - `@filename` - Reference file context with fuzzy matching support
-  - `@codebase` - Semantic codebase search based on AI Embedding
-  - `@git` - Reference Git changes, auto-fetch diff info
-  - `@terminal` - Reference terminal output for quick error analysis
-  - `@symbols` - Reference current file symbols, quick navigation to functions/classes
-  - `@web` - Web search for latest technical documentation
-  - Drag & drop files/folders to chat for batch context addition
+- **Plan Mode 🧠 — review the work before it runs**
+  - A four-stage workbench guides **Requirement Review → Plan Review → Run Center → Result Review**.
+  - The planner produces dependency-aware tasks with expected artifacts, priorities, role/model allocation, and sequential or parallel execution paths.
+  - Structural checks catch dependency cycles, missing prerequisites, and parallel write conflicts before execution.
+  - Each task runs in an isolated worker thread on the shared Agent kernel. You can inspect progress, open task threads, handle approvals, pause/resume execution, request changes, and accept the final result.
 
-- **Seamless Multi-LLM Switching**: 
-  - Supports OpenAI (GPT-4, GPT-4o, o1 series)
-  - Anthropic Claude (Claude 3.5 Sonnet, Claude 3.7)
-  - Google Gemini (Gemini 2.0, Gemini 1.5 Pro)
-  - DeepSeek (DeepSeek-V3, DeepSeek-R1 with thinking process visualization)
-  - Ollama (local models)
-  - Custom API (OpenAI-compatible format)
-  
-- **Quick Model Switching**: Dropdown selector at bottom of chat panel, grouped by provider, one-click model switching with custom model parameters
+![Plan Mode](images/orchestrator.png)
 
-- **⚡ Skills System**: 
-  - Plugin-based system based on agentskills.io standard
-  - Search and install community skill packages from skills.sh marketplace
-  - Direct installation from GitHub repositories
-  - Supports project-level and global-level skills, project-level overrides global
-  - Supports Auto mode (AI auto-determines loading) and Manual mode (requires @skill-name reference)
-  - Skill packages support YAML frontmatter metadata configuration
+### 🧰 Agent Tooling & Context
 
-- **🔌 Deep MCP Protocol Integration**: 
-  - Full implementation of Model Context Protocol standard
-  - Supports external tools, resources, and prompt extensions
-  - Built-in OAuth 2.0 authentication flow for third-party service authorization
-  - Config hot-reload without restart for MCP server updates
-  - Supports multi-workspace config merging with priority management
-  - Built-in MCP Registry search for one-click official plugin installation
+- **Workspace operations**: read, create, edit, move, and delete files with scoped authorization and diff previews.
+- **Code intelligence**: text/regex search, LanceDB semantic search, symbols, definitions, references, hover information, and diagnostics through LSP.
+- **Terminal execution**: foreground/background commands, live output, interactive input, cancellation, and reliable exit-code capture.
+- **Research and integrations**: web search, URL reading, MCP tools/resources/prompts, and reusable Skills.
+- **Smart context references**: mention files plus `@codebase`, `@git`, `@terminal`, `@symbols`, and `@web`; files and folders can also be dragged into the thread.
+- **Model freedom**: switch between OpenAI, Anthropic, Google, DeepSeek, Ollama, and OpenAI-compatible providers, including reasoning controls and provider-specific options.
 
-- **💾 AI Memory & Approval**: 
-  - Project-level memory storage supporting long-term and short-term memory
-  - Manual approval mechanism for AI-written memories to prevent misinformation
-  - Automatic memory categorization and indexing with semantic search
-  - Supports memory export/import for team knowledge sharing
+![Agent tools](images/tool.png)
 
-- **🎨 Enhanced Response Preview**: 
-  - Tool execution results support rich rendering: Markdown, code highlighting, images, tables
-  - Fluid typewriter animation with real-time AI content generation
-  - Supports collapse/expand for long content, optimized reading experience
-  - Thinking process visualization (DeepSeek-R1, Claude 3.7 reasoning models)
+### 🧩 Open AI Ecosystem
 
-- **🪵 Eye Style Log System**: 
-  - Redesigned color-highlighted log system
-  - Separate Main/Renderer process logs for clear debugging
-  - Supports log level filtering (Debug, Info, Warn, Error)
-  - Real-time log streaming without refresh
+- **Skills**: install from the marketplace or GitHub, create project/global instruction packages, and load them automatically or explicitly.
+- **MCP**: discover and install npm, PyPI, Docker/OCI, Cargo, NuGet, MCPB, HTTP, and SSE servers with hot-reload and OAuth support where required.
+- **Cross-editor migration**: discover and import compatible MCP servers, Skills, and Rules from Claude Desktop/Code, Codex, and Cursor instead of rebuilding your setup manually.
+- **Project memory**: keep project-specific conventions and knowledge behind an approval-aware write path.
 
-- **🎭 Emotion Awareness System**: 
-  - Real-time detection of user coding state (focused, confused, fatigued, etc.)
-  - Multi-dimensional analysis based on keyboard/mouse behavior and code context
-  - Intelligent suggestions for break times and task switching
-  - Personalized baseline learning adapting to different developer habits
+### 🚀 What Makes Adnify Different
 
-![alt text](images/tool.png)
-
-### 🚀 Unique Advantages (vs Cursor/Windsurf/Claude Code)
-
-Adnify builds upon mainstream AI editors with multiple innovative features:
-
-- **🔄 9-Strategy Smart Replace**: When AI edits code, 9 fault-tolerant matching strategies (exact match, whitespace normalization, flexible indentation, etc.) ensure successful modifications even with slight format differences, dramatically improving edit success rate
-
-- **⚡ Smart Parallel Tool Execution**: Dependency-aware parallel execution - independent reads run in parallel, writes on different files can parallelize, 2-5x speed improvement for multi-file operations
-
-- **🧠 4-Level Context Compression**: Progressive compression (remove redundancy → compress old messages → generate summary → Handoff document), supports truly long conversations without context overflow interruption
-
-- **📸 Checkpoint System**: Auto-creates snapshots before AI modifications, rollback by message granularity, more fine-grained version control than Git
-
-- **🌿 Conversation Branching**: Create branches from any message to explore different solutions, visual management, like Git branches but for AI conversations
-
-- **🔁 Smart Loop Detection**: Multi-dimensional detection of AI repetitive operations, auto-interrupt with suggestions, avoids token waste
-
-- **🩺 Auto Error Fix**: After Agent execution, automatically calls LSP to detect code errors, immediately fixes issues found
-
-- **💾 AI Memory System**: Project-level memory storage, lets AI remember project-specific conventions and preferences
-
-- **🎬 Streaming Edit Preview**: Real-time Diff display as AI generates code, preview changes as they're generated
-
-- **🎭 Role-based Tools**: Different roles have exclusive toolsets, frontend and backend developers can have different tool capabilities
+- **Governed planning, not a longer prompt**: Plan Mode turns requirements into an inspectable task graph, requires a plan review, projects execution onto a live TaskBoard, and ends with explicit result validation.
+- **Real task orchestration**: dependency scheduling, bounded concurrency, per-task role/model selection, artifact contracts, isolated task threads, and consolidated results are built into the runtime.
+- **Long-session architecture**: four-level context compression, summary/handoff, SQLite-backed thread persistence, and hot/cold message loading keep extended work usable.
+- **Reliable terminal state**: OSC 633 shell integration captures command boundaries and exit codes, with a piped-shell fallback when native integration is unavailable.
+- **Built-in local app preview**: automatically detects dev servers, probes candidate ports, and opens local pages in protected Webview tabs with a Local Servers panel.
+- **Resilient editing**: nine matching strategies handle formatting drift; streaming diffs, checkpoints, and thread branches make changes reviewable and reversible.
+- **Execution verification**: Agent tasks can use LSP diagnostics and project commands to validate their own changes before reporting completion.
 
 ### 📝 Professional Code Editing
 
@@ -262,18 +206,9 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 - **Complete LSP Features**: Intelligent completion, go to definition, find references, hover info, code diagnostics, formatting, rename, etc.
 - **Smart Root Detection**: Auto-detect monorepo sub-projects, start independent LSP for each
 - **AI Code Completion**: Context-based intelligent code suggestions (Ghost Text) with real-time AI suggestions
-- **Inline Edit (Ctrl+K)**: Let AI modify selected code directly without switching to chat panel
+- **Inline Edit (Ctrl+K)**: Let AI modify selected code directly without leaving the editor
 - **Diff Preview**: Show diff comparison before AI modifies code, support accept/reject for each change
-- **🎼 Composer Mode (Ctrl+Shift+I)**: 
-  - Multi-file editing mode similar to Cursor Composer
-  - Edit multiple files simultaneously with unified preview of all changes
-  - Changes grouped by directory, one-click accept/reject all modifications
-  - Deep integration with Agent, AI-generated multi-file changes automatically enter Composer
-- **🐛 Built-in Debugger**: 
-  - VSCode-like debugging experience supporting Node.js and browser debugging
-  - Breakpoint management, variable inspection, call stack, console output
-  - Supports DAP (Debug Adapter Protocol)
-  - Visual debugging interface without leaving the editor
+- **Built-in Debug Panel**: Breakpoints, variables, call stacks, debug console, and launch configuration for supported adapters
 
 ![text](images/editor.png)
 
@@ -286,9 +221,12 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 - **Integrated Terminal**: 
   - Based on xterm.js + node-pty, supports multiple shells (PowerShell, CMD, Bash, Zsh)
   - Supports split view, multiple tabs, terminal reuse
-  - AI error analysis and fix suggestions
+  - Shell Integration tracks command boundaries, working directories, and exit codes with a fallback for unsupported shells
   - 🌐 **Remote SSH Terminal**: Built-in native SSH client for direct remote server connection with key authentication support
-  - Smart terminal output recognition (error highlighting, clickable links)
+  - Remote file browsing, upload/download, and automatic shell integration over SSH
+- **Local Server Preview**:
+  - Detects dev-server URLs and candidate ports from terminal activity
+  - Opens local applications in isolated Webview tabs and tracks them in a Local Servers panel
 - **Git Version Control**: 
   - Complete Git operation interface with change management, commit history, diff view
   - Visual branch management and conflict resolution
@@ -306,9 +244,9 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 
 **Security Features**
 - Workspace isolation, sensitive path protection (.ssh, .aws, .gnupg, etc.)
-- Command whitelist, Shell injection detection
-- Git subcommand whitelist, permission confirmation
-- Customizable security policies, audit logging
+- Permission-aware command execution and shell injection detection
+- Explicit authorization for files outside the workspace
+- Protected Webview navigation and narrowly scoped Electron IPC capabilities
 
 **Multi-Window & Workspace**
 - Supports multiple windows for different projects simultaneously
@@ -318,7 +256,7 @@ Adnify builds upon mainstream AI editors with multiple innovative features:
 
 **Other Features**
 - Command Palette (Ctrl+Shift+P) for quick access to all features
-- Session management with persistent conversation history
+- SQLite-backed thread history with checkpoints, branches, plan history, and crash-safe recovery
 - Token statistics with real-time consumption display
 - Complete Chinese and English support with automatic system language detection
 - Custom shortcuts supporting VSCode-style keybindings
@@ -443,15 +381,15 @@ See [public/brand/README.md](public/brand/README.md) for more details.
 
 Supports OpenAI, Anthropic, Google, DeepSeek, Ollama, and custom APIs
 
-### Collaborate with AI
+### Choose a Workflow
 
-**Context References**: Type `@` to select files, or use `@codebase`, `@git`, `@terminal`, `@symbols`, `@web` for special references
+**Agent Mode** is the default workspace for questions and implementation. Ask about the project, attach context with `@`, or describe a change; Agent can inspect files, use tools, generate diffs, run verification, and report the result in the same thread. There is no separate Chat mode.
 
-**Slash Commands**: `/file`, `/clear`, `/chat`, `/agent` and other quick commands
+**Plan Mode** is designed for larger or higher-risk work. Use it when you want to review requirements, dependencies, ownership, models, artifacts, and execution order before any task runs.
 
-**Code Modification**: Switch to Agent Mode, enter instruction, AI generates Diff preview then accept or reject
+**Context References**: Type `@` to select files, or use `@codebase`, `@git`, `@terminal`, `@symbols`, and `@web` for special context.
 
-**Inline Edit**: Select code and press `Ctrl+K`, enter modification instruction
+**Inline Edit**: Select code and press `Ctrl+K`, then describe the change without leaving the editor.
 
 ### Codebase Indexing
 
@@ -459,7 +397,10 @@ Open Settings → Index tab, select Embedding provider (recommend Jina AI), conf
 
 ### Using Plan Mode
 
-Switch to Plan Mode and engage in multi-turn conversations with the AI to clarify requirements. The AI will automatically create an in-depth step-by-step execution plan, decomposing complex tasks into multiple sub-tasks and managing dependencies and execution order.
+1. **Requirement Review** — describe the goal and answer focused clarification questions. Adnify turns the discussion into a structured brief with scope and acceptance criteria.
+2. **Plan Review** — inspect the task graph, dependencies, artifacts, parallelism, and per-task role/model configuration. Structural checks surface unsafe plans before they run.
+3. **Run Center** — approve the plan and follow each isolated task thread on the live TaskBoard. Handle tool approvals or pause/resume the run when needed.
+4. **Result Review** — review the consolidated outcome and failed-task status, then accept the result or request another revision.
 
 ![Plan Mode](images/orchestrator.png)
 
@@ -487,24 +428,25 @@ Skills are instruction packages that give AI specialized capabilities (e.g., opt
 | Category | Shortcut | Function |
 |:---|:---|:---|
 | **General** | `Ctrl + P` | Quick open file |
-| | `Ctrl + Shift + P` | Command palette |
+| | `Ctrl + Shift + P` / `F1` | Command palette |
 | | `Ctrl + ,` | Open settings |
-| | `Ctrl + B` | Toggle sidebar |
+| | `Ctrl + L` | Toggle AI panel |
+| | `Ctrl + backtick` | Toggle terminal |
+| | `Ctrl + Shift + D` | Toggle debug panel |
 | **Editor** | `Ctrl + S` | Save file |
 | | `Ctrl + K` | Inline AI edit |
-| | `Ctrl + Shift + I` | Open Composer multi-file edit |
-| | `F12` | Go to definition |
-| | `Shift + F12` | Find references |
+| | `Ctrl + W` | Close active file |
+| | `F12` | Go to definition when the editor is focused |
 | **Search** | `Ctrl + F` | In-file search |
 | | `Ctrl + Shift + F` | Global search |
-| **AI Chat** | `Enter` | Send message |
+| **AI** | `Enter` | Send instruction |
 | | `Shift + Enter` | New line |
 | | `@` | Reference context |
 | | `/` | Slash commands |
-| **Other** | `Escape` | Close panel/dialog |
-| | `F5` | Start debugging |
+| **Debug** | `F5` | Start debugging |
+| | `F9` | Toggle breakpoint |
 
-**Work Modes**: Chat 💬 (pure conversation) / Agent 🤖 (single task agent) / Plan 🧠 (task orchestration)
+**Work Modes**: Agent 🤖 (execute directly) / Plan 🧠 (review and orchestrate)
 
 ---
 
@@ -535,7 +477,7 @@ adnify/
 │   │   │   ├── panels/  # Bottom panels
 │   │   │   ├── dialogs/ # Dialogs
 │   │   │   └── settings/# Settings components
-│   │   ├── modes/       # Multi-mode state machines (Chat, Agent, Plan)
+│   │   ├── modes/       # Agent and Plan mode definitions
 │   │   ├── services/    # Frontend services
 │   │   │   └── TerminalManager.ts # Terminal manager
 │   │   ├── store/       # Zustand state management
@@ -559,7 +501,7 @@ adnify/
 - **Terminal**: xterm.js + node-pty + WebGL Addon
 - **State Management**: Zustand
 - **Styling**: Tailwind CSS
-- **LSP**: typescript-language-server
+- **LSP**: Multi-server LSP manager (TypeScript/JavaScript, Java, Python, Go, Rust, C/C++, Vue, Zig, C#, and more)
 - **Git**: dugite
 - **Vector Storage**: LanceDB (high-performance vector database)
 - **Code Parsing**: tree-sitter
