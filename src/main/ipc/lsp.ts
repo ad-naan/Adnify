@@ -25,6 +25,11 @@ import {
 } from '../lsp/languageEnvConfig'
 import { lspUriToPath } from '@shared/utils/uriUtils'
 import { authorizeUserFile } from '../security/userFileAccess'
+import * as fs from 'fs'
+import * as path from 'path'
+import { randomUUID } from 'crypto'
+import { systemPrivilegeService } from '../services/systemPrivilegeService'
+import { isSystemPermissionError } from '@shared/utils/permissionError'
 
 const NAVIGATION_METHODS = new Set([
   'textDocument/definition',
@@ -495,33 +500,59 @@ export function registerLspHandlers(preferencesStore?: any): void {
     return getDefaultLspBinDir()
   })
 
-  ipcMain.handle('lsp:setCustomBinDir', (_, customPath: string | null) => {
-    setCustomLspBinDir(customPath)
-    // 保存到配置文件
-    if (_preferencesStore) {
+  ipcMain.handle('lsp:setCustomBinDir', async (event, customPath: string | null) => {
+    let probePath: string | null = null
+    try {
       if (customPath) {
-        _preferencesStore.set('lspSettings.customBinDir', customPath)
-      } else {
-        _preferencesStore.delete('lspSettings.customBinDir')
+        const resolvedPath = path.resolve(customPath)
+        await fs.promises.mkdir(resolvedPath, { recursive: true })
+        probePath = path.join(resolvedPath, `.adnify-lsp-write-test-${process.pid}-${randomUUID()}`)
+        await fs.promises.writeFile(probePath, '', { flag: 'wx' })
+        await fs.promises.unlink(probePath)
+        probePath = null
+      }
+
+      if (_preferencesStore) {
+        if (customPath) {
+          _preferencesStore.set('lspSettings.customBinDir', customPath)
+        } else {
+          _preferencesStore.delete('lspSettings.customBinDir')
+        }
+      }
+      setCustomLspBinDir(customPath)
+      return { success: true }
+    } catch (error) {
+      if (isSystemPermissionError(error)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'lsp.install')
+      }
+      return { success: false, error: toAppError(error).message }
+    } finally {
+      if (probePath) {
+        try { await fs.promises.unlink(probePath) } catch { /* best-effort probe cleanup */ }
       }
     }
-    return { success: true }
   })
 
-  ipcMain.handle('lsp:installServer', async (_, serverType: string) => {
+  ipcMain.handle('lsp:installServer', async (event, serverType: string) => {
     try {
       const result = await installServer(serverType)
       if (result.success) {
         // 清除 unavailable 冷却标记，允许立即重试启动
         lspManager.clearUnavailable(serverType)
       }
+      if (!result.success && isSystemPermissionError(result.error)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'lsp.install')
+      }
       return result
     } catch (err) {
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'lsp.install')
+      }
       return { success: false, error: toAppError(err).message }
     }
   })
 
-  ipcMain.handle('lsp:installBasicServers', async () => {
+  ipcMain.handle('lsp:installBasicServers', async event => {
     try {
       const result = await installBasicServers()
       if (result.success) {
@@ -530,8 +561,14 @@ export function registerLspHandlers(preferencesStore?: any): void {
         lspManager.clearUnavailable('css')
         lspManager.clearUnavailable('json')
       }
+      if (!result.success && isSystemPermissionError(result.error)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'lsp.install')
+      }
       return result
     } catch (err) {
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'lsp.install')
+      }
       return { success: false, error: toAppError(err).message }
     }
   })

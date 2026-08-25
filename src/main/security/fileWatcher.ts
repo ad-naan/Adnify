@@ -15,6 +15,7 @@ import * as path from 'path'
 export interface FileWatcherEvent {
   event: 'create' | 'update' | 'delete'
   path: string
+  source?: 'git-metadata'
 }
 
 export interface FileWatcherConfig {
@@ -24,11 +25,12 @@ export interface FileWatcherConfig {
   bufferTimeMs: number
   maxBufferSize: number
   maxWaitTimeMs: number
+  forwardOnly: boolean
 }
 
 interface WatcherEntry {
   subscription: watcher.AsyncSubscription
-  buffer: FileChangeBuffer
+  buffer: FileChangeBuffer | null
   root: string
   subscribers: Map<string, (data: FileWatcherEvent) => void>
 }
@@ -40,6 +42,7 @@ const DEFAULT_CONFIG: FileWatcherConfig = {
   bufferTimeMs: 500,
   maxBufferSize: 50,
   maxWaitTimeMs: 5000,
+  forwardOnly: false,
 }
 
 const watcherEntries = new Map<string, WatcherEntry>()
@@ -115,12 +118,13 @@ async function createWatcherEntry(
 ): Promise<WatcherEntry> {
   const mergedConfig = { ...DEFAULT_CONFIG, ...config }
   const shouldIgnore = createIgnoreMatcher(mergedConfig.ignored)
-  const indexService = getIndexService(workspaceRoot)
-  const fileChangeBuffer = createFileChangeHandler(indexService, {
-    bufferTimeMs: mergedConfig.bufferTimeMs,
-    maxBufferSize: mergedConfig.maxBufferSize,
-    maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
-  })
+  const fileChangeBuffer = mergedConfig.forwardOnly
+    ? null
+    : createFileChangeHandler(getIndexService(workspaceRoot), {
+        bufferTimeMs: mergedConfig.bufferTimeMs,
+        maxBufferSize: mergedConfig.maxBufferSize,
+        maxWaitTimeMs: mergedConfig.maxWaitTimeMs,
+      })
   const subscribers = new Map<string, (data: FileWatcherEvent) => void>()
   const watcherOptions: watcher.Options = {
     ignore: mergedConfig.ignored.filter((p): p is string => typeof p === 'string'),
@@ -159,7 +163,7 @@ async function createWatcherEntry(
         // or forwarded to language servers.
         if (isGitMetadata) continue
 
-        fileChangeBuffer.add({ type: eventType, path: event.path, timestamp: Date.now() })
+        fileChangeBuffer?.add({ type: eventType, path: event.path, timestamp: Date.now() })
         lspChanges.push({ path: event.path, type: eventType })
       }
 
@@ -168,7 +172,7 @@ async function createWatcherEntry(
 
     return { subscription, buffer: fileChangeBuffer, root: workspaceRoot, subscribers }
   } catch (error) {
-    fileChangeBuffer.destroy()
+    fileChangeBuffer?.destroy()
     throw error
   }
 }
@@ -214,7 +218,7 @@ export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
     if (!entry || entry.subscribers.size > 0) return
 
     watcherEntries.delete(rootKey)
-    entry.buffer.destroy()
+    entry.buffer?.destroy()
     logger.security.info('[Watcher] Cleaning up shared file watcher...', 'root:', entry.root)
     try {
       await entry.subscription.unsubscribe()
@@ -228,7 +232,7 @@ export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
   const entries = Array.from(watcherEntries.values())
   watcherEntries.clear()
   await Promise.all(entries.map(async (entry) => {
-    entry.buffer.destroy()
+    entry.buffer?.destroy()
     try {
       await entry.subscription.unsubscribe()
     } catch (err) {
@@ -246,17 +250,17 @@ export function getWatcherStatus(): {
 
   return {
     isActive: entries.length > 0,
-    hasBuffer: entries.length > 0,
-    bufferSize: entries.reduce((sum, entry) => sum + entry.buffer.size(), 0),
+    hasBuffer: entries.some(entry => entry.buffer !== null),
+    bufferSize: entries.reduce((sum, entry) => sum + (entry.buffer?.size() || 0), 0),
   }
 }
 
 export function flushBuffer(watcherId?: string): void {
   if (watcherId) {
     const rootKey = watcherRootsById.get(watcherId)
-    if (rootKey) watcherEntries.get(rootKey)?.buffer.flush()
+    if (rootKey) watcherEntries.get(rootKey)?.buffer?.flush()
     return
   }
 
-  watcherEntries.forEach(entry => entry.buffer.flush())
+  watcherEntries.forEach(entry => entry.buffer?.flush())
 }

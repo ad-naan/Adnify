@@ -11,6 +11,7 @@ import type {
 } from '@shared/types/sessionPersistence'
 import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
 import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, PrivilegeRequiredEvent, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
+import type { FileMutationResult } from '@shared/types/fileMutation'
 
 // 本地类型定义（避免从 renderer 导入）
 type Language = 'en' | 'zh'
@@ -289,24 +290,24 @@ export interface ElectronAPI {
   statFile: (path: string) => Promise<{ size: number; isDirectory: boolean; isFile: boolean; mtimeMs: number } | null>
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
-  writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
-  appendFile: (path: string, content: string, encoding?: string) => Promise<boolean>
-  ensureDir: (path: string) => Promise<boolean>
+  writeFile: (path: string, content: string, encoding?: string) => Promise<FileMutationResult>
+  appendFile: (path: string, content: string, encoding?: string) => Promise<FileMutationResult>
+  ensureDir: (path: string) => Promise<FileMutationResult>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<boolean>
-  authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<boolean>
-  mkdir: (path: string) => Promise<boolean>
-  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<boolean>
-  copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
-  renameFile: (oldPath: string, newPath: string) => Promise<boolean>
+  authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<FileMutationResult>
+  mkdir: (path: string) => Promise<FileMutationResult>
+  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<FileMutationResult>
+  copyFile: (sourcePath: string, destinationPath: string) => Promise<FileMutationResult>
+  renameFile: (oldPath: string, newPath: string) => Promise<FileMutationResult>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
 
   // Settings
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<boolean>
   getConfigPath: () => Promise<string>
-  setConfigPath: (path: string) => Promise<boolean>
+  setConfigPath: (path: string) => Promise<FileMutationResult>
   onSettingsChanged: (callback: (event: { key: string; value: unknown }) => void) => () => void
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
 
@@ -451,7 +452,7 @@ export interface ElectronAPI {
   lspGetServerStatus: () => Promise<Record<string, { installed: boolean; path?: string }>>
   lspGetBinDir: () => Promise<string>
   lspGetDefaultBinDir: () => Promise<string>
-  lspSetCustomBinDir: (customPath: string | null) => Promise<{ success: boolean }>
+  lspSetCustomBinDir: (customPath: string | null) => Promise<{ success: boolean; error?: string }>
   lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
   lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 

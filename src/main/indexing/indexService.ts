@@ -21,7 +21,7 @@ import {
   EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk, IndexedChunk,
   DEFAULT_INDEX_CONFIG,
 } from './types'
-import { getUserConfigDir } from '../services/configPath'
+import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
 
 // Worker 消息类型
 interface WorkerResultMessage { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
@@ -40,6 +40,7 @@ type WorkerMessage =
 export class CodebaseIndexService {
 
   private workspacePath: string
+  private workspaceCachePath: string
   private config: IndexConfig
   private mainWindow: BrowserWindow | null = null
 
@@ -84,6 +85,7 @@ export class CodebaseIndexService {
 
   constructor(workspacePath: string, config?: Partial<IndexConfig>) {
     this.workspacePath = workspacePath
+    this.workspaceCachePath = getWorkspaceCacheDir(workspacePath)
     this.config = { ...DEFAULT_INDEX_CONFIG, ...config }
     // 注入缓存路径（用于 Worker 中的 Transformers.js）
     if (!this.config.embedding.cacheDir) {
@@ -96,7 +98,10 @@ export class CodebaseIndexService {
     this.fallbackChunker = new ChunkerService(this.config)
     this.bm25Index = new BM25Index()
     this.symbolIndex = new SymbolIndex()
-    this.summaryGenerator = new ProjectSummaryGenerator(workspacePath)
+    this.summaryGenerator = new ProjectSummaryGenerator(
+      workspacePath,
+      path.join(this.workspaceCachePath, 'project-summary.json'),
+    )
   }
 
   // ==================== 公共 API ====================
@@ -106,11 +111,11 @@ export class CodebaseIndexService {
   }
 
   private get structuralIndexPath(): string {
-    return path.join(this.workspacePath, '.adnify', 'structural-index.json')
+    return path.join(this.workspaceCachePath, 'structural-index.json')
   }
 
   private get indexStatusPath(): string {
-    return path.join(this.workspacePath, '.adnify', 'index-status.json')
+    return path.join(this.workspaceCachePath, 'index-status.json')
   }
 
   private initialized = false
@@ -696,7 +701,7 @@ export class CodebaseIndexService {
     }
 
     if (!this.vectorStore) {
-      this.vectorStore = new VectorStoreService(this.workspacePath)
+      this.vectorStore = new VectorStoreService(this.workspaceCachePath)
     }
 
     if (!this.vectorStore.isInitialized()) {

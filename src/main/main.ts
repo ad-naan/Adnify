@@ -28,6 +28,12 @@ import {
   shutdownWindowController,
   type ShutdownWindowPresentation,
 } from './services/window/ShutdownWindowController'
+import {
+  cleanupRelaunchHandshake,
+  parseRelaunchContext,
+  signalRelaunchReady,
+  waitForParentExit,
+} from './services/relaunchProtocol'
 
 // ==========================================
 // 常量定义
@@ -93,6 +99,17 @@ const authorizedCloseWindows = new Set<number>()
 let appQuitInProgress = false
 const launchFiles = collectLaunchFiles(process.argv)
 queueLaunchFiles(launchFiles, 'startup')
+const relaunchContext = parseRelaunchContext(process.argv)
+
+if (relaunchContext) {
+  try {
+    signalRelaunchReady(relaunchContext)
+  } catch (error) {
+    logger.security.error('[Relaunch] Failed to signal replacement readiness', error)
+    app.quit()
+    process.exit(1)
+  }
+}
 
 
 // 延迟加载的模块
@@ -167,7 +184,7 @@ crashReporter.start({
 // 单例锁
 // ==========================================
 
-if (!app.requestSingleInstanceLock()) {
+if (!relaunchContext && !app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
 }
@@ -868,6 +885,21 @@ process.on('exit', (code) => {
 // ==========================================
 
 app.whenReady().then(async () => {
+  if (relaunchContext) {
+    const parentExited = await waitForParentExit(relaunchContext)
+    cleanupRelaunchHandshake(relaunchContext)
+    if (!parentExited) {
+      logger.security.error('[Relaunch] Previous process did not exit before handoff timeout')
+      app.quit()
+      return
+    }
+    if (!app.requestSingleInstanceLock()) {
+      logger.security.error('[Relaunch] Could not acquire the single-instance lock after handoff')
+      app.quit()
+      return
+    }
+  }
+
   // Override global fetch with Electron's net.fetch to route all Node fetches through Chromium network stack
   const boundFetch = net.fetch.bind(net) as any
   global.fetch = boundFetch

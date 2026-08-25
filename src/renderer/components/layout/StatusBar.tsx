@@ -49,7 +49,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import FileFormatControls from './FileFormatControls'
 import { gitService, type GitBranch as GitBranchInfo } from '@renderer/services/gitService'
 import { toast } from '../common/ToastProvider'
-import { pathStartsWith } from '@shared/utils/pathUtils'
 import AdministratorModeIndicator from './AdministratorModeIndicator'
 
 export default function StatusBar() {
@@ -142,27 +141,18 @@ export default function StatusBar() {
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => void refreshGitState(), delay)
     }
-    const unsubscribe = api.file.onChanged((event: { path: string }) => {
-      if (pathStartsWith(event.path, workspacePath) && /[\\/]\.git(?:[\\/]|$)/.test(event.path)) {
-        scheduleRefresh(250)
+    const unsubscribe = api.file.onChanged((event: { path: string; source?: 'git-metadata' }) => {
+      if (event.source === 'git-metadata' || /[\\/]\.git(?:[\\/]|$)/.test(event.path)) {
+        scheduleRefresh()
       }
     })
     // 聚焦时通过防抖调度，避免与文件监听等并发冲突
     const handleFocus = () => scheduleRefresh(300)
     window.addEventListener('focus', handleFocus)
 
-    // 仅作为非常低频的弱兜底（60秒），主要依赖文件监听与窗口聚焦事件
-    const branchPoll = window.setInterval(async () => {
-      if (document.visibilityState !== 'visible') return
-      const branch = await gitService.getCurrentBranch(workspacePath)
-      const displayedBranch = useStore.getState().gitStatus?.branch
-      if (branch !== null && (branch || 'HEAD') !== displayedBranch) scheduleRefresh(100)
-    }, 60_000)
-
     return () => {
       unsubscribe()
       window.removeEventListener('focus', handleFocus)
-      window.clearInterval(branchPoll)
       if (debounceTimer) clearTimeout(debounceTimer)
     }
   }, [refreshGitState, setGitBranches, setGitRecentCommits, setGitStatus, setIsGitRepo, workspacePath])

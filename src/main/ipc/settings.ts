@@ -7,11 +7,14 @@ import { session } from 'electron'
 import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import { randomUUID } from 'crypto'
 import Store from 'electron-store'
 import { getBootstrapStore, getUserConfigDir, setUserConfigDir } from '../services/configPath'
 import { cleanConfigValue } from '@shared/config/configCleaner'
 import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
-import { isSystemPermissionError, systemPrivilegeService } from '../services/systemPrivilegeService'
+import { systemPrivilegeService } from '../services/systemPrivilegeService'
+import { isSystemPermissionError } from '@shared/utils/permissionError'
+import { mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
 
 interface SecurityModuleRef {
   securityManager: any
@@ -188,21 +191,27 @@ export function registerSettingsHandlers(
   })
 
   ipcMain.handle('settings:setConfigPath', async (event, newPath: string) => {
+    let probePath: string | null = null
     try {
       if (!fs.existsSync(newPath)) {
         fs.mkdirSync(newPath, { recursive: true })
       }
-      const probePath = path.join(newPath, `.adnify-write-test-${process.pid}-${Date.now()}`)
-      fs.writeFileSync(probePath, '')
+      probePath = path.join(newPath, `.adnify-write-test-${process.pid}-${randomUUID()}`)
+      fs.writeFileSync(probePath, '', { flag: 'wx' })
       fs.unlinkSync(probePath)
+      probePath = null
       setUserConfigDir(newPath, getBootstrapStore())
-      return true
+      return mutationSuccess()
     } catch (err) {
       logger.ipc.error('[Settings] Failed to set config path:', err)
       if (isSystemPermissionError(err)) {
         systemPrivilegeService.notifyPermissionRequired(event.sender, 'config.writeProtected')
       }
-      return false
+      return mutationFailureFromError(err, 'config.writeProtected')
+    } finally {
+      if (probePath) {
+        try { fs.unlinkSync(probePath) } catch { /* best-effort probe cleanup */ }
+      }
     }
   })
 

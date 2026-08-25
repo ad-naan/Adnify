@@ -86,9 +86,9 @@ export class ProjectSummaryGenerator {
   private workspacePath: string
   private cachePath: string
 
-  constructor(workspacePath: string) {
+  constructor(workspacePath: string, cachePath?: string) {
     this.workspacePath = workspacePath
-    this.cachePath = path.join(workspacePath, '.adnify', 'project-summary.json')
+    this.cachePath = cachePath ?? path.join(workspacePath, '.adnify', 'project-summary.json')
   }
 
   /** 检测项目类型 */

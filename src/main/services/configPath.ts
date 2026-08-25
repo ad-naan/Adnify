@@ -2,6 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import Store from 'electron-store'
+import { createHash } from 'crypto'
 
 const BOOTSTRAP_STORE_NAME = 'bootstrap'
 
@@ -55,6 +56,13 @@ export function getWorkspaceConfigFilePath(
   return subdir
     ? path.join(workspaceRoot, '.adnify', subdir, filename)
     : path.join(workspaceRoot, '.adnify', filename)
+}
+
+export function getWorkspaceCacheDir(workspaceRoot: string): string {
+  const resolved = path.resolve(workspaceRoot).replace(/\\/g, '/')
+  const normalized = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+  const workspaceKey = createHash('sha256').update(normalized).digest('hex').slice(0, 24)
+  return path.join(getUserConfigDir(), 'cache', 'workspaces', workspaceKey)
 }
 
 export const CONFIG_FILES = {

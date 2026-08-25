@@ -5,6 +5,9 @@ import * as path from 'path'
 import { getWorkspaceConfigFilePath } from '../services/configPath'
 import { cleanupFileWatcher, setupFileWatcher, type FileWatcherEvent } from './fileWatcher'
 import { securityManager } from './securityModule'
+import { resolveGitMetadataDirectory } from '../services/gitMetadata'
+import { systemPrivilegeService } from '../services/systemPrivilegeService'
+import { isSystemPermissionError } from '@shared/utils/permissionError'
 
 export interface WindowManagerContext {
   findWindowByWorkspace?: (roots: string[]) => BrowserWindow | null
@@ -61,20 +64,57 @@ function getWatcherId(webContentsId: number): string {
   return `window-${webContentsId}`
 }
 
+function getGitWatcherId(webContentsId: number): string {
+  return `window-${webContentsId}-git`
+}
+
 async function restartWindowFileWatcher(sender: Electron.WebContents, roots: string[]): Promise<void> {
   const watcherId = getWatcherId(sender.id)
+  const gitWatcherId = getGitWatcherId(sender.id)
+  await cleanupFileWatcher(gitWatcherId)
   if (!roots.length) {
     await cleanupFileWatcher(watcherId)
     return
   }
 
-  await setupFileWatcher(watcherId, roots[0], (data: FileWatcherEvent) => {
+  try {
+    await setupFileWatcher(watcherId, roots[0], (data: FileWatcherEvent) => {
+      try {
+        sender.send('file:changed', data)
+      } catch {
+        void cleanupFileWatcher(watcherId)
+        void cleanupFileWatcher(gitWatcherId)
+      }
+    })
+  } catch (error) {
+    logger.security.warn('[Workspace] File watching is unavailable; workspace remains open', {
+      root: roots[0],
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  const gitDirectory = await resolveGitMetadataDirectory(roots[0])
+  const workspaceRoot = path.resolve(roots[0])
+  const gitRelativePath = gitDirectory ? path.relative(workspaceRoot, gitDirectory) : ''
+  const gitDirectoryIsInsideWorkspace = Boolean(gitDirectory) && (
+    gitRelativePath === '' || (!gitRelativePath.startsWith('..') && !path.isAbsolute(gitRelativePath))
+  )
+  if (gitDirectory && !gitDirectoryIsInsideWorkspace) {
     try {
-      sender.send('file:changed', data)
-    } catch {
-      void cleanupFileWatcher(watcherId)
+      await setupFileWatcher(gitWatcherId, gitDirectory, (data: FileWatcherEvent) => {
+        try {
+          sender.send('file:changed', { ...data, source: 'git-metadata' satisfies FileWatcherEvent['source'] })
+        } catch {
+          void cleanupFileWatcher(gitWatcherId)
+        }
+      }, { forwardOnly: true })
+    } catch (error) {
+      logger.security.warn('[Git] Metadata watching is unavailable; focus refresh remains active', {
+        gitDirectory,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
-  })
+  }
 }
 
 export async function readWorkspaceMarkerId(root: string): Promise<string | null> {
@@ -109,14 +149,21 @@ async function ensureWorkspaceMarker(root: string): Promise<string | null> {
   const markerDir = path.dirname(markerPath)
   const workspaceId = `ws_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 
-  await fsPromises.mkdir(markerDir, { recursive: true })
-  await fsPromises.writeFile(markerPath, JSON.stringify({
-    id: workspaceId,
-    createdAt: new Date().toISOString(),
-    version: 1,
-  }, null, 2), 'utf-8')
-
-  return workspaceId
+  try {
+    await fsPromises.mkdir(markerDir, { recursive: true })
+    await fsPromises.writeFile(markerPath, JSON.stringify({
+      id: workspaceId,
+      createdAt: new Date().toISOString(),
+      version: 1,
+    }, null, 2), 'utf-8')
+    return workspaceId
+  } catch (error) {
+    logger.security.info('[Workspace] Continuing without an in-repository marker', {
+      root,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
 }
 
 async function writeWorkspaceDescriptor(targetPath: string, roots: string[]): Promise<void> {
@@ -213,13 +260,16 @@ export function registerWorkspaceHandlers(
     return result.canceled ? null : result.filePaths[0] || null
   })
 
-  ipcMain.handle('workspace:save', async (_, configPath: string | null, roots: string[]) => {
+  ipcMain.handle('workspace:save', async (event, configPath: string | null, roots: string[]) => {
     if (!roots.length) return false
     try {
       await writeWorkspaceDescriptor(configPath || getWorkspaceDescriptorPath(roots[0]), roots)
       return true
     } catch (error) {
       logger.security.error('Failed to save workspace', error)
+      if (isSystemPermissionError(error)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })

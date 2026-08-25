@@ -406,18 +406,18 @@ export interface ElectronAPI {
   readBinaryFile: (path: string) => Promise<string | null>
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
-  writeFile: (path: string, content: string, encoding?: string) => Promise<boolean>
-  appendFile: (path: string, content: string, encoding?: string) => Promise<boolean>
-  ensureDir: (path: string) => Promise<boolean>
+  writeFile: (path: string, content: string, encoding?: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
+  appendFile: (path: string, content: string, encoding?: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
+  ensureDir: (path: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
   saveFile: (content: string, path?: string, encoding?: string) => Promise<string | null>
   fileExists: (path: string) => Promise<boolean>
   showItemInFolder: (path: string) => Promise<boolean>
-  authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<boolean>
+  authorizeSettingsEdit: (path: string, initialContent?: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
   openInBrowser: (path: string) => Promise<boolean>
-  mkdir: (path: string) => Promise<boolean>
-  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<boolean>
-  copyFile: (sourcePath: string, destinationPath: string) => Promise<boolean>
-  renameFile: (oldPath: string, newPath: string) => Promise<boolean>
+  mkdir: (path: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
+  deleteFile: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<import('@shared/types/fileMutation').FileMutationResult>
+  copyFile: (sourcePath: string, destinationPath: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
+  renameFile: (oldPath: string, newPath: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
   searchFiles: (query: string, rootPath: string | string[], options?: SearchFilesOptions) => Promise<SearchFileResult[]>
   searchStream: (query: string, rootPath: string | string[], options: SearchFilesOptions, searchId: string) => Promise<void>
   onSearchResults: (callback: (searchId: string, results: SearchFileResult[]) => void) => () => void
@@ -428,7 +428,7 @@ export interface ElectronAPI {
   getSetting: (key: string) => Promise<unknown>
   setSetting: (key: string, value: unknown) => Promise<boolean>
   getConfigPath: () => Promise<string>
-  setConfigPath: (path: string) => Promise<boolean>
+  setConfigPath: (path: string) => Promise<import('@shared/types/fileMutation').FileMutationResult>
   onSettingsChanged: (callback: (event: { key: string; value: unknown }) => void) => () => void
   resetWhitelist: () => Promise<{ shell: string[]; git: string[] }>
   getUserDataPath: () => Promise<string>
@@ -638,7 +638,7 @@ export interface ElectronAPI {
   lspGetServerStatus: () => Promise<Record<string, { installed: boolean; path?: string }>>
   lspGetBinDir: () => Promise<string>
   lspGetDefaultBinDir: () => Promise<string>
-  lspSetCustomBinDir: (customPath: string | null) => Promise<{ success: boolean }>
+  lspSetCustomBinDir: (customPath: string | null) => Promise<{ success: boolean; error?: string }>
   lspInstallServer: (serverType: string) => Promise<{ success: boolean; path?: string; error?: string }>
   lspInstallBasicServers: () => Promise<{ success: boolean; error?: string }>
 

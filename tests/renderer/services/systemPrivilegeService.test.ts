@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isSystemPermissionError } from '@renderer/services/systemPrivilegeService'
+import { isSystemPermissionError } from '@shared/utils/permissionError'
 
 describe('isSystemPermissionError', () => {
   it.each([

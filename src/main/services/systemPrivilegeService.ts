@@ -1,14 +1,17 @@
 import { app, type WebContents } from 'electron'
-import { execFile, spawn } from 'child_process'
+import { execFile } from 'child_process'
 import { logger } from '@shared/utils/Logger'
 import type { ElevationRequestResult, NormalRelaunchResult, PrivilegeCapability, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
+import {
+  cleanupRelaunchHandshake,
+  buildWindowsLaunchScript,
+  createRelaunchTicket,
+  waitForRelaunchReady,
+} from './relaunchProtocol'
 
-const PERMISSION_ERROR_CODES = new Set(['EACCES', 'EPERM'])
-
-export function isSystemPermissionError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const code = 'code' in error ? String(error.code) : ''
-  return PERMISSION_ERROR_CODES.has(code.toUpperCase())
+function isWindowsUacCancellation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /(?:cancel(?:ed|led)|1223)/i.test(message)
 }
 
 const WINDOWS_ADMIN_CHECK = [
@@ -28,59 +31,46 @@ function isWindowsElevated(): Promise<boolean> {
   })
 }
 
-function scheduleWindowsElevatedRelaunch(): Promise<void> {
-  const executableBase64 = Buffer.from(app.getPath('exe'), 'utf8').toString('base64')
-  const script = [
-    `$parentPid = ${process.pid}`,
-    'Wait-Process -Id $parentPid -ErrorAction SilentlyContinue',
-    `$exe = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${executableBase64}'))`,
-    'Start-Process -FilePath $exe -Verb RunAs',
-  ].join('; ')
+function executePowerShell(script: string): Promise<void> {
   const encodedScript = Buffer.from(script, 'utf16le').toString('base64')
-
   return new Promise((resolve, reject) => {
-    const child = spawn(
+    execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encodedScript],
-      { detached: true, stdio: 'ignore', windowsHide: true },
+      { windowsHide: true, timeout: 30_000 },
+      error => error ? reject(error) : resolve(),
     )
-    child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve()
-    })
   })
 }
 
-function scheduleWindowsNormalRelaunch(): Promise<void> {
-  const executableBase64 = Buffer.from(app.getPath('exe'), 'utf8').toString('base64')
-  const script = [
-    `$parentPid = ${process.pid}`,
-    'Wait-Process -Id $parentPid -ErrorAction SilentlyContinue',
-    `$exe = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${executableBase64}'))`,
-    // Explorer runs at the interactive user's normal integrity level and launches
-    // the executable without inheriting this process' elevated token.
-    'Start-Process -FilePath explorer.exe -ArgumentList (\'"\' + $exe + \'"\')',
-  ].join('; ')
-  const encodedScript = Buffer.from(script, 'utf16le').toString('base64')
+async function launchWindowsReplacement(elevated: boolean): Promise<void> {
+  const ticket = createRelaunchTicket()
+  const launchArgs = [
+    ...(!app.isPackaged && process.argv[1] ? [process.argv[1]] : []),
+    ...ticket.args,
+  ]
+  const script = buildWindowsLaunchScript(app.getPath('exe'), launchArgs, elevated)
 
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', encodedScript],
-      { detached: true, stdio: 'ignore', windowsHide: true },
-    )
-    child.once('error', reject)
-    child.once('spawn', () => {
-      child.unref()
-      resolve()
-    })
-  })
+  try {
+    await executePowerShell(script)
+    if (!await waitForRelaunchReady(ticket)) {
+      throw new Error('The replacement application did not become ready in time.')
+    }
+  } catch (error) {
+    cleanupRelaunchHandshake(ticket)
+    throw error
+  }
 }
 
 class SystemPrivilegeService {
+  private readonly lastNotificationAt = new Map<string, number>()
+
   notifyPermissionRequired(webContents: WebContents, capability: PrivilegeCapability): void {
     if (webContents.isDestroyed()) return
+    const key = `${webContents.id}:${capability}`
+    const now = Date.now()
+    if (now - (this.lastNotificationAt.get(key) || 0) < 2_000) return
+    this.lastNotificationAt.set(key, now)
     webContents.send('systemPrivilege:required', { capability })
   }
 
@@ -113,11 +103,15 @@ class SystemPrivilegeService {
     }
 
     try {
-      await scheduleWindowsElevatedRelaunch()
-      logger.security.info('[Privilege] Elevated relaunch scheduled after application exit')
+      await launchWindowsReplacement(true)
+      logger.security.info('[Privilege] Elevated replacement is ready for handoff')
       return { success: true, scheduled: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      if (isWindowsUacCancellation(error)) {
+        logger.security.info('[Privilege] Windows elevation was canceled by the user')
+        return { success: false, canceled: true }
+      }
       logger.security.error('[Privilege] Failed to schedule elevated relaunch', { error: message })
       return { success: false, error: message }
     }
@@ -131,8 +125,8 @@ class SystemPrivilegeService {
     }
 
     try {
-      await scheduleWindowsNormalRelaunch()
-      logger.security.info('[Privilege] Normal relaunch scheduled after application exit')
+      await launchWindowsReplacement(false)
+      logger.security.info('[Privilege] Normal replacement is ready for handoff')
       return { success: true, scheduled: true }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)

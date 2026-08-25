@@ -66,20 +66,20 @@ export class VectorStoreService {
   private indexPath: string
   private tableName = 'code_chunks'
 
-  constructor(workspacePath: string) {
-    this.indexPath = path.join(workspacePath, '.adnify', 'index')
+  constructor(workspaceCachePath: string) {
+    this.indexPath = path.join(workspaceCachePath, 'index')
   }
 
   /**
    * 初始化数据库连接
    */
   async initialize(): Promise<void> {
-    // 确保目录存在
-    if (!fs.existsSync(this.indexPath)) {
-      fs.mkdirSync(this.indexPath, { recursive: true })
-    }
-
     try {
+      // Index data is a disposable cache. Failure to create it must disable
+      // semantic persistence rather than prevent the workspace from opening.
+      if (!fs.existsSync(this.indexPath)) {
+        fs.mkdirSync(this.indexPath, { recursive: true })
+      }
       const lancedb = await import('@lancedb/lancedb')
       this.db = (await lancedb.connect(this.indexPath)) as unknown as LanceDBConnection
 

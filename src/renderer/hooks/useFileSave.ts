@@ -12,6 +12,31 @@ import { toast } from '@renderer/components/common/ToastProvider'
 import { t } from '@renderer/i18n'
 import { getEditorConfig } from '@renderer/settings'
 import { monaco } from '@renderer/monacoWorker'
+import type { FileMutationResult } from '@shared/types/fileMutation'
+
+function getSaveErrorMessage(result: FileMutationResult, language: 'zh' | 'en'): string {
+  if (result.success) return ''
+  const messages = language === 'zh'
+    ? {
+        permission_denied: '系统拒绝写入此文件',
+        policy_denied: '安全策略不允许写入此路径',
+        invalid_request: '保存请求无效',
+        not_found: '文件或父目录不存在',
+        locked: '文件正被其他程序占用',
+        disk_full: '磁盘空间不足',
+        io_error: '发生文件系统错误',
+      }
+    : {
+        permission_denied: 'The system denied writing to this file',
+        policy_denied: 'Security policy does not allow writing to this path',
+        invalid_request: 'The save request is invalid',
+        not_found: 'The file or parent directory does not exist',
+        locked: 'The file is being used by another program',
+        disk_full: 'The disk is full',
+        io_error: 'A file system error occurred',
+      }
+  return result.error.message || messages[result.error.code]
+}
 
 /** 获取文件对应的 Monaco model 版本号 */
 function getModelVersionId(filePath: string): number | undefined {
@@ -29,8 +54,8 @@ export function useFileSave() {
     if (!file || file.pinned) return false
 
     try {
-      const success = await api.file.write(file.path, file.content, file.encoding)
-      if (success) {
+      const result = await api.file.writeDetailed(file.path, file.content, file.encoding)
+      if (result.success) {
         // 获取当前版本号并保存
         const versionId = getModelVersionId(file.path)
         markFileSaved(file.path, versionId)
@@ -46,10 +71,10 @@ export function useFileSave() {
       } else {
         toast.error(
           language === 'zh' ? '保存失败' : 'Save Failed',
-          language === 'zh' ? '无法写入文件' : 'Could not write to file'
+          getSaveErrorMessage(result, language)
         )
       }
-      return success
+      return result.success
     } catch (error) {
       toast.error(
         language === 'zh' ? '保存失败' : 'Save Failed',

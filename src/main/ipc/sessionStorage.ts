@@ -7,6 +7,8 @@ import { sessionStorageWorker } from '../services/session/SessionStorageWorkerCl
 import { readWorkspaceMarkerId } from '../security/workspaceHandlers'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 import type { SessionPatch, SessionWorkerResult } from '@shared/types/sessionPersistence'
+import { systemPrivilegeService } from '../services/systemPrivilegeService'
+import { isSystemPermissionError } from '@shared/utils/permissionError'
 
 interface SessionStorageHandlerOptions {
   getWindowWorkspace?: (windowId: number) => string[] | null
@@ -45,15 +47,28 @@ function expectResult<T extends SessionWorkerResult['type']>(
   return result as Extract<SessionWorkerResult, { type: T }>
 }
 
+async function runSessionOperation<T>(event: IpcMainInvokeEvent, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    if (isSystemPermissionError(error)) {
+      systemPrivilegeService.notifyPermissionRequired(event.sender, 'config.writeProtected')
+    }
+    throw error
+  }
+}
+
 export function registerSessionStorageHandlers(options: SessionStorageHandlerOptions): void {
   ipcMain.handle('session:open', async event => {
-    const scope = await resolveScope(event, options)
-    return expectResult(await sessionStorageWorker.request({
-      type: 'open',
-      databasePath: scope.databasePath,
-      legacySessionsDir: scope.legacySessionsDir,
-      legacyPlanDir: scope.legacyPlanDir,
-    }), 'opened')
+    return runSessionOperation(event, async () => {
+      const scope = await resolveScope(event, options)
+      return expectResult(await sessionStorageWorker.request({
+        type: 'open',
+        databasePath: scope.databasePath,
+        legacySessionsDir: scope.legacySessionsDir,
+        legacyPlanDir: scope.legacyPlanDir,
+      }), 'opened')
+    })
   })
 
   ipcMain.handle('session:loadCatalog', async event => {
@@ -101,16 +116,20 @@ export function registerSessionStorageHandlers(options: SessionStorageHandlerOpt
   })
 
   ipcMain.handle('session:upsertPlan', async (event, plan: unknown) => {
-    const scope = await resolveScope(event, options)
-    await sessionStorageWorker.request({ type: 'upsertPlan', databasePath: scope.databasePath, plan })
-    return true
+    return runSessionOperation(event, async () => {
+      const scope = await resolveScope(event, options)
+      await sessionStorageWorker.request({ type: 'upsertPlan', databasePath: scope.databasePath, plan })
+      return true
+    })
   })
 
   ipcMain.handle('session:deletePlan', async (event, planId: string) => {
     if (!planId) throw new Error('planId is required')
-    const scope = await resolveScope(event, options)
-    await sessionStorageWorker.request({ type: 'deletePlan', databasePath: scope.databasePath, planId })
-    return true
+    return runSessionOperation(event, async () => {
+      const scope = await resolveScope(event, options)
+      await sessionStorageWorker.request({ type: 'deletePlan', databasePath: scope.databasePath, planId })
+      return true
+    })
   })
 
   ipcMain.handle('session:applyPatch', async (event, patch: SessionPatch) => {
@@ -118,14 +137,18 @@ export function registerSessionStorageHandlers(options: SessionStorageHandlerOpt
       !Array.isArray(patch.branchThreads)) {
       throw new Error('Invalid session patch')
     }
-    const scope = await resolveScope(event, options)
-    await sessionStorageWorker.request({ type: 'applyPatch', databasePath: scope.databasePath, patch })
-    return true
+    return runSessionOperation(event, async () => {
+      const scope = await resolveScope(event, options)
+      await sessionStorageWorker.request({ type: 'applyPatch', databasePath: scope.databasePath, patch })
+      return true
+    })
   })
 
   ipcMain.handle('session:clear', async event => {
-    const scope = await resolveScope(event, options)
-    await sessionStorageWorker.request({ type: 'clear', databasePath: scope.databasePath })
-    return true
+    return runSessionOperation(event, async () => {
+      const scope = await resolveScope(event, options)
+      await sessionStorageWorker.request({ type: 'clear', databasePath: scope.databasePath })
+      return true
+    })
   })
 }

@@ -12,7 +12,6 @@ import { getLanguageId, isLanguageSupported } from '@/renderer/services/lspServi
 import BottomBarPopover from '../ui/BottomBarPopover'
 import { logger } from '@shared/utils/Logger'
 import { toast } from '../common/ToastProvider'
-import { requestElevationForPermissionError } from '@renderer/services/systemPrivilegeService'
 
 interface LspServerStatus {
   installed: boolean
@@ -129,21 +128,11 @@ export default function LspStatusIndicator() {
         logger.lsp.error('Install failed:', result.error)
         const message = result.error || 'Installation failed'
         toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
-        await requestElevationForPermissionError({
-          error: message,
-          capability: 'lsp.install',
-          language: language as 'zh' | 'en',
-        })
       }
     } catch (error) {
       logger.lsp.error('Install error:', error)
       const message = error instanceof Error ? error.message : String(error)
       toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
-      await requestElevationForPermissionError({
-        error,
-        capability: 'lsp.install',
-        language: language as 'zh' | 'en',
-      })
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete(serverType); return next })
     }

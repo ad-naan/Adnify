@@ -27,6 +27,10 @@ type ElectronAPIWithRemoteShell = ElectronAPI & {
   remoteHostTrustGetLastDecision: (server: RemoteShellServer) => Promise<RemoteHostTrustDecision | null>
 }
 
+function mutationSucceeded(result: { success: boolean } | boolean): boolean {
+  return typeof result === 'boolean' ? result : result.success
+}
+
 // 创建分组 API 适配器
 function createGroupedAPI() {
   const raw = window.electronAPI as ElectronAPIWithRemoteShell
@@ -75,17 +79,25 @@ function createGroupedAPI() {
       readBinary: (path: string) => raw.readBinaryFile(path),
       readRichContent: (path: string, options?: Parameters<typeof raw.readRichContent>[1]) => raw.readRichContent(path, options),
       readImageAnalysis: (request: Parameters<typeof raw.readImageAnalysis>[0]) => raw.readImageAnalysis(request),
-      write: (path: string, content: string, encoding?: string) => raw.writeFile(path, content, encoding),
-      append: (path: string, content: string, encoding?: string) => raw.appendFile(path, content, encoding),
+      write: async (path: string, content: string, encoding?: string) => mutationSucceeded(await raw.writeFile(path, content, encoding)),
+      writeDetailed: (path: string, content: string, encoding?: string) => raw.writeFile(path, content, encoding),
+      append: async (path: string, content: string, encoding?: string) => mutationSucceeded(await raw.appendFile(path, content, encoding)),
+      appendDetailed: (path: string, content: string, encoding?: string) => raw.appendFile(path, content, encoding),
       save: (content: string, path?: string, encoding?: string) => raw.saveFile(content, path, encoding),
       exists: (path: string) => raw.fileExists(path),
-      mkdir: (path: string) => raw.mkdir(path),
-      ensureDir: (path: string) => raw.ensureDir(path),
-      delete: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => raw.deleteFile(path, approval),
-      copy: (sourcePath: string, destinationPath: string) => raw.copyFile(sourcePath, destinationPath),
-      rename: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
+      mkdir: async (path: string) => mutationSucceeded(await raw.mkdir(path)),
+      mkdirDetailed: (path: string) => raw.mkdir(path),
+      ensureDir: async (path: string) => mutationSucceeded(await raw.ensureDir(path)),
+      ensureDirDetailed: (path: string) => raw.ensureDir(path),
+      delete: async (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => mutationSucceeded(await raw.deleteFile(path, approval)),
+      deleteDetailed: (path: string, approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => raw.deleteFile(path, approval),
+      copy: async (sourcePath: string, destinationPath: string) => mutationSucceeded(await raw.copyFile(sourcePath, destinationPath)),
+      copyDetailed: (sourcePath: string, destinationPath: string) => raw.copyFile(sourcePath, destinationPath),
+      rename: async (oldPath: string, newPath: string) => mutationSucceeded(await raw.renameFile(oldPath, newPath)),
+      renameDetailed: (oldPath: string, newPath: string) => raw.renameFile(oldPath, newPath),
       showInFolder: (path: string) => raw.showItemInFolder(path),
-      authorizeSettingsEdit: (path: string, initialContent?: string) => raw.authorizeSettingsEdit(path, initialContent),
+      authorizeSettingsEdit: async (path: string, initialContent?: string) => mutationSucceeded(await raw.authorizeSettingsEdit(path, initialContent)),
+      authorizeSettingsEditDetailed: (path: string, initialContent?: string) => raw.authorizeSettingsEdit(path, initialContent),
       openInBrowser: (path: string) => raw.openInBrowser(path),
       search: (query: string, rootPath: string | string[], options?: Parameters<typeof raw.searchFiles>[2]) =>
         raw.searchFiles(query, rootPath, options),
@@ -128,7 +140,8 @@ function createGroupedAPI() {
       get: (key: string) => raw.getSetting(key),
       set: (key: string, value: unknown) => raw.setSetting(key, value),
       getConfigPath: () => raw.getConfigPath(),
-      setConfigPath: (path: string) => raw.setConfigPath(path),
+      setConfigPath: async (path: string) => mutationSucceeded(await raw.setConfigPath(path)),
+      setConfigPathDetailed: (path: string) => raw.setConfigPath(path),
       resetWhitelist: () => raw.resetWhitelist(),
       getUserDataPath: () => raw.getUserDataPath(),
       getRecentLogs: () => raw.getRecentLogs(),

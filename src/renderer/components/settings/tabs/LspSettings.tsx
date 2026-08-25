@@ -22,7 +22,6 @@ import { api } from '@/renderer/services/electronAPI'
 import { Button, Input } from '@components/ui'
 import { LSP_SERVER_DEFINITIONS } from '@shared/languages'
 import { toast } from '@components/common/ToastProvider'
-import { requestElevationForPermissionError } from '@renderer/services/systemPrivilegeService'
 
 interface LspSettingsProps {
   language: Language
@@ -131,21 +130,11 @@ export function LspSettings({ language }: LspSettingsProps) {
         const message = result.error || 'Installation failed'
         setError(message)
         toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
-        await requestElevationForPermissionError({
-          error: message,
-          capability: 'lsp.install',
-          language,
-        })
       }
     } catch (err: any) {
       const message = err?.message || String(err)
       setError(message)
       toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
-      await requestElevationForPermissionError({
-        error: message,
-        capability: 'lsp.install',
-        language,
-      })
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete(serverId); return next })
     }
@@ -165,21 +154,11 @@ export function LspSettings({ language }: LspSettingsProps) {
         const message = result.error || 'Installation failed'
         setError(message)
         toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
-        await requestElevationForPermissionError({
-          error: message,
-          capability: 'lsp.install',
-          language,
-        })
       }
     } catch (err: any) {
       const message = err?.message || String(err)
       setError(message)
       toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
-      await requestElevationForPermissionError({
-        error: message,
-        capability: 'lsp.install',
-        language,
-      })
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete('all'); return next })
     }
@@ -201,7 +180,12 @@ export function LspSettings({ language }: LspSettingsProps) {
   const handleApplyCustomPath = async () => {
     if (!customBinDir) return
     try {
-      await api.lsp.setCustomBinDir(customBinDir)
+      const result = await api.lsp.setCustomBinDir(customBinDir)
+      if (!result.success) {
+        const message = result.error || 'Failed to set language server path'
+        setError(message)
+        return
+      }
       await loadStatus()
     } catch (err: any) {
       setError(err.message)
@@ -211,7 +195,11 @@ export function LspSettings({ language }: LspSettingsProps) {
   // 恢复默认路径
   const handleResetPath = async () => {
     try {
-      await api.lsp.setCustomBinDir(null)
+      const result = await api.lsp.setCustomBinDir(null)
+      if (!result.success) {
+        setError(result.error || 'Failed to reset language server path')
+        return
+      }
       setCustomBinDir('')
       await loadStatus()
     } catch (err: any) {

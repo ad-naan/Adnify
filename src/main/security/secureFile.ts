@@ -17,7 +17,10 @@ import { fileApprovalScope, isRecentAgentApprovalProof, type AgentApprovalProof 
 
 // 导入拆分的模块
 import { readFileWithEncodingInfo, readFileSized, readLargeFile, writeFileAtomic, getFileStats } from './fileUtils'
-import { isSystemPermissionError, systemPrivilegeService } from '../services/systemPrivilegeService'
+import { systemPrivilegeService } from '../services/systemPrivilegeService'
+import { isSystemPermissionError } from '@shared/utils/permissionError'
+import { mutationFailure, mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
+import type { FileMutationResult } from '@shared/types/fileMutation'
 import {
   setupFileWatcher,
   cleanupFileWatcher,
@@ -158,13 +161,9 @@ function appendFileSerialized(filePath: string, content: string, encoding: strin
   const key = path.resolve(filePath)
   const previous = pendingFileWrites.get(key)?.promise ?? Promise.resolve(true)
   const append = previous.catch(() => false).then(async () => {
-    try {
-      await fsPromises.mkdir(path.dirname(filePath), { recursive: true })
-      await fsPromises.appendFile(filePath, content, { encoding: encoding as BufferEncoding })
-      return true
-    } catch {
-      return false
-    }
+    await fsPromises.mkdir(path.dirname(filePath), { recursive: true })
+    await fsPromises.appendFile(filePath, content, { encoding: encoding as BufferEncoding })
+    return true
   })
   pendingFileWrites.set(key, { kind: 'append', content, encoding, promise: append })
   void append.finally(() => {
@@ -183,6 +182,17 @@ function showSecurityError(mainWindow: any, title: string, message: string): voi
     // 如果窗口不可用，回退到原生对话框
     dialog.showErrorBox(title, message)
   }
+}
+
+function fileMutationFailure(
+  event: Electron.IpcMainInvokeEvent,
+  error: unknown,
+): FileMutationResult {
+  const result = mutationFailureFromError(error, 'file.writeProtected')
+  if (!result.success && result.error.code === 'permission_denied') {
+    systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+  }
+  return result
 }
 
 /**
@@ -447,8 +457,8 @@ export function registerSecureFileHandlers(
 
   // 写入文件（无弹窗）
   ipcMain.handle('file:write', async (event, filePath: string, content: string, encoding?: string) => {
-    if (!filePath || typeof filePath !== 'string') return false
-    if (content === undefined || content === null) return false
+    if (!filePath || typeof filePath !== 'string') return mutationFailure('invalid_request')
+    if (content === undefined || content === null) return mutationFailure('invalid_request')
 
     const workspace = getWorkspaceSessionFn(event)
 
@@ -456,7 +466,7 @@ export function registerSecureFileHandlers(
       securityManager.logOperation(OperationType.FILE_WRITE, filePath, false, {
         reason: '安全底线：路径未获授权',
       })
-      return false
+      return mutationFailure('policy_denied', 'Path is not authorized for writing.')
     }
 
     // 禁止类型检查
@@ -466,14 +476,14 @@ export function registerSecureFileHandlers(
         securityManager.logOperation(OperationType.FILE_WRITE, filePath, false, {
           reason: '安全底线：禁止类型',
         })
-        return false
+        return mutationFailure('policy_denied', 'This file type cannot be written.')
       }
     }
 
     try {
       const success = await writeFileSerialized(filePath, content, encoding || 'utf-8')
       if (!success) {
-        return false
+        return mutationFailure('io_error', 'The file could not be written.')
       }
       if (!isInternalAdnifyPath(filePath)) {
         securityManager.logOperation(OperationType.FILE_WRITE, filePath, true, {
@@ -481,42 +491,40 @@ export function registerSecureFileHandlers(
           bypass: true,
         })
       }
-      return true
+      return mutationSuccess()
     } catch (err) {
       logger.security.error('[File] write failed:', filePath, toAppError(err).message)
-      if (isSystemPermissionError(err)) {
-        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-      }
-      return false
+      return fileMutationFailure(event, err)
     }
   })
 
   // Append-only project logs avoid reading and rewriting an ever-growing file.
   ipcMain.handle('file:append', async (event, filePath: string, content: string, encoding?: string) => {
-    if (!filePath || typeof filePath !== 'string' || !content) return false
+    if (!filePath || typeof filePath !== 'string' || !content) return mutationFailure('invalid_request')
     // Append is intentionally narrower than general writes: it exists for
     // internal append-only journals, not arbitrary renderer file mutation.
-    if (!isInternalAdnifyPath(filePath)) return false
+    if (!isInternalAdnifyPath(filePath)) return mutationFailure('policy_denied')
     const workspace = getWorkspaceSessionFn(event)
-    if (!canAccessFile(filePath, workspace, 'write')) return false
-    const success = await appendFileSerialized(filePath, content, encoding || 'utf-8')
-    if (!success) logger.security.error('[File] append failed:', filePath)
-    return success
+    if (!canAccessFile(filePath, workspace, 'write')) return mutationFailure('policy_denied')
+    try {
+      await appendFileSerialized(filePath, content, encoding || 'utf-8')
+      return mutationSuccess()
+    } catch (err) {
+      logger.security.error('[File] append failed:', filePath, toAppError(err).message)
+      return fileMutationFailure(event, err)
+    }
   })
 
   // 确保目录存在
   ipcMain.handle('file:ensureDir', async (event, dirPath: string) => {
-    if (!dirPath) return false
+    if (!dirPath) return mutationFailure('invalid_request')
     const workspace = getWorkspaceSessionFn(event)
-    if (!canAccessFile(dirPath, workspace, 'manage')) return false
+    if (!canAccessFile(dirPath, workspace, 'manage')) return mutationFailure('policy_denied')
     try {
       await fsPromises.mkdir(dirPath, { recursive: true })
-      return true
+      return mutationSuccess()
     } catch (err) {
-      if (isSystemPermissionError(err)) {
-        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-      }
-      return false
+      return fileMutationFailure(event, err)
     }
   })
 
@@ -613,9 +621,9 @@ export function registerSecureFileHandlers(
 
   // 创建目录（无弹窗）
   ipcMain.handle('file:mkdir', async (event, dirPath: string) => {
-    if (!dirPath || typeof dirPath !== 'string') return false
+    if (!dirPath || typeof dirPath !== 'string') return mutationFailure('invalid_request')
     const workspace = getWorkspaceSessionFn(event)
-    if (!canAccessFile(dirPath, workspace, 'manage')) return false
+    if (!canAccessFile(dirPath, workspace, 'manage')) return mutationFailure('policy_denied')
 
     try {
       await fsPromises.mkdir(dirPath, { recursive: true })
@@ -623,13 +631,10 @@ export function registerSecureFileHandlers(
         isDirectory: true,
         bypass: true,
       })
-      return true
+      return mutationSuccess()
     } catch (err) {
       logger.security.error('[File] mkdir failed:', dirPath, toAppError(err).message)
-      if (isSystemPermissionError(err)) {
-        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-      }
-      return false
+      return fileMutationFailure(event, err)
     }
   })
 
@@ -653,14 +658,14 @@ export function registerSecureFileHandlers(
 
   // 删除文件/目录：主进程边界做单次审批，避免依赖可绕过的渲染层状态。
   ipcMain.handle('file:delete', async (event, filePath: string, approval?: AgentApprovalProof) => {
-    if (!filePath) return false
+    if (!filePath) return mutationFailure('invalid_request')
     const workspace = getWorkspaceSessionFn(event)
     const hasExactManageGrant = isUserAuthorizedFile(filePath, 'manage')
     if (!canAccessFile(filePath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
         reason: '安全底线：超出工作区边界',
       })
-      return false
+      return mutationFailure('policy_denied', 'Path is outside the authorized workspace.')
     }
 
     const riskReasons: Array<{ zh: string; en: string }> = []
@@ -685,8 +690,8 @@ export function registerSecureFileHandlers(
           riskReasons.push({ zh: `目录较大（${size} MB）`, en: `The directory is large (${size} MB)` })
         }
       }
-    } catch {
-      return false
+    } catch (err) {
+      return fileMutationFailure(event, err)
     }
 
     const normalizedFilePath = path.resolve(filePath)
@@ -711,7 +716,7 @@ export function registerSecureFileHandlers(
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, false, {
         reason: 'Agent Dock 审批凭据无效、已过期或目标不匹配',
       })
-      return false
+      return mutationFailure('policy_denied', 'Approval proof is invalid or expired.')
     }
     if (!hasExactManageGrant && !hasAgentApproval && !isInternalAgentTemp && !isTrustedWorkspaceOperation) {
       const reason = riskReasons.length > 0
@@ -729,7 +734,7 @@ export function registerSecureFileHandlers(
         reason,
         isInsideWorkspace ? 'app' : 'native',
       )
-      if (!approved) return false
+      if (!approved) return mutationFailure('policy_denied', 'Deletion was not approved.')
     }
 
     try {
@@ -750,26 +755,23 @@ export function registerSecureFileHandlers(
                 ? 'internal-agent-temp'
                 : 'approved-once',
       })
-      return true
+      return mutationSuccess()
     } catch (err) {
       logger.security.error('[File] delete failed:', filePath, toAppError(err).message)
-      if (isSystemPermissionError(err)) {
-        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-      }
-      return false
+      return fileMutationFailure(event, err)
     }
   })
 
   // 复制文件（无弹窗）
   ipcMain.handle('file:copy', async (event, sourcePath: string, destinationPath: string) => {
-    if (!sourcePath || !destinationPath) return false
+    if (!sourcePath || !destinationPath) return mutationFailure('invalid_request')
     const workspace = getWorkspaceSessionFn(event)
     if (!canAccessFile(sourcePath, workspace, 'manage') || !canAccessFile(destinationPath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_WRITE, sourcePath, false, {
         reason: '安全底线：超出工作区边界',
         destinationPath,
       })
-      return false
+      return mutationFailure('policy_denied', 'Source or destination is outside the authorized workspace.')
     }
 
     try {
@@ -789,26 +791,23 @@ export function registerSecureFileHandlers(
         isDirectory: stat.isDirectory(),
         bypass: true,
       })
-      return true
+      return mutationSuccess()
     } catch (err) {
       logger.security.error('[File] copy failed:', sourcePath, toAppError(err).message)
-      if (isSystemPermissionError(err)) {
-        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-      }
-      return false
+      return fileMutationFailure(event, err)
     }
   })
 
   // 重命名文件（无弹窗）
   ipcMain.handle('file:rename', async (event, oldPath: string, newPath: string) => {
-    if (!oldPath || !newPath) return false
+    if (!oldPath || !newPath) return mutationFailure('invalid_request')
     const workspace = getWorkspaceSessionFn(event)
     if (!canAccessFile(oldPath, workspace, 'manage') || !canAccessFile(newPath, workspace, 'manage')) {
       securityManager.logOperation(OperationType.FILE_RENAME, oldPath, false, {
         reason: '安全底线：超出工作区边界',
         newPath,
       })
-      return false
+      return mutationFailure('policy_denied', 'Source or destination is outside the authorized workspace.')
     }
 
     try {
@@ -817,13 +816,10 @@ export function registerSecureFileHandlers(
         newPath,
         bypass: true,
       })
-      return true
+      return mutationSuccess()
     } catch (err) {
       logger.security.error('[File] rename failed:', oldPath, toAppError(err).message)
-      if (isSystemPermissionError(err)) {
-        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-      }
-      return false
+      return fileMutationFailure(event, err)
     }
   })
 
@@ -841,11 +837,11 @@ export function registerSecureFileHandlers(
   // 设置面板中的明确“在编辑器中打开”操作，只为当前工作区或受信任的
   // Adnify 配置资源授予本次应用会话内的精确文件写权限。
   ipcMain.handle('file:authorizeSettingsEdit', async (event, filePath: string, initialContent?: string) => {
-    if (!filePath || typeof filePath !== 'string') return false
-    if (securityManager.isSensitivePath(filePath)) return false
+    if (!filePath || typeof filePath !== 'string') return mutationFailure('invalid_request')
+    if (securityManager.isSensitivePath(filePath)) return mutationFailure('policy_denied')
     const workspace = getWorkspaceSessionFn(event)
     if (!securityManager.validateWorkspacePath(filePath, workspace?.roots || []) && !isAllowedGlobalResourcePath(filePath)) {
-      return false
+      return mutationFailure('policy_denied')
     }
     authorizeUserFile(filePath, 'settings-editor', 'write')
 
@@ -857,14 +853,11 @@ export function registerSecureFileHandlers(
         const code = (error as NodeJS.ErrnoException).code
         if (code !== 'EEXIST') {
           logger.security.error('[File] Failed to initialize settings file:', filePath, toAppError(error).message)
-          if (isSystemPermissionError(error)) {
-            systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
-          }
-          return false
+          return fileMutationFailure(event, error)
         }
       }
     }
-    return true
+    return mutationSuccess()
   })
 
   // 在浏览器中打开文件

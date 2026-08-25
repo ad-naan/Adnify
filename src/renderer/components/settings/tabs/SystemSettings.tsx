@@ -422,12 +422,14 @@ export function SystemSettings({
                             <Button variant="secondary" size="sm" className="rounded-xl px-4" onClick={async () => {
                                 const newPath = await api.file.selectFolder()
                                 if (newPath) {
-                                    // @ts-ignore
-                                    const success = await api.settings.setConfigPath?.(newPath)
-                                    if (success) {
+                                    const result = await api.settings.setConfigPathDetailed(newPath)
+                                    if (result.success) {
                                         toast.success(language === 'zh' ? '路径已更新，重启后生效' : 'Path updated, restart required to take effect')
                                     } else {
-                                        toast.error(language === 'zh' ? '更新路径失败' : 'Failed to update path')
+                                        toast.error(
+                                            language === 'zh' ? '更新路径失败' : 'Failed to update path',
+                                            result.error.message,
+                                        )
                                     }
                                 }
                             }}>

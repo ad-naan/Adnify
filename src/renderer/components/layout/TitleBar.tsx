@@ -7,6 +7,7 @@ import WorkspaceDropdown from './WorkspaceDropdown'
 import UpdateIndicator from './UpdateIndicator'
 import { MascotIP } from '../mascot/MascotIP'
 import SkinPanel from './SkinPanel'
+import AdministratorModeTitleBadge from './AdministratorModeTitleBadge'
 
 // 检测是否为 Mac 平台
 const isMac = typeof navigator !== 'undefined' && (
@@ -76,6 +77,7 @@ export default function TitleBar() {
       <div className="flex items-center justify-end h-full pr-2 gap-1">
         <div className="no-drag flex items-center gap-1 h-full mr-2">
           <SkinPanel />
+          <AdministratorModeTitleBadge />
 
           {/* Update Indicator */}
           <UpdateIndicator />

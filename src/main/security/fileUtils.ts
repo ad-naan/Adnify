@@ -1,5 +1,6 @@
 import { promises as fsPromises } from 'fs'
 import type { FileHandle } from 'fs/promises'
+import { randomUUID } from 'crypto'
 import * as iconv from 'iconv-lite'
 
 export type SupportedEncoding = 'utf-8' | 'utf-8-bom' | 'gbk' | 'gb18030'
@@ -192,7 +193,7 @@ export async function writeFileAtomic(
   content: string,
   encoding: SupportedEncoding = 'utf-8',
 ): Promise<void> {
-  const tempPath = `${filePath}.tmp.${Date.now()}`
+  const tempPath = `${filePath}.tmp.${process.pid}.${randomUUID()}`
 
   try {
     const path = await import('path')

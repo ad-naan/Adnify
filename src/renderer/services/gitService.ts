@@ -125,7 +125,10 @@ class GitService {
         try {
             const normalizedPath = normalizePath(targetPath)
             // 注入 -c core.quotePath=false 来防止 Git 把中文路径转义和加引号（导致 stage/unstage 找不到文件）
-            const fullArgs = ['-c', 'core.quotePath=false', ...args]
+            // Read-only status queries must not refresh/write the index; otherwise
+            // the Git metadata watcher would observe our own query and schedule
+            // another refresh. Required locks for mutating commands still work.
+            const fullArgs = ['--no-optional-locks', '-c', 'core.quotePath=false', ...args]
             const result = await api.git.execSecure(fullArgs, normalizedPath)
             const exitCode = result.success === false ? (result.exitCode ?? 1) : (result.exitCode || 0)
             return {
