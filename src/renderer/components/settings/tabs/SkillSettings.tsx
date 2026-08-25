@@ -9,11 +9,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { skillService, type SkillItem, type SkillTriggerType, type SkillSource } from '@/renderer/agent/services/skillService'
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
-import { Button, Input } from '@components/ui'
+import { Button, Input, Modal } from '@components/ui'
 import { joinPath } from '@shared/utils/pathUtils'
 import {
     Zap, Plus, Trash2, RefreshCw, Download, Search,
-    ToggleLeft, ToggleRight, ExternalLink, Github, FolderOpen
+    ToggleLeft, ToggleRight, ExternalLink, Github, FolderOpen, Import, Check, Loader2
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
@@ -33,6 +33,11 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
     const [loading, setLoading] = useState(true)
     const [globalSkillsDir, setGlobalSkillsDir] = useState('')
     const [openingDir, setOpeningDir] = useState<SkillSource | null>(null)
+    const [showImportModal, setShowImportModal] = useState(false)
+    const [externalSkills, setExternalSkills] = useState<SkillItem[]>([])
+    const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set())
+    const [importLevel, setImportLevel] = useState<SkillSource>('global')
+    const [importLoading, setImportLoading] = useState(false)
 
     // Install from marketplace
     const [searchQuery, setSearchQuery] = useState('')
@@ -76,6 +81,33 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
         setSkills(items)
         setLoading(false)
     }, [])
+
+    const handleOpenImport = async () => {
+        setShowImportModal(true)
+        setImportLoading(true)
+        setSelectedImports(new Set())
+        setExternalSkills(await skillService.discoverExternalSkills())
+        setImportLoading(false)
+    }
+
+    const handleImportSelected = async () => {
+        setImportLoading(true)
+        let imported = 0
+        for (const skill of externalSkills) {
+            if (!selectedImports.has(skill.filePath)) continue
+            const result = await skillService.importExternalSkill(skill, importLevel)
+            if (result.success) imported++
+        }
+        await loadSkills()
+        setImportLoading(false)
+        setShowImportModal(false)
+        showMessage(
+            imported === selectedImports.size ? 'success' : 'error',
+            imported === selectedImports.size
+                ? t(`已导入 ${imported} 个 Skill`, `Imported ${imported} Skill(s)`)
+                : t(`已导入 ${imported} 个，部分项目因同名或文件权限被跳过`, `Imported ${imported}; some items were skipped due to conflicts or permissions`)
+        )
+    }
 
     useEffect(() => {
         loadSkills()
@@ -209,6 +241,10 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                         </span>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button variant="secondary" size="sm" onClick={handleOpenImport}>
+                            <Import className="mr-1.5 h-3.5 w-3.5" />
+                            {t('从其他 Agent 导入', 'Import from Agent')}
+                        </Button>
                         <button
                             onClick={loadSkills}
                             className="p-1.5 text-text-muted hover:text-accent transition-colors"
@@ -279,7 +315,9 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-medium text-text-primary">{skill.name}</span>
                                         <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[9px] font-medium text-accent">
-                                            {{ adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: t('通用', 'Generic') }[skill.provider]}
+                                            {skill.importedFrom
+                                                ? t(`来自 ${{ adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: '其他 Agent' }[skill.importedFrom.provider]}`, `From ${{ adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: 'Other Agent' }[skill.importedFrom.provider]}`)
+                                                : 'Adnify'}
                                         </span>
                                         <span className={`text-[9px] px-1.5 py-0.5 rounded ${skill.source === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                                             {skill.source === 'global' ? t('全局', 'Global') : t('项目', 'Project')}
@@ -304,6 +342,11 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                     </div>
                                     <p className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{skill.description}</p>
                                     <p className="mt-1 truncate font-mono text-[9px] text-text-muted/70" title={skill.filePath}>{skill.filePath}</p>
+                                    {skill.importedFrom && (
+                                        <p className="mt-0.5 truncate font-mono text-[9px] text-accent/65" title={skill.importedFrom.path}>
+                                            {t('最初导入自：', 'Originally imported from: ')}{skill.importedFrom.path}
+                                        </p>
+                                    )}
                                     {!!skill.shadowedOrigins?.length && (
                                         <p className="mt-1 text-[9px] text-amber-400/80">
                                             {t(`另有 ${skill.shadowedOrigins.length} 个同名来源被覆盖，删除后可能显示下一项`, `${skill.shadowedOrigins.length} same-name source(s) are overridden and may appear after deletion`)}
@@ -660,6 +703,85 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                     </div>
                 </div>
             </section>
+
+            <Modal
+                isOpen={showImportModal}
+                onClose={() => !importLoading && setShowImportModal(false)}
+                title={t('从其他 Agent 导入 Skills', 'Import Skills from another Agent')}
+                size="3xl"
+            >
+                <div className="space-y-5">
+                    <div className="rounded-xl border border-accent/20 bg-accent/[0.05] p-4 text-xs leading-relaxed text-text-secondary">
+                        {t(
+                            '这里只临时扫描 Cursor、Codex、Claude 等目录。导入会复制完整 Skill 文件夹到 Adnify，之后不会跟随来源自动变化。',
+                            'This temporarily scans Cursor, Codex, Claude, and other directories. Import copies the complete Skill folder into Adnify without ongoing sync.'
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        {(['global', 'project'] as const).map(level => (
+                            <button
+                                key={level}
+                                type="button"
+                                disabled={level === 'project' && !workspacePath}
+                                onClick={() => setImportLevel(level)}
+                                className={`rounded-lg border px-3 py-2 text-xs transition-colors ${importLevel === level ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-text-muted hover:bg-white/5'} disabled:opacity-40`}
+                            >
+                                {level === 'global' ? t('保存到全局', 'Save globally') : t('保存到当前项目', 'Save to project')}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="max-h-[440px] space-y-2 overflow-auto pr-1">
+                        {importLoading && externalSkills.length === 0 ? (
+                            <div className="flex h-36 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-accent" /></div>
+                        ) : externalSkills.length === 0 ? (
+                            <div className="flex h-36 items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
+                                {t('没有发现可导入的第三方 Skills', 'No external Skills found')}
+                            </div>
+                        ) : externalSkills.map(skill => {
+                            const exists = skills.some(item => item.name === skill.name)
+                            const selected = selectedImports.has(skill.filePath)
+                            const provider = { adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: t('其他 Agent', 'Other Agent') }[skill.provider]
+                            return (
+                                <button
+                                    key={skill.filePath}
+                                    type="button"
+                                    disabled={exists}
+                                    onClick={() => setSelectedImports(previous => {
+                                        const next = new Set(previous)
+                                        selected ? next.delete(skill.filePath) : next.add(skill.filePath)
+                                        return next
+                                    })}
+                                    className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ${selected ? 'border-accent/40 bg-accent/[0.08]' : 'border-border bg-surface/40 hover:border-accent/25'} disabled:cursor-not-allowed disabled:opacity-55`}
+                                >
+                                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected ? 'border-accent bg-accent text-white' : 'border-border'}`}>
+                                        {selected && <Check className="h-3.5 w-3.5" />}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="flex flex-wrap items-center gap-2">
+                                            <span className="text-sm font-semibold text-text-primary">{skill.name}</span>
+                                            <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted">{provider}</span>
+                                            <span className="text-[10px] text-text-muted">{skill.source === 'global' ? t('全局来源', 'Global source') : t('项目来源', 'Project source')}</span>
+                                            {exists && <span className="text-[10px] text-amber-400">{t('Adnify 已存在同名 Skill', 'Already exists in Adnify')}</span>}
+                                        </span>
+                                        <span className="mt-1 block line-clamp-2 text-[11px] text-text-muted">{skill.description}</span>
+                                        <span className="mt-1 block truncate font-mono text-[9px] text-text-muted/70" title={skill.filePath}>{skill.filePath}</span>
+                                    </span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                    <div className="flex items-center justify-between border-t border-border pt-4">
+                        <span className="text-xs text-text-muted">{t(`已选择 ${selectedImports.size} 项`, `${selectedImports.size} selected`)}</span>
+                        <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{t('取消', 'Cancel')}</Button>
+                            <Button variant="primary" size="sm" onClick={handleImportSelected} disabled={selectedImports.size === 0 || importLoading}>
+                                {importLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                {t(`导入 ${selectedImports.size} 项`, `Import ${selectedImports.size}`)}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </Modal>
         </div>
     )
 }

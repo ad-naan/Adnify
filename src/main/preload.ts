@@ -519,6 +519,7 @@ export interface ElectronAPI {
   openaiAuthToken: () => Promise<{ token: string | null }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
+  mcpDiscoverExternalConfigs: () => Promise<{ success: boolean; configs?: any[]; error?: string }>
   mcpAddServer: (config: {
     id: string
     name: string
@@ -527,6 +528,7 @@ export interface ElectronAPI {
     env: Record<string, string>
     autoApprove: string[]
     disabled: boolean
+    importedFrom?: { provider: string; path: string; importedAt: number }
   }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
   mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => Promise<{ success: boolean; error?: string }>
@@ -544,6 +546,7 @@ export interface ElectronAPI {
   skillsGetGlobalDir: () => Promise<string>
   skillsGetGlobalDirs?: () => Promise<string[]>
   skillsDeleteGlobalSkill: (skillDir: string) => Promise<boolean>
+  skillsImportExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => Promise<{ success: boolean; targetDir?: string; error?: string }>
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => () => void
@@ -883,6 +886,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('openai:auth:usage', options),
   mcpGetConfigPaths: () => ipcRenderer.invoke('mcp:getConfigPaths'),
   mcpReloadConfig: () => ipcRenderer.invoke('mcp:reloadConfig'),
+  mcpDiscoverExternalConfigs: () => ipcRenderer.invoke('mcp:discoverExternalConfigs'),
   mcpAddServer: (config: {
     type?: 'local' | 'remote'
     id: string
@@ -895,6 +899,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
+    importedFrom?: { provider: string; path: string; importedAt: number }
   }, level?: 'user' | 'workspace') => ipcRenderer.invoke('mcp:addServer', config, level),
   mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => ipcRenderer.invoke('mcp:removeServer', serverId, level, sourcePath),
   mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => ipcRenderer.invoke('mcp:toggleServer', serverId, disabled, level, sourcePath),
@@ -933,6 +938,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   skillsGetGlobalDir: () => ipcRenderer.invoke('skills:getGlobalDir'),
   skillsGetGlobalDirs: () => ipcRenderer.invoke('skills:getGlobalDirs'),
   skillsDeleteGlobalSkill: (skillDir: string) => ipcRenderer.invoke('skills:deleteGlobalSkill', skillDir),
+  skillsImportExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => ipcRenderer.invoke('skills:importExternalSkill', sourceSkillDir, level, workspacePath),
 
   // Command Execution
   onExecuteCommand: (callback: (commandId: string) => void) => {

@@ -17,6 +17,7 @@ import type {
   McpResourceReadResult,
   McpPromptGetRequest,
   McpPromptGetResult,
+  McpServerConfig,
 } from '@shared/types/mcp'
 
 class McpService {
@@ -267,6 +268,7 @@ class McpService {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
+    importedFrom?: McpServerConfig['importedFrom']
   }, level?: 'user' | 'workspace'): Promise<boolean> {
     try {
       const result = await api.mcp.addServer(config, level)
@@ -276,6 +278,12 @@ class McpService {
       logger.agent.error(`[McpService] Add server failed: ${error.code}`, error)
       return false
     }
+  }
+
+  /** 仅在导入界面中扫描第三方 Agent 配置。 */
+  async discoverExternalConfigs(): Promise<McpServerConfig[]> {
+    const result = await api.mcp.discoverExternalConfigs()
+    return result.success ? (result.configs || []) as McpServerConfig[] : []
   }
 
   /** 删除服务器 */

@@ -29,6 +29,12 @@ export interface SkillOrigin {
     source: SkillSource
 }
 
+export interface SkillImportedOrigin {
+    provider: SkillProvider
+    path: string
+    importedAt: number
+}
+
 export interface SkillItem {
     name: string
     description: string
@@ -45,6 +51,8 @@ export interface SkillItem {
     provider: SkillProvider
     /** Same-name lower-priority skills hidden by this effective item. */
     shadowedOrigins?: SkillOrigin[]
+    /** 从其他 Agent 导入前的原始位置。 */
+    importedFrom?: SkillImportedOrigin
 }
 
 interface SkillConfig {
@@ -93,13 +101,11 @@ class SkillService {
     private readonly SCAN_INTERVAL = 5000 // 5 秒缓存
     private readonly SKILLS_DIR = '.adnify/skills'
     private readonly CONFIG_FILE = '.adnify/skills/.skills-config.json'
-    /** 工作区项目级技能候选目录（按优先级从低到高扫描，高优先级覆盖低优先级同名技能） */
-    private readonly PROJECT_SKILL_CANDIDATE_DIRS = [
+    private readonly EXTERNAL_PROJECT_SKILL_DIRS = [
         'skills',
         '.cursor/skills',
         '.codex/skills',
         '.claude/skills',
-        '.adnify/skills',
     ]
 
     private resolveProvider(skillsDir: string): SkillProvider {
@@ -121,10 +127,7 @@ class SkillService {
 
     /**
      * 获取所有 Skills（包括禁用的）
-     * 多层扫描：
-     * 1. 全局目录（~/.cursor/skills -> ~/.codex/skills -> ~/.claude/skills -> ~/.adnify/skills）
-     * 2. 项目目录（skills -> .cursor/skills -> .codex/skills -> .claude/skills -> .adnify/skills）
-     * 按 name 自动去重，高优先级目录覆盖低优先级目录
+     * 日常运行只扫描 Adnify 自己的全局目录和项目 .adnify/skills。
      */
     async getAllSkills(forceRefresh = false): Promise<SkillItem[]> {
         const now = Date.now()
@@ -135,36 +138,18 @@ class SkillService {
         const config = await this.loadConfig()
         const skillMap = new Map<string, SkillItem>()
 
-        // 1. 扫描全局 Skills（低优先级：Cursor -> Codex -> Claude -> Adnify）
+        // 1. Adnify 全局 Skills
         try {
-            const [globalDirs, adnifyGlobalDir] = await Promise.all([
-                api.skills.getGlobalDirs(),
-                api.skills.getGlobalDir(),
-            ])
-            for (const dir of globalDirs) {
-                if (dir) {
-                    const provider = this.pathsEqual(dir, adnifyGlobalDir) ? 'adnify' : undefined
-                    await this.scanSkillsDir(dir, 'global', config, skillMap, provider)
-                }
-            }
+            const adnifyGlobalDir = await api.skills.getGlobalDir()
+            await this.scanSkillsDir(adnifyGlobalDir, 'global', config, skillMap, 'adnify')
         } catch {
-            try {
-                const defaultGlobalDir = await api.skills.getGlobalDir()
-                if (defaultGlobalDir) {
-                    await this.scanSkillsDir(defaultGlobalDir, 'global', config, skillMap)
-                }
-            } catch {
-                // 全局目录不可用时静默跳过
-            }
+            // 全局目录不可用时静默跳过
         }
 
-        // 2. 扫描项目 Skills（高优先级，覆盖全局同名技能）
+        // 2. Adnify 项目 Skills（覆盖全局同名技能）
         const { workspacePath } = useStore.getState()
         if (workspacePath) {
-            for (const candidateRelDir of this.PROJECT_SKILL_CANDIDATE_DIRS) {
-                const projectDir = joinPath(workspacePath, candidateRelDir)
-                await this.scanSkillsDir(projectDir, 'project', config, skillMap)
-            }
+            await this.scanSkillsDir(joinPath(workspacePath, this.SKILLS_DIR), 'project', config, skillMap, 'adnify')
         }
 
         const skills = Array.from(skillMap.values())
@@ -173,6 +158,33 @@ class SkillService {
         this.lastScanTime = now
         logger.agent.info(`[SkillService] Loaded ${skills.length} skills from multi-source directories`)
         return skills
+    }
+
+    /** 仅在用户打开导入界面时扫描其他 Agent，不参与运行时。 */
+    async discoverExternalSkills(): Promise<SkillItem[]> {
+        const results: SkillItem[] = []
+        const emptyConfig: SkillConfig = { disabled: [] }
+        try {
+            const [dirs, adnifyDir] = await Promise.all([api.skills.getGlobalDirs(), api.skills.getGlobalDir()])
+            for (const dir of dirs) {
+                if (!dir || this.pathsEqual(dir, adnifyDir)) continue
+                const items = new Map<string, SkillItem>()
+                await this.scanSkillsDir(dir, 'global', emptyConfig, items)
+                results.push(...items.values())
+            }
+        } catch {
+            // 外部全局目录不可用时继续扫描项目来源
+        }
+
+        const { workspacePath } = useStore.getState()
+        if (workspacePath) {
+            for (const relativeDir of this.EXTERNAL_PROJECT_SKILL_DIRS) {
+                const items = new Map<string, SkillItem>()
+                await this.scanSkillsDir(joinPath(workspacePath, relativeDir), 'project', emptyConfig, items)
+                results.push(...items.values())
+            }
+        }
+        return results
     }
 
     /**
@@ -220,6 +232,16 @@ class SkillService {
                 || 'auto'
 
             // 项目级覆盖全局级（后扫描的覆盖先扫描的）
+            const originRaw = await api.file.read(joinPath(skillsDir, item.name, '.adnify-origin.json'))
+            let importedFrom: SkillImportedOrigin | undefined
+            if (originRaw) {
+                try {
+                    importedFrom = JSON.parse(originRaw) as SkillImportedOrigin
+                } catch {
+                    // 损坏的来源记录不影响 Skill 本体加载
+                }
+            }
+
             const previous = skillMap.get(name)
             const next: SkillItem = {
                 name,
@@ -232,6 +254,7 @@ class SkillService {
                 type: triggerType,
                 source,
                 provider: providerOverride || this.resolveProvider(skillsDir),
+                importedFrom,
                 shadowedOrigins: previous
                     ? [
                         ...(previous.shadowedOrigins || []),
@@ -465,6 +488,15 @@ Add your skill instructions here.
         }
 
         return success
+    }
+
+    async importExternalSkill(skill: Pick<SkillItem, 'filePath'>, level: SkillSource): Promise<{ success: boolean; error?: string }> {
+        const skillDir = getDirname(skill.filePath)
+        if (!skillDir) return { success: false, error: 'Invalid Skill source path' }
+        const { workspacePath } = useStore.getState()
+        const result = await api.skills.importExternalSkill(skillDir, level, workspacePath || undefined)
+        if (result.success) this.clearCache()
+        return { success: result.success, error: result.error }
     }
 
     private pathsEqual(left: string, right: string): boolean {

@@ -702,6 +702,7 @@ export interface ElectronAPI {
   }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
+  mcpDiscoverExternalConfigs: () => Promise<{ success: boolean; configs?: McpServerState['config'][]; error?: string }>
   mcpAddServer: (config: {
     type: 'local' | 'remote'
     id: string
@@ -714,6 +715,7 @@ export interface ElectronAPI {
     oauth?: { clientId?: string; clientSecret?: string; scope?: string } | false
     autoApprove?: string[]
     disabled?: boolean
+    importedFrom?: { provider: string; path: string; importedAt: number }
   }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
   mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => Promise<{ success: boolean; error?: string }>
   mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => Promise<{ success: boolean; error?: string }>
@@ -774,6 +776,7 @@ export interface ElectronAPI {
   skillsGetGlobalDir: () => Promise<string>
   skillsGetGlobalDirs?: () => Promise<string[]>
   skillsDeleteGlobalSkill: (skillDir: string) => Promise<boolean>
+  skillsImportExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => Promise<{ success: boolean; targetDir?: string; error?: string }>
 
   // Command
   onExecuteCommand: (callback: (commandId: string) => void) => () => void

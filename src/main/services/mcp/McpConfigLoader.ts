@@ -25,7 +25,7 @@ export class McpConfigLoader {
   }
 
   /** 获取所有用户全局级候选 MCP 配置文件路径（按优先级从低到高） */
-  private getUserConfigPaths(): string[] {
+  private getExternalUserConfigPaths(): string[] {
     const homeDir = os.homedir()
     const paths: string[] = []
 
@@ -50,21 +50,17 @@ export class McpConfigLoader {
     // 4. Cursor 全局配置
     paths.push(path.join(homeDir, '.cursor', 'mcp.json'))
 
-    // 5. Adnify 原生用户配置（最高全局优先级）
-    paths.push(this.userConfigPath)
-
     return paths
   }
 
   /** 获取指定工作区的所有候选 MCP 配置文件路径（按优先级从低到高） */
-  private getWorkspaceConfigPaths(workspaceRoot: string): string[] {
+  private getExternalWorkspaceConfigPaths(workspaceRoot: string): string[] {
     return [
       path.join(workspaceRoot, 'mcp.json'),
       path.join(workspaceRoot, '.vscode', 'mcp.json'),
       path.join(workspaceRoot, '.codex', 'mcp.json'),
       path.join(workspaceRoot, '.cursor', 'mcp.json'),
       path.join(workspaceRoot, '.claude', 'mcp.json'),
-      this.getWorkspaceConfigPath(workspaceRoot), // .adnify/mcp.json（最高工作区优先级）
     ]
   }
 
@@ -79,7 +75,7 @@ export class McpConfigLoader {
     this.onConfigChange = callback
   }
 
-  /** 加载合并后的配置，按优先级从低到高聚合去重 */
+  /** 日常运行只加载 Adnify 自己的全局和工作区配置。 */
   async loadConfig(): Promise<McpServerConfig[]> {
     const configMap = new Map<string, McpServerConfig>()
 
@@ -100,30 +96,44 @@ export class McpConfigLoader {
       configMap.set(id, normalized)
     }
 
-    // 1. 加载所有全局用户级配置（低到高，高优先级覆盖低优先级同名配置）
-    for (const configPath of this.getUserConfigPaths()) {
-      const userConfig = await this.loadConfigFile(configPath)
-      if (userConfig && userConfig.mcpServers) {
-        for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
-          addConfig(id, serverConfig as Record<string, any>, 'user', configPath)
-        }
+    const userConfig = await this.loadConfigFile(this.userConfigPath)
+    if (userConfig?.mcpServers) {
+      for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
+        addConfig(id, serverConfig as Record<string, any>, 'user', this.userConfigPath)
       }
     }
 
-    // 2. 加载工作区配置（工作区级覆盖全局级）
+    // 工作区 Adnify 配置覆盖全局 Adnify 同名配置。
     for (const root of this.workspaceRoots) {
-      for (const workspaceConfigPath of this.getWorkspaceConfigPaths(root)) {
-        const workspaceConfig = await this.loadConfigFile(workspaceConfigPath)
-        if (workspaceConfig && workspaceConfig.mcpServers) {
-          for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
-            addConfig(id, serverConfig as Record<string, any>, 'workspace', workspaceConfigPath)
-          }
+      const workspaceConfigPath = this.getWorkspaceConfigPath(root)
+      const workspaceConfig = await this.loadConfigFile(workspaceConfigPath)
+      if (workspaceConfig?.mcpServers) {
+        for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
+          addConfig(id, serverConfig as Record<string, any>, 'workspace', workspaceConfigPath)
         }
       }
     }
 
     const configs = Array.from(configMap.values())
-    logger.mcp?.info(`[McpConfigLoader] Loaded ${configs.length} MCP server configs from multi-source directories`)
+    logger.mcp?.info(`[McpConfigLoader] Loaded ${configs.length} MCP server configs from Adnify directories`)
+    return configs
+  }
+
+  /** 用户主动打开导入界面时才扫描第三方 Agent 配置；结果不参与运行。 */
+  async discoverExternalConfigs(): Promise<McpServerConfig[]> {
+    const configs: McpServerConfig[] = []
+    const scan = async (configPath: string, source: 'user' | 'workspace') => {
+      const file = await this.loadConfigFile(configPath)
+      if (!file?.mcpServers) return
+      for (const [id, serverConfig] of Object.entries(file.mcpServers)) {
+        configs.push(this.normalizeConfig(id, serverConfig as Record<string, any>, source, configPath))
+      }
+    }
+
+    for (const configPath of this.getExternalUserConfigPaths()) await scan(configPath, 'user')
+    for (const root of this.workspaceRoots) {
+      for (const configPath of this.getExternalWorkspaceConfigPaths(root)) await scan(configPath, 'workspace')
+    }
     return configs
   }
 
@@ -151,6 +161,7 @@ export class McpConfigLoader {
     return {
       ...serverConfig,
       id,
+      name: serverConfig.name || id,
       type,
       args,
       source,
@@ -238,10 +249,7 @@ export class McpConfigLoader {
   private resolveWritableConfigPath(level: 'user' | 'workspace', sourcePath?: string): string {
     if (!sourcePath) return this.resolveConfigPath(level)
 
-    const knownPaths = [
-      ...this.getUserConfigPaths(),
-      ...this.workspaceRoots.flatMap(root => this.getWorkspaceConfigPaths(root)),
-    ]
+    const knownPaths = [this.userConfigPath, ...this.workspaceRoots.map(root => this.getWorkspaceConfigPath(root))]
     const normalizedSource = path.resolve(sourcePath).toLowerCase()
     const matchedPath = knownPaths.find(candidate => path.resolve(candidate).toLowerCase() === normalizedSource)
     if (!matchedPath) {
@@ -314,22 +322,10 @@ export class McpConfigLoader {
     // 清理旧的 watchers
     this.cleanup()
 
-    // 监听全局候选配置文件
-    for (const userPath of this.getUserConfigPaths()) {
-      if (fs.existsSync(userPath)) {
-        this.watchConfigFile(userPath)
-      }
-    }
-    // 监听默认用户配置路径（即便文件不存在也监听其目录）
+    // 只监听 Adnify 自己的配置；第三方来源仅在用户主动导入时扫描。
     this.watchConfigFile(this.userConfigPath)
 
-    // 监听工作区候选配置文件
     for (const root of this.workspaceRoots) {
-      for (const workspacePath of this.getWorkspaceConfigPaths(root)) {
-        if (fs.existsSync(workspacePath)) {
-          this.watchConfigFile(workspacePath)
-        }
-      }
       this.watchConfigFile(this.getWorkspaceConfigPath(root))
     }
   }

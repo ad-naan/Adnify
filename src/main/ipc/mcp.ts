@@ -93,6 +93,10 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
     return { success: true }
   })
 
+  safeIpcHandle('mcp:discoverExternalConfigs', async () => {
+    return { success: true, configs: await mcpManager.discoverExternalConfigs() }
+  })
+
   // 添加服务器（支持本地和远程）
   safeIpcHandle('mcp:addServer', async (_, config: McpServerConfig, level?: 'user' | 'workspace') => {
     await mcpManager.addServer(config, level)

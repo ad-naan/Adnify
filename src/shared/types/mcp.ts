@@ -26,6 +26,13 @@ export interface McpConfigOrigin {
   source: 'user' | 'workspace'
 }
 
+/** 导入到 Adnify 前的原始来源（会随 Adnify 配置持久化） */
+export interface McpImportedOrigin {
+  provider: McpConfigProvider
+  path: string
+  importedAt: number
+}
+
 interface McpRuntimeSourceMetadata {
   /** 配置来源层级（运行时填充，不持久化） */
   source?: 'user' | 'workspace'
@@ -71,6 +78,8 @@ export interface McpLocalServerConfig extends McpRuntimeSourceMetadata {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
+  /** 从其他 Agent 导入时记录的原始来源 */
+  importedFrom?: McpImportedOrigin
 }
 
 /** 远程 MCP 服务器配置 */
@@ -95,6 +104,8 @@ export interface McpRemoteServerConfig extends McpRuntimeSourceMetadata {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
+  /** 从其他 Agent 导入时记录的原始来源 */
+  importedFrom?: McpImportedOrigin
 }
 
 /** MCP 服务器配置（联合类型） */

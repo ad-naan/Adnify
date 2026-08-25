@@ -279,6 +279,7 @@ function createGroupedAPI() {
       refreshCapabilities: (serverId: string) => raw.mcpRefreshCapabilities(serverId),
       getConfigPaths: () => raw.mcpGetConfigPaths(),
       reloadConfig: () => raw.mcpReloadConfig(),
+      discoverExternalConfigs: () => raw.mcpDiscoverExternalConfigs(),
       addServer: (config: Parameters<typeof raw.mcpAddServer>[0], level?: 'user' | 'workspace') => raw.mcpAddServer(config, level),
       removeServer: (serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => raw.mcpRemoveServer(serverId, level, sourcePath),
       toggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => raw.mcpToggleServer(serverId, disabled, level, sourcePath),
@@ -299,6 +300,7 @@ function createGroupedAPI() {
       getGlobalDir: () => raw.skillsGetGlobalDir(),
       getGlobalDirs: () => (raw.skillsGetGlobalDirs ? raw.skillsGetGlobalDirs() : raw.skillsGetGlobalDir().then(d => [d])),
       deleteGlobalSkill: (skillDir: string) => raw.skillsDeleteGlobalSkill(skillDir),
+      importExternalSkill: (sourceSkillDir: string, level: 'global' | 'project', workspacePath?: string) => raw.skillsImportExternalSkill(sourceSkillDir, level, workspacePath),
     },
 
     // LSP

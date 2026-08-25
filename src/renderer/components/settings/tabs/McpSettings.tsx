@@ -23,12 +23,14 @@ import {
   Key,
   LogIn,
   Lightbulb,
+  Import,
+  Check,
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { mcpService } from '@services/mcpService'
-import { Button, Switch } from '@components/ui'
-import type { McpServerState, McpServerStatus } from '@shared/types/mcp'
+import { Button, Modal, Switch } from '@components/ui'
+import type { McpServerConfig, McpServerState, McpServerStatus } from '@shared/types/mcp'
 import { isRemoteConfig, isLocalConfig } from '@shared/types/mcp'
 import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
@@ -49,6 +51,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
   const [configPaths, setConfigPaths] = useState<{ user: string; workspace: string[] } | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [externalConfigs, setExternalConfigs] = useState<McpServerConfig[]>([])
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set())
+  const [importLevel, setImportLevel] = useState<'user' | 'workspace'>('user')
+  const [importLoading, setImportLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   // 追踪正在等待浏览器授权的服务器（OAuth pending）
@@ -115,6 +122,41 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       logger.settings.error('Failed to add server:', err)
       return false
     }
+  }
+
+  const externalKey = (config: McpServerConfig) => `${config.sourcePath || ''}::${config.id}`
+
+  const handleOpenImport = async () => {
+    setShowImportModal(true)
+    setImportLoading(true)
+    setSelectedImports(new Set())
+    setExternalConfigs(await mcpService.discoverExternalConfigs())
+    setImportLoading(false)
+  }
+
+  const handleImportSelected = async () => {
+    setImportLoading(true)
+    let imported = 0
+    for (const config of externalConfigs) {
+      if (!selectedImports.has(externalKey(config)) || !config.sourcePath || !config.sourceProvider) continue
+      const {
+        source: _source,
+        sourcePath,
+        sourceProvider,
+        shadowedSources: _shadowedSources,
+        importedFrom: _importedFrom,
+        ...localConfig
+      } = config
+      const success = await mcpService.addServer({
+        ...localConfig,
+        importedFrom: { provider: sourceProvider, path: sourcePath, importedAt: Date.now() },
+      }, importLevel)
+      if (success) imported++
+    }
+    if (imported > 0) await mcpService.reloadConfig()
+    setImportLoading(false)
+    setShowImportModal(false)
+    setActionError(imported === selectedImports.size ? null : (language === 'zh' ? '部分配置导入失败，请检查目标配置文件。' : 'Some configs could not be imported. Check the target config file.'))
   }
 
   const handleDeleteServer = async (server: McpServerState) => {
@@ -221,7 +263,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
     const showDeleteConfirm = deleteConfirm === server.id
     const isRemote = server.config.type === 'remote'
     const isOAuthPending = oauthPendingServers.has(server.id)
-    const providerLabel = getProviderLabel(server.config.sourceProvider)
+    const providerLabel = getProviderLabel(server.config.importedFrom?.provider || server.config.sourceProvider)
 
     // 通过 presetId 查找预设获取使用示例
     const presetId = server.config.presetId
@@ -270,7 +312,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="flex items-center gap-2.5">
                 <h4 className="text-base font-bold text-text-primary tracking-tight">{server.config.name}</h4>
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded border bg-accent/10 text-accent border-accent/20 tracking-tight">
-                  {providerLabel}
+                  {server.config.importedFrom ? (language === 'zh' ? `来自 ${providerLabel}` : `From ${providerLabel}`) : 'Adnify'}
                 </span>
                 {server.config.source && (
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase tracking-tight ${
@@ -301,11 +343,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   {language === 'zh' ? '来源：' : 'Source: '}{server.config.sourcePath}
                 </div>
               )}
-              {server.config.shadowedSources && server.config.shadowedSources.length > 0 && (
-                <div className="mt-1.5 text-[11px] text-amber-400/90">
-                  {language === 'zh'
-                    ? `另有 ${server.config.shadowedSources.length} 个同名低优先级配置；删除后可能重新出现。`
-                    : `${server.config.shadowedSources.length} lower-priority config(s) share this ID and may reappear after deletion.`}
+              {server.config.importedFrom && (
+                <div
+                  className="mt-1 max-w-[520px] truncate text-[10px] text-accent/70 font-mono"
+                  title={server.config.importedFrom.path}
+                >
+                  {language === 'zh' ? '最初导入自：' : 'Originally imported from: '}{server.config.importedFrom.path}
                 </div>
               )}
             </div>
@@ -432,12 +475,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             <div className="flex flex-col gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 space-y-1.5">
                 <div className="text-sm font-semibold text-red-300">
-                  {language === 'zh' ? `从 ${providerLabel} 配置中删除？` : `Delete from ${providerLabel}?`}
+                  {language === 'zh' ? '删除 Adnify 中的配置？' : 'Delete the Adnify config?'}
                 </div>
                 <p className="text-xs leading-relaxed text-text-secondary">
                   {language === 'zh'
-                    ? '只会移除此配置条目，不会卸载对应的软件或 npm 包。此操作会直接修改下面的文件。'
-                    : 'This removes only the config entry; it does not uninstall the app or npm package. The file below will be modified.'}
+                    ? `只删除 Adnify 保存的副本${server.config.importedFrom ? `，不会修改 ${providerLabel} 中的原始配置` : ''}。此操作会直接修改下面的文件。`
+                    : `Only the Adnify copy is removed${server.config.importedFrom ? `; the original ${providerLabel} config is untouched` : ''}. The file below will be modified.`}
                 </p>
                 <div className="break-all rounded-lg border border-red-500/15 bg-black/20 px-2.5 py-2 font-mono text-[11px] text-red-200/80">
                   {server.config.sourcePath || (language === 'zh' ? '来源路径不可用' : 'Source path unavailable')}
@@ -709,6 +752,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={handleOpenImport}>
+            <Import className="w-4 h-4 mr-2" />
+            {language === 'zh' ? '从其他 Agent 导入' : 'Import from Agent'}
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -941,6 +988,82 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       )}
 
       {/* Add Server Modal */}
+      <Modal
+        isOpen={showImportModal}
+        onClose={() => !importLoading && setShowImportModal(false)}
+        title={language === 'zh' ? '从其他 Agent 导入 MCP' : 'Import MCP from another Agent'}
+        size="3xl"
+      >
+        <div className="space-y-5">
+          <div className="rounded-xl border border-accent/20 bg-accent/[0.05] p-4 text-xs leading-relaxed text-text-secondary">
+            {language === 'zh'
+              ? '这里只临时扫描第三方配置。导入后会写入 Adnify 自己的配置，之后的启用、修改和删除都不会影响来源软件。'
+              : 'External configs are scanned only here. Imported items are copied into Adnify and no longer depend on the source app.'}
+          </div>
+          <div className="flex gap-2">
+            {(['user', 'workspace'] as const).map(level => (
+              <button
+                key={level}
+                type="button"
+                disabled={level === 'workspace' && !configPaths?.workspace.length}
+                onClick={() => setImportLevel(level)}
+                className={`rounded-lg border px-3 py-2 text-xs transition-colors ${importLevel === level ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-text-muted hover:bg-white/5'} disabled:opacity-40`}
+              >
+                {level === 'user' ? (language === 'zh' ? '保存到全局' : 'Save globally') : (language === 'zh' ? '保存到当前项目' : 'Save to project')}
+              </button>
+            ))}
+          </div>
+          <div className="max-h-[440px] space-y-2 overflow-auto pr-1">
+            {importLoading && externalConfigs.length === 0 ? (
+              <div className="flex h-36 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-accent" /></div>
+            ) : externalConfigs.length === 0 ? (
+              <div className="flex h-36 flex-col items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
+                {language === 'zh' ? '没有发现可导入的第三方 MCP 配置' : 'No external MCP configs found'}
+              </div>
+            ) : externalConfigs.map(config => {
+              const key = externalKey(config)
+              const exists = existingServerIds.includes(config.id)
+              const selected = selectedImports.has(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={exists}
+                  onClick={() => setSelectedImports(previous => {
+                    const next = new Set(previous)
+                    selected ? next.delete(key) : next.add(key)
+                    return next
+                  })}
+                  className={`flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors ${selected ? 'border-accent/40 bg-accent/[0.08]' : 'border-border bg-surface/40 hover:border-accent/25'} disabled:cursor-not-allowed disabled:opacity-55`}
+                >
+                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected ? 'border-accent bg-accent text-white' : 'border-border'}`}>
+                    {selected && <Check className="h-3.5 w-3.5" />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-text-primary">{config.name || config.id}</span>
+                      <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted">{getProviderLabel(config.sourceProvider)}</span>
+                      {exists && <span className="text-[10px] text-amber-400">{language === 'zh' ? 'Adnify 已存在同名配置' : 'Already exists in Adnify'}</span>}
+                    </span>
+                    <span className="mt-1 block truncate font-mono text-[10px] text-text-muted" title={config.sourcePath}>{config.sourcePath}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <span className="text-xs text-text-muted">{language === 'zh' ? `已选择 ${selectedImports.size} 项` : `${selectedImports.size} selected`}</span>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{language === 'zh' ? '取消' : 'Cancel'}</Button>
+              <Button variant="primary" size="sm" onClick={handleImportSelected} disabled={selectedImports.size === 0 || importLoading}>
+                {importLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {language === 'zh' ? `导入 ${selectedImports.size} 项` : `Import ${selectedImports.size}`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
       <McpAddServerModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}

@@ -327,6 +327,11 @@ export class McpManager extends EventEmitter {
     logger.mcp?.info(`[McpManager] Added server: ${config.id} (${level})`)
   }
 
+  /** 扫描可导入的第三方配置，不加入运行时。 */
+  async discoverExternalConfigs(): Promise<McpServerConfig[]> {
+    return this.configLoader.discoverExternalConfigs()
+  }
+
   /** 删除服务器 */
   async removeServer(serverId: string, level: 'user' | 'workspace' = 'user', sourcePath?: string): Promise<boolean> {
     const removed = await this.configLoader.removeServer(serverId, level, sourcePath)
