@@ -52,6 +52,32 @@ describe('PromptBuilder', () => {
     expect(prompt).not.toContain('use edit_file for any partial change to an existing file')
   })
 
+  it('defines an action-first workflow with a progress invariant', () => {
+    const prompt = buildSystemPrompt({
+      os: 'Windows',
+      workspacePath: 'E:\\Project\\adnify',
+      activeFile: null,
+      openFiles: [],
+      date: '2026-08-25',
+      mode: 'agent',
+      personality: 'You are a coding assistant.',
+      projectRules: null,
+      memories: [],
+      autoSkills: [],
+      mentionedSkills: [],
+      customInstructions: null,
+      templateId: 'default',
+      projectSummary: null,
+    } satisfies PromptContext)
+
+    expect(prompt).toContain('Answer, explain, review, diagnose, or report')
+    expect(prompt).toContain('Change, build, fix, implement, or refactor')
+    expect(prompt).toContain('Act as soon as the target and change are clear')
+    expect(prompt).toContain('Every tool call must do at least one of these: narrow the target, change the workspace, or validate a change')
+    expect(prompt).toContain('Tool descriptions are routing boundaries, not a checklist')
+    expect(prompt).toContain('If validation fails, use the failure output to make the next fix')
+  })
+
   it('uses one layered XML and Markdown contract without repeating native tool schemas', () => {
     const prompt = buildSystemPrompt({
       os: 'Windows',

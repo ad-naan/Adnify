@@ -20,6 +20,7 @@ describe('ToolRoutingAdvisor', () => {
 
     expect(result.details?.category).toBe('semantic_navigation')
     expect(result.suggestion).toContain('find_symbol')
+    expect(result.suggestion).toContain('stop navigating and edit')
   })
 
   it('recognizes explicit multi-file paths as source reads', () => {
@@ -60,6 +61,7 @@ describe('ToolRoutingAdvisor', () => {
 
     expect(result.details).toMatchObject({ category: 'semantic_navigation', pattern: 'fallback_source_read_burst' })
     expect(result.suggestion).toContain('search_files')
+    expect(result.suggestion).toContain('stop navigating and edit')
   })
 
   it('allows precise line-range reads', () => {
