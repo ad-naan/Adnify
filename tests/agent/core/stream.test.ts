@@ -91,7 +91,7 @@ describe('tool call stream assembly', () => {
 
     const result = await processor.wait()
     expect(result.toolCalls).toHaveLength(1)
-    expect(result.toolCalls[0].arguments).toEqual(expected)
+    expect(result.toolCalls?.[0]?.arguments).toEqual(expected)
   })
 
   it('falls back to complete streamed arguments when no available event arrives', async () => {
@@ -108,7 +108,7 @@ describe('tool call stream assembly', () => {
     streamHarness.done!({})
 
     const result = await processor.wait()
-    expect(result.toolCalls[0].arguments).toEqual(expected)
+    expect(result.toolCalls?.[0]?.arguments).toEqual(expected)
   })
 
   it('does not execute an empty fallback when no arguments arrive', async () => {
