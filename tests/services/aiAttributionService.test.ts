@@ -1,12 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  aiAttributionService,
   classifyCommitAddedLines,
   createAiCandidateBlocks,
   parseAddedCommitLinesFromPatch,
   type AiWriteEvent,
 } from '@/renderer/services/aiAttributionService'
 
+afterEach(() => {
+  aiAttributionService.reset()
+  vi.restoreAllMocks()
+})
+
 describe('aiAttributionService helpers', () => {
+  it('reconciles the workspace roots being bound instead of stale store roots', async () => {
+    const reconcile = vi.spyOn(aiAttributionService, 'reconcileWorkspaceRepos').mockResolvedValue()
+
+    await aiAttributionService.bindWorkspace({
+      configPath: null,
+      roots: ['/new-workspace'],
+    })
+
+    expect(reconcile).toHaveBeenCalledWith(['/new-workspace'])
+  })
+
   it('extracts AI candidate blocks with line hashes and anchors', () => {
     const oldContent = [
       'function greet() {',

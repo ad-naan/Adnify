@@ -579,7 +579,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                 try {
                                     const text = await readClipboardText()
                                     if (text && contextMenu.termId) {
-                                        terminalManager.writeToTerminal(contextMenu.termId, text)
+                                        terminalManager.pasteToTerminal(contextMenu.termId, text)
                                     }
                                 } catch {
                                     // ignore

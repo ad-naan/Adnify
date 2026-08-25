@@ -17,6 +17,7 @@ const HOOK_PENDING_FILE = `${HOOK_PENDING_DIR}/pending-commits.jsonl`
 const NOTES_REF = 'adnify-ai'
 const AI_EDIT_SIMILARITY_THRESHOLD = 0.55
 const MAX_RECENT_COMMITS = 6
+const MAX_RECONCILE_COMMITS = 6
 const MAX_TOP_FILES = 8
 const MAX_MODEL_BREAKDOWN = 8
 
@@ -458,6 +459,7 @@ class AiAttributionService {
   private dashboardCache = new Map<string, AiDashboardData>()
   private commitReportCache = new Map<string, AiCommitReport | null>()
   private pendingCommitReportReads = new Map<string, Promise<AiCommitReport | null>>()
+  private reconcilePromises = new Map<string, Promise<void>>()
 
   async bindWorkspace(workspace: WorkspaceConfig | null): Promise<void> {
     const nextRoot = workspace?.roots?.[0] || null
@@ -481,7 +483,7 @@ class AiAttributionService {
     this.commitReportCache.clear()
     this.pendingCommitReportReads.clear()
     await this.ensureStoragePaths()
-    await this.reconcileWorkspaceRepos().catch(error => {
+    await this.reconcileWorkspaceRepos(workspace.roots).catch(error => {
       logger.system.warn('[AiAttribution] Failed to reconcile workspace repos on bind:', error)
     })
   }
@@ -661,8 +663,26 @@ class AiAttributionService {
   }
 
   async reconcileRepo(repoRoot: string): Promise<void> {
+    const key = normalizePath(repoRoot)
+    const pending = this.reconcilePromises.get(key)
+    if (pending) {
+      return pending
+    }
+
+    const reconcile = this.runReconcileRepo(repoRoot)
+    this.reconcilePromises.set(key, reconcile)
+    try {
+      await reconcile
+    } finally {
+      if (this.reconcilePromises.get(key) === reconcile) {
+        this.reconcilePromises.delete(key)
+      }
+    }
+  }
+
+  private async runReconcileRepo(repoRoot: string): Promise<void> {
     const pendingEntries = await this.readPendingCommits(repoRoot)
-    const branchCommits = await this.listBranchCommits(repoRoot, 40)
+    const branchCommits = await this.listBranchCommits(repoRoot, MAX_RECONCILE_COMMITS)
 
     const orderedShas: string[] = []
     for (const entry of pendingEntries) {
@@ -695,8 +715,7 @@ class AiAttributionService {
     this.dashboardCache.clear()
   }
 
-  async reconcileWorkspaceRepos(): Promise<void> {
-    const roots = useStore.getState().workspace?.roots || []
+  async reconcileWorkspaceRepos(roots: string[] = useStore.getState().workspace?.roots || []): Promise<void> {
     for (const root of roots) {
       const repoRoot = await this.resolveRepoRoot(root)
       if (!repoRoot) continue
@@ -1247,7 +1266,7 @@ class AiAttributionService {
     await api.file.ensureDir(dirPath)
     if (entries.length === 0) {
       if (await api.file.exists(filePath)) {
-        await api.file.delete(filePath)
+        await api.file.write(filePath, '')
       }
       return
     }

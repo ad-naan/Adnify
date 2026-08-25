@@ -68,6 +68,7 @@ class MockTerminal {
     callback?.()
   })
   focus = vi.fn()
+  paste = vi.fn()
   loadAddon = vi.fn()
   open = vi.fn(() => { this.element = {} as HTMLElement })
   dispose = vi.fn()
@@ -148,6 +149,26 @@ describe('TerminalManager shell integration', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
+  })
+
+  it('pastes clipboard text through xterm and restores terminal focus', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      const termId = await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const xterm = terminalManager.getXterm(termId) as unknown as MockTerminal
+
+      terminalManager.pasteToTerminal(termId, 'copied elsewhere')
+
+      expect(xterm.paste).toHaveBeenCalledWith('copied elsewhere')
+      expect(xterm.focus).toHaveBeenCalledOnce()
+    } finally {
+      terminalManager.cleanup()
+    }
   })
 
   it('submits raw commands and resolves output from OSC 633 markers', async () => {

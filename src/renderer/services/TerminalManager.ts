@@ -1195,6 +1195,17 @@ class TerminalManagerClass {
     api.terminal.write(id, data);
   }
 
+  pasteToTerminal(id: string, data: string) {
+    const terminal = this.xtermInstances.get(id)?.terminal;
+    if (!terminal) {
+      api.terminal.write(id, data);
+      return;
+    }
+
+    terminal.paste(data);
+    terminal.focus();
+  }
+
   /** Start a long-running Agent command in the existing interactive shell. */
   executeDetachedCommand(termId: string, command: string, cwd?: string): void {
     const terminal = this.state.terminals.find((item) => item.id === termId)

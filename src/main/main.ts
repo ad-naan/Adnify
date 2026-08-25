@@ -157,7 +157,7 @@ function findWindowByWorkspace(roots: string[]): BrowserWindow | null {
   for (const [id, workspaceRoots] of windowWorkspaces) {
     const normalizedWs = workspaceRoots.map(r => r.toLowerCase().replace(/\\/g, '/'))
     if (normalized.some(root => normalizedWs.includes(root))) {
-      const win = windows.get(id)
+      const win = Array.from(windows.values()).find(candidate => candidate.webContents.id === id)
       if (win && !win.isDestroyed()) return win
     }
   }
@@ -487,7 +487,9 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     }
 
     windows.delete(windowId)
-    windowWorkspaces.delete(windowId)
+    if (cachedWebContentsId) {
+      windowWorkspaces.delete(cachedWebContentsId)
+    }
     logger.system.info(`[Main] Window ${windowId} closed and removed from map. Remaining: ${windows.size}`)
 
     if (lastActiveWindow === win) {
