@@ -72,6 +72,7 @@ export const TERMINAL_DEFAULTS = {
   cursorBlink: true,
   scrollback: 1000,
   maxOutputLines: 1000,
+  nodePackageManager: 'auto',
 } as const
 
 // ============================================

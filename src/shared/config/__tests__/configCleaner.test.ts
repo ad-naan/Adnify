@@ -16,6 +16,13 @@ const validPreferenceSamples: Record<string, unknown> = {
 }
 
 describe('cleanEditorConfig', () => {
+  it('preserves valid task runner package manager preferences', () => {
+    expect(cleanEditorConfig({ terminal: { nodePackageManager: 'pnpm' } })).toEqual({
+      terminal: { nodePackageManager: 'pnpm' },
+    })
+    expect(cleanEditorConfig({ terminal: { nodePackageManager: 'invalid' } })).toEqual({ terminal: {} })
+  })
+
   it('preserves custom git commit prompts', () => {
     const prompt = 'Write commit messages in Chinese conventional-commit format.'
 

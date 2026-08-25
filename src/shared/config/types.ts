@@ -5,6 +5,7 @@
 
 import type { ApiProtocol, OpenAICompatibilityProfile } from './providers'
 import type { LLMConfig, LLMProviderOptions } from '@/shared/types/llm'
+import type { NodePackageManagerPreference } from '@shared/utils/projectTasks'
 
 export type { LLMConfig }
 export type { ApiProtocol }
@@ -126,6 +127,7 @@ export interface TerminalConfig {
   cursorBlink: boolean
   scrollback: number
   maxOutputLines: number
+  nodePackageManager: NodePackageManagerPreference
 }
 
 export interface GitConfig {

@@ -33,7 +33,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { id: 'editor.lineNumbers', tab: 'editor', label: { en: 'Line Numbers', zh: '行号' }, keywords: ['line', 'numbers', '行号', 'relative'] },
   { id: 'editor.fontFamily', tab: 'editor', label: { en: 'Code Font', zh: '代码字体' }, keywords: ['font', 'family', '字体', 'code', '代码', 'monospace', 'fira'] },
   { id: 'editor.chatFontSize', tab: 'editor', label: { en: 'Chat Font Size', zh: '聊天字体大小' }, keywords: ['chat', 'font', '聊天', '字体', 'agent'] },
-  { id: 'editor.terminal', tab: 'editor', label: { en: 'Terminal Settings', zh: '终端配置' }, keywords: ['terminal', '终端', 'scrollback', '滚动', 'cursor', '光标', '闪烁', 'blink'] },
+  { id: 'editor.terminal', tab: 'editor', label: { en: 'Terminal Settings', zh: '终端配置' }, keywords: ['terminal', '终端', 'scrollback', '滚动', 'cursor', '光标', '闪烁', 'blink', 'package manager', '包管理器', 'npm', 'pnpm', 'yarn', 'bun'] },
   { id: 'editor.minimap', tab: 'editor', label: { en: 'Minimap', zh: '小地图' }, keywords: ['minimap', '小地图', 'overview'] },
   { id: 'editor.bracketPair', tab: 'editor', label: { en: 'Bracket Pair Colorization', zh: '括号配对着色' }, keywords: ['bracket', 'pair', '括号', '着色', 'colorization'] },
   { id: 'editor.formatOnSave', tab: 'editor', label: { en: 'Format on Save', zh: '保存时格式化' }, keywords: ['format', 'save', '格式化', '保存', 'formatOnSave'] },

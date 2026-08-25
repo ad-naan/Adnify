@@ -5,6 +5,8 @@ import { Button, Checkbox, Input, Modal, Select } from '@/renderer/components/ui
 import { shellRegistryService } from '../services/shellRegistryService'
 import { DEFAULT_REMOTE_PORT } from '../types'
 import type { AvailableShell, RemoteServerConfig, ShellLink, ShellPreset } from '../types'
+import { useStore } from '@store'
+import { detectNodePackageManager, nodeScriptCommand } from '@shared/utils/projectTasks'
 
 interface ShellManagerDialogProps {
   isOpen: boolean
@@ -152,6 +154,7 @@ export function ShellManagerDialog({
   initialCreate,
   initialEdit,
 }: ShellManagerDialogProps) {
+  const nodePackageManager = useStore(state => state.editorConfig.terminal.nodePackageManager)
   const [saving, setSaving] = useState(false)
   const [formDefaultShell, setFormDefaultShell] = useState<string>('')
   const [formPresets, setFormPresets] = useState<ShellPreset[]>([])
@@ -239,15 +242,16 @@ export function ShellManagerDialog({
   const packageCommands = useMemo(() => {
     const scripts = packageJson?.scripts
     if (!scripts || typeof scripts !== 'object') return []
+    const manager = detectNodePackageManager(['package.json', 'pnpm-lock.yaml'], JSON.stringify(packageJson), nodePackageManager)
 
     return Object.keys(scripts)
       .filter(Boolean)
-      .map((name) => (name === 'test' ? 'npm test' : `npm run ${name}`))
-  }, [])
+      .map((name) => nodeScriptCommand(manager, name))
+      .filter((command): command is string => Boolean(command))
+  }, [nodePackageManager])
 
   const suggestedCommands = useMemo(() => {
-    const defaults = ['npm run dev', 'npm run build', 'npm test', 'npm run rebuild']
-    return [...new Set([...defaults, ...packageCommands])].slice(0, 8)
+    return [...new Set(packageCommands)].slice(0, 8)
   }, [packageCommands])
 
   const resolvedDefaultShell = useMemo(() => {

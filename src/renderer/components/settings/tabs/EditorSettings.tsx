@@ -298,6 +298,32 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? '终端配置' : 'Terminal'}</h5>
                         </div>
                         <div className="grid grid-cols-2 gap-5">
+                            <div className="col-span-2">
+                                <label className={labelClass}>{language === 'zh' ? 'Node.js 包管理器' : 'Node.js Package Manager'}</label>
+                                <Select
+                                    value={advancedConfig.terminal.nodePackageManager}
+                                    onChange={(value) => setAdvancedConfig({
+                                        ...advancedConfig,
+                                        terminal: {
+                                            ...advancedConfig.terminal,
+                                            nodePackageManager: value as 'auto' | 'npm' | 'pnpm' | 'yarn' | 'bun',
+                                        },
+                                    })}
+                                    options={[
+                                        { value: 'auto', label: language === 'zh' ? '自动检测（推荐）' : 'Auto Detect (Recommended)' },
+                                        { value: 'npm', label: 'npm' },
+                                        { value: 'pnpm', label: 'pnpm' },
+                                        { value: 'yarn', label: 'Yarn' },
+                                        { value: 'bun', label: 'Bun' },
+                                    ]}
+                                    className={`w-full ${inputClass}`}
+                                />
+                                <p className="mt-2 text-[10px] leading-4 text-text-muted">
+                                    {language === 'zh'
+                                        ? '自动模式优先读取 package.json 的 packageManager，然后识别 pnpm-lock.yaml、yarn.lock、bun.lock 或 package-lock.json。'
+                                        : 'Auto mode reads packageManager first, then detects pnpm, Yarn, Bun, or npm lockfiles.'}
+                                </p>
+                            </div>
                             <div>
                                 <label className={labelClass}>{language === 'zh' ? '字体大小' : 'Font Size'}</label>
                                 <Input type="number" value={advancedConfig.terminal.fontSize} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, fontSize: parseInt(e.target.value) || 13 } })} min={10} max={24} className={inputClass} />

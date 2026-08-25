@@ -114,7 +114,7 @@ function extractBuildTargets(content: string, syntax: 'make' | 'just'): string[]
     if (!rawLine || /^\s/.test(rawLine) || rawLine.startsWith('#')) continue
     const match = syntax === 'make'
       ? rawLine.match(/^([\p{L}\p{N}_./-]+)\s*:(?![=])/u)
-      : rawLine.match(/^([\p{L}\p{N}_./-]+)(?:\s+[^:=]+)?\s*:=?/u)
+      : rawLine.match(/^([\p{L}\p{N}_./-]+)(?:\s+[^:=]+)?\s*:/u)
     const target = match?.[1]
     if (!target || target.startsWith('.') || !SAFE_TASK_NAME.test(target)) continue
     if (!targets.includes(target)) targets.push(target)

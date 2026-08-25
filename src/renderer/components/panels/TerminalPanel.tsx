@@ -20,9 +20,15 @@ import { readClipboardText, writeClipboardText } from '@/renderer/services/clipb
 import { useClickOutside } from '@renderer/hooks/usePerformance'
 import { t } from '@renderer/i18n'
 import { formatShortcut } from '@services/keybindingService'
+import { discoverProjectTasks, type ProjectFileSnapshot, type ProjectTask } from '@shared/utils/projectTasks'
+
+const TASK_MANIFESTS = new Set([
+    'package.json', 'deno.json', 'pyproject.toml', 'pom.xml', 'build.gradle', 'build.gradle.kts',
+    'composer.json', 'pubspec.yaml', 'makefile', 'justfile',
+])
 
 const TerminalPanel = memo(function TerminalPanel() {
-    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language })))
+    const { terminalVisible, setTerminalVisible, workspace, currentTheme, terminalLayout, setTerminalLayout, language, nodePackageManager } = useStore(useShallow(s => ({ terminalVisible: s.terminalVisible, setTerminalVisible: s.setTerminalVisible, workspace: s.workspace, currentTheme: s.currentTheme, terminalLayout: s.terminalLayout, setTerminalLayout: s.setTerminalLayout, language: s.language, nodePackageManager: s.editorConfig.terminal.nodePackageManager })))
     const setMode = useModeStore(s => s.setMode)
     // 从 AgentStore 获取 setInputPrompt
     const setInputPrompt = useAgentStore(state => state.setInputPrompt)
@@ -34,7 +40,7 @@ const TerminalPanel = memo(function TerminalPanel() {
     const [availableShells, setAvailableShells] = useState<{ label: string; path: string }[]>([])
     const [showShellMenu, setShowShellMenu] = useState(false)
     const [selectedRoot, setSelectedRoot] = useState<string>('')
-    const [scripts, setScripts] = useState<Record<string, string>>({})
+    const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([])
     const [showScriptMenu, setShowScriptMenu] = useState(false)
     const [contextMenu, setContextMenu] = useState<{
         visible: boolean
@@ -184,20 +190,32 @@ const TerminalPanel = memo(function TerminalPanel() {
     }, [selectedRoot, workspaceRoot])
 
     useEffect(() => {
-        const loadScripts = async () => {
+        const loadTasks = async () => {
             if (!selectedRoot) return
             try {
-                const content = await api.file.read(`${selectedRoot}/package.json`)
-                if (content) {
-                    const pkg = JSON.parse(content)
-                    if (pkg.scripts) setScripts(pkg.scripts)
-                }
+                const entries = await api.file.readDir(selectedRoot)
+                const root = selectedRoot.replace(/[\\/]+$/, '')
+                const snapshots: ProjectFileSnapshot[] = await Promise.all(entries.map(async (entry) => {
+                    const snapshot: ProjectFileSnapshot = { name: entry.name, isDirectory: entry.isDirectory }
+                    if (entry.isDirectory || !TASK_MANIFESTS.has(entry.name.toLowerCase())) return snapshot
+                    try {
+                        const manifestContent = await api.file.read(`${root}/${entry.name}`)
+                        if (manifestContent !== null) snapshot.content = manifestContent
+                    } catch {
+                        // A malformed or temporarily unavailable manifest should not hide other ecosystems.
+                    }
+                    return snapshot
+                }))
+                setProjectTasks(discoverProjectTasks(snapshots, {
+                    nodePackageManager,
+                    platform: /windows/i.test(navigator.userAgent) ? 'win32' : /macintosh|mac os/i.test(navigator.userAgent) ? 'darwin' : 'linux',
+                }))
             } catch {
-                setScripts({})
+                setProjectTasks([])
             }
         }
-        loadScripts()
-    }, [selectedRoot])
+        void loadTasks()
+    }, [selectedRoot, nodePackageManager])
 
     // ===== 窗口大小调整 =====
 
@@ -351,7 +369,7 @@ const TerminalPanel = memo(function TerminalPanel() {
         setInputPrompt(`I'm getting this error in the terminal. Please analyze it and fix the code:\n\n\`\`\`\n${content}\n\`\`\``)
     }, [managerState.activeId, setMode, setInputPrompt])
 
-    const runScript = useCallback(async (name: string) => {
+    const runTask = useCallback(async (command: string) => {
         setShowScriptMenu(false)
         if (!terminalVisible) setTerminalVisible(true)
 
@@ -363,7 +381,7 @@ const TerminalPanel = memo(function TerminalPanel() {
 
         if (targetId) {
             terminalManager.focusTerminal(targetId)
-            terminalManager.writeToTerminal(targetId, `npm run ${name}\r`)
+            terminalManager.writeToTerminal(targetId, `${command}\r`)
         }
     }, [terminalVisible, setTerminalVisible, managerState.activeId, managerState.terminals, createTerminal])
 
@@ -471,12 +489,15 @@ const TerminalPanel = memo(function TerminalPanel() {
                             </Button>
                             {showScriptMenu && (
                                 <div ref={scriptMenuRef} className="absolute bottom-full right-0 mb-2 bg-surface/90 backdrop-blur-xl border border-border rounded-xl shadow-xl py-1 flex flex-col max-h-64 overflow-y-auto z-[100] min-w-[180px] animate-scale-in">
-                                    {Object.keys(scripts).length > 0 ? Object.entries(scripts).map(([name, cmd]) => (
-                                        <button key={name} onClick={() => runScript(name)} className="text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover flex flex-col gap-0.5 border-b border-border/50 last:border-0 w-full transition-colors">
-                                            <span className="font-medium text-accent">{name}</span>
-                                            <span className="text-[10px] text-text-muted truncate max-w-[200px] opacity-70 font-mono">{cmd}</span>
+                                    {projectTasks.length > 0 ? projectTasks.map((task) => (
+                                        <button key={task.id} onClick={() => runTask(task.command)} className="text-left px-3 py-2 text-xs text-text-primary hover:bg-surface-hover flex flex-col gap-0.5 border-b border-border/50 last:border-0 w-full transition-colors">
+                                            <span className="flex w-full items-center justify-between gap-3">
+                                                <span className="font-medium text-accent">{task.name}</span>
+                                                <span className="text-[9px] text-text-muted whitespace-nowrap">{task.ecosystem}</span>
+                                            </span>
+                                            <span className="text-[10px] text-text-muted truncate max-w-[260px] opacity-70 font-mono">{task.command}</span>
                                         </button>
-                                    )) : <div className="px-3 py-2 text-xs text-text-muted italic">No scripts found</div>}
+                                    )) : <div className="px-3 py-2 text-xs text-text-muted italic">{language === 'zh' ? '未发现可运行任务' : 'No runnable tasks found'}</div>}
                                 </div>
                             )}
                         </div>

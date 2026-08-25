@@ -38,6 +38,7 @@ export interface EditorConfigSchema {
     cursorBlink?: boolean
     scrollback?: number
     maxOutputLines?: number
+    nodePackageManager?: 'auto' | 'npm' | 'pnpm' | 'yarn' | 'bun'
   }
   git?: {
     autoRefresh?: boolean
@@ -116,6 +117,9 @@ export function cleanEditorConfig(config: Record<string, unknown>): EditorConfig
     if (typeof t.cursorBlink === 'boolean') cleaned.terminal.cursorBlink = t.cursorBlink
     if (typeof t.scrollback === 'number') cleaned.terminal.scrollback = t.scrollback
     if (typeof t.maxOutputLines === 'number') cleaned.terminal.maxOutputLines = t.maxOutputLines
+    if (t.nodePackageManager === 'auto' || t.nodePackageManager === 'npm' || t.nodePackageManager === 'pnpm' || t.nodePackageManager === 'yarn' || t.nodePackageManager === 'bun') {
+      cleaned.terminal.nodePackageManager = t.nodePackageManager
+    }
   }
 
   // git 子对象
