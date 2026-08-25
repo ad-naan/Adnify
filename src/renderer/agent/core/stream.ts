@@ -220,19 +220,9 @@ export function createStreamProcessor(
         if (tcId && assistantId) {
           const tc = streamingToolCalls.get(tcId)
           if (tc) {
-            const finalArgs = parseFinalJsonArgs(tc.argsString) || {}
-            void syncStreamingEditPreview(tc.id, tc.name, finalArgs)
-
-            const toolCall: ToolCall = {
-              id: tc.id,
-              name: tc.name,
-              arguments: finalArgs,
-              status: 'pending',
-            }
-
-            // Avoid duplicate tool calls in the final array.
-            if (!toolCalls.find(t => t.id === tc.id)) {
-              toolCalls.push(toolCall)
+            const finalArgs = parseFinalJsonArgs(tc.argsString)
+            if (finalArgs) {
+              void syncStreamingEditPreview(tc.id, tc.name, finalArgs)
             }
           }
         }
@@ -257,8 +247,13 @@ export function createStreamProcessor(
           status: 'pending',
         }
 
-        // Avoid duplicate tool calls in the final array.
-        if (!toolCalls.find(tc => tc.id === tcId)) {
+        // The available event is authoritative. Some providers omit argument
+        // deltas and only deliver the complete payload here, so replace any
+        // compatibility fallback with these final arguments.
+        const existingIndex = toolCalls.findIndex(tc => tc.id === tcId)
+        if (existingIndex >= 0) {
+          toolCalls[existingIndex] = toolCall
+        } else {
           toolCalls.push(toolCall)
         }
 
@@ -364,6 +359,21 @@ export function createStreamProcessor(
     // `llm:done:*` and `llm:stream:*` are delivered on different IPC channels.
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
+      // Compatibility fallback for providers that stream a complete argument
+      // object but never emit tool_call_available. Never promote an empty or
+      // malformed payload into an executable call.
+      for (const tc of streamingToolCalls.values()) {
+        if (toolCalls.some(toolCall => toolCall.id === tc.id)) continue
+        const finalArgs = parseFinalJsonArgs(tc.argsString)
+        if (!finalArgs || Object.keys(finalArgs).length === 0) continue
+        toolCalls.push({
+          id: tc.id,
+          name: tc.name,
+          arguments: finalArgs,
+          status: 'pending',
+        })
+      }
+
       finalizeReasoning()
       doResolve({ content, reasoning, reasoningSignature, toolCalls, sources, usage, metadata, error })
     }, 0)
