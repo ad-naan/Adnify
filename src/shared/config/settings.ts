@@ -165,6 +165,9 @@ const defaultEditorConfig: EditorConfig = {
 
 const defaultSecuritySettings: SecuritySettings = {
   strictWorkspaceMode: SECURITY_SETTINGS_DEFAULTS.strictWorkspaceMode,
+  trustedDangerousOperationWorkspaceRoots: [
+    ...SECURITY_SETTINGS_DEFAULTS.trustedDangerousOperationWorkspaceRoots,
+  ],
   allowedShellCommands: [...SECURITY_SETTINGS_DEFAULTS.allowedShellCommands],
   allowedGitSubcommands: [...SECURITY_SETTINGS_DEFAULTS.allowedGitSubcommands],
 }

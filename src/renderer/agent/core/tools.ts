@@ -40,6 +40,7 @@ import {
   isAlwaysApprovalTool,
   type AgentApprovalProof,
 } from '@shared/security/executionPolicy'
+import { isDangerousOperationWorkspaceTrusted } from '@shared/config/securitySettings'
 
 // ===== 文件快照 =====
 
@@ -316,21 +317,25 @@ async function enrichToolArgumentsWithRoutingMeta(
  */
 function needsApproval(toolCall: ToolCall, context: ToolExecutionContext): boolean {
   const approvalType = getToolApprovalType(toolCall.name)
+  const mainStore = useStore.getState()
+  const trustedWorkspaceOperation = isDangerousOperationWorkspaceTrusted(
+    context.workspacePath,
+    mainStore.securitySettings?.trustedDangerousOperationWorkspaceRoots,
+  )
 
   if (hasReusableApproval(toolCall, context)) return false
-
-  // Local destructive actions and exceptional paths use the existing tool Dock.
-  // The resulting proof suppresses a second native main-process dialog.
-  if (toolCall.name === 'delete_file_or_folder') return true
 
   const pathArg = toolCall.arguments?.path
   if (typeof pathArg === 'string' && context.workspacePath && !REMOTE_ONLY_TOOL_NAMES.has(toolCall.name)) {
     const fullPath = toFullPath(pathArg, context.workspacePath)
-    const strictWorkspaceMode = useStore.getState().securitySettings?.strictWorkspaceMode !== false
-    if (isSensitivePath(fullPath) || (strictWorkspaceMode && !isPathInWorkspace(fullPath, context.workspacePath))) {
+    if (isSensitivePath(fullPath) || !isPathInWorkspace(fullPath, context.workspacePath)) {
       return true
     }
   }
+
+  // Local destructive actions use the Dock unless the containing workspace was
+  // explicitly trusted. Exceptional paths above can never inherit that trust.
+  if (toolCall.name === 'delete_file_or_folder') return !trustedWorkspaceOperation
 
   // This invariant is stronger than per-user auto-approval preferences.
   if (isAlwaysApprovalTool(toolCall.name)) return true
@@ -339,7 +344,6 @@ function needsApproval(toolCall: ToolCall, context: ToolExecutionContext): boole
   if (approvalType === 'none') return false
 
   // 检查用户的 autoApprove 设置
-  const mainStore = useStore.getState()
   const autoApprove = mainStore.autoApprove
 
   // 根据工具类型检查对应的 autoApprove 设置
@@ -356,6 +360,7 @@ function needsApproval(toolCall: ToolCall, context: ToolExecutionContext): boole
     // Structurally invalid input is rejected by the main process and should not
     // waste the user's time with an approval that cannot make it executable.
     if (shellDecision?.kind === 'deny') return false
+    if (trustedWorkspaceOperation && shellDecision?.code === 'shell.dangerous') return false
     if (
       shellDecision?.kind === 'allow'
       && isTerminalCommandEligibleForAutoApproval(

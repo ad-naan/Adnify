@@ -15,6 +15,16 @@ export interface AgentApprovalProof {
   scope: string
 }
 
+export interface AppSecurityApprovalRequest {
+  requestId: string
+  operation: string
+  target: string
+  reason: {
+    zh: string
+    en: string
+  }
+}
+
 function normalizeApprovalPath(value: string): string {
   return value.trim().replace(/\\/g, '/').replace(/\/+$/, '')
 }

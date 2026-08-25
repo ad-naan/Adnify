@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { logger } from '@shared/utils/Logger'
 import { commandApprovalScope } from '@shared/security/executionPolicy'
 
-const { handlers, childSpawnMock, dugiteExecMock, requestApprovalMock, runPipedShellCommandMock } = vi.hoisted(() => ({
+const { handlers, childSpawnMock, dugiteExecMock, requestApprovalMock, runPipedShellCommandMock, workspaceDangerousTrustedMock } = vi.hoisted(() => ({
   handlers: new Map<string, Function>(),
   childSpawnMock: vi.fn(),
   dugiteExecMock: vi.fn(),
   requestApprovalMock: vi.fn(),
   runPipedShellCommandMock: vi.fn(),
+  workspaceDangerousTrustedMock: vi.fn(),
 }))
 
 vi.mock('fs', () => ({
@@ -73,6 +74,7 @@ vi.mock('@main/security/securityModule', () => ({
   },
   securityManager: {
     validateWorkspacePath: vi.fn(() => true),
+    isWorkspaceDangerousOperationTrusted: workspaceDangerousTrustedMock,
     logOperation: vi.fn(),
     checkPermission: vi.fn(async () => true),
     requestApproval: requestApprovalMock,
@@ -85,6 +87,7 @@ describe('secureTerminal', () => {
     childSpawnMock.mockReset()
     dugiteExecMock.mockReset()
     requestApprovalMock.mockReset().mockResolvedValue(true)
+    workspaceDangerousTrustedMock.mockReset().mockReturnValue(false)
     runPipedShellCommandMock.mockReset().mockResolvedValue({
       success: true,
       stdout: '',
@@ -325,6 +328,40 @@ describe('secureTerminal', () => {
     expect(requestApprovalMock).not.toHaveBeenCalled()
     expect(runPipedShellCommandMock).not.toHaveBeenCalled()
     expect(childSpawnMock).not.toHaveBeenCalled()
+  })
+
+  it('authorizes a dangerous command without the Dock in a trusted workspace', async () => {
+    const workspaceRoot = process.cwd()
+    workspaceDangerousTrustedMock.mockReturnValue(true)
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const authorize = handlers.get('security:authorizeCommand')
+    const result = await authorize?.({}, { command: 'rm -rf ./cache', cwd: workspaceRoot })
+
+    expect(result).toMatchObject({ allowed: true, risk: 'dangerous' })
+    expect(result.authorizationId).toBeTypeOf('string')
+    expect(requestApprovalMock).not.toHaveBeenCalled()
+  })
+
+  it('does not downgrade a critical system command in a trusted workspace', async () => {
+    const workspaceRoot = process.cwd()
+    workspaceDangerousTrustedMock.mockReturnValue(true)
+    const module = await import('@main/security/secureTerminal')
+    module.registerSecureTerminalHandlers(
+      () => ({ isDestroyed: () => false, webContents: { send: vi.fn() } }) as any,
+      () => ({ roots: [workspaceRoot] }),
+    )
+
+    const authorize = handlers.get('security:authorizeCommand')
+    const result = await authorize?.({}, { command: 'rm -rf /', cwd: workspaceRoot })
+
+    expect(result).toMatchObject({ allowed: false, risk: 'dangerous' })
+    expect(result.authorizationId).toBeUndefined()
+    expect(requestApprovalMock).not.toHaveBeenCalled()
   })
 
   it('uses a scoped Dock approval without opening a second native approval', async () => {

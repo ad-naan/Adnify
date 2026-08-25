@@ -214,7 +214,10 @@ export function registerSecureFileHandlers(
         const approved = await securityManager.requestApproval(
           OperationType.FILE_READ,
           filePath,
-          '用户选择的文件位于系统或凭据敏感路径',
+          {
+            zh: '用户选择的文件位于系统或凭据敏感路径',
+            en: 'The selected file is in a system-sensitive or credential-sensitive path',
+          },
         )
         if (!approved) return null
       }
@@ -643,13 +646,13 @@ export function registerSecureFileHandlers(
       return false
     }
 
-    const riskReasons: string[] = []
+    const riskReasons: Array<{ zh: string; en: string }> = []
 
     // 关键配置文件需要更明确的审批，而不是直接拒绝。
     const criticalFiles = [/\.env$/i, /package-lock\.json$/i, /yarn\.lock$/i, /pnpm-lock\.yaml$/i]
     for (const pattern of criticalFiles) {
       if (pattern.test(filePath)) {
-        riskReasons.push('目标是关键配置文件')
+        riskReasons.push({ zh: '目标是关键配置文件', en: 'The target is a critical configuration file' })
         break
       }
     }
@@ -661,7 +664,8 @@ export function registerSecureFileHandlers(
       if (targetStat.isDirectory()) {
         const dirSize = await calculateDirectorySize(filePath)
         if (dirSize > 100 * 1024 * 1024) {
-          riskReasons.push(`目录较大（${(dirSize / 1024 / 1024).toFixed(1)} MB）`)
+          const size = (dirSize / 1024 / 1024).toFixed(1)
+          riskReasons.push({ zh: `目录较大（${size} MB）`, en: `The directory is large (${size} MB)` })
         }
       }
     } catch {
@@ -669,11 +673,19 @@ export function registerSecureFileHandlers(
     }
 
     const normalizedFilePath = path.resolve(filePath)
-    const relativeToWorkspace = workspace?.roots.some(root => {
+    const isInsideWorkspace = workspace?.roots.some(root => {
+      const relative = path.relative(path.resolve(root), normalizedFilePath)
+      return !relative.startsWith('..') && !path.isAbsolute(relative)
+    }) ?? false
+    const isInternalAgentTemp = workspace?.roots.some(root => {
       const relative = path.relative(path.resolve(root), normalizedFilePath)
       return !relative.startsWith('..') && !path.isAbsolute(relative)
         && /^\.adnify[\\/]agent-temp[\\/]inline-[^\\/]+$/i.test(relative)
     }) ?? false
+    const isTrustedWorkspaceOperation = securityManager.isWorkspaceDangerousOperationTrusted(
+      normalizedFilePath,
+      workspace?.roots || [],
+    )
     const hasAgentApproval = isRecentAgentApprovalProof(
       approval,
       fileApprovalScope(normalizedFilePath, 'manage'),
@@ -684,11 +696,22 @@ export function registerSecureFileHandlers(
       })
       return false
     }
-    if (!hasExactManageGrant && !hasAgentApproval && !relativeToWorkspace) {
+    if (!hasExactManageGrant && !hasAgentApproval && !isInternalAgentTemp && !isTrustedWorkspaceOperation) {
       const reason = riskReasons.length > 0
-        ? `删除操作不可恢复；${riskReasons.join('；')}`
-        : '删除文件或目录属于不可恢复操作'
-      const approved = await securityManager.requestApproval(OperationType.FILE_DELETE, filePath, reason)
+        ? {
+            zh: `删除操作不可恢复；${riskReasons.map(item => item.zh).join('；')}`,
+            en: `Deletion cannot be undone; ${riskReasons.map(item => item.en).join('; ')}`,
+          }
+        : {
+            zh: '删除文件或目录属于不可恢复操作',
+            en: 'Deleting a file or directory cannot be undone',
+          }
+      const approved = await securityManager.requestApproval(
+        OperationType.FILE_DELETE,
+        filePath,
+        reason,
+        isInsideWorkspace ? 'app' : 'native',
+      )
       if (!approved) return false
     }
 
@@ -700,7 +723,15 @@ export function registerSecureFileHandlers(
       }
       securityManager.logOperation(OperationType.FILE_DELETE, filePath, true, {
         size: targetStat.size,
-        approval: hasExactManageGrant ? 'exact-path-grant' : 'approved-once',
+        approval: hasExactManageGrant
+          ? 'exact-path-grant'
+          : hasAgentApproval
+            ? 'agent-dock'
+            : isTrustedWorkspaceOperation
+              ? 'trusted-workspace'
+              : isInternalAgentTemp
+                ? 'internal-agent-temp'
+                : 'approved-once',
       })
       return true
     } catch (err) {

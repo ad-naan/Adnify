@@ -11,6 +11,20 @@ import { toolManager } from '@renderer/agent/tools/providers'
 import type { ToolCall } from '@shared/types'
 import type { ToolExecutionContext } from '@renderer/agent/core/types'
 
+const { mainStoreState } = vi.hoisted(() => ({
+  mainStoreState: {
+    agentConfig: { autoApprove: true },
+    autoApprove: { terminalCommandRules: [] },
+    securitySettings: {
+      strictWorkspaceMode: true,
+      trustedDangerousOperationWorkspaceRoots: [] as string[],
+      allowedShellCommands: ['rm'],
+      allowedGitSubcommands: [],
+    },
+    addToolCallLog: vi.fn(),
+  },
+}))
+
 // Mock dependencies
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
@@ -72,12 +86,7 @@ vi.mock('@utils/Logger', () => ({
 
 vi.mock('@store', () => ({
   useStore: {
-    getState: vi.fn(() => ({
-      agentConfig: {
-        autoApprove: true, // 自动批准所有工具
-      },
-      addToolCallLog: vi.fn(),
-    })),
+    getState: vi.fn(() => mainStoreState),
   },
 }))
 
@@ -91,6 +100,7 @@ describe('Tools Core - Parallel Execution', () => {
   }
 
   beforeEach(() => {
+    mainStoreState.securitySettings.trustedDangerousOperationWorkspaceRoots = []
     // 重置 store
     useAgentStore.setState({
       threads: {},
@@ -113,6 +123,46 @@ describe('Tools Core - Parallel Execution', () => {
   })
 
   describe('Parallel Tool Execution Performance', () => {
+    it('auto-runs deletes inside a trusted dangerous-operation workspace', async () => {
+      mainStoreState.securitySettings.trustedDangerousOperationWorkspaceRoots = ['/test/workspace']
+
+      const outcome = await executeTools(
+        [{ id: 'trusted-delete', name: 'delete_file_or_folder', arguments: { path: 'cache' }, status: 'pending' }],
+        { ...context, requestId: 'trusted-delete-request' },
+        getStore(),
+      )
+
+      expect(outcome.hadRejectedTool).toBe(false)
+      expect(toolManager.execute).toHaveBeenCalledWith(
+        'delete_file_or_folder',
+        expect.objectContaining({ path: 'cache' }),
+        expect.not.objectContaining({ securityApproval: expect.anything() }),
+      )
+    })
+
+    it('still requires Dock approval for an external delete when the workspace is trusted', async () => {
+      const requestId = 'trusted-workspace-external-delete'
+      mainStoreState.securitySettings.trustedDangerousOperationWorkspaceRoots = ['/test/workspace']
+      const execution = executeTools(
+        [{ id: 'external-delete', name: 'delete_file_or_folder', arguments: { path: '/outside/cache' }, status: 'pending' }],
+        { ...context, requestId },
+        getStore(),
+      )
+
+      await vi.waitFor(() => {
+        const message = getStore().getMessages().find(item => item.id === assistantId)
+        const pendingCall = message?.role === 'assistant'
+          ? message.toolCalls?.find(item => item.id === 'external-delete')
+          : undefined
+        expect(pendingCall?.status).toBe('awaiting')
+      })
+      approvalService.reject(requestId, 'external-delete')
+      const outcome = await execution
+
+      expect(outcome.hadRejectedTool).toBe(true)
+      expect(toolManager.execute).not.toHaveBeenCalled()
+    })
+
     it('passes the Dock approval proof into the tool execution context', async () => {
       const requestId = 'request-with-command-approval'
       const command = 'adnify-security-probe --version'

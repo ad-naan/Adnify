@@ -61,6 +61,19 @@ describe('security settings normalization', () => {
     expect(normalized.allowedShellCommands).toEqual(['bash', 'node'])
   })
 
+  it('normalizes and deduplicates trusted dangerous-operation workspace roots', () => {
+    const normalized = normalizeSecuritySettings({
+      trustedDangerousOperationWorkspaceRoots: [
+        ' D:\\Project\\Adnify\\ ',
+        'd:/project/adnify',
+        '',
+        42,
+      ],
+    })
+
+    expect(normalized.trustedDangerousOperationWorkspaceRoots).toEqual(['D:\\Project\\Adnify'])
+  })
+
   it('drops removed legacy confirmation flags', () => {
     const normalized = normalizeSecuritySettings({
       enablePermissionConfirm: false,

@@ -144,6 +144,10 @@ export function registerSettingsHandlers(
         )
       }
 
+      if (key === 'language' && securityRef) {
+        securityRef.securityManager.setLanguage(cleanedValue === 'en' ? 'en' : 'zh')
+      }
+
       if (key === 'app-settings') {
         const appSettings = (cleanedValue || value) as any
         if (appSettings && appSettings.proxySettings) {

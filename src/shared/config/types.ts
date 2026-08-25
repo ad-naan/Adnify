@@ -196,6 +196,8 @@ export interface EditorConfig {
 
 export interface SecuritySettings {
   strictWorkspaceMode: boolean
+  /** Workspace roots where local dangerous operations may run without Tool Dock approval. */
+  trustedDangerousOperationWorkspaceRoots: string[]
   allowedShellCommands: string[]
   allowedGitSubcommands: string[]
 }

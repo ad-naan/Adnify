@@ -327,6 +327,18 @@ export function registerSecureTerminalHandlers(
   getWorkspace: (event?: Electron.IpcMainInvokeEvent) => { roots: string[] } | null,
   getWindowWorkspace?: (windowId: number) => string[] | null
 ) {
+  const localizedDecisionReason = (decision: ExecutionDecision): { zh: string; en: string } => {
+    const englishByCode: Record<string, string> = {
+      'path.external': 'The operation targets a path outside the active workspace',
+      'shell.critical': 'The command may modify or delete critical system resources',
+      'shell.dangerous': 'The command performs a destructive or privileged system operation',
+      'shell.untrusted': 'The executable is not in the trusted automatic-execution list',
+      'git.dangerous': 'The Git command may discard changes or rewrite history',
+      'git.untrusted': 'The Git subcommand is not in the trusted automatic-execution list',
+    }
+    return { zh: decision.reason, en: englishByCode[decision.code] || decision.reason }
+  }
+
   const authorizeDecision = async (
     operation: OperationType,
     target: string,
@@ -340,7 +352,15 @@ export function registerSecureTerminalHandlers(
       return { allowed: false, error: decision.reason }
     }
     if (decision.kind === 'ask') {
-      const allowed = await securityManager.requestApproval(operation, target, decision.reason)
+      const presentation = decision.code === 'path.external' || decision.code === 'shell.critical'
+        ? 'native'
+        : 'app'
+      const allowed = await securityManager.requestApproval(
+        operation,
+        target,
+        localizedDecisionReason(decision),
+        presentation,
+      )
       return { allowed, error: allowed ? undefined : '用户拒绝了此次高风险操作' }
     }
     return { allowed: true }
@@ -352,15 +372,26 @@ export function registerSecureTerminalHandlers(
     workspace: { roots: string[] } | null,
   ): ExecutionDecision => {
     const base = assessShellCommand(command, WHITELIST.shell)
-    const outsideWorkspace = Boolean(
-      workspace?.roots.length
-      && !securityManager.validateWorkspacePath(cwd, workspace.roots),
-    )
-    return requireExternalPathApproval(base, outsideWorkspace)
+    const trustedWorkspaceOperation = base.code === 'shell.dangerous'
+      && securityManager.isWorkspaceDangerousOperationTrusted(cwd, workspace?.roots || [])
+    const workspaceScoped = trustedWorkspaceOperation
+      ? {
+          ...base,
+          kind: 'allow' as const,
+          code: 'shell.workspace-trusted',
+          reason: '危险命令位于已授权自动执行危险操作的工作区内',
+        }
+      : base
+    const resolvedCwd = path.resolve(cwd)
+    const outsideWorkspace = Boolean(workspace?.roots.length && !workspace.roots.some(root => {
+      const relative = path.relative(path.resolve(root), resolvedCwd)
+      return !relative.startsWith('..') && !path.isAbsolute(relative)
+    }))
+    return requireExternalPathApproval(workspaceScoped, outsideWorkspace)
   }
 
   const executionTarget = (command: string, cwd: string): string =>
-    `${command}\n工作目录：${cwd}`
+    `${command}\n${cwd}`
 
   safeIpcHandle('security:authorizeCommand', async (
     event,

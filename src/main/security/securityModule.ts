@@ -5,10 +5,16 @@
 
 import { logger } from '@shared/utils/Logger'
 import * as path from 'path'
-import { dialog, BrowserWindow } from 'electron'
+import { app, dialog, BrowserWindow, ipcMain } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { isSensitivePath as sharedIsSensitivePath } from '@shared/constants'
 import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 import type { SecuritySettings } from '@shared/config/types'
+import { isDangerousOperationWorkspaceTrusted } from '@shared/config/securitySettings'
+import type { AppSecurityApprovalRequest } from '@shared/security/executionPolicy'
+
+type ApprovalPresentation = 'native' | 'app'
+type ApprovalReason = string | { zh: string; en: string }
 
 // 敏感操作类型
 export enum OperationType {
@@ -28,7 +34,7 @@ export enum OperationType {
 }
 
 interface SecurityModule {
-  requestApproval: (operation: OperationType, target: string, reason: string) => Promise<boolean>
+  requestApproval: (operation: OperationType, target: string, reason: ApprovalReason, presentation?: ApprovalPresentation) => Promise<boolean>
 
   // 工作区设置
   setWorkspacePath: (workspacePath: string | null) => void
@@ -38,15 +44,31 @@ interface SecurityModule {
 
   // 工作区安全边界
   validateWorkspacePath: (filePath: string, workspace: string | string[]) => boolean
+  isWorkspaceDangerousOperationTrusted: (targetPath: string, workspaceRoots: string[]) => boolean
   isSensitivePath: (filePath: string) => boolean
 
   // 配置更新
   updateConfig: (config: Partial<SecuritySettings>) => void
+  setLanguage: (language: 'zh' | 'en') => void
 }
 
 class SecurityManager implements SecurityModule {
   private pendingApprovals = new Map<string, Promise<boolean>>()
+  private pendingAppApprovals = new Map<string, {
+    senderId: number
+    settle: (allowed: boolean) => void
+  }>()
   private config: Partial<SecuritySettings> = {}
+  private language: 'zh' | 'en' | null = null
+
+  constructor() {
+    ipcMain.on('security:approval-response', (event, response: { requestId?: string; allowed?: boolean }) => {
+      const requestId = typeof response?.requestId === 'string' ? response.requestId : ''
+      const pending = this.pendingAppApprovals.get(requestId)
+      if (!pending || pending.senderId !== event.sender.id) return
+      pending.settle(response.allowed === true)
+    })
+  }
 
   /**
    * 设置当前工作区路径（保留接口兼容）
@@ -63,33 +85,33 @@ class SecurityManager implements SecurityModule {
     logger.security.info('[Security] Configuration updated:', this.config)
   }
 
+  setLanguage(language: 'zh' | 'en') {
+    this.language = language
+  }
+
   /**
    * Explicit risk approval. Unlike legacy permission levels, this is always
    * shown for an elevated decision and is never cached as a broad grant.
    */
-  async requestApproval(operation: OperationType, target: string, reason: string): Promise<boolean> {
-    const key = `${operation}:${target}`
+  async requestApproval(
+    operation: OperationType,
+    target: string,
+    reason: ApprovalReason,
+    presentation: ApprovalPresentation = 'native',
+  ): Promise<boolean> {
+    const localizedReason = typeof reason === 'string' ? { zh: reason, en: reason } : reason
+    const key = `${presentation}:${operation}:${target}`
     const pending = this.pendingApprovals.get(key)
     if (pending) return pending
 
     const approval = (async () => {
       const mainWindow = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      const options = {
-        type: 'warning' as const,
-        buttons: ['仅此次允许', '拒绝'],
-        defaultId: 1,
-        cancelId: 1,
-        title: '安全审批',
-        message: '此操作需要明确授权',
-        detail: `原因：${reason}\n\n操作：${operation}\n目标：${target}`,
-        noLink: true,
-      }
-      const result = mainWindow
-        ? await dialog.showMessageBox(mainWindow, options)
-        : await dialog.showMessageBox(options)
-      const allowed = result.response === 0
+      const allowed = presentation === 'app' && mainWindow
+        ? await this.requestAppApproval(mainWindow, { operation, target, reason: localizedReason })
+        : await this.requestNativeApproval(mainWindow, { operation, target, reason: localizedReason })
       this.logOperation(operation, target, allowed, {
-        reason,
+        reason: localizedReason.zh,
+        presentation: presentation === 'app' && mainWindow ? 'app-confirm' : 'native',
         decision: allowed ? 'approved-once' : 'denied',
       })
       return allowed
@@ -100,6 +122,58 @@ class SecurityManager implements SecurityModule {
     } finally {
       this.pendingApprovals.delete(key)
     }
+  }
+
+  private async requestNativeApproval(
+    mainWindow: BrowserWindow | null | undefined,
+    request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reason'>,
+  ): Promise<boolean> {
+    const isZh = this.language ? this.language === 'zh' : app.getLocale().toLowerCase().startsWith('zh')
+    const options = {
+      type: 'warning' as const,
+      buttons: isZh ? ['仅此次允许', '拒绝'] : ['Allow once', 'Deny'],
+      defaultId: 1,
+      cancelId: 1,
+      title: isZh ? '安全审批' : 'Security approval',
+      message: isZh ? '此操作需要明确授权' : 'This operation requires explicit approval',
+      detail: isZh
+        ? `原因：${request.reason.zh}\n\n操作：${request.operation}\n目标：${request.target}`
+        : `Reason: ${request.reason.en}\n\nOperation: ${request.operation}\nTarget: ${request.target}`,
+      noLink: true,
+    }
+    const result = mainWindow
+      ? await dialog.showMessageBox(mainWindow, options)
+      : await dialog.showMessageBox(options)
+    return result.response === 0
+  }
+
+  private requestAppApproval(
+    mainWindow: BrowserWindow,
+    request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reason'>,
+  ): Promise<boolean> {
+    const requestId = randomUUID()
+    return new Promise(resolve => {
+      let settled = false
+      const settle = (allowed: boolean) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        mainWindow.webContents.removeListener('destroyed', handleDestroyed)
+        this.pendingAppApprovals.delete(requestId)
+        resolve(allowed)
+      }
+      const handleDestroyed = () => settle(false)
+      const timer = setTimeout(() => settle(false), 2 * 60_000)
+      this.pendingAppApprovals.set(requestId, {
+        senderId: mainWindow.webContents.id,
+        settle,
+      })
+      mainWindow.webContents.once('destroyed', handleDestroyed)
+      mainWindow.webContents.send('security:approval-request', {
+        requestId,
+        ...request,
+      } satisfies AppSecurityApprovalRequest)
+    })
   }
 
   /**
@@ -139,6 +213,27 @@ class SecurityManager implements SecurityModule {
       return isInside && !isSensitive
     } catch (error) {
       logger.security.error('[Security] Path validation error:', error)
+      return false
+    }
+  }
+
+  isWorkspaceDangerousOperationTrusted(targetPath: string, workspaceRoots: string[]): boolean {
+    if (!targetPath || this.isSensitivePath(targetPath)) return false
+    try {
+      const resolvedTarget = path.resolve(targetPath)
+      const containingRoot = workspaceRoots.find(root => {
+        if (typeof root !== 'string') return false
+        const resolvedRoot = path.resolve(root)
+        return pathStartsWith(resolvedTarget, resolvedRoot) || pathEquals(resolvedTarget, resolvedRoot)
+      })
+      return Boolean(
+        containingRoot
+        && isDangerousOperationWorkspaceTrusted(
+          containingRoot,
+          this.config.trustedDangerousOperationWorkspaceRoots,
+        ),
+      )
+    } catch {
       return false
     }
   }

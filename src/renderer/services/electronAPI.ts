@@ -220,6 +220,8 @@ function createGroupedAPI() {
     security: {
       requestExternalFileAccess: (filePath: string, access?: 'read' | 'write' | 'manage', approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => raw.requestExternalFileAccess(filePath, access, approval),
       authorizeCommand: (request: { command: string; cwd?: string; approval?: import('@shared/security/executionPolicy').AgentApprovalProof }) => raw.authorizeCommand(request),
+      onApprovalRequest: (callback: Parameters<typeof raw.onSecurityApprovalRequest>[0]) => raw.onSecurityApprovalRequest(callback),
+      respondApproval: (requestId: string, allowed: boolean) => raw.respondSecurityApproval(requestId, allowed),
     },
 
     // 索引

@@ -5,6 +5,7 @@ import { t } from '@renderer/i18n'
 import { logger } from '@utils/Logger'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
+import { api } from '@renderer/services/electronAPI'
 
 interface ConfirmDialogProps {
   isOpen: boolean
@@ -91,7 +92,7 @@ export default function ConfirmDialog({
             {title}
           </h3>
         )}
-        <p className="text-[13px] text-text-secondary leading-relaxed mb-8 max-w-[280px]">
+        <p className="mb-8 max-w-[320px] whitespace-pre-line break-all text-[13px] leading-relaxed text-text-secondary">
           {message}
         </p>
 
@@ -175,6 +176,7 @@ export function useConfirm() {
 
 let globalResolve: ((value: boolean) => void) | null = null
 let globalSetState: ((state: { isOpen: boolean; options: ConfirmOptions | null }) => void) | null = null
+let globalConfirmQueue: Promise<void> = Promise.resolve()
 
 export function GlobalConfirmDialog() {
   const [state, setState] = useState<{
@@ -187,8 +189,24 @@ export function GlobalConfirmDialog() {
 
   useEffect(() => {
     globalSetState = setState
+    const unsubscribe = api.security.onApprovalRequest(async request => {
+      const language = useStore.getState().language
+      const allowed = await globalConfirm({
+        title: request.operation === 'file:delete'
+          ? (language === 'zh' ? '删除确认' : 'Delete confirmation')
+          : (language === 'zh' ? '安全确认' : 'Security confirmation'),
+        message: `${request.reason[language]}\n\n${language === 'zh' ? `目标：${request.target}` : `Target: ${request.target}`}`,
+        confirmText: language === 'zh' ? '仅此次允许' : 'Allow once',
+        cancelText: language === 'zh' ? '拒绝' : 'Deny',
+        variant: request.operation === 'file:delete' ? 'danger' : 'warning',
+      })
+      api.security.respondApproval(request.requestId, allowed)
+    })
     return () => {
+      unsubscribe()
       globalSetState = null
+      globalResolve?.(false)
+      globalResolve = null
     }
   }, [])
 
@@ -216,8 +234,8 @@ export function GlobalConfirmDialog() {
   )
 }
 
-export function globalConfirm(options: ConfirmOptions): Promise<boolean> {
-  return new Promise((resolve) => {
+function showGlobalConfirm(options: ConfirmOptions): Promise<boolean> {
+  return new Promise(resolve => {
     if (!globalSetState) {
       logger.ui.warn('GlobalConfirmDialog not mounted, canceling confirm request')
       resolve(false)
@@ -227,4 +245,10 @@ export function globalConfirm(options: ConfirmOptions): Promise<boolean> {
     globalResolve = resolve
     globalSetState({ isOpen: true, options })
   })
+}
+
+export function globalConfirm(options: ConfirmOptions): Promise<boolean> {
+  const result = globalConfirmQueue.then(() => showGlobalConfirm(options))
+  globalConfirmQueue = result.then(() => undefined, () => undefined)
+  return result
 }

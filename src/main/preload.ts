@@ -762,6 +762,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       reason?: string
       risk?: string
     }>,
+  onSecurityApprovalRequest: (callback: (request: import('@shared/security/executionPolicy').AppSecurityApprovalRequest) => void) => {
+    const handler = (_: IpcRendererEvent, request: import('@shared/security/executionPolicy').AppSecurityApprovalRequest) => callback(request)
+    ipcRenderer.on('security:approval-request', handler)
+    return () => ipcRenderer.removeListener('security:approval-request', handler)
+  },
+  respondSecurityApproval: (requestId: string, allowed: boolean) =>
+    ipcRenderer.send('security:approval-response', { requestId, allowed }),
 
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => {
     const handler = (_: IpcRendererEvent, data: { event: 'create' | 'update' | 'delete'; path: string }) => callback(data)

@@ -573,6 +573,8 @@ export interface ElectronAPI {
     reason?: string
     risk?: string
   }>
+  onSecurityApprovalRequest: (callback: (request: import('@shared/security/executionPolicy').AppSecurityApprovalRequest) => void) => () => void
+  respondSecurityApproval: (requestId: string, allowed: boolean) => void
 
   // Index
   indexInitialize: (workspacePath: string) => Promise<{ success: boolean; error?: string }>

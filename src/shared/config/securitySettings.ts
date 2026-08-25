@@ -1,4 +1,5 @@
 import type { SecuritySettings } from './types'
+import { pathEquals } from '@shared/utils/pathUtils'
 
 const LEGACY_RUNTIME_SHELL_COMMANDS = [
   'npm', 'yarn', 'pnpm', 'bun',
@@ -44,9 +45,31 @@ export const DEFAULT_SECURITY_GIT_SUBCOMMANDS = [
 
 export const SECURITY_SETTINGS_DEFAULTS = {
   strictWorkspaceMode: true,
+  trustedDangerousOperationWorkspaceRoots: [],
   allowedShellCommands: [...DEFAULT_SECURITY_SHELL_COMMANDS],
   allowedGitSubcommands: [...DEFAULT_SECURITY_GIT_SUBCOMMANDS],
 } as const satisfies SecuritySettings
+
+function normalizeWorkspaceRootList(roots: unknown): string[] {
+  if (!Array.isArray(roots)) return []
+  const normalized: string[] = []
+  for (const root of roots) {
+    if (typeof root !== 'string') continue
+    const value = root.trim().replace(/[\\/]+$/, '')
+    if (value && !normalized.some(existing => pathEquals(existing, value))) normalized.push(value)
+  }
+  return normalized
+}
+
+export function isDangerousOperationWorkspaceTrusted(
+  workspaceRoot: string | null | undefined,
+  trustedRoots: readonly string[] | null | undefined,
+): boolean {
+  return Boolean(
+    workspaceRoot
+    && trustedRoots?.some(root => pathEquals(root, workspaceRoot)),
+  )
+}
 
 function normalizeCommandList(
   commands: unknown,
@@ -101,6 +124,9 @@ export function normalizeSecuritySettings(settings: unknown): SecuritySettings {
     strictWorkspaceMode: typeof candidate.strictWorkspaceMode === 'boolean'
       ? candidate.strictWorkspaceMode
       : SECURITY_SETTINGS_DEFAULTS.strictWorkspaceMode,
+    trustedDangerousOperationWorkspaceRoots: normalizeWorkspaceRootList(
+      candidate.trustedDangerousOperationWorkspaceRoots,
+    ),
     allowedShellCommands,
     allowedGitSubcommands,
   }

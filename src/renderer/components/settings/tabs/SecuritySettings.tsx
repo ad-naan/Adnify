@@ -1,5 +1,5 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import { Bot, Clock3, MonitorUp, PanelBottom, Plus, RotateCcw, ShieldCheck, Terminal, X, Zap } from 'lucide-react'
+import { Bot, Clock3, MonitorUp, PanelBottom, Plus, RotateCcw, ShieldAlert, ShieldCheck, Terminal, X, Zap } from 'lucide-react'
 import { Switch } from '@components/ui'
 import { toast } from '@components/common/ToastProvider'
 import { type Language } from '@renderer/i18n'
@@ -7,6 +7,8 @@ import { api } from '@renderer/services/electronAPI'
 import type { AutoApproveSettings, SecuritySettings as SecuritySettingsState } from '@shared/config/types'
 import { formatTerminalCommandRule, legacyTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ProgressiveReveal } from '../ProgressiveReveal'
+import { useStore } from '@store'
+import { pathEquals } from '@shared/utils/pathUtils'
 
 interface SecuritySettingsProps {
     language: Language
@@ -26,7 +28,11 @@ export function SecuritySettings({
     const [newShellCmd, setNewShellCmd] = useState('')
     const [newGitCmd, setNewGitCmd] = useState('')
     const [newCommandScope, setNewCommandScope] = useState('')
+    const workspaceRoots = useStore((state) => state.workspace?.roots || [])
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
+    const trustedWorkspaceRoots = securitySettings.trustedDangerousOperationWorkspaceRoots || []
+    const trustsCurrentWorkspace = workspaceRoots.length > 0
+        && workspaceRoots.every(root => trustedWorkspaceRoots.some(trusted => pathEquals(root, trusted)))
 
     const updateSecuritySettings = (updates: Partial<SecuritySettingsState>) => {
         setSecuritySettings((current) => ({ ...current, ...updates }))
@@ -72,6 +78,18 @@ export function SecuritySettings({
         }
     }
 
+    const handleTrustCurrentWorkspace = (trusted: boolean) => {
+        if (workspaceRoots.length === 0) return
+        updateSecuritySettings({
+            trustedDangerousOperationWorkspaceRoots: trusted
+                ? [
+                    ...trustedWorkspaceRoots,
+                    ...workspaceRoots.filter(root => !trustedWorkspaceRoots.some(existing => pathEquals(existing, root))),
+                ]
+                : trustedWorkspaceRoots.filter(root => !workspaceRoots.some(activeRoot => pathEquals(activeRoot, root))),
+        })
+    }
+
     const policyCards = [
         {
             icon: Zap,
@@ -83,13 +101,13 @@ export function SecuritySettings({
             icon: PanelBottom,
             tone: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
             title: t('工具 Dock 审批', 'Tool Dock approval'),
-            detail: t('未知命令、危险参数、删除、远程修改和异常路径。', 'Unknown commands, risky arguments, deletes, remote mutations, and exceptional paths.'),
+            detail: t('未知命令、未受信任工作区中的危险参数与删除，以及远程修改。', 'Unknown commands, dangerous operations in untrusted workspaces, and remote mutations.'),
         },
         {
             icon: MonitorUp,
             tone: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
             title: t('系统确认', 'Native confirmation'),
-            detail: t('仅非 Agent 的直接用户操作；Agent 不会重复弹系统窗。', 'Only direct non-Agent actions; Agent tools never open a second native dialog.'),
+            detail: t('仅跨工作区、系统关键命令和敏感路径等强边界。', 'Only strong boundaries such as external workspaces, critical system commands, and sensitive paths.'),
         },
     ]
 
@@ -125,6 +143,25 @@ export function SecuritySettings({
                         <p className="mt-1 text-[11px] leading-4 text-text-muted">{t('开启后，工作区外路径首次访问必须经过 Dock；敏感路径始终需要审批。', 'When enabled, first access outside the workspace requires the Dock. Sensitive paths always require approval.')}</p>
                     </div>
                     <Switch label={t('启用', 'Enabled')} checked={securitySettings.strictWorkspaceMode} onChange={(event) => updateSecuritySettings({ strictWorkspaceMode: event.target.checked })} />
+                </div>
+                <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-start gap-3">
+                        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                        <div>
+                            <div className="text-xs font-medium text-text-primary">{t('当前工作区内自动执行危险操作', 'Auto-run dangerous operations in this workspace')}</div>
+                            <p className="mt-1 text-[11px] leading-4 text-text-muted">
+                                {workspaceRoots.length > 0
+                                    ? t('允许 Agent 在当前工作区内执行删除和危险 Shell 命令，不进入 Dock；跨工作区、系统关键命令和敏感路径仍需强审批。', 'Allows Agent deletes and dangerous shell commands inside this workspace without the Dock. External paths, critical system commands, and sensitive paths still require strong approval.')
+                                    : t('请先打开工作区后再配置。', 'Open a workspace before configuring this option.')}
+                            </p>
+                        </div>
+                    </div>
+                    <Switch
+                        label={t('允许', 'Allow')}
+                        checked={trustsCurrentWorkspace}
+                        disabled={workspaceRoots.length === 0}
+                        onChange={(event) => handleTrustCurrentWorkspace(event.target.checked)}
+                    />
                 </div>
                 <div className="flex items-start gap-2 text-[11px] leading-5 text-text-muted">
                     <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
