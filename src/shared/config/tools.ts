@@ -487,7 +487,7 @@ For long-running servers or watch tasks:
             'Use cwd parameter instead of cd — NEVER write "cd path && command" or "cd path; command" inside command field',
             'NEVER use && in command — it is not supported on Windows PowerShell 5 (use cwd parameter for directory changes)',
             'Always use is_background=true for servers and dev tasks',
-            'When a safe family of similar commands is obvious, include approval_scope with the executable, a literal argument prefix, and a short description. Never put regex, wildcards, shell operators, paths, secrets, or dangerous flags in approval_scope. Omit it when uncertain.',
+            'The app derives conservative similar-command approval scopes locally. You may include a narrower approval_scope with the executable, a literal argument prefix, and a short description. Never put regex, wildcards, shell operators, paths, secrets, or dangerous flags in approval_scope. Omit it when uncertain.',
         ],
         category: 'terminal',
         approvalType: 'terminal',
@@ -1526,6 +1526,9 @@ function convertToPropertySchema(prop: ToolPropertyDef): ToolPropertySchema {
         schema.properties = Object.fromEntries(
             Object.entries(prop.properties).map(([k, v]) => [k, convertToPropertySchema(v)])
         )
+        schema.required = Object.entries(prop.properties)
+            .filter(([, value]) => value.required)
+            .map(([key]) => key)
     }
     return schema
 }

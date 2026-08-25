@@ -139,6 +139,7 @@ export default function ChatPanel() {
     isStreaming,
     isAwaitingApproval,
     pendingToolCall,
+    pendingToolCalls,
     pendingChanges,
     messageCheckpoints,
     contextItems,
@@ -1224,9 +1225,9 @@ export default function ChatPanel() {
         onEdit={handleEditMessage}
         onRegenerate={handleRegenerate}
         onRestore={handleRestore}
-        onApproveTool={approveCurrentTool}
-        onApproveToolForTask={canApprovePendingToolForTask ? approveCurrentToolForTask : undefined}
-        onRejectTool={rejectCurrentTool}
+        onApproveTool={() => approveCurrentTool(pendingToolCall?.id)}
+        onApproveToolForTask={canApprovePendingToolForTask ? () => approveCurrentToolForTask(pendingToolCall?.id) : undefined}
+        onRejectTool={() => rejectCurrentTool(pendingToolCall?.id)}
         onStopTool={abort}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
@@ -1495,6 +1496,7 @@ export default function ChatPanel() {
                 isStreaming={isStreaming}
                 isAwaitingApproval={isAwaitingApproval}
                 pendingToolCall={pendingToolCall}
+                pendingToolCalls={pendingToolCalls}
                 onStop={abort}
                 onReviewFile={handleReviewFile}
                 onAcceptFile={handleAcceptFile}
@@ -1502,7 +1504,7 @@ export default function ChatPanel() {
                 onUndoAll={handleUndoAll}
                 onKeepAll={handleKeepAll}
                 onApproveTool={approveCurrentTool}
-                onApproveToolForTask={canApprovePendingToolForTask ? approveCurrentToolForTask : undefined}
+                onApproveToolForTask={approveCurrentToolForTask}
                 onRejectTool={rejectCurrentTool}
                 onQueueSendNow={(id) => {
                   useMessageQueueStore.getState().promote(id)

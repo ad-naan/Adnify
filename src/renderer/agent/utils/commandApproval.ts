@@ -2,7 +2,7 @@ import type { TerminalCommandRule } from '@shared/config/types'
 import { assessShellCommand, splitShellCommandSegments } from '@shared/security/executionPolicy'
 import { isCommandEligibleForPersistentApproval, matchesTerminalCommandRule } from '@shared/security/commandApprovalRule'
 
-export { matchesTerminalCommandRule, validateTerminalCommandRuleProposal } from '@shared/security/commandApprovalRule'
+export { deriveTerminalCommandRule, matchesTerminalCommandRule, validateTerminalCommandRuleProposal } from '@shared/security/commandApprovalRule'
 
 export function isTerminalCommandAutoApproved(
   command: unknown,

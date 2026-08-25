@@ -1197,13 +1197,12 @@ class TerminalManagerClass {
 
   pasteToTerminal(id: string, data: string) {
     const terminal = this.xtermInstances.get(id)?.terminal;
-    if (!terminal) {
-      api.terminal.write(id, data);
-      return;
-    }
+    if (!data) return;
 
-    terminal.paste(data);
-    terminal.focus();
+    // Match the working keyboard shortcut: send clipboard text directly to the
+    // PTY. xterm.paste() is not guaranteed to emit onData in every Electron build.
+    api.terminal.write(id, data);
+    terminal?.focus();
   }
 
   /** Start a long-running Agent command in the existing interactive shell. */

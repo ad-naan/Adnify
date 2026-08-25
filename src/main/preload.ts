@@ -2,7 +2,7 @@
  * 安全的 Preload Script
  */
 
-import { clipboard, contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import type {
   SessionCatalogRecord,
   SessionPatch,
@@ -568,11 +568,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('app:open-files', handler)
     return () => ipcRenderer.removeListener('app:open-files', handler)
   },
-  clipboardReadText: async () => clipboard.readText(),
-  clipboardWriteText: async (text: string) => {
-    clipboard.writeText(text)
-    return true
-  },
+  clipboardReadText: () => ipcRenderer.invoke('clipboard:readText'),
+  clipboardWriteText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),
   minimize: () => ipcRenderer.send('window:minimize'),
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),

@@ -26,6 +26,7 @@ import {
   FolderOpen,
   ListTodo,
   Layers,
+  ShieldCheck,
   Play,
   Pencil,
   Trash2,
@@ -37,9 +38,12 @@ import type { PendingChange, TodoItem, ToolCall } from '@/renderer/agent/types'
 import type { QueuedMessage } from '@/renderer/agent/types/queue'
 import { useStore } from '@store'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
+import { toast } from '@components/common/ToastProvider'
+import { deriveTerminalCommandRule, formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ToolApprovalActions } from './ToolApprovalActions'
+import { supportsTaskApproval } from './ToolCallGroup'
 
-type TabView = 'files' | 'tasks' | 'queue'
+type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
 interface UnifiedStatusTrayProps {
   pendingChanges: PendingChange[]
@@ -47,15 +51,16 @@ interface UnifiedStatusTrayProps {
   isStreaming: boolean
   isAwaitingApproval: boolean
   pendingToolCall?: ToolCall
+  pendingToolCalls?: ToolCall[]
   onStop?: () => void
   onReviewFile?: (filePath: string) => void
   onAcceptFile?: (filePath: string) => void
   onRejectFile?: (filePath: string) => void
   onUndoAll?: () => void
   onKeepAll?: () => void
-  onApproveTool?: () => void
-  onApproveToolForTask?: () => void
-  onRejectTool?: () => void
+  onApproveTool?: (toolCallId?: string) => void
+  onApproveToolForTask?: (toolCallId?: string) => void
+  onRejectTool?: (toolCallId?: string) => void
   onQueueSendNow?: (id: string) => void
 }
 
@@ -65,6 +70,7 @@ function UnifiedStatusTray({
   isStreaming,
   isAwaitingApproval,
   pendingToolCall,
+  pendingToolCalls = [],
   onStop,
   onReviewFile,
   onAcceptFile,
@@ -88,6 +94,7 @@ function UnifiedStatusTray({
   const hasChanges = pendingChanges.length > 0
   const hasTodos = todos.length > 0
   const hasQueue = queue.length > 0
+  const hasApprovals = pendingToolCalls.length > 0
   const hasStatus = isStreaming || isAwaitingApproval
   const pendingCommand = isAwaitingApproval && pendingToolCall?.name === 'run_command'
     && typeof pendingToolCall.arguments.command === 'string'
@@ -97,13 +104,14 @@ function UnifiedStatusTray({
   // 计算可用的 tabs
   const availableTabs = useMemo(() => {
     const tabs: TabView[] = []
+    if (hasApprovals) tabs.push('approvals')
     if (hasChanges || hasStatus) tabs.push('files')
     if (hasTodos) tabs.push('tasks')
     if (hasQueue) tabs.push('queue')
     return tabs
-  }, [hasChanges, hasStatus, hasTodos, hasQueue])
+  }, [hasApprovals, hasChanges, hasStatus, hasTodos, hasQueue])
 
-  const [activeTab, setActiveTab] = useState<TabView>('files')
+  const [activeTab, setActiveTab] = useState<TabView>('approvals')
   const [isExpanded, setIsExpanded] = useState(expandByDefault)
 
   // 确保 activeTab 在可用范围内
@@ -149,6 +157,16 @@ function UnifiedStatusTray({
             {/* Tab 切换按钮 */}
             {availableTabs.length > 1 && (
               <div className="flex items-center gap-0.5 px-1 py-0.5 rounded-lg bg-surface-hover/50">
+                {availableTabs.includes('approvals') && (
+                  <TabButton
+                    active={currentTab === 'approvals'}
+                    onClick={() => setActiveTab('approvals')}
+                    title={language === 'zh' ? '待审批' : 'Approvals'}
+                    badge={pendingToolCalls.length}
+                  >
+                    <ShieldCheck className="w-3 h-3" />
+                  </TabButton>
+                )}
                 {availableTabs.includes('files') && (
                   <TabButton
                     active={currentTab === 'files'}
@@ -185,6 +203,7 @@ function UnifiedStatusTray({
             {/* 单 tab 时显示标签文字 */}
             {availableTabs.length === 1 && (
               <span className="text-[11px] font-medium text-text-muted/70">
+                {currentTab === 'approvals' && (language === 'zh' ? `${pendingToolCalls.length} 项待审批` : `${pendingToolCalls.length} approvals`)}
                 {currentTab === 'files' && `${pendingChanges.length} file${pendingChanges.length > 1 ? 's' : ''} changed`}
                 {currentTab === 'tasks' && `${todos.filter(t => t.status === 'completed').length}/${todos.length} Tasks`}
                 {currentTab === 'queue' && `${queue.length} ${language === 'zh' ? '条待发送' : 'queued'}`}
@@ -210,9 +229,9 @@ function UnifiedStatusTray({
               <ToolApprovalActions
                 language={language}
                 compact
-                onApprove={onApproveTool}
-                onApproveForTask={onApproveToolForTask}
-                onReject={onRejectTool}
+                onApprove={() => onApproveTool?.(pendingToolCall?.id)}
+                onApproveForTask={pendingToolCall && supportsTaskApproval(pendingToolCall) ? () => onApproveToolForTask?.(pendingToolCall.id) : undefined}
+                onReject={() => onRejectTool?.(pendingToolCall?.id)}
                 onStop={onStop}
               />
             )}
@@ -292,6 +311,17 @@ function UnifiedStatusTray({
                 />
               )}
 
+              {currentTab === 'approvals' && hasApprovals && (
+                <ApprovalQueueContent
+                  toolCalls={pendingToolCalls}
+                  currentToolCallId={pendingToolCall?.id}
+                  language={language}
+                  onApprove={onApproveTool}
+                  onApproveForTask={onApproveToolForTask}
+                  onReject={onRejectTool}
+                />
+              )}
+
               {currentTab === 'tasks' && hasTodos && (
                 <TasksContent todos={todos} />
               )}
@@ -317,6 +347,117 @@ function UnifiedStatusTray({
 export default memo(UnifiedStatusTray)
 
 // ===== Sub-components =====
+
+function getApprovalSummary(toolCall: ToolCall): string {
+  if (toolCall.name === 'run_command' && typeof toolCall.arguments.command === 'string') {
+    return toolCall.arguments.command
+  }
+  const path = toolCall.arguments.path || toolCall.arguments.relative_path
+  if (typeof path === 'string') return path
+  return toolCall.name
+}
+
+function ApprovalQueueContent({
+  toolCalls,
+  currentToolCallId,
+  language,
+  onApprove,
+  onApproveForTask,
+  onReject,
+}: {
+  toolCalls: ToolCall[]
+  currentToolCallId?: string
+  language: string
+  onApprove?: (toolCallId?: string) => void
+  onApproveForTask?: (toolCallId?: string) => void
+  onReject?: (toolCallId?: string) => void
+}) {
+  const [decidedToolIds, setDecidedToolIds] = useState<Set<string>>(() => new Set())
+  const visibleToolCalls = toolCalls.filter(toolCall => !decidedToolIds.has(toolCall.id))
+  const decideOnce = useCallback((toolCallId: string, decide?: (toolCallId?: string) => void) => {
+    setDecidedToolIds(current => new Set(current).add(toolCallId))
+    decide?.(toolCallId)
+  }, [])
+
+  const approveAlways = useCallback(async (toolCall: ToolCall) => {
+    const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
+    const rule = toolCall.name === 'run_command' && !toolCall.arguments.server_name
+      ? deriveTerminalCommandRule(command)
+      : null
+    if (!rule) return
+
+    const store = useStore.getState()
+    const current = store.autoApprove.terminalCommandRules || []
+    const key = terminalCommandRuleKey(rule)
+    if (!current.some(item => terminalCommandRuleKey(item) === key)) {
+      store.set('autoApprove', {
+        ...store.autoApprove,
+        terminalCommandRules: [...current, rule],
+      })
+      await useStore.getState().save()
+    }
+    toast.success(
+      language === 'zh' ? '已始终允许相似命令' : 'Similar commands are now always allowed',
+      `${formatTerminalCommandRule(rule)} *`,
+    )
+    decideOnce(toolCall.id, onApprove)
+  }, [decideOnce, language, onApprove])
+
+  return (
+    <div className="max-h-[220px] space-y-1 overflow-y-auto px-2 py-2 custom-scrollbar">
+      {visibleToolCalls.map((toolCall, index) => {
+        const isCurrent = toolCall.id === currentToolCallId
+        const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
+        const persistentRule = toolCall.name === 'run_command' && !toolCall.arguments.server_name
+          ? deriveTerminalCommandRule(command)
+          : null
+        return (
+          <div
+            key={toolCall.id}
+            className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors ${isCurrent
+              ? 'border-amber-400/30 bg-amber-400/[0.06]'
+              : 'border-border/40 bg-background/25'
+            }`}
+          >
+            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[9px] font-semibold ${isCurrent
+              ? 'bg-amber-400/15 text-amber-400'
+              : 'bg-text-primary/5 text-text-muted'
+            }`}>
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-medium text-text-primary">{toolCall.name}</span>
+                {isCurrent && <span className="text-[9px] text-amber-400">{language === 'zh' ? '当前' : 'Current'}</span>}
+              </div>
+              <code className="block truncate font-mono text-[10px] text-text-muted" title={getApprovalSummary(toolCall)}>
+                {getApprovalSummary(toolCall)}
+              </code>
+            </div>
+            {persistentRule && (
+              <button
+                type="button"
+                onClick={() => void approveAlways(toolCall)}
+                className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+                title={`${language === 'zh' ? '始终允许相似命令' : 'Always allow similar commands'}: ${formatTerminalCommandRule(persistentRule)} *`}
+              >
+                <ShieldCheck className="h-3 w-3" />
+                <span>{language === 'zh' ? '始终' : 'Always'}</span>
+              </button>
+            )}
+            <ToolApprovalActions
+              language={language}
+              compact
+              onApprove={() => decideOnce(toolCall.id, onApprove)}
+              onApproveForTask={supportsTaskApproval(toolCall) ? () => decideOnce(toolCall.id, onApproveForTask) : undefined}
+              onReject={() => decideOnce(toolCall.id, onReject)}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function TabButton({
   active,

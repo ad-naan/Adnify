@@ -5,7 +5,7 @@ import { toast } from '@components/common/ToastProvider'
 import { type Language } from '@renderer/i18n'
 import { api } from '@renderer/services/electronAPI'
 import type { AutoApproveSettings, SecuritySettings as SecuritySettingsState } from '@shared/config/types'
-import { formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
+import { formatTerminalCommandRule, legacyTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ProgressiveReveal } from '../ProgressiveReveal'
 
 interface SecuritySettingsProps {
@@ -25,6 +25,7 @@ export function SecuritySettings({
 }: SecuritySettingsProps) {
     const [newShellCmd, setNewShellCmd] = useState('')
     const [newGitCmd, setNewGitCmd] = useState('')
+    const [newCommandScope, setNewCommandScope] = useState('')
     const t = (zh: string, en: string) => language === 'zh' ? zh : en
 
     const updateSecuritySettings = (updates: Partial<SecuritySettingsState>) => {
@@ -43,6 +44,23 @@ export function SecuritySettings({
         if (!cmd || securitySettings.allowedGitSubcommands.includes(cmd)) return
         updateSecuritySettings({ allowedGitSubcommands: [...securitySettings.allowedGitSubcommands, cmd] })
         setNewGitCmd('')
+    }
+
+    const handleAddCommandScope = () => {
+        const rule = legacyTerminalCommandRule(newCommandScope)
+        if (!rule) {
+            toast.error(t('请输入“程序 + 固定参数 + *”，例如 git status *', 'Enter "executable + fixed arguments + *", for example git status *'))
+            return
+        }
+        const key = terminalCommandRuleKey(rule)
+        const rules = autoApprove.terminalCommandRules || []
+        if (!rules.some(item => terminalCommandRuleKey(item) === key)) {
+            setAutoApprove(current => ({ ...current, terminalCommandRules: [...(current.terminalCommandRules || []), rule] }))
+        }
+        if (!securitySettings.allowedShellCommands.includes(rule.executable)) {
+            updateSecuritySettings({ allowedShellCommands: [...securitySettings.allowedShellCommands, rule.executable] })
+        }
+        setNewCommandScope('')
     }
 
     const handleResetTrustedLists = async () => {
@@ -110,18 +128,18 @@ export function SecuritySettings({
                 </div>
                 <div className="flex items-start gap-2 text-[11px] leading-5 text-text-muted">
                     <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                    <span>{t('同一任务内，完全相同的未知命令或外部路径审批可复用 2 分钟；危险命令、删除和远程修改不复用。', 'Within one task, identical unknown commands or external-path approvals may be reused for 2 minutes. Dangerous commands, deletes, and remote mutations are never reused.')}</span>
+                    <span>{t('“允许一次”只执行当前操作；可在工具 Dock 中选择本任务复用完全相同的操作，或长期允许经过本地校验的相似命令。危险命令、删除和远程修改不复用。', '“Allow once” runs only the current action. The Tool Dock can reuse an identical action for the task or permanently allow locally validated similar commands. Dangerous commands, deletes, and remote mutations are never reused.')}</span>
                 </div>
             </section>
 
             <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4 text-accent" />
-                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{t('已批准的命令范围', 'Approved command scopes')}</h4>
+                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{t('自动化命令规则（跨任务）', 'Automation command rules (cross-task)')}</h4>
                 </div>
                 <div className="flex items-start gap-2 rounded-xl border border-accent/15 bg-accent/[0.05] p-3 text-xs leading-5 text-text-secondary">
                     <Bot className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    <p>{t('Agent 会随低风险命令提交结构化范围建议。只有你在工具 Dock 确认后才会保存；这里不接受正则或通配符，程序与固定参数前缀由本地安全层再次校验。', 'The agent may attach a structured scope proposal to a low-risk command. It is saved only after you confirm it in the Tool Dock. Regex and wildcards are not accepted; the executable and literal argument prefix are validated locally.')}</p>
+                    <p>{t('这里对应旧版“始终允许的终端规则”。规则按“程序 + 固定参数前缀”匹配；末尾 * 表示后续参数可变化，危险参数仍由本地安全层拦截。符合条件的审批项也可在 Dock 中直接点“始终”。', 'This replaces the legacy “always allow terminal rules”. Rules match an executable plus a fixed argument prefix; a trailing * allows later arguments to vary. Risky arguments remain blocked locally. Eligible Dock approvals also expose an Always action.')}</p>
                 </div>
                 {autoApprove.terminalCommandRules.length > 0 ? (
                     <ProgressiveReveal language={language} collapsedHeight={150} expandLabel={t('查看全部命令范围', 'Show all command scopes')}>
@@ -138,6 +156,7 @@ export function SecuritySettings({
                     </div>
                     </ProgressiveReveal>
                 ) : <p className="text-[11px] text-text-muted">{t('暂无已批准范围。需要审批的 Agent 命令会进入工具 Dock。', 'No approved scopes yet. Agent commands requiring approval appear in the Tool Dock.')}</p>}
+                <AddRow value={newCommandScope} setValue={setNewCommandScope} onAdd={handleAddCommandScope} placeholder={t('例如：git status *', 'For example: git status *')} label={t('添加跨任务自动化规则', 'Add cross-task automation rule')} />
             </section>
 
             <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">

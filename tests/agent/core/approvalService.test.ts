@@ -57,4 +57,10 @@ describe('approvalService request targeting', () => {
 
     expect(await pending).toBe('approve_for_task')
   })
+
+  it('queues decisions for later tool calls by toolCallId', async () => {
+    approvalService.approve('req-queue', 'tool-later')
+
+    await expect(approvalService.waitForApproval('req-queue', 'tool-later')).resolves.toBe('approve')
+  })
 })

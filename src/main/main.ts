@@ -6,7 +6,7 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, ipcMain, net } from 'electron'
+import { app, BrowserWindow, Menu, clipboard, ipcMain, net } from 'electron'
 // 补充 Language 类型（与渲染端对齐）
 export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
@@ -43,6 +43,12 @@ const WINDOW_CONFIG = {
   EMPTY_MIN_HEIGHT: 400,
   BG_COLOR: '#09090b',
 } as const
+
+ipcMain.handle('clipboard:readText', () => clipboard.readText())
+ipcMain.handle('clipboard:writeText', (_event, text: string) => {
+  clipboard.writeText(text)
+  return true
+})
 
 // ==========================================
 // Store（延迟初始化）

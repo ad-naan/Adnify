@@ -31,7 +31,10 @@ export function ToolApprovalActions({
   // 审批条是卡片里的操作区，不是页面级主按钮：外层已有卡片边框和背景，
   // 这里再用大按钮会和内容抢视觉重量。次要动作（拒绝/停止）走无边框浅色文字，
   // 只有「允许」保留主色实心，一眼就能锁定主操作。
-  const buttonHeight = compact ? 'h-6' : 'h-[26px]'
+  const buttonHeight = compact ? 'h-6' : 'h-7'
+  const secondaryButtonClass = compact
+    ? 'w-6 px-0'
+    : 'gap-1 px-2'
 
   useLayoutEffect(() => {
     if (!menuOpen || !triggerRef.current || !menuRef.current) return
@@ -74,18 +77,19 @@ export function ToolApprovalActions({
 
   return (
     <div
-      className="flex min-w-0 flex-wrap items-center justify-end gap-1"
+      className="flex min-w-0 flex-nowrap items-center justify-end gap-0.5"
       onClick={event => event.stopPropagation()}
     >
       {onReject && (
         <button
           type="button"
           onClick={onReject}
+          aria-label={zh ? '拒绝当前操作' : 'Reject current action'}
           title={zh ? '仅拒绝当前操作，Agent 会收到拒绝结果并重新规划' : 'Reject only this action and let the agent re-plan'}
-          className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded px-1.5 text-[11px] text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/50`}
+          className={`${buttonHeight} ${secondaryButtonClass} inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-[11px] text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-400/50`}
         >
           <X className="h-3 w-3 shrink-0" />
-          <span>{zh ? '拒绝' : 'Reject'}</span>
+          <span className={compact ? 'sr-only' : undefined}>{zh ? '拒绝' : 'Reject'}</span>
         </button>
       )}
 
@@ -93,27 +97,41 @@ export function ToolApprovalActions({
         <button
           type="button"
           onClick={onStop}
+          aria-label={zh ? '停止当前任务' : 'Stop current task'}
           title={zh ? '停止当前任务，保留对话和已经完成的结果' : 'Stop this task but keep the conversation and completed results'}
-          className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 rounded px-1.5 text-[11px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border`}
+          className={`${buttonHeight} ${secondaryButtonClass} inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-[11px] text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border`}
         >
           <Square className="h-2.5 w-2.5 shrink-0 fill-current" />
-          <span>{zh ? '停止' : 'Stop'}</span>
+          <span className={compact ? 'sr-only' : undefined}>{zh ? '停止' : 'Stop'}</span>
+        </button>
+      )}
+
+      {onApproveAlways && (
+        <button
+          type="button"
+          onClick={onApproveAlways}
+          aria-label={zh ? '始终允许相似命令' : 'Always allow similar commands'}
+          title={zh ? '保存程序和固定参数前缀，后续相似命令自动运行' : 'Save the executable and fixed argument prefix for future commands'}
+          className={`${buttonHeight} ${compact ? 'w-6 px-0' : 'gap-1 px-2'} inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-[11px] font-medium text-accent transition-colors hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
+        >
+          <ShieldCheck className="h-3 w-3 shrink-0" />
+          <span className={compact ? 'sr-only' : undefined}>{zh ? '始终' : 'Always'}</span>
         </button>
       )}
 
       {onApprove && (
-        <div className="ml-0.5 flex shrink-0 items-stretch overflow-hidden rounded border border-accent/25 bg-accent/10 text-accent">
+        <div className="ml-1 flex shrink-0 items-stretch overflow-hidden rounded-md border border-accent/35 bg-accent/[0.08] text-accent shadow-[0_1px_2px_rgba(var(--accent-rgb),0.08)]">
           <button
             type="button"
             onClick={onApprove}
-            title={zh ? '允许当前操作；符合复用条件的相同操作两分钟内不再询问' : 'Allow this action; eligible identical actions are reused for two minutes'}
-            className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 px-2 text-[11px] font-medium transition-colors hover:bg-accent/20 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
+            title={zh ? '仅允许当前这一次操作' : 'Allow only this action once'}
+            className={`${buttonHeight} inline-flex cursor-pointer items-center justify-center gap-1 px-2.5 text-[11px] font-semibold transition-colors hover:bg-accent/15 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
           >
             <Check className="h-3 w-3 shrink-0" />
             <span>{zh ? '允许' : 'Allow'}</span>
           </button>
 
-          {(onApproveForTask || onApproveAlways) && (
+          {onApproveForTask && (
             <>
               <button
                 ref={triggerRef}
@@ -126,7 +144,7 @@ export function ToolApprovalActions({
                   if (!value) setMenuPosition(position => ({ ...position, ready: false }))
                   return !value
                 })}
-                className={`${buttonHeight} flex w-5 cursor-pointer items-center justify-center border-l border-accent/20 transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
+                className={`${buttonHeight} flex ${compact ? 'w-5' : 'w-6'} cursor-pointer items-center justify-center border-l border-accent/25 transition-colors hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50`}
               >
                 <ChevronDown className={`h-3 w-3 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -142,8 +160,11 @@ export function ToolApprovalActions({
                     backgroundColor: 'rgb(var(--surface))',
                     boxShadow: '0 14px 34px rgb(0 0 0 / 0.20), 0 3px 10px rgb(0 0 0 / 0.10)',
                   }}
-                  className="fixed z-[1000] w-64 isolate overflow-hidden rounded-lg border border-border p-1.5 text-text-primary"
+                  className="fixed z-[1000] w-[min(17rem,calc(100vw-1rem))] isolate overflow-hidden rounded-xl border border-border p-1.5 text-text-primary"
                 >
+                <div className="px-2.5 pb-1.5 pt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted/70">
+                  {zh ? '选择授权范围' : 'Approval scope'}
+                </div>
                 {onApproveForTask && (
                   <button
                     type="button"
@@ -153,22 +174,8 @@ export function ToolApprovalActions({
                   >
                     <CheckCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
                     <span className="min-w-0">
-                      <span className="block text-[11px] font-semibold">{zh ? '本任务允许相同操作' : 'Allow identical actions for task'}</span>
-                      <span className="mt-0.5 block text-[10px] leading-4 text-text-muted">{zh ? '仅限当前任务和完全相同的命令或路径' : 'Only this task and the exact same command or path'}</span>
-                    </span>
-                  </button>
-                )}
-                {onApproveAlways && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { closeMenu(); onApproveAlways() }}
-                    className="flex w-full cursor-pointer items-start gap-2 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-                  >
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    <span className="min-w-0">
-                      <span className="block text-[11px] font-semibold">{zh ? '保存 AI 建议的命令范围' : 'Save AI-proposed command scope'}</span>
-                      <span className="mt-0.5 block text-[10px] leading-4 text-text-muted">{zh ? '确认结构化范围并保存；危险参数仍会审批' : 'Review the structured scope; risky arguments are still checked'}</span>
+                      <span className="block text-[11px] font-semibold">{zh ? '本任务允许此操作' : 'Allow this action for task'}</span>
+                      <span className="mt-0.5 block text-[10px] leading-4 text-text-muted">{zh ? '当前任务内复用完全相同的命令、目录或路径' : 'Reuse the exact command, directory, or path during this task'}</span>
                     </span>
                   </button>
                 )}

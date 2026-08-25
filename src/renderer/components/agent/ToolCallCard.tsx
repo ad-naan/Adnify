@@ -18,7 +18,7 @@ import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { themeManager } from '../../config/themeConfig'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { resolveWriteFileStatusText } from '@renderer/agent/utils/fileWriteDisplay'
-import { validateTerminalCommandRuleProposal } from '@renderer/agent/utils/commandApproval'
+import { deriveTerminalCommandRule, validateTerminalCommandRuleProposal } from '@renderer/agent/utils/commandApproval'
 import { formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { assessShellCommand } from '@shared/security/executionPolicy'
@@ -1077,8 +1077,9 @@ const ToolCallCard = memo(function ToolCallCard({
     const commandText = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command : ''
     const shellDecision = effectiveName === 'run_command' ? assessShellCommand(commandText, []) : null
     const canConfigureCommandRule = shellDecision?.kind !== 'deny' && shellDecision?.risk !== 'dangerous'
-    const approvalRule = effectiveName === 'run_command'
+    const approvalRule = effectiveName === 'run_command' && !toolCall.arguments.server_name
         ? validateTerminalCommandRuleProposal(commandText, toolCall.arguments.approval_scope)
+            || deriveTerminalCommandRule(commandText)
         : null
     const [showApproveRule, setShowApproveRule] = useState(false)
     const handleApproveAlways = async () => {
@@ -1094,7 +1095,7 @@ const ToolCallCard = memo(function ToolCallCard({
             await useStore.getState().save()
         }
         toast.success(
-            language === 'zh' ? '已保存相似命令范围' : 'Similar-command scope saved',
+            language === 'zh' ? '已允许相似命令' : 'Similar commands allowed',
             formatTerminalCommandRule(approvalRule),
         )
         onApprove?.()
@@ -1218,7 +1219,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     {showApproveRule && approvalRule && (
                         <div className="mb-2.5 rounded-lg border border-accent/25 bg-background/75 p-2.5">
                             <div className="mb-1 text-[11px] font-medium text-text-primary">
-                                {language === 'zh' ? '保存 AI 建议的命令范围' : 'Save AI-proposed command scope'}
+                                {language === 'zh' ? '始终允许相似命令' : 'Always allow similar commands'}
                             </div>
                             <div className="flex items-center gap-2 rounded-md border border-border/70 bg-surface/60 p-2">
                                 <div className="min-w-0 flex-1">
@@ -1231,8 +1232,8 @@ const ToolCallCard = memo(function ToolCallCard({
                             </div>
                             <p className="mt-1.5 text-[10px] leading-4 text-text-muted">
                                 {language === 'zh'
-                                    ? '仅固定程序和参数前缀；AI 建议已经过本地校验，危险参数仍会再次审批。'
-                                    : 'Only the executable and literal argument prefix are stored. Risky arguments still require approval.'}
+                                    ? '仅保存程序和固定参数前缀；范围由本地安全层校验，危险参数仍会再次审批。'
+                                    : 'Only the executable and literal argument prefix are stored. The local security layer still checks risky arguments.'}
                             </p>
                         </div>
                     )}

@@ -433,6 +433,7 @@ export const createThreadSlice: StateCreator<
                     ...thread.streamState,
                     phase,
                     currentToolCall: undefined,
+                    pendingToolCalls: undefined,
                     error: undefined,
                     statusText: undefined,
                     requestId: undefined,

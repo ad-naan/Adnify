@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  deriveTerminalCommandRule,
   isTerminalCommandAutoApproved,
   isTerminalCommandEligibleForAutoApproval,
   matchesTerminalCommandRule,
@@ -51,5 +52,18 @@ describe('terminal command approval', () => {
     expect(validateTerminalCommandRuleProposal('git reset --hard HEAD', {
       executable: 'git', argument_prefix: ['reset'], description: 'Dangerous',
     })).toBeNull()
+  })
+
+  it('derives a conservative similar-command scope without an AI proposal', () => {
+    expect(deriveTerminalCommandRule('git status --short')).toEqual(rule('git', 'status'))
+    expect(deriveTerminalCommandRule('pnpm run test --watch')).toEqual(rule('pnpm', 'run', 'test'))
+    expect(deriveTerminalCommandRule('node --version')).toEqual(rule('node', '--version'))
+  })
+
+  it('does not derive scopes for compound, path-bound, destructive, or dynamic launcher commands', () => {
+    expect(deriveTerminalCommandRule('git status | Out-File result.txt')).toBeNull()
+    expect(deriveTerminalCommandRule('node scripts/build.js')).toBeNull()
+    expect(deriveTerminalCommandRule('rm -rf build')).toBeNull()
+    expect(deriveTerminalCommandRule('powershell -Command Get-Date')).toBeNull()
   })
 })

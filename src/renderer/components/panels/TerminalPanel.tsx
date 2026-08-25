@@ -597,15 +597,16 @@ const TerminalPanel = memo(function TerminalPanel() {
                         <button
                             className="flex items-center justify-between w-full px-3 py-1.5 hover:bg-surface-hover"
                             onClick={async () => {
+                                const targetTermId = contextMenu.termId
+                                setContextMenu(prev => ({ ...prev, visible: false }))
                                 try {
                                     const text = await readClipboardText()
-                                    if (text && contextMenu.termId) {
-                                        terminalManager.pasteToTerminal(contextMenu.termId, text)
+                                    if (text && targetTermId) {
+                                        terminalManager.pasteToTerminal(targetTermId, text)
                                     }
-                                } catch {
-                                    // ignore
+                                } catch (error) {
+                                    console.error('[Terminal] Failed to paste clipboard text', error)
                                 }
-                                setContextMenu(prev => ({ ...prev, visible: false }))
                             }}
                         >
                             <span>{t('ctxPaste', language)}</span>

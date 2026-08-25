@@ -164,7 +164,7 @@ describe('TerminalManager shell integration', () => {
 
       terminalManager.pasteToTerminal(termId, 'copied elsewhere')
 
-      expect(xterm.paste).toHaveBeenCalledWith('copied elsewhere')
+      expect(writeMock).toHaveBeenCalledWith(termId, 'copied elsewhere')
       expect(xterm.focus).toHaveBeenCalledOnce()
     } finally {
       terminalManager.cleanup()

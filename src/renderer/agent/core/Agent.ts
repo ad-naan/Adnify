@@ -337,7 +337,7 @@ export class AgentClass {
   /**
    * 批准当前待审批的工具
    */
-  approve(requestId?: string): void {
+  approve(requestId?: string, toolCallId?: string): void {
     const state = useAgentStore.getState()
     const currentThread = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
     const effectiveRequestId = requestId
@@ -345,12 +345,12 @@ export class AgentClass {
       || currentThread?.executionMeta?.requestId
 
     if (effectiveRequestId) {
-      approvalService.approve(effectiveRequestId)
+      approvalService.approve(effectiveRequestId, toolCallId)
     }
   }
 
   /** 在当前任务内批准完全相同的操作。 */
-  approveForTask(requestId?: string): void {
+  approveForTask(requestId?: string, toolCallId?: string): void {
     const state = useAgentStore.getState()
     const currentThread = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
     const effectiveRequestId = requestId
@@ -358,14 +358,14 @@ export class AgentClass {
       || currentThread?.executionMeta?.requestId
 
     if (effectiveRequestId) {
-      approvalService.approveForTask(effectiveRequestId)
+      approvalService.approveForTask(effectiveRequestId, toolCallId)
     }
   }
 
   /**
    * 拒绝当前待审批的工具
    */
-  reject(requestId?: string): void {
+  reject(requestId?: string, toolCallId?: string): void {
     const state = useAgentStore.getState()
     const currentThread = state.currentThreadId ? state.threads[state.currentThreadId] : undefined
     const effectiveRequestId = requestId
@@ -373,7 +373,7 @@ export class AgentClass {
       || currentThread?.executionMeta?.requestId
 
     if (effectiveRequestId) {
-      approvalService.reject(effectiveRequestId)
+      approvalService.reject(effectiveRequestId, toolCallId)
     }
   }
 

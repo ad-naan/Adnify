@@ -59,7 +59,7 @@ export interface ProviderConfig {
 }
 
 export interface AutoApproveSettings {
-  /** Structured, user-approved command scopes proposed by the agent. */
+  /** Structured command scopes explicitly approved by the user. */
   terminalCommandRules: TerminalCommandRule[]
 }
 

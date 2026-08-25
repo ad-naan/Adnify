@@ -54,6 +54,8 @@ export interface ThreadExecutionMeta {
 export interface StreamState {
   phase: StreamPhase
   currentToolCall?: ToolCall
+  /** Approval items from the current model turn that have not been decided yet. */
+  pendingToolCalls?: ToolCall[]
   error?: string
   statusText?: string
   requestId?: string

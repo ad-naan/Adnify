@@ -140,16 +140,16 @@ export function useAgentCommands() {
     return streamState.requestId
   }, [streamState.phase, streamState.requestId])
 
-  const approveCurrentTool = useCallback(() => {
-    Agent.approve(pendingApprovalRequestId)
+  const approveCurrentTool = useCallback((toolCallId?: string) => {
+    Agent.approve(pendingApprovalRequestId, toolCallId)
   }, [pendingApprovalRequestId])
 
-  const approveCurrentToolForTask = useCallback(() => {
-    Agent.approveForTask(pendingApprovalRequestId)
+  const approveCurrentToolForTask = useCallback((toolCallId?: string) => {
+    Agent.approveForTask(pendingApprovalRequestId, toolCallId)
   }, [pendingApprovalRequestId])
 
-  const rejectCurrentTool = useCallback(() => {
-    Agent.reject(pendingApprovalRequestId)
+  const rejectCurrentTool = useCallback((toolCallId?: string) => {
+    Agent.reject(pendingApprovalRequestId, toolCallId)
   }, [pendingApprovalRequestId])
 
   return {
@@ -231,6 +231,7 @@ export function useAgentViewState() {
 
     return undefined
   }, [streamState])
+  const pendingToolCalls = streamState.pendingToolCalls || (pendingToolCall ? [pendingToolCall] : [])
 
   return {
     messages,
@@ -240,6 +241,7 @@ export function useAgentViewState() {
     isStreaming,
     isAwaitingApproval,
     pendingToolCall,
+    pendingToolCalls,
     pendingChanges,
     messageCheckpoints,
     currentThreadId,

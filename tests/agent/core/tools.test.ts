@@ -170,7 +170,7 @@ describe('Tools Core - Parallel Execution', () => {
       expect(toolManager.execute).not.toHaveBeenCalled()
     })
 
-    it('returns a rejection to the model and skips later approval calls in the batch', async () => {
+    it('keeps independent later approvals actionable after a rejection', async () => {
       const requestId = 'request-rejects-command-batch'
       const execution = executeTools(
         [
@@ -181,14 +181,17 @@ describe('Tools Core - Parallel Execution', () => {
         getStore(),
       )
 
-      setTimeout(() => approvalService.reject(requestId), 0)
+      setTimeout(() => approvalService.reject(requestId, 'rejected-command'), 0)
+      await vi.waitFor(() => {
+        expect(useAgentStore.getState().threads[threadId].streamState.currentToolCall?.id).toBe('skipped-command')
+      })
+      approvalService.approve(requestId, 'skipped-command')
       const outcome = await execution
 
       expect(outcome.hadRejectedTool).toBe(true)
-      expect(outcome.results.map(result => result.result.status)).toEqual(['rejected', 'rejected'])
+      expect(outcome.results.map(result => result.result.status)).toEqual(['rejected', 'success'])
       expect(outcome.results[0].result.content).toContain('Do not retry')
-      expect(outcome.results[1].result.content).toContain('another approval in this batch')
-      expect(toolManager.execute).not.toHaveBeenCalled()
+      expect(toolManager.execute).toHaveBeenCalledTimes(1)
 
       const retry = await executeTools(
         [{ id: 'semantic-retry', name: 'run_command', arguments: { command: 'adnify-reject-probe --one' }, status: 'pending' }],
@@ -196,7 +199,7 @@ describe('Tools Core - Parallel Execution', () => {
         getStore(),
       )
       expect(retry.results[0].result.content).toContain('Rejected earlier in this turn')
-      expect(toolManager.execute).not.toHaveBeenCalled()
+      expect(toolManager.execute).toHaveBeenCalledTimes(1)
     })
 
     it('reuses an exact approval for the rest of the current task when requested', async () => {
@@ -217,6 +220,33 @@ describe('Tools Core - Parallel Execution', () => {
       expect(outcome.hadRejectedTool).toBe(false)
       expect(outcome.results).toHaveLength(2)
       expect(toolManager.execute).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not reuse a normal one-time approval', async () => {
+      const requestId = 'request-one-time-command'
+      const command = 'adnify-one-time-probe --version'
+      const firstExecution = executeTools(
+        [{ id: 'one-time-command-one', name: 'run_command', arguments: { command }, status: 'pending' }],
+        { ...context, requestId },
+        getStore(),
+      )
+
+      setTimeout(() => approvalService.approve(requestId), 0)
+      await firstExecution
+
+      const secondExecution = executeTools(
+        [{ id: 'one-time-command-two', name: 'run_command', arguments: { command }, status: 'pending' }],
+        { ...context, requestId },
+        getStore(),
+      )
+      await vi.waitFor(() => {
+        expect(useAgentStore.getState().threads[threadId].streamState.currentToolCall?.id).toBe('one-time-command-two')
+      })
+      approvalService.reject(requestId)
+      const secondOutcome = await secondExecution
+
+      expect(secondOutcome.results[0].result.status).toBe('rejected')
+      expect(toolManager.execute).toHaveBeenCalledTimes(1)
     })
 
     it('should execute multiple fast tools in parallel efficiently', async () => {

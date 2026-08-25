@@ -8,7 +8,7 @@ import {
   toolRegistry,
   initializeToolProviders,
 } from '@renderer/agent/tools'
-import { TOOL_SCHEMAS, TOOL_CONFIGS } from '@/shared/config/tools'
+import { generateToolDefinition, TOOL_SCHEMAS, TOOL_CONFIGS } from '@/shared/config/tools'
 import { getToolsForContext } from '@/shared/config/toolGroups'
 
 // Mock dependencies that tools need
@@ -71,6 +71,13 @@ describe('Tool Definitions', () => {
     it('should have run_command in configs', () => {
       expect(TOOL_CONFIGS.run_command).toBeDefined()
       expect(TOOL_CONFIGS.run_command.name).toBe('run_command')
+    })
+
+    it('marks nested approval scope fields as required for tool providers', () => {
+      const definition = generateToolDefinition(TOOL_CONFIGS.run_command)
+      const approvalScope = definition.parameters.properties.approval_scope
+
+      expect(approvalScope.required).toEqual(['executable', 'argument_prefix', 'description'])
     })
 
     it('should expose semantic symbol tools with valid schemas', () => {

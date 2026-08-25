@@ -170,10 +170,8 @@ const REMOTE_ONLY_TOOL_NAMES = new Set([
   'download_from_remote',
 ])
 
-const reusableApprovals = new Map<string, { approvedAt: number; forTask: boolean }>()
 const taskApprovals = new Set<string>()
 const rejectedApprovalScopes = new Set<string>()
-const REUSABLE_APPROVAL_TTL_MS = 2 * 60_000
 
 function toolApprovalScope(toolCall: ToolCall, context: ToolExecutionContext): string {
   if (toolCall.name === 'run_command' && !toolCall.arguments.server_name) {
@@ -210,38 +208,9 @@ function taskApprovalKey(toolCall: ToolCall, context: ToolExecutionContext): str
   return typeof toolCall.arguments?.path === 'string' || toolCall.name === 'run_command' ? key : null
 }
 
-function reusableApprovalKey(toolCall: ToolCall, context: ToolExecutionContext): string | null {
-  if (!context.requestId) return null
-
-  if (toolCall.name === 'run_command' && !toolCall.arguments.server_name) {
-    const command = typeof toolCall.arguments.command === 'string' ? toolCall.arguments.command.trim() : ''
-    if (!command || assessShellCommand(command, []).risk !== 'elevated') return null
-    const cwd = typeof toolCall.arguments.cwd === 'string' ? toolCall.arguments.cwd : context.workspacePath || ''
-    return `${context.requestId}:command:${cwd}:${command}`
-  }
-
-  if (toolCall.name === 'delete_file_or_folder' || REMOTE_ONLY_TOOL_NAMES.has(toolCall.name)) return null
-  const pathArg = toolCall.arguments?.path
-  if (typeof pathArg !== 'string' || !context.workspacePath) return null
-  const fullPath = toFullPath(pathArg, context.workspacePath)
-  const strictWorkspaceMode = useStore.getState().securitySettings?.strictWorkspaceMode !== false
-  if (isSensitivePath(fullPath) || (strictWorkspaceMode && !isPathInWorkspace(fullPath, context.workspacePath))) {
-    return `${context.requestId}:path:${toolCall.name}:${fullPath}`
-  }
-  return null
-}
-
 function hasReusableApproval(toolCall: ToolCall, context: ToolExecutionContext): boolean {
   const taskKey = taskApprovalKey(toolCall, context)
-  if (taskKey && taskApprovals.has(taskKey)) return true
-  const key = reusableApprovalKey(toolCall, context)
-  if (!key) return false
-  const approval = reusableApprovals.get(key)
-  if (!approval || (!approval.forTask && Date.now() - approval.approvedAt > REUSABLE_APPROVAL_TTL_MS)) {
-    reusableApprovals.delete(key)
-    return false
-  }
-  return true
+  return Boolean(taskKey && taskApprovals.has(taskKey))
 }
 
 function buildApprovedExecutionContext(toolCall: ToolCall, context: ToolExecutionContext): ToolExecutionContext {
@@ -252,16 +221,6 @@ function buildApprovedExecutionContext(toolCall: ToolCall, context: ToolExecutio
     scope: toolApprovalScope(toolCall, context),
   }
   return { ...context, securityApproval: approval }
-}
-
-function rememberReusableApproval(key: string, forTask = false): void {
-  reusableApprovals.delete(key)
-  reusableApprovals.set(key, { approvedAt: Date.now(), forTask })
-  while (reusableApprovals.size > 512) {
-    const oldest = reusableApprovals.keys().next().value
-    if (typeof oldest !== 'string') break
-    reusableApprovals.delete(oldest)
-  }
 }
 
 function rememberTaskApproval(key: string): void {
@@ -889,31 +848,56 @@ export async function executeTools(
     }
   }
 
-  // 2. 逐个处理需要审批的工具
+  // Build the whole approval queue before waiting so the Dock can show every
+  // decision in this model turn. Execution remains dependency ordered.
+  const preparedApprovalArguments = new Map<string, Record<string, unknown>>()
+  const queuedApprovalCalls: ToolCall[] = []
   for (const tc of approvalRequired) {
-    if (abortSignal?.aborted) break
-
-    if (hadRejectedTool) {
-      const content = 'Skipped because another approval in this batch was rejected by the user.'
-      rejected.add(tc.id)
-      pending.delete(tc.id)
-      if (context.currentAssistantId) {
-        store.updateToolCall(context.currentAssistantId, tc.id, {
-          status: 'rejected',
-          result: content,
-          streamingState: undefined,
-        })
-      }
-      emitToolEvent({ type: 'tool:rejected', id: tc.id, ...buildToolExecutionIdentity(tc, context) })
-      results.push({ toolCall: tc, result: { content, status: 'rejected' } })
+    const rejectionKey = rejectedApprovalKey(tc, context)
+    if (hasReusableApproval(tc, context) || (rejectionKey && rejectedApprovalScopes.has(rejectionKey))) {
       continue
     }
+    const pendingArguments = await enrichToolArgumentsWithRoutingMeta(tc, context)
+    preparedApprovalArguments.set(tc.id, pendingArguments)
+    const queuedCall = { ...tc, arguments: pendingArguments, status: 'awaiting' as const }
+    queuedApprovalCalls.push(queuedCall)
+    if (context.currentAssistantId) {
+      store.finalizeTextBeforeToolCall(context.currentAssistantId)
+      store.addToolCallPart(context.currentAssistantId, {
+        id: tc.id,
+        name: tc.name,
+        arguments: pendingArguments,
+      })
+      store.updateToolCall(context.currentAssistantId, tc.id, {
+        arguments: pendingArguments,
+        status: 'awaiting',
+      })
+    }
+  }
+
+  let remainingApprovalCalls = queuedApprovalCalls
+  const removeFromApprovalQueue = (toolCallId: string): void => {
+    remainingApprovalCalls = remainingApprovalCalls.filter(call => call.id !== toolCallId)
+  }
+
+  if (remainingApprovalCalls.length > 0) {
+    store.setStreamState({
+      pendingToolCalls: remainingApprovalCalls,
+      requestId: context.requestId,
+      assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
+    })
+  }
+
+  // 2. 逐个执行需要审批的工具；用户可以在 Dock 中提前决定后续项。
+  for (const tc of approvalRequired) {
+    if (abortSignal?.aborted) break
 
     // 检查依赖是否满足（依赖的工具必须已完成且未失败/未被拒绝）
     const tcDeps = deps.get(tc.id) || new Set()
     const depsOk = Array.from(tcDeps).every(dep => completed.has(dep) && !rejected.has(dep) && !failed.has(dep))
 
     if (!depsOk) {
+      removeFromApprovalQueue(tc.id)
       const skipped = buildDependencyErrorResult(tc, 'Skipped: dependency not met')
       if (context.currentAssistantId) {
         store.updateToolCall(context.currentAssistantId, tc.id, {
@@ -938,9 +922,11 @@ export async function executeTools(
     // Re-check here so exact duplicates later in the same batch can reuse the
     // newly approved request-scoped decision instead of opening another Dock.
     if (hasReusableApproval(tc, context)) {
+      removeFromApprovalQueue(tc.id)
       store.setStreamState({
         phase: 'tool_running',
         currentToolCall: undefined,
+        pendingToolCalls: remainingApprovalCalls,
         statusText: undefined,
         requestId: context.requestId,
         assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
@@ -955,6 +941,7 @@ export async function executeTools(
 
     const rejectionKey = rejectedApprovalKey(tc, context)
     if (rejectionKey && rejectedApprovalScopes.has(rejectionKey)) {
+      removeFromApprovalQueue(tc.id)
       const content = 'Rejected earlier in this turn. Do not retry this operation without a new user instruction.'
       hadRejectedTool = true
       rejected.add(tc.id)
@@ -971,25 +958,15 @@ export async function executeTools(
       continue
     }
 
-    const pendingArguments = await enrichToolArgumentsWithRoutingMeta(tc, context)
-    if (context.currentAssistantId) {
-      store.finalizeTextBeforeToolCall(context.currentAssistantId)
-      store.addToolCallPart(context.currentAssistantId, {
-        id: tc.id,
-        name: tc.name,
-        arguments: pendingArguments,
-      })
-      store.updateToolCall(context.currentAssistantId, tc.id, {
-        arguments: pendingArguments,
-        status: 'awaiting',
-      })
-    }
+    const pendingArguments = preparedApprovalArguments.get(tc.id)
+      || await enrichToolArgumentsWithRoutingMeta(tc, context)
     // The approval card is a validated tool call, not a streaming proposal.
     // Persist it before entering tool_pending so the user can inspect the exact
     // command or file operation before deciding whether to allow it.
     store.setStreamState({
       phase: 'tool_pending',
       currentToolCall: { ...tc, arguments: pendingArguments, status: 'awaiting' },
+      pendingToolCalls: remainingApprovalCalls,
       statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
@@ -1003,7 +980,8 @@ export async function executeTools(
     })
 
     // 等待用户审批
-    const decision = await approvalService.waitForApproval(context.requestId)
+    const decision = await approvalService.waitForApproval(context.requestId, tc.id)
+    removeFromApprovalQueue(tc.id)
 
     if (decision === 'reject' || abortSignal?.aborted) {
       // 用户拒绝了这个工具
@@ -1025,6 +1003,10 @@ export async function executeTools(
         },
       })
       pending.delete(tc.id)
+      store.setStreamState({
+        currentToolCall: undefined,
+        pendingToolCalls: remainingApprovalCalls,
+      })
 
       // 剩余待审批操作会被跳过，结果统一返回给模型重新规划。
       continue
@@ -1034,14 +1016,13 @@ export async function executeTools(
     store.setStreamState({
       phase: 'tool_running',
       currentToolCall: undefined,
+      pendingToolCalls: remainingApprovalCalls,
       statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,
     })
-    const reuseKey = reusableApprovalKey(tc, context)
     const taskKey = taskApprovalKey(tc, context)
     if (decision === 'approve_for_task' && taskKey) rememberTaskApproval(taskKey)
-    else if (reuseKey) rememberReusableApproval(reuseKey)
     const result = await executeSingle(tc, buildApprovedExecutionContext(tc, context), store)
     results.push(result)
     pending.delete(tc.id)
@@ -1058,6 +1039,7 @@ export async function executeTools(
     store.setStreamState({
       phase: 'streaming',
       currentToolCall: undefined,
+      pendingToolCalls: undefined,
       statusText: undefined,
       requestId: context.requestId,
       assistantId: context.assistantId ?? context.currentAssistantId ?? undefined,

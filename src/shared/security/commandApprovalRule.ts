@@ -3,6 +3,22 @@ import { assessGitCommand, assessShellCommand, splitShellCommandSegments } from 
 
 const SAFE_TOKEN = /^[\p{L}\p{N}._:@/+\-=]+$/u
 
+const DYNAMIC_LAUNCHER_ARGUMENTS: Record<string, RegExp> = {
+  powershell: /^-(?:c|command)$/i,
+  pwsh: /^-(?:c|command)$/i,
+  cmd: /^\/(?:c|k)$/i,
+  bash: /^-c$/i,
+  sh: /^-c$/i,
+  zsh: /^-c$/i,
+  fish: /^-c$/i,
+  python: /^-c$/i,
+  python3: /^-c$/i,
+  py: /^-c$/i,
+  node: /^(?:-e|--eval)$/i,
+  deno: /^eval$/i,
+  bun: /^(?:-e|--eval)$/i,
+}
+
 function tokenize(command: string): string[] {
   return (command.trim().match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [])
     .map(token => {
@@ -14,6 +30,18 @@ function tokenize(command: string): string[] {
 
 function normalizeExecutable(value: string): string {
   return value.trim().toLowerCase().replace(/\.exe$/i, '')
+}
+
+function isSafeRuleToken(token: string): boolean {
+  if (!token || token.length > 80 || !SAFE_TOKEN.test(token)) return false
+  if (/^(?:\.{0,2}[\\/]|[A-Za-z]:[\\/])/.test(token)) return false
+  if (token.includes('\\')) return false
+  return !token.includes('/') || /^@[\p{L}\p{N}._-]+\/[\p{L}\p{N}._-]+$/u.test(token)
+}
+
+function isDynamicLauncherPrefix(executable: string, argumentPrefix: readonly string[]): boolean {
+  const pattern = DYNAMIC_LAUNCHER_ARGUMENTS[normalizeExecutable(executable)]
+  return Boolean(pattern && argumentPrefix[0] && pattern.test(argumentPrefix[0]))
 }
 
 export function terminalCommandRuleKey(rule: TerminalCommandRule): string {
@@ -40,7 +68,8 @@ export function validateTerminalCommandRuleProposal(
     .filter((value): value is string => typeof value === 'string')
     .map(value => value.trim())
   if (!executable || argumentPrefix.length === 0 || argumentPrefix.length !== candidate.argument_prefix.length) return null
-  if (![executable, ...argumentPrefix].every(token => token.length > 0 && token.length <= 80 && SAFE_TOKEN.test(token))) return null
+  if (!isSafeRuleToken(executable) || !argumentPrefix.every(isSafeRuleToken)) return null
+  if (isDynamicLauncherPrefix(executable, argumentPrefix)) return null
 
   const actual = tokenize(segments[0])
   if (normalizeExecutable(actual[0] || '') !== executable) return null
@@ -51,6 +80,27 @@ export function validateTerminalCommandRuleProposal(
     ? candidate.description.trim().slice(0, 120)
     : undefined
   return { executable, argumentPrefix, ...(description ? { description } : {}) }
+}
+
+export function deriveTerminalCommandRule(command: unknown): TerminalCommandRule | null {
+  if (typeof command !== 'string' || !isCommandEligibleForPersistentApproval(command)) return null
+  const segments = splitShellCommandSegments(command)
+  if (!segments || segments.length !== 1 || /`|\$\(/.test(command)) return null
+
+  const actual = tokenize(segments[0])
+  const executable = normalizeExecutable(actual[0] || '')
+  const args = actual.slice(1)
+  if (!isSafeRuleToken(executable) || args.length === 0) return null
+
+  const argumentPrefix = ['npm', 'pnpm', 'yarn', 'bun'].includes(executable)
+    && args[0] === 'run'
+    && args[1]
+    ? args.slice(0, 2)
+    : args.slice(0, 1)
+  if (!argumentPrefix.every(isSafeRuleToken)) return null
+  if (isDynamicLauncherPrefix(executable, argumentPrefix)) return null
+
+  return { executable, argumentPrefix }
 }
 
 export function isCommandEligibleForPersistentApproval(command: string): boolean {
@@ -79,6 +129,7 @@ export function legacyTerminalCommandRule(value: string): TerminalCommandRule | 
   if (tokens.length < 2) return null
   const executable = normalizeExecutable(tokens[0])
   const argumentPrefix = tokens.slice(1)
-  if (![executable, ...argumentPrefix].every(token => SAFE_TOKEN.test(token))) return null
+  if (!isSafeRuleToken(executable) || !argumentPrefix.every(isSafeRuleToken)) return null
+  if (isDynamicLauncherPrefix(executable, argumentPrefix)) return null
   return { executable, argumentPrefix, description: 'Migrated from a legacy command rule' }
 }
