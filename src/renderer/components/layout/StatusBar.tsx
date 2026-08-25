@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   GitBranch,
   AlertCircle,
@@ -17,6 +17,10 @@ import {
   ListTodo,
   Bell,
   Volume2,
+  Search,
+  RefreshCw,
+  Check,
+  ArrowUpRight,
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -43,6 +47,9 @@ import LocalServersIndicator from './LocalServersIndicator'
 import { EmotionStatusIndicator } from '../agent/EmotionStatusIndicator'
 import { motion, AnimatePresence } from 'framer-motion'
 import FileFormatControls from './FileFormatControls'
+import { gitService, type GitBranch as GitBranchInfo } from '@renderer/services/gitService'
+import { toast } from '../common/ToastProvider'
+import { pathStartsWith } from '@shared/utils/pathUtils'
 
 export default function StatusBar() {
   const {
@@ -57,6 +64,10 @@ export default function StatusBar() {
     cursorPosition,
     isGitRepo,
     gitStatus,
+    gitBranches,
+    setGitStatus,
+    setGitBranches,
+    setIsGitRepo,
     setActiveSidePanel,
   } = useStore(useShallow(s => ({
     activeFilePath: s.activeFilePath,
@@ -70,11 +81,108 @@ export default function StatusBar() {
     cursorPosition: s.cursorPosition,
     isGitRepo: s.isGitRepo,
     gitStatus: s.gitStatus,
+    gitBranches: s.gitBranches,
+    setGitStatus: s.setGitStatus,
+    setGitBranches: s.setGitBranches,
+    setIsGitRepo: s.setIsGitRepo,
     setActiveSidePanel: s.setActiveSidePanel,
   })))
 
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
   const [workerProgress, setWorkerProgress] = useState<IndexProgress | null>(null)
+  const [branchQuery, setBranchQuery] = useState('')
+  const [switchingBranch, setSwitchingBranch] = useState<string | null>(null)
+  const gitRefreshRunRef = useRef(0)
+
+  const refreshGitState = useCallback(async () => {
+    const runId = ++gitRefreshRunRef.current
+    if (!workspacePath) {
+      setIsGitRepo(false)
+      setGitStatus(null)
+      setGitBranches([])
+      return
+    }
+
+    const repo = await gitService.isGitRepo(workspacePath)
+    if (runId !== gitRefreshRunRef.current) return
+    setIsGitRepo(repo)
+
+    if (!repo) {
+      setGitStatus(null)
+      setGitBranches([])
+      return
+    }
+
+    const [status, branches] = await Promise.all([
+      gitService.getStatus(workspacePath),
+      gitService.getBranches(workspacePath),
+    ])
+    if (runId !== gitRefreshRunRef.current) return
+    setGitStatus(status)
+    setGitBranches(branches)
+  }, [setGitBranches, setGitStatus, setIsGitRepo, workspacePath])
+
+  useEffect(() => {
+    setIsGitRepo(false)
+    setGitStatus(null)
+    setGitBranches([])
+    void refreshGitState()
+    if (!workspacePath) return
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefresh = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => void refreshGitState(), 250)
+    }
+    const unsubscribe = api.file.onChanged((event: { path: string }) => {
+      if (pathStartsWith(event.path, workspacePath) && /[\\/]\.git(?:[\\/]|$)/.test(event.path)) {
+        scheduleRefresh()
+      }
+    })
+    const handleFocus = () => void refreshGitState()
+    window.addEventListener('focus', handleFocus)
+
+    // Linked worktrees can keep HEAD outside the watched workspace. A cheap
+    // branch-only check closes that gap while the IDE is visible.
+    const branchPoll = window.setInterval(async () => {
+      if (document.visibilityState !== 'visible') return
+      const branch = await gitService.getCurrentBranch(workspacePath)
+      const displayedBranch = useStore.getState().gitStatus?.branch
+      if (branch !== null && (branch || 'HEAD') !== displayedBranch) scheduleRefresh()
+    }, 3000)
+
+    return () => {
+      unsubscribe()
+      window.removeEventListener('focus', handleFocus)
+      window.clearInterval(branchPoll)
+      if (debounceTimer) clearTimeout(debounceTimer)
+    }
+  }, [refreshGitState, setGitBranches, setGitStatus, setIsGitRepo, workspacePath])
+
+  const visibleBranches = useMemo(() => {
+    const query = branchQuery.trim().toLocaleLowerCase()
+    return gitBranches.filter(branch => !query || branch.name.toLocaleLowerCase().includes(query))
+  }, [branchQuery, gitBranches])
+
+  const handleSwitchBranch = useCallback(async (branch: GitBranchInfo) => {
+    if (!workspacePath || branch.current || switchingBranch) return
+    setSwitchingBranch(branch.name)
+    const result = branch.remote
+      ? await gitService.checkoutRemoteBranch(branch.name, workspacePath)
+      : await gitService.checkoutBranch(branch.name, workspacePath)
+
+    if (result.success) {
+      await refreshGitState()
+      setBranchQuery('')
+      toast.success(
+        language === 'zh' ? '已切换分支' : 'Branch switched',
+        'branch' in result && typeof result.branch === 'string' ? result.branch : branch.name,
+      )
+    } else {
+      toast.error(language === 'zh' ? '无法切换分支' : 'Could not switch branch', result.error)
+    }
+    setSwitchingBranch(null)
+  }, [language, refreshGitState, switchingBranch, workspacePath])
 
   const { toasts, visibleIds } = useInlineToast()
   const notificationCount = toasts.length
@@ -193,12 +301,90 @@ export default function StatusBar() {
         <EmotionStatusIndicator />
 
         {isGitRepo && gitStatus && (
-          <button className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-white/5 text-text-muted hover:text-text-primary transition-colors group">
-            <div className="flex items-center justify-center w-4 h-4 transition-colors">
-              <GitBranch className="w-3 h-3 text-text-muted group-hover:text-text-primary transition-colors" />
+          <BottomBarPopover
+            tooltip={language === 'zh' ? '切换 Git 分支' : 'Switch Git branch'}
+            title={language === 'zh' ? 'Git 分支' : 'Git branches'}
+            width={320}
+            height={360}
+            onOpenChange={open => {
+              if (open) void refreshGitState()
+            }}
+            icon={
+              <div className="group flex items-center gap-1.5 px-1 text-text-muted hover:text-text-primary">
+                <GitBranch className="h-3 w-3 transition-colors" />
+                <span className="max-w-44 truncate font-medium tracking-wide">{gitStatus.branch}</span>
+              </div>
+            }
+          >
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex items-center gap-2 border-b border-border/40 p-2.5">
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border/50 bg-background/40 px-2.5 focus-within:border-accent/50">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                  <input
+                    value={branchQuery}
+                    onChange={event => setBranchQuery(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') {
+                        const target = visibleBranches.find(branch => !branch.current)
+                        if (target) void handleSwitchBranch(target)
+                      }
+                    }}
+                    placeholder={language === 'zh' ? '搜索分支…' : 'Search branches…'}
+                    className="h-8 min-w-0 flex-1 bg-transparent text-[11px] text-text-primary outline-none placeholder:text-text-muted/60"
+                    aria-label={language === 'zh' ? '搜索 Git 分支' : 'Search Git branches'}
+                  />
+                </div>
+                <button
+                  onClick={() => void refreshGitState()}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                  title={language === 'zh' ? '刷新分支' : 'Refresh branches'}
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-1.5 custom-scrollbar">
+                {visibleBranches.length > 0 ? visibleBranches.map(branch => (
+                  <button
+                    key={`${branch.remote ? 'remote' : 'local'}:${branch.name}`}
+                    onClick={() => void handleSwitchBranch(branch)}
+                    disabled={branch.current || switchingBranch !== null}
+                    className={`group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent ${
+                      branch.current ? 'bg-accent/10 text-accent' : 'text-text-primary hover:bg-white/5 disabled:opacity-50'
+                    }`}
+                  >
+                    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                      {switchingBranch === branch.name
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : branch.current
+                          ? <Check className="h-3.5 w-3.5" />
+                          : <GitBranch className="h-3.5 w-3.5 text-text-muted group-hover:text-text-primary" />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{branch.name}</span>
+                    <span className="shrink-0 text-[9px] uppercase tracking-wider text-text-muted/70">
+                      {branch.current
+                        ? (language === 'zh' ? '当前' : 'current')
+                        : branch.remote
+                          ? (language === 'zh' ? '远程' : 'remote')
+                          : ''}
+                    </span>
+                  </button>
+                )) : (
+                  <div className="flex h-24 items-center justify-center text-[11px] text-text-muted">
+                    {language === 'zh' ? '没有匹配的分支' : 'No matching branches'}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setActiveSidePanel('git')}
+                className="flex h-10 shrink-0 items-center justify-between border-t border-border/40 px-3 text-[10px] font-medium text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
+              >
+                <span>{language === 'zh' ? '打开完整 Git 面板' : 'Open full Git panel'}</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
             </div>
-            <span className="font-medium tracking-wide group-hover:text-text-primary">{gitStatus.branch}</span>
-          </button>
+          </BottomBarPopover>
         )}
 
         <button

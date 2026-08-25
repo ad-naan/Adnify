@@ -21,6 +21,7 @@ export interface BottomBarPopoverProps {
     height?: number
     language?: 'en' | 'zh'
     scrollable?: boolean
+    onOpenChange?: (isOpen: boolean) => void
 }
 
 const VIEWPORT_MARGIN = 12
@@ -35,14 +36,24 @@ export default memo(function BottomBarPopover({
     width = 400,
     height,
     scrollable = true,
+    onOpenChange,
 }: BottomBarPopoverProps) {
     const [isOpen, setIsOpen] = useState(false)
     const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null)
     const popoverRef = useRef<HTMLDivElement>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
 
-    const handleClose = useCallback(() => setIsOpen(false), [])
-    const handleToggle = useCallback(() => setIsOpen(prev => !prev), [])
+    const handleClose = useCallback(() => {
+        setIsOpen(false)
+        onOpenChange?.(false)
+    }, [onOpenChange])
+    const handleToggle = useCallback(() => {
+        setIsOpen(prev => {
+            const next = !prev
+            onOpenChange?.(next)
+            return next
+        })
+    }, [onOpenChange])
 
     useClickOutside(handleClose, isOpen, [popoverRef, buttonRef])
     useEscapeKey(handleClose, isOpen)

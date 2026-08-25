@@ -136,13 +136,29 @@ async function createWatcherEntry(
 
       const lspChanges: Array<{ path: string; type: 'create' | 'update' | 'delete' }> = []
       for (const event of events) {
-        if (shouldIgnore(event.path)) continue
+        const normalizedEventPath = event.path.replace(/\\/g, '/')
+        const gitMarker = normalizedEventPath.match(/(?:^|\/)\.git(?:\/|$)/)
+        const isGitMetadata = gitMarker !== null
+        const gitRelativePath = gitMarker?.index !== undefined
+          ? normalizedEventPath.slice(gitMarker.index + gitMarker[0].length)
+          : ''
+        const isGitStateSignal = isGitMetadata && (
+          gitRelativePath === ''
+          || /^(?:HEAD|index|packed-refs|FETCH_HEAD|ORIG_HEAD|MERGE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD)$/.test(gitRelativePath)
+          || /^(?:refs|rebase-merge|rebase-apply)\//.test(gitRelativePath)
+        )
+        if (shouldIgnore(event.path) && !isGitStateSignal) continue
 
         const eventType = event.type === 'create' ? 'create' : event.type === 'delete' ? 'delete' : 'update'
         const data = { event: eventType, path: event.path } as FileWatcherEvent
         for (const callback of subscribers.values()) {
           try { callback(data) } catch { /* one window must not break the shared watcher */ }
         }
+
+        // Git metadata drives branch/status UI updates, but must never be indexed
+        // or forwarded to language servers.
+        if (isGitMetadata) continue
+
         fileChangeBuffer.add({ type: eventType, path: event.path, timestamp: Date.now() })
         lspChanges.push({ path: event.path, type: eventType })
       }
