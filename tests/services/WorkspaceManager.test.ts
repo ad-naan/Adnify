@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { workspaceManager } from '@renderer/services/WorkspaceManager'
+import { api } from '@renderer/services/electronAPI'
 
 describe('WorkspaceManager', () => {
   beforeEach(() => {
@@ -23,6 +24,19 @@ describe('WorkspaceManager', () => {
       expect(typeof workspaceManager.getCurrentWorkspacePath).toBe('function')
       expect(typeof workspaceManager.switchTo).toBe('function')
       expect(typeof workspaceManager.openFolder).toBe('function')
+    })
+
+    it('retains the previous roots while activating a new workspace', async () => {
+      const setActive = vi.spyOn(api.workspace, 'setActive').mockResolvedValue(true)
+
+      await (workspaceManager as any).handleWorkspaceRedirection(
+        { configPath: null, roots: ['D:/new-workspace'] },
+        ['D:/old-workspace'],
+      )
+
+      expect(setActive).toHaveBeenCalledWith(['D:/new-workspace'], {
+        retainRootsDuringTransition: ['D:/old-workspace'],
+      })
     })
   })
 })

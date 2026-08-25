@@ -377,7 +377,10 @@ export interface ElectronAPI {
   addFolderToWorkspace: () => Promise<string | null>
   saveWorkspace: (configPath: string, roots: string[]) => Promise<boolean>
   restoreWorkspace: () => Promise<WorkspaceConfig | null>
-  setActiveWorkspace: (roots: string[]) => Promise<boolean | { redirected: true; roots: string[] }>
+  setActiveWorkspace: (
+    roots: string[],
+    options?: { retainRootsDuringTransition?: string[] },
+  ) => Promise<boolean | { redirected: true; roots: string[] }>
   getRecentWorkspaces: () => Promise<string[]>
   workspaceExists: (path: string) => Promise<boolean>
   clearRecentWorkspaces: () => Promise<boolean>

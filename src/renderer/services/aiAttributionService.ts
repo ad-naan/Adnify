@@ -462,8 +462,9 @@ class AiAttributionService {
   private reconcilePromises = new Map<string, Promise<void>>()
 
   async bindWorkspace(workspace: WorkspaceConfig | null): Promise<void> {
-    const nextRoot = workspace?.roots?.[0] || null
-    const nextKey = workspace?.roots?.join('|') || null
+    const nextRoots = workspace?.roots || []
+    const nextRoot = nextRoots[0] || null
+    const nextKey = nextRoots.join('|') || null
 
     if (!nextRoot || !nextKey) {
       await this.flush()
@@ -483,7 +484,7 @@ class AiAttributionService {
     this.commitReportCache.clear()
     this.pendingCommitReportReads.clear()
     await this.ensureStoragePaths()
-    await this.reconcileWorkspaceRepos(workspace.roots).catch(error => {
+    await this.reconcileWorkspaceRepos(nextRoots).catch(error => {
       logger.system.warn('[AiAttribution] Failed to reconcile workspace repos on bind:', error)
     })
   }

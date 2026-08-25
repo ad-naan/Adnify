@@ -95,7 +95,7 @@ function createGroupedAPI() {
       addFolder: () => raw.addFolderToWorkspace(),
       save: (configPath: string, roots: string[]) => raw.saveWorkspace(configPath, roots),
       restore: () => raw.restoreWorkspace(),
-      setActive: (roots: string[]) => raw.setActiveWorkspace(roots),
+      setActive: (roots: string[], options?: { retainRootsDuringTransition?: string[] }) => raw.setActiveWorkspace(roots, options),
       getRecent: () => raw.getRecentWorkspaces(),
       exists: (path: string) => raw.workspaceExists(path),
       clearRecent: () => raw.clearRecentWorkspaces(),

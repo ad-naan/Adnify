@@ -86,7 +86,7 @@ class WorkspaceManager {
       // fail when changing folders from an already-open project.
       await this.saveCurrentWorkspace()
 
-      const redirected = await this.handleWorkspaceRedirection(newWorkspace)
+      const redirected = await this.handleWorkspaceRedirection(newWorkspace, oldWorkspace?.roots || [])
       if (redirected) {
         api.window.close()
         return true
@@ -177,10 +177,12 @@ class WorkspaceManager {
     }
   }
 
-  private async handleWorkspaceRedirection(workspace: WorkspaceConfig): Promise<boolean> {
+  private async handleWorkspaceRedirection(workspace: WorkspaceConfig, previousRoots: string[] = []): Promise<boolean> {
     if (workspace.roots.length === 0) return false
 
-    const result = await api.workspace.setActive(workspace.roots)
+    const result = await api.workspace.setActive(workspace.roots, {
+      retainRootsDuringTransition: previousRoots,
+    })
     if (result && typeof result === 'object' && 'redirected' in result) {
       logger.system.info('[WorkspaceManager] Workspace already open in another window, closing this window')
       return true

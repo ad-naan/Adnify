@@ -42,6 +42,7 @@ import { toast } from '@components/common/ToastProvider'
 import { deriveTerminalCommandRule, formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { supportsTaskApproval } from './ToolCallGroup'
+import type { Language } from '@renderer/i18n'
 
 type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
@@ -367,7 +368,7 @@ function ApprovalQueueContent({
 }: {
   toolCalls: ToolCall[]
   currentToolCallId?: string
-  language: string
+  language: Language
   onApprove?: (toolCallId?: string) => void
   onApproveForTask?: (toolCallId?: string) => void
   onReject?: (toolCallId?: string) => void

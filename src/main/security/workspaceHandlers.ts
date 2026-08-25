@@ -13,6 +13,8 @@ export interface WindowManagerContext {
 
 const WORKSPACE_MARKER_RELATIVE_PATH = path.join('.adnify', 'workspace-meta.json')
 const WORKSPACE_DESCRIPTOR_FILENAME = 'workspace.json'
+const WORKSPACE_TRANSITION_GRACE_MS = 10_000
+const workspaceTransitionTokens = new Map<number, symbol>()
 
 interface StoredWorkspaceSession {
   configPath: string | null
@@ -240,10 +242,14 @@ export function registerWorkspaceHandlers(
     return session
   })
 
-  ipcMain.handle('workspace:setActive', async (event, roots: string[]) => {
+  ipcMain.handle('workspace:setActive', async (
+    event,
+    roots: string[],
+    options?: { retainRootsDuringTransition?: string[] },
+  ) => {
     if (!roots.length) return false
 
-    const mainWindow = getMainWindowFn()
+    const mainWindow = BrowserWindow.fromWebContents(event.sender) || getMainWindowFn()
     if (windowManager?.findWindowByWorkspace) {
       const existingWindow = windowManager.findWindowByWorkspace(roots)
       if (existingWindow && existingWindow !== mainWindow) {
@@ -254,7 +260,25 @@ export function registerWorkspaceHandlers(
     }
 
     const workspaceId = roots[0] ? await ensureWorkspaceMarker(roots[0]) : null
-    windowManager?.setWindowWorkspace?.(event.sender.id, roots)
+    const retainedRoots = (options?.retainRootsDuringTransition || [])
+      .filter(root => typeof root === 'string' && root.trim().length > 0)
+    const transitionRoots = Array.from(new Set([...roots, ...retainedRoots]))
+    const transitionToken = Symbol('workspace-transition')
+    workspaceTransitionTokens.set(event.sender.id, transitionToken)
+    windowManager?.setWindowWorkspace?.(event.sender.id, transitionRoots)
+    if (retainedRoots.length > 0) {
+      setTimeout(() => {
+        if (workspaceTransitionTokens.get(event.sender.id) !== transitionToken) return
+        if (event.sender.isDestroyed()) {
+          workspaceTransitionTokens.delete(event.sender.id)
+          return
+        }
+        windowManager?.setWindowWorkspace?.(event.sender.id, roots)
+        workspaceTransitionTokens.delete(event.sender.id)
+      }, WORKSPACE_TRANSITION_GRACE_MS)
+    } else {
+      workspaceTransitionTokens.delete(event.sender.id)
+    }
     securityManager.setWorkspacePath(roots[0] || null)
     persistWorkspaceSession({ configPath: null, roots, workspaceId: workspaceId || undefined })
     roots.forEach(addRecentWorkspace)
