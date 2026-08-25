@@ -1,219 +1,323 @@
-/**
- * Prompt preview modal component
- */
+/** Prompt architecture preview for the exact system prompt sent to the model. */
 
-import { useState, useEffect, useMemo } from 'react'
-import { Search, Copy, Check, ChevronRight } from 'lucide-react'
-import { getPromptTemplateById, getPromptTemplatePreview } from '@renderer/agent/prompts/promptTemplates'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+    Braces,
+    Check,
+    ChevronRight,
+    Copy,
+    Database,
+    Layers3,
+    Search,
+    ShieldCheck,
+} from 'lucide-react'
+import {
+    getPromptTemplateById,
+    getPromptTemplatePreview,
+    type PromptTemplatePreview,
+} from '@renderer/agent/prompts/promptTemplates'
+import type { SystemPromptSection, SystemPromptSectionGroup } from '@renderer/agent/prompts/PromptBuilder'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Modal } from '@components/ui'
 import { PromptPreviewModalProps } from '../types'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 
-export function PromptPreviewModal({ templateId, language, onClose }: PromptPreviewModalProps) {
+type PreviewView = 'layers' | 'raw'
+
+const SECTION_LABELS: Record<string, { zh: string; en: string }> = {
+    role: { zh: '身份与人格', en: 'Identity & personality' },
+    'operating-contract': { zh: '执行契约', en: 'Operating contract' },
+    'mode-contract': { zh: '当前模式', en: 'Active mode' },
+    'tool-routing': { zh: '工具路由', en: 'Tool routing' },
+    'response-contract': { zh: '回复规范', en: 'Response contract' },
+    'plan-providers': { zh: '计划能力', en: 'Planning providers' },
+    'project-context': { zh: '项目上下文', en: 'Project context' },
+    'runtime-context': { zh: '运行时环境', en: 'Runtime environment' },
+}
+
+const GROUP_LABELS: Record<SystemPromptSectionGroup, { zh: string; en: string }> = {
+    core: { zh: '稳定核心', en: 'Stable core' },
+    mode: { zh: '行为与路由', en: 'Behavior & routing' },
+    project: { zh: '项目注入', en: 'Project injection' },
+    runtime: { zh: '运行时', en: 'Runtime' },
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function highlightText(text: string, query: string): ReactNode {
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery) return text
+
+    const parts = text.split(new RegExp(`(${escapeRegExp(trimmedQuery)})`, 'gi'))
+    return parts.map((part, index) =>
+        part.toLocaleLowerCase() === trimmedQuery.toLocaleLowerCase()
+            ? <mark key={index} className="rounded-sm bg-accent/20 px-0.5 text-accent">{part}</mark>
+            : part
+    )
+}
+
+function estimateTokens(text: string): number {
+    const cjkCharacters = text.match(/[\u3400-\u9fff\uf900-\ufaff]/g)?.length ?? 0
+    return Math.ceil(cjkCharacters / 1.5 + (text.length - cjkCharacters) / 4)
+}
+
+export function PromptPreviewModal({ templateId, customInstructions, language, onClose }: PromptPreviewModalProps) {
     const template = getPromptTemplateById(templateId)
-    const [previewContent, setPreviewContent] = useState('')
-    const [isLoadingPreview, setIsLoadingPreview] = useState(true)
+    const [preview, setPreview] = useState<PromptTemplatePreview | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState('')
     const [activeSection, setActiveSection] = useState<string | null>(null)
-    const [copied, setCopied] = useState(false)
-
-    const sections = useMemo(() => {
-        if (!previewContent) return []
-        const lines = previewContent.split('\n')
-        const result: { id: string; title: string; startIndex: number }[] = []
-        lines.forEach((line, index) => {
-            if (line.startsWith('## ')) {
-                const title = line.replace('## ', '').trim()
-                result.push({ id: title.toLowerCase().replace(/\s+/g, '-'), title, startIndex: index })
-            }
-        })
-        return result
-    }, [previewContent])
+    const [view, setView] = useState<PreviewView>('layers')
+    const [copiedTarget, setCopiedTarget] = useState<string | null>(null)
+    const t = (zh: string, en: string) => language === 'zh' ? zh : en
 
     useEffect(() => {
         let cancelled = false
+        setIsLoading(true)
+        setPreview(null)
 
-        if (!template) {
-            setPreviewContent('')
-            setIsLoadingPreview(false)
-            return
-        }
-
-        setIsLoadingPreview(true)
-        void getPromptTemplatePreview(templateId)
-            .then((content) => {
-                if (!cancelled) {
-                    setPreviewContent(content)
-                }
+        void getPromptTemplatePreview(templateId, customInstructions)
+            .then((result) => {
+                if (cancelled) return
+                setPreview(result)
+                setActiveSection(result?.sections[0]?.id ?? null)
             })
             .catch(() => {
                 if (!cancelled) {
-                    setPreviewContent('')
-                    toast.error(language === 'zh' ? '加载 Prompt 预览失败' : 'Failed to load prompt preview')
+                    toast.error(t('加载提示词预览失败', 'Failed to load prompt preview'))
                 }
             })
             .finally(() => {
-                if (!cancelled) {
-                    setIsLoadingPreview(false)
-                }
+                if (!cancelled) setIsLoading(false)
             })
 
-        return () => {
-            cancelled = true
-        }
-    }, [language, template, templateId])
+        return () => { cancelled = true }
+    }, [templateId, customInstructions, language])
 
-    useEffect(() => {
-        if (sections.length > 0 && !activeSection) {
-            setActiveSection(sections[0].id)
-        }
-    }, [sections, activeSection])
+    const visibleSections = useMemo(() => {
+        if (!preview) return []
+        const query = searchQuery.trim().toLocaleLowerCase()
+        if (!query) return preview.sections
+        return preview.sections.filter((section) => {
+            const label = SECTION_LABELS[section.id]
+            return section.content.toLocaleLowerCase().includes(query)
+                || label?.zh.toLocaleLowerCase().includes(query)
+                || label?.en.toLocaleLowerCase().includes(query)
+        })
+    }, [preview, searchQuery])
 
-    const handleCopy = async () => {
-        const success = await writeClipboardText(previewContent)
+    const promptTokens = useMemo(() => preview ? estimateTokens(preview.content) : 0, [preview])
+    const stableTokens = useMemo(() => preview
+        ? preview.sections.filter(section => section.stable).reduce((total, section) => total + estimateTokens(section.content), 0)
+        : 0, [preview])
+
+    const handleCopy = async (content: string, target: string) => {
+        const success = await writeClipboardText(content)
         if (!success) {
-            toast.error(language === 'zh' ? '复制失败' : 'Copy failed')
+            toast.error(t('复制失败', 'Copy failed'))
             return
         }
-
-        setCopied(true)
-        toast.success(language === 'zh' ? '已复制到剪贴板' : 'Copied to clipboard')
-        setTimeout(() => setCopied(false), 2000)
+        setCopiedTarget(target)
+        toast.success(t('已复制到剪贴板', 'Copied to clipboard'))
+        window.setTimeout(() => setCopiedTarget(current => current === target ? null : current), 1800)
     }
 
-    const highlightText = (text: string, query: string) => {
-        if (!query) return highlightVariables(text)
-        const parts = text.split(new RegExp(`(${query})`, 'gi'))
-        return (
-            <>
-                {parts.map((part, i) =>
-                    part.toLowerCase() === query.toLowerCase() ? (
-                        <mark key={i} className="bg-accent/30 text-accent-hover rounded-sm px-0.5">{part}</mark>
-                    ) : (
-                        highlightVariables(part)
-                    )
-                )}
-            </>
-        )
-    }
-
-    const highlightVariables = (text: string) => {
-        const parts = text.split(/(\{\{[^}]+\}\}|\[[^\]]+\])/g)
-        return (
-            <>
-                {parts.map((part, i) => {
-                    if (part.startsWith('{{') && part.endsWith('}}')) {
-                        return <span key={i} className="text-accent font-bold">{part}</span>
-                    }
-                    if (part.startsWith('[') && part.endsWith(']')) {
-                        return <span key={i} className="text-purple-400 font-semibold">{part}</span>
-                    }
-                    return part
-                })}
-            </>
-        )
+    const scrollToSection = (sectionId: string) => {
+        setActiveSection(sectionId)
+        document.getElementById(`prompt-section-${sectionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
 
     if (!template) return null
 
     return (
-        <Modal isOpen={true} onClose={onClose} title={language === 'zh' ? '完整提示词预览' : 'Full Prompt Preview'} size="5xl" noPadding>
-            <div className="flex h-[700px] bg-background">
-                <div className="w-64 border-r border-border-subtle bg-surface/30 flex flex-col">
-                    <div className="p-4 border-b border-border-subtle">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder={language === 'zh' ? '搜索提示词...' : 'Search prompt...'}
-                                className="w-full bg-surface/50 border border-border-subtle rounded-lg pl-9 pr-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent/50 transition-all"
-                            />
+        <Modal isOpen onClose={onClose} title={t('系统提示词', 'System prompt')} size="5xl" noPadding>
+            <div className="flex h-[min(760px,82vh)] min-h-[560px] flex-col bg-background">
+                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface/20 px-5 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-accent">
+                            <Layers3 className="h-4.5 w-4.5" />
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <span className="truncate text-sm font-medium text-text-primary">{language === 'zh' ? template.nameZh : template.name}</span>
+                                <span className="rounded border border-border-subtle bg-background/50 px-1.5 py-0.5 text-[10px] text-text-muted">
+                                    {preview?.sections.length ?? 0} {t('层', 'layers')}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-[11px] text-text-muted">
+                                {t('这里展示最终系统提示词的组成；工具 Schema 由模型接口单独发送。', 'This shows the final system prompt composition. Tool schemas are sent separately.')}
+                            </p>
                         </div>
                     </div>
-                    <nav className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-                        {sections.map((section) => (
+
+                    <div className="flex rounded-lg border border-border-subtle bg-background/50 p-0.5" role="tablist" aria-label={t('预览方式', 'Preview mode')}>
+                        {(['layers', 'raw'] as const).map(item => (
                             <button
-                                key={section.id}
-                                onClick={() => {
-                                    setActiveSection(section.id)
-                                    document.getElementById(`section-${section.id}`)?.scrollIntoView({ behavior: 'smooth' })
-                                }}
-                                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all ${activeSection === section.id
-                                    ? 'bg-accent/10 text-accent border border-accent/20'
-                                    : 'text-text-secondary hover:bg-surface/20 hover:text-text-primary border border-transparent'
+                                key={item}
+                                type="button"
+                                role="tab"
+                                aria-selected={view === item}
+                                onClick={() => setView(item)}
+                                className={`flex h-7 items-center gap-1.5 rounded-md px-3 text-xs transition-colors ${view === item
+                                    ? 'bg-surface text-text-primary shadow-sm'
+                                    : 'text-text-muted hover:text-text-secondary'
                                     }`}
                             >
-                                <span className="truncate">{section.title}</span>
-                                {activeSection === section.id && <ChevronRight className="w-3.5 h-3.5" />}
+                                {item === 'layers' ? <Layers3 className="h-3.5 w-3.5" /> : <Braces className="h-3.5 w-3.5" />}
+                                {item === 'layers' ? t('分层', 'Layers') : t('最终原文', 'Raw')}
                             </button>
                         ))}
-                    </nav>
-                    <div className="p-4 border-t border-border-subtle bg-surface/20">
-                        <Button variant={copied ? 'success' : 'secondary'} size="sm" onClick={handleCopy} className="w-full" leftIcon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}>
-                            {copied ? (language === 'zh' ? '已复制' : 'Copied') : (language === 'zh' ? '复制全文' : 'Copy Full')}
-                        </Button>
                     </div>
-                </div>
+                </header>
 
-                <div className="flex-1 flex flex-col min-w-0">
-                    <div className="px-6 py-3 bg-surface/20 border-b border-border-subtle flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Template:</span>
-                            <span className="text-xs font-bold text-accent px-2 py-0.5 bg-accent/10 rounded">{template.name}</span>
-                        </div>
-                        <div className="text-[10px] text-text-muted font-mono">
-                            {previewContent.length} chars | {previewContent.split(/\s+/).length} words
-                        </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-gradient-to-b from-transparent to-surface/5">
-                        {isLoadingPreview ? (
-                            <div className="max-w-3xl mx-auto h-full min-h-[320px] flex items-center justify-center text-sm text-text-muted">
-                                {language === 'zh' ? '正在生成 Prompt 预览...' : 'Generating prompt preview...'}
+                <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)]">
+                    <aside className="flex min-h-0 flex-col border-r border-border-subtle bg-surface/10">
+                        <div className="border-b border-border-subtle p-3">
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+                                <input
+                                    type="search"
+                                    value={searchQuery}
+                                    onChange={event => setSearchQuery(event.target.value)}
+                                    placeholder={t('搜索内容或层级', 'Search content or layer')}
+                                    className="h-8 w-full rounded-md border border-border-subtle bg-background/60 pl-8 pr-2 text-xs text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/50"
+                                />
                             </div>
+                        </div>
+
+                        <nav className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar" aria-label={t('提示词层级', 'Prompt layers')}>
+                            {visibleSections.map((section, index) => {
+                                const label = SECTION_LABELS[section.id]
+                                const previousGroup = visibleSections[index - 1]?.group
+                                return (
+                                    <div key={section.id}>
+                                        {section.group !== previousGroup && (
+                                            <div className="mb-1 mt-3 flex items-center gap-2 px-2 first:mt-1">
+                                                <span className="text-[10px] font-medium uppercase tracking-wider text-text-muted">
+                                                    {language === 'zh' ? GROUP_LABELS[section.group].zh : GROUP_LABELS[section.group].en}
+                                                </span>
+                                                <div className="h-px flex-1 bg-border-subtle" />
+                                            </div>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => scrollToSection(section.id)}
+                                            className={`group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs transition-colors ${activeSection === section.id
+                                                ? 'bg-accent/10 text-accent'
+                                                : 'text-text-secondary hover:bg-surface/50 hover:text-text-primary'
+                                                }`}
+                                        >
+                                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${section.stable ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                                            <span className="min-w-0 flex-1 truncate">{label ? (language === 'zh' ? label.zh : label.en) : section.id}</span>
+                                            <ChevronRight className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
+                                        </button>
+                                    </div>
+                                )
+                            })}
+                            {!isLoading && visibleSections.length === 0 && (
+                                <p className="px-3 py-8 text-center text-xs leading-5 text-text-muted">{t('没有匹配的层级', 'No matching layers')}</p>
+                            )}
+                        </nav>
+
+                        <div className="space-y-2 border-t border-border-subtle p-3 text-[10px] text-text-muted">
+                            <div className="flex items-center justify-between"><span>{t('估算 Token', 'Estimated tokens')}</span><span className="font-mono text-text-secondary">≈{promptTokens.toLocaleString()}</span></div>
+                            <div className="flex items-center justify-between"><span>{t('稳定部分', 'Stable sections')}</span><span className="font-mono text-text-secondary">{stableTokens.toLocaleString()}</span></div>
+                            <div className="flex items-center gap-3 pt-1">
+                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{t('稳定', 'Stable')}</span>
+                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-amber-400" />{t('动态', 'Dynamic')}</span>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <main className="min-h-0 overflow-y-auto bg-gradient-to-b from-transparent to-surface/5 p-5 custom-scrollbar">
+                        {isLoading ? (
+                            <div className="flex h-full items-center justify-center text-sm text-text-muted">{t('正在生成预览…', 'Generating preview…')}</div>
+                        ) : view === 'raw' ? (
+                            <section className="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border-subtle bg-surface/20">
+                                <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
+                                    <div className="flex items-center gap-2 text-xs text-text-secondary"><Braces className="h-3.5 w-3.5" />{t('模型收到的系统提示词', 'System prompt received by the model')}</div>
+                                    <CopyButton copied={copiedTarget === 'full'} onClick={() => preview && handleCopy(preview.content, 'full')} label={t('复制全文', 'Copy all')} copiedLabel={t('已复制', 'Copied')} />
+                                </div>
+                                <pre className="overflow-x-auto whitespace-pre-wrap break-words p-5 font-mono text-xs leading-6 text-text-secondary">{preview ? highlightText(preview.content, searchQuery) : null}</pre>
+                            </section>
                         ) : (
-                            <div className="max-w-3xl mx-auto space-y-8">
-                                {previewContent.split('\n\n').map((block, blockIdx) => {
-                                    const isHeader = block.startsWith('## ')
-                                    if (isHeader) {
-                                        const title = block.replace('## ', '').trim()
-                                        const id = title.toLowerCase().replace(/\s+/g, '-')
-                                        return (
-                                            <div key={blockIdx} id={`section-${id}`} className="pt-4 first:pt-0">
-                                                <h2 className="text-xl font-bold text-text-primary flex items-center gap-3 group">
-                                                    <span className="w-1.5 h-6 bg-accent rounded-full" />
-                                                    {title}
-                                                    <div className="flex-1 h-px bg-border-subtle group-hover:bg-border transition-colors" />
-                                                </h2>
-                                            </div>
-                                        )
-                                    }
-                                    return (
-                                        <div key={blockIdx} className="relative group">
-                                            <div className="absolute -left-4 top-0 bottom-0 w-0.5 bg-accent/0 group-hover:bg-accent/20 transition-all rounded-full" />
-                                            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap font-mono">
-                                                {highlightText(block, searchQuery)}
-                                            </div>
-                                        </div>
-                                    )
-                                })}
+                            <div className="mx-auto max-w-4xl space-y-3">
+                                <div className="mb-4 flex items-start gap-2 rounded-lg border border-border-subtle bg-surface/20 px-3 py-2.5 text-xs leading-5 text-text-muted">
+                                    <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
+                                    <span>{t('绿色层构成可缓存的稳定行为契约；黄色层会随项目和窗口状态变化。预览中的方括号内容是运行时占位符。', 'Green layers form the cache-friendly stable contract. Amber layers change with project and window state. Bracketed values are runtime placeholders.')}</span>
+                                </div>
+                                {visibleSections.map(section => (
+                                    <PromptSectionCard
+                                        key={section.id}
+                                        section={section}
+                                        language={language}
+                                        query={searchQuery}
+                                        copied={copiedTarget === section.id}
+                                        onCopy={() => handleCopy(section.content, section.id)}
+                                    />
+                                ))}
+                                {visibleSections.length === 0 && (
+                                    <div className="py-20 text-center text-sm text-text-muted">{t('没有找到匹配内容', 'No matching content found')}</div>
+                                )}
                             </div>
                         )}
-                    </div>
-                    <div className="px-8 py-4 border-t border-border-subtle bg-surface/30 flex items-center justify-between">
-                        <p className="text-xs text-text-muted italic">
-                            {language === 'zh'
-                                ? '提示词包含：核心身份、沟通风格、代码质量标准、工具定义、工作流规范和环境信息'
-                                : 'Prompt includes: Core identity, communication style, code quality standards, tool definitions, workflow guidelines, and environment info'}
-                        </p>
-                        <Button variant="ghost" size="sm" onClick={onClose} className="text-text-muted hover:text-text-primary">
-                            {language === 'zh' ? '关闭' : 'Close'}
-                        </Button>
-                    </div>
+                    </main>
                 </div>
+
+                <footer className="flex items-center justify-between border-t border-border-subtle bg-surface/20 px-5 py-3">
+                    <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                        <Database className="h-3.5 w-3.5" />
+                        {t('此处使用模拟项目数据；实际会话会注入当前窗口的真实上下文。', 'Preview data is simulated; real sessions inject context from the active window.')}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => preview && handleCopy(preview.content, 'full')} leftIcon={copiedTarget === 'full' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}>
+                            {copiedTarget === 'full' ? t('已复制', 'Copied') : t('复制全文', 'Copy all')}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={onClose}>{t('关闭', 'Close')}</Button>
+                    </div>
+                </footer>
             </div>
         </Modal>
+    )
+}
+
+function PromptSectionCard({
+    section,
+    language,
+    query,
+    copied,
+    onCopy,
+}: {
+    section: SystemPromptSection
+    language: 'zh' | 'en'
+    query: string
+    copied: boolean
+    onCopy: () => void
+}) {
+    const label = SECTION_LABELS[section.id]
+    const title = label ? (language === 'zh' ? label.zh : label.en) : section.id
+    return (
+        <section id={`prompt-section-${section.id}`} className="scroll-mt-5 overflow-hidden rounded-xl border border-border-subtle bg-surface/20">
+            <header className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
+                <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${section.stable ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                    <h3 className="text-xs font-medium text-text-primary">{title}</h3>
+                    <code className="text-[10px] text-text-muted">{`<${section.id.replaceAll('-', '_')}>`}</code>
+                </div>
+                <CopyButton copied={copied} onClick={onCopy} label={language === 'zh' ? '复制此层' : 'Copy layer'} copiedLabel={language === 'zh' ? '已复制' : 'Copied'} />
+            </header>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-6 text-text-secondary">{highlightText(section.content, query)}</pre>
+        </section>
+    )
+}
+
+function CopyButton({ copied, onClick, label, copiedLabel }: { copied: boolean; onClick: () => void; label: string; copiedLabel: string }) {
+    return (
+        <button type="button" onClick={onClick} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-text-muted transition-colors hover:bg-surface hover:text-text-primary" aria-label={label}>
+            {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+            {copied ? copiedLabel : label}
+        </button>
     )
 }

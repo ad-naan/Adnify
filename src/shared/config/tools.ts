@@ -3,7 +3,7 @@
  * 
  * 设计参考：Claude Code CLI, Codex CLI, Kiro
  * 
- * 单一数据源：所有工具的定义、schema、元数据、提示词描述都从这里生成
+ * 单一数据源：所有工具的定义、schema 与元数据都从这里生成
  * 添加新工具只需在 TOOL_CONFIGS 中添加一项
  */
 
@@ -33,9 +33,9 @@ export interface ToolPropertyDef {
 export interface ToolConfig {
     name: string
     displayName: string
-    /** 简短描述（用于 LLM 工具定义） */
+    /** 工具选择边界的简短摘要 */
     description: string
-    /** 详细描述（用于系统提示词） */
+    /** 追加到原生 LLM 工具定义的操作细节 */
     detailedDescription?: string
     /** 使用示例 */
     examples?: string[]
@@ -768,7 +768,12 @@ For long-running servers or watch tasks:
     get_diagnostics: {
         name: 'get_diagnostics',
         displayName: 'Diagnostics',
-        description: 'Get fresh LSP diagnostics for a source file or one symbol, grouped by containing symbol.',
+        description: 'Get fresh LSP diagnostics for a source file or symbol, optionally including symbols that reference a changed public symbol.',
+        detailedDescription: `Diagnostics are grouped by the symbol that owns them.
+- Omit name_path to inspect the whole file
+- Pass name_path to inspect one symbol
+- Set include_references=true after changing a public symbol to inspect diagnostics in its callers
+- Use find_references instead when locations, rather than diagnostics, are the required evidence`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -779,6 +784,8 @@ For long-running servers or watch tasks:
             relative_path: { type: 'string', description: 'Source file to inspect', required: true },
             name_path: { type: 'string', description: 'Optional exact symbol name path to restrict diagnostics' },
             min_severity: { type: 'number', description: 'Include severity values up to this level: 1 error, 2 warning, 3 info, 4 hint', default: 4 },
+            include_references: { type: 'boolean', description: 'Also inspect diagnostics in symbols that reference name_path', default: false },
+            max_reference_symbols: { type: 'number', description: 'Maximum distinct referencing symbols to inspect (default: 20)', default: 20 },
         },
     },
 
@@ -807,7 +814,11 @@ For long-running servers or watch tasks:
     navigate_symbol: {
         name: 'navigate_symbol',
         displayName: 'Navigate Symbol',
-        description: 'Find a symbol definition or implementation by stable name path.',
+        description: 'Navigate semantic relationships for a located symbol: definition, type definition, implementation, callers, or callees.',
+        detailedDescription: `Use stable name paths to inspect relationships that text search cannot represent reliably.
+- definition, type_definition, and implementation return target source locations
+- incoming_calls returns callers; outgoing_calls returns callees
+- Use find_references when every usage matters rather than only the call graph`,
         category: 'lsp',
         approvalType: 'none',
         parallel: true,
@@ -817,7 +828,12 @@ For long-running servers or watch tasks:
         parameters: {
             relative_path: { type: 'string', description: 'File containing the source symbol', required: true },
             name_path: { type: 'string', description: 'Exact symbol name or name path in that file', required: true },
-            relation: { type: 'string', description: 'Location relation to retrieve', required: true, enum: ['definition', 'implementation'] },
+            relation: {
+                type: 'string',
+                description: 'Semantic relationship to retrieve',
+                required: true,
+                enum: ['definition', 'type_definition', 'implementation', 'incoming_calls', 'outgoing_calls'],
+            },
         },
     },
 
@@ -842,13 +858,24 @@ For long-running servers or watch tasks:
     edit_symbol: {
         name: 'edit_symbol',
         displayName: 'Edit Symbol',
-        description: 'Replace a complete symbol definition or insert code immediately before or after it.',
+        description: 'Replace or safely delete a complete symbol definition, or insert code immediately before or after it.',
         detailedDescription: `Use stable semantic name paths for structural edits.
 - Replace a complete function, method, class, interface, or other named definition
+- Delete a complete symbol only when LSP finds no references outside that symbol
 - Insert a new definition immediately before or after an existing symbol
 - Call find_symbol(include_body=true) first for replacement
 - For a one-to-few-line change inside a symbol, use edit_file instead`,
         criticalRules: ['For action=replace, call find_symbol with include_body=true first'],
+        customSchema: z.object({
+            relative_path: z.string().min(1, 'relative_path is required'),
+            name_path: z.string().min(1, 'name_path is required'),
+            action: z.enum(['replace', 'insert_before', 'insert_after', 'delete']),
+            body: z.string().optional(),
+        }).passthrough().superRefine((data, ctx) => {
+            if (data.action !== 'delete' && data.body === undefined) {
+                ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['body'], message: 'body is required for replace and insert actions' })
+            }
+        }),
         category: 'write',
         approvalType: 'none',
         parallel: false,
@@ -862,8 +889,8 @@ For long-running servers or watch tasks:
         parameters: {
             relative_path: { type: 'string', description: 'File containing the symbol', required: true },
             name_path: { type: 'string', description: 'Exact symbol name path', required: true },
-            action: { type: 'string', description: 'Edit operation', required: true, enum: ['replace', 'insert_before', 'insert_after'] },
-            body: { type: 'string', description: 'Replacement definition or code to insert', required: true },
+            action: { type: 'string', description: 'Structural edit operation', required: true, enum: ['replace', 'insert_before', 'insert_after', 'delete'] },
+            body: { type: 'string', description: 'Replacement definition or code to insert. Omit for delete.' },
         },
     },
 
@@ -1101,7 +1128,7 @@ TIPS:
             'create_task_plan name="Login Page" requirementsDoc="..." tasks=[{title:"Create form",suggestedProvider:"anthropic",suggestedModel:"claude-sonnet-4",suggestedRole:"coder"}]',
         ],
         criticalRules: [
-            'Always gather requirements with ask_user before creating a plan',
+            'Use ask_user before creating a plan only when a material product or architectural decision remains unresolved after exploration',
             'Break complex requests into atomic tasks',
             'Suggest appropriate models based on task complexity',
             'Include clear task descriptions',
@@ -1454,61 +1481,6 @@ Available skills are listed in the system prompt under "Available Skills". Each 
 
 
 // ============================================
-// 工具选择决策指南
-// ============================================
-
-/**
- * 文件编辑工具选择决策树
- * 根据场景选择最合适的工具
- */
-export const FILE_EDIT_DECISION_GUIDE = `
-## File Editing Decision Guide
-
-**1. Pick the tool**
-- New file or full rewrite: use \`write_file\`.
-- New directory: use \`create_directory\`.
-- Partial change to an existing file: use \`edit_file\` after \`read_file\`.
-
-**2. Pick exactly one edit_file mode**
-- String mode: \`old_string\` + \`new_string\`.
-- Line mode: \`start_line\` + \`end_line\` + \`content\`.
-- Batch mode: \`edits\` array only.
-
-**3. Avoid invalid payloads**
-- Never mix string, line, and batch fields in one call.
-- Never send empty placeholder edits.
-- Prefer line or batch mode for large files.
-`
-
-/**
- * 搜索工具选择决策指南
- */
-export const SEARCH_DECISION_GUIDE = `
-## Search Tool Selection
-
-**Decision Tree:**
-1. Looking for a CONCEPT or MEANING (e.g., "authentication logic")?
-   → Use \`codebase_search\` (semantic/AI search)
-
-2. Looking for EXACT TEXT or PATTERN?
-   → Use \`search_files\` (text/regex search)
-   → For multiple patterns, combine with | (e.g., "pattern1|pattern2|pattern3")
-
-3. Searching within a SINGLE FILE?
-   → Use \`search_files\` with file path as path parameter
-   → Example: search_files path="src/styles.css" pattern="button|card"
-
-4. Looking for FILES BY NAME/PATTERN?
-   → Use \`list_directory\` (set recursive=true to walk subdirectories)
-
-**NEVER use bash grep/find - use these tools instead.**
-
-**ANTI-FRAGMENTATION:**
-- Combine multiple patterns with | instead of making multiple calls
-- Pass an array to \`read_file\` with paths=["a.ts","b.ts"] instead of multiple read_file calls
-`
-
-// ============================================
 // 生成器函数
 // ============================================
 
@@ -1547,7 +1519,16 @@ export function generateToolDefinition(config: ToolConfig): ToolDefinition {
 
     return {
         name: config.name,
-        description: config.description,
+        description: [
+            config.description,
+            config.detailedDescription?.trim(),
+            config.criticalRules?.length
+                ? `Rules:\n${config.criticalRules.map(rule => `- ${rule}`).join('\n')}`
+                : null,
+            config.commonErrors?.length
+                ? `Errors:\n${config.commonErrors.map(item => `- ${item.error}: ${item.solution}`).join('\n')}`
+                : null,
+        ].filter(Boolean).join('\n\n'),
         ...(config.approvalType !== 'none' && { approvalType: config.approvalType }),
         parameters: {
             type: 'object',
@@ -1663,153 +1644,6 @@ export function generateZodSchema(config: ToolConfig): z.ZodSchema {
     }
 
     return objectSchema
-}
-
-// ============================================
-// 生成系统提示词中的工具描述
-// ============================================
-
-/**
- * 生成单个工具的详细提示词描述
- * 
- * 使用 description 作为主要描述（包含反碎片化规则）
- */
-export function generateToolPromptDescription(config: ToolConfig): string {
-    const lines: string[] = []
-
-    // 工具名
-    lines.push(`### ${config.displayName} (\`${config.name}\`)`)
-
-    // 主描述（包含反碎片化规则）
-    lines.push(config.description)
-    lines.push('')
-
-    // 详细描述（补充使用细节）
-    if (config.detailedDescription) {
-        lines.push(config.detailedDescription)
-        lines.push('')
-    }
-
-    // 关键规则
-    if (config.criticalRules && config.criticalRules.length > 0) {
-        lines.push('**Rules:**')
-        for (const rule of config.criticalRules) {
-            lines.push(`- ${rule}`)
-        }
-        lines.push('')
-    }
-
-    // 参数
-    const params = Object.entries(config.parameters)
-    if (params.length > 0) {
-        lines.push('**Parameters:**')
-        for (const [key, prop] of params) {
-            const required = prop.required ? '(required)' : '(optional)'
-            const defaultVal = prop.default !== undefined ? ` [default: ${prop.default}]` : ''
-            lines.push(`- \`${key}\` ${required}: ${prop.description}${defaultVal}`)
-        }
-        lines.push('')
-    }
-
-    // 常见错误
-    if (config.commonErrors && config.commonErrors.length > 0) {
-        lines.push('**Common Errors:**')
-        for (const err of config.commonErrors) {
-            lines.push(`- "${err.error}" → ${err.solution}`)
-        }
-        lines.push('')
-    }
-
-    return lines.join('\n')
-}
-
-/**
- * 生成工具提示词描述（可排除指定类别和指定工具）
- * 
- * @param excludeCategories 要排除的工具类别
- * @param allowedTools 允许的工具列表（如果提供，只包含这些工具）
- */
-export function generateToolsPromptDescriptionFiltered(
-    excludeCategories: ToolCategory[] = [],
-    allowedTools?: string[]
-): string {
-    const categories: Record<ToolCategory, ToolConfig[]> = {
-        read: [],
-        search: [],
-        write: [],
-        terminal: [],
-        lsp: [],
-        network: [],
-        interaction: [],
-        plan: [],
-    }
-
-    // 按类别分组
-    for (const config of Object.values(TOOL_CONFIGS)) {
-        // 检查是否启用、类别是否被排除、是否在允许列表中
-        const isEnabled = config.enabled
-        const categoryAllowed = !excludeCategories.includes(config.category)
-        const toolAllowed = !allowedTools || allowedTools.includes(config.name)
-
-        if (isEnabled && categoryAllowed && toolAllowed) {
-            categories[config.category].push(config)
-        }
-    }
-
-    const sections: string[] = []
-
-    if (categories.read.length > 0) {
-        sections.push('## File Reading Tools')
-        for (const config of categories.read) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    if (categories.search.length > 0) {
-        sections.push('## Search Tools')
-        sections.push(SEARCH_DECISION_GUIDE)
-        for (const config of categories.search) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    if (categories.write.length > 0) {
-        sections.push('## File Editing Tools')
-        sections.push(FILE_EDIT_DECISION_GUIDE)
-        for (const config of categories.write) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    if (categories.terminal.length > 0) {
-        sections.push('## Terminal Tools')
-        for (const config of categories.terminal) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    if (categories.lsp.length > 0) {
-        sections.push('## Code Intelligence Tools')
-        for (const config of categories.lsp) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    if (categories.network.length > 0) {
-        sections.push('## Network Tools')
-        for (const config of categories.network) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    if (categories.interaction.length > 0) {
-        sections.push('## Interaction Tools')
-        for (const config of categories.interaction) {
-            sections.push(generateToolPromptDescription(config))
-        }
-    }
-
-    return sections.join('\n\n')
 }
 
 // ============================================

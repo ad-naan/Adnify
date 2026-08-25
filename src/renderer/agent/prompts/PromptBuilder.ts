@@ -1,7 +1,6 @@
 /** Prompt builder for Agent and Plan modes. */
 
 import { WorkMode } from '@/renderer/modes/types'
-import { generateToolsPromptDescriptionFiltered, type ToolCategory } from '@/shared/config/tools'
 import { getToolsForContext } from '@/shared/config/toolGroups'
 import { DEFAULT_AGENT_CONFIG } from '@shared/config/agentConfig'
 import { PERFORMANCE_DEFAULTS } from '@shared/config/defaults'
@@ -9,16 +8,17 @@ import { rulesService, type ProjectRules } from '../services/rulesService'
 import { memoryService, type MemoryItem } from '../services/memoryService'
 import { skillService, type SkillItem } from '../services/skillService'
 import {
-  APP_IDENTITY,
-  PROFESSIONAL_OBJECTIVITY,
-  SECURITY_RULES,
-  CODE_CONVENTIONS,
-  WORKFLOW_GUIDELINES,
-  OUTPUT_FORMAT,
-  TOOL_GUIDELINES,
   getPromptTemplateById,
   getDefaultPromptTemplate,
 } from './promptTemplates'
+import {
+  buildModeContract,
+  buildOperatingContract,
+  buildResponseContract,
+  buildRoleContract,
+  buildToolRoutingContract,
+  type PromptContractContext,
+} from './promptContract'
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { shellServerRoutingService } from '../services/shellServerRoutingService'
@@ -80,37 +80,46 @@ export interface PromptContext {
   isSubAgent?: boolean
 }
 
-function buildTools(
+export type SystemPromptSectionGroup = 'core' | 'mode' | 'project' | 'runtime'
+
+export interface SystemPromptSection {
+  id: string
+  group: SystemPromptSectionGroup
+  content: string
+  /** Stable sections are suitable for provider-side prompt caching. */
+  stable: boolean
+}
+
+function getPromptContractContext(
   mode: WorkMode,
   templateId?: string,
   planPhase?: 'planning' | 'executing',
   isSubAgent?: boolean
-): string {
-  const excludeCategories: ToolCategory[] = []
-  const allowedTools = getToolsForContext({ mode, templateId, planPhase, isSubAgent })
-  const sortedAllowedTools = allowedTools ? [...allowedTools].sort() : undefined
-  const baseTools = generateToolsPromptDescriptionFiltered(excludeCategories, sortedAllowedTools)
-
-  return `## Available Tools
-
-${baseTools}
-
-${TOOL_GUIDELINES}`
+): PromptContractContext {
+  return {
+    mode,
+    planPhase,
+    isSubAgent,
+    allowedTools: getToolsForContext({ mode, templateId, planPhase, isSubAgent }),
+  }
 }
 
 function buildEnvironment(ctx: PromptContext): string {
-  return `## Environment
+  return `<runtime_context>
+## Environment
 - OS: ${ctx.os}
 - Workspace: ${ctx.workspacePath || 'No workspace open'}
 - Active File: ${ctx.activeFile || 'None'}
 - Open Files: ${ctx.openFiles.length > 0 ? ctx.openFiles.join(', ') : 'None'}
-- Date: ${ctx.date}`
+- Local Date: ${ctx.date}
+</runtime_context>`
 }
 
 function buildProjectRules(rules: ProjectRules | null): string | null {
   if (!rules?.content) return null
-  return `## Project Rules
-${rules.content}`
+  return `<project_rules>
+${rules.content}
+</project_rules>`
 }
 
 function buildMemory(memories: MemoryItem[]): string | null {
@@ -118,53 +127,32 @@ function buildMemory(memories: MemoryItem[]): string | null {
   if (enabled.length === 0) return null
 
   const lines = enabled.map(memory => `- ${memory.content}`).join('\n')
-  return `## Project Memory
-${lines}`
+  return `<project_memory>
+${lines}
+</project_memory>`
 }
 
 function buildCustomInstructions(instructions: string | null): string | null {
   if (!instructions?.trim()) return null
-  return `## Custom Instructions
-${instructions.trim()}`
+  return `<custom_instructions>
+${instructions.trim()}
+</custom_instructions>`
 }
 
 function buildProjectSummary(summary: string | null): string | null {
   if (!summary?.trim()) return null
 
   logger.agent.info('[PromptBuilder] Injecting project summary into system prompt, length:', summary.length)
-  return `## Project Overview
+  return `<project_overview source="generated">
 ${summary.trim()}
 
-Note: This is an auto-generated project summary. Use it to understand the codebase structure before exploring files.`
+Use this generated overview as a starting point, then verify task-relevant details with tools.
+</project_overview>`
 }
 
 function buildRemoteServerSection(section: string | null): string | null {
   if (!section?.trim()) return null
   return section.trim()
-}
-
-function buildModeRuntimeContract(ctx: PromptContext): string | null {
-  if (ctx.mode !== 'plan' || ctx.isSubAgent) return null
-
-  if (ctx.planPhase === 'executing') {
-    return `## Plan Mode Runtime Contract — Execution Phase
-- A reviewed plan already exists. Work through that plan and keep its task state accurate.
-- Do not replace the approved plan with an unrelated ad-hoc todo list.
-- Use report_plan_activity for meaningful fine-grained actions, findings, blockers, handoffs, and validation results. The title/detail must describe the actual work rather than a predefined frontend step.
-- Do not report every trivial tool call. Runtime task state and approval state remain authoritative; never use activity reports to claim work completed early.
-- Surface approval requests and blockers through the Plan execution UI.`
-  }
-
-  return `## Plan Mode Runtime Contract — Planning Phase (OVERRIDES generic autonomy rules)
-- You are planning, not implementing. Do not behave like ordinary Agent mode.
-- For every non-trivial request, first inspect the workspace, then explicitly check whether scope, acceptance criteria, UX behavior, constraints, and execution preferences are sufficiently clear.
-- Use report_plan_activity when the meaningful focus changes or you discover a concrete constraint. Fine-grained activity text is generated by you; the UI only provides the requirements/plan/execution/validation containers.
-- If any important decision is missing, you MUST call ask_user with one concise grouped question before creating the plan. Do not silently guess product decisions.
-- When requirements are clear, you MUST call create_task_plan. Describing a plan only in prose is not completion.
-- create_task_plan.stageContent is the versioned UI content model. Author all four stages (requirements, plan, execution, validation) from the actual request. Choose the sections and entries dynamically; never emit placeholder or generic filler.
-- The task graph is authoritative for dependencies and scheduling. Stage content explains what each workspace stage should show; it must agree with the graph, assigned roles/models, expected artifacts, risks, and acceptance criteria.
-- create_task_plan opens the TaskBoard automatically. After it succeeds, stop the loop so the user can review the board.
-- Do not implement files or launch sub-agents during this phase.`
 }
 
 function buildSkillsSections(autoSkills: SkillItem[], mentionedSkills: SkillItem[]): (string | null)[] {
@@ -177,27 +165,59 @@ export function buildSystemPrompt(
   ctx: PromptContext,
   options?: { includeRuntimeEnvironment?: boolean },
 ): string {
-  const sections: (string | null)[] = [
-    ctx.personality,
-    APP_IDENTITY,
-    PROFESSIONAL_OBJECTIVITY,
-    SECURITY_RULES,
-    buildTools(ctx.mode, ctx.templateId, ctx.planPhase, ctx.isSubAgent),
-    CODE_CONVENTIONS,
-    WORKFLOW_GUIDELINES,
-    buildModeRuntimeContract(ctx),
-    ctx.mode === 'plan' ? buildPlanProviderPromptSection() : null,
-    OUTPUT_FORMAT,
+  const sections = buildSystemPromptSections(ctx, options)
+  return ['<adnify_agent>', ...sections.map(section => section.content), '</adnify_agent>'].join('\n\n')
+}
+
+/**
+ * Builds the exact ordered sections used by buildSystemPrompt.
+ * Consumers such as the settings preview can inspect the prompt architecture
+ * without parsing markup or maintaining a second representation.
+ */
+export function buildSystemPromptSections(
+  ctx: PromptContext,
+  options?: { includeRuntimeEnvironment?: boolean },
+): SystemPromptSection[] {
+  const contractContext = getPromptContractContext(
+    ctx.mode,
+    ctx.templateId,
+    ctx.planPhase,
+    ctx.isSubAgent,
+  )
+  const projectContext = [
     buildProjectSummary(ctx.projectSummary || null),
     buildProjectRules(ctx.projectRules),
     buildMemory(ctx.memories),
     ...buildSkillsSections(ctx.autoSkills, ctx.mentionedSkills),
     buildRemoteServerSection(ctx.remoteServerSection || null),
     buildCustomInstructions(ctx.customInstructions),
-    options?.includeRuntimeEnvironment === false ? null : buildEnvironment(ctx),
+  ].filter(Boolean)
+  const toolRouting = buildToolRoutingContract(contractContext)
+
+  const sections: Array<SystemPromptSection | null> = [
+    { id: 'role', group: 'core', stable: true, content: buildRoleContract(ctx.personality) },
+    { id: 'operating-contract', group: 'core', stable: true, content: buildOperatingContract() },
+    { id: 'mode-contract', group: 'mode', stable: true, content: buildModeContract(contractContext) },
+    toolRouting
+      ? { id: 'tool-routing', group: 'mode', stable: true, content: toolRouting }
+      : null,
+    { id: 'response-contract', group: 'core', stable: true, content: buildResponseContract() },
+    ctx.mode === 'plan'
+      ? { id: 'plan-providers', group: 'mode', stable: true, content: `<plan_providers>
+${buildPlanProviderPromptSection()}
+</plan_providers>` }
+      : null,
+    projectContext.length > 0
+      ? { id: 'project-context', group: 'project', stable: false, content: `<project_context priority="below_core_contract">
+${projectContext.join('\n\n')}
+</project_context>` }
+      : null,
+    options?.includeRuntimeEnvironment === false
+      ? null
+      : { id: 'runtime-context', group: 'runtime', stable: false, content: buildEnvironment(ctx) },
   ]
 
-  return sections.filter(Boolean).join('\n\n')
+  return sections.filter((section): section is SystemPromptSection => section !== null)
 }
 
 export async function buildAgentSystemPrompt(

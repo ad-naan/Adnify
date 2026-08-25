@@ -80,6 +80,15 @@ describe('Tool Definitions', () => {
       expect(approvalScope.required).toEqual(['executable', 'argument_prefix', 'description'])
     })
 
+    it('keeps tool-specific guidance in the native tool definition', () => {
+      const definition = generateToolDefinition(TOOL_CONFIGS.find_symbol)
+
+      expect(definition.description).toContain('Find a class, function, method')
+      expect(definition.description).toContain('Find symbols using stable semantic name paths')
+      expect(definition.description).toContain('Prefer this tool over read_file')
+      expect(definition.description).not.toContain('**Parameters:**')
+    })
+
     it('should expose semantic symbol tools with valid schemas', () => {
       expect(TOOL_CONFIGS.find_symbol).toBeDefined()
       expect(getToolsForContext({ mode: 'agent' })).toContain('find_symbol')
@@ -93,15 +102,21 @@ describe('Tool Definitions', () => {
       expect(TOOL_SCHEMAS.find_references.safeParse({ path: 'src/editor.ts', line: 1, column: 1 }).success).toBe(false)
       expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'definition' }).success).toBe(true)
       expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'references' }).success).toBe(false)
+      expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'incoming_calls' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render', relation: 'outgoing_calls' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/types.ts', name_path: 'Editor', relation: 'type_definition' }).success).toBe(true)
       expect(TOOL_SCHEMAS.get_hover_info.safeParse({ relative_path: 'src/editor.ts', name_path: 'Editor/render' }).success).toBe(true)
       expect(TOOL_SCHEMAS.navigate_symbol.safeParse({ relative_path: 'src/types.ts', name_path: 'Editor', relation: 'implementation' }).success).toBe(true)
       expect(getToolsForContext({ mode: 'agent' })).toContain('navigate_symbol')
       expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'replace', body: 'run() {}' }).success).toBe(true)
-      expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'remove', body: '' }).success).toBe(false)
+      expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'replace' }).success).toBe(false)
+      expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'delete' }).success).toBe(true)
+      expect(TOOL_SCHEMAS.edit_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', action: 'remove' }).success).toBe(false)
       expect(TOOL_SCHEMAS.rename_symbol.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', new_name: 'execute' }).success).toBe(true)
       expect(getToolsForContext({ mode: 'agent' })).toContain('edit_symbol')
       expect(getToolsForContext({ mode: 'plan' })).not.toContain('edit_symbol')
       expect(TOOL_SCHEMAS.get_diagnostics.safeParse({ relative_path: 'src/a.ts', name_path: 'A/run', min_severity: 2 }).success).toBe(true)
+      expect(TOOL_SCHEMAS.get_diagnostics.parse({ relative_path: 'src/a.ts', name_path: 'A/run', include_references: true }).max_reference_symbols).toBe(20)
       expect(getToolsForContext({ mode: 'plan' })).toContain('get_diagnostics')
     })
 

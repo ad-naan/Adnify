@@ -160,7 +160,7 @@ export class ToolRoutingAdvisor {
       warning: 'Another whole source file is about to be read without a targeted navigation step.',
       suggestion: fallbackMode
         ? 'Semantic navigation failed, so use search_files to locate exact text and then read only the matching file range.'
-        : 'Known symbol: use find_symbol. Known file but unknown structure: use get_document_symbols(depth=0). Exact text: use search_files. Read only the final file or line range after locating the target.',
+        : 'Known symbol: use find_symbol. Call graph or semantic target: use navigate_symbol. Known file but unknown structure: use get_document_symbols(depth=0). Exact text: use search_files. Read only the final file or line range after locating the target.',
       details: {
         category: 'semantic_navigation',
         toolName: record.name,

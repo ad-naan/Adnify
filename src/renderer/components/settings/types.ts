@@ -86,6 +86,7 @@ export interface AgentSettingsProps {
 
 export interface PromptPreviewModalProps {
     templateId: string
+    customInstructions?: string
     language: Language
     onClose: () => void
 }

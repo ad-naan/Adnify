@@ -525,6 +525,7 @@ export function AgentSettings({
             {showPreview && selectedTemplateForPreview && (
                 <PromptPreviewModal
                     templateId={selectedTemplateForPreview}
+                    customInstructions={aiInstructions}
                     language={language}
                     onClose={() => setShowPreview(false)}
                 />

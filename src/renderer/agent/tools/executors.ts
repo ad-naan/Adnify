@@ -1062,6 +1062,76 @@ async function formatNavigationLocations(
     ], toolOutputBudget())
 }
 
+function formatCallHierarchy(
+    items: unknown,
+    relation: 'incoming_calls' | 'outgoing_calls',
+    ctx: ToolExecutionContext,
+): string {
+    const values = Array.isArray(items) ? items : []
+    if (!values.length) return relation === 'incoming_calls' ? 'No callers found' : 'No callees found'
+
+    const calls = values.flatMap((value: any) => {
+        const target = relation === 'incoming_calls' ? value?.from : value?.to
+        const start = target?.selectionRange?.start ?? target?.range?.start
+        if (!target?.uri || !start) return []
+
+        return [{
+            name: String(target.name || '<anonymous>'),
+            relativePath: toRelativePath(lspUriToPath(target.uri), ctx.workspacePath).replace(/\\/g, '/'),
+            line: start.line + 1,
+            column: start.character + 1,
+            callSiteCount: Array.isArray(value.fromRanges) ? value.fromRanges.length : 1,
+        }]
+    })
+
+    if (!calls.length) return relation === 'incoming_calls' ? 'No callers found' : 'No callees found'
+    return boundJsonOutput([
+        { build: () => ({ relation, count: calls.length, calls }) },
+        {
+            build: () => ({
+                relation,
+                count: calls.length,
+                calls: calls.map(({ name, relativePath, line }) => ({ name, relativePath, line })),
+            }),
+            hint: 'Columns and call-site counts were omitted.',
+        },
+        {
+            build: () => ({ relation, count: calls.length, files: countByFile(calls) }),
+            hint: 'Only per-file counts fit. Navigate one listed symbol to inspect it.',
+        },
+    ], toolOutputBudget())
+}
+
+async function collectDiagnosticsForTarget(
+    loaded: Awaited<ReturnType<typeof loadAgentSymbolsForFile>>,
+    target: AgentSymbol | AgentSymbol[] | undefined,
+    minSeverity: number,
+): Promise<Record<string, any[]>> {
+    const content = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''
+    await didOpenDocument(loaded.fullPath, content)
+    await waitForDiagnostics(loaded.fullPath)
+
+    const diagnostics = (await api.lsp.getDiagnostics(loaded.fullPath) ?? []) as any[]
+    const grouped: Record<string, any[]> = {}
+    const targets = Array.isArray(target) ? target : target ? [target] : []
+    for (const diagnostic of diagnostics) {
+        if (typeof diagnostic.severity === 'number' && diagnostic.severity > minSeverity) continue
+        const line = Number(diagnostic.range?.start?.line ?? 0) + 1
+        const column = Number(diagnostic.range?.start?.character ?? 0) + 1
+        if (targets.length > 0 && !targets.some(item => findContainingAgentSymbol([item], line, column))) continue
+        const owner = findContainingAgentSymbol(loaded.symbols, line, column)
+        const ownerPath = owner?.namePath ?? '<file>'
+        ;(grouped[ownerPath] ??= []).push({
+            severity: diagnostic.severity,
+            message: diagnostic.message,
+            code: diagnostic.code,
+            line,
+            column,
+        })
+    }
+    return grouped
+}
+
 /** 工具结果预算。与边界层同源，避免执行器和边界层各自算出不同的上限。 */
 function toolOutputBudget(): number {
     return clampOutputBudget(getAgentConfig().maxToolResultChars)
@@ -1278,6 +1348,14 @@ function symbolRangeEdit(symbol: AgentSymbol, newText: string): LspTextEdit {
         },
         newText,
     }
+}
+
+function isPositionInsideSymbol(symbol: AgentSymbol, line: number, column: number): boolean {
+    const afterStart = line > symbol.range.start.line
+        || (line === symbol.range.start.line && column >= symbol.range.start.column)
+    const beforeEnd = line < symbol.range.end.line
+        || (line === symbol.range.end.line && column <= symbol.range.end.column)
+    return afterStart && beforeEnd
 }
 
 
@@ -2745,12 +2823,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
     async get_diagnostics(args, ctx) {
         const loaded = await loadAgentSymbolsForFile(args.relative_path as string, ctx)
-        const content = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''
-        await didOpenDocument(loaded.fullPath, content)
-        await waitForDiagnostics(loaded.fullPath)
-
         const minSeverity = Math.max(1, Math.min(4, Number(args.min_severity ?? 4)))
         const targetNamePath = typeof args.name_path === 'string' ? args.name_path : undefined
+        const includeReferences = args.include_references === true
+        if (includeReferences && !targetNamePath) {
+            return { success: false, result: '', error: 'include_references requires name_path' }
+        }
+
         let target: AgentSymbol | undefined
         if (targetNamePath) {
             const matches = findAgentSymbols(loaded.symbols, targetNamePath)
@@ -2764,22 +2843,120 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             target = matches[0]
         }
 
-        const diagnostics = (await api.lsp.getDiagnostics(loaded.fullPath) ?? []) as any[]
-        const grouped: Record<string, any[]> = {}
-        for (const diagnostic of diagnostics) {
-            if (typeof diagnostic.severity === 'number' && diagnostic.severity > minSeverity) continue
-            const line = Number(diagnostic.range?.start?.line ?? 0) + 1
-            const column = Number(diagnostic.range?.start?.character ?? 0) + 1
-            if (target && !findContainingAgentSymbol([target], line, column)) continue
-            const owner = findContainingAgentSymbol(loaded.symbols, line, column)
-            const ownerPath = owner?.namePath ?? '<file>'
-            ;(grouped[ownerPath] ??= []).push({
-                severity: diagnostic.severity,
-                message: diagnostic.message,
-                code: diagnostic.code,
-                line,
-                column,
+        const grouped = await collectDiagnosticsForTarget(loaded, target, minSeverity)
+
+        if (includeReferences && target) {
+            const locations = await api.lsp.references({
+                uri: pathToLspUri(loaded.fullPath),
+                line: target.selectionRange.start.line - 1,
+                character: target.selectionRange.start.column - 1,
+                workspacePath: ctx.workspacePath,
             })
+            if (locations === null || locations === undefined) {
+                return { success: false, result: '', error: 'Unable to retrieve symbol references for diagnostic impact analysis' }
+            }
+
+            const maxReferenceSymbols = Math.max(1, Number(args.max_reference_symbols ?? 20))
+            const positions = (locations as Array<{
+                uri: string
+                range: { start: { line: number; character: number } }
+            }>).flatMap(location => {
+                const relativePath = toRelativePath(lspUriToPath(location.uri), ctx.workspacePath).replace(/\\/g, '/')
+                const line = location.range.start.line + 1
+                const column = location.range.start.character + 1
+                const isInsideSource = relativePath === loaded.relativePath && isPositionInsideSymbol(target, line, column)
+                return isInsideSource ? [] : [{ relativePath, line, column }]
+            })
+
+            const positionsByFile = new Map<string, Array<{ line: number; column: number }>>()
+            for (const position of positions) {
+                const entries = positionsByFile.get(position.relativePath) ?? []
+                entries.push({ line: position.line, column: position.column })
+                positionsByFile.set(position.relativePath, entries)
+            }
+
+            const loadLimit = pLimit(4)
+            const referencingTargets = (await Promise.all([...positionsByFile].map(([relativePath, filePositions]) => loadLimit(async () => {
+                const referenceFile = await loadAgentSymbolsForFile(relativePath, ctx)
+                const symbols = new Map<string, AgentSymbol>()
+                for (const position of filePositions) {
+                    const owner = findContainingAgentSymbol(referenceFile.symbols, position.line, position.column)
+                    if (owner) symbols.set(owner.namePath, owner)
+                }
+                return [...symbols.values()].map(symbol => ({ loaded: referenceFile, symbol }))
+            })))).flat()
+
+            const visibleTargets = referencingTargets.slice(0, maxReferenceSymbols)
+            const visibleByFile = new Map<string, {
+                loaded: Awaited<ReturnType<typeof loadAgentSymbolsForFile>>
+                symbols: AgentSymbol[]
+            }>()
+            for (const item of visibleTargets) {
+                const entry = visibleByFile.get(item.loaded.relativePath) ?? { loaded: item.loaded, symbols: [] }
+                entry.symbols.push(item.symbol)
+                visibleByFile.set(item.loaded.relativePath, entry)
+            }
+            const referenceDiagnostics = await Promise.all([...visibleByFile.values()].map(item => loadLimit(async () => ({
+                relativePath: item.loaded.relativePath,
+                grouped: await collectDiagnosticsForTarget(item.loaded, item.symbols, minSeverity),
+            }))))
+
+            const files: Record<string, Record<string, any[]>> = { [loaded.relativePath]: grouped }
+            for (const item of referenceDiagnostics) {
+                const fileDiagnostics = files[item.relativePath] ?? {}
+                for (const [owner, diagnostics] of Object.entries(item.grouped)) {
+                    fileDiagnostics[owner] = diagnostics
+                }
+                files[item.relativePath] = fileDiagnostics
+            }
+
+            const count = Object.values(files).reduce(
+                (fileSum, file) => fileSum + Object.values(file).reduce((sum, items) => sum + items.length, 0),
+                0,
+            )
+            if (!count) {
+                return {
+                    success: true,
+                    result: 'No diagnostics found in the symbol or inspected referencing symbols',
+                    meta: {
+                        diagnosticCount: 0,
+                        referenceSymbolCount: referencingTargets.length,
+                        inspectedReferenceSymbolCount: visibleTargets.length,
+                    },
+                }
+            }
+
+            return {
+                success: true,
+                result: boundJsonOutput([
+                    {
+                        build: () => ({
+                            diagnosticCount: count,
+                            referenceSymbolCount: referencingTargets.length,
+                            inspectedReferenceSymbolCount: visibleTargets.length,
+                            truncated: visibleTargets.length < referencingTargets.length,
+                            files,
+                        }),
+                    },
+                    {
+                        build: () => ({
+                            diagnosticCount: count,
+                            diagnosticsPerFile: Object.fromEntries(
+                                Object.entries(files).map(([relativePath, file]) => [
+                                    relativePath,
+                                    Object.values(file).reduce((sum, items) => sum + items.length, 0),
+                                ]),
+                            ),
+                        }),
+                        hint: 'Only per-file diagnostic counts fit. Inspect one listed file or symbol for details.',
+                    },
+                ], toolOutputBudget()),
+                meta: {
+                    diagnosticCount: count,
+                    referenceSymbolCount: referencingTargets.length,
+                    inspectedReferenceSymbolCount: visibleTargets.length,
+                },
+            }
         }
 
         const count = Object.values(grouped).reduce((sum, items) => sum + items.length, 0)
@@ -2866,6 +3043,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         // 对一个被广泛使用的符号来说，为不会出现在结果里的引用付这份钱是纯浪费。
         const visible = positions.slice(0, maxReferences)
         const symbolTreesByPath = new Map<string, AgentSymbol[]>()
+        const referenceFiles = [...new Set(visible.map(position => position.relativePath))]
+        const symbolLoadLimit = pLimit(4)
+        await Promise.all(referenceFiles.map(relativePath => symbolLoadLimit(async () => {
+            const symbols = (await loadAgentSymbolsForFile(relativePath, ctx)).symbols
+            symbolTreesByPath.set(relativePath, symbols)
+        })))
+
         const references: Array<{
             relativePath: string
             line: number
@@ -2874,11 +3058,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             containingKind?: string
         }> = []
         for (const position of visible) {
-            let symbolTrees = symbolTreesByPath.get(position.relativePath)
-            if (!symbolTrees) {
-                symbolTrees = (await loadAgentSymbolsForFile(position.relativePath, ctx)).symbols
-                symbolTreesByPath.set(position.relativePath, symbolTrees)
-            }
+            const symbolTrees = symbolTreesByPath.get(position.relativePath) ?? []
             const container = findContainingAgentSymbol(symbolTrees, position.line, position.column)
             references.push({
                 ...position,
@@ -2920,13 +3100,27 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             args.name_path as string,
             ctx,
         )
-        const request = args.relation === 'implementation' ? api.lsp.implementation : api.lsp.definition
-        const locations = await request({
+        const relation = args.relation as 'definition' | 'type_definition' | 'implementation' | 'incoming_calls' | 'outgoing_calls'
+        const position = {
             uri: pathToLspUri(loaded.fullPath),
             line: symbol.selectionRange.start.line - 1,
             character: symbol.selectionRange.start.column - 1,
             workspacePath: ctx.workspacePath,
-        })
+        }
+
+        if (relation === 'incoming_calls' || relation === 'outgoing_calls') {
+            const calls = relation === 'incoming_calls'
+                ? await api.lsp.incomingCalls(position)
+                : await api.lsp.outgoingCalls(position)
+            return { success: true, result: formatCallHierarchy(calls, relation, ctx) }
+        }
+
+        const request = relation === 'implementation'
+            ? api.lsp.implementation
+            : relation === 'type_definition'
+                ? api.lsp.typeDefinition
+                : api.lsp.definition
+        const locations = await request(position)
         return { success: true, result: await formatNavigationLocations(locations, ctx) }
     },
 
@@ -2953,10 +3147,67 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             args.name_path as string,
             ctx,
         )
-        const action = args.action as 'replace' | 'insert_before' | 'insert_after'
+        const action = args.action as 'replace' | 'insert_before' | 'insert_after' | 'delete'
         if (action === 'replace' && !fileCacheService.hasValidCache(loaded.fullPath)) {
             return { success: false, result: '', error: 'Retrieve the symbol with find_symbol(include_body=true) before replacing it' }
         }
+        if (action === 'delete') {
+            const locations = await api.lsp.references({
+                uri: pathToLspUri(loaded.fullPath),
+                line: symbol.selectionRange.start.line - 1,
+                character: symbol.selectionRange.start.column - 1,
+                workspacePath: ctx.workspacePath,
+            })
+            if (locations === null || locations === undefined) {
+                return { success: false, result: '', error: 'Unable to verify symbol references; deletion was not performed' }
+            }
+
+            const externalReferences = (locations as Array<{
+                uri: string
+                range: { start: { line: number; character: number } }
+            }>).flatMap(location => {
+                const relativePath = toRelativePath(lspUriToPath(location.uri), ctx.workspacePath).replace(/\\/g, '/')
+                const line = location.range.start.line + 1
+                const column = location.range.start.character + 1
+                const isInsideDeletedSymbol = relativePath === loaded.relativePath
+                    && isPositionInsideSymbol(symbol, line, column)
+                return isInsideDeletedSymbol ? [] : [{ relativePath, line, column }]
+            })
+
+            if (externalReferences.length > 0) {
+                const visible = externalReferences.slice(0, 50)
+                return {
+                    success: false,
+                    result: '',
+                    error: boundJsonOutput([
+                        {
+                            build: () => ({
+                                message: 'Symbol deletion blocked because external references remain',
+                                referenceCount: externalReferences.length,
+                                references: visible,
+                            }),
+                            ...(visible.length < externalReferences.length
+                                ? { hint: `Showing ${visible.length} of ${externalReferences.length} references.` }
+                                : {}),
+                        },
+                        {
+                            build: () => ({
+                                message: 'Symbol deletion blocked because external references remain',
+                                referenceCount: externalReferences.length,
+                                files: countByFile(externalReferences),
+                            }),
+                        },
+                    ], toolOutputBudget()),
+                }
+            }
+
+            return applyWorkspaceEditAtomically(
+                { changes: { [pathToLspUri(loaded.fullPath)]: [symbolRangeEdit(symbol, '')] } },
+                ctx,
+                'edit_symbol',
+            )
+        }
+
         let edit = symbolRangeEdit(symbol, args.body as string)
         if (action !== 'replace') {
             const original = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''

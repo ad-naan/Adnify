@@ -18,6 +18,13 @@ vi.mock('@renderer/services/electronAPI', () => ({
     lsp: {
       documentSymbol: vi.fn(),
       workspaceSymbol: vi.fn(),
+      definition: vi.fn(),
+      typeDefinition: vi.fn(),
+      implementation: vi.fn(),
+      references: vi.fn(),
+      getDiagnostics: vi.fn(),
+      incomingCalls: vi.fn(),
+      outgoingCalls: vi.fn(),
     },
   },
 }))
@@ -211,6 +218,138 @@ describe('document read tool executors', () => {
     expect(result.result).toContain('src/infrastructure/llm/Gateway.ts')
     expect(api.file.read).toHaveBeenCalledTimes(1)
     expect(api.file.read).not.toHaveBeenCalledWith('/workspace/src/presentation/GatewayView.ts', expect.anything(), expect.anything())
+  })
+
+  it('uses call hierarchy through navigate_symbol instead of text search', async () => {
+    vi.mocked(api.file.read).mockResolvedValue('export function run() {}')
+    vi.mocked(didOpenDocument).mockResolvedValue(true)
+    vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
+      name: 'run',
+      kind: 12,
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 24 } },
+      selectionRange: { start: { line: 0, character: 16 }, end: { line: 0, character: 19 } },
+    }])
+    vi.mocked(api.lsp.incomingCalls).mockResolvedValue([{
+      from: {
+        name: 'main',
+        uri: 'file:///workspace/src/main.ts',
+        range: { start: { line: 4, character: 0 }, end: { line: 8, character: 1 } },
+        selectionRange: { start: { line: 4, character: 16 }, end: { line: 4, character: 20 } },
+      },
+      fromRanges: [
+        { start: { line: 6, character: 2 }, end: { line: 6, character: 5 } },
+        { start: { line: 7, character: 2 }, end: { line: 7, character: 5 } },
+      ],
+    }] as any)
+
+    const result = await toolExecutors.navigate_symbol({
+      relative_path: 'src/run.ts',
+      name_path: 'run',
+      relation: 'incoming_calls',
+    }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(api.lsp.incomingCalls).toHaveBeenCalled()
+    expect(result.result).toContain('"relation":"incoming_calls"')
+    expect(result.result).toContain('"name":"main"')
+    expect(result.result).toContain('"relativePath":"src/main.ts"')
+    expect(result.result).toContain('"callSiteCount":2')
+  })
+
+  it('routes type definitions through navigate_symbol', async () => {
+    vi.mocked(api.file.read).mockResolvedValue('export const value: Item = source')
+    vi.mocked(didOpenDocument).mockResolvedValue(true)
+    vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
+      name: 'value',
+      kind: 14,
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 33 } },
+      selectionRange: { start: { line: 0, character: 13 }, end: { line: 0, character: 18 } },
+    }])
+    vi.mocked(api.lsp.typeDefinition).mockResolvedValue([])
+
+    const result = await toolExecutors.navigate_symbol({
+      relative_path: 'src/value.ts',
+      name_path: 'value',
+      relation: 'type_definition',
+    }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(api.lsp.typeDefinition).toHaveBeenCalled()
+    expect(result.result).toBe('No locations found')
+  })
+
+  it('blocks symbol deletion when references remain outside the symbol', async () => {
+    vi.mocked(api.file.read).mockResolvedValue('export function run() {}')
+    vi.mocked(didOpenDocument).mockResolvedValue(true)
+    vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
+      name: 'run',
+      kind: 12,
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 24 } },
+      selectionRange: { start: { line: 0, character: 16 }, end: { line: 0, character: 19 } },
+    }])
+    vi.mocked(api.lsp.references).mockResolvedValue([{
+      uri: 'file:///workspace/src/main.ts',
+      range: { start: { line: 5, character: 2 }, end: { line: 5, character: 5 } },
+    }] as any)
+
+    const result = await toolExecutors.edit_symbol({
+      relative_path: 'src/run.ts',
+      name_path: 'run',
+      action: 'delete',
+    }, ctx)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('deletion blocked')
+    expect(result.error).toContain('src/main.ts')
+    expect(api.file.write).not.toHaveBeenCalled()
+  })
+
+  it('checks diagnostics in symbols that reference a changed public symbol', async () => {
+    vi.mocked(api.file.read).mockImplementation(async path => (
+      String(path).replace(/\\/g, '/').endsWith('src/run.ts')
+        ? 'export function run() {}'
+        : 'export function main() { run() }'
+    ))
+    vi.mocked(didOpenDocument).mockResolvedValue(true)
+    vi.mocked(api.lsp.documentSymbol).mockImplementation(async params => (
+      String((params as any).uri).includes('main.ts')
+        ? [{
+            name: 'main',
+            kind: 12,
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 32 } },
+            selectionRange: { start: { line: 0, character: 16 }, end: { line: 0, character: 20 } },
+          }]
+        : [{
+            name: 'run',
+            kind: 12,
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 24 } },
+            selectionRange: { start: { line: 0, character: 16 }, end: { line: 0, character: 19 } },
+          }]
+    ))
+    vi.mocked(api.lsp.references).mockResolvedValue([{
+      uri: 'file:///workspace/src/main.ts',
+      range: { start: { line: 0, character: 25 }, end: { line: 0, character: 28 } },
+    }] as any)
+    vi.mocked(api.lsp.getDiagnostics).mockImplementation(async path => (
+      String(path).replace(/\\/g, '/').endsWith('src/main.ts')
+        ? [{
+            severity: 1,
+            message: 'Expected one argument',
+            range: { start: { line: 0, character: 25 }, end: { line: 0, character: 28 } },
+          }]
+        : []
+    ))
+
+    const result = await toolExecutors.get_diagnostics({
+      relative_path: 'src/run.ts',
+      name_path: 'run',
+      include_references: true,
+    }, ctx)
+
+    expect(result.success).toBe(true)
+    expect(result.result).toContain('src/main.ts')
+    expect(result.result).toContain('Expected one argument')
+    expect(result.meta).toMatchObject({ diagnosticCount: 1, referenceSymbolCount: 1 })
   })
 
   it('routes rich documents through readRichContent', async () => {
