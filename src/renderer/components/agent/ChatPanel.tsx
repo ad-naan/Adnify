@@ -1489,11 +1489,12 @@ export default function ChatPanel() {
           {/* Bottom Input Area - Unified Tray */}
           <div className={`shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
             <div className="mx-4 mb-4 flex flex-col">
-              {/* Reserve a fixed Dock slot so status changes never resize the
-                  message viewport. Expanded content floats upward from it. */}
+              {/* Keep a stable minimum Dock slot, but let approval details and
+                  expanded content participate in layout so they never cover
+                  the final message or its tool actions. */}
               {chatMode !== 'plan' && (
-                <div className="relative h-[52px] shrink-0">
-                  <div className="absolute inset-x-0 bottom-0 z-30">
+                <div className="relative min-h-[52px] shrink-0">
+                  <div className="relative z-30">
                     <UnifiedStatusTray
                       pendingChanges={pendingChanges}
                       todos={todos}
