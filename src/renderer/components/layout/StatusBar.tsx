@@ -50,6 +50,7 @@ import FileFormatControls from './FileFormatControls'
 import { gitService, type GitBranch as GitBranchInfo } from '@renderer/services/gitService'
 import { toast } from '../common/ToastProvider'
 import { pathStartsWith } from '@shared/utils/pathUtils'
+import AdministratorModeIndicator from './AdministratorModeIndicator'
 
 export default function StatusBar() {
   const {
@@ -444,6 +445,7 @@ export default function StatusBar() {
             <span>Ln {cursorPosition?.line || 1}, Col {cursorPosition?.column || 1}</span>
           </div>
           <FileFormatControls />
+          <AdministratorModeIndicator />
           <LspStatusIndicator />
         </div>
 

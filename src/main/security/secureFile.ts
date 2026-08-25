@@ -16,7 +16,8 @@ import { getUserConfigDir } from '../services/configPath'
 import { fileApprovalScope, isRecentAgentApprovalProof, type AgentApprovalProof } from '@shared/security/executionPolicy'
 
 // 导入拆分的模块
-import { readFileWithEncodingInfo, readFileSized, readLargeFile, safeWriteFile, getFileStats } from './fileUtils'
+import { readFileWithEncodingInfo, readFileSized, readLargeFile, writeFileAtomic, getFileStats } from './fileUtils'
+import { isSystemPermissionError, systemPrivilegeService } from '../services/systemPrivilegeService'
 import {
   setupFileWatcher,
   cleanupFileWatcher,
@@ -142,7 +143,10 @@ function writeFileSerialized(filePath: string, content: string, encoding: string
   if (existing?.kind === 'replace' && existing.content === content && existing.encoding === encoding) return existing.promise
 
   const previous = existing?.promise ?? Promise.resolve(true)
-  const write = previous.catch(() => false).then(() => safeWriteFile(filePath, content, encoding as any))
+  const write = previous.catch(() => false).then(async () => {
+    await writeFileAtomic(filePath, content, encoding as any)
+    return true
+  })
   pendingFileWrites.set(key, { kind: 'replace', content, encoding, promise: write })
   void write.finally(() => {
     if (pendingFileWrites.get(key)?.promise === write) pendingFileWrites.delete(key)
@@ -480,6 +484,9 @@ export function registerSecureFileHandlers(
       return true
     } catch (err) {
       logger.security.error('[File] write failed:', filePath, toAppError(err).message)
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })
@@ -505,7 +512,10 @@ export function registerSecureFileHandlers(
     try {
       await fsPromises.mkdir(dirPath, { recursive: true })
       return true
-    } catch {
+    } catch (err) {
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })
@@ -522,11 +532,13 @@ export function registerSecureFileHandlers(
       }
 
       try {
-        const success = await safeWriteFile(currentPath, content, (encoding as any) || 'utf-8')
-        if (!success) return null
+        await writeFileAtomic(currentPath, content, (encoding as any) || 'utf-8')
         securityManager.logOperation(OperationType.FILE_WRITE, currentPath, true)
         return currentPath
-      } catch {
+      } catch (err) {
+        if (isSystemPermissionError(err)) {
+          systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+        }
         return null
       }
     }
@@ -552,15 +564,17 @@ export function registerSecureFileHandlers(
       }
 
       try {
-        const success = await safeWriteFile(savePath, content, (encoding as any) || 'utf-8')
-        if (!success) return null
+        await writeFileAtomic(savePath, content, (encoding as any) || 'utf-8')
         authorizeUserFile(savePath, 'save-picker', 'write')
         securityManager.logOperation(OperationType.FILE_WRITE, savePath, true, {
           isNewFile: true,
           bypass: true,
         })
         return savePath
-      } catch {
+      } catch (err) {
+        if (isSystemPermissionError(err)) {
+          systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+        }
         return null
       }
     }
@@ -612,6 +626,9 @@ export function registerSecureFileHandlers(
       return true
     } catch (err) {
       logger.security.error('[File] mkdir failed:', dirPath, toAppError(err).message)
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })
@@ -736,6 +753,9 @@ export function registerSecureFileHandlers(
       return true
     } catch (err) {
       logger.security.error('[File] delete failed:', filePath, toAppError(err).message)
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })
@@ -772,6 +792,9 @@ export function registerSecureFileHandlers(
       return true
     } catch (err) {
       logger.security.error('[File] copy failed:', sourcePath, toAppError(err).message)
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })
@@ -797,6 +820,9 @@ export function registerSecureFileHandlers(
       return true
     } catch (err) {
       logger.security.error('[File] rename failed:', oldPath, toAppError(err).message)
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+      }
       return false
     }
   })
@@ -831,6 +857,9 @@ export function registerSecureFileHandlers(
         const code = (error as NodeJS.ErrnoException).code
         if (code !== 'EEXIST') {
           logger.security.error('[File] Failed to initialize settings file:', filePath, toAppError(error).message)
+          if (isSystemPermissionError(error)) {
+            systemPrivilegeService.notifyPermissionRequired(event.sender, 'file.writeProtected')
+          }
           return false
         }
       }

@@ -24,6 +24,7 @@ import { registerSkillsHandlers } from './skills' // Skills
 import { registerOpenAIAuthHandlers } from './openaiAuth' // OpenAI OAuth
 import { registerSessionStorageHandlers } from './sessionStorage'
 import { registerFormatterHandlers } from './formatter'
+import { registerSystemPrivilegeHandlers } from './systemPrivilege'
 import { resolveWorkspaceFromEvent } from './workspaceContext'
 
 // 安全模块
@@ -61,6 +62,7 @@ export function registerAllHandlers(context: IPCContext) {
 
   // 窗口控制
   registerWindowHandlers(createWindow)
+  registerSystemPrivilegeHandlers(getMainWindow)
 
   // 文件操作（安全版）
   registerSecureFileHandlers(getMainWindow, workspaceMetaStore, (event) =>

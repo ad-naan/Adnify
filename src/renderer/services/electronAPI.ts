@@ -35,6 +35,14 @@ function createGroupedAPI() {
     // 应用生命周期
     appReady: () => raw.appReady(),
     getAppVersion: () => raw.getAppVersion(),
+    systemPrivilege: {
+      getStatus: () => raw.systemPrivilegeGetStatus(),
+      requestElevation: (request: Parameters<typeof raw.systemPrivilegeRequestElevation>[0]) =>
+        raw.systemPrivilegeRequestElevation(request),
+      restartNormally: () => raw.systemPrivilegeRestartNormally(),
+      onRequired: (callback: Parameters<typeof raw.onSystemPrivilegeRequired>[0]) =>
+        raw.onSystemPrivilegeRequired(callback),
+    },
     clipboard: {
       readText: () => raw.clipboardReadText(),
       writeText: (text: string) => raw.clipboardWriteText(text),

@@ -13,6 +13,7 @@ import { ThemeManager } from './components/editor/ThemeManager'
 import { EditorSkeleton, PanelSkeleton, ChatSkeleton, FullScreenLoading, SettingsSkeleton } from './components/ui/Loading'
 import { EmotionAmbientGlow } from './components/agent/EmotionAmbientGlow'
 import { startupMetrics } from '@shared/utils/startupMetrics'
+import SystemPrivilegeCoordinator from './components/system/SystemPrivilegeCoordinator'
 
 startupMetrics.mark('app-module-loaded')
 
@@ -260,6 +261,7 @@ export default function App() {
   return (
     <ToastProvider>
       <ToastInitializer />
+      <SystemPrivilegeCoordinator />
       <GlobalErrorHandler>
         <ThemeManager>
           <AppContent />

@@ -6,10 +6,12 @@ import { logger } from '@shared/utils/Logger'
 import { session } from 'electron'
 import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
+import * as path from 'path'
 import Store from 'electron-store'
 import { getBootstrapStore, getUserConfigDir, setUserConfigDir } from '../services/configPath'
 import { cleanConfigValue } from '@shared/config/configCleaner'
 import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
+import { isSystemPermissionError, systemPrivilegeService } from '../services/systemPrivilegeService'
 
 interface SecurityModuleRef {
   securityManager: any
@@ -185,15 +187,21 @@ export function registerSettingsHandlers(
     return getUserConfigDir()
   })
 
-  ipcMain.handle('settings:setConfigPath', async (_, newPath: string) => {
+  ipcMain.handle('settings:setConfigPath', async (event, newPath: string) => {
     try {
       if (!fs.existsSync(newPath)) {
         fs.mkdirSync(newPath, { recursive: true })
       }
+      const probePath = path.join(newPath, `.adnify-write-test-${process.pid}-${Date.now()}`)
+      fs.writeFileSync(probePath, '')
+      fs.unlinkSync(probePath)
       setUserConfigDir(newPath, getBootstrapStore())
       return true
     } catch (err) {
       logger.ipc.error('[Settings] Failed to set config path:', err)
+      if (isSystemPermissionError(err)) {
+        systemPrivilegeService.notifyPermissionRequired(event.sender, 'config.writeProtected')
+      }
       return false
     }
   })

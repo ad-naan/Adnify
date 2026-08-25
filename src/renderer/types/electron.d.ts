@@ -352,6 +352,10 @@ export type DebugEvent =
 export interface ElectronAPI {
   // App
   appReady: () => void
+  systemPrivilegeGetStatus: () => Promise<import('@shared/types/systemPrivilege').SystemPrivilegeStatus>
+  systemPrivilegeRequestElevation: (request: import('@shared/types/systemPrivilege').ElevationRequest) => Promise<import('@shared/types/systemPrivilege').ElevationRequestResult>
+  systemPrivilegeRestartNormally: () => Promise<import('@shared/types/systemPrivilege').NormalRelaunchResult>
+  onSystemPrivilegeRequired: (callback: (event: import('@shared/types/systemPrivilege').PrivilegeRequiredEvent) => void) => () => void
   getAppVersion: () => Promise<string>
   respondToShutdownRequest: (requestId: string, success: boolean) => Promise<boolean>
   onShutdownRequested: (callback: (event: { requestId: string; reason: 'window-close' | 'app-quit' }) => void) => () => void

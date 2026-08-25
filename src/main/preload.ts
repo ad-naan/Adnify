@@ -10,6 +10,7 @@ import type {
   SessionWorkerResult,
 } from '@shared/types/sessionPersistence'
 import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
+import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, PrivilegeRequiredEvent, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
 
 // 本地类型定义（避免从 renderer 导入）
 type Language = 'en' | 'zh'
@@ -233,6 +234,10 @@ interface OpenFilesPayload {
 export interface ElectronAPI {
   // App lifecycle
   appReady: () => void
+  systemPrivilegeGetStatus: () => Promise<SystemPrivilegeStatus>
+  systemPrivilegeRequestElevation: (request: ElevationRequest) => Promise<ElevationRequestResult>
+  systemPrivilegeRestartNormally: () => Promise<NormalRelaunchResult>
+  onSystemPrivilegeRequired: (callback: (event: PrivilegeRequiredEvent) => void) => () => void
   getAppVersion: () => Promise<string>
 
   // Window controls
@@ -560,6 +565,14 @@ export interface ElectronAPI {
 
 contextBridge.exposeInMainWorld('electronAPI', {
   appReady: () => ipcRenderer.send('app:ready'),
+  systemPrivilegeGetStatus: () => ipcRenderer.invoke('systemPrivilege:getStatus'),
+  systemPrivilegeRequestElevation: (request: ElevationRequest) => ipcRenderer.invoke('systemPrivilege:requestElevation', request),
+  systemPrivilegeRestartNormally: () => ipcRenderer.invoke('systemPrivilege:restartNormally'),
+  onSystemPrivilegeRequired: (callback: (event: PrivilegeRequiredEvent) => void) => {
+    const handler = (_: IpcRendererEvent, payload: PrivilegeRequiredEvent) => callback(payload)
+    ipcRenderer.on('systemPrivilege:required', handler)
+    return () => ipcRenderer.removeListener('systemPrivilege:required', handler)
+  },
   getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
   respondToShutdownRequest: (requestId: string, success: boolean) =>
     ipcRenderer.invoke('app:shutdown-response', requestId, success),

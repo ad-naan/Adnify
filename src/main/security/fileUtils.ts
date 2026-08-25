@@ -179,21 +179,33 @@ export async function safeWriteFile(
   content: string,
   encoding: SupportedEncoding = 'utf-8',
 ): Promise<boolean> {
+  try {
+    await writeFileAtomic(filePath, content, encoding)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function writeFileAtomic(
+  filePath: string,
+  content: string,
+  encoding: SupportedEncoding = 'utf-8',
+): Promise<void> {
   const tempPath = `${filePath}.tmp.${Date.now()}`
 
   try {
     const path = await import('path')
-    await ensureDirectory(path.dirname(filePath))
+    await fsPromises.mkdir(path.dirname(filePath), { recursive: true })
     await fsPromises.writeFile(tempPath, encodeContent(content, normalizeEncoding(encoding)))
     await fsPromises.rename(tempPath, filePath)
-    return true
-  } catch {
+  } catch (error) {
     try {
       await fsPromises.unlink(tempPath)
     } catch {
       // ignore cleanup failure
     }
-    return false
+    throw error
   }
 }
 
