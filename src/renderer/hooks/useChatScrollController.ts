@@ -82,11 +82,12 @@ export function useChatScrollController({
     atBottomRef.current = true
     setShowScrollButton(false)
 
+    // Virtuoso's followOutput handles ordinary list growth. This is only the
+    // fallback for height changes inside the last row (streamed Markdown), so
+    // write the scroll position once and let the next frame settle its state.
     scroller.scrollTop = scroller.scrollHeight
-    virtuosoRef.current?.autoscrollToBottom()
 
     requestAnimationFrame(() => {
-      scroller.scrollTop = scroller.scrollHeight
       lastScrollTopRef.current = scroller.scrollTop
       isAutoScrollingRef.current = false
     })
@@ -101,16 +102,10 @@ export function useChatScrollController({
   }, [stickToBottom])
 
   const followOutput = useCallback((isListAtBottom: boolean) => {
-    if (isStreaming) return (isListAtBottom || atBottomRef.current) ? 'auto' : false
     return (isListAtBottom || atBottomRef.current) ? 'auto' : false
-  }, [isStreaming])
+  }, [])
 
   const handleTotalListHeightChanged = useCallback(() => {
-    if (!isStreaming) {
-      requestAnimationFrame(syncBottomStateFromScroller)
-      return
-    }
-
     const { bottom } = getBottomMetrics()
     if (!atBottomRef.current && !bottom) {
       requestAnimationFrame(syncBottomStateFromScroller)
@@ -118,20 +113,9 @@ export function useChatScrollController({
     }
 
     atBottomRef.current = true
-    isAutoScrollingRef.current = true
     setShowScrollButton(false)
-
-    requestAnimationFrame(() => {
-      stickToBottom()
-      requestAnimationFrame(() => {
-        stickToBottom()
-        requestAnimationFrame(() => {
-          isAutoScrollingRef.current = false
-          syncBottomStateFromScroller()
-        })
-      })
-    })
-  }, [getBottomMetrics, isStreaming, stickToBottom, syncBottomStateFromScroller])
+    scheduleStickToBottom()
+  }, [getBottomMetrics, scheduleStickToBottom, syncBottomStateFromScroller])
 
   const handleBottomStateChange = useCallback((bottom: boolean) => {
     if (isAutoScrollingRef.current) return
@@ -221,18 +205,6 @@ export function useChatScrollController({
       resizeObserver.disconnect()
     }
   }, [getBottomMetrics, isStreaming, scheduleStickToBottom, syncBottomState, syncBottomStateFromScroller])
-
-  useEffect(() => {
-    if (!isStreaming) return
-
-    const timer = window.setInterval(() => {
-      if (atBottomRef.current) {
-        stickToBottom()
-      }
-    }, 120)
-
-    return () => window.clearInterval(timer)
-  }, [isStreaming, stickToBottom])
 
   useEffect(() => {
     return () => {

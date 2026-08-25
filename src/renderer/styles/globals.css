@@ -913,29 +913,6 @@ textarea,
   opacity: 1;
 }
 
-/* Ink Blur Fade-In Animation - Smooth Character Fade */
-@keyframes ink-fade-in {
-  0% {
-    opacity: 0;
-    filter: blur(4px);
-  }
-  100% {
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
-/* Apply ink effect to streaming content */
-.streaming-ink-effect {
-  text-shadow: 0 0 1px rgba(var(--text-primary) / 0.1);
-}
-
-.inline-stream-char {
-  display: inline;
-  animation: ink-fade-in 0.5s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
-  will-change: opacity, filter;
-}
-
 /* Reveal in Explorer - File highlight flash */
 @keyframes reveal-highlight {
   0% {
@@ -966,6 +943,23 @@ textarea,
 .animate-block-reveal {
   animation: block-reveal 0.28s ease-out both;
   will-change: opacity, filter, transform;
+}
+
+/* One soft "ink settling" moment per new streaming block. The wrapper key is
+   stable while tokens append, so this never replays for individual characters. */
+@keyframes streaming-block-soft-enter {
+  from { opacity: 0.72; filter: blur(0.8px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+.streaming-block-soft-enter {
+  animation: streaming-block-soft-enter 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-block-soft-enter {
+    animation: none;
+  }
 }
 
 /* --- Inline Diff Styles (Composer) --- */

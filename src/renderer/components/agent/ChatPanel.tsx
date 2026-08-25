@@ -1489,28 +1489,35 @@ export default function ChatPanel() {
           {/* Bottom Input Area - Unified Tray */}
           <div className={`shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
             <div className="mx-4 mb-4 flex flex-col">
-              {/* Unified Status Tray: Files + Tasks + Queue */}
-              {chatMode !== 'plan' && <UnifiedStatusTray
-                pendingChanges={pendingChanges}
-                todos={todos}
-                isStreaming={isStreaming}
-                isAwaitingApproval={isAwaitingApproval}
-                pendingToolCall={pendingToolCall}
-                pendingToolCalls={pendingToolCalls}
-                onStop={abort}
-                onReviewFile={handleReviewFile}
-                onAcceptFile={handleAcceptFile}
-                onRejectFile={handleRejectFile}
-                onUndoAll={handleUndoAll}
-                onKeepAll={handleKeepAll}
-                onApproveTool={approveCurrentTool}
-                onApproveToolForTask={approveCurrentToolForTask}
-                onRejectTool={rejectCurrentTool}
-                onQueueSendNow={(id) => {
-                  useMessageQueueStore.getState().promote(id)
-                  abort()
-                }}
-              />}
+              {/* Reserve a fixed Dock slot so status changes never resize the
+                  message viewport. Expanded content floats upward from it. */}
+              {chatMode !== 'plan' && (
+                <div className="relative h-[52px] shrink-0">
+                  <div className="absolute inset-x-0 bottom-0 z-30">
+                    <UnifiedStatusTray
+                      pendingChanges={pendingChanges}
+                      todos={todos}
+                      isStreaming={isStreaming}
+                      isAwaitingApproval={isAwaitingApproval}
+                      pendingToolCall={pendingToolCall}
+                      pendingToolCalls={pendingToolCalls}
+                      onStop={abort}
+                      onReviewFile={handleReviewFile}
+                      onAcceptFile={handleAcceptFile}
+                      onRejectFile={handleRejectFile}
+                      onUndoAll={handleUndoAll}
+                      onKeepAll={handleKeepAll}
+                      onApproveTool={approveCurrentTool}
+                      onApproveToolForTask={approveCurrentToolForTask}
+                      onRejectTool={rejectCurrentTool}
+                      onQueueSendNow={(id) => {
+                        useMessageQueueStore.getState().promote(id)
+                        abort()
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Input Component */}
               <ChatInput

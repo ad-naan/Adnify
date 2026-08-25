@@ -84,11 +84,11 @@ describe('selectLiveState — 引用稳定性（卡顿的根因）', () => {
     expect(r1.liveParts).toBe(r2.liveParts) // 都是 undefined
   })
 
-  it('phase 不在活跃集合内时不算流式', () => {
+  it('phase 不在活跃集合内时保留当前回复的最终帧', () => {
     for (const phase of ['idle', 'done', 'error', 'compressing']) {
       const r = selectLiveState(makeState({ phase }), 'm1', true, true)
       expect(r.isStreaming, `phase=${phase}`).toBe(false)
-      expect(r.liveParts, `phase=${phase}`).toBeUndefined()
+      expect(r.liveParts, `phase=${phase}`).toEqual([{ type: 'text', content: 'hello' }])
     }
   })
 })

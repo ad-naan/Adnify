@@ -91,7 +91,6 @@ interface RenderPartProps {
 
 const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkMath]
 const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
-const STREAMING_TAIL_LENGTH = 40
 
 // 代码块组件 - 更加精致的玻璃质感
 const CodeBlock = React.memo(({ language, children, fontSize }: { language: string | undefined; children: React.ReactNode; fontSize: number }) => {
@@ -184,76 +183,6 @@ const StableStreamingMarkdownBlock = React.memo(({
 ))
 
 StableStreamingMarkdownBlock.displayName = 'StableStreamingMarkdownBlock'
-
-const renderStreamingTailText = (value: string, key: string) => {
-  if (!value) return value
-
-  const tailLength = Math.min(STREAMING_TAIL_LENGTH, value.length)
-  if (tailLength <= 0) return value
-
-  const stableText = value.slice(0, -tailLength)
-  const animatedTail = value.slice(-tailLength)
-
-  return (
-    <React.Fragment key={key}>
-      {stableText}
-      {animatedTail.split('').map((char, i) => {
-        const charIndex = value.length - tailLength + i
-        return (
-          <span key={`${key}-${charIndex}`} className="inline-stream-char">
-            {char}
-          </span>
-        )
-      })}
-    </React.Fragment>
-  )
-}
-
-const decorateStreamingChild = (child: React.ReactNode, path: string): { changed: boolean; node: React.ReactNode } => {
-  if (typeof child === 'string') {
-    return { changed: true, node: renderStreamingTailText(child, path) }
-  }
-
-  if (typeof child === 'number') {
-    return { changed: true, node: renderStreamingTailText(String(child), path) }
-  }
-
-  if (!React.isValidElement(child)) {
-    return { changed: false, node: child }
-  }
-
-  const childProps = child.props as { children?: React.ReactNode } | null
-  if (!childProps || childProps.children == null) {
-    return { changed: false, node: child }
-  }
-
-  const decoratedChildren = decorateStreamingChildren(childProps.children, path)
-  if (decoratedChildren === childProps.children) {
-    return { changed: false, node: child }
-  }
-
-  return {
-    changed: true,
-    node: React.cloneElement(child, undefined, decoratedChildren),
-  }
-}
-
-const decorateStreamingChildren = (children: React.ReactNode, basePath = 'tail'): React.ReactNode => {
-  const childArray = React.Children.toArray(children)
-  for (let index = childArray.length - 1; index >= 0; index -= 1) {
-    const currentChild = childArray[index]
-    const decorated = decorateStreamingChild(currentChild, `${basePath}-${index}`)
-    if (!decorated.changed) continue
-    if (decorated.node == null || typeof decorated.node === 'boolean') continue
-
-    const nextChildren = [...childArray]
-    nextChildren[index] = decorated.node
-    return nextChildren
-  }
-
-  return children
-}
-
 
 // ThinkingBlock 组件 - 扁平化折叠样式
 interface ThinkingBlockProps {
@@ -510,7 +439,6 @@ interface ProcessFoldProps {
   children: React.ReactNode
   language: 'zh' | 'en'
   summary: AssistantProcessSummary
-  settleExpanded?: boolean
 }
 
 const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => (
@@ -526,24 +454,13 @@ const ProcessFoldDivider = React.memo(({ side }: { side: 'left' | 'right' }) => 
 ))
 ProcessFoldDivider.displayName = 'ProcessFoldDivider'
 
-const ProcessFold = React.memo(({ children, language, summary, settleExpanded = false }: ProcessFoldProps) => {
-  const [isExpanded, setIsExpanded] = useState(settleExpanded)
+const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProps) => {
+  const [isExpanded, setIsExpanded] = useState(false)
   const summaryText = buildProcessSummaryText(summary, language)
   const titleText = summaryText || (language === 'zh' ? '过程' : 'Process')
   const detailLabel = isExpanded
     ? (language === 'zh' ? '收起过程' : 'Hide details')
     : (language === 'zh' ? '查看过程' : 'View process')
-
-  useEffect(() => {
-    if (!settleExpanded) return
-
-    setIsExpanded(true)
-    const timer = window.setTimeout(() => {
-      setIsExpanded(false)
-    }, 180)
-
-    return () => window.clearTimeout(timer)
-  }, [settleExpanded])
 
   return (
     <div className="my-3 w-full">
@@ -643,7 +560,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
                 style={{ fontSize: `${fontSize - 1}px` }}
                 className={`text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans ${isStreaming ? 'animate-block-reveal' : ''}`}
               >
-                {isStreaming ? renderStreamingTailText(fluidContent, 'think-tail') : fluidContent}
+                {fluidContent}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -661,13 +578,16 @@ ThinkingBlock.displayName = 'ThinkingBlock'
 // Markdown 渲染组件
 const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming }: { content: string; fontSize: number; isStreaming?: boolean }) => {
   const content = typeof rawContent === 'string' ? rawContent : String(rawContent ?? '')
+  const streamedInThisMountRef = React.useRef(false)
+  if (isStreaming) streamedInThisMountRef.current = true
+  const keepStreamingLayout = streamedInThisMountRef.current
 
   // 所有 useMemo 必须在前面
   const cleanedContent = React.useMemo(() => {
-    return isStreaming
-      ? cleanStreamingContent(content)
-      : fixMarkdownTables(content)
-  }, [content, isStreaming])
+    // Use identical normalization before and after completion so the final
+    // stream frame does not swap to a differently shaped Markdown tree.
+    return fixMarkdownTables(cleanStreamingContent(content))
+  }, [content])
 
   // 检测系统警告
   const systemAlert = React.useMemo(() => {
@@ -688,10 +608,9 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   // 平滑流式插入
   const smoothContent = useSmoothStream(contentWithoutAlert || '', !!isStreaming, 1.5)
-  const enableBlockReveal = !!isStreaming
   const streamingPartition = React.useMemo(
-    () => isStreaming ? partitionStreamingMarkdown(smoothContent) : null,
-    [isStreaming, smoothContent],
+    () => keepStreamingLayout ? partitionStreamingMarkdown(smoothContent) : null,
+    [keepStreamingLayout, smoothContent],
   )
 
   const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
@@ -710,11 +629,6 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
       console.warn('Failed to open file from markdown:', err)
     }
   }, [workspacePath, openFile, setActiveFile])
-
-  const renderStreamingChildren = React.useCallback((children: React.ReactNode) => {
-    if (!isStreaming) return children
-    return decorateStreamingChildren(children)
-  }, [isStreaming])
 
   const markdownComponents = React.useMemo(() => ({
     code({ className, children, node, ...props }: any) {
@@ -755,33 +669,33 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
         </div>
       )
     },
-    pre: ({ children }: any) => <div className={`overflow-x-auto max-w-full ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{children}</div>,
-    p: ({ children }: any) => <p className={`mb-3 last:mb-0 leading-7 break-words ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</p>,
-    ul: ({ children }: any) => <ul className={`list-disc pl-5 mb-3 space-y-1 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{children}</ul>,
-    ol: ({ children }: any) => <ol className={`list-decimal pl-5 mb-3 space-y-1 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{children}</ol>,
-    li: ({ children }: any) => <li className={`pl-1 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</li>,
+    pre: ({ children }: any) => <div className="overflow-x-auto max-w-full">{children}</div>,
+    p: ({ children }: any) => <p className="mb-3 last:mb-0 leading-7 break-words">{children}</p>,
+    ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
+    ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
+    li: ({ children }: any) => <li className="pl-1">{children}</li>,
     a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{renderStreamingChildren(children)}</a>
+      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
     ),
-    strong: ({ children, ...props }: any) => <strong {...props}>{renderStreamingChildren(children)}</strong>,
-    em: ({ children, ...props }: any) => <em {...props}>{renderStreamingChildren(children)}</em>,
+    strong: ({ children, ...props }: any) => <strong {...props}>{children}</strong>,
+    em: ({ children, ...props }: any) => <em {...props}>{children}</em>,
     blockquote: ({ children }: any) => (
-      <blockquote className={`border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</blockquote>
+      <blockquote className="border-l-4 border-accent/30 pl-4 my-4 text-text-muted italic bg-surface/20 py-2 rounded-r">{children}</blockquote>
     ),
-    h1: ({ children }: any) => <h1 className={`text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</h1>,
-    h2: ({ children }: any) => <h2 className={`text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</h2>,
-    h3: ({ children }: any) => <h3 className={`text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>{renderStreamingChildren(children)}</h3>,
+    h1: ({ children }: any) => <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-text-primary tracking-tight">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-text-primary tracking-tight">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-text-primary">{children}</h3>,
     table: ({ children }: any) => (
-      <div className={`overflow-x-auto my-4 ${enableBlockReveal ? 'animate-block-reveal' : ''}`}>
+      <div className="overflow-x-auto my-4">
         <table className="min-w-full border-collapse border border-border">{children}</table>
       </div>
     ),
     thead: ({ children }: any) => <thead className="bg-surface/50">{children}</thead>,
     tbody: ({ children }: any) => <tbody>{children}</tbody>,
     tr: ({ children }: any) => <tr className="border-b border-border hover:bg-surface-hover transition-colors">{children}</tr>,
-    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{renderStreamingChildren(children)}</th>,
-    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{renderStreamingChildren(children)}</td>,
-  }), [enableBlockReveal, fontSize, handleOpenFile, isStreaming, renderStreamingChildren])
+    th: ({ children }: any) => <th className="border border-border px-4 py-2 text-text-primary text-left font-semibold text-text-primary">{children}</th>,
+    td: ({ children }: any) => <td className="border border-border px-4 py-2 text-text-secondary">{children}</td>,
+  }), [fontSize, handleOpenFile])
 
   if (!contentWithoutAlert && !systemAlert) {
     return null
@@ -800,9 +714,9 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
       {contentWithoutAlert && (
         <div
           style={{ fontSize: `${fontSize}px` }}
-          className={`text-text-primary/90 leading-relaxed tracking-wide overflow-hidden ${isStreaming ? 'streaming-ink-effect' : ''}`}
+          className="text-text-primary/90 leading-relaxed tracking-wide overflow-hidden"
         >
-          {isStreaming && streamingPartition ? (
+          {keepStreamingLayout && streamingPartition ? (
             <>
               {streamingPartition.completedBlocks.map((block, index) => (
                 <StableStreamingMarkdownBlock
@@ -812,21 +726,26 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
                 />
               ))}
               {streamingPartition.activeBlock && (
-                streamingPartition.hasOpenFence || streamingPartition.activeBlock.length > 4096 ? (
-                  <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
-                    {renderStreamingTailText(streamingPartition.activeBlock, 'markdown-stream-tail')}
-                  </div>
-                ) : (
-                  <ReactMarkdown
-                    className="prose prose-invert max-w-none"
-                    remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-                    rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-                    components={markdownComponents}
-                    skipHtml
-                  >
-                    {streamingPartition.activeBlock}
-                  </ReactMarkdown>
-                )
+                <div
+                  key={`active-block-${streamingPartition.completedBlocks.length}`}
+                  className={isStreaming ? 'streaming-block-soft-enter' : undefined}
+                >
+                  {streamingPartition.hasOpenFence || streamingPartition.activeBlock.length > 4096 ? (
+                    <div className={`whitespace-pre-wrap break-words leading-7 ${streamingPartition.hasOpenFence ? 'font-mono' : ''}`}>
+                      {streamingPartition.activeBlock}
+                    </div>
+                  ) : (
+                    <ReactMarkdown
+                      className="prose prose-invert max-w-none"
+                      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+                      rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+                      components={markdownComponents}
+                      skipHtml
+                    >
+                      {streamingPartition.activeBlock}
+                    </ReactMarkdown>
+                  )}
+                </div>
               )}
             </>
           ) : (
@@ -907,7 +826,6 @@ SourcesBlock.displayName = 'SourcesBlock'
 // 渲染单个 Part
 const RenderPart = React.memo(({
   part,
-  index,
   pendingToolId,
   onApproveTool,
   onApproveToolForTask,
@@ -923,7 +841,6 @@ const RenderPart = React.memo(({
     if (!textStr.trim()) return null
     return (
       <MarkdownContent
-        key={`text-${index}`}
         content={textStr}
         fontSize={fontSize}
         isStreaming={isStreaming}
@@ -935,7 +852,6 @@ const RenderPart = React.memo(({
     if (!part.content?.trim() && !part.isStreaming) return null
     return (
       <ThinkingBlock
-        key={`reasoning-${index}`}
         content={part.content}
         startTime={part.startTime}
         isStreaming={!!part.isStreaming}
@@ -1026,11 +942,22 @@ const AssistantMessageContent = React.memo(({
   isStreaming?: boolean
   messageId: string
 }) => {
+  const getStablePartKey = React.useCallback((part: AssistantPart, index: number) => {
+    if ('id' in part && typeof part.id === 'string') return `${part.type}:${part.id}`
+    if (isToolCallPart(part)) return `tool:${part.toolCall.id}`
+
+    let sameTypeAfter = 0
+    for (let cursor = index + 1; cursor < parts.length; cursor += 1) {
+      if (parts[cursor].type === part.type) sameTypeAfter += 1
+    }
+    return `${part.type}:from-end-${sameTypeAfter}`
+  }, [parts])
+
   // Memoize 分组逻辑
   const groups = React.useMemo(() => {
     const result: Array<
-      | { type: 'part'; part: AssistantPart; index: number }
-      | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number }
+      | { type: 'part'; part: AssistantPart; index: number; key: string }
+      | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number; key: string }
     > = []
 
     let currentToolCalls: ToolCall[] = []
@@ -1042,26 +969,36 @@ const AssistantMessageContent = React.memo(({
         currentToolCalls.push(part.toolCall)
       } else {
         if (currentToolCalls.length > 0) {
-          result.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+          result.push({
+            type: 'tool_group',
+            toolCalls: currentToolCalls,
+            startIndex,
+            key: `tools:${currentToolCalls.map(toolCall => toolCall.id).join(':')}`,
+          })
           currentToolCalls = []
         }
-        result.push({ type: 'part', part, index })
+        result.push({ type: 'part', part, index, key: getStablePartKey(part, index) })
       }
     })
 
     if (currentToolCalls.length > 0) {
-      result.push({ type: 'tool_group', toolCalls: currentToolCalls, startIndex })
+      result.push({
+        type: 'tool_group',
+        toolCalls: currentToolCalls,
+        startIndex,
+        key: `tools:${currentToolCalls.map(toolCall => toolCall.id).join(':')}`,
+      })
     }
 
     return result
-  }, [parts])
+  }, [getStablePartKey, parts])
 
   return (
     <>
       {groups.map((group) => {
         if (group.type === 'part') {
           return (
-            <div key={`wrap-part-${group.index}`} className="w-full">
+            <div key={group.key} className="w-full">
               <RenderPart
                 part={group.part}
                 index={group.index}
@@ -1081,7 +1018,7 @@ const AssistantMessageContent = React.memo(({
 
         if (group.toolCalls.length === 1) {
           return (
-            <div key={`wrap-tool-${group.startIndex}`} className="w-full">
+            <div key={group.key} className="w-full">
               <RenderPart
                 part={parts[group.startIndex]}
                 index={group.startIndex}
@@ -1100,7 +1037,7 @@ const AssistantMessageContent = React.memo(({
         }
 
         return (
-          <div key={`wrap-group-${group.startIndex}`} className="w-full">
+          <div key={group.key} className="w-full">
             <ToolCallGroup
               toolCalls={group.toolCalls}
               pendingToolId={pendingToolId}
@@ -1139,8 +1076,6 @@ const ChatMessage = React.memo(({
   const [editContent, setEditContent] = useState('')
   const [copied, setCopied] = useState(false)
   const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null)
-  const wasStreamingRef = React.useRef(false)
-  const [isProcessSettling, setIsProcessSettling] = useState(false)
   const { editorConfig, language, expandAgentBlocksByDefault, userAvatarStyle, userAvatarSeed, userDisplayName, setShowAvatarDialog } = useStore(useShallow(s => ({
     editorConfig: s.editorConfig,
     language: s.language,
@@ -1203,7 +1138,6 @@ const ChatMessage = React.memo(({
 
   const assistantParts = isAssistantMessage(message) ? (liveParts ?? message.parts) : undefined
   const assistantInteractive = isAssistantMessage(message) ? (liveInteractive ?? message.interactive) : undefined
-  const didJustFinishStreaming = wasStreamingRef.current && !isStreaming
 
   useEffect(() => {
     if (isStreaming) {
@@ -1213,26 +1147,6 @@ const ChatMessage = React.memo(({
       return () => clearInterval(interval)
     }
   }, [isStreaming])
-
-  useEffect(() => {
-    if (!isAssistantMessage(message)) return
-
-    if (isStreaming) {
-      wasStreamingRef.current = true
-      setIsProcessSettling(false)
-      return
-    }
-
-    if (wasStreamingRef.current) {
-      wasStreamingRef.current = false
-      setIsProcessSettling(true)
-      const timer = window.setTimeout(() => {
-        setIsProcessSettling(false)
-      }, 520)
-
-      return () => window.clearTimeout(timer)
-    }
-  }, [isStreaming, message])
 
   const hasMetaGroup = React.useMemo(() => {
     if (!isAssistantMessage(message)) return false
@@ -1261,7 +1175,6 @@ const ChatMessage = React.memo(({
   }, [assistantParts, expandAgentBlocksByDefault, hasMetaGroup, isAwaitingApproval, isStreaming, message, pendingToolId])
 
   const shouldCollapseProcess = assistantProjection?.shouldCollapseProcess ?? false
-  const shouldSettleProcess = shouldCollapseProcess && (didJustFinishStreaming || isProcessSettling)
   const shouldRenderMetaGroup = isAssistantMessage(message) && !shouldCollapseProcess && hasMetaGroup
   const alertAssistantParts = assistantProjection?.alertParts ?? []
   const visibleAssistantParts = shouldCollapseProcess
@@ -1511,7 +1424,7 @@ const ChatMessage = React.memo(({
                 )}
               </div>
 
-              {!message.isStreaming && (
+              {!isStreaming && (
                 <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/msg:opacity-100 transition-opacity">
                   <Tooltip content={tt.copy}>
                     <button onClick={handleCopy} className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-hover transition-all">
@@ -1539,7 +1452,7 @@ const ChatMessage = React.memo(({
               )}
               <div className="prose-custom w-full max-w-none">
                 {shouldCollapseProcess && assistantProjection?.hasProcessContent && (
-                  <ProcessFold language={language} summary={assistantProjection.summary} settleExpanded={shouldSettleProcess}>
+                  <ProcessFold key="process" language={language} summary={assistantProjection.summary}>
                     {hasMetaGroup && (
                       <MessageMetaGroup
                         autoSkills={message.contextItems?.filter((item: any) => item.type === 'Skill' && item.auto)}
@@ -1566,6 +1479,7 @@ const ChatMessage = React.memo(({
                 )}
                 {alertAssistantParts.length > 0 && (
                   <AssistantMessageContent
+                    key="alerts"
                     parts={alertAssistantParts}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
@@ -1574,12 +1488,13 @@ const ChatMessage = React.memo(({
                     onStopTool={onStopTool}
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
-                    isStreaming={message.isStreaming}
+                    isStreaming={isStreaming}
                     messageId={message.id}
                   />
                 )}
                 {visibleAssistantParts.length > 0 && (
                   <AssistantMessageContent
+                    key="visible"
                     parts={visibleAssistantParts}
                     pendingToolId={pendingToolId}
                     onApproveTool={onApproveTool}
@@ -1588,13 +1503,13 @@ const ChatMessage = React.memo(({
                     onStopTool={onStopTool}
                     onOpenDiff={onOpenDiff}
                     fontSize={fontSize}
-                    isStreaming={message.isStreaming}
+                    isStreaming={isStreaming}
                     messageId={message.id}
                   />
                 )}
               </div>
 
-              {assistantInteractive && !message.isStreaming && (
+              {assistantInteractive && !isStreaming && (
                 <div className="mt-2 w-full">
                   <InteractiveCard
                     content={assistantInteractive}

@@ -15,9 +15,10 @@
  * 每条消息还各自在 selector 里做一次 messages.find() 线性查找，成本同样翻 12 倍。
  *
  * ── 修法 ──
- * 只有「当前正在流式的那一条」需要 live parts。其余消息的 parts 已经落库、不再
- * 变化，直接返回 undefined，组件会回退到 message.parts（一个稳定引用）。这样
- * 静态消息的 selector 结果逐字段全等，useShallow 判定无变化，重渲染被切断。
+ * 只有「当前正在流式的那一条」和它刚结束、等待父列表 props 落定的最后一帧需要
+ * live parts。其余消息的 parts 已经落库、不再变化，直接返回 undefined，组件会
+ * 回退到 message.parts（一个稳定引用）。这样静态消息的 selector 结果逐字段全等，
+ * useShallow 判定无变化，重渲染被切断。
  *
  * 先判断 isActiveAssistant 再取 parts，也顺带省掉了静态消息那次 find()。
  */
@@ -74,22 +75,23 @@ export function selectLiveState(
   const thread = threadId ? state.threads[threadId] : undefined
   const streamState = thread?.streamState
 
-  const isActiveAssistant =
+  const isCurrentAssistant =
     Boolean(messageIsStreaming) &&
     !!threadId &&
-    streamState?.assistantId === messageId &&
-    ACTIVE_STREAM_PHASES.has(streamState?.phase ?? 'idle')
+    streamState?.assistantId === messageId
+  const isActiveAssistant = isCurrentAssistant && ACTIVE_STREAM_PHASES.has(streamState?.phase ?? 'idle')
 
-  // 不在流式中：parts 已经定稿，不要订阅 live 引用。返回 undefined 让组件用
-  // message.parts（稳定引用），并跳过下面那次 find()。
-  if (!isActiveAssistant) return INERT
+  // 静态消息不订阅 live 引用。当前回复刚结束时，streamState 会先退出活跃
+  // phase，而父列表传下来的 message props 可能晚一帧更新；这时继续读取最终
+  // live parts，避免正文短暂回退到旧 props 后再跳回最终内容。
+  if (!isCurrentAssistant) return INERT
 
   const liveMessage = thread?.messages?.find(
     msg => msg.id === messageId && msg.role === 'assistant',
   )
 
   return {
-    isStreaming: true,
+    isStreaming: isActiveAssistant,
     liveParts: liveMessage?.parts,
     liveInteractive: liveMessage?.interactive,
   }
