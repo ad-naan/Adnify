@@ -7,8 +7,18 @@ import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
 import type { WorkerRequest, WorkerResponse, WorkerMessageType } from '../workers/computeWorker'
 
-// Worker 池配置
-const POOL_SIZE = Math.max(1, (navigator.hardwareConcurrency || 4) - 1)
+// A renderer-local pool is duplicated in every BrowserWindow. Keep it small:
+// these tasks are occasional UI helpers, not a sustained parallel workload.
+export function calculateWorkerPoolSize(hardwareConcurrency?: number): number {
+  const availableCores = Number.isFinite(hardwareConcurrency) && hardwareConcurrency! > 0
+    ? Math.floor(hardwareConcurrency!)
+    : 4
+  return Math.min(2, Math.max(1, availableCores - 1))
+}
+
+const POOL_SIZE = calculateWorkerPoolSize(
+  typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
+)
 
 interface PendingTask {
   resolve: (result: unknown) => void

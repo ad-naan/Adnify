@@ -16,7 +16,6 @@ import { initDiagnosticsListener } from './diagnosticsStore'
 import { restoreWorkspaceState } from './workspaceStateService'
 import { mcpService } from './mcpService'
 import { snippetService } from './snippetService'
-import { workerService } from './workerService'
 import { workspaceStorageRuntime } from './workspaceStorageRuntime'
 import { initCacheLifecycleService } from './cacheLifecycleService'
 import { runWithAgentStorageWritesSuspended } from '@renderer/agent/store/agentStorage'
@@ -154,17 +153,6 @@ async function restoreWorkspace(): Promise<boolean> {
   return true
 }
 
-function scheduleBackgroundInit(): void {
-  scheduleIdleTask(() => {
-    try {
-      workerService.init()
-      logger.system.debug('[Init] Worker service initialized')
-    } catch (e) {
-      logger.system.warn('[Init] Worker service init failed:', e)
-    }
-  })
-}
-
 export async function initializeApp(
   updateStatus: (status: string) => void
 ): Promise<InitResult> {
@@ -189,8 +177,6 @@ export async function initializeApp(
       updateStatus('Restoring workspace...')
       await restoreWorkspace()
     }
-
-    scheduleBackgroundInit()
 
     updateStatus('Ready!')
     startupMetrics.end('init-total')

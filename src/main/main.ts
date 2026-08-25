@@ -381,6 +381,8 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
       webSecurity: true,
       allowRunningInsecureContent: false,
       v8CacheOptions: 'bypassHeatCheck',
+      // Background windows may still be running Agent tasks, terminal output,
+      // and timeout-sensitive orchestration, so keep renderer scheduling active.
       backgroundThrottling: false,
       // 内置预览用 <webview> 承载本地 dev server：它跑在独立进程里，并且能给出
       // 真实的导航历史与 did-fail-load 错误码（iframe 两者都拿不到）。

@@ -32,6 +32,7 @@
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:coverage": "vitest --run --coverage",
+    "diagnose:multiwindow": "powershell -ExecutionPolicy Bypass -File scripts/diagnostics/monitor-multiwindow.ps1",
     "assets:icons": "node scripts/generate-platform-icons.js",
     "changelog:sync": "node scripts/sync-changelog.js",
     "postinstall": "node scripts/postinstall.js",
