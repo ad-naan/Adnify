@@ -2,7 +2,6 @@ import { motion } from 'framer-motion'
 import { Sparkles, Code, FileText, Bug, ArrowRight, GitBranch, FolderOpen, FileCode, Clock, RefreshCw, Zap, Box, AlertCircle, Layers, Wand2 } from 'lucide-react'
 import { useStore } from '@store'
 import { getFileName } from '@shared/utils/pathUtils'
-import { ScrollShadow } from '../ui/ScrollShadow'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 interface EmptyChatSuggestionsProps {
@@ -23,12 +22,12 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
     const latestCommitMsg = latestCommit?.message || (language === 'zh' ? '暂无提交记录' : 'No commits')
 
     return (
-        <div className="flex flex-col p-6 select-none z-10 w-full max-w-[500px] mx-auto h-full overflow-hidden">
+        <div className="flex flex-col p-6 select-none z-10 w-full max-w-[500px] mx-auto h-full overflow-y-auto custom-scrollbar">
             <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="flex flex-col h-full"
+                className="flex flex-col"
             >
                 {/* 1. Header Card */}
                 <div className="flex items-center gap-4 bg-gradient-to-r from-[rgb(var(--accent)/0.08)] to-[rgb(var(--accent)/0.02)] p-5 rounded-2xl mb-8 border border-[rgb(var(--accent)/0.1)]">
@@ -133,49 +132,47 @@ export default function EmptyChatSuggestions({ onSelectSuggestion }: EmptyChatSu
                 </div>
 
                 {/* 4. Start From Here */}
-                <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex flex-col">
                     <h3 className="text-[13px] font-bold text-[rgb(var(--text-primary))] mb-3 px-1 shrink-0">{language === 'zh' ? '从这里开始' : 'Start from here'}</h3>
-                    <ScrollShadow className="flex-1 min-h-0" maxHeight="100%">
-                        <div className="flex flex-col gap-2 pb-6 px-1">
-                            {[
-                            {
-                                icon: <Layers className="w-4 h-4 text-[rgb(var(--accent))]" />, iconBg: 'bg-[rgb(var(--accent)/0.1)]',
-                                title: language === 'zh' ? '梳理当前项目' : 'Analyze current project',
-                                desc: language === 'zh' ? '分析结构与依赖，快速掌握项目全貌' : 'Analyze structure and dependencies to master the project',
-                                prompt: language === 'zh' ? '请帮我梳理当前项目，分析目录结构与核心依赖，让我快速掌握项目全貌。' : 'Please analyze the current project structure and dependencies.'
-                            },
-                            {
-                                icon: <Box className="w-4 h-4 text-emerald-500" />, iconBg: 'bg-emerald-500/10',
-                                title: language === 'zh' ? '为这个模块生成方案' : 'Generate module plan',
-                                desc: language === 'zh' ? '基于当前目录，生成实施方案与模块设计' : 'Generate implementation plan based on current directory',
-                                prompt: language === 'zh' ? '请基于当前激活的目录或文件，为这个模块生成一份实施方案与模块设计。' : 'Please generate an implementation plan and module design.'
-                            },
-                            {
-                                icon: <FileText className="w-4 h-4 text-emerald-500" />, iconBg: 'bg-emerald-500/10',
-                                title: language === 'zh' ? '为选中文件补充注释' : 'Add comments to file',
-                                desc: language === 'zh' ? '自动生成注释与类型说明，提升可读性' : 'Auto-generate comments to improve readability',
-                                prompt: language === 'zh' ? '请为我当前选中的文件补充完整的注释与类型说明，提升代码可读性。' : 'Please add comprehensive comments and type declarations to the active file.'
-                            },
-                            {
-                                icon: <AlertCircle className="w-4 h-4 text-orange-500" />, iconBg: 'bg-orange-500/10',
-                                title: language === 'zh' ? '定位隐藏问题' : 'Find hidden issues',
-                                desc: language === 'zh' ? '扫描潜在风险与缺陷，给出修复建议' : 'Scan for potential risks and suggest fixes',
-                                prompt: language === 'zh' ? '请帮我扫描当前项目或激活文件的潜在风险、性能缺陷与安全隐患，并给出修复建议。' : 'Please scan the current project for potential bugs, security risks, and provide fixes.'
-                            }
-                        ].map((item, idx) => (
-                            <button key={idx} onClick={() => onSelectSuggestion(item.prompt)} className="flex items-center gap-4 p-3.5 rounded-xl border border-transparent bg-[rgb(var(--surface)/0.3)] hover:bg-[rgb(var(--surface))] hover:border-[rgb(var(--border)/0.6)] transition-all text-left group">
-                                <div className={`p-2.5 rounded-xl ${item.iconBg}`}>
-                                    {item.icon}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-[13px] font-semibold text-[rgb(var(--text-primary))] mb-0.5">{item.title}</div>
-                                    <div className="text-[11px] text-[rgb(var(--text-muted))] truncate">{item.desc}</div>
-                                </div>
-                                <ArrowRight className="w-4 h-4 text-[rgb(var(--text-muted))] opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-                            </button>
-                        ))}
-                        </div>
-                    </ScrollShadow>
+                    <div className="flex flex-col gap-2 pb-6 px-1">
+                        {[
+                        {
+                            icon: <Layers className="w-4 h-4 text-[rgb(var(--accent))]" />, iconBg: 'bg-[rgb(var(--accent)/0.1)]',
+                            title: language === 'zh' ? '梳理当前项目' : 'Analyze current project',
+                            desc: language === 'zh' ? '分析结构与依赖，快速掌握项目全貌' : 'Analyze structure and dependencies to master the project',
+                            prompt: language === 'zh' ? '请帮我梳理当前项目，分析目录结构与核心依赖，让我快速掌握项目全貌。' : 'Please analyze the current project structure and dependencies.'
+                        },
+                        {
+                            icon: <Box className="w-4 h-4 text-emerald-500" />, iconBg: 'bg-emerald-500/10',
+                            title: language === 'zh' ? '为这个模块生成方案' : 'Generate module plan',
+                            desc: language === 'zh' ? '基于当前目录，生成实施方案与模块设计' : 'Generate implementation plan based on current directory',
+                            prompt: language === 'zh' ? '请基于当前激活的目录或文件，为这个模块生成一份实施方案与模块设计。' : 'Please generate an implementation plan and module design.'
+                        },
+                        {
+                            icon: <FileText className="w-4 h-4 text-emerald-500" />, iconBg: 'bg-emerald-500/10',
+                            title: language === 'zh' ? '为选中文件补充注释' : 'Add comments to file',
+                            desc: language === 'zh' ? '自动生成注释与类型说明，提升可读性' : 'Auto-generate comments to improve readability',
+                            prompt: language === 'zh' ? '请为我当前选中的文件补充完整的注释与类型说明，提升代码可读性。' : 'Please add comprehensive comments and type declarations to the active file.'
+                        },
+                        {
+                            icon: <AlertCircle className="w-4 h-4 text-orange-500" />, iconBg: 'bg-orange-500/10',
+                            title: language === 'zh' ? '定位隐藏问题' : 'Find hidden issues',
+                            desc: language === 'zh' ? '扫描潜在风险与缺陷，给出修复建议' : 'Scan for potential risks and suggest fixes',
+                            prompt: language === 'zh' ? '请帮我扫描当前项目或激活文件的潜在风险、性能缺陷与安全隐患，并给出修复建议。' : 'Please scan the current project for potential bugs, security risks, and provide fixes.'
+                        }
+                    ].map((item, idx) => (
+                        <button key={idx} onClick={() => onSelectSuggestion(item.prompt)} className="flex items-center gap-4 p-3.5 rounded-xl border border-transparent bg-[rgb(var(--surface)/0.3)] hover:bg-[rgb(var(--surface))] hover:border-[rgb(var(--border)/0.6)] transition-all text-left group">
+                            <div className={`p-2.5 rounded-xl ${item.iconBg}`}>
+                                {item.icon}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[13px] font-semibold text-[rgb(var(--text-primary))] mb-0.5">{item.title}</div>
+                                <div className="text-[11px] text-[rgb(var(--text-muted))] truncate">{item.desc}</div>
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-[rgb(var(--text-muted))] opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                        </button>
+                    ))}
+                    </div>
                 </div>
             </motion.div>
         </div>

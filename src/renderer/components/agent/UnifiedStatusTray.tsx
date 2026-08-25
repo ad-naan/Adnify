@@ -120,14 +120,18 @@ function UnifiedStatusTray({
     ? activeTab
     : availableTabs[0] || 'files'
 
-  // 如果没有任何内容可显示，不渲染
-  if (availableTabs.length === 0 && !hasStatus) return null
+  // 是否有内容需要展示
+  const showTray = availableTabs.length > 0 || hasStatus
 
   return (
+    <AnimatePresence>
+      {showTray && (
     <motion.div
+      key="unified-status-tray"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 10 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
       className="mb-3"
     >
       <div className="rounded-xl border border-border/50 bg-surface/40 backdrop-blur-md overflow-hidden shadow-[0_4px_16px_-8px_rgba(0,0,0,0.1)] transition-all">
@@ -342,6 +346,8 @@ function UnifiedStatusTray({
         </AnimatePresence>
       </div>
     </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

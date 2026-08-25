@@ -69,6 +69,7 @@ export default function StatusBar() {
     setGitStatus,
     setGitBranches,
     setIsGitRepo,
+    setGitRecentCommits,
     setActiveSidePanel,
   } = useStore(useShallow(s => ({
     activeFilePath: s.activeFilePath,
@@ -86,6 +87,7 @@ export default function StatusBar() {
     setGitStatus: s.setGitStatus,
     setGitBranches: s.setGitBranches,
     setIsGitRepo: s.setIsGitRepo,
+    setGitRecentCommits: s.setGitRecentCommits,
     setActiveSidePanel: s.setActiveSidePanel,
   })))
 
@@ -101,6 +103,7 @@ export default function StatusBar() {
       setIsGitRepo(false)
       setGitStatus(null)
       setGitBranches([])
+      setGitRecentCommits([])
       return
     }
 
@@ -111,46 +114,50 @@ export default function StatusBar() {
     if (!repo) {
       setGitStatus(null)
       setGitBranches([])
+      setGitRecentCommits([])
       return
     }
 
-    const [status, branches] = await Promise.all([
+    const [status, branches, recentCommits] = await Promise.all([
       gitService.getStatus(workspacePath),
       gitService.getBranches(workspacePath),
+      gitService.getRecentCommits(5, workspacePath).catch(() => []),
     ])
     if (runId !== gitRefreshRunRef.current) return
     setGitStatus(status)
     setGitBranches(branches)
-  }, [setGitBranches, setGitStatus, setIsGitRepo, workspacePath])
+    setGitRecentCommits(recentCommits)
+  }, [setGitBranches, setGitRecentCommits, setGitStatus, setIsGitRepo, workspacePath])
 
   useEffect(() => {
     setIsGitRepo(false)
     setGitStatus(null)
     setGitBranches([])
+    setGitRecentCommits([])
     void refreshGitState()
     if (!workspacePath) return
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    const scheduleRefresh = () => {
+    const scheduleRefresh = (delay = 250) => {
       if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => void refreshGitState(), 250)
+      debounceTimer = setTimeout(() => void refreshGitState(), delay)
     }
     const unsubscribe = api.file.onChanged((event: { path: string }) => {
       if (pathStartsWith(event.path, workspacePath) && /[\\/]\.git(?:[\\/]|$)/.test(event.path)) {
-        scheduleRefresh()
+        scheduleRefresh(250)
       }
     })
-    const handleFocus = () => void refreshGitState()
+    // 聚焦时通过防抖调度，避免与文件监听等并发冲突
+    const handleFocus = () => scheduleRefresh(300)
     window.addEventListener('focus', handleFocus)
 
-    // Linked worktrees can keep HEAD outside the watched workspace. A cheap
-    // branch-only check closes that gap while the IDE is visible.
+    // 仅作为非常低频的弱兜底（60秒），主要依赖文件监听与窗口聚焦事件
     const branchPoll = window.setInterval(async () => {
       if (document.visibilityState !== 'visible') return
       const branch = await gitService.getCurrentBranch(workspacePath)
       const displayedBranch = useStore.getState().gitStatus?.branch
-      if (branch !== null && (branch || 'HEAD') !== displayedBranch) scheduleRefresh()
-    }, 3000)
+      if (branch !== null && (branch || 'HEAD') !== displayedBranch) scheduleRefresh(100)
+    }, 60_000)
 
     return () => {
       unsubscribe()
@@ -158,7 +165,7 @@ export default function StatusBar() {
       window.clearInterval(branchPoll)
       if (debounceTimer) clearTimeout(debounceTimer)
     }
-  }, [refreshGitState, setGitBranches, setGitStatus, setIsGitRepo, workspacePath])
+  }, [refreshGitState, setGitBranches, setGitRecentCommits, setGitStatus, setIsGitRepo, workspacePath])
 
   const visibleBranches = useMemo(() => {
     const query = branchQuery.trim().toLocaleLowerCase()

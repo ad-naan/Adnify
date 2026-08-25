@@ -1489,34 +1489,31 @@ export default function ChatPanel() {
           {/* Bottom Input Area - Unified Tray */}
           <div className={`shrink-0 z-20 flex-col ${chatMode === 'plan' && planOverlayOpen ? 'hidden' : 'flex'}`}>
             <div className="mx-4 mb-4 flex flex-col">
-              {/* Keep a stable minimum Dock slot, but let approval details and
-                  expanded content participate in layout so they never cover
-                  the final message or its tool actions. */}
+              {/* Dock 区域：无内容时不占空间，有内容时用动画平滑展开，
+                  避免固定 min-h 造成的底部空白，同时通过过渡动画防止抖动。 */}
               {chatMode !== 'plan' && (
-                <div className="relative min-h-[52px] shrink-0">
-                  <div className="relative z-30">
-                    <UnifiedStatusTray
-                      pendingChanges={pendingChanges}
-                      todos={todos}
-                      isStreaming={isStreaming}
-                      isAwaitingApproval={isAwaitingApproval}
-                      pendingToolCall={pendingToolCall}
-                      pendingToolCalls={pendingToolCalls}
-                      onStop={abort}
-                      onReviewFile={handleReviewFile}
-                      onAcceptFile={handleAcceptFile}
-                      onRejectFile={handleRejectFile}
-                      onUndoAll={handleUndoAll}
-                      onKeepAll={handleKeepAll}
-                      onApproveTool={approveCurrentTool}
-                      onApproveToolForTask={approveCurrentToolForTask}
-                      onRejectTool={rejectCurrentTool}
-                      onQueueSendNow={(id) => {
-                        useMessageQueueStore.getState().promote(id)
-                        abort()
-                      }}
-                    />
-                  </div>
+                <div className="relative shrink-0 z-30">
+                  <UnifiedStatusTray
+                    pendingChanges={pendingChanges}
+                    todos={todos}
+                    isStreaming={isStreaming}
+                    isAwaitingApproval={isAwaitingApproval}
+                    pendingToolCall={pendingToolCall}
+                    pendingToolCalls={pendingToolCalls}
+                    onStop={abort}
+                    onReviewFile={handleReviewFile}
+                    onAcceptFile={handleAcceptFile}
+                    onRejectFile={handleRejectFile}
+                    onUndoAll={handleUndoAll}
+                    onKeepAll={handleKeepAll}
+                    onApproveTool={approveCurrentTool}
+                    onApproveToolForTask={approveCurrentToolForTask}
+                    onRejectTool={rejectCurrentTool}
+                    onQueueSendNow={(id) => {
+                      useMessageQueueStore.getState().promote(id)
+                      abort()
+                    }}
+                  />
                 </div>
               )}
 
