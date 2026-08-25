@@ -11,7 +11,7 @@ import { z } from 'zod'
 import type { ToolApprovalType } from '@/shared/types/llm'
 import type { ToolOutputFormat, ToolOutputSignal } from '@/shared/utils/toolOutput'
 import { normalizeEditFileArgs, resolveEditFileRequest } from '@/shared/utils/editFile'
-import { normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
+import { hasMultiPaths, hasSinglePath, normalizeReadFileArgs, resolveReadFileRequest } from '@/shared/utils/readFile'
 import { PLAN_ACTIVITY_STAGES, PLAN_ACTIVITY_STATUSES } from '@/shared/types/planActivity'
 
 // ============================================
@@ -137,13 +137,19 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 - The result budget is shared across paths, so a large batch returns less of each file; locate the target with find_symbol or search_files first, then read a line range`,
         customSchema: z.object({
             path: z.string().min(1, 'path is required').optional(),
-            paths: z.array(z.string().min(1, 'path items must be non-empty')).min(1, 'paths must not be empty').optional(),
+            paths: z.array(z.string().min(1, 'path items must be non-empty')).optional(),
             start_line: z.number().optional(),
             end_line: z.number().optional(),
         }).passthrough()
             .superRefine((data, ctx) => {
-                if (Boolean(data.path) === Boolean(data.paths)) {
-                    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provide exactly one of path or paths' })
+                // 只要求「至少给出一个可用路径」。path 与 paths 同时出现不算冲突 ——
+                // 归一化阶段会取并集，模型的占位空数组或重复路径都能正常消化。
+                const record = data as Record<string, unknown>
+                if (!hasSinglePath(record) && !hasMultiPaths(record)) {
+                    ctx.addIssue({
+                        code: z.ZodIssueCode.custom,
+                        message: 'Provide either path (single file) or a non-empty paths array (multiple files)',
+                    })
                 }
             })
             .transform((data) => normalizeReadFileArgs(data as Record<string, unknown>))
@@ -167,9 +173,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
         parameters: {
             path: {
                 type: 'string',
-                description: 'Single file path. Use paths instead for multiple files.'
+                description: 'Single file path. Use paths instead for multiple files. Do not send both path and paths.'
             },
-            paths: { type: 'array', description: 'Multiple file paths. Do not combine with path or line ranges.', items: { type: 'string', description: 'File path relative to workspace root' } },
+            paths: { type: 'array', description: 'Multiple file paths. Omit this field entirely for a single file - do not send an empty array alongside path. Do not combine with path or line ranges.', items: { type: 'string', description: 'File path relative to workspace root' } },
             start_line: { type: 'number', description: 'Starting line (1-indexed, single file only)' },
             end_line: { type: 'number', description: 'Ending line inclusive (single file only)' },
         },

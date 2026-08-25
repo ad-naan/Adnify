@@ -111,128 +111,125 @@ export default function UpdateIndicator() {
       <AnimatePresence>
         {showPopover && (
           <motion.div
-            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            initial={{ opacity: 0, y: 8, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 400 }}
-            className="absolute right-0 top-full mt-3 w-[320px] rounded-3xl bg-background-secondary/95 backdrop-blur-xl border border-border/70 shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden origin-top-right"
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="absolute right-0 top-full mt-2 w-[300px] rounded-2xl bg-[rgb(var(--background-secondary))] border border-[rgb(var(--border))] shadow-2xl overflow-hidden origin-top-right select-none z-50"
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background-secondary/70">
-              <span className="text-[10px] font-black text-text-muted uppercase tracking-[0.2em]">{t.title}</span>
+            {/* 顶栏 */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--border)/0.6)] bg-[rgb(var(--background-tertiary)/0.5)]">
+              <span className="text-[12px] font-semibold text-[rgb(var(--text-primary))]">{t.title}</span>
               <button
                 onClick={() => setShowPopover(false)}
-                className="p-1.5 rounded-full hover:bg-white/10 text-text-muted transition-colors"
+                className="p-1 rounded-md text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] hover:bg-[rgb(var(--surface-hover))] transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="p-6">
-              <div className="flex flex-col items-center text-center mb-6">
-                <div className="relative mb-4 group/icon">
-                  <div
-                    className={`absolute inset-0 blur-2xl rounded-full opacity-40 transition-all duration-500 ${
-                      hasUpdate ? 'bg-accent group-hover/icon:opacity-60' : isError ? 'bg-red-500' : 'bg-emerald-500'
-                    }`}
-                  />
-                  <div
-                    className={`relative w-16 h-16 rounded-3xl flex items-center justify-center border border-white/10 shadow-xl ${
-                      hasUpdate
-                        ? 'bg-accent text-white'
-                        : isChecking || isDownloading
-                          ? 'bg-surface-active text-accent'
-                          : isError
-                            ? 'bg-red-500/20 text-red-400'
-                            : 'bg-emerald-500/20 text-emerald-400'
-                    }`}
-                  >
-                    {isChecking || isDownloading ? (
-                      <Loader2 className="w-8 h-8 animate-spin" />
-                    ) : hasUpdate ? (
-                      <ArrowUpCircle className="w-8 h-8" />
-                    ) : isError ? (
-                      <AlertCircle className="w-8 h-8" />
-                    ) : (
-                      <CheckCircle className="w-8 h-8" />
-                    )}
-                  </div>
-                </div>
-
-                <h4 className="text-lg font-bold text-text-primary tracking-tight">
-                  {status?.status === 'available'
-                    ? t.available
-                    : status?.status === 'downloaded'
-                      ? t.downloaded
-                      : status?.status === 'downloading'
-                        ? t.downloading
-                        : status?.status === 'checking'
-                          ? t.checking
-                          : status?.status === 'error'
-                            ? t.error
-                            : t.notAvailable}
-                </h4>
-
-                <div className="mt-2 flex items-center gap-2 px-3 py-1 rounded-full bg-background-secondary/[0.78] border border-border/60 text-[11px] font-medium">
-                  {status?.version && hasUpdate ? (
-                    <>
-                      <span className="text-text-muted opacity-60">v{currentVersion}</span>
-                      <div className="w-1 h-1 rounded-full bg-text-muted opacity-30" />
-                      <span className="text-accent font-bold">v{status.version}</span>
-                    </>
+            <div className="p-5 flex flex-col items-center text-center">
+              {/* 图标 */}
+              <div className="mb-3">
+                <div
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center border transition-all ${
+                    hasUpdate
+                      ? 'bg-[rgb(var(--accent)/0.12)] text-[rgb(var(--accent))] border-[rgb(var(--accent)/0.25)]'
+                      : isChecking || isDownloading
+                        ? 'bg-[rgb(var(--accent)/0.1)] text-[rgb(var(--accent))] border-[rgb(var(--accent)/0.2)]'
+                        : isError
+                          ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                          : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                  }`}
+                >
+                  {isChecking || isDownloading ? (
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  ) : hasUpdate ? (
+                    <ArrowUpCircle className="w-6 h-6" />
+                  ) : isError ? (
+                    <AlertCircle className="w-6 h-6" />
                   ) : (
-                    <span className="text-text-muted">
-                      {t.current}: v{currentVersion}
-                    </span>
+                    <CheckCircle className="w-6 h-6" />
                   )}
                 </div>
               </div>
 
+              {/* 标题 */}
+              <h4 className="text-[15px] font-semibold text-[rgb(var(--text-primary))]">
+                {status?.status === 'available'
+                  ? t.available
+                  : status?.status === 'downloaded'
+                    ? t.downloaded
+                    : status?.status === 'downloading'
+                      ? t.downloading
+                      : status?.status === 'checking'
+                        ? t.checking
+                        : status?.status === 'error'
+                          ? t.error
+                          : t.notAvailable}
+              </h4>
+
+              {/* 版本号 */}
+              <div className="mt-1.5 mb-4 text-[12px] text-[rgb(var(--text-muted))]">
+                {status?.version && hasUpdate ? (
+                  <span>
+                    v{currentVersion} <span className="text-[rgb(var(--text-muted)/0.4)]">→</span> <span className="text-[rgb(var(--accent))] font-medium">v{status.version}</span>
+                  </span>
+                ) : (
+                  <span>{t.current}: v{currentVersion}</span>
+                )}
+              </div>
+
+              {/* 下载进度条 */}
               {isDownloading && status?.progress !== undefined && (
-                <div className="mb-6 space-y-2">
-                  <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                <div className="w-full mb-4 p-2.5 rounded-xl bg-[rgb(var(--surface))] border border-[rgb(var(--border)/0.6)] space-y-1.5 text-left">
+                  <div className="flex justify-between text-[11px] font-medium text-[rgb(var(--text-muted))]">
+                    <span>{t.downloading}</span>
+                    <span className="text-[rgb(var(--accent))] font-bold">{status.progress.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-[rgb(var(--surface-active))] rounded-full overflow-hidden">
                     <motion.div
-                      className="h-full bg-accent shadow-[0_0_12px_rgba(var(--accent),0.8)]"
+                      className="h-full bg-[rgb(var(--accent))] rounded-full"
                       initial={{ width: 0 }}
                       animate={{ width: `${status.progress}%` }}
-                      transition={{ ease: 'circOut' }}
+                      transition={{ ease: 'easeOut' }}
                     />
                   </div>
-                  <div className="flex justify-between text-[9px] font-bold text-text-muted uppercase tracking-widest opacity-60">
-                    <span>{t.downloading}</span>
-                    <span className="text-accent">{status.progress.toFixed(0)}%</span>
-                  </div>
                 </div>
               )}
 
-              {hasUpdate && status?.requiresManualDownload && (
-                <div className="mb-4 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/80 leading-relaxed text-center">
-                  {t.manualHint}
-                </div>
-              )}
-
+              {/* 加速镜像提示 */}
               {status?.usingDownloadMirror && (
-                <div className="mb-4 px-4 py-2.5 rounded-2xl bg-sky-500/10 border border-sky-500/20 text-[11px] text-sky-200/80 leading-relaxed text-center">
+                <div className="w-full mb-4 px-3 py-2 rounded-xl bg-[rgb(var(--surface))] border border-[rgb(var(--border)/0.5)] text-[11px] text-[rgb(var(--text-secondary))] leading-relaxed text-left">
                   {t.mirrorHint}
                 </div>
               )}
 
-              <div className="space-y-2">
+              {/* 便携版提示 */}
+              {hasUpdate && status?.requiresManualDownload && (
+                <div className="w-full mb-4 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed text-left">
+                  {t.manualHint}
+                </div>
+              )}
+
+              {/* 按钮区域 */}
+              <div className="w-full space-y-2">
                 {hasUpdate ? (
                   status?.status === 'downloaded' ? (
                     <button
                       onClick={handleInstall}
-                      className="w-full h-11 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-sm font-bold shadow-[0_10px_20px_-5px_rgba(34,197,94,0.4)] transition-all active:scale-95 flex items-center justify-center gap-2"
+                      className="w-full h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm"
                     >
-                      <RefreshCw className="w-4 h-4" />
-                      {t.install}
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>{t.install}</span>
                     </button>
                   ) : (
                     <button
                       onClick={handleDownload}
-                      className="w-full h-11 rounded-2xl bg-accent hover:bg-accent-hover text-white text-sm font-bold shadow-[0_10px_20px_-5px_rgba(var(--accent)/0.4)] transition-all active:scale-95 flex items-center justify-center gap-2"
+                      className="w-full h-9 rounded-xl bg-[rgb(var(--accent))] hover:bg-[rgb(var(--accent-hover))] text-white text-[13px] font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm"
                     >
-                      {status?.requiresManualDownload ? <ExternalLink className="w-4 h-4" /> : <Download className="w-4 h-4" />}
-                      {status?.requiresManualDownload ? t.openPage : t.download}
+                      {status?.requiresManualDownload ? <ExternalLink className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
+                      <span>{status?.requiresManualDownload ? t.openPage : t.download}</span>
                     </button>
                   )
                 ) : (
@@ -240,10 +237,10 @@ export default function UpdateIndicator() {
                   !isDownloading && (
                     <button
                       onClick={handleCheck}
-                      className="w-full h-11 rounded-2xl bg-surface-active hover:bg-white/10 border border-border/50 text-text-primary text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                      className="w-full h-9 rounded-xl bg-[rgb(var(--surface))] hover:bg-[rgb(var(--surface-hover))] border border-[rgb(var(--border))] text-[rgb(var(--text-primary))] text-[13px] font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                     >
-                      <RefreshCw className="w-4 h-4" />
-                      {t.checkNow}
+                      <RefreshCw className="w-3.5 h-3.5 text-[rgb(var(--text-muted))]" />
+                      <span>{t.checkNow}</span>
                     </button>
                   )
                 )}
@@ -254,7 +251,7 @@ export default function UpdateIndicator() {
                     setShowPopover(false)
                     setShowChangelog(true, status?.version || currentVersion)
                   }}
-                  className="w-full py-2 text-xs font-medium text-text-muted hover:text-accent flex items-center justify-center gap-1.5 transition-colors"
+                  className="w-full py-1 text-[12px] text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
                   <span>{language === 'zh' ? '查看更新日志' : 'View Changelog'}</span>

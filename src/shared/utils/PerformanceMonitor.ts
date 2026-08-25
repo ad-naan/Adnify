@@ -47,6 +47,16 @@ export interface MemorySnapshot {
   rss?: number
 }
 
+// 内存泄漏检测阈值
+// 启动预热窗口：这段时间内的堆增长视为正常冷启动爬坡，不参与泄漏判定
+const MEMORY_WARMUP_MS = 5 * 60 * 1000
+// 最小绝对增量：低于此值的增长即使百分比很高也无诊断价值
+const MEMORY_MIN_GROWTH_BYTES = 200 * 1024 * 1024
+// 重复告警冷却：避免平台期每个快照都刷一条
+const MEMORY_WARNING_COOLDOWN_MS = 10 * 60 * 1000
+// 接近堆上限的告警水位
+const MEMORY_PRESSURE_RATIO = 0.75
+
 // 性能监控配置
 interface PerformanceConfig {
   enabled: boolean
@@ -97,6 +107,13 @@ class PerformanceMonitorClass {
   // 新增：内存监控
   private memorySnapshots: MemorySnapshot[] = []
   private memoryTimer: NodeJS.Timeout | null = null
+  // 泄漏检测状态
+  // 用 -Infinity 而非 0 表示「从未告警」：0 会被冷却窗口当成
+  // 「刚刚在 epoch 0 告警过」，从而吞掉第一次告警。
+  private startedAt = Date.now()
+  private lastLeakWarningAt = Number.NEGATIVE_INFINITY
+  private lastPressureWarningAt = Number.NEGATIVE_INFINITY
+  private heapLimit: number | null | undefined = undefined
   
   // 新增：采样计数器（用于确定性采样）
   private sampleCounters: Map<MetricCategory, number> = new Map()
@@ -173,30 +190,95 @@ class PerformanceMonitorClass {
       
       // 检测内存泄漏趋势
       this.detectMemoryLeak()
+      // 检测堆压力（真正的 OOM 前兆，不受预热窗口限制）
+      this.detectMemoryPressure(snapshot)
     } catch {
       // 忽略内存监控错误
     }
   }
 
   /**
+   * 堆压力检测：heapUsed 接近 V8 上限时告警。
+   * 这是 OOM 的直接前兆 —— 多窗口共享同一个主进程堆时尤其重要。
+   */
+  private detectMemoryPressure(snapshot: MemorySnapshot): void {
+    const heapLimit = this.getHeapLimit()
+    if (!heapLimit) return
+
+    const ratio = snapshot.heapUsed / heapLimit
+    if (ratio < MEMORY_PRESSURE_RATIO) return
+
+    if (snapshot.timestamp - this.lastPressureWarningAt < MEMORY_WARNING_COOLDOWN_MS) return
+    this.lastPressureWarningAt = snapshot.timestamp
+
+    logger.perf.error('Heap pressure critical - OOM risk', {
+      heapUsed: `${(snapshot.heapUsed / 1024 / 1024).toFixed(1)}MB`,
+      heapLimit: `${(heapLimit / 1024 / 1024).toFixed(1)}MB`,
+      heapUsedPercent: `${(ratio * 100).toFixed(1)}%`,
+      rss: snapshot.rss ? `${(snapshot.rss / 1024 / 1024).toFixed(1)}MB` : undefined,
+    })
+  }
+
+  /**
    * 检测内存泄漏趋势
+   *
+   * 注意：启动阶段主进程会一次性分配大块内存（索引 / embedding / tree-sitter），
+   * 堆从几 MB 涨到数百 MB 是正常的冷启动爬坡，不是泄漏。旧实现只看相对增长率，
+   * 于是把这段爬坡报成 "9151% 泄漏"，既是误报又掩盖了真正的信号
+   * （接近堆上限）。这里改为三个条件同时成立才告警。
    */
   private detectMemoryLeak(): void {
     if (this.memorySnapshots.length < 10) return
-    
+
     const recent = this.memorySnapshots.slice(-10)
     const first = recent[0]
     const last = recent[recent.length - 1]
-    
-    // 如果最近 10 次快照内存持续增长超过 50%，发出警告
-    const growthRate = (last.heapUsed - first.heapUsed) / first.heapUsed
-    if (growthRate > 0.5) {
-      logger.perf.warn('Potential memory leak detected', {
-        growthRate: `${(growthRate * 100).toFixed(1)}%`,
-        heapUsed: `${(last.heapUsed / 1024 / 1024).toFixed(1)}MB`,
-        duration: `${((last.timestamp - first.timestamp) / 1000).toFixed(0)}s`,
-      })
+
+    // 1. 跳过启动预热窗口：爬坡期的增长率没有诊断价值
+    if (last.timestamp - this.startedAt < MEMORY_WARMUP_MS) return
+
+    // 2. 相对增长：最近窗口内持续上涨
+    const growthRate = (last.heapUsed - first.heapUsed) / Math.max(first.heapUsed, 1)
+    if (growthRate <= 0.5) return
+
+    // 3. 绝对增量：过滤掉低基数下的百分比噪声
+    //    （8MB → 16MB 是 100%，但完全无害）
+    if (last.heapUsed - first.heapUsed < MEMORY_MIN_GROWTH_BYTES) return
+
+    // 重复告警节流：内存到达平台期后不再每 30s 刷一条
+    if (last.timestamp - this.lastLeakWarningAt < MEMORY_WARNING_COOLDOWN_MS) return
+    this.lastLeakWarningAt = last.timestamp
+
+    const heapLimit = this.getHeapLimit()
+    logger.perf.warn('Potential memory leak detected', {
+      growthRate: `${(growthRate * 100).toFixed(1)}%`,
+      heapUsed: `${(last.heapUsed / 1024 / 1024).toFixed(1)}MB`,
+      heapTotal: `${(last.heapTotal / 1024 / 1024).toFixed(1)}MB`,
+      rss: last.rss ? `${(last.rss / 1024 / 1024).toFixed(1)}MB` : undefined,
+      // 真正决定会不会 OOM 的是这个比例，而不是增长率
+      heapLimit: heapLimit ? `${(heapLimit / 1024 / 1024).toFixed(1)}MB` : undefined,
+      heapUsedPercent: heapLimit ? `${((last.heapUsed / heapLimit) * 100).toFixed(1)}%` : undefined,
+      duration: `${((last.timestamp - first.timestamp) / 1000).toFixed(0)}s`,
+    })
+  }
+
+  /**
+   * V8 堆上限（仅主进程可得）。渲染进程返回 null。
+   */
+  private getHeapLimit(): number | null {
+    if (this.heapLimit !== undefined) return this.heapLimit
+
+    this.heapLimit = null
+    try {
+      if (typeof process !== 'undefined' && process.versions?.node) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const v8 = require('v8') as { getHeapStatistics(): { heap_size_limit: number } }
+        this.heapLimit = v8.getHeapStatistics().heap_size_limit
+      }
+    } catch {
+      this.heapLimit = null
     }
+    return this.heapLimit
   }
 
   /**

@@ -130,15 +130,17 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
+  const isZh = language === 'zh'
+
   // 定义所有命令
   const commands: Command[] = [
     // AI Actions (Priority)
     {
       id: 'ai-chat',
-      label: 'Ask AI...',
-      description: 'Start a new chat conversation',
+      label: isZh ? '询问 AI...' : 'Ask AI...',
+      description: isZh ? '发起新的 AI 对话会话' : 'Start a new chat conversation',
       icon: Sparkles,
-      category: 'AI',
+      category: isZh ? 'AI 助手' : 'AI Helper',
       action: () => {
         setChatVisible(true)
         setMode('agent')
@@ -147,43 +149,43 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     },
     {
       id: 'ai-explain',
-      label: 'Explain Current File',
-      description: 'Ask AI to explain the active file',
+      label: isZh ? '解释当前文件' : 'Explain Current File',
+      description: isZh ? '让 AI 详细分析并解释当前激活的文件' : 'Ask AI to explain the active file',
       icon: MessageSquare,
-      category: 'AI Helper',
+      category: isZh ? 'AI 助手' : 'AI Helper',
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
           setMode('agent')
-          setInputPrompt(`Explain the file ${activeFilePath} in detail.`)
+          setInputPrompt(isZh ? `请详细解释文件 ${activeFilePath} 的结构与核心逻辑。` : `Explain the file ${activeFilePath} in detail.`)
         }
       }
     },
     {
       id: 'ai-refactor',
-      label: 'Refactor File',
-      description: 'Ask AI to suggest refactoring improvements',
+      label: isZh ? '重构当前文件' : 'Refactor File',
+      description: isZh ? '让 AI 提出代码重构与性能可读性优化建议' : 'Ask AI to suggest refactoring improvements',
       icon: Zap,
-      category: 'AI Helper',
+      category: isZh ? 'AI 助手' : 'AI Helper',
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
           setMode('agent')
-          setInputPrompt(`Analyze ${activeFilePath} and suggest refactoring improvements for readability and performance.`)
+          setInputPrompt(isZh ? `请分析 ${activeFilePath} 并提出重构改进方案，提升可读性与性能。` : `Analyze ${activeFilePath} and suggest refactoring improvements for readability and performance.`)
         }
       }
     },
     {
       id: 'ai-fix',
-      label: 'Fix Bugs',
-      description: 'Ask AI to find and fix bugs in current file',
+      label: isZh ? '修复当前文件问题' : 'Fix Bugs',
+      description: isZh ? '让 AI 排查潜在缺陷并生成修复方案' : 'Ask AI to find and fix bugs in current file',
       icon: Zap,
-      category: 'AI Helper',
+      category: isZh ? 'AI 助手' : 'AI Helper',
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
           setMode('agent')
-          setInputPrompt(`Find potential bugs in ${activeFilePath} and provide fixes.`)
+          setInputPrompt(isZh ? `请排查 ${activeFilePath} 中的潜在问题并给出修复建议。` : `Find potential bugs in ${activeFilePath} and provide fixes.`)
         }
       }
     },
@@ -191,59 +193,58 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     // File Operations
     {
       id: 'open-folder',
-      label: 'Open Folder',
-      description: 'Open a workspace folder',
+      label: isZh ? '打开文件夹' : 'Open Folder',
+      description: isZh ? '打开工作区目录' : 'Open a workspace folder',
       icon: FolderOpen,
-      category: 'File',
+      category: isZh ? '文件' : 'File',
       action: () => api.file.openFolder(),
       shortcut: formatShortcut('Ctrl+O'),
     },
     {
       id: 'new-window',
-      label: 'New Window',
-      description: 'Open a new application window',
+      label: isZh ? '新建窗口' : 'New Window',
+      description: isZh ? '打开新的应用窗口' : 'Open a new application window',
       icon: Plus,
-      category: 'Window',
+      category: isZh ? '窗口' : 'Window',
       action: () => api.window.new(),
       shortcut: formatShortcut('Ctrl+Shift+N'),
     },
     {
       id: 'add-folder',
-      label: 'Add Folder to Workspace...',
-      description: 'Add a new root folder to the current workspace',
+      label: isZh ? '添加文件夹到工作区...' : 'Add Folder to Workspace...',
+      description: isZh ? '为当前工作区添加新的根目录' : 'Add a new root folder to the current workspace',
       icon: FolderPlus,
-      category: 'Workspace',
+      category: isZh ? '工作区' : 'Workspace',
       action: async () => {
         const path = await api.workspace.addFolder()
         if (path) {
           const { addRoot } = useStore.getState()
           addRoot(path)
-          // 初始化新根目录的 .adnify
           await workspaceFiles.initialize(path)
-          toast.success(`Added ${path} to workspace`)
+          toast.success(isZh ? `已添加 ${path} 到工作区` : `Added ${path} to workspace`)
         }
       },
     },
     {
       id: 'save-workspace',
-      label: 'Save Workspace As...',
-      description: 'Save the current multi-root workspace configuration',
+      label: isZh ? '工作区另存为...' : 'Save Workspace As...',
+      description: isZh ? '保存当前多根工作区配置' : 'Save the current multi-root workspace configuration',
       icon: Save,
-      category: 'Workspace',
+      category: isZh ? '工作区' : 'Workspace',
       action: async () => {
         const { workspace } = useStore.getState()
         if (workspace) {
           const success = await api.workspace.save(workspace.configPath || '', workspace.roots)
-          if (success) toast.success('Workspace saved')
+          if (success) toast.success(isZh ? '工作区已保存' : 'Workspace saved')
         }
       },
     },
     {
       id: 'save-file',
-      label: 'Save File',
-      description: 'Save the current file',
+      label: isZh ? '保存文件' : 'Save File',
+      description: isZh ? '保存当前正在编辑的文件' : 'Save the current file',
       icon: Save,
-      category: 'File',
+      category: isZh ? '文件' : 'File',
       action: () => {
         document.dispatchEvent(new KeyboardEvent('keydown', {
           key: 's',
@@ -255,10 +256,10 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     },
     {
       id: 'refresh-files',
-      label: 'Refresh File Explorer',
-      description: 'Reload the file tree',
+      label: isZh ? '刷新文件资源管理器' : 'Refresh File Explorer',
+      description: isZh ? '重新加载文件目录树' : 'Reload the file tree',
       icon: RefreshCw,
-      category: 'File',
+      category: isZh ? '文件' : 'File',
       action: async () => {
         if (workspacePath) {
           const files = await api.file.readDir(workspacePath)
@@ -272,86 +273,86 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     // View & Settings
     {
       id: 'quick-open',
-      label: 'Go to File...',
-      description: 'Search and open files by name',
+      label: isZh ? '快速打开文件...' : 'Go to File...',
+      description: isZh ? '按名称搜索并打开文件' : 'Search and open files by name',
       icon: Search,
-      category: 'File',
+      category: isZh ? '文件' : 'File',
       action: () => setShowQuickOpen(true),
       shortcut: formatShortcut('Ctrl+P'),
     },
     {
       id: 'toggle-terminal',
-      label: terminalVisible ? 'Hide Terminal' : 'Show Terminal',
-      description: 'Toggle the terminal panel',
+      label: terminalVisible ? (isZh ? '隐藏终端' : 'Hide Terminal') : (isZh ? '显示终端' : 'Show Terminal'),
+      description: isZh ? '切换终端面板的显示与隐藏' : 'Toggle the terminal panel',
       icon: Terminal,
-      category: 'View',
+      category: isZh ? '视图' : 'View',
       action: () => setTerminalVisible(!terminalVisible),
       shortcut: formatShortcut('Ctrl+`'),
     },
     {
       id: 'toggle-ai-panel',
-      label: chatVisible ? 'Hide AI Panel' : 'Show AI Panel',
-      description: 'Toggle the AI assistant panel',
+      label: chatVisible ? (isZh ? '隐藏 AI 面板' : 'Hide AI Panel') : (isZh ? '显示 AI 面板' : 'Show AI Panel'),
+      description: isZh ? '切换 AI 助手对话面板的显示' : 'Toggle the AI assistant panel',
       icon: PanelRight,
-      category: 'View',
+      category: isZh ? '视图' : 'View',
       action: () => setChatVisible(!chatVisible),
       shortcut: formatShortcut('Ctrl+L'),
     },
     {
       id: 'settings',
-      label: 'Open Settings',
-      description: 'Configure API keys and preferences',
+      label: isZh ? '打开设置' : 'Open Settings',
+      description: isZh ? '配置 API 密钥、模型与系统偏好' : 'Configure API keys and preferences',
       icon: Settings,
-      category: 'Preferences',
+      category: isZh ? '偏好设置' : 'Preferences',
       action: () => setShowSettings(true),
       shortcut: formatShortcut('Ctrl+,'),
     },
     {
       id: 'keyboard-shortcuts',
-      label: 'Keyboard Shortcuts',
-      description: 'View all keyboard shortcuts',
+      label: isZh ? '快捷键列表' : 'Keyboard Shortcuts',
+      description: isZh ? '查看所有键盘快捷键' : 'View all keyboard shortcuts',
       icon: Keyboard,
-      category: 'Help',
+      category: isZh ? '帮助' : 'Help',
       action: () => onShowKeyboardShortcuts(),
       shortcut: '?',
     },
     {
       id: 'about',
-      label: 'About Adnify',
-      description: 'View application information',
+      label: isZh ? '关于 Adnify' : 'About Adnify',
+      description: isZh ? '查看应用版本与相关信息' : 'View application information',
       icon: MessageSquare,
-      category: 'Help',
+      category: isZh ? '帮助' : 'Help',
       action: () => setShowAbout(true),
     },
     {
       id: 'view-changelog',
-      label: language === 'zh' ? '更新日志 (版本记录)' : 'View Changelog / Release Notes',
-      description: language === 'zh' ? '查看所有历史版本与新功能更新记录' : 'View release history and new features',
+      label: isZh ? '更新日志 (版本记录)' : 'View Changelog / Release Notes',
+      description: isZh ? '查看所有历史版本与新功能更新记录' : 'View release history and new features',
       icon: BookOpen,
-      category: 'Help',
+      category: isZh ? '帮助' : 'Help',
       action: () => setShowChangelog(true),
     },
 
     // AI Tools
     {
       id: 'clear-chat',
-      label: 'Clear Chat History',
-      description: 'Remove all messages from the chat',
+      label: isZh ? '清空对话历史' : 'Clear Chat History',
+      description: isZh ? '移除当前对话中的所有消息记录' : 'Remove all messages from the chat',
       icon: Trash2,
-      category: 'AI Tools',
+      category: isZh ? 'AI 工具' : 'AI Tools',
       action: () => clearMessages(),
     },
     {
       id: 'clear-checkpoints',
-      label: 'Clear All Checkpoints',
-      description: 'Remove all saved checkpoints',
+      label: isZh ? '清除所有检查点' : 'Clear All Checkpoints',
+      description: isZh ? '删除已保存的所有历史快照与检查点' : 'Remove all saved checkpoints',
       icon: History,
-      category: 'AI Tools',
+      category: isZh ? 'AI 工具' : 'AI Tools',
       action: () => clearCheckpoints(),
     },
   ]
 
-  // 过滤命令
+  // 过滤命令（同时支持中文与英文关键词）
   const filteredCommands = commands.filter(cmd => {
     if (!query) return true
     const searchStr = `${cmd.label} ${cmd.description || ''} ${cmd.category}`.toLowerCase()
@@ -493,11 +494,11 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
                 <kbd className="floating-surface-chip font-sans px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↑</kbd>
                 <kbd className="floating-surface-chip font-sans px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↓</kbd>
               </div>
-              <span>to navigate</span>
+              <span>{isZh ? '导航' : 'to navigate'}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <kbd className="floating-surface-chip font-sans px-1.5 py-0.5 rounded shadow-sm">↵</kbd>
-              <span>to select</span>
+              <span>{isZh ? '选择执行' : 'to select'}</span>
             </span>
           </div>
           <div className="flex items-center gap-2 opacity-50">

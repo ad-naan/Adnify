@@ -451,6 +451,34 @@ class LoggerClass {
     this.processFileWriteQueue()
   }
 
+  /**
+   * 同步冲刷待写日志。
+   * 用于 process 'exit' 等无法等待异步回调的场景 —— 否则队列里的
+   * 最后几条（尤其是退出/崩溃面包屑）会随进程一起消失。
+   */
+  flushSync(): void {
+    if (!this.isMain) return
+    if (!this.config.fileLogging || !this.config.logFilePath) return
+    if (this.fileWriteQueue.length === 0) return
+
+    try {
+      const fs = getNodeFs()
+      const path = getNodePath()
+      const logPath = this.config.logFilePath
+      const logDir = path.dirname(logPath)
+
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true })
+      }
+
+      const entries = this.fileWriteQueue.splice(0)
+      const lines = entries.map(e => this.formatLogLine(e)).join('\n') + '\n'
+      fs.appendFileSync(logPath, lines, 'utf-8')
+    } catch {
+      // 退出路径，不再尝试补救
+    }
+  }
+
   private async processFileWriteQueue(): Promise<void> {
     if (!this.isMain) return
     if (this.isWriting || this.fileWriteQueue.length === 0) return

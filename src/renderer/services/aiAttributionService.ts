@@ -756,11 +756,20 @@ class AiAttributionService {
 
     const branch = await this.getCurrentBranch(repoRoot)
     const baseRef = branch ? await this.resolveBaseRef(repoRoot, branch) : null
-    const commitShas = branch ? await this.listRangeCommits(repoRoot, baseRef, 'HEAD', 120) : []
+    let commitShas = branch ? await this.listRangeCommits(repoRoot, baseRef, 'HEAD', 15) : []
+    if (commitShas.length === 0 && branch) {
+      commitShas = await this.listBranchCommits(repoRoot, 10)
+    }
     const reports: AiCommitReport[] = []
     const pendingCommits: string[] = []
+    let newlyAnalyzedCount = 0
     for (const commitSha of commitShas) {
-      const report = await this.readCommitReport(repoRoot, commitSha)
+      let report = await this.readCommitReport(repoRoot, commitSha)
+      if (!report && newlyAnalyzedCount < 3) {
+        // 单次加载最多增量分析 3 个缺失的 commit，避免阻塞
+        report = await this.analyzeCommit(repoRoot, commitSha, 'reconcile').catch(() => null)
+        if (report) newlyAnalyzedCount++
+      }
       if (report) {
         reports.push(report)
       } else {
@@ -912,14 +921,48 @@ class AiAttributionService {
     }
   }
 
+  private existingNotesCache = new Map<string, { timestamp: number; shas: Set<string> }>()
+
+  private async getExistingNoteShas(repoRoot: string): Promise<Set<string>> {
+    const key = normalizePath(repoRoot)
+    const cached = this.existingNotesCache.get(key)
+    if (cached && Date.now() - cached.timestamp < 15_000) {
+      return cached.shas
+    }
+    const stdout = await this.gitStdout(['notes', '--ref', NOTES_REF, 'list'], repoRoot)
+    const shas = new Set<string>()
+    if (stdout) {
+      for (const line of stdout.split('\n')) {
+        const parts = line.trim().split(/\s+/)
+        if (parts.length >= 2) {
+          shas.add(parts[1])
+        }
+      }
+    }
+    this.existingNotesCache.set(key, { timestamp: Date.now(), shas })
+    return shas
+  }
+
   async readAiNote(repoRoot: string, commitSha: string): Promise<AiCommitReport | null> {
+    const existingShas = await this.getExistingNoteShas(repoRoot)
+    if (!existingShas.has(commitSha)) {
+      return null
+    }
     const content = await this.gitStdout(['notes', '--ref', NOTES_REF, 'show', commitSha], repoRoot)
     return content ? safeParseJson<AiCommitReport>(content) : null
   }
 
   async writeAiNote(repoRoot: string, commitSha: string, report: AiCommitReport): Promise<boolean> {
     const result = await api.git.execSecure(['notes', '--ref', NOTES_REF, 'add', '-f', '-m', JSON.stringify(report), commitSha], repoRoot)
-    return result.success !== false && result.exitCode === 0
+    if (result.success !== false && result.exitCode === 0) {
+      const key = normalizePath(repoRoot)
+      const cached = this.existingNotesCache.get(key)
+      if (cached) {
+        cached.shas.add(commitSha)
+      }
+      return true
+    }
+    return false
   }
 
   private scheduleFlush(): void {
@@ -1289,7 +1332,10 @@ class AiAttributionService {
   }
 
   private async listRangeCommits(repoRoot: string, baseRef: string | null, headRef: string, count: number): Promise<string[]> {
-    const range = baseRef ? `${baseRef}..${headRef}` : headRef
+    if (!baseRef || baseRef === headRef) {
+      return this.listBranchCommits(repoRoot, count)
+    }
+    const range = `${baseRef}..${headRef}`
     const stdout = await this.gitStdout(['log', range, `-${count}`, '--pretty=format:%H'], repoRoot)
     if (!stdout) {
       return []
@@ -1300,11 +1346,17 @@ class AiAttributionService {
       .filter(Boolean)
   }
 
-  private async resolveBaseRef(repoRoot: string, _branch: string): Promise<string | null> {
+  private async resolveBaseRef(repoRoot: string, branch: string): Promise<string | null> {
+    const headSha = (await this.gitStdout(['rev-parse', 'HEAD'], repoRoot))?.trim()
+    const isMainBranch = ['main', 'master', 'trunk', 'develop'].includes(branch.toLowerCase())
+    if (isMainBranch) {
+      return null
+    }
+
     const upstream = await this.gitStdout(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], repoRoot)
     if (upstream?.trim()) {
       const mergeBase = await this.gitStdout(['merge-base', 'HEAD', upstream.trim()], repoRoot)
-      if (mergeBase?.trim()) {
+      if (mergeBase?.trim() && mergeBase.trim() !== headSha) {
         return mergeBase.trim()
       }
     }
@@ -1312,20 +1364,20 @@ class AiAttributionService {
     const remoteHead = await this.gitStdout(['symbolic-ref', 'refs/remotes/origin/HEAD'], repoRoot)
     if (remoteHead?.trim()) {
       const mergeBase = await this.gitStdout(['merge-base', 'HEAD', remoteHead.trim()], repoRoot)
-      if (mergeBase?.trim()) {
+      if (mergeBase?.trim() && mergeBase.trim() !== headSha) {
         return mergeBase.trim()
       }
     }
 
     for (const fallback of ['origin/main', 'origin/master', 'main', 'master']) {
+      if (fallback === branch || fallback === `origin/${branch}`) continue
       const mergeBase = await this.gitStdout(['merge-base', 'HEAD', fallback], repoRoot)
-      if (mergeBase?.trim()) {
+      if (mergeBase?.trim() && mergeBase.trim() !== headSha) {
         return mergeBase.trim()
       }
     }
 
-    const rootCommit = await this.gitStdout(['rev-list', '--max-parents=0', 'HEAD'], repoRoot)
-    return rootCommit?.split('\n').map(line => line.trim()).find(Boolean) || null
+    return null
   }
 }
 

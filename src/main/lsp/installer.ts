@@ -102,9 +102,18 @@ function logEnvironmentInfo(): void {
 
 function getCommonBinaryDirs(): string[] {
   if (process.platform === 'win32') {
+    const systemDrive = process.env.SystemDrive || 'C:'
+    const programFiles = process.env.ProgramFiles || `${systemDrive}\\Program Files`
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || `${systemDrive}\\Program Files (x86)`
     return [
+      `${programFiles}\\nodejs`,
+      `${programFilesX86}\\nodejs`,
       'C:\\Program Files\\nodejs',
       'C:\\Program Files (x86)\\nodejs',
+      'D:\\Program Files\\nodejs',
+      'D:\\Program Files (x86)\\nodejs',
+      'D:\\Program Files\\Git\\cmd',
+      'C:\\Program Files\\Git\\cmd',
     ]
   }
 
@@ -154,9 +163,9 @@ export function commandExists(cmd: string): boolean {
   try {
     const env = { ...process.env, PATH: getAugmentedPathEnv() }
     if (process.platform === 'win32') {
-      execSync(`where ${cmd}`, { stdio: 'ignore', env })
+      execSync(`where "${cmd}"`, { stdio: 'ignore', env })
     } else {
-      execSync(`which ${cmd}`, { stdio: 'ignore', env })
+      execSync(`which "${cmd}"`, { stdio: 'ignore', env })
     }
     return true
   } catch {
@@ -252,11 +261,18 @@ async function npmInstall(packageNames: string | string[], targetDir: string): P
       }
     }
 
-    const proc = spawn(resolvedNpmCmd, installArgs, {
+    // 在 Windows 下使用 shell: true 时，如果可执行文件路径包含空格（如 D:\Program Files\...），
+    // 必须用双引号包裹命令，否则 cmd.exe 会在空格处截断命令报错。
+    const commandToRun = process.platform === 'win32' && resolvedNpmCmd.includes(' ') && !resolvedNpmCmd.startsWith('"')
+      ? `"${resolvedNpmCmd}"`
+      : resolvedNpmCmd
+
+    const proc = spawn(commandToRun, installArgs, {
       cwd: targetDir,
       stdio: 'pipe',
       env,
       shell: process.platform === 'win32',
+      windowsVerbatimArguments: process.platform === 'win32',
     })
 
     let stdout = ''

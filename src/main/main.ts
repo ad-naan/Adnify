@@ -6,11 +6,13 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, clipboard, ipcMain, net, shell } from 'electron'
+import { app, BrowserWindow, Menu, clipboard, crashReporter, ipcMain, net, shell } from 'electron'
 // 补充 Language 类型（与渲染端对齐）
 export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
+import * as os from 'os'
 import * as path from 'path'
+import * as v8 from 'v8'
 import { logger } from '@shared/utils/Logger'
 import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import type Store from 'electron-store'
@@ -148,6 +150,20 @@ function sleep(ms: number): Promise<void> {
 }
 
 // ==========================================
+// 崩溃诊断
+// ==========================================
+
+// 必须在 app ready 之前启动，否则早期崩溃不会生成 minidump。
+// uploadToServer: false —— minidump 只落在本地 crashpad 目录，不外传任何用户数据。
+crashReporter.start({
+  productName: 'Adnify',
+  companyName: 'Adnify',
+  submitURL: '',
+  uploadToServer: false,
+  compress: true,
+})
+
+// ==========================================
 // 单例锁
 // ==========================================
 
@@ -255,6 +271,27 @@ function isDevelopmentRuntime(): boolean {
   return !app.isPackaged && !!process.env.VITE_DEV_SERVER_URL
 }
 
+/**
+ * 主进程内存快照（MB），用于在崩溃/卡死日志里留下内存现场。
+ * 多窗口场景下主进程堆是所有窗口共享的，这是判断 OOM 的关键证据。
+ */
+function describeProcessMemory(): Record<string, string | number> {
+  try {
+    const mem = process.memoryUsage()
+    const toMB = (n: number) => Math.round(n / 1024 / 1024)
+    return {
+      heapUsedMB: toMB(mem.heapUsed),
+      heapTotalMB: toMB(mem.heapTotal),
+      rssMB: toMB(mem.rss),
+      externalMB: toMB(mem.external),
+      heapLimitMB: Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024),
+      windows: windows.size,
+    }
+  } catch {
+    return { unavailable: 1 }
+  }
+}
+
 
 function registerWindowDiagnostics(win: BrowserWindow): void {
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -272,7 +309,21 @@ function registerWindowDiagnostics(win: BrowserWindow): void {
       windowId: win.id,
       reason: details.reason,
       exitCode: details.exitCode,
+      // oom / killed 是内存耗尽的直接证据
+      memory: describeProcessMemory(),
     })
+  })
+
+  // 渲染进程卡死（长任务或内存压力下的 GC 抖动），通常是 OOM 前兆
+  win.on('unresponsive', () => {
+    logger.system.error('[Window] unresponsive', {
+      windowId: win.id,
+      memory: describeProcessMemory(),
+    })
+  })
+
+  win.on('responsive', () => {
+    logger.system.warn('[Window] responsive again', { windowId: win.id })
   })
 
 }
@@ -456,12 +507,12 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 
   win.on('close', (event) => {
     if (authorizedCloseWindows.delete(windowId) || appQuitInProgress) {
-      logger.system.info(`[Main] Window ${windowId} close event allowed`)
+      logger.system.warn(`[Main] Window ${windowId} close event allowed`)
       return
     }
 
     event.preventDefault()
-    logger.system.info(`[Main] Window ${windowId} close event intercepted for state save`)
+    logger.system.warn(`[Main] Window ${windowId} close event intercepted for state save`)
 
     void (async () => {
       const isLastWindowQuit = process.platform !== 'darwin' && windows.size === 1
@@ -484,7 +535,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
 
       if (isLastWindowQuit) {
         isCleanupDone = true
-        logger.system.info('[Main] Last window close cleanup done, finalizing app quit')
+        logger.system.warn('[Main] Last window close cleanup done, finalizing app quit')
         app.quit()
       }
     })()
@@ -509,7 +560,7 @@ function createWindow(isEmpty = false, deferLoad = false): BrowserWindow {
     if (cachedWebContentsId) {
       windowWorkspaces.delete(cachedWebContentsId)
     }
-    logger.system.info(`[Main] Window ${windowId} closed and removed from map. Remaining: ${windows.size}`)
+    logger.system.warn(`[Main] Window ${windowId} closed and removed from map. Remaining: ${windows.size}`)
 
     if (lastActiveWindow === win) {
       lastActiveWindow = Array.from(windows.values())[0] || null
@@ -790,6 +841,28 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
   }
 })
 
+// 子进程（GPU / utility / renderer）意外退出。
+// reason 为 'oom' 或 exitCode 非零时，配合 memory 字段可确认内存耗尽。
+app.on('child-process-gone', (_event, details) => {
+  logger.system.error('[Main] child-process-gone', {
+    type: details.type,
+    reason: details.reason,
+    exitCode: details.exitCode,
+    serviceName: details.serviceName,
+    name: details.name,
+    memory: describeProcessMemory(),
+  })
+})
+
+// 进程即将退出：无论正常关闭还是被信号终止都会尽力留下一行。
+// 与 before-quit 的面包屑配合，可区分「用户关闭」与「进程被杀」。
+process.on('exit', (code) => {
+  logger.system.warn('[Main] process exit', { code, memory: describeProcessMemory() })
+  // exit 回调内无法等待异步 I/O，必须同步冲刷，否则这行连同队列里
+  // 未落盘的面包屑会一起丢失。
+  logger.flushSync()
+})
+
 // ==========================================
 // 应用生命周期
 // ==========================================
@@ -822,12 +895,17 @@ app.whenReady().then(async () => {
   if (enableFileLogging) {
     const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
     logger.enableFileLogging(logPath)
-    logger.system.info('[Main] File logging enabled', {
+    // warn 级：enableFileLogging 会把 minLevel 抬到 warn，info 不会落盘。
+    // 这行是排查现场的锚点（版本 / 架构 / 堆上限），必须留下。
+    logger.system.warn('[Main] File logging enabled', {
       logPath,
       version: app.getVersion(),
       platform: process.platform,
       arch: process.arch,
       isPackaged: app.isPackaged,
+      heapLimitMB: Math.round(v8.getHeapStatistics().heap_size_limit / 1024 / 1024),
+      cpus: os.cpus().length,
+      totalMemMB: Math.round(os.totalmem() / 1024 / 1024),
     })
   } else {
     logger.system.info('[Main] File logging is disabled')
@@ -866,7 +944,7 @@ app.on('second-instance', (_event, argv) => {
 })
 
 app.on('window-all-closed', () => {
-  logger.system.info('[Main] All windows closed, platform:', process.platform)
+  logger.system.warn('[Main] All windows closed, platform:', process.platform)
   if (appQuitInProgress && !isCleanupDone) {
     return
   }
@@ -905,7 +983,7 @@ app.on('before-quit', async (e) => {
 
   if (!isCleanupDone) {
     e.preventDefault()
-    logger.system.info('[Main] Intercepting before-quit for cleanup')
+    logger.system.warn('[Main] Intercepting before-quit for cleanup')
 
     appQuitInProgress = true
 
@@ -935,7 +1013,7 @@ app.on('before-quit', async (e) => {
     await shutdownWindowController.close()
 
     isCleanupDone = true
-    logger.system.info('[Main] Cleanup done, re-triggering app.quit()')
+    logger.system.warn('[Main] Cleanup done, re-triggering app.quit()')
     app.quit()
   }
 })

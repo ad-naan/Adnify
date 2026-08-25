@@ -139,7 +139,29 @@ describe('Tool Definitions', () => {
       })
 
       expect(result.success).toBe(true)
-      expect(readFileSchema.safeParse({ path: 'src/a.ts', paths: ['src/b.ts'] }).success).toBe(false)
+    })
+
+    it('should merge read_file path and paths instead of rejecting', () => {
+      const readFileSchema = TOOL_SCHEMAS.read_file
+      expect(readFileSchema).toBeDefined()
+
+      // Models routinely send both fields together — a customer log had 51/51
+      // read_file calls rejected for exactly this. Treat them as a union.
+      const merged = readFileSchema.safeParse({ path: 'src/a.ts', paths: ['src/b.ts'] })
+      expect(merged.success).toBe(true)
+      if (merged.success) {
+        expect((merged.data as Record<string, unknown>).paths).toEqual(['src/a.ts', 'src/b.ts'])
+      }
+
+      // Empty paths placeholder alongside path collapses to a single-file read.
+      const placeholder = readFileSchema.safeParse({ path: 'src/a.ts', paths: [] })
+      expect(placeholder.success).toBe(true)
+      if (placeholder.success) {
+        expect((placeholder.data as Record<string, unknown>).path).toBe('src/a.ts')
+      }
+
+      // Still rejected: no usable path at all.
+      expect(readFileSchema.safeParse({ paths: [] }).success).toBe(false)
     })
 
     it('should accept inverted line ranges in read_file', () => {
