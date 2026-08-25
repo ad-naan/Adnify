@@ -258,6 +258,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Generate Release Notes
+        run: node scripts/generate-release-notes.js ${{ needs.get-version.outputs.version }}
+
       - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
@@ -269,9 +277,13 @@ jobs:
       - name: Flatten artifacts
         run: |
           mkdir -p release-files
-          # 复制对外发布的安装包
-          find artifacts -type f \( -name "Adnify-Setup-*.exe" -o -name "*.dmg" -o -name "*-mac.zip" -o -name "*.AppImage" \) -exec cp {} release-files/ \;
-          # 复制 blockmap 文件
+          # 拷贝主安装包
+          find artifacts -type f -name "Adnify-Setup-*.exe" -exec cp {} release-files/ \;
+          find artifacts -type f -name "*.dmg" -exec cp {} release-files/ \;
+          find artifacts -type f -name "*-mac.zip" -exec cp {} release-files/ \;
+          find artifacts -type f -name "*.AppImage" -exec cp {} release-files/ \;
+          
+          # 拷贝 blockmap 文件（自动更新需要）
           find artifacts -type f -name "*.blockmap" -exec cp {} release-files/ \;
           
           # 处理 yml 文件 - 按架构重命名避免覆盖
@@ -307,29 +319,7 @@ jobs:
         with:
           tag_name: v${{ needs.get-version.outputs.version }}
           name: Adnify v${{ needs.get-version.outputs.version }}
-          body: |
-            ## Adnify v${{ needs.get-version.outputs.version }}
-            
-            ### 下载 / Downloads
-            
-            | 平台 | 架构 | 文件 |
-            |------|------|------|
-            | Windows 安装版 | x64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-x64.exe` |
-            | Windows 安装版 | arm64 | `Adnify-Setup-${{ needs.get-version.outputs.version }}-arm64.exe` |
-            | macOS | Intel (x64) | `Adnify-${{ needs.get-version.outputs.version }}-x64-mac.dmg` |
-            | macOS | Apple Silicon (arm64) | `Adnify-${{ needs.get-version.outputs.version }}-arm64-mac.dmg` |
-            | Linux | x64 | `Adnify-${{ needs.get-version.outputs.version }}-x86_64-linux.AppImage` |
-            | Linux | arm64 | `Adnify-${{ needs.get-version.outputs.version }}-arm64-linux.AppImage` |
-            
-            ### 安装说明
-            - **Windows**: 下载对应架构的 Setup.exe 运行安装
-            - **macOS**: 下载对应架构的 .dmg 拖入 Applications。如提示"已损坏"，请在终端执行：`xattr -cr /Applications/Adnify.app`
-            - **Linux**: 下载对应架构的 .AppImage，`chmod +x` 后运行
-            
-            > 💡 不确定架构？Windows 大多数电脑选 x64，M1/M2/M3 Mac 选 arm64，Intel Mac 选 x64
-            
-            ---
-            📦 [Gitee 镜像](https://gitee.com/adnaan/adnify/releases/tag/v${{ needs.get-version.outputs.version }})
+          body_path: RELEASE_BODY.md
           files: release-files/*
           fail_on_unmatched_files: false
           draft: false
@@ -347,6 +337,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Generate Release Notes
+        run: node scripts/generate-release-notes.js ${{ needs.get-version.outputs.version }}
+
       - name: Sync code to Gitee
         run: |
           git remote add gitee https://${{ secrets.GITEE_USERNAME }}:${{ secrets.GITEE_TOKEN }}@gitee.com/adnaan/adnify.git
@@ -360,21 +358,19 @@ jobs:
           VERSION: ${{ needs.get-version.outputs.version }}
         run: |
           TAG="v$VERSION"
-          GITHUB_RELEASE_URL="https://github.com/ad-naan/adnify/releases/tag/$TAG"
+          BODY=$(cat RELEASE_BODY.md)
           
-          BODY="## Adnify v$VERSION\n\n### 下载 / Downloads\n\n请前往 GitHub Release 下载：\n\n👉 **[$GITHUB_RELEASE_URL]($GITHUB_RELEASE_URL)**\n\n| 平台 | 架构 | 文件 |\n|------|------|------|\n| Windows 安装版 | x64 | [Adnify-Setup-$VERSION-x64.exe]($GITHUB_RELEASE_URL) |\n| Windows 安装版 | arm64 | [Adnify-Setup-$VERSION-arm64.exe]($GITHUB_RELEASE_URL) |\n| macOS | Intel (x64) | [Adnify-$VERSION-x64-mac.dmg]($GITHUB_RELEASE_URL) |\n| macOS | Apple Silicon | [Adnify-$VERSION-arm64-mac.dmg]($GITHUB_RELEASE_URL) |\n| Linux | x64 | [Adnify-$VERSION-x86_64-linux.AppImage]($GITHUB_RELEASE_URL) |\n| Linux | arm64 | [Adnify-$VERSION-arm64-linux.AppImage]($GITHUB_RELEASE_URL) |"
+          PAYLOAD=$(jq -n \
+            --arg token "$GITEE_TOKEN" \
+            --arg tag "$TAG" \
+            --arg name "Adnify v$VERSION" \
+            --arg body "$BODY" \
+            '{access_token: $token, tag_name: $tag, target_commitish: "master", name: $name, body: $body, prerelease: false}')
           
           RESPONSE=$(curl -s -X POST \
             "https://gitee.com/api/v5/repos/adnaan/adnify/releases" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"access_token\": \"$GITEE_TOKEN\",
-              \"tag_name\": \"$TAG\",
-              \"target_commitish\": \"master\",
-              \"name\": \"Adnify v$VERSION\",
-              \"body\": \"$BODY\",
-              \"prerelease\": false
-            }")
+            -d "$PAYLOAD")
           
           echo "Create release response: $RESPONSE"
           

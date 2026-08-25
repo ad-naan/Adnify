@@ -43,6 +43,150 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.63",
+    "rawVersion": "1.7.63",
+    "date": "2026-08-25",
+    "title": "AI 代码归因重构、LSP 空格路径兼容、Git 性能优化与命令面板全量国际化",
+    "titleEn": "AI Attribution Pipeline Fix, LSP Space-Path Compatibility, Git Performance Optimization & Command Palette Localization",
+    "highlight": "修复主分支 AI 代码统计为 0 及 Git Notes 冗余探测问题；彻底解决 Windows 下由于 Node.js 路径包含空格导致的语言服务器安装失败；消除 Git 高频无谓子进程轮询并接入防抖调度；重构命令面板实现全量中英双语与中文关键词搜索；优化输入区域 Dock 占位与聊天面板整页自然滚动体验。",
+    "highlightEn": "Fixed AI code attribution showing zero on main branches and added batch pre-checking for Git Notes; resolved LSP installation failures caused by spaces in Windows execution paths; eliminated unnecessary high-frequency Git polling in favor of debounced events; fully localized the Command Palette with Chinese keyword search; and improved input dock slot transitions and full-page scrolling for empty chat suggestions.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "fix",
+        "label": "核心修复 / Bug Fixes",
+        "labelEn": "Bug Fixes",
+        "items": [
+          {
+            "title": "AI 代码归因系统与 Git Notes 探测重构",
+            "titleEn": "AI Code Attribution & Git Notes Batch Pre-Check",
+            "details": [
+              "修复在 master/main 等主干分支上基准点错误计算导致 Commit 范围为空集、AI 统计一直为 0 的问题",
+              "引入 git notes list 批量预检缓存机制，消除启动时对历史 Commit 逐个探测导致的无 note 报错与上百次无效子进程启动",
+              "收敛概览扫描范围至活跃区间，大幅加快欢迎页加载速度（< 50ms）"
+            ],
+            "detailsEn": [
+              "Fixed base reference calculation on main/master branches that caused empty commit ranges and zeroed AI statistics",
+              "Added a batch pre-check cache via 'git notes list' to eliminate repeated non-zero probe warnings and over a hundred unnecessary child processes",
+              "Narrowed overview commit scanning to recent active commits, accelerating dashboard load times to under 50ms"
+            ]
+          },
+          {
+            "title": "Windows 路径含空格环境下的 LSP 安装修复",
+            "titleEn": "LSP Installation with Space-Containing Paths on Windows",
+            "details": [
+              "修复 Node.js / npm 安装在 Program Files 等带空格路径下时，cmd.exe 在空格处截断命令报错的问题",
+              "在底层进程生成中自动包裹双引号并启用 Windows 严格参数模式，确保自定义及 D 盘安装路径也能顺畅安装 TypeScript 等语言服务器"
+            ],
+            "detailsEn": [
+              "Fixed cmd.exe truncating command paths at whitespace when Node.js or npm is installed in directories like Program Files",
+              "Automatically quoted executable paths and enabled verbatim arguments in process spawning to ensure seamless LSP installation on custom drive paths"
+            ]
+          },
+          {
+            "title": "系统更新弹窗 UI 穿透与对比度修复",
+            "titleEn": "Update Dialog Transparency and Contrast Fixes",
+            "details": [
+              "修复弹窗由于非法背景类导致的半透明穿透问题，采用实色容器彻底阻断底层内容重叠",
+              "重构加速镜像提示与状态卡片排版，修复浅色模式下低对比度隐形文字问题，统一内敛精致的系统级质感"
+            ],
+            "detailsEn": [
+              "Fixed background transparency bleed-through in the update popover by switching to solid surface containers",
+              "Redesigned mirror hint cards and status containers to fix low-contrast invisible text in light mode, achieving a clean and cohesive system UI"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "性能与系统体验 / Performance & System Experience",
+        "labelEn": "Performance & System Experience",
+        "items": [
+          {
+            "title": "Git 状态刷新与轮询性能优化",
+            "titleEn": "Git Status Refresh & Polling Optimization",
+            "details": [
+              "将状态栏中 3 秒一次的高频 git branch 子进程轮询降频至 60 秒弱兜底，消除系统无谓 CPU 唤醒与安全日志刷屏",
+              "窗口获取焦点（focus）与文件系统（.git）变更事件统一接入防抖调度，防止瞬时并发发起重复的 Git 状态检测请求",
+              "修复状态栏最近提交记录（Recent Commits）初始化时未正确拉取的展示 Bug"
+            ],
+            "detailsEn": [
+              "Reduced high-frequency 3-second git branch subprocess polling to a low-frequency 60-second fallback, eliminating CPU wakeups and log spam",
+              "Unified window focus and .git file system watcher triggers under debounced scheduling to prevent redundant concurrent Git queries",
+              "Fixed recent commits in the StatusBar not updating on initial workspace load"
+            ]
+          },
+          {
+            "title": "系统权限与管理员模式支持",
+            "titleEn": "System Privilege & Administrator Mode Support",
+            "details": [
+              "新增系统权限管理服务与协调器，支持按需检测管理员权限并提供提权指引",
+              "状态栏新增管理员模式指示器，在受限文件修改与系统级工具安装时提供平滑的权限过渡"
+            ],
+            "detailsEn": [
+              "Added System Privilege Service and Coordinator to detect admin privileges and guide users through elevation",
+              "Introduced an Administrator Mode indicator in the StatusBar for smooth permission handling during restricted file and tool operations"
+            ]
+          },
+          {
+            "title": "日志与性能监控健壮性提升",
+            "titleEn": "Logger and Performance Monitor Robustness",
+            "details": [
+              "优化 PerformanceMonitor 内存泄漏检测阈值与条件，避免应用冷启动阶段出现假阳性误报",
+              "Logger 新增进程退出时的同步刷盘保障，防止关键异常日志丢失"
+            ],
+            "detailsEn": [
+              "Adjusted memory leak detection thresholds and conditions in PerformanceMonitor to prevent false positives during app startup",
+              "Added synchronous log flushing on process exit in Logger to prevent loss of critical error traces"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "交互与国际化 / Interaction & Localization",
+        "labelEn": "Interaction & Localization",
+        "items": [
+          {
+            "title": "命令面板全量中英双语与中文搜索",
+            "titleEn": "Full Command Palette Localization with Chinese Search",
+            "details": [
+              "命令面板（Ctrl+Shift+P / Ctrl+P）所有分类标签、操作命令、详细描述及底部键盘操作提示全量支持中英双语切换",
+              "支持直接输入中文关键词（如“设置”、“终端”、“重构”、“清空”）精准过滤匹配命令"
+            ],
+            "detailsEn": [
+              "Fully localized all categories, command titles, descriptions, and footer navigation shortcuts in the Command Palette",
+              "Enabled direct Chinese keyword filtering to quickly find and trigger commands in Chinese mode"
+            ]
+          },
+          {
+            "title": "聊天面板 Dock 占位与建议面板滚动优化",
+            "titleEn": "Chat Dock Slot Transition & Natural Scrolling",
+            "details": [
+              "重构 ChatPanel 底部 Dock 槽位，采用 AnimatePresence 动态高度平滑过渡，彻底解决空状态下底部空白过大的视觉问题",
+              "空聊天建议面板改为整页统一自然滚动，解决小屏幕模式下底部建议卡片被截断的问题"
+            ],
+            "detailsEn": [
+              "Refactored ChatPanel dock slot to use AnimatePresence with dynamic height transitions, eliminating unwanted whitespace when inactive",
+              "Switched empty chat suggestions to unified full-page scrolling, preventing content truncation on smaller viewports"
+            ]
+          },
+          {
+            "title": "read_file 工具 Schema 联合类型归一化",
+            "titleEn": "read_file Tool Schema Union Normalization",
+            "details": [
+              "优化 read_file 工具 Schema，支持 path 与 paths 参数并存与联合校验，自动标准化单文件和批量读取请求"
+            ],
+            "detailsEn": [
+              "Enhanced read_file schema to support path and paths unions, automatically normalizing single and batch file read requests"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.62",
     "rawVersion": "1.7.62",
     "date": "2026-08-25",
@@ -50,8 +194,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Workspace Security Approvals, External MCP & Skills Import, Terminal and Agent UX Upgrades",
     "highlight": "新增按工作区授权的危险操作自动执行策略，统一应用内确认与系统强审批边界并补齐中英文体验；支持发现和导入外部 Agent 的 MCP 与 Skills 配置，同时增强终端命令审批、项目任务识别、消息渲染和多窗口稳定性",
     "highlightEn": "Added per-workspace trust for dangerous operations, unified in-app confirmations with native strong-boundary approvals, and completed bilingual approval UX; added discovery and import of MCP and Skills configurations from external agents while improving terminal approvals, project task detection, message rendering, and multi-window stability",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "security",

@@ -1,6 +1,6 @@
 {
   "name": "adnify",
-  "version": "1.7.62",
+  "version": "1.7.63",
   "description": "Adnify - A lightweight yet powerful AI-powered code editor",
   "productName": "Adnify",
   "author": "adnaan <adnaan.worker@gmail.com>",
@@ -35,6 +35,7 @@
     "diagnose:multiwindow": "powershell -ExecutionPolicy Bypass -File scripts/diagnostics/monitor-multiwindow.ps1",
     "assets:icons": "node scripts/generate-platform-icons.js",
     "changelog:sync": "node scripts/sync-changelog.js",
+    "changelog:release": "node scripts/generate-release-notes.js",
     "postinstall": "node scripts/postinstall.js",
     "rebuild": "npx electron-rebuild -f -w node-pty",
     "rebuild:all": "npx electron-rebuild -f -w"

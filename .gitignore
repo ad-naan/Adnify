@@ -50,3 +50,5 @@ package-lock.json
 # which the terminal tests mock as '.', so they land in the repo root.
 /adnify-shell-integration-*.bashrc
 /adnify-shell-integration-*/
+
+RELEASE_BODY.md
