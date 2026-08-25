@@ -146,17 +146,14 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
 
     // Delete skill (with confirmation)
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-    const handleDelete = async (name: string) => {
-        if (deleteConfirm !== name) {
-            setDeleteConfirm(name)
-            return
-        }
+    const handleDelete = async (skill: SkillItem) => {
         setDeleteConfirm(null)
-        const skill = skills.find(s => s.name === name)
-        const success = await skillService.deleteSkill(name, skill?.source || 'project')
+        const success = await skillService.deleteSkill(skill)
         if (success) {
             showMessage('success', t('已删除', 'Deleted'))
             loadSkills()
+        } else {
+            showMessage('error', t(`删除失败：${skill.filePath}`, `Failed to delete: ${skill.filePath}`))
         }
     }
 
@@ -261,7 +258,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                     ) : (
                         skills.map((skill) => (
                             <div
-                                key={skill.name}
+                                key={skill.filePath}
                                 className={`group flex items-start gap-3 p-3 rounded-lg border transition-colors ${skill.enabled
                                     ? 'bg-surface border-border hover:border-accent/30'
                                     : 'bg-background border-border/50 opacity-60'
@@ -281,6 +278,9 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-medium text-text-primary">{skill.name}</span>
+                                        <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[9px] font-medium text-accent">
+                                            {{ adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: t('通用', 'Generic') }[skill.provider]}
+                                        </span>
                                         <span className={`text-[9px] px-1.5 py-0.5 rounded ${skill.source === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                                             {skill.source === 'global' ? t('全局', 'Global') : t('项目', 'Project')}
                                         </span>
@@ -303,6 +303,39 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                         </div>
                                     </div>
                                     <p className="text-[11px] text-text-muted mt-0.5 line-clamp-2">{skill.description}</p>
+                                    <p className="mt-1 truncate font-mono text-[9px] text-text-muted/70" title={skill.filePath}>{skill.filePath}</p>
+                                    {!!skill.shadowedOrigins?.length && (
+                                        <p className="mt-1 text-[9px] text-amber-400/80">
+                                            {t(`另有 ${skill.shadowedOrigins.length} 个同名来源被覆盖，删除后可能显示下一项`, `${skill.shadowedOrigins.length} same-name source(s) are overridden and may appear after deletion`)}
+                                        </p>
+                                    )}
+                                    {deleteConfirm === skill.filePath && (
+                                        <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2.5">
+                                            <p className="text-[11px] font-medium text-red-300">
+                                                {t(`从 ${skill.provider === 'generic' ? '此来源' : skill.provider} 删除这个 Skill？`, `Delete this Skill from ${skill.provider}?`)}
+                                            </p>
+                                            <p className="mt-1 break-all font-mono text-[9px] text-red-200/70">{skill.filePath}</p>
+                                            <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
+                                                {t('将删除包含 SKILL.md 的整个目录，不影响来源软件中的其他 Skills。', 'The entire directory containing SKILL.md will be removed. Other Skills from this provider are not affected.')}
+                                            </p>
+                                            <div className="mt-2 flex justify-end gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDeleteConfirm(null)}
+                                                    className="rounded px-2 py-1 text-[10px] text-text-muted hover:bg-white/5 hover:text-text-primary"
+                                                >
+                                                    {t('取消', 'Cancel')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void handleDelete(skill)}
+                                                    className="rounded bg-red-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-red-600"
+                                                >
+                                                    {t('确认删除', 'Delete')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
@@ -313,10 +346,9 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                         <FolderOpen className="w-3 h-3" />
                                     </button>
                                     <button
-                                        onClick={() => handleDelete(skill.name)}
-                                        onBlur={() => deleteConfirm === skill.name && setDeleteConfirm(null)}
-                                        className={`p-1 rounded transition-colors ${deleteConfirm === skill.name ? 'text-red-400 bg-red-500/20' : 'text-text-muted hover:text-red-400 hover:bg-red-500/10'}`}
-                                        title={deleteConfirm === skill.name ? t('再次点击确认删除', 'Click again to confirm') : t('删除', 'Delete')}
+                                        onClick={() => setDeleteConfirm(skill.filePath)}
+                                        className={`p-1 rounded transition-colors ${deleteConfirm === skill.filePath ? 'text-red-400 bg-red-500/20' : 'text-text-muted hover:text-red-400 hover:bg-red-500/10'}`}
+                                        title={t('删除', 'Delete')}
                                     >
                                         <Trash2 className="w-3 h-3" />
                                     </button>

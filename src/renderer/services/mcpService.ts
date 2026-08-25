@@ -279,9 +279,9 @@ class McpService {
   }
 
   /** 删除服务器 */
-  async removeServer(serverId: string, level?: 'user' | 'workspace'): Promise<boolean> {
+  async removeServer(serverId: string, level?: 'user' | 'workspace', sourcePath?: string): Promise<boolean> {
     try {
-      const result = await api.mcp.removeServer(serverId, level)
+      const result = await api.mcp.removeServer(serverId, level, sourcePath)
       return result.success
     } catch (err) {
       const error = toAppError(err)
@@ -291,9 +291,9 @@ class McpService {
   }
 
   /** 切换服务器启用/禁用状态 */
-  async toggleServer(serverId: string, disabled: boolean, level?: 'user' | 'workspace'): Promise<boolean> {
+  async toggleServer(serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string): Promise<boolean> {
     try {
-      const result = await api.mcp.toggleServer(serverId, disabled, level)
+      const result = await api.mcp.toggleServer(serverId, disabled, level, sourcePath)
       return result.success
     } catch (err) {
       const error = toAppError(err)

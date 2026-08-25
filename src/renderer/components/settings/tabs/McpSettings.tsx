@@ -50,6 +50,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   // 追踪正在等待浏览器授权的服务器（OAuth pending）
   const [oauthPendingServers, setOauthPendingServers] = useState<Set<string>>(new Set())
 
@@ -116,29 +117,56 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
     }
   }
 
-  const handleDeleteServer = async (serverId: string) => {
-    setActionLoading(`delete-${serverId}`)
+  const handleDeleteServer = async (server: McpServerState) => {
+    setActionLoading(`delete-${server.id}`)
+    setActionError(null)
     try {
-      const success = await mcpService.removeServer(serverId)
+      const success = await mcpService.removeServer(server.id, server.config.source, server.config.sourcePath)
       if (success) {
         await mcpService.reloadConfig()
+        setDeleteConfirm(null)
+      } else {
+        setActionError(language === 'zh'
+          ? `删除失败：未能从来源配置中找到或移除 ${server.id}。请检查文件权限。`
+          : `Delete failed: ${server.id} could not be removed from its source config. Check file permissions.`)
       }
     } catch (err) {
       logger.settings.error('Failed to delete server:', err)
+      setActionError(language === 'zh' ? '删除失败，请检查来源配置文件是否只读。' : 'Delete failed. The source config may be read-only.')
     }
     setActionLoading(null)
-    setDeleteConfirm(null)
   }
 
-  const handleToggleServer = async (serverId: string, disabled: boolean) => {
-    setActionLoading(`toggle-${serverId}`)
+  const handleToggleServer = async (server: McpServerState, disabled: boolean) => {
+    setActionLoading(`toggle-${server.id}`)
+    setActionError(null)
     try {
-      await mcpService.toggleServer(serverId, disabled)
-      await mcpService.reloadConfig()
+      const success = await mcpService.toggleServer(server.id, disabled, server.config.source, server.config.sourcePath)
+      if (success) {
+        await mcpService.reloadConfig()
+      } else {
+        setActionError(language === 'zh'
+          ? `更新失败：${server.id} 的来源配置可能已移动或不可写。`
+          : `Update failed: the source config for ${server.id} may have moved or be read-only.`)
+      }
     } catch (err) {
       logger.settings.error('Failed to toggle server:', err)
+      setActionError(language === 'zh' ? '更新失败，请检查来源配置文件权限。' : 'Update failed. Check the source config permissions.')
     }
     setActionLoading(null)
+  }
+
+  const getProviderLabel = (provider: McpServerState['config']['sourceProvider']) => {
+    const labels = {
+      adnify: 'Adnify',
+      'claude-desktop': 'Claude Desktop',
+      'claude-code': 'Claude Code',
+      codex: 'Codex',
+      cursor: 'Cursor',
+      vscode: 'VS Code',
+      generic: language === 'zh' ? '通用配置' : 'Generic',
+    }
+    return provider ? labels[provider] : (language === 'zh' ? '未知来源' : 'Unknown')
   }
 
   const getStatusIcon = (status: McpServerStatus) => {
@@ -193,6 +221,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
     const showDeleteConfirm = deleteConfirm === server.id
     const isRemote = server.config.type === 'remote'
     const isOAuthPending = oauthPendingServers.has(server.id)
+    const providerLabel = getProviderLabel(server.config.sourceProvider)
 
     // 通过 presetId 查找预设获取使用示例
     const presetId = server.config.presetId
@@ -240,6 +269,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             <div className="flex-1 min-w-0 pt-0.5">
               <div className="flex items-center gap-2.5">
                 <h4 className="text-base font-bold text-text-primary tracking-tight">{server.config.name}</h4>
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded border bg-accent/10 text-accent border-accent/20 tracking-tight">
+                  {providerLabel}
+                </span>
                 {server.config.source && (
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase tracking-tight ${
                     server.config.source === 'workspace'
@@ -261,6 +293,21 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   : `${'command' in server.config ? server.config.command : ''} ...`
                 }
               </div>
+              {server.config.sourcePath && (
+                <div
+                  className="mt-2 max-w-[520px] truncate text-[11px] text-text-muted/80 font-mono"
+                  title={server.config.sourcePath}
+                >
+                  {language === 'zh' ? '来源：' : 'Source: '}{server.config.sourcePath}
+                </div>
+              )}
+              {server.config.shadowedSources && server.config.shadowedSources.length > 0 && (
+                <div className="mt-1.5 text-[11px] text-amber-400/90">
+                  {language === 'zh'
+                    ? `另有 ${server.config.shadowedSources.length} 个同名低优先级配置；删除后可能重新出现。`
+                    : `${server.config.shadowedSources.length} lower-priority config(s) share this ID and may reappear after deletion.`}
+                </div>
+              )}
             </div>
           </div>
 
@@ -350,7 +397,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleToggleServer(server.id, !server.config.disabled)}
+                onClick={() => handleToggleServer(server, !server.config.disabled)}
                 disabled={isLoading}
                 title={server.config.disabled 
                   ? (language === 'zh' ? '启用' : 'Enable')
@@ -382,11 +429,21 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
         {/* Delete Confirmation */}
         {showDeleteConfirm && (
           <div className="px-4 pb-4">
-            <div className="flex items-center justify-between p-3 bg-red-500/10 rounded-lg">
-              <span className="text-sm text-red-400">
-                {language === 'zh' ? '确定要删除此服务器吗？' : 'Are you sure you want to delete this server?'}
-              </span>
-              <div className="flex gap-2">
+            <div className="flex flex-col gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="min-w-0 space-y-1.5">
+                <div className="text-sm font-semibold text-red-300">
+                  {language === 'zh' ? `从 ${providerLabel} 配置中删除？` : `Delete from ${providerLabel}?`}
+                </div>
+                <p className="text-xs leading-relaxed text-text-secondary">
+                  {language === 'zh'
+                    ? '只会移除此配置条目，不会卸载对应的软件或 npm 包。此操作会直接修改下面的文件。'
+                    : 'This removes only the config entry; it does not uninstall the app or npm package. The file below will be modified.'}
+                </p>
+                <div className="break-all rounded-lg border border-red-500/15 bg-black/20 px-2.5 py-2 font-mono text-[11px] text-red-200/80">
+                  {server.config.sourcePath || (language === 'zh' ? '来源路径不可用' : 'Source path unavailable')}
+                </div>
+              </div>
+              <div className="flex shrink-0 justify-end gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -397,7 +454,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => handleDeleteServer(server.id)}
+                  onClick={() => handleDeleteServer(server)}
                   disabled={isDeleting}
                   className="bg-red-500 hover:bg-red-600"
                 >
@@ -677,6 +734,18 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
         <div className="flex items-start gap-2 p-3 bg-red-500/10 rounded-lg text-red-400 text-sm">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>{mcpError}</span>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
+          <div className="flex min-w-0 items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button type="button" className="shrink-0 text-xs text-red-300 hover:text-red-200" onClick={() => setActionError(null)}>
+            {language === 'zh' ? '关闭' : 'Dismiss'}
+          </button>
         </div>
       )}
 

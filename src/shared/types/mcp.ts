@@ -9,6 +9,34 @@
 /** MCP 服务器类型 */
 export type McpServerType = 'local' | 'remote'
 
+/** MCP 配置来源软件（运行时元数据，不持久化） */
+export type McpConfigProvider =
+  | 'adnify'
+  | 'claude-desktop'
+  | 'claude-code'
+  | 'codex'
+  | 'cursor'
+  | 'vscode'
+  | 'generic'
+
+/** 被同名高优先级配置覆盖的来源 */
+export interface McpConfigOrigin {
+  provider: McpConfigProvider
+  path: string
+  source: 'user' | 'workspace'
+}
+
+interface McpRuntimeSourceMetadata {
+  /** 配置来源层级（运行时填充，不持久化） */
+  source?: 'user' | 'workspace'
+  /** 配置来源软件（运行时填充，不持久化） */
+  sourceProvider?: McpConfigProvider
+  /** 实际配置文件路径（运行时填充，不持久化） */
+  sourcePath?: string
+  /** 被当前同名配置覆盖的低优先级来源（运行时填充，不持久化） */
+  shadowedSources?: McpConfigOrigin[]
+}
+
 /** OAuth 配置 */
 export interface McpOAuthConfig {
   /** OAuth 客户端 ID（可选，不提供则尝试动态注册） */
@@ -20,7 +48,7 @@ export interface McpOAuthConfig {
 }
 
 /** 本地 MCP 服务器配置 */
-export interface McpLocalServerConfig {
+export interface McpLocalServerConfig extends McpRuntimeSourceMetadata {
   /** 服务器类型 */
   type: 'local'
   /** 服务器唯一标识 */
@@ -43,12 +71,10 @@ export interface McpLocalServerConfig {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
-  /** 配置来源层级（运行时填充，不持久化） */
-  source?: 'user' | 'workspace'
 }
 
 /** 远程 MCP 服务器配置 */
-export interface McpRemoteServerConfig {
+export interface McpRemoteServerConfig extends McpRuntimeSourceMetadata {
   /** 服务器类型 */
   type: 'remote'
   /** 服务器唯一标识 */
@@ -69,8 +95,6 @@ export interface McpRemoteServerConfig {
   timeout?: number
   /** 来源预设 ID（用于匹配预设获取使用示例等信息） */
   presetId?: string
-  /** 配置来源层级（运行时填充，不持久化） */
-  source?: 'user' | 'workspace'
 }
 
 /** MCP 服务器配置（联合类型） */

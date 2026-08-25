@@ -715,8 +715,8 @@ export interface ElectronAPI {
     autoApprove?: string[]
     disabled?: boolean
   }, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
-  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
-  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => Promise<{ success: boolean; error?: string }>
+  mcpRemoveServer: (serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => Promise<{ success: boolean; error?: string }>
+  mcpToggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => Promise<{ success: boolean; error?: string }>
   mcpSetAutoConnect: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
   mcpRegistrySearch: (query?: string) => Promise<{ success: boolean; servers?: any[]; error?: string }>
   mcpRegistryGetDetails: (serverName: string) => Promise<{ success: boolean; server?: any; requiredEnvVars?: any[]; localConfig?: any; error?: string }>
@@ -773,6 +773,7 @@ export interface ElectronAPI {
   // Skills
   skillsGetGlobalDir: () => Promise<string>
   skillsGetGlobalDirs?: () => Promise<string[]>
+  skillsDeleteGlobalSkill: (skillDir: string) => Promise<boolean>
 
   // Command
   onExecuteCommand: (callback: (commandId: string) => void) => () => void

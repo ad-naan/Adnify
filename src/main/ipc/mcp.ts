@@ -100,15 +100,15 @@ export function registerMcpHandlers(_getMainWindow: () => BrowserWindow | null):
   })
 
   // 删除服务器
-  safeIpcHandle('mcp:removeServer', async (_, serverId: string, level?: 'user' | 'workspace') => {
-    await mcpManager.removeServer(serverId, level)
-    return { success: true }
+  safeIpcHandle('mcp:removeServer', async (_, serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => {
+    const success = await mcpManager.removeServer(serverId, level, sourcePath)
+    return { success, error: success ? undefined : 'Server was not found in its source config file' }
   })
 
   // 切换服务器启用/禁用
-  safeIpcHandle('mcp:toggleServer', async (_, serverId: string, disabled: boolean, level?: 'user' | 'workspace') => {
-    await mcpManager.toggleServer(serverId, disabled, level)
-    return { success: true }
+  safeIpcHandle('mcp:toggleServer', async (_, serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => {
+    const success = await mcpManager.toggleServer(serverId, disabled, level, sourcePath)
+    return { success, error: success ? undefined : 'Server was not found in its source config file' }
   })
 
   // =================== OAuth 相关处理器 ===================

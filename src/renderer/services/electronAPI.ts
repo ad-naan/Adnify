@@ -280,8 +280,8 @@ function createGroupedAPI() {
       getConfigPaths: () => raw.mcpGetConfigPaths(),
       reloadConfig: () => raw.mcpReloadConfig(),
       addServer: (config: Parameters<typeof raw.mcpAddServer>[0], level?: 'user' | 'workspace') => raw.mcpAddServer(config, level),
-      removeServer: (serverId: string, level?: 'user' | 'workspace') => raw.mcpRemoveServer(serverId, level),
-      toggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace') => raw.mcpToggleServer(serverId, disabled, level),
+      removeServer: (serverId: string, level?: 'user' | 'workspace', sourcePath?: string) => raw.mcpRemoveServer(serverId, level, sourcePath),
+      toggleServer: (serverId: string, disabled: boolean, level?: 'user' | 'workspace', sourcePath?: string) => raw.mcpToggleServer(serverId, disabled, level, sourcePath),
       setAutoConnect: (enabled: boolean) => raw.mcpSetAutoConnect(enabled),
       startOAuth: (serverId: string) => raw.mcpStartOAuth(serverId),
       finishOAuth: (serverId: string, authorizationCode: string) => raw.mcpFinishOAuth(serverId, authorizationCode),
@@ -298,6 +298,7 @@ function createGroupedAPI() {
     skills: {
       getGlobalDir: () => raw.skillsGetGlobalDir(),
       getGlobalDirs: () => (raw.skillsGetGlobalDirs ? raw.skillsGetGlobalDirs() : raw.skillsGetGlobalDir().then(d => [d])),
+      deleteGlobalSkill: (skillDir: string) => raw.skillsDeleteGlobalSkill(skillDir),
     },
 
     // LSP

@@ -9,7 +9,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { useStore } from '@store'
-import { joinPath, platform } from '@shared/utils/pathUtils'
+import { getDirname, joinPath, platform } from '@shared/utils/pathUtils'
 import { parse as parseYaml } from 'yaml'
 
 // ============================================
@@ -21,6 +21,13 @@ export type SkillTriggerType = 'auto' | 'manual'
 
 /** Skill 来源层级 */
 export type SkillSource = 'global' | 'project'
+export type SkillProvider = 'adnify' | 'codex' | 'claude' | 'cursor' | 'generic'
+
+export interface SkillOrigin {
+    provider: SkillProvider
+    filePath: string
+    source: SkillSource
+}
 
 export interface SkillItem {
     name: string
@@ -34,6 +41,10 @@ export interface SkillItem {
     type: SkillTriggerType
     /** 来源层级：global 全局, project 项目级 */
     source: SkillSource
+    /** Product/config family that owns the discovered directory. */
+    provider: SkillProvider
+    /** Same-name lower-priority skills hidden by this effective item. */
+    shadowedOrigins?: SkillOrigin[]
 }
 
 interface SkillConfig {
@@ -91,6 +102,15 @@ class SkillService {
         '.adnify/skills',
     ]
 
+    private resolveProvider(skillsDir: string): SkillProvider {
+        const normalized = skillsDir.replace(/\\/g, '/').toLowerCase()
+        if (normalized.includes('/.adnify/')) return 'adnify'
+        if (normalized.includes('/.codex/')) return 'codex'
+        if (normalized.includes('/.claude/')) return 'claude'
+        if (normalized.includes('/.cursor/')) return 'cursor'
+        return 'generic'
+    }
+
     /**
      * 获取所有已启用的 Skills
      */
@@ -117,10 +137,14 @@ class SkillService {
 
         // 1. 扫描全局 Skills（低优先级：Cursor -> Codex -> Claude -> Adnify）
         try {
-            const globalDirs = await api.skills.getGlobalDirs()
+            const [globalDirs, adnifyGlobalDir] = await Promise.all([
+                api.skills.getGlobalDirs(),
+                api.skills.getGlobalDir(),
+            ])
             for (const dir of globalDirs) {
                 if (dir) {
-                    await this.scanSkillsDir(dir, 'global', config, skillMap)
+                    const provider = this.pathsEqual(dir, adnifyGlobalDir) ? 'adnify' : undefined
+                    await this.scanSkillsDir(dir, 'global', config, skillMap, provider)
                 }
             }
         } catch {
@@ -158,7 +182,8 @@ class SkillService {
         skillsDir: string,
         source: SkillSource,
         config: SkillConfig,
-        skillMap: Map<string, SkillItem>
+        skillMap: Map<string, SkillItem>,
+        providerOverride?: SkillProvider,
     ): Promise<void> {
         let items: any[] | null
         try {
@@ -195,7 +220,8 @@ class SkillService {
                 || 'auto'
 
             // 项目级覆盖全局级（后扫描的覆盖先扫描的）
-            skillMap.set(name, {
+            const previous = skillMap.get(name)
+            const next: SkillItem = {
                 name,
                 description,
                 content: body,
@@ -205,7 +231,15 @@ class SkillService {
                 metadata: frontmatter.metadata as Record<string, string> | undefined,
                 type: triggerType,
                 source,
-            })
+                provider: providerOverride || this.resolveProvider(skillsDir),
+                shadowedOrigins: previous
+                    ? [
+                        ...(previous.shadowedOrigins || []),
+                        { provider: previous.provider, filePath: previous.filePath, source: previous.source },
+                    ]
+                    : undefined,
+            }
+            skillMap.set(name, next)
         }
     }
 
@@ -415,32 +449,27 @@ Add your skill instructions here.
      * 删除 Skill
      * @param level 指定从哪个层级删除，默认 'project'
      */
-    async deleteSkill(name: string, level: SkillSource = 'project'): Promise<boolean> {
-        let baseDir: string
-        if (level === 'global') {
-            try {
-                baseDir = await api.skills.getGlobalDir()
-            } catch {
-                return false
-            }
-        } else {
-            const { workspacePath } = useStore.getState()
-            if (!workspacePath) return false
-            baseDir = joinPath(workspacePath, this.SKILLS_DIR)
-        }
-
-        const skillDir = joinPath(baseDir, name)
-        const success = await api.file.delete(skillDir)
+    async deleteSkill(skill: Pick<SkillItem, 'name' | 'filePath' | 'source'>): Promise<boolean> {
+        const skillDir = getDirname(skill.filePath)
+        if (!skillDir) return false
+        const success = skill.source === 'global'
+            ? await api.skills.deleteGlobalSkill(skillDir)
+            : await api.file.delete(skillDir)
 
         if (success) {
             // 从禁用列表中也移除
             const config = await this.loadConfig()
-            config.disabled = config.disabled.filter(n => n !== name)
+            config.disabled = config.disabled.filter(n => n !== skill.name)
             await this.saveConfig(config)
             this.clearCache()
         }
 
         return success
+    }
+
+    private pathsEqual(left: string, right: string): boolean {
+        const normalize = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+        return normalize(left) === normalize(right)
     }
 
     /**

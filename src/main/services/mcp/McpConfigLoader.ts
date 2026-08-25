@@ -10,7 +10,7 @@ import * as os from 'os'
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { getConfigFilePath, getWorkspaceConfigFilePath, CONFIG_FILES } from '../configPath'
-import type { McpConfig, McpServerConfig } from '@shared/types/mcp'
+import type { McpConfig, McpConfigProvider, McpServerConfig } from '@shared/types/mcp'
 import { normalizeLocalCommandArgs } from './McpEnvHelper'
 
 export class McpConfigLoader {
@@ -83,12 +83,29 @@ export class McpConfigLoader {
   async loadConfig(): Promise<McpServerConfig[]> {
     const configMap = new Map<string, McpServerConfig>()
 
+    const addConfig = (
+      id: string,
+      serverConfig: Record<string, any>,
+      source: 'user' | 'workspace',
+      configPath: string,
+    ) => {
+      const normalized = this.normalizeConfig(id, serverConfig, source, configPath)
+      const previous = configMap.get(id)
+      if (previous?.sourcePath && previous.sourceProvider && previous.source) {
+        normalized.shadowedSources = [
+          ...(previous.shadowedSources || []),
+          { provider: previous.sourceProvider, path: previous.sourcePath, source: previous.source },
+        ]
+      }
+      configMap.set(id, normalized)
+    }
+
     // 1. 加载所有全局用户级配置（低到高，高优先级覆盖低优先级同名配置）
     for (const configPath of this.getUserConfigPaths()) {
       const userConfig = await this.loadConfigFile(configPath)
       if (userConfig && userConfig.mcpServers) {
         for (const [id, serverConfig] of Object.entries(userConfig.mcpServers)) {
-          configMap.set(id, this.normalizeConfig(id, serverConfig as Record<string, any>, 'user'))
+          addConfig(id, serverConfig as Record<string, any>, 'user', configPath)
         }
       }
     }
@@ -99,7 +116,7 @@ export class McpConfigLoader {
         const workspaceConfig = await this.loadConfigFile(workspaceConfigPath)
         if (workspaceConfig && workspaceConfig.mcpServers) {
           for (const [id, serverConfig] of Object.entries(workspaceConfig.mcpServers)) {
-            configMap.set(id, this.normalizeConfig(id, serverConfig as Record<string, any>, 'workspace'))
+            addConfig(id, serverConfig as Record<string, any>, 'workspace', workspaceConfigPath)
           }
         }
       }
@@ -111,7 +128,12 @@ export class McpConfigLoader {
   }
 
   /** 自动推断配置的 type 字段，标记来源层级并规范化参数 */
-  private normalizeConfig(id: string, serverConfig: Record<string, any>, source: 'user' | 'workspace' = 'user'): McpServerConfig {
+  private normalizeConfig(
+    id: string,
+    serverConfig: Record<string, any>,
+    source: 'user' | 'workspace',
+    sourcePath: string,
+  ): McpServerConfig {
     let type = serverConfig.type
     if (!type) {
       if ('url' in serverConfig) {
@@ -126,7 +148,16 @@ export class McpConfigLoader {
       args = normalizeLocalCommandArgs(serverConfig.command, args)
     }
 
-    return { ...serverConfig, id, type, args, source } as McpServerConfig
+    return {
+      ...serverConfig,
+      id,
+      type,
+      args,
+      source,
+      sourcePath,
+      sourceProvider: this.resolveConfigProvider(sourcePath),
+      shadowedSources: undefined,
+    } as McpServerConfig
   }
 
   /** 保存用户级配置 */
@@ -159,29 +190,40 @@ export class McpConfigLoader {
   async addServer(serverConfig: McpServerConfig, level: 'user' | 'workspace' = 'user'): Promise<void> {
     const configPath = this.resolveConfigPath(level)
     const config = (await this.loadConfigFile(configPath)) || { mcpServers: {} }
-    const { id, source: _source, ...rest } = serverConfig as McpServerConfig & { source?: string }
+    const {
+      id,
+      source: _source,
+      sourcePath: _sourcePath,
+      sourceProvider: _sourceProvider,
+      shadowedSources: _shadowedSources,
+      ...rest
+    } = serverConfig
     config.mcpServers[id] = rest
     await this.saveConfigFile(configPath, config)
   }
 
   /** 从配置删除服务器 */
-  async removeServer(serverId: string, level: 'user' | 'workspace' = 'user'): Promise<void> {
-    const configPath = this.resolveConfigPath(level)
+  async removeServer(serverId: string, level: 'user' | 'workspace' = 'user', sourcePath?: string): Promise<boolean> {
+    const configPath = this.resolveWritableConfigPath(level, sourcePath)
     const config = await this.loadConfigFile(configPath)
     if (config && config.mcpServers[serverId]) {
       delete config.mcpServers[serverId]
       await this.saveConfigFile(configPath, config)
+      return true
     }
+    return false
   }
 
   /** 切换服务器启用/禁用状态 */
-  async toggleServer(serverId: string, disabled: boolean, level: 'user' | 'workspace' = 'user'): Promise<void> {
-    const configPath = this.resolveConfigPath(level)
+  async toggleServer(serverId: string, disabled: boolean, level: 'user' | 'workspace' = 'user', sourcePath?: string): Promise<boolean> {
+    const configPath = this.resolveWritableConfigPath(level, sourcePath)
     const config = await this.loadConfigFile(configPath)
     if (config && config.mcpServers[serverId]) {
       config.mcpServers[serverId].disabled = disabled
       await this.saveConfigFile(configPath, config)
+      return true
     }
+    return false
   }
 
   /** 解析配置文件路径 */
@@ -190,6 +232,33 @@ export class McpConfigLoader {
       return this.getWorkspaceConfigPath(this.workspaceRoots[0])
     }
     return this.userConfigPath
+  }
+
+  /** 只允许修改本加载器实际扫描的配置文件，避免 IPC 被用于写入任意路径。 */
+  private resolveWritableConfigPath(level: 'user' | 'workspace', sourcePath?: string): string {
+    if (!sourcePath) return this.resolveConfigPath(level)
+
+    const knownPaths = [
+      ...this.getUserConfigPaths(),
+      ...this.workspaceRoots.flatMap(root => this.getWorkspaceConfigPaths(root)),
+    ]
+    const normalizedSource = path.resolve(sourcePath).toLowerCase()
+    const matchedPath = knownPaths.find(candidate => path.resolve(candidate).toLowerCase() === normalizedSource)
+    if (!matchedPath) {
+      throw new Error(`Refusing to modify unknown MCP config path: ${sourcePath}`)
+    }
+    return matchedPath
+  }
+
+  private resolveConfigProvider(configPath: string): McpConfigProvider {
+    const normalized = configPath.replace(/\\/g, '/').toLowerCase()
+    if (path.resolve(configPath).toLowerCase() === path.resolve(this.userConfigPath).toLowerCase() || normalized.includes('/.adnify/')) return 'adnify'
+    if (normalized.endsWith('/claude/claude_desktop_config.json')) return 'claude-desktop'
+    if (normalized.includes('/.claude')) return 'claude-code'
+    if (normalized.includes('/.codex/')) return 'codex'
+    if (normalized.includes('/.cursor/')) return 'cursor'
+    if (normalized.includes('/.vscode/')) return 'vscode'
+    return 'generic'
   }
 
   /** 清理资源 */
