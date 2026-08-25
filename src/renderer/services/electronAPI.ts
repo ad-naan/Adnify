@@ -175,6 +175,7 @@ function createGroupedAPI() {
     terminal: {
       create: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) => raw.createTerminal(options),
       write: (id: string, data: string) => raw.writeTerminal(id, data),
+      openExternal: (url: string) => raw.terminalOpenExternal(url),
       resize: (id: string, cols: number, rows: number) => raw.resizeTerminal(id, cols, rows),
       kill: (id?: string) => raw.killTerminal(id),
       getShells: () => raw.getAvailableShells(),

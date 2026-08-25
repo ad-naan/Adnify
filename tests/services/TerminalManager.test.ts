@@ -6,6 +6,8 @@ const resizeMock = vi.fn()
 const killMock = vi.fn()
 const settingsGetMock = vi.fn()
 const settingsSetMock = vi.fn()
+const openExternalMock = vi.fn()
+const webLinkHandlers: Array<(event: MouseEvent, uri: string) => void> = []
 let uuidCounter = 0
 let dataHandler: ((event: { id: string; data: string; seq: number; occurredAt: number }) => void) | null = null
 let exitHandler: ((event: { id: string; exitCode: number; signal?: number; seq: number; occurredAt: number; reason: 'process_exit' | 'killed_by_user' | 'remote_close' }) => void) | null = null
@@ -17,6 +19,7 @@ vi.mock('@renderer/services/electronAPI', () => ({
       write: writeMock,
       resize: resizeMock,
       kill: killMock,
+      openExternal: openExternalMock,
       onData: vi.fn(handler => {
         dataHandler = handler
         return () => { dataHandler = null }
@@ -109,7 +112,13 @@ vi.mock('@xterm/addon-fit', () => ({
     proposeDimensions = vi.fn(() => ({ cols: 120, rows: 30 }))
   },
 }))
-vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }))
+vi.mock('@xterm/addon-web-links', () => ({
+  WebLinksAddon: class {
+    constructor(handler?: (event: MouseEvent, uri: string) => void) {
+      if (handler) webLinkHandlers.push(handler)
+    }
+  },
+}))
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: class {
     dispose = vi.fn()
@@ -139,6 +148,9 @@ describe('TerminalManager shell integration', () => {
     writeMock.mockReset()
     resizeMock.mockReset()
     killMock.mockReset()
+    openExternalMock.mockReset()
+    openExternalMock.mockResolvedValue(true)
+    webLinkHandlers.length = 0
     dataHandler = null
     exitHandler = null
     vi.useFakeTimers()
@@ -166,6 +178,28 @@ describe('TerminalManager shell integration', () => {
 
       expect(writeMock).toHaveBeenCalledWith(termId, 'copied elsewhere')
       expect(xterm.focus).toHaveBeenCalledOnce()
+    } finally {
+      terminalManager.cleanup()
+    }
+  })
+
+  it('opens terminal URLs only with the platform open-link modifier', async () => {
+    const { terminalManager } = await import('@renderer/services/TerminalManager')
+
+    try {
+      await terminalManager.createTerminal({
+        cwd: 'C:\\workspace',
+        shell: 'powershell.exe',
+        backend: 'pipe',
+      })
+      const handler = webLinkHandlers.at(-1)
+      expect(handler).toBeDefined()
+
+      handler?.({ metaKey: false, ctrlKey: false, preventDefault: vi.fn() } as unknown as MouseEvent, 'http://127.0.0.1:5173')
+      expect(openExternalMock).not.toHaveBeenCalled()
+
+      handler?.({ metaKey: true, ctrlKey: false, preventDefault: vi.fn() } as unknown as MouseEvent, 'http://127.0.0.1:5173')
+      expect(openExternalMock).toHaveBeenCalledWith('http://127.0.0.1:5173')
     } finally {
       terminalManager.cleanup()
     }

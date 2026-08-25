@@ -502,6 +502,7 @@ export interface ElectronAPI {
   // Terminal
   createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
+  terminalOpenExternal: (url: string) => Promise<boolean>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>

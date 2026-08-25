@@ -832,6 +832,35 @@ class TerminalManagerClass {
     } catch { }
   }
 
+  private createWebLinksAddon(): WebLinksAddon {
+    const modifierLabel = isMac ? 'Cmd' : 'Ctrl'
+    let hoverTarget: HTMLElement | null = null
+    return new WebLinksAddon(
+      (event, uri) => {
+        const hasOpenModifier = isMac ? event.metaKey : event.ctrlKey
+        if (!hasOpenModifier) return
+        event.preventDefault()
+        void api.terminal.openExternal(uri)
+          .then(opened => {
+            if (!opened) logger.system.warn('[Terminal] URL was not opened:', uri)
+          })
+          .catch(error => {
+            logger.system.warn('[Terminal] Failed to open URL:', error)
+          })
+      },
+      {
+        hover: (event) => {
+          hoverTarget = event.target instanceof HTMLElement ? event.target : null
+          hoverTarget?.setAttribute('title', `${modifierLabel}+Click to open in browser`)
+        },
+        leave: () => {
+          hoverTarget?.removeAttribute('title')
+          hoverTarget = null
+        },
+      },
+    )
+  }
+
   private createXtermInstance(id: string): XTermInstance {
     const termConfig = getEditorConfig().terminal;
     const terminal = new XTerminal({
@@ -848,7 +877,7 @@ class TerminalManagerClass {
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon());
+    terminal.loadAddon(this.createWebLinksAddon());
     this.registerShellIntegrationHandler(id, terminal);
 
     // 处理终端输入
@@ -991,7 +1020,7 @@ class TerminalManagerClass {
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new WebLinksAddon());
+    terminal.loadAddon(this.createWebLinksAddon());
     this.registerShellIntegrationHandler(id, terminal);
     terminal.open(container);
 

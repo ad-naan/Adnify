@@ -6,7 +6,7 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, clipboard, ipcMain, net } from 'electron'
+import { app, BrowserWindow, Menu, clipboard, ipcMain, net, shell } from 'electron'
 // 补充 Language 类型（与渲染端对齐）
 export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
@@ -48,6 +48,17 @@ ipcMain.handle('clipboard:readText', () => clipboard.readText())
 ipcMain.handle('clipboard:writeText', (_event, text: string) => {
   clipboard.writeText(text)
   return true
+})
+ipcMain.handle('terminal:openExternal', async (_event, value: string) => {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+    await shell.openExternal(url.href)
+    return true
+  } catch (error) {
+    logger.security.warn('[Terminal] Rejected invalid external URL', { value, error })
+    return false
+  }
 })
 
 // ==========================================

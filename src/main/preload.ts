@@ -327,6 +327,7 @@ export interface ElectronAPI {
   // Interactive Terminal
   createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) => Promise<{ success: boolean; error?: string }>
   writeTerminal: (id: string, data: string) => Promise<void>
+  terminalOpenExternal: (url: string) => Promise<boolean>
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<void>
   killTerminal: (id?: string) => void
   getAvailableShells: () => Promise<{ label: string; path: string }[]>
@@ -697,6 +698,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   createTerminal: (options: { id: string; cwd?: string; shell?: string; backend?: 'pty' | 'pipe'; remote?: RemoteShellServer; isAgent?: boolean }) =>
     ipcRenderer.invoke('terminal:interactive', options),
   writeTerminal: (id: string, data: string) => ipcRenderer.invoke('terminal:input', { id, data }),
+  terminalOpenExternal: (url: string) => ipcRenderer.invoke('terminal:openExternal', url),
   executeBackground: (params: { command: string; cwd?: string; timeout?: number; shell?: string }) =>
     ipcRenderer.invoke('shell:executeBackground', params),
   runPiped: (params: { command: string; cwd?: string; timeout?: number; shell?: string; maxOutputChars?: number; authorizationId?: string }) =>
