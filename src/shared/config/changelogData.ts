@@ -43,6 +43,134 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.62",
+    "rawVersion": "1.7.62",
+    "date": "2026-08-25",
+    "title": "工作区安全审批重构、外部 MCP 与 Skills 导入、终端与 Agent 交互升级",
+    "titleEn": "Workspace Security Approvals, External MCP & Skills Import, Terminal and Agent UX Upgrades",
+    "highlight": "新增按工作区授权的危险操作自动执行策略，统一应用内确认与系统强审批边界并补齐中英文体验；支持发现和导入外部 Agent 的 MCP 与 Skills 配置，同时增强终端命令审批、项目任务识别、消息渲染和多窗口稳定性",
+    "highlightEn": "Added per-workspace trust for dangerous operations, unified in-app confirmations with native strong-boundary approvals, and completed bilingual approval UX; added discovery and import of MCP and Skills configurations from external agents while improving terminal approvals, project task detection, message rendering, and multi-window stability",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "security",
+        "label": "安全与审批 / Security & Approvals",
+        "labelEn": "Security & Approvals",
+        "items": [
+          {
+            "title": "按工作区授权危险操作自动执行",
+            "titleEn": "Per-Workspace Trust for Dangerous Operations",
+            "details": [
+              "安全设置新增当前工作区危险操作信任开关；启用后，Agent 可在该工作区内自动执行删除和危险 Shell 命令",
+              "跨工作区路径、敏感路径和系统关键命令始终保留强审批，不会因关闭严格工作区模式或信任当前工作区而被降级",
+              "信任范围按规范化工作区根路径持久化，支持多根工作区并避免大小写与路径分隔符造成重复记录"
+            ],
+            "detailsEn": [
+              "Added a security setting that lets Agent deletes and dangerous shell commands run automatically inside explicitly trusted workspaces",
+              "External workspace paths, sensitive locations, and critical system commands always retain strong approval and cannot be downgraded by workspace trust or relaxed workspace mode",
+              "Persisted trust by normalized workspace root with multi-root support and path deduplication across casing and separator differences"
+            ]
+          },
+          {
+            "title": "分层审批交互与国际化完善",
+            "titleEn": "Layered Approval UX and Complete Localization",
+            "details": [
+              "工作区内的直接危险操作统一使用应用内 Confirm，Agent 操作统一进入工具 Dock；仅强安全边界使用系统原生弹窗",
+              "消除文件树删除的重复确认，并修复并发 Confirm 相互覆盖、窗口关闭后审批请求悬挂的问题",
+              "审批标题、原因、目标和按钮完整支持中英文，系统原生兜底弹窗跟随应用语言"
+            ],
+            "detailsEn": [
+              "Unified direct in-workspace risk prompts on the app Confirm dialog and Agent approvals in the Tool Dock, reserving native dialogs for strong security boundaries",
+              "Removed duplicate file-tree deletion prompts and fixed concurrent Confirm replacement and pending approvals left behind when a window closes",
+              "Localized approval titles, reasons, targets, and actions in Chinese and English, including native fallback dialogs following the app language"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "feature",
+        "label": "核心新特性 / Features",
+        "labelEn": "Features",
+        "items": [
+          {
+            "title": "外部 MCP 与 Skills 配置发现和导入",
+            "titleEn": "External MCP and Skills Discovery & Import",
+            "details": [
+              "自动发现第三方 Agent 的 MCP 配置与全局 Skills 目录，并可在设置页选择性导入",
+              "MCP 服务记录来源配置路径，启停和删除会精准修改原始配置文件，并对可修改路径实施安全校验",
+              "Skills 设置展示来源与提供方信息，改善跨工具迁移和多来源管理体验"
+            ],
+            "detailsEn": [
+              "Discover MCP configurations and global Skills directories from third-party agents and selectively import them from Settings",
+              "Track MCP source configuration paths so toggles and removals update the correct file with validated writable-path boundaries",
+              "Display skill origin and provider metadata for clearer cross-tool migration and multi-source management"
+            ]
+          },
+          {
+            "title": "项目任务识别与终端工作流增强",
+            "titleEn": "Project Task Detection and Terminal Workflow Enhancements",
+            "details": [
+              "统一识别 npm、pnpm、yarn 与 bun 项目任务，在终端面板提供更准确的任务发现与运行入口",
+              "终端支持可靠粘贴与可点击外部 URL，并补充对应的跨平台行为测试"
+            ],
+            "detailsEn": [
+              "Unified project task discovery across npm, pnpm, yarn, and bun with more accurate run actions in the Terminal panel",
+              "Added reliable terminal paste handling and clickable external URLs with cross-platform behavior coverage"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "体验与性能优化 / Improvements",
+        "labelEn": "Improvements",
+        "items": [
+          {
+            "title": "终端命令审批中心与规则安全性增强",
+            "titleEn": "Terminal Approval Center and Safer Command Rules",
+            "details": [
+              "统一状态托盘新增待审批视图，集中处理等待中的工具调用",
+              "支持在安全设置中维护跨任务终端命令规则，并以保守作用域推导避免动态启动器规则被过度放宽",
+              "工具 Dock 审批凭据可安全传递至后续执行通道，避免同一 Agent 操作重复弹出系统确认"
+            ],
+            "detailsEn": [
+              "Added a pending-approvals view to the unified status tray for centralized tool-call review",
+              "Added cross-task terminal command rule management with conservative scope derivation that prevents unsafe broad rules for dynamic launchers",
+              "Safely forwards Tool Dock approval proofs into execution transports to avoid duplicate native confirmation for the same Agent operation"
+            ]
+          },
+          {
+            "title": "Agent 工具契约、提示词与消息渲染优化",
+            "titleEn": "Agent Tool Contracts, Prompts, and Message Rendering",
+            "details": [
+              "拆分并收敛 Agent 提示词契约，精简重复工具说明，增强诊断与符号导航参数表达",
+              "优化 ChatMessage 与 ChatPanel 的实时选择和渲染路径，减少流式输出期间的无效重渲染",
+              "工作区切换期间保留前一组根目录直至新工作区激活完成，降低瞬时空状态导致的界面抖动"
+            ],
+            "detailsEn": [
+              "Consolidated Agent prompt contracts, removed duplicated tool guidance, and clarified diagnostics and symbol-navigation parameters",
+              "Optimized ChatMessage and ChatPanel live selectors and render paths to reduce unnecessary rerenders during streaming",
+              "Retained previous workspace roots until the next workspace is fully activated, preventing transient empty-state flicker"
+            ]
+          },
+          {
+            "title": "多窗口诊断与 Worker 生命周期加固",
+            "titleEn": "Multi-Window Diagnostics and Worker Lifecycle Hardening",
+            "details": [
+              "新增多窗口终端负载与 CDP 诊断脚本，便于发布前复现和定位窗口生命周期问题",
+              "增强 Worker 服务管理与测试覆盖，减少多窗口切换和关闭阶段的资源竞态"
+            ],
+            "detailsEn": [
+              "Added multi-window terminal load and CDP diagnostic scripts for release-time lifecycle validation",
+              "Strengthened worker service lifecycle management and tests to reduce resource races during multi-window switching and shutdown"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.61",
     "rawVersion": "1.7.61",
     "date": "2026-08-25",
@@ -50,8 +178,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "Preference Persistence Architecture, Multi-Window Task Isolation, Java & Formatter Service, Agent Semantic Routing & Tool Pipeline",
     "highlight": "统一用户偏好持久化架构至 electron-store 单一数据源并支持多窗口实时热同步，彻底修复 Windows 多窗口任务退出与终端通道绑定问题，重构消息上下文为极简排版并支持多源技能直达，新增 Java 语言支持与 Eclipse JDT LS 集成，上线统一项目级 Formatter 格式化体系，引入 Agent 语义路由（ToolRoutingAdvisor）与结构化 JSON 工具输出无损降级，增强远程 SFTP 传输与更新服务 GitHub 镜像加速",
     "highlightEn": "Unified user preference persistence to a single electron-store source of truth with multi-window real-time synchronization, resolved multi-window task termination and terminal window binding on Windows, redesigned message context for minimal layout and multi-source skill navigation, added Java support with Eclipse JDT LS, launched project-level Formatter Service, introduced ToolRoutingAdvisor and structured JSON lossless output bounding, and enhanced remote SFTP transfers and GitHub update mirrors",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "feature",
