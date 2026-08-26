@@ -6,12 +6,12 @@ import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { getFileName, pathEquals } from '@shared/utils/pathUtils'
 import { removeFileFromTypeService } from '@renderer/services/monacoTypeService'
 import { internalWriteTracker } from '@renderer/services/internalWriteTracker'
-import { scheduleSavedVersionSync } from '@renderer/services/fileSavedVersionSync'
+import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 
 export function useFileWatcher() {
   useEffect(() => {
     const unsubscribe = api.file.onChanged(async (event: { event: string; path: string }) => {
-      const { openFiles, reloadFileFromDisk, markFileDeleted, markFileRestored, language } = useStore.getState()
+      const { openFiles, markFileDeleted, markFileRestored, language } = useStore.getState()
 
       if (event.event === 'delete') {
         removeFileFromTypeService(event.path)
@@ -28,8 +28,7 @@ export function useFileWatcher() {
         if (openFile?.isDeleted) {
           const newContent = await api.file.readFull(event.path)
           if (newContent !== null) {
-            reloadFileFromDisk(openFile.path, newContent)
-            scheduleSavedVersionSync(openFile.path, newContent)
+            applySavedEditorBufferContent(openFile.path, newContent)
           } else {
             markFileRestored(openFile.path)
           }
@@ -48,8 +47,7 @@ export function useFileWatcher() {
       const isInternal = internalWriteTracker.consume(event.path)
 
       if (isInternal) {
-        reloadFileFromDisk(openFile.path, newContent)
-        scheduleSavedVersionSync(openFile.path, newContent)
+        applySavedEditorBufferContent(openFile.path, newContent)
         return
       }
 
@@ -63,14 +61,12 @@ export function useFileWatcher() {
         })
 
         if (confirmed) {
-          reloadFileFromDisk(openFile.path, newContent)
-          scheduleSavedVersionSync(openFile.path, newContent)
+          applySavedEditorBufferContent(openFile.path, newContent)
         }
         return
       }
 
-      reloadFileFromDisk(openFile.path, newContent)
-      scheduleSavedVersionSync(openFile.path, newContent)
+      applySavedEditorBufferContent(openFile.path, newContent)
     })
 
     return unsubscribe

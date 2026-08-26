@@ -5,7 +5,8 @@
 
 import type { editor } from 'monaco-editor'
 import { getEditorConfig } from '@renderer/settings'
-import { LargeFileInfo, getLargeFileEditorOptions } from '@/renderer/services/largeFileService'
+import { getLargeFileEditorOptions } from '@/renderer/services/largeFileService'
+import type { LargeFileInfo } from '@shared/types/largeFile'
 import type { EditorConfig } from '@shared/config/types'
 
 /**

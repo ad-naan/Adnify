@@ -6,6 +6,7 @@ import type { FileItem } from '@shared/types'
 import type { OpenPreviewMetadata } from '@shared/types/preview'
 import { buildPreviewDocumentPath } from '@shared/types/preview'
 import { normalizePath } from '@shared/utils/pathUtils'
+import type { LargeFileInfo } from '@shared/types/largeFile'
 
 export interface WorkspaceConfig {
   configPath: string | null
@@ -13,17 +14,6 @@ export interface WorkspaceConfig {
   restoreError?: 'missing-workspace'
   missingRoots?: string[]
   workspaceId?: string
-}
-
-/** 大文件信息 */
-export interface LargeFileInfo {
-  isLarge: boolean
-  isVeryLarge: boolean
-  size: number
-  lineCount: number
-  path?: string
-  reason?: 'size' | 'lines' | 'both'
-  warning?: string
 }
 
 export interface OpenFile {
@@ -272,7 +262,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
 
   restoreOpenFiles: (files, activeFilePath) =>
     set(() => {
-      const restoredFiles: OpenFile[] = files.map((file) => ({
+      const restoredFiles: OpenFile[] = files.map((file, index) => ({
         path: normalizePath(file.path),
         content: file.content,
         contentState: 'loaded',
@@ -318,18 +308,28 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
   }),
 
   updateFileContent: (path, content) =>
-    set((state) => ({
-      openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, content, contentState: 'loaded' } : f
-      ),
-    })),
+    set((state) => {
+      const file = state.openFiles.find(candidate => candidate.path === path)
+      if (!file || (file.content === content && file.contentState === 'loaded')) return state
+      return {
+        openFiles: state.openFiles.map((candidate) =>
+          candidate.path === path ? { ...candidate, content, contentState: 'loaded' } : candidate
+        ),
+      }
+    }),
 
   updateFileDirtyState: (path, currentVersionId) =>
-    set((state) => ({
-      openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, isDirty: currentVersionId !== f.savedVersionId } : f
-      ),
-    })),
+    set((state) => {
+      const file = state.openFiles.find(candidate => candidate.path === path)
+      if (!file) return state
+      const isDirty = currentVersionId !== file.savedVersionId
+      if (file.isDirty === isDirty) return state
+      return {
+        openFiles: state.openFiles.map((candidate) =>
+          candidate.path === path ? { ...candidate, isDirty } : candidate
+        ),
+      }
+    }),
 
   markFileSaved: (path, versionId) =>
     set((state) => ({

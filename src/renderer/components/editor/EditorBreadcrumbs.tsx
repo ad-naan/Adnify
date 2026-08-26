@@ -5,7 +5,7 @@ import { memo } from 'react'
 import { Home, ChevronRight, AlertTriangle } from 'lucide-react'
 import { getPathSeparator } from '@shared/utils/pathUtils'
 import { getLargeFileWarning } from '@renderer/services/largeFileService'
-import type { LargeFileInfo } from '@renderer/services/largeFileService'
+import type { LargeFileInfo } from '@shared/types/largeFile'
 
 interface EditorBreadcrumbsProps {
   filePath: string

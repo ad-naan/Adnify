@@ -4,7 +4,6 @@
  */
 import { useCallback, useRef, useEffect } from 'react'
 import { useStore } from '@store'
-import { useShallow } from 'zustand/react/shallow'
 import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
 import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
@@ -13,6 +12,7 @@ import { t } from '@renderer/i18n'
 import { getEditorConfig } from '@renderer/settings'
 import { monaco } from '@renderer/monacoWorker'
 import type { FileMutationResult } from '@shared/types/fileMutation'
+import { commitEditorBufferSnapshot, getEditorBufferContent } from '@renderer/services/editorBufferService'
 
 function getSaveErrorMessage(result: FileMutationResult, language: 'zh' | 'en'): string {
   if (result.success) return ''
@@ -46,16 +46,20 @@ function getModelVersionId(filePath: string): number | undefined {
 }
 
 export function useFileSave() {
-  const { openFiles, markFileSaved, closeFile, language } = useStore(useShallow(s => ({ openFiles: s.openFiles, markFileSaved: s.markFileSaved, closeFile: s.closeFile, language: s.language })))
+  const markFileSaved = useStore(state => state.markFileSaved)
+  const closeFile = useStore(state => state.closeFile)
+  const language = useStore(state => state.language)
 
   // 保存单个文件
   const saveFile = useCallback(async (filePath: string): Promise<boolean> => {
-    const file = openFiles.find(f => f.path === filePath)
+    const file = useStore.getState().openFiles.find(f => f.path === filePath)
     if (!file || file.pinned) return false
 
     try {
-      const result = await api.file.writeDetailed(file.path, file.content, file.encoding)
+      const content = getEditorBufferContent(file.path, file.content)
+      const result = await api.file.writeDetailed(file.path, content, file.encoding)
       if (result.success) {
+        commitEditorBufferSnapshot(file.path, content)
         // 获取当前版本号并保存
         const versionId = getModelVersionId(file.path)
         markFileSaved(file.path, versionId)
@@ -82,11 +86,11 @@ export function useFileSave() {
       )
       return false
     }
-  }, [openFiles, markFileSaved, language])
+  }, [markFileSaved, language])
 
   // 关闭文件（带保存提示）
   const closeFileWithConfirm = useCallback(async (filePath: string) => {
-    const file = openFiles.find(f => f.path === filePath)
+    const file = useStore.getState().openFiles.find(f => f.path === filePath)
     if (file?.pinned) return
     if (file?.isDirty) {
       const fileName = getFileName(filePath)
@@ -102,33 +106,36 @@ export function useFileSave() {
       }
     }
     closeFile(filePath)
-  }, [openFiles, closeFile, saveFile, language])
+  }, [closeFile, saveFile, language])
 
   // 关闭其他文件
   const closeOtherFiles = useCallback(async (keepPath: string) => {
+    const openFiles = useStore.getState().openFiles
     for (const file of openFiles) {
       if (file.path !== keepPath) {
         await closeFileWithConfirm(file.path)
       }
     }
-  }, [openFiles, closeFileWithConfirm])
+  }, [closeFileWithConfirm])
 
   // 关闭所有文件
   const closeAllFiles = useCallback(async () => {
+    const openFiles = useStore.getState().openFiles
     for (const file of [...openFiles]) {
       await closeFileWithConfirm(file.path)
     }
-  }, [openFiles, closeFileWithConfirm])
+  }, [closeFileWithConfirm])
 
   // 关闭右侧文件
   const closeFilesToRight = useCallback(async (filePath: string) => {
+    const openFiles = useStore.getState().openFiles
     const index = openFiles.findIndex(f => f.path === filePath)
     if (index >= 0) {
       for (let i = openFiles.length - 1; i > index; i--) {
         await closeFileWithConfirm(openFiles[i].path)
       }
     }
-  }, [openFiles, closeFileWithConfirm])
+  }, [closeFileWithConfirm])
 
   // 触发自动保存
   // 触发自动保存 (使用 debounce 重构)
@@ -144,8 +151,10 @@ export function useFileSave() {
           const { openFiles: currentFiles, markFileSaved: currentMarkSaved } = useStore.getState()
           const file = currentFiles.find(f => f.path === fPath)
           if (file?.isDirty) {
-            const success = await api.file.write(file.path, file.content, file.encoding)
+            const content = getEditorBufferContent(file.path, file.content)
+            const success = await api.file.write(file.path, content, file.encoding)
             if (success) {
+              commitEditorBufferSnapshot(file.path, content)
               const versionId = getModelVersionId(file.path)
               currentMarkSaved(file.path, versionId)
             }
@@ -175,10 +184,13 @@ export function useFileSave() {
     if (config.autoSave !== 'onFocusChange') return
 
     const handleBlur = async () => {
+      const openFiles = useStore.getState().openFiles
       for (const file of openFiles) {
         if (file.isDirty) {
-          const success = await api.file.write(file.path, file.content, file.encoding)
+          const content = getEditorBufferContent(file.path, file.content)
+          const success = await api.file.write(file.path, content, file.encoding)
           if (success) {
+            commitEditorBufferSnapshot(file.path, content)
             const versionId = getModelVersionId(file.path)
             markFileSaved(file.path, versionId)
           }
@@ -188,7 +200,7 @@ export function useFileSave() {
 
     window.addEventListener('blur', handleBlur)
     return () => window.removeEventListener('blur', handleBlur)
-  }, [openFiles, markFileSaved])
+  }, [markFileSaved])
 
   // 清理定时器
   useEffect(() => {

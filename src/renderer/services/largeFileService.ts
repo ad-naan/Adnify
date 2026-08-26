@@ -4,6 +4,8 @@
  */
 
 import { getEditorConfig } from '@renderer/settings'
+import type { LargeFileInfo } from '@shared/types/largeFile'
+export type { LargeFileInfo } from '@shared/types/largeFile'
 
 // 文件大小阈值（字节）- 从配置获取
 function getLargeFileThreshold(): number {
@@ -28,15 +30,6 @@ export interface FileChunk {
   content: string
   startOffset: number
   endOffset: number
-}
-
-export interface LargeFileInfo {
-  path: string
-  size: number
-  lineCount: number
-  isLarge: boolean
-  isVeryLarge: boolean
-  reason?: 'size' | 'lines' | 'both'
 }
 
 /**

@@ -1,7 +1,7 @@
 /**
  * Store Slices 导出
  */
-export { createFileSlice, type FileSlice, type OpenFile, type WorkspaceConfig, type LargeFileInfo } from './fileSlice'
+export { createFileSlice, type FileSlice, type OpenFile, type WorkspaceConfig } from './fileSlice'
 export { createSettingsSlice, type SettingsSlice, type SettingsState, type SettingKey, type ProviderModelConfig } from './settingsSlice'
 export { createThemeSlice, type ThemeSlice, type ThemeName } from './themeSlice'
 export { createLogSlice, type LogSlice, type ToolCallLogEntry } from './logSlice'

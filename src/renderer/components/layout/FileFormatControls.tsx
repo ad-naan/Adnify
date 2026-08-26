@@ -4,6 +4,7 @@ import BottomBarPopover from '../ui/BottomBarPopover'
 import { applyFileEol } from '@services/fileFormatService'
 import { toast } from '../common/ToastProvider'
 import { api } from '@renderer/services/electronAPI'
+import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 
 const EOL_OPTIONS = [
   { id: 'LF', label: 'LF', descriptionZh: 'Unix / macOS', descriptionEn: 'Unix / macOS' },
@@ -47,7 +48,6 @@ export default function FileFormatControls() {
   const activeFile = useStore(state => state.openFiles.find(file => file.path === state.activeFilePath))
   const language = useStore(state => state.language)
   const setFileEncoding = useStore(state => state.setFileEncoding)
-  const updateFileContent = useStore(state => state.updateFileContent)
 
   if (!activeFile || activeFile.kind === 'preview') {
     return null
@@ -80,7 +80,7 @@ export default function FileFormatControls() {
       return
     }
 
-    updateFileContent(activeFile.path, nextContent)
+    applySavedEditorBufferContent(activeFile.path, nextContent)
     setFileEncoding(activeFile.path, nextEncoding)
     toast.success(
       language === 'zh' ? '文件编码已更新' : 'File encoding updated',

@@ -12,6 +12,7 @@ import { t } from '@renderer/i18n'
 import { composerService } from '@renderer/agent/services/composerService'
 import { buildFileChangeDescriptor } from '@renderer/agent/utils/fileChangeUtils'
 import { toast } from '../common/ToastProvider'
+import { getEditorBufferContent, replaceEditorBufferContent } from '@renderer/services/editorBufferService'
 
 interface InlineEditProps {
 	position: { x: number; y: number }
@@ -35,7 +36,7 @@ export default function InlineEdit({
 	const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
 	const [originalContent, setOriginalContent] = useState<string>('')
 	const inputRef = useRef<HTMLInputElement>(null)
-	const { llmConfig, language, updateFileContent, workspacePath } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, language: s.language, updateFileContent: s.updateFileContent, workspacePath: s.workspacePath })))
+	const { llmConfig, language, workspacePath } = useStore(useShallow(s => ({ llmConfig: s.llmConfig, language: s.language, workspacePath: s.workspacePath })))
 	const containerRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
@@ -61,17 +62,18 @@ export default function InlineEdit({
 			onClose()
 			return
 		}
+		const baseContent = getEditorBufferContent(filePath, currentFile.content)
 
 		setState('generating')
-		setOriginalContent(currentFile.content)
+		setOriginalContent(baseContent)
 
 		// Create a composer session so inline diff rendering kicks in
 		composerService.ensureSession('Inline Edit', 'AI Inline Edit')
 		composerService.addChange(buildFileChangeDescriptor({
 			filePath,
 			workspacePath,
-			oldContent: currentFile.content,
-			newContent: currentFile.content,
+			oldContent: baseContent,
+			newContent: baseContent,
 			changeType: 'modify',
 			linesAdded: 0,
 			linesRemoved: 0
@@ -93,20 +95,20 @@ export default function InlineEdit({
 						cleanBlock = cleanBlock.replace(/^```\w*\n?/, '').replace(/\n?```$/, '')
 					}
 
-					const oldContentLines = currentFile.content.split('\n')
+					const oldContentLines = baseContent.split('\n')
 					const preContent = oldContentLines.slice(0, lineRange[0] - 1)
 					const postContent = oldContentLines.slice(lineRange[1])
 
 					const newFullContent = [...preContent, cleanBlock, ...postContent].join('\n')
 
 					// Update editor buffer in real-time -> triggers useComposerInlineDiff
-					updateFileContent(filePath, newFullContent)
+					replaceEditorBufferContent(filePath, newFullContent)
 
 					// Update composer service explicitly so diff logic has newContent
 					composerService.addChange(buildFileChangeDescriptor({
 						filePath,
 						workspacePath,
-						oldContent: currentFile.content,
+						oldContent: baseContent,
 						newContent: newFullContent,
 						changeType: 'modify',
 						linesAdded: 0,
@@ -131,7 +133,7 @@ export default function InlineEdit({
 				cleanup()
 				console.error('[InlineEdit] AI Edit stream error:', err)
 				toast.error(t('error', language) || 'Error', err.message || 'AI request failed')
-				updateFileContent(filePath, currentFile.content)
+				replaceEditorBufferContent(filePath, baseContent)
 				composerService.rejectChange(filePath)
 				setState('idle')
 				setActiveRequestId(null)
@@ -146,12 +148,12 @@ export default function InlineEdit({
 		} catch (err: any) {
 			console.error(err)
 			toast.error(t('error', language) || 'Error', err.message || 'Generation failed')
-			updateFileContent(filePath, currentFile.content)
+			replaceEditorBufferContent(filePath, baseContent)
 			composerService.rejectChange(filePath)
 			setState('idle')
 			setActiveRequestId(null)
 		}
-	}, [instruction, state, selectedCode, filePath, lineRange, llmConfig, updateFileContent, onClose, workspacePath])
+	}, [instruction, state, selectedCode, filePath, lineRange, llmConfig, onClose, workspacePath])
 
 	const handleAccept = useCallback(() => {
 		// Just clear composer change pending status by "accepting" it
@@ -161,20 +163,20 @@ export default function InlineEdit({
 
 	const handleReject = useCallback(() => {
 		// Restore original content
-		updateFileContent(filePath, originalContent)
+		replaceEditorBufferContent(filePath, originalContent)
 		composerService.rejectChange(filePath)
 		onClose()
-	}, [filePath, originalContent, updateFileContent, onClose])
+	}, [filePath, originalContent, onClose])
 
 	const handleCancelStream = useCallback(() => {
 		if (activeRequestId) {
 			api.llm.abort(activeRequestId)
-			updateFileContent(filePath, originalContent)
+			replaceEditorBufferContent(filePath, originalContent)
 			composerService.rejectChange(filePath)
 			setState('idle')
 			setActiveRequestId(null)
 		}
-	}, [activeRequestId, filePath, originalContent, updateFileContent])
+	}, [activeRequestId, filePath, originalContent])
 
 	// 当进入非 idle 状态（input 被摧毁）时，需要全局监听按键
 	useEffect(() => {

@@ -27,6 +27,12 @@ import type { StreamingEditState } from '@renderer/agent/types'
 import type { ThemeName } from '@store/slices/themeSlice'
 import { useEditorBreakpoints } from '@hooks/useEditorBreakpoints'
 import { consumePendingNavigation } from '@services/editorNavigation'
+import {
+  commitEditorBufferSnapshot,
+  flushEditorBufferSnapshots,
+  replaceEditorBufferContent,
+  scheduleEditorBufferSnapshot,
+} from '@services/editorBufferService'
 
 // 子组件
 import { EditorTabs } from './EditorTabs'
@@ -205,6 +211,7 @@ export default function Editor() {
 
   useEffect(() => {
     return () => {
+      flushEditorBufferSnapshots()
       if (fontZoomRafRef.current != null) {
         cancelAnimationFrame(fontZoomRafRef.current)
       }
@@ -240,10 +247,13 @@ export default function Editor() {
   // 同时检查是否有跨文件 Go-to-Definition 待处理的跳转定位
   useEffect(() => {
     clearLintErrors()
-    if (activeFile?.contentState === 'loaded' && !isPreviewDocument && !isPlanBoardDocument) {
-      notifyFileOpened(activeFile.path, activeFile.content)
+    const file = activeFilePath
+      ? useStore.getState().openFiles.find(candidate => candidate.path === activeFilePath)
+      : undefined
+    if (file?.contentState === 'loaded' && !isPreviewDocument && !isPlanBoardDocument) {
+      notifyFileOpened(file.path, file.content)
       // 检查是否有跨文件跳转定义的待定位请求
-      const nav = consumePendingNavigation(activeFile.path)
+      const nav = consumePendingNavigation(file.path)
       if (nav && editorRef.current) {
         setTimeout(() => {
           editorRef.current?.setPosition({ lineNumber: nav.line, column: nav.col })
@@ -252,7 +262,7 @@ export default function Editor() {
         }, 80)
       }
     }
-  }, [activeFilePath, activeFile, clearLintErrors, notifyFileOpened, isPlanBoardDocument, isPreviewDocument])
+  }, [activeFilePath, activeFile?.contentState, activeFile?.contentLoadVersion, clearLintErrors, notifyFileOpened, isPlanBoardDocument, isPreviewDocument])
 
   // 清理不再打开的文件的 Monaco Models，防止内存泄漏
   useEffect(() => {
@@ -412,9 +422,7 @@ export default function Editor() {
       const content = editorRef.current.getValue()
       const success = await api.file.write(activeFile.path, content, activeFile.encoding)
       if (success) {
-        if (config.formatOnSave && content !== activeFile.content) {
-          updateFileContent(activeFile.path, content)
-        }
+        commitEditorBufferSnapshot(activeFile.path, content)
         // 保存时记录当前版本号
         const model = editorRef.current.getModel()
         const versionId = model?.getAlternativeVersionId()
@@ -424,7 +432,7 @@ export default function Editor() {
         toast.error(language === 'zh' ? '保存失败' : 'Save Failed', language === 'zh' ? '无法写入文件' : 'Could not write to file')
       }
     }
-  }, [activeFile, isPlanBoardDocument, markFileSaved, language, updateFileContent])
+  }, [activeFile, isPlanBoardDocument, markFileSaved, language])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (keybindingService.matches(e.nativeEvent, 'editor.save')) {
@@ -485,7 +493,7 @@ export default function Editor() {
             filePath={streamingEdit.filePath}
             isStreaming={!streamingEdit.isComplete}
             onAccept={() => {
-              updateFileContent(activeFile.path, streamingEdit.currentContent)
+              replaceEditorBufferContent(activeFile.path, streamingEdit.currentContent)
               composerService.acceptChange(activeFile.path)
               setShowDiffPreview(false)
             }}
@@ -536,7 +544,7 @@ export default function Editor() {
               const realPath = activeFile.path.replace(/^(git-)?diff:\/\//, '')
               acceptChange(realPath)
               await composerService.acceptChange(realPath)
-              updateFileContent(realPath, activeFile.content)
+              replaceEditorBufferContent(realPath, activeFile.content)
               closeFile(activeFile.path)
             }}
             onReject={async () => {
@@ -597,13 +605,13 @@ export default function Editor() {
                     key={activeFile.path}
                     path={monaco.Uri.file(activeFile.path).toString()}
                     language={activeLanguage}
-                    value={activeFile.content}
+                    defaultValue={activeFile.content}
                     theme="adnify-dynamic"
                     beforeMount={handleBeforeMount}
                     onMount={handleEditorMount}
                     onChange={(value) => {
                       if (value !== undefined) {
-                        updateFileContent(activeFile.path, value)
+                        scheduleEditorBufferSnapshot(activeFile.path, value)
                         scheduleDidChangeDocument(activeFile.path, value)
                       }
                     }}
@@ -645,13 +653,13 @@ export default function Editor() {
                 key={activeFile.path}
                 path={monaco.Uri.file(activeFile.path).toString()}
                 language={activeLanguage}
-                value={activeFile.content}
+                defaultValue={activeFile.content}
                 theme="adnify-dynamic"
                 beforeMount={handleBeforeMount}
                 onMount={handleEditorMount}
                 onChange={(value) => {
                   if (value !== undefined) {
-                    updateFileContent(activeFile.path, value)
+                    scheduleEditorBufferSnapshot(activeFile.path, value)
                     scheduleDidChangeDocument(activeFile.path, value)
                     triggerAutoSave(activeFile.path)
                   }

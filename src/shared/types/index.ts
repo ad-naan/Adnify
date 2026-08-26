@@ -18,6 +18,7 @@ export * from './planActivity'
 
 // 文档 / 图片读取类型
 export * from './documentReader'
+export * from './largeFile'
 
 // ==========================================
 // 基础类型

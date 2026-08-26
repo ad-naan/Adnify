@@ -18,7 +18,8 @@ import {
 
 
 // 导出类型
-export type { OpenFile, WorkspaceConfig, LargeFileInfo } from './slices'
+export type { OpenFile, WorkspaceConfig } from './slices'
+export type { LargeFileInfo } from '@shared/types/largeFile'
 export type { ProviderModelConfig, SettingsState, SettingKey } from './slices'
 // 类型从 shared/config/types 导入
 export type { LLMConfig, AutoApproveSettings, AgentConfig } from '@shared/config/types'

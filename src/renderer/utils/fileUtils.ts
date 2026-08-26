@@ -5,7 +5,7 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
-import { LargeFileInfo } from '@store/slices/fileSlice'
+import type { LargeFileInfo } from '@shared/types/largeFile'
 import {
   getFileInfo,
   getLargeFileWarning,
@@ -77,6 +77,7 @@ export function detectLargeFile(content: string, filePath: string, language: 'en
   const warning = getLargeFileWarning(info, language)
 
   return {
+    path: filePath,
     isLarge: info.isLarge,
     isVeryLarge: info.isVeryLarge,
     size: info.size,

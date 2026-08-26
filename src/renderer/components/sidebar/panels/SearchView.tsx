@@ -9,7 +9,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { t } from '@renderer/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
-import { scheduleSavedVersionSync } from '@renderer/services/fileSavedVersionSync'
+import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 import { globalConfirm } from '../../common/ConfirmDialog'
 import { Input } from '../../ui'
 import { toast } from '../../common/ToastProvider'
@@ -227,10 +227,9 @@ export function SearchView() {
     if (newContent !== content) {
       await api.file.write(filePath, newContent)
       // 同步已打开的编辑器内容
-      const { openFiles, reloadFileFromDisk } = useStore.getState()
+      const { openFiles } = useStore.getState()
       if (openFiles.some(f => f.path === filePath)) {
-        reloadFileFromDisk(filePath, newContent)
-        scheduleSavedVersionSync(filePath, newContent)
+        applySavedEditorBufferContent(filePath, newContent)
       }
       handleSearch()
     }
@@ -289,10 +288,9 @@ export function SearchView() {
       if (newContent !== content) {
         await api.file.write(filePath, newContent)
         // 同步已打开的编辑器内容
-        const { openFiles: currentOpenFiles, reloadFileFromDisk } = useStore.getState()
+        const { openFiles: currentOpenFiles } = useStore.getState()
         if (currentOpenFiles.some(f => f.path === filePath)) {
-          reloadFileFromDisk(filePath, newContent)
-          scheduleSavedVersionSync(filePath, newContent)
+          applySavedEditorBufferContent(filePath, newContent)
         }
         replacedCount++
       }

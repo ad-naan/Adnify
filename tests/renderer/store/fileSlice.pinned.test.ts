@@ -31,6 +31,20 @@ describe('fileSlice pinned tabs', () => {
 })
 
 describe('fileSlice content lifecycle', () => {
+  it('does not notify subscribers for repeated equivalent editor updates', () => {
+    const store = createFileStore()
+    store.getState().openFile('E:/workspace/app.ts', 'initial')
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => { notifications += 1 })
+
+    store.getState().updateFileDirtyState('E:/workspace/app.ts', 2)
+    store.getState().updateFileDirtyState('E:/workspace/app.ts', 3)
+    store.getState().updateFileContent('E:/workspace/app.ts', 'initial')
+
+    unsubscribe()
+    expect(notifications).toBe(1)
+  })
+
   it('marks an evicted clean buffer as unloaded and supports explicit rehydration', () => {
     const store = createFileStore()
 
