@@ -20,9 +20,10 @@ import type {
     SearchPart,
     SourcesPart,
     InteractiveContent,
+    ChatThread,
 } from '../../types'
 import type { LLMStreamSource } from '@/shared/types/llm'
-import { createIdleHandoffState } from '../../types'
+import { createIdleHandoffState, materializeThreadMessages } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
 import type { BranchSlice } from './branchSlice'
@@ -143,6 +144,28 @@ const bumpThreadMessageVersion = (
     [threadId]: (versions[threadId] || 0) + 1,
 })
 
+function getAssistantMessage(thread: ChatThread, messageId: string): AssistantMessage | undefined {
+    if (thread.liveAssistantMessage?.id === messageId) {
+        return thread.liveAssistantMessage
+    }
+
+    return thread.messages.find(
+        message => message.id === messageId && message.role === 'assistant'
+    ) as AssistantMessage | undefined
+}
+
+function replaceAssistantMessage(
+    thread: ChatThread,
+    assistantMessage: AssistantMessage
+): ChatMessage[] | null {
+    const messageIndex = thread.messages.findIndex(message => message.id === assistantMessage.id)
+    if (messageIndex === -1) return null
+
+    const nextMessages = thread.messages.slice()
+    nextMessages[messageIndex] = assistantMessage
+    return nextMessages
+}
+
 /**
  * Trim a thread's stored history to `maxStoredMessagesPerThread`.
  *
@@ -233,7 +256,8 @@ export const createMessageSlice: StateCreator<
                     ...state.threads,
                     [threadId!]: {
                         ...thread,
-                        messages: [...thread.messages, message],
+                        messages: [...materializeThreadMessages(thread), message],
+                        liveAssistantMessage: undefined,
                         lastModified: Date.now(),
                     },
                 },
@@ -276,7 +300,7 @@ export const createMessageSlice: StateCreator<
 
             // Bound stored history once per turn. Uses a much larger limit than the
             // model payload cap, so scrollback stays useful.
-            const appended = [...thread.messages, userMessage, assistantMessage]
+            const appended = [...materializeThreadMessages(thread), userMessage, assistantMessage]
             const messages = trimStoredMessages(
                 appended,
                 getAgentConfig().maxStoredMessagesPerThread
@@ -289,6 +313,7 @@ export const createMessageSlice: StateCreator<
                     [threadId!]: {
                         ...thread,
                         messages,
+                        liveAssistantMessage: assistantMessage,
                         lastModified: Date.now(),
                         streamState: { ...thread.streamState, phase: 'streaming' },
                         contextItems: [], // 同时清理上下文
@@ -325,7 +350,8 @@ export const createMessageSlice: StateCreator<
                     ...state.threads,
                     [threadId]: {
                         ...thread,
-                        messages: [...thread.messages, message],
+                        messages: [...materializeThreadMessages(thread), message],
+                        liveAssistantMessage: message,
                         lastModified: Date.now(),
                         streamState: { ...thread.streamState, phase: 'streaming' },
                     },
@@ -360,7 +386,8 @@ export const createMessageSlice: StateCreator<
                     ...state.threads,
                     [threadId]: {
                         ...thread,
-                        messages: [...thread.messages, message],
+                        messages: [...materializeThreadMessages(thread), message],
+                        liveAssistantMessage: undefined,
                         lastModified: Date.now(),
                     },
                 },
@@ -389,12 +416,8 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messageIdx = thread.messages.findIndex(
-                msg => msg.id === messageId && msg.role === 'assistant'
-            )
-            if (messageIdx === -1) return state
-
-            const assistantMsg = thread.messages[messageIdx] as AssistantMessage
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
             const newContent = assistantMsg.content + content
 
             let newParts: AssistantPart[]
@@ -414,8 +437,11 @@ export const createMessageSlice: StateCreator<
 
             // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
             const { _textFinalized: _, ...cleanMsg } = assistantMsg
-            const nextMessages = [...thread.messages]
-            nextMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
+            const liveAssistantMessage: AssistantMessage = {
+                ...cleanMsg,
+                content: newContent,
+                parts: newParts,
+            }
 
             // A token chunk changes only the active row, not timeline membership.
             // Keep the settled message-list revision stable so ChatPanel does not
@@ -425,7 +451,7 @@ export const createMessageSlice: StateCreator<
                     ...state.threads,
                     [threadId]: {
                         ...thread,
-                        messages: nextMessages,
+                        liveAssistantMessage,
                     },
                 },
             }
@@ -441,30 +467,26 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
 
-                    // 清理幽灵工具调用：如果 LLM 已结束，但仍有处于非终态的工具，将它们标记为错误
-                    const cleanToolCall = (tc: ToolCall): ToolCall => {
-                        if (['pending', 'running', 'awaiting'].includes(tc.status)) {
-                            return { ...tc, status: 'error', result: getInterruptedToolMessage() }
-                        }
-                        return tc
-                    }
-
-                    const newToolCalls = assistantMsg.toolCalls?.map(cleanToolCall)
-                    const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'tool_call') {
-                            return { ...part, toolCall: cleanToolCall(part.toolCall) }
-                        }
-                        return part
-                    })
-
-                    return { ...assistantMsg, isStreaming: false, toolCalls: newToolCalls, parts: newParts }
+            // 清理幽灵工具调用：如果 LLM 已结束，但仍有处于非终态的工具，将它们标记为错误
+            const cleanToolCall = (toolCall: ToolCall): ToolCall => {
+                if (['pending', 'running', 'awaiting'].includes(toolCall.status)) {
+                    return { ...toolCall, status: 'error', result: getInterruptedToolMessage() }
                 }
-                return msg
-            })
+                return toolCall
+            }
+            const finalizedMessage: AssistantMessage = {
+                ...assistantMsg,
+                isStreaming: false,
+                toolCalls: assistantMsg.toolCalls?.map(cleanToolCall),
+                parts: assistantMsg.parts.map(part => part.type === 'tool_call'
+                    ? { ...part, toolCall: cleanToolCall(part.toolCall) }
+                    : part),
+            }
+            const messages = replaceAssistantMessage(thread, finalizedMessage)
+            if (!messages) return state
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
@@ -473,6 +495,7 @@ export const createMessageSlice: StateCreator<
                     [threadId]: {
                         ...thread,
                         messages,
+                        liveAssistantMessage: undefined,
                         streamState: { ...thread.streamState, phase: 'idle' },
                     },
                 },
@@ -520,35 +543,28 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messageIdx = thread.messages.findIndex(
-                msg => msg.id === messageId && msg.role === 'assistant'
-            )
-            if (messageIdx === -1) return state
-
-            const assistantMsg = thread.messages[messageIdx] as AssistantMessage
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
             const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1]
+            const hasLiveMessage = thread.liveAssistantMessage?.id === messageId
+            if (lastPart?.type !== 'text' && !hasLiveMessage) return state
+            const finalizedMessage: AssistantMessage = lastPart?.type === 'text'
+                ? { ...assistantMsg, _textFinalized: true }
+                : assistantMsg
+            const messages = replaceAssistantMessage(thread, finalizedMessage)
+            if (!messages) return state
 
-            // 如果最后一个 part 是 text 且正在流式输出，标记为已完成
-            // 这样后续的工具调用会作为新的 part 添加，而不是插入到文本中间
-            if (lastPart && lastPart.type === 'text') {
-                // 添加一个标记，表示这个文本 part 已经完成
-                // 后续的 appendToAssistant 会创建新的 text part
-                const newMessages = [...thread.messages]
-                newMessages[messageIdx] = {
-                    ...assistantMsg,
-                    _textFinalized: true, // 内部标记
-                }
-
-                return {
-                    threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                    threads: {
-                        ...state.threads,
-                        [threadId]: { ...thread, messages: newMessages },
+            return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                threads: {
+                    ...state.threads,
+                    [threadId]: {
+                        ...thread,
+                        messages,
+                        liveAssistantMessage: undefined,
                     },
-                }
+                },
             }
-
-            return state
         })
     },
 
@@ -561,7 +577,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId) {
                     if (msg.role === 'assistant') {
                         const assistantMsg = msg as AssistantMessage
@@ -584,7 +600,12 @@ export const createMessageSlice: StateCreator<
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages, lastModified: Date.now() },
+                        [threadId]: {
+                            ...thread,
+                            messages,
+                            liveAssistantMessage: undefined,
+                            lastModified: Date.now(),
+                        },
                 },
             }
         })
@@ -693,6 +714,7 @@ export const createMessageSlice: StateCreator<
                     [threadId]: {
                         ...thread,
                         messages: [],
+                        liveAssistantMessage: undefined,
                         contextItems: [],
                         messageCheckpoints: [],
                         compressionStats: null,
@@ -730,10 +752,11 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const index = thread.messages.findIndex(m => m.id === messageId)
+            const materializedMessages = materializeThreadMessages(thread)
+            const index = materializedMessages.findIndex(m => m.id === messageId)
             if (index === -1) return state
 
-            const remainingMessages = thread.messages.slice(0, index + 1)
+            const remainingMessages = materializedMessages.slice(0, index + 1)
             const remainingMessageIds = new Set(remainingMessages.map(message => message.id))
 
             return {
@@ -743,6 +766,7 @@ export const createMessageSlice: StateCreator<
                     [threadId]: {
                         ...thread,
                         messages: remainingMessages,
+                        liveAssistantMessage: undefined,
                         messageCheckpoints: (thread.messageCheckpoints || []).filter(checkpoint => remainingMessageIds.has(checkpoint.messageId)),
                         compressionStats: null,
                         contextSummary: null,
@@ -763,7 +787,7 @@ export const createMessageSlice: StateCreator<
         if (!threadId) return []
 
         const thread = get().threads[threadId]
-        return thread?.messages || []
+        return thread ? materializeThreadMessages(thread) : []
     },
 
     // 添加工具调用部分
@@ -788,7 +812,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
 
@@ -809,7 +833,7 @@ export const createMessageSlice: StateCreator<
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, messages, liveAssistantMessage: undefined },
                 },
             }
         })
@@ -945,7 +969,8 @@ export const createMessageSlice: StateCreator<
             )
             if (messageIdx === -1) return state
 
-            const assistantMessage = thread.messages[messageIdx] as AssistantMessage
+            const assistantMessage = getAssistantMessage(thread, messageId)
+            if (!assistantMessage) return state
             const existingToolCall = assistantMessage.toolCalls?.find(call => call.id === toolCall.id)
             const parts = existingToolCall
                 ? assistantMessage.parts.map(part =>
@@ -978,6 +1003,7 @@ export const createMessageSlice: StateCreator<
                     [threadId]: {
                         ...thread,
                         messages,
+                        liveAssistantMessage: undefined,
                         toolStreamingPreviews,
                         streamState: {
                             ...thread.streamState,
@@ -1065,8 +1091,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加推理部分
-    addReasoningPart: (messageId) => {
-        const threadId = get().currentThreadId
+    addReasoningPart: (messageId, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return ''
 
         const partId = `reasoning-${crypto.randomUUID()}`
@@ -1075,26 +1101,24 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
-                    const newPart: ReasoningPart = {
-                        id: partId,
-                        type: 'reasoning',
-                        content: '',
-                        startTime: Date.now(),
-                        isStreaming: true,
-                    }
-                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
-                }
-                return msg
-            })
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const newPart: ReasoningPart = {
+                id: partId,
+                type: 'reasoning',
+                content: '',
+                startTime: Date.now(),
+                isStreaming: true,
+            }
+            const liveAssistantMessage: AssistantMessage = {
+                ...assistantMsg,
+                parts: [...assistantMsg.parts, newPart],
+            }
 
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, liveAssistantMessage },
                 },
             }
         })
@@ -1121,27 +1145,22 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
-                    const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'reasoning' && part.id === partId) {
-                            return { ...part, content: part.content + content, isStreaming }
-                        }
-                        return part
-                    })
-                    return { ...assistantMsg, parts: newParts }
-                }
-                return msg
-            })
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const liveAssistantMessage: AssistantMessage = {
+                ...assistantMsg,
+                parts: assistantMsg.parts.map(part => {
+                    if (part.type === 'reasoning' && part.id === partId) {
+                        return { ...part, content: part.content + content, isStreaming }
+                    }
+                    return part
+                }),
+            }
 
             return {
-                ...(isStreaming ? {} : {
-                    threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                }),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, liveAssistantMessage },
                 },
             }
         })
@@ -1156,25 +1175,22 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
-                    const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'reasoning' && part.id === partId) {
-                            return { ...part, isStreaming: false }
-                        }
-                        return part
-                    })
-                    return { ...assistantMsg, parts: newParts }
-                }
-                return msg
-            })
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const liveAssistantMessage: AssistantMessage = {
+                ...assistantMsg,
+                parts: assistantMsg.parts.map(part => {
+                    if (part.type === 'reasoning' && part.id === partId) {
+                        return { ...part, isStreaming: false }
+                    }
+                    return part
+                }),
+            }
 
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, liveAssistantMessage },
                 },
             }
         })
@@ -1191,25 +1207,23 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
-                    const newPart: SearchPart = {
-                        id: partId,
-                        type: 'search',
-                        content: '',
-                        isStreaming: true,
-                    }
-                    return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
-                }
-                return msg
-            })
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const newPart: SearchPart = {
+                id: partId,
+                type: 'search',
+                content: '',
+                isStreaming: true,
+            }
+            const liveAssistantMessage: AssistantMessage = {
+                ...assistantMsg,
+                parts: [...assistantMsg.parts, newPart],
+            }
 
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, liveAssistantMessage },
                 },
             }
         })
@@ -1226,28 +1240,23 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
-                    const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'search' && part.id === partId) {
-                            const newContent = append ? part.content + content : content
-                            return { ...part, content: newContent, isStreaming }
-                        }
-                        return part
-                    })
-                    return { ...assistantMsg, parts: newParts }
-                }
-                return msg
-            })
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const liveAssistantMessage: AssistantMessage = {
+                ...assistantMsg,
+                parts: assistantMsg.parts.map(part => {
+                    if (part.type === 'search' && part.id === partId) {
+                        const newContent = append ? part.content + content : content
+                        return { ...part, content: newContent, isStreaming }
+                    }
+                    return part
+                }),
+            }
 
             return {
-                ...(isStreaming ? {} : {
-                    threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                }),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, liveAssistantMessage },
                 },
             }
         })
@@ -1262,25 +1271,22 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
-                    const newParts = assistantMsg.parts.map(part => {
-                        if (part.type === 'search' && part.id === partId) {
-                            return { ...part, isStreaming: false }
-                        }
-                        return part
-                    })
-                    return { ...assistantMsg, parts: newParts }
-                }
-                return msg
-            })
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const liveAssistantMessage: AssistantMessage = {
+                ...assistantMsg,
+                parts: assistantMsg.parts.map(part => {
+                    if (part.type === 'search' && part.id === partId) {
+                        return { ...part, isStreaming: false }
+                    }
+                    return part
+                }),
+            }
 
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages },
+                    [threadId]: { ...thread, liveAssistantMessage },
                 },
             }
         })
@@ -1294,62 +1300,45 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            let updated = false
             const sourceKey = getSourceStableKey(source)
+            const assistantMsg = getAssistantMessage(thread, messageId)
+            if (!assistantMsg) return state
+            const partIndex = assistantMsg.parts.findIndex(part => part.type === 'sources')
+            const existingPart = partIndex >= 0 ? assistantMsg.parts[partIndex] as SourcesPart : undefined
+            const nextSources = existingPart
+                ? (() => {
+                    const existingIndex = existingPart.sources.findIndex(item => getSourceStableKey(item) === sourceKey)
+                    if (existingIndex === -1) return [...existingPart.sources, source]
 
-            const messages = thread.messages.map(msg => {
-                if (msg.id !== messageId || msg.role !== 'assistant') {
-                    return msg
-                }
+                    const merged = mergeSourceEntry(existingPart.sources[existingIndex], source)
+                    if (merged === existingPart.sources[existingIndex]) return existingPart.sources
 
-                const assistantMsg = msg as AssistantMessage
-                const partIndex = assistantMsg.parts.findIndex(part => part.type === 'sources')
-                const existingPart = partIndex >= 0 ? assistantMsg.parts[partIndex] as SourcesPart : undefined
+                    const cloned = [...existingPart.sources]
+                    cloned[existingIndex] = merged
+                    return cloned
+                })()
+                : [source]
+            if (existingPart && nextSources === existingPart.sources) return state
 
-                const nextSources = existingPart
-                    ? (() => {
-                        const existingIndex = existingPart.sources.findIndex(item => getSourceStableKey(item) === sourceKey)
-                        if (existingIndex === -1) {
-                            return [...existingPart.sources, source]
-                        }
-
-                        const merged = mergeSourceEntry(existingPart.sources[existingIndex], source)
-                        if (merged === existingPart.sources[existingIndex]) {
-                            return existingPart.sources
-                        }
-
-                        const cloned = [...existingPart.sources]
-                        cloned[existingIndex] = merged
-                        return cloned
-                    })()
-                    : [source]
-
-                if (existingPart && nextSources === existingPart.sources) {
-                    return msg
-                }
-
-                updated = true
-
-                if (!existingPart) {
-                    const createdSourcesPart: SourcesPart = {
-                        type: 'sources',
-                        sources: nextSources,
-                    }
-                    const updatedMessage: AssistantMessage = {
-                        ...assistantMsg,
-                        parts: [...assistantMsg.parts, createdSourcesPart],
-                    }
-                    return updatedMessage
-                }
-
-                const nextParts: AssistantMessage['parts'] = [...assistantMsg.parts]
+            const nextParts: AssistantMessage['parts'] = [...assistantMsg.parts]
+            if (existingPart) {
                 nextParts[partIndex] = { ...existingPart, sources: nextSources }
-                const updatedMessage: AssistantMessage = { ...assistantMsg, parts: nextParts }
-                return updatedMessage
-            })
+            } else {
+                nextParts.push({ type: 'sources', sources: nextSources })
+            }
+            const updatedMessage: AssistantMessage = { ...assistantMsg, parts: nextParts }
 
-            if (!updated) return state
+            if (thread.liveAssistantMessage?.id === messageId) {
+                return {
+                    threads: {
+                        ...state.threads,
+                        [threadId]: { ...thread, liveAssistantMessage: updatedMessage },
+                    },
+                }
+            }
 
+            const messages = replaceAssistantMessage(thread, updatedMessage)
+            if (!messages) return state
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
@@ -1369,7 +1358,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newPart: AssistantPart = { type: 'lint_check', files: [], status: 'checking' }
@@ -1380,7 +1369,10 @@ export const createMessageSlice: StateCreator<
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: { ...state.threads, [threadId]: { ...thread, messages } },
+                threads: {
+                    ...state.threads,
+                    [threadId]: { ...thread, messages, liveAssistantMessage: undefined },
+                },
             }
         })
     },
@@ -1394,7 +1386,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newParts = assistantMsg.parts.map(part => {
@@ -1410,7 +1402,10 @@ export const createMessageSlice: StateCreator<
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: { ...state.threads, [threadId]: { ...thread, messages } },
+                threads: {
+                    ...state.threads,
+                    [threadId]: { ...thread, messages, liveAssistantMessage: undefined },
+                },
             }
         })
     },
@@ -1423,7 +1418,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
                     const newPart: AssistantPart = {
@@ -1441,7 +1436,15 @@ export const createMessageSlice: StateCreator<
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: { ...state.threads, [threadId]: { ...thread, messages, lastModified: Date.now() } },
+                threads: {
+                    ...state.threads,
+                    [threadId]: {
+                        ...thread,
+                        messages,
+                        liveAssistantMessage: undefined,
+                        lastModified: Date.now(),
+                    },
+                },
             }
         })
     },
@@ -1455,7 +1458,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     return { ...msg, interactive, isStreaming: false }
                 }
@@ -1469,6 +1472,7 @@ export const createMessageSlice: StateCreator<
                     [threadId]: {
                         ...thread,
                         messages,
+                        liveAssistantMessage: undefined,
                         streamState: { ...thread.streamState, phase: 'idle' },
                         lastModified: Date.now(),
                     },
@@ -1487,7 +1491,7 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId!]
             if (!thread) return state
 
-            const messages = thread.messages.map(msg => {
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id !== messageId || msg.role !== 'assistant') return msg
                 const aMsg = msg as AssistantMessage
                 const items: ContextItem[] = aMsg.contextItems || []
@@ -1505,7 +1509,10 @@ export const createMessageSlice: StateCreator<
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId!),
-                threads: { ...state.threads, [threadId!]: { ...thread, messages } }
+                threads: {
+                    ...state.threads,
+                    [threadId!]: { ...thread, messages, liveAssistantMessage: undefined },
+                }
             }
         })
     },

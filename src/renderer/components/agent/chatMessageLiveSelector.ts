@@ -39,6 +39,12 @@ export interface LiveSelectorState {
     string,
     | {
         streamState?: { assistantId?: string; phase?: string }
+        liveAssistantMessage?: {
+          id: string
+          role: string
+          parts?: AssistantPart[]
+          interactive?: InteractiveContent
+        }
         messages?: ReadonlyArray<{
           id: string
           role: string
@@ -86,9 +92,11 @@ export function selectLiveState(
   // live parts，避免正文短暂回退到旧 props 后再跳回最终内容。
   if (!isCurrentAssistant) return INERT
 
-  const liveMessage = thread?.messages?.find(
-    msg => msg.id === messageId && msg.role === 'assistant',
-  )
+  const liveMessage = thread?.liveAssistantMessage?.id === messageId
+    ? thread.liveAssistantMessage
+    : thread?.messages?.find(
+        msg => msg.id === messageId && msg.role === 'assistant',
+      )
 
   return {
     isStreaming: isActiveAssistant,

@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { selectMessageListState, useAgentStore } from '@renderer/agent/store/AgentStore'
 import type { HandoffDocument } from '@renderer/agent/domains/context/types'
-import type { ChatMessage } from '@renderer/agent/types'
+import { toPersistedChatThread, type ChatMessage } from '@renderer/agent/types'
 
 describe('AgentStore', () => {
   beforeEach(() => {
@@ -130,6 +130,7 @@ describe('AgentStore', () => {
       }))
 
       const assistantId = useAgentStore.getState().addAssistantMessage()
+      useAgentStore.getState().setStreamState({ phase: 'streaming', assistantId }, threadId)
       let projection = selectMessageListState(useAgentStore.getState())
       let projectionChanges = 0
       const unsubscribe = useAgentStore.subscribe(state => {
@@ -141,23 +142,19 @@ describe('AgentStore', () => {
       })
 
       try {
+        const canonicalMessages = useAgentStore.getState().threads[threadId].messages
         for (let index = 0; index < 100; index += 1) {
           useAgentStore.getState()._doAppendToAssistant(assistantId, 'x', threadId)
         }
 
-        const assistant = useAgentStore.getState().threads[threadId].messages.at(-1)
+        const assistant = useAgentStore.getState().getMessages(threadId).at(-1)
         expect(assistant?.role === 'assistant' ? assistant.content : '').toHaveLength(100)
+        expect(useAgentStore.getState().threads[threadId].messages).toBe(canonicalMessages)
+        expect(toPersistedChatThread(useAgentStore.getState().threads[threadId]).messages.at(-1))
+          .toMatchObject({ id: assistantId, content: 'x'.repeat(100) })
         expect(projectionChanges).toBe(0)
 
-        useAgentStore.getState().finalizeAssistant(assistantId, threadId)
-        expect(projectionChanges).toBe(1)
-
-        useAgentStore.getState().setStreamState({
-          phase: 'streaming',
-          assistantId,
-        }, threadId)
         const reasoningPartId = useAgentStore.getState().addReasoningPart(assistantId)
-        projectionChanges = 0
         for (let index = 0; index < 100; index += 1) {
           useAgentStore.getState()._doUpdateReasoningPart(
             assistantId,
@@ -169,10 +166,9 @@ describe('AgentStore', () => {
         }
         expect(projectionChanges).toBe(0)
         useAgentStore.getState().finalizeReasoningPart(assistantId, reasoningPartId, threadId)
-        expect(projectionChanges).toBe(1)
+        expect(projectionChanges).toBe(0)
 
         const searchPartId = useAgentStore.getState().addSearchPart(assistantId, threadId)
-        projectionChanges = 0
         for (let index = 0; index < 100; index += 1) {
           useAgentStore.getState().updateSearchPart(
             assistantId,
@@ -185,7 +181,16 @@ describe('AgentStore', () => {
         }
         expect(projectionChanges).toBe(0)
         useAgentStore.getState().finalizeSearchPart(assistantId, searchPartId, threadId)
+        expect(projectionChanges).toBe(0)
+
+        useAgentStore.getState().finalizeAssistant(assistantId, threadId)
         expect(projectionChanges).toBe(1)
+        expect(useAgentStore.getState().threads[threadId].liveAssistantMessage).toBeUndefined()
+        expect(useAgentStore.getState().threads[threadId].messages.at(-1)).toMatchObject({
+          id: assistantId,
+          content: 'x'.repeat(100),
+          isStreaming: false,
+        })
       } finally {
         unsubscribe()
       }
@@ -230,6 +235,47 @@ describe('AgentStore', () => {
       const assistant = messages[0] as any
       expect(assistant.toolCalls[0].status).toBe('success')
       expect(assistant.toolCalls[0].result).toBe('File content')
+    })
+
+    it('materializes live text exactly once at a tool boundary and preserves part order', () => {
+      const threadId = useAgentStore.getState().createThread()
+      const assistantId = useAgentStore.getState().addAssistantMessage()
+      const threadStore = useAgentStore.getState().forThread(threadId)
+
+      useAgentStore.getState()._doAppendToAssistant(assistantId, 'before', threadId)
+      threadStore.startToolExecution(assistantId, {
+        id: 'tc-live-boundary',
+        name: 'read_file',
+        arguments: { path: 'test.ts' },
+      }, {})
+
+      let thread = useAgentStore.getState().threads[threadId]
+      expect(thread.liveAssistantMessage).toBeUndefined()
+      expect(thread.messages[0]).toMatchObject({ content: 'before' })
+
+      threadStore.finishToolExecution(assistantId, 'tc-live-boundary', {
+        status: 'success',
+        result: 'file content',
+      }, {
+        name: 'read_file',
+        content: 'file content',
+        type: 'success',
+      })
+      threadStore.setStreamState({ phase: 'streaming', assistantId })
+      useAgentStore.getState()._doAppendToAssistant(assistantId, 'after', threadId)
+      threadStore.finalizeAssistant(assistantId)
+
+      thread = useAgentStore.getState().threads[threadId]
+      const assistant = thread.messages.find(message => message.id === assistantId)
+      expect(assistant?.role).toBe('assistant')
+      if (assistant?.role !== 'assistant') return
+      expect(assistant.content).toBe('beforeafter')
+      expect(assistant.parts.map(part => part.type)).toEqual(['text', 'tool_call', 'text'])
+      expect(assistant.toolCalls?.[0]).toMatchObject({
+        id: 'tc-live-boundary',
+        status: 'success',
+        result: 'file content',
+      })
     })
   })
 

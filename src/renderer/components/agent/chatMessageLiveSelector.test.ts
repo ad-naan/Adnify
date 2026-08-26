@@ -112,6 +112,19 @@ describe('selectLiveState — 流式中仍要拿到实时数据', () => {
     expect(r2.liveParts).toEqual([{ type: 'text', content: 'frame2' }])
   })
 
+  it('优先读取 O(1) 活动消息覆盖层而不是扫描稳定历史', () => {
+    const state = makeState({ partsContent: 'settled' })
+    state.threads.t1!.liveAssistantMessage = {
+      id: 'm1',
+      role: 'assistant',
+      parts: [{ type: 'text', content: 'live overlay' }],
+    }
+
+    expect(selectLiveState(state, 'm1', true, true).liveParts).toEqual([
+      { type: 'text', content: 'live overlay' },
+    ])
+  })
+
   it('三种活跃 phase 都算流式', () => {
     for (const phase of ['streaming', 'tool_running', 'tool_pending']) {
       const r = selectLiveState(makeState({ phase }), 'm1', true, true)

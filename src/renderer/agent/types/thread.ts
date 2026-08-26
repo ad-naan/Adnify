@@ -4,7 +4,7 @@
 
 import type { ToolCall, ToolStreamingPreview } from '@/shared/types'
 import { normalizeMode } from '@/shared/types/workMode'
-import type { ChatMessage } from './messages'
+import type { AssistantMessage, ChatMessage } from './messages'
 import { getMessageText } from './messages'
 import type { MessageCheckpoint } from './checkpoint'
 import type { ContextItem } from './context'
@@ -85,6 +85,12 @@ export interface ChatThread {
   title?: string
 
   messages: ChatMessage[]
+  /**
+   * Runtime-only overlay for the single assistant message currently streaming.
+   * Keeping it outside `messages` makes token writes independent of history
+   * length; persistence and execution boundaries materialize it atomically.
+   */
+  liveAssistantMessage?: AssistantMessage
   contextItems: ContextItem[]
   messageCheckpoints?: MessageCheckpoint[]
   /**
@@ -156,6 +162,22 @@ export interface PersistedChatThread {
   taskId?: string
 }
 
+export function materializeThreadMessages(
+  thread: Pick<ChatThread, 'messages' | 'liveAssistantMessage'>
+): ChatMessage[] {
+  const liveMessage = thread.liveAssistantMessage
+  if (!liveMessage) return thread.messages
+
+  const messageIndex = thread.messages.findIndex(message => message.id === liveMessage.id)
+  if (messageIndex === -1 || thread.messages[messageIndex] === liveMessage) {
+    return thread.messages
+  }
+
+  const messages = thread.messages.slice()
+  messages[messageIndex] = liveMessage
+  return messages
+}
+
 export function createRuntimeThreadState(): Pick<
   ChatThread,
   'streamState' | 'toolStreamingPreviews' | 'contextStats' | 'compressionStats' | 'handoff' | 'isCompacting' | 'compressionPhase' | 'executionMeta'
@@ -185,7 +207,7 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
     createdAt: thread.createdAt,
     lastModified: thread.lastModified,
     title: thread.title,
-    messages: thread.messages,
+    messages: materializeThreadMessages(thread),
     contextItems: thread.contextItems,
     messageCheckpoints: thread.messageCheckpoints ?? [],
     messageCount: thread.messageCount,
