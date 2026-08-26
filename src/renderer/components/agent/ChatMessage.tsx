@@ -47,6 +47,7 @@ import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { CompressionDigestCard } from './CompressionDigestCard'
 import { t } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { stripToolCallLeaks } from '@renderer/agent/utils/toolCallLeakFilter'
@@ -276,10 +277,8 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
           // ignore
         }
 
-        const content = await api.file.readFull(targetPath)
-        if (content !== null) {
-          openFile(targetPath, content)
-          setActiveFile(targetPath)
+        const result = await safeOpenFile(targetPath, { language, confirmLargeFile: false })
+        if (result.success) {
           return
         }
       }
@@ -613,22 +612,18 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     [keepStreamingLayout, smoothContent],
   )
 
-  const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
+  const workspacePath = useStore(s => s.workspacePath)
 
   const handleOpenFile = React.useCallback(async (filePath: string) => {
     if (!workspacePath) return
     const resolvedPath = toFullPath(filePath, workspacePath)
 
     try {
-      const content = await api.file.readFull(resolvedPath)
-      if (content !== null) {
-        openFile(resolvedPath, content)
-        setActiveFile(resolvedPath)
-      }
+      await safeOpenFile(resolvedPath, { showWarning: false, confirmLargeFile: false })
     } catch (err) {
       console.warn('Failed to open file from markdown:', err)
     }
-  }, [workspacePath, openFile, setActiveFile])
+  }, [workspacePath])
 
   const markdownComponents = React.useMemo(() => ({
     code({ className, children, node, ...props }: any) {

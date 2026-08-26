@@ -2,18 +2,19 @@
 packages:
   - '.'
 
-# 与 .npmrc 双写：pnpm 9 读 .npmrc；pnpm 11+ 以 workspace 为准。
+# pnpm 11 的唯一项目级配置入口。package.json 不再保留一份会被忽略的
+# overrides/patches 副本，避免安全约束看似存在、实际不生效。
 # 强制本机 Node/pnpm 与 package.json engines + packageManager 一致。
 engineStrict: true
 packageManagerStrict: true
 packageManagerStrictVersion: true
 
+# 安装必须是显式步骤。运行 test/build 时发现依赖状态变化就直接执行目标，
+# 不让 pnpm 在后台隐式重装整棵依赖树。
+verifyDepsBeforeRun: false
+
 # 安全 override：把传递依赖顶到已修复的补丁版本。
 #
-# 必须与 package.json 的 pnpm.overrides 保持一致 —— 两份不是冗余：
-# pnpm 9 只读 package.json 的 pnpm.overrides，pnpm 11 只读这里。
-# 本仓库用 packageManager 钉在 9.15.9；安装时 packageManagerStrictVersion
-# 会拒绝其它 pnpm 大/小版本。overrides 仍双写，避免钉子松动后静默失效。
 overrides:
   brace-expansion@<1.1.18: ^1.1.18
   brace-expansion@>=2.0.0 <2.1.4: ^2.1.4
@@ -45,25 +46,14 @@ minimumReleaseAge: 0
 
 # pnpm v11+ 默认会忽略某些包的构建脚本，在此明确批准
 allowBuilds:
-  '0': '@parcel/watcher'
-  '1': core-js
-  '2': cpu-features
-  '3': dugite
-  '4': electron
-  '5': electron-winstaller
-  '6': esbuild
-  '7': node-pty
-  '8': protobufjs
-  '9': sharp
-  '10': ssh2
-  '@parcel/watcher': set this to true or false
-  core-js: set this to true or false
-  cpu-features: set this to true or false
-  dugite: set this to true or false
-  electron: set this to true or false
-  electron-winstaller: set this to true or false
-  esbuild: set this to true or false
-  node-pty: set this to true or false
-  protobufjs: set this to true or false
-  sharp: set this to true or false
-  ssh2: set this to true or false
+  '@parcel/watcher': true
+  core-js: true
+  cpu-features: true
+  dugite: true
+  electron: true
+  electron-winstaller: true
+  esbuild: true
+  node-pty: true
+  protobufjs: true
+  sharp: true
+  ssh2: true

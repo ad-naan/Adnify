@@ -3,11 +3,11 @@
  * 统一处理所有文件类型的路径跳转（import、href、src、url() 等）
  */
 
-import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import type { languages, editor, IRange } from 'monaco-editor'
 import { getPathSeparator, getDirPath, joinPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 // ============ 类型定义 ============
 
@@ -212,15 +212,11 @@ class PathLinkService {
     basePath: string, 
     extensions: string[] = ['']
   ): Promise<{ success: boolean; path?: string }> {
-    const { openFile, setActiveFile } = useStore.getState()
-    
     for (const ext of extensions) {
       const fullPath = basePath + ext
       try {
-        const content = await api.file.readFull(fullPath)
-        if (content !== null) {
-          openFile(fullPath, content)
-          setActiveFile(fullPath)
+        const result = await safeOpenFile(fullPath, { showWarning: false, confirmLargeFile: false })
+        if (result.success) {
           return { success: true, path: fullPath }
         }
       } catch {

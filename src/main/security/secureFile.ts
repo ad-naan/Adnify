@@ -16,7 +16,7 @@ import { getUserConfigDir } from '../services/configPath'
 import { fileApprovalScope, isRecentAgentApprovalProof, type AgentApprovalProof } from '@shared/security/executionPolicy'
 
 // 导入拆分的模块
-import { readFileWithEncodingInfo, readFileSized, readLargeFile, writeFileAtomic, getFileStats } from './fileUtils'
+import { readFileWithEncodingInfo, readFileSized, readTextFileChunk, writeFileAtomic, getFileStats } from './fileUtils'
 import { systemPrivilegeService } from '../services/systemPrivilegeService'
 import { isSystemPermissionError } from '@shared/utils/permissionError'
 import { mutationFailure, mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
@@ -111,7 +111,6 @@ function canAccessFile(
  * a truncated parse there reads as "empty", and empty round-trips as deletion.
  */
 const PREVIEW_BYTE_LIMIT = 5 * 1024 * 1024
-const PREVIEW_SLICE_BYTES = 10000
 
 function readFileSingleFlight(
   filePath: string,
@@ -340,6 +339,21 @@ export function registerSecureFileHandlers(
       } else {
         logger.security.error('[File] read failed:', filePath, toAppError(err).message)
       }
+      return null
+    }
+  })
+
+  ipcMain.handle('file:readTextChunk', async (event, filePath: string, offset?: number, maxBytes?: number) => {
+    if (!filePath || !canAccessFile(filePath, getWorkspaceSessionFn(event), 'read')) return null
+    try {
+      const chunk = await readTextFileChunk(filePath, offset, maxBytes)
+      securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
+        size: chunk.nextOffset - chunk.startOffset,
+        chunked: true,
+      })
+      return chunk
+    } catch (err) {
+      logger.security.error('[File] read text chunk failed:', filePath, toAppError(err).message)
       return null
     }
   })
@@ -971,4 +985,3 @@ export { securityManager }
 // 重新导出拆分模块的类型和函数，方便外部使用
 export type { FileWatcherEvent, WindowManagerContext }
 export { setupFileWatcher, cleanupFileWatcher } from './fileWatcher'
-export { readFileWithEncoding, readLargeFile } from './fileUtils'

@@ -10,20 +10,66 @@ import type { OpenFile } from '@store'
 import { getEditorConfig } from '@renderer/settings'
 import { workspaceStateRepository, type WorkspaceStateData } from './workspaceStateRepository'
 import { isPreviewDocumentPath } from '@shared/types/preview'
+import { LARGE_FILE_PAGE_BYTES, MAX_EDITABLE_TEXT_FILE_BYTES } from '@shared/types/largeFile'
+import type { LargeFileInfo } from '@shared/types/largeFile'
+import type { TextFileChunk } from '@shared/types/fileChunk'
 
 type PersistedWorkspaceOpenFile = Exclude<WorkspaceStateData['openFiles'][number], string>
 
 async function readFilesWithConcurrency(
   filePaths: string[],
   concurrency = 4
-): Promise<Array<{ path: string; content: string }>> {
-  const results: Array<{ path: string; content: string }> = []
+): Promise<Array<{
+  path: string
+  content: string
+  options?: {
+    kind: 'large-preview'
+    largeFileInfo: LargeFileInfo
+    largeFileView: Omit<TextFileChunk, 'content'> & { chunkSize: number }
+  }
+}>> {
+  const results: Array<{
+    path: string
+    content: string
+    options?: {
+      kind: 'large-preview'
+      largeFileInfo: LargeFileInfo
+      largeFileView: Omit<TextFileChunk, 'content'> & { chunkSize: number }
+    }
+  }> = []
 
   for (let i = 0; i < filePaths.length; i += concurrency) {
     const batch = filePaths.slice(i, i + concurrency)
     const batchResults = await Promise.all(
       batch.map(async (filePath) => {
         try {
+          const stats = await api.file.stat(filePath)
+          if (stats && stats.size > MAX_EDITABLE_TEXT_FILE_BYTES) {
+            const chunk = await api.file.readTextChunk(filePath, 0, LARGE_FILE_PAGE_BYTES)
+            if (!chunk) return null
+            return {
+              path: filePath,
+              content: chunk.content,
+              options: {
+                kind: 'large-preview' as const,
+                largeFileInfo: {
+                  path: filePath,
+                  size: stats.size,
+                  lineCount: -1,
+                  isLarge: true,
+                  isVeryLarge: true,
+                  reason: 'size' as const,
+                },
+                largeFileView: {
+                  startOffset: chunk.startOffset,
+                  nextOffset: chunk.nextOffset,
+                  totalSize: chunk.totalSize,
+                  eof: chunk.eof,
+                  chunkSize: LARGE_FILE_PAGE_BYTES,
+                },
+              },
+            }
+          }
           // 恢复的内容会回填到编辑器缓冲区，随后可能被保存回磁盘，
           // 所以必须读完整文件而不是预览切片。
           const fileContent = await api.file.readFull(filePath)

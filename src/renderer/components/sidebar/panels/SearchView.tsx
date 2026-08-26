@@ -13,6 +13,7 @@ import { applySavedEditorBufferContent } from '@renderer/services/editorBufferSe
 import { globalConfirm } from '../../common/ConfirmDialog'
 import { Input } from '../../ui'
 import { toast } from '../../common/ToastProvider'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 export function SearchView() {
   const [query, setQuery] = useState('')
@@ -46,7 +47,7 @@ export function SearchView() {
   /** 流式搜索 ID，用于匹配异步事件 */
   const searchIdRef = useRef<string | null>(null)
 
-  const { workspacePath, workspace, openFile, setActiveFile, language, openFiles, setActiveSidePanel } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, workspace: s.workspace, openFile: s.openFile, setActiveFile: s.setActiveFile, language: s.language, openFiles: s.openFiles, setActiveSidePanel: s.setActiveSidePanel })))
+  const { workspacePath, workspace, language, openFiles, setActiveSidePanel } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, workspace: s.workspace, language: s.language, openFiles: s.openFiles, setActiveSidePanel: s.setActiveSidePanel })))
 
   // 监听流式搜索结果事件
   useEffect(() => {
@@ -169,10 +170,8 @@ export function SearchView() {
       filePath = joinPath(workspacePath, filePath)
     }
 
-    const content = await api.file.readFull(filePath)
-    if (content !== null) {
-      openFile(filePath, content)
-      setActiveFile(filePath)
+    const opened = await safeOpenFile(filePath, { language, confirmLargeFile: false })
+    if (opened.success && !opened.isLargeFile) {
 
       // 增加延迟，确保编辑器完全准备好
       setTimeout(() => {

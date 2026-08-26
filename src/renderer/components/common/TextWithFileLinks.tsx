@@ -1,8 +1,7 @@
 import React, { useCallback, useMemo } from 'react'
-import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
-import { useShallow } from 'zustand/react/shallow'
 import { joinPath } from '@shared/utils/pathUtils'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 interface TextWithFileLinksProps {
     text: string
@@ -10,7 +9,7 @@ interface TextWithFileLinksProps {
 }
 
 export function TextWithFileLinks({ text, className = '' }: TextWithFileLinksProps) {
-    const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
+    const workspacePath = useStore(s => s.workspacePath)
 
     const handleFileClick = useCallback(async (e: React.MouseEvent, filePath: string) => {
         e.stopPropagation()
@@ -21,15 +20,11 @@ export function TextWithFileLinks({ text, className = '' }: TextWithFileLinksPro
         }
 
         try {
-            const content = await api.file.readFull(absPath)
-            if (content !== null) {
-                openFile(absPath, content)
-                setActiveFile(absPath)
-            }
+            await safeOpenFile(absPath, { showWarning: false, confirmLargeFile: false })
         } catch (error) {
             // Ignore if not a valid file
         }
-    }, [workspacePath, openFile, setActiveFile])
+    }, [workspacePath])
 
     const elements = useMemo(() => {
         if (!text) return null

@@ -16,6 +16,7 @@ import { toast } from '@components/common/ToastProvider'
 import { isCreateActionLabel, resolveFileChangeActionLabel } from '@renderer/agent/utils/fileWriteDisplay'
 import { RollingNumber } from '@components/ui'
 import { ToolApprovalActions } from './ToolApprovalActions'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 interface FileChangeCardProps {
     toolCall: ToolCall
@@ -126,10 +127,8 @@ function FileChangeCard({
         }
 
         try {
-            const content = await api.file.readFull(absPath)
-            if (content !== null) {
-                openFile(absPath, content)
-                setActiveFile(absPath)
+            const result = await safeOpenFile(absPath, { language, confirmLargeFile: false })
+            if (result.success) {
                 return
             }
         } catch {
@@ -137,7 +136,7 @@ function FileChangeCard({
         }
 
         toast.error(`Failed to open file: ${getFileName(absPath)}`)
-    }, [filePath, workspacePath, openFile, setActiveFile])
+    }, [filePath, workspacePath, language])
 
     const diffStats = useMemo(() => {
         // Prefer precise stats returned by the tool when available.

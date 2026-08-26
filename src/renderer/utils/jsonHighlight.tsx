@@ -4,10 +4,9 @@
  */
 
 import React, { useCallback } from 'react'
-import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
-import { useShallow } from 'zustand/react/shallow'
 import { joinPath } from '@shared/utils/pathUtils'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 export interface HighlightStyle {
     string: string
@@ -203,7 +202,7 @@ export function JsonHighlight({
         return { content: text, truncated: false, originalLength: text.length }
     }, [data, maxLength])
 
-    const { workspacePath, openFile, setActiveFile } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
+    const workspacePath = useStore(s => s.workspacePath)
 
     const handleFileClick = useCallback(async (filePath: string) => {
         let absPath = filePath
@@ -214,18 +213,15 @@ export function JsonHighlight({
         }
 
         try {
-            const content = await api.file.readFull(absPath)
-            if (content !== null) {
-                openFile(absPath, content)
-                setActiveFile(absPath)
-            } else {
+            const result = await safeOpenFile(absPath, { showWarning: false, confirmLargeFile: false })
+            if (!result.success) {
                 // 如果不仅是个文件，就不报错默默忽略（因为可能是误判）
                 // toast.warning('Not a valid readable file.') 
             }
         } catch (error) {
             // 不弹出错误，因为这说明这个字符串实际上不是文件
         }
-    }, [workspacePath, openFile, setActiveFile])
+    }, [workspacePath])
 
     return (
         <pre className={`text-xs font-mono overflow-auto ${maxHeight} ${className}`}>

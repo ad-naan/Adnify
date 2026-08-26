@@ -5,7 +5,12 @@
 
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
-import type { LargeFileInfo } from '@shared/types/largeFile'
+import {
+  LARGE_FILE_CONFIRM_BYTES,
+  LARGE_FILE_PAGE_BYTES,
+  MAX_EDITABLE_TEXT_FILE_BYTES,
+  type LargeFileInfo,
+} from '@shared/types/largeFile'
 import {
   getFileInfo,
   getLargeFileWarning,
@@ -13,6 +18,7 @@ import {
 } from '@services/largeFileService'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '../components/common/ConfirmDialog'
+import { t } from '../i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { detectEolFromContent } from '@services/fileFormatService'
 
@@ -20,9 +26,9 @@ import { detectEolFromContent } from '@services/fileFormatService'
 
 const FILE_CONFIG = {
   /** 超大文件阈值（超过此大小需要确认） */
-  confirmThreshold: 5 * 1024 * 1024, // 5MB
+  confirmThreshold: LARGE_FILE_CONFIRM_BYTES,
   /** 最大文件大小（超过此大小拒绝打开） */
-  maxFileSize: 50 * 1024 * 1024, // 50MB
+  maxFileSize: MAX_EDITABLE_TEXT_FILE_BYTES,
   /** 二进制文件扩展名 */
   binaryExtensions: new Set([
     'exe', 'dll', 'so', 'dylib', 'bin', 'obj', 'o', 'a', 'lib',
@@ -124,18 +130,45 @@ export async function safeOpenFile(
 
     // 3. 检查文件大小
     if (byteSize > FILE_CONFIG.maxFileSize) {
-      const msg = language === 'zh'
-        ? '文件太大，无法打开'
-        : 'File is too large to open'
-      if (showWarning) {
-        toast.error(msg, `${(byteSize / 1024 / 1024).toFixed(1)} MB`)
+      const chunk = await api.file.readTextChunk(filePath, 0, LARGE_FILE_PAGE_BYTES)
+      if (!chunk) {
+        const msg = language === 'zh' ? '无法读取超大文件' : 'Could not read very large file'
+        if (showWarning) toast.error(msg, filePath)
+        return { success: false, error: msg, isLargeFile: true }
       }
-      return { success: false, error: msg, isLargeFile: true }
+
+      openFile(filePath, chunk.content, originalContent, {
+        kind: 'large-preview',
+        encoding: 'utf-8',
+        eol: detectEolFromContent(chunk.content),
+        largeFileInfo: {
+          path: filePath,
+          size: byteSize,
+          lineCount: -1,
+          isLarge: true,
+          isVeryLarge: true,
+          reason: 'size',
+        },
+        largeFileView: {
+          startOffset: chunk.startOffset,
+          nextOffset: chunk.nextOffset,
+          totalSize: chunk.totalSize,
+          eof: chunk.eof,
+          chunkSize: LARGE_FILE_PAGE_BYTES,
+        },
+      })
+      setActiveFile(filePath)
+      if (showWarning) {
+        toast.warning(
+          language === 'zh' ? '已使用超大文件查看器' : 'Opened in very large file viewer',
+          `${(byteSize / 1024 / 1024).toFixed(1)} MB`,
+        )
+      }
+      return { success: true, isLargeFile: true }
     }
 
     // 4. 大文件确认
     if (confirmLargeFile && byteSize > FILE_CONFIG.confirmThreshold) {
-      const { t } = await import('../i18n')
       const size = (byteSize / 1024 / 1024).toFixed(1)
 
       const confirmed = await globalConfirm({

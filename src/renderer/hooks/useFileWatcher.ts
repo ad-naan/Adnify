@@ -10,6 +10,14 @@ import { applySavedEditorBufferContent } from '@renderer/services/editorBufferSe
 
 export function useFileWatcher() {
   useEffect(() => {
+    const readOpenFileContent = async (file: { path: string; kind?: string; largeFileView?: { chunkSize: number } }) => {
+      if (file.kind === 'large-preview') {
+        const chunk = await api.file.readTextChunk(file.path, 0, file.largeFileView?.chunkSize)
+        return chunk?.content ?? null
+      }
+      return api.file.readFull(file.path)
+    }
+
     const unsubscribe = api.file.onChanged(async (event: { event: string; path: string }) => {
       const { openFiles, markFileDeleted, markFileRestored, language } = useStore.getState()
 
@@ -26,7 +34,7 @@ export function useFileWatcher() {
       if (event.event === 'create') {
         const openFile = openFiles.find((file) => pathEquals(file.path, event.path))
         if (openFile?.isDeleted) {
-          const newContent = await api.file.readFull(event.path)
+          const newContent = await readOpenFileContent(openFile)
           if (newContent !== null) {
             applySavedEditorBufferContent(openFile.path, newContent)
           } else {
@@ -41,7 +49,7 @@ export function useFileWatcher() {
       const openFile = openFiles.find((file) => pathEquals(file.path, event.path))
       if (!openFile) return
 
-      const newContent = await api.file.readFull(event.path)
+      const newContent = await readOpenFileContent(openFile)
       if (newContent === null || newContent === openFile.content) return
 
       const isInternal = internalWriteTracker.consume(event.path)

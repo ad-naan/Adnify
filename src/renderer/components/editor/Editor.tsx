@@ -66,6 +66,7 @@ import { defineMonacoTheme } from './utils/monacoTheme'
 import { isPreviewDocumentPath } from '@shared/types/preview'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@shared/types/planBoard'
 import type { EditorConfig as SharedEditorConfig } from '@shared/config/types'
+import LargeFileViewer from './LargeFileViewer'
 
 loader.config({ monaco })
 
@@ -229,7 +230,10 @@ export default function Editor() {
     if (!file || file.contentState !== 'unloaded') return
 
     let cancelled = false
-    void api.file.readFull(file.path, file.encoding).then((content) => {
+    const readContent = file.kind === 'large-preview'
+      ? api.file.readTextChunk(file.path, 0, file.largeFileView?.chunkSize).then(chunk => chunk?.content ?? null)
+      : api.file.readFull(file.path, file.encoding)
+    void readContent.then((content) => {
       if (cancelled) return
       if (content === null) {
         setFileContentState(file.path, 'error')
@@ -250,7 +254,7 @@ export default function Editor() {
     const file = activeFilePath
       ? useStore.getState().openFiles.find(candidate => candidate.path === activeFilePath)
       : undefined
-    if (file?.contentState === 'loaded' && !isPreviewDocument && !isPlanBoardDocument) {
+    if (file?.contentState === 'loaded' && file.kind !== 'large-preview' && !isPreviewDocument && !isPlanBoardDocument) {
       notifyFileOpened(file.path, file.content)
       // 检查是否有跨文件跳转定义的待定位请求
       const nav = consumePendingNavigation(file.path)
@@ -272,7 +276,7 @@ export default function Editor() {
 
     const validUris = new Set(
       useStore.getState().openFiles.map(f => {
-        if (f.path.startsWith('diff://') || f.kind === 'preview' || f.contentState !== 'loaded') return ''
+        if (f.path.startsWith('diff://') || f.kind === 'preview' || f.kind === 'large-preview' || f.contentState !== 'loaded') return ''
         return monacoInstance.Uri.file(f.path).toString()
       })
     )
@@ -572,6 +576,8 @@ export default function Editor() {
           </div>
         ) : activeFile && activeFile.contentState !== 'loaded' ? (
           <CodeSkeleton lines={12} />
+        ) : activeFile?.kind === 'large-preview' ? (
+          <LargeFileViewer file={activeFile} language={language} />
         ) : activeFile && (
           <>
             {/* Markdown 工具栏 */}

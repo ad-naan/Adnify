@@ -3,7 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { readFileSized, readLargeFile } from '@main/security/fileUtils'
+import { readFileSized, readTextFileChunk } from '@main/security/fileUtils'
 
 /**
  * Regression cover for the silent-truncation data loss.
@@ -93,16 +93,53 @@ describe('readFileSized', () => {
   })
 })
 
-describe('readLargeFile', () => {
-  it('reads a byte range rather than a line range', async () => {
-    const filePath = path.join(tempDir, 'bytes.txt')
-    await fs.writeFile(filePath, 'abcdefghij')
+describe('readTextFileChunk', () => {
+  it('reconstructs a UTF-8 file exactly from bounded sequential pages', async () => {
+    const filePath = path.join(tempDir, 'paged.txt')
+    const original = Array.from({ length: 3000 }, (_, index) => `${index}: 性能测试内容-${'x'.repeat(40)}\n`).join('')
+    await fs.writeFile(filePath, original)
 
-    await expect(readLargeFile(filePath, 0, 4)).resolves.toBe('abcd')
-    await expect(readLargeFile(filePath, 4, 3)).resolves.toBe('efg')
+    let offset = 0
+    let reconstructed = ''
+    let pageCount = 0
+    while (true) {
+      const chunk = await readTextFileChunk(filePath, offset, 257)
+      reconstructed += chunk.content
+      pageCount += 1
+      expect(chunk.nextOffset).toBeGreaterThan(offset)
+      if (chunk.eof) break
+      offset = chunk.nextOffset
+    }
+
+    expect(pageCount).toBeGreaterThan(1)
+    expect(reconstructed).toBe(original)
   })
 
-  it('returns null for a missing file instead of throwing', async () => {
-    await expect(readLargeFile(path.join(tempDir, 'nope.txt'), 0, 16)).resolves.toBeNull()
+  it('does not split UTF-8 characters in a very long line', async () => {
+    const filePath = path.join(tempDir, 'unicode-line.txt')
+    const original = '界'.repeat(1000)
+    await fs.writeFile(filePath, original)
+
+    let offset = 0
+    let reconstructed = ''
+    while (true) {
+      const chunk = await readTextFileChunk(filePath, offset, 101)
+      reconstructed += chunk.content
+      expect(chunk.content).not.toContain('\uFFFD')
+      if (chunk.eof) break
+      offset = chunk.nextOffset
+    }
+
+    expect(reconstructed).toBe(original)
+  })
+
+  it('enforces the per-request memory ceiling', async () => {
+    const filePath = path.join(tempDir, 'bounded-page.txt')
+    await fs.writeFile(filePath, 'x'.repeat(6 * 1024 * 1024))
+
+    const chunk = await readTextFileChunk(filePath, 0, 100 * 1024 * 1024)
+
+    expect(chunk.content.length).toBe(4 * 1024 * 1024)
+    expect(chunk.eof).toBe(false)
   })
 })

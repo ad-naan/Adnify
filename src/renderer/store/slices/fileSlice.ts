@@ -7,6 +7,8 @@ import type { OpenPreviewMetadata } from '@shared/types/preview'
 import { buildPreviewDocumentPath } from '@shared/types/preview'
 import { normalizePath } from '@shared/utils/pathUtils'
 import type { LargeFileInfo } from '@shared/types/largeFile'
+import type { TextFileChunk } from '@shared/types/fileChunk'
+import type { EditorDocumentKind } from '@shared/types/editorDocument'
 
 export interface WorkspaceConfig {
   configPath: string | null
@@ -24,13 +26,14 @@ export interface OpenFile {
   contentState: 'loaded' | 'unloaded' | 'error'
   /** Changes only when text is loaded from an external source, not on edits. */
   contentLoadVersion: number
-  kind?: 'file' | 'diff' | 'preview'
+  kind?: EditorDocumentKind
   isDirty: boolean
   originalContent?: string
   /** 保存时的版本号（Monaco versionId） */
   savedVersionId?: number
   /** 大文件信息（如果是大文件） */
   largeFileInfo?: LargeFileInfo
+  largeFileView?: Omit<TextFileChunk, 'content'> & { chunkSize: number }
   /** 文件编码 */
   encoding?: string
   /** 文件换行符 */
@@ -68,6 +71,7 @@ export interface FileSlice {
   expandFolder: (path: string) => void
   openFile: (path: string, content: string, originalContent?: string, options?: {
     largeFileInfo?: LargeFileInfo
+    largeFileView?: OpenFile['largeFileView']
     encoding?: string
     eol?: 'LF' | 'CRLF'
     remote?: OpenFile['remote']
@@ -82,6 +86,7 @@ export interface FileSlice {
     originalContent?: string
       options?: {
         largeFileInfo?: LargeFileInfo
+        largeFileView?: OpenFile['largeFileView']
         encoding?: string
         eol?: 'LF' | 'CRLF'
         remote?: OpenFile['remote']
@@ -204,6 +209,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         originalContent,
         savedVersionId: 1,
         largeFileInfo: options?.largeFileInfo,
+        largeFileView: options?.largeFileView,
         encoding: options?.encoding,
         eol: options?.eol,
         remote: options?.remote,
@@ -272,6 +278,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         originalContent: file.originalContent,
         savedVersionId: 1,
         largeFileInfo: file.options?.largeFileInfo,
+        largeFileView: file.options?.largeFileView,
         encoding: file.options?.encoding,
         eol: file.options?.eol,
         remote: file.options?.remote,

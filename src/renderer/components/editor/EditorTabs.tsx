@@ -9,6 +9,7 @@ import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { t } from '@renderer/i18n'
 import { isPreviewDocumentPath } from '@shared/types/preview'
 import { isPlanBoardPath } from '@shared/types/planBoard'
+import type { EditorDocumentKind } from '@shared/types/editorDocument'
 
 interface EditorTabsProps {
   activeFilePath: string | null
@@ -19,7 +20,7 @@ interface EditorTabsProps {
   lintWarningCount: number
   isLinting: boolean
   onRunLint: () => void
-  activeFileKind?: 'file' | 'diff' | 'preview'
+  activeFileKind?: EditorDocumentKind
 }
 
 /**

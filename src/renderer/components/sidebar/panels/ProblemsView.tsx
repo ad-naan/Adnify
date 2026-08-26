@@ -2,18 +2,17 @@
  * 问题面板 - 显示所有诊断错误
  */
 
-import { api } from '@/renderer/services/electronAPI'
 import { useState, useMemo } from 'react'
 import { ChevronRight, FileText, AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useStore } from '@store'
-import { useShallow } from 'zustand/react/shallow'
 import type { LspDiagnostic } from '@shared/types'
 import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getFileName } from '@shared/utils/pathUtils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 export function ProblemsView() {
-  const { openFile, setActiveFile, language } = useStore(useShallow(s => ({ openFile: s.openFile, setActiveFile: s.setActiveFile, language: s.language })))
+  const language = useStore(state => state.language)
   
   // 从全局 store 获取诊断数据
   const diagnostics = useDiagnosticsStore(state => state.diagnostics)
@@ -42,10 +41,8 @@ export function ProblemsView() {
       }
     }
 
-    const content = await api.file.readFull(filePath)
-    if (content !== null) {
-      openFile(filePath, content)
-      setActiveFile(filePath)
+    const opened = await safeOpenFile(filePath, { language, confirmLargeFile: false })
+    if (opened.success && !opened.isLargeFile) {
 
       window.dispatchEvent(
         new CustomEvent('editor:goto-line', {

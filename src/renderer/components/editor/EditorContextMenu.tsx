@@ -15,6 +15,7 @@ import type { editor } from 'monaco-editor'
 import { logger } from '@shared/utils/Logger'
 import { readClipboardText, writeClipboardText } from '@/renderer/services/clipboardService'
 import { navigateToDefinition } from './hooks/useEditorActions'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 // 支持 Call Hierarchy 的语言（只有支持函数/方法调用的语言才有意义）
 const CALL_HIERARCHY_SUPPORTED_LANGUAGES = [
@@ -69,7 +70,7 @@ interface EditorContextMenuProps {
 }
 
 export default function EditorContextMenu({ x, y, editor, onClose }: EditorContextMenuProps) {
-  const { language, activeFilePath, openFile, setActiveFile } = useStore(useShallow(s => ({ language: s.language, activeFilePath: s.activeFilePath, openFile: s.openFile, setActiveFile: s.setActiveFile })))
+  const { language, activeFilePath } = useStore(useShallow(s => ({ language: s.language, activeFilePath: s.activeFilePath })))
   const menuRef = useRef<HTMLDivElement>(null)
   const [callHierarchyResult, setCallHierarchyResult] = useState<CallHierarchyResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -297,10 +298,8 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   const handleJumpToCall = async (item: CallHierarchyResult['items'][0]) => {
     const filePath = lspUriToPath(item.uri)
     if (filePath) {
-      const content = await api.file.readFull(filePath)
-      if (content === null) return
-      openFile(filePath, content)
-      setActiveFile(filePath)
+      const opened = await safeOpenFile(filePath, { language, confirmLargeFile: false })
+      if (!opened.success || opened.isLargeFile) return
       // 延迟设置光标位置，等待编辑器加载
       setTimeout(() => {
         editor.setPosition({ lineNumber: item.line + 1, column: item.character + 1 })

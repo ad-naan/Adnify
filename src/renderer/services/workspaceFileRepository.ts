@@ -5,6 +5,7 @@ import { BufferedCommitQueue } from '@shared/persistence/BufferedCommitQueue'
 import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
 import { persistenceCoordinator } from './persistence/PersistenceCoordinator'
+import type { EditorDocumentKind } from '@shared/types/editorDocument'
 
 export const ADNIFY_DIR_NAME = '.adnify'
 
@@ -22,7 +23,7 @@ type AdnifyFile = typeof ADNIFY_FILES[keyof typeof ADNIFY_FILES]
 export interface WorkspaceStateData {
   openFiles: Array<string | {
     path: string
-    kind?: 'file' | 'diff' | 'preview'
+    kind?: EditorDocumentKind
     preview?: OpenPreviewMetadata
   }>
   activeFile: string | null

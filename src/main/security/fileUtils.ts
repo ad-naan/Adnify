@@ -2,6 +2,10 @@ import { promises as fsPromises } from 'fs'
 import type { FileHandle } from 'fs/promises'
 import { randomUUID } from 'crypto'
 import * as iconv from 'iconv-lite'
+import type { TextFileChunk } from '@shared/types/fileChunk'
+import { LARGE_FILE_PAGE_BYTES } from '@shared/types/largeFile'
+
+const MAX_TEXT_CHUNK_BYTES = 4 * 1024 * 1024
 
 export type SupportedEncoding = 'utf-8' | 'utf-8-bom' | 'gbk' | 'gb18030'
 
@@ -52,9 +56,66 @@ function encodeContent(content: string, encoding: SupportedEncoding): Buffer {
   return Buffer.from(content, 'utf-8')
 }
 
-export async function readFileWithEncoding(filePath: string): Promise<string | null> {
-  const result = await readFileWithEncodingInfo(filePath)
-  return result.content
+function findCompleteUtf8Boundary(buffer: Buffer, end: number): number {
+  let leadIndex = end - 1
+  while (leadIndex >= 0 && (buffer[leadIndex] & 0xc0) === 0x80) leadIndex -= 1
+  if (leadIndex < 0) return end
+
+  const leadByte = buffer[leadIndex]
+  const expectedBytes = leadByte < 0x80 ? 1 : leadByte < 0xe0 ? 2 : leadByte < 0xf0 ? 3 : 4
+  return end - leadIndex < expectedBytes ? leadIndex : end
+}
+
+export async function readTextFileChunk(
+  filePath: string,
+  offset = 0,
+  requestedBytes = LARGE_FILE_PAGE_BYTES,
+): Promise<TextFileChunk> {
+  const stats = await fsPromises.stat(filePath)
+  const totalSize = stats.size
+  const finiteOffset = Number.isFinite(offset) ? offset : 0
+  const finiteRequestedBytes = Number.isFinite(requestedBytes) ? requestedBytes : LARGE_FILE_PAGE_BYTES
+  const startOffset = Math.min(Math.max(0, Math.floor(finiteOffset)), totalSize)
+  // Four bytes are enough for one complete UTF-8 code point, so even a
+  // pathological tiny request always makes progress without corrupt decoding.
+  const chunkBytes = Math.min(Math.max(4, Math.floor(finiteRequestedBytes)), MAX_TEXT_CHUNK_BYTES)
+  if (startOffset >= totalSize) {
+    return { content: '', startOffset, nextOffset: startOffset, totalSize, eof: true }
+  }
+
+  const bytesToRead = Math.min(chunkBytes, totalSize - startOffset)
+  const buffer = Buffer.allocUnsafe(bytesToRead)
+  const handle = await fsPromises.open(filePath, 'r')
+  try {
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, startOffset)
+    let end = bytesRead
+    const reachesEof = startOffset + bytesRead >= totalSize
+
+    if (!reachesEof) {
+      const newline = buffer.lastIndexOf(10, bytesRead - 1)
+      if (newline >= 0) {
+        end = newline + 1
+      } else {
+        end = findCompleteUtf8Boundary(buffer, bytesRead)
+        if (end === 0) {
+          const firstByte = buffer[0]
+          const firstCharacterBytes = firstByte < 0x80 ? 1 : firstByte < 0xe0 ? 2 : firstByte < 0xf0 ? 3 : 4
+          end = Math.min(firstCharacterBytes, bytesRead)
+        }
+      }
+    }
+
+    const nextOffset = startOffset + end
+    return {
+      content: decodeBuffer(buffer.subarray(0, end), 'utf-8'),
+      startOffset,
+      nextOffset,
+      totalSize,
+      eof: nextOffset >= totalSize,
+    }
+  } finally {
+    await handle.close()
+  }
 }
 
 export async function readFileWithEncodingInfo(
@@ -92,7 +153,7 @@ export async function readFileWithEncodingInfo(
  * parses the result or writes it back — must use `readFileWithEncodingInfo`,
  * otherwise a truncated read round-trips as a destructive write.
  */
-export async function readLargeFile(
+async function readByteRange(
   filePath: string,
   start: number,
   maxLength: number,
@@ -134,7 +195,7 @@ export async function readFileSized(
   const stats = await fsPromises.stat(filePath)
 
   if (stats.size > previewByteLimit) {
-    const content = await readLargeFile(filePath, 0, previewByteLimit)
+    const content = await readByteRange(filePath, 0, previewByteLimit)
     return {
       content,
       encoding: normalizeEncoding(encoding),

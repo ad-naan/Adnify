@@ -14,6 +14,7 @@ import { t } from '@renderer/i18n'
 import { Button } from '../ui'
 import FileIcon from '../common/FileIcon'
 import { useElevatedToastLayer } from '../common/toastLayerStore'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 
 interface QuickOpenProps {
   onClose: () => void
@@ -164,7 +165,7 @@ const FileMatchItem = memo(function FileMatchItem({
 
 export default function QuickOpen({ onClose }: QuickOpenProps) {
   useElevatedToastLayer(true)
-  const { workspacePath, openFile, language } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, openFile: s.openFile, language: s.language })))
+  const { workspacePath, language } = useStore(useShallow(s => ({ workspacePath: s.workspacePath, language: s.language })))
   const [query, setQuery] = useState('')
   const [allFiles, setAllFiles] = useState<string[]>([])
   const [matches, setMatches] = useState<FileMatch[]>([])
@@ -252,13 +253,9 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
     if (!workspacePath) return
 
     const fullPath = `${workspacePath}/${filePath}`
-    const content = await api.file.readFull(fullPath)
-
-    if (content !== null) {
-      openFile(fullPath, content)
-      onClose()
-    }
-  }, [workspacePath, openFile, onClose])
+    const result = await safeOpenFile(fullPath, { language, confirmLargeFile: false })
+    if (result.success) onClose()
+  }, [workspacePath, language, onClose])
 
   // 键盘导航
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

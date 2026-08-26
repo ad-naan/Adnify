@@ -5,10 +5,10 @@
   "productName": "Adnify",
   "author": "adnaan <adnaan.worker@gmail.com>",
   "license": "SEE LICENSE IN LICENSE",
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "pnpm@11.22.0",
   "engines": {
     "node": "^24.19.0",
-    "pnpm": "9.15.9"
+    "pnpm": "11.22.0"
   },
   "homepage": "https://github.com/ad-naan/adnify",
   "repository": {
@@ -39,26 +39,6 @@
     "postinstall": "node scripts/postinstall.js",
     "rebuild": "npx electron-rebuild -f -w node-pty",
     "rebuild:all": "npx electron-rebuild -f -w"
-  },
-  "pnpm": {
-    "overrides": {
-      "brace-expansion@<1.1.18": "^1.1.18",
-      "brace-expansion@>=2.0.0 <2.1.4": "^2.1.4",
-      "brace-expansion@>=4.0.0 <5.0.9": "^5.0.9",
-      "fast-uri@>=3.0.0 <3.1.5": "^3.1.5",
-      "hono@<4.12.34": "^4.12.34",
-      "@hono/node-server@<2.0.5": "^2.0.5",
-      "ip-address@<=10.3.0": "^10.3.1",
-      "js-yaml@>=4.0.0 <4.3.1": "^4.3.1",
-      "dompurify@<3.4.13": "^3.4.13",
-      "sharp@<0.35.0": "^0.35.1",
-      "tar@<7.5.22": "^7.5.22",
-      "undici@<6.28.0": "^6.28.0",
-      "protobufjs@<7.6.3": "^7.6.3"
-    },
-    "patchedDependencies": {
-      "extract-zip@2.0.1": "patches/extract-zip@2.0.1.patch"
-    }
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.23.0",
@@ -95,7 +75,6 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@monaco-editor/react": "^4.6.0",
     "@types/adm-zip": "^0.5.7",
-    "@types/dompurify": "^3.0.5",
     "@types/node": "^24.0.0",
     "@types/pdf-parse": "^1.1.5",
     "@types/picomatch": "^4.0.2",
@@ -118,6 +97,7 @@
     "electron": "^39.8.5",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
+    "extract-zip": "2.0.1",
     "fast-check": "^4.4.0",
     "fast-json-stable-stringify": "^2.1.0",
     "framer-motion": "^12.25.0",
@@ -126,6 +106,7 @@
     "katex": "^0.16.45",
     "lucide-react": "^0.562.0",
     "monaco-editor": "^0.55.1",
+    "onnx-proto": "4.0.4",
     "png2icons": "^2.0.1",
     "postcss": "^8.5.23",
     "react": "^18.3.1",

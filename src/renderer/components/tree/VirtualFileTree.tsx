@@ -33,6 +33,7 @@ import { writeClipboardText } from '@/renderer/services/clipboardService'
 import FileIcon from '../common/FileIcon'
 import { getFileType } from '../editor/FilePreview'
 import type { TreeRefreshOptions } from '../sidebar/panels/ExplorerView'
+import { safeOpenFile } from '@renderer/utils/fileUtils'
 import { gitExcludeService } from '@services/gitExcludeService'
 
 // 每个节点的高度（像素）
@@ -582,11 +583,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         openFile(node.item.path, '')
         setActiveFile(node.item.path)
       } else {
-        const content = await api.file.readFull(node.item.path)
-        if (content !== null) {
-          openFile(node.item.path, content)
-          setActiveFile(node.item.path)
-        } else {
+        const result = await safeOpenFile(node.item.path, { language, confirmLargeFile: false })
+        if (!result.success) {
           // 文件读取失败，可能是二进制文件或权限问题
           toast.warning(t('error.fileNotFound', language, { path: node.item.name }))
         }
