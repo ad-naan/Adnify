@@ -8,7 +8,7 @@
  * - 工具调用 token 计数
  */
 
-import type { Tiktoken } from 'js-tiktoken'
+import type { Tiktoken } from 'js-tiktoken/lite'
 
 // ===== 类型定义 =====
 
@@ -36,11 +36,14 @@ export function ensureTokenEncoder(): Promise<void> {
   if (cachedEncoder) return Promise.resolve()
   if (encoderLoadPromise) return encoderLoadPromise
 
-  encoderLoadPromise = import('js-tiktoken')
-    .then(({ getEncoding }) => {
+  encoderLoadPromise = Promise.all([
+    import('js-tiktoken/lite'),
+    import('js-tiktoken/ranks/cl100k_base'),
+  ])
+    .then(([{ Tiktoken }, { default: cl100kBase }]) => {
       // cl100k_base is OpenAI's tokenizer, and the only one bundled. For other
       // providers it is a baseline corrected by measured provider feedback.
-      cachedEncoder = getEncoding('cl100k_base')
+      cachedEncoder = new Tiktoken(cl100kBase)
     })
     .catch((error: unknown) => {
       encoderLoadPromise = null

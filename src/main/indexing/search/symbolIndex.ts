@@ -135,6 +135,23 @@ export class SymbolIndex {
     }
   }
 
+  /** Yield the serialized index without allocating one index-sized string. */
+  *toJSONChunks(): Generator<string> {
+    yield '{"byName":['
+    let index = 0
+    for (const entry of this.byName) {
+      if (index++ > 0) yield ','
+      yield JSON.stringify(entry)
+    }
+    yield '],"byFile":['
+    index = 0
+    for (const entry of this.byFile) {
+      if (index++ > 0) yield ','
+      yield JSON.stringify(entry)
+    }
+    yield ']}'
+  }
+
   /** 从 JSON 恢复 */
   fromJSON(data: { byName: [string, SymbolInfo[]][]; byFile: [string, SymbolInfo[]][] }): void {
     this.byName = new Map(data.byName)

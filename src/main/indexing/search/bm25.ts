@@ -35,8 +35,8 @@ export class BM25Index {
    * Blocking the main process stalls every renderer IPC, so the whole window
    * freezes. A watcher burst typically touches a handful of chunks, so caching
    * each document's fragment and re-encoding only the changed ones cuts that to
-   * ~8 ms. Moving the work to a worker was measured to be *worse*: the
-   * structured clone of the index costs more than the stringify it replaces.
+   * ~8 ms. The persistence path now also consumes these fragments as a stream,
+   * so it never joins them into an index-sized allocation.
    *
    * Keyed by the document object rather than its id: `addDocument` never mutates
    * an existing entry, but ids are not guaranteed unique (a caller that re-adds a
@@ -181,25 +181,28 @@ export class BM25Index {
   }
 
   /**
-   * Encode straight to a JSON string, reusing cached per-document fragments.
-   *
-   * Equivalent output to `JSON.stringify(this.toJSON())`, but only documents
-   * added since the last call are re-encoded. Callers persist this directly.
+   * Yield JSON in bounded fragments, reusing cached per-document encodings.
+   * Consumers can stream these chunks without allocating one index-sized string.
    */
-  toJSONString(): string {
-    const fragments: string[] = []
-    for (const doc of this.documents) {
+  *toJSONChunks(): Generator<string> {
+    yield '{"documents":['
+    for (let index = 0; index < this.documents.length; index++) {
+      const doc = this.documents[index]
       let fragment = this.serializedDocuments.get(doc)
       if (fragment === undefined) {
         fragment = JSON.stringify({ ...doc, termFreq: Array.from(doc.termFreq.entries()) })
         this.serializedDocuments.set(doc, fragment)
       }
-      fragments.push(fragment)
+      if (index > 0) yield ','
+      yield fragment
     }
-
-    return `{"documents":[${fragments.join(',')}],` +
-      `"avgDocLength":${JSON.stringify(this.avgDocLength)},` +
-      `"idf":${JSON.stringify(Array.from(this.idf.entries()))}}`
+    yield `],"avgDocLength":${JSON.stringify(this.avgDocLength)},"idf":[`
+    let index = 0
+    for (const entry of this.idf) {
+      if (index++ > 0) yield ','
+      yield JSON.stringify(entry)
+    }
+    yield ']}'
   }
 
   /** 从 JSON 恢复 */
