@@ -71,6 +71,7 @@ export class EmbeddingService {
   private batchSize: number
   private llmConfig: LLMConfig | null = null
   private useLLMEmbeddings: boolean = false
+  private requestQueue = Promise.resolve()
 
   constructor(config: EmbeddingConfig, llmConfig?: LLMConfig) {
     this.config = {
@@ -159,9 +160,15 @@ export class EmbeddingService {
   /**
    * 批量获取 embedding（自动分批 + 速率限制 + 重试）
    */
-  async embedBatch(texts: string[]): Promise<number[][]> {
-    if (texts.length === 0) return []
+  embedBatch(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) return Promise.resolve([])
 
+    const request = this.requestQueue.then(() => this.performEmbedBatch(texts))
+    this.requestQueue = request.then(() => undefined, () => undefined)
+    return request
+  }
+
+  private async performEmbedBatch(texts: string[]): Promise<number[][]> {
     const results: number[][] = []
 
     // 按 batchSize 分批处理

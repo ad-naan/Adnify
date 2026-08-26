@@ -6,7 +6,7 @@
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
 import { FileChangeBuffer, createFileChangeHandler } from '../indexing/fileChangeBuffer'
-import { getIndexService } from '../indexing/indexService'
+import { destroyIndexService, getIndexService } from '../indexing/indexService'
 import { lspManager } from '../lsp/lspManager'
 import * as watcher from '@parcel/watcher'
 import picomatch from 'picomatch'
@@ -172,7 +172,8 @@ async function createWatcherEntry(
 
     return { subscription, buffer: fileChangeBuffer, root: workspaceRoot, subscribers }
   } catch (error) {
-    fileChangeBuffer?.destroy()
+    await fileChangeBuffer?.destroy()
+    if (fileChangeBuffer) destroyIndexService(workspaceRoot)
     throw error
   }
 }
@@ -218,13 +219,14 @@ export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
     if (!entry || entry.subscribers.size > 0) return
 
     watcherEntries.delete(rootKey)
-    entry.buffer?.destroy()
     logger.security.info('[Watcher] Cleaning up shared file watcher...', 'root:', entry.root)
     try {
       await entry.subscription.unsubscribe()
     } catch (err) {
       logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
     }
+    await entry.buffer?.destroy()
+    destroyIndexService(entry.root)
     return
   }
 
@@ -232,12 +234,13 @@ export async function cleanupFileWatcher(watcherId?: string): Promise<void> {
   const entries = Array.from(watcherEntries.values())
   watcherEntries.clear()
   await Promise.all(entries.map(async (entry) => {
-    entry.buffer?.destroy()
     try {
       await entry.subscription.unsubscribe()
     } catch (err) {
       logger.security.info('[Watcher] Cleanup completed (ignored error):', toAppError(err).message)
     }
+    await entry.buffer?.destroy()
+    destroyIndexService(entry.root)
   }))
 }
 

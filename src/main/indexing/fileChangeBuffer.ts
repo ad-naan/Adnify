@@ -32,10 +32,12 @@ export class FileChangeBuffer {
   private timer: NodeJS.Timeout | null = null
   private firstEventTime: number | null = null
   private config: FileChangeBufferConfig
-  private onFlush: (events: FileChangeEvent[]) => void
+  private onFlush: (events: FileChangeEvent[]) => void | Promise<void>
+  private drainPromise: Promise<void> | null = null
+  private destroyed = false
 
   constructor(
-    onFlush: (events: FileChangeEvent[]) => void,
+    onFlush: (events: FileChangeEvent[]) => void | Promise<void>,
     config?: Partial<FileChangeBufferConfig>
   ) {
     this.onFlush = onFlush
@@ -46,6 +48,8 @@ export class FileChangeBuffer {
    * 添加文件变更事件
    */
   add(event: FileChangeEvent): void {
+    if (this.destroyed) return
+
     const existing = this.buffer.get(event.path)
 
     // 合并事件逻辑
@@ -91,6 +95,7 @@ export class FileChangeBuffer {
    * 批量添加事件
    */
   addBatch(events: FileChangeEvent[]): void {
+    if (this.destroyed) return
     for (const event of events) {
       this.add(event)
     }
@@ -105,16 +110,14 @@ export class FileChangeBuffer {
       this.timer = null
     }
 
-    if (this.buffer.size === 0) {
-      return
-    }
+    if (this.buffer.size === 0 || this.destroyed || this.drainPromise) return
 
-    const events = Array.from(this.buffer.values())
-    this.buffer.clear()
-    this.firstEventTime = null
-
-    logger.index.info(`[FileChangeBuffer] Flushing ${events.length} events`)
-    this.onFlush(events)
+    this.drainPromise = this.drain().finally(() => {
+      this.drainPromise = null
+      // An event cannot interleave with the synchronous finally callback, but
+      // keep this guard so future changes cannot strand a queued batch.
+      if (!this.destroyed && this.buffer.size > 0) this.flush()
+    })
   }
 
   /**
@@ -139,8 +142,15 @@ export class FileChangeBuffer {
   /**
    * 销毁
    */
-  destroy(): void {
+  async destroy(): Promise<void> {
+    this.destroyed = true
     this.clear()
+    await this.drainPromise
+  }
+
+  /** Wait for flushed work to finish. Primarily used by orderly shutdown/tests. */
+  async waitForIdle(): Promise<void> {
+    while (this.drainPromise) await this.drainPromise
   }
 
   private resetTimer(): void {
@@ -158,6 +168,21 @@ export class FileChangeBuffer {
       clearTimeout(this.timer)
       this.timer = null
       this.firstEventTime = null
+    }
+  }
+
+  private async drain(): Promise<void> {
+    while (!this.destroyed && this.buffer.size > 0) {
+      const events = Array.from(this.buffer.values())
+      this.buffer.clear()
+      this.firstEventTime = null
+
+      logger.index.info(`[FileChangeBuffer] Flushing ${events.length} events`)
+      try {
+        await this.onFlush(events)
+      } catch (error) {
+        logger.index.error('[FileChangeBuffer] Flush failed:', error)
+      }
     }
   }
 }

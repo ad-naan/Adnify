@@ -16,19 +16,19 @@ import { CodeChunk, IndexedChunk, IndexConfig } from './types'
  */
 type WorkerMessage =
   | { type: 'index'; workspacePath: string; config: IndexConfig; existingHashes?: Record<string, string> }
-  | { type: 'update'; workspacePath: string; file: string; config: IndexConfig }
-  | { type: 'batch_update'; workspacePath: string; files: string[]; config: IndexConfig }
+  | { type: 'batch_update'; requestId: number; workspacePath: string; files: string[]; config: IndexConfig }
 
 /**
  * Worker 响应消息类型
  */
 type WorkerResponse =
   | { type: 'progress'; processed: number; total: number; message?: string }
+  | { type: 'structural_result'; chunks: CodeChunk[]; processed: number; total: number }
   | { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
   | { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
-  | { type: 'batch_update_result'; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
+  | { type: 'batch_update_result'; requestId: number; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
   | { type: 'complete'; totalChunks: number }
-  | { type: 'error'; error: string }
+  | { type: 'error'; error: string; requestId?: number }
 
 if (!parentPort) {
   throw new Error('This file must be run as a worker thread.')
@@ -56,25 +56,31 @@ function postResponse(response: WorkerResponse): void {
   parentPort?.postMessage(response)
 }
 
-parentPort.on('message', async (message: WorkerMessage) => {
-  try {
-    switch (message.type) {
-      case 'index':
+let operationQueue = Promise.resolve()
+
+parentPort.on('message', (message: WorkerMessage) => {
+  // Tree-sitter and embedding instances are shared by design. A single queue
+  // prevents a full index and watcher updates from mutating them concurrently.
+  operationQueue = operationQueue
+    .then(async () => {
+      if (message.type === 'index') {
         await handleIndex(message.workspacePath, message.config, message.existingHashes)
-        break
-      case 'update':
-        await handleUpdate(message.workspacePath, message.file, message.config)
-        break
-      case 'batch_update':
-        await handleBatchUpdate(message.workspacePath, message.files, message.config)
-        break
-    }
-  } catch (error) {
-    postResponse({
-      type: 'error',
-      error: error instanceof Error ? error.message : String(error)
+      } else {
+        await handleBatchUpdate(
+          message.requestId,
+          message.workspacePath,
+          message.files,
+          message.config,
+        )
+      }
     })
-  }
+    .catch((error: unknown) => {
+      postResponse({
+        type: 'error',
+        error: error instanceof Error ? error.message : String(error),
+        requestId: message.type === 'batch_update' ? message.requestId : undefined,
+      })
+    })
 })
 
 /**
@@ -107,14 +113,14 @@ async function handleIndex(
   }
 
   const { regexChunker, tsChunker } = await getChunkers(config)
-  const embedder = new EmbeddingService(config.embedding)
-  const limit = pLimit(10)
+  const embedder = config.mode === 'semantic' ? new EmbeddingService(config.embedding) : null
+  const limit = pLimit(4)
 
   // 预热 Embedder (触发模型加载) 并通知 UI
   if (config.mode === 'semantic' && config.embedding.provider === 'transformers') {
     postResponse({ type: 'progress', processed: 0, total: totalFiles, message: 'Loading embedding model (first run may take longer)...' })
     try {
-      await embedder.embed('warmup')
+      await embedder!.embed('warmup')
     } catch (e) {
       logger.index.error('Failed to load model during warmup:', e)
     }
@@ -125,10 +131,19 @@ async function handleIndex(
   let totalChunks = 0
   let skippedFiles = 0
   let pendingChunks: IndexedChunk[] = []
+  let pendingStructuralChunks: CodeChunk[] = []
   const RESULT_BATCH_SIZE = 50
 
   const flushChunks = (): void => {
-    if (pendingChunks.length > 0) {
+    if (pendingStructuralChunks.length > 0) {
+      postResponse({
+        type: 'structural_result',
+        chunks: pendingStructuralChunks,
+        processed: processedFiles,
+        total: totalFiles,
+      })
+      pendingStructuralChunks = []
+    } else if (pendingChunks.length > 0) {
       postResponse({ type: 'result', chunks: pendingChunks, processed: processedFiles, total: totalFiles })
       pendingChunks = []
     }
@@ -158,12 +173,16 @@ async function handleIndex(
       const chunks = await chunkFile(tsChunker, regexChunker, filePath, content, workspacePath)
 
       if (chunks.length > 0) {
-        const texts = chunks.map(c => prepareTextForEmbedding(c))
-        const vectors = await embedder.embedBatch(texts)
+        if (config.mode === 'structural') {
+          pendingStructuralChunks.push(...chunks)
+        } else {
+          const texts = chunks.map(c => prepareTextForEmbedding(c))
+          const vectors = await embedder!.embedBatch(texts)
 
-        for (let i = 0; i < chunks.length; i++) {
-          if (vectors[i]) {
-            pendingChunks.push({ ...chunks[i], vector: vectors[i] })
+          for (let i = 0; i < chunks.length; i++) {
+            if (vectors[i]) {
+              pendingChunks.push({ ...chunks[i], vector: vectors[i] })
+            }
           }
         }
         totalChunks += chunks.length
@@ -171,7 +190,7 @@ async function handleIndex(
 
       processedFiles++
 
-      if (pendingChunks.length >= RESULT_BATCH_SIZE) {
+      if (pendingChunks.length >= RESULT_BATCH_SIZE || pendingStructuralChunks.length >= RESULT_BATCH_SIZE) {
         flushChunks()
       } else if (processedFiles % 10 === 0) {
         postResponse({ type: 'progress', processed: processedFiles, total: totalFiles })
@@ -190,47 +209,14 @@ async function handleIndex(
 }
 
 /**
- * 处理单文件更新请求
- */
-async function handleUpdate(workspacePath: string, filePath: string, config: IndexConfig): Promise<void> {
-  const { regexChunker, tsChunker } = await getChunkers(config)
-  const embedder = new EmbeddingService(config.embedding)
-
-  // 检查文件是否存在
-  try {
-    await fs.access(filePath)
-  } catch {
-    postResponse({ type: 'update_result', filePath, chunks: [], deleted: true })
-    return
-  }
-
-  const content = await fs.readFile(filePath, 'utf-8')
-
-  if (content.length > config.maxFileSize) {
-    return
-  }
-
-  const chunks = await chunkFile(tsChunker, regexChunker, filePath, content, workspacePath)
-
-  if (chunks.length === 0) {
-    postResponse({ type: 'update_result', filePath, chunks: [], deleted: true })
-    return
-  }
-
-  const texts = chunks.map(c => prepareTextForEmbedding(c))
-  const vectors = await embedder.embedBatch(texts)
-
-  const indexedChunks: IndexedChunk[] = chunks
-    .map((chunk, idx) => vectors[idx] ? { ...chunk, vector: vectors[idx] } : null)
-    .filter((c): c is IndexedChunk => c !== null)
-
-  postResponse({ type: 'update_result', filePath, chunks: indexedChunks, deleted: false })
-}
-
-/**
  * 处理批量文件更新请求
  */
-async function handleBatchUpdate(workspacePath: string, files: string[], config: IndexConfig): Promise<void> {
+async function handleBatchUpdate(
+  requestId: number,
+  workspacePath: string,
+  files: string[],
+  config: IndexConfig,
+): Promise<void> {
   const { regexChunker, tsChunker } = await getChunkers(config)
   const embedder = new EmbeddingService(config.embedding)
   const limit = pLimit(5) // 批量更新时降低并发
@@ -276,7 +262,7 @@ async function handleBatchUpdate(workspacePath: string, files: string[], config:
 
   await Promise.all(tasks)
 
-  postResponse({ type: 'batch_update_result', results })
+  postResponse({ type: 'batch_update_result', requestId, results })
 }
 
 /**

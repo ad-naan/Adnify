@@ -7,7 +7,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { BrowserWindow } from 'electron'
+import type { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
 import { logger, normalizePath } from '@shared/utils'
 import { TreeSitterChunker } from './treeSitterChunker'
@@ -24,13 +24,15 @@ import {
 import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
 
 // Worker 消息类型
+interface WorkerStructuralResultMessage { type: 'structural_result'; chunks: CodeChunk[]; processed: number; total: number }
 interface WorkerResultMessage { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
 interface WorkerUpdateResultMessage { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
-interface WorkerBatchUpdateResultMessage { type: 'batch_update_result'; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
+interface WorkerBatchUpdateResultMessage { type: 'batch_update_result'; requestId: number; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
 interface WorkerCompleteMessage { type: 'complete'; totalChunks: number }
-interface WorkerErrorMessage { type: 'error'; error: string }
+interface WorkerErrorMessage { type: 'error'; error: string; requestId?: number }
 type WorkerMessage =
   | { type: 'progress'; processed: number; total: number; message?: string }
+  | WorkerStructuralResultMessage
   | WorkerResultMessage
   | WorkerUpdateResultMessage
   | WorkerBatchUpdateResultMessage
@@ -58,6 +60,14 @@ export class CodebaseIndexService {
   private worker: Worker | null = null
   private pendingIndexResolve: (() => void) | null = null
   private pendingIndexReject: ((err: Error) => void) | null = null
+  private workerMessageQueue = Promise.resolve()
+  private nextWorkerRequestId = 1
+  private pendingWorkerUpdates = new Map<number, { resolve: () => void; reject: (error: Error) => void }>()
+  private destroyed = false
+  private mutationQueue = Promise.resolve()
+  private pendingFullIndex: Promise<void> | null = null
+  private structuralBuildLanguages: Record<string, number> | null = null
+  private structuralBuildFileSymbols: Map<string, SymbolInfo[]> | null = null
 
   private status: IndexStatus = {
     mode: 'structural',
@@ -122,6 +132,7 @@ export class CodebaseIndexService {
 
   async initialize(): Promise<void> {
     if (this.initialized) return
+    if (this.destroyed) throw new Error('Index service has been destroyed')
 
     await this.chunker.init()
 
@@ -315,8 +326,21 @@ export class CodebaseIndexService {
     return this.config.mode
   }
 
+  private enqueueMutation(operation: () => Promise<void>): Promise<void> {
+    const result = this.mutationQueue.then(() => {
+      if (this.destroyed) return
+      return operation()
+    })
+    this.mutationQueue = result.catch(() => {})
+    return result
+  }
+
   /** 切换索引模式 */
   async setMode(mode: IndexMode): Promise<void> {
+    return this.enqueueMutation(() => this.applyMode(mode))
+  }
+
+  private async applyMode(mode: IndexMode): Promise<void> {
     if (mode === this.config.mode) return
 
     this.config.mode = mode
@@ -344,28 +368,36 @@ export class CodebaseIndexService {
 
   /** 全量索引 */
   async indexWorkspace(): Promise<void> {
-    if (this.status.isIndexing) {
-      logger.index.info('[IndexService] Already indexing, skipping...')
-      return
-    }
+    if (this.destroyed) return
+    if (this.pendingFullIndex) return this.pendingFullIndex
 
+    const operation = this.enqueueMutation(() => this.performWorkspaceIndex())
+    const tracked = operation.finally(() => {
+      if (this.pendingFullIndex === tracked) this.pendingFullIndex = null
+    })
+    this.pendingFullIndex = tracked
+    return tracked
+  }
+
+  private async performWorkspaceIndex(): Promise<void> {
     this.status = { ...this.status, isIndexing: true, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
     this.emitProgress()
 
     try {
       if (this.config.mode === 'structural') {
         await this.buildStructuralIndex()
-        await this.saveStructuralIndex()
-        this.status.isIndexing = false
-        this.status.lastIndexedAt = Date.now()
-        this.emitProgress(true)
       } else {
-        // Semantic mode: buildSemanticIndex returns a Promise that resolves
-        // when the worker sends 'complete' or rejects on 'error'.
-        // The worker message handler sets isIndexing/lastIndexedAt.
         await this.buildSemanticIndex()
       }
+      if (this.destroyed) return
+
+      this.status.isIndexing = false
+      this.status.lastIndexedAt = Date.now()
+      this.status.message = undefined
+      await this.saveIndex()
+      this.emitProgress(true)
     } catch (e) {
+      if (this.destroyed) return
       logger.index.error('[IndexService] Indexing failed:', e)
       this.status.error = e instanceof Error ? e.message : String(e)
       this.status.isIndexing = false
@@ -453,6 +485,10 @@ export class CodebaseIndexService {
 
   /** 清空索引 */
   async clearIndex(): Promise<void> {
+    return this.enqueueMutation(() => this.performClearIndex())
+  }
+
+  private async performClearIndex(): Promise<void> {
     this.bm25Index.clear()
     this.symbolIndex.clear()
     this.projectSummary = null
@@ -471,8 +507,11 @@ export class CodebaseIndexService {
 
   /** 批量更新文件（用于文件监听） */
   async updateFiles(filePaths: string[]): Promise<void> {
-    if (filePaths.length === 0) return
+    if (filePaths.length === 0 || this.destroyed) return
+    return this.enqueueMutation(() => this.performUpdateFiles(filePaths))
+  }
 
+  private async performUpdateFiles(filePaths: string[]): Promise<void> {
     logger.index.info(`[IndexService] Updating ${filePaths.length} files...`)
 
     // 结构化模式：增量更新
@@ -543,15 +582,23 @@ export class CodebaseIndexService {
       return
     }
 
-    // 语义模式：通过 worker 处理
-    if (this.vectorStore?.isInitialized() && this.worker) {
-      this.worker.postMessage({
+    // 语义模式：通过 worker 处理。Promise 只在向量存储提交完成后解析，
+    // 这样文件监听缓冲器才能提供真正的背压，而不是无限 postMessage。
+    await this.initSemanticComponents()
+    if (!this.worker) this.initWorker()
+    if (!this.worker) throw new Error('Index worker is unavailable')
+
+    const requestId = this.nextWorkerRequestId++
+    await new Promise<void>((resolve, reject) => {
+      this.pendingWorkerUpdates.set(requestId, { resolve, reject })
+      this.worker!.postMessage({
         type: 'batch_update',
+        requestId,
         workspacePath: this.workspacePath,
         files: filePaths,
         config: this.config
       })
-    }
+    })
   }
 
   /** 从结构化索引中删除文件 */
@@ -567,6 +614,11 @@ export class CodebaseIndexService {
 
   /** 删除文件索引 */
   async deleteFileIndex(filePath: string): Promise<void> {
+    if (this.destroyed) return
+    return this.enqueueMutation(() => this.performDeleteFileIndex(filePath))
+  }
+
+  private async performDeleteFileIndex(filePath: string): Promise<void> {
     const relativePath = path.relative(this.workspacePath, filePath)
 
     // 结构化模式：从索引中删除
@@ -602,6 +654,9 @@ export class CodebaseIndexService {
   }
 
   destroy(): void {
+    if (this.destroyed) return
+    this.destroyed = true
+    this.status.isIndexing = false
     // 若有待执行的去抖落盘，同步写完再退出，否则最后一批索引更新会丢失。
     // destroy() 是同步的且调用方不 await，因此这里只能用同步写。
     if (this.savePendingTimer !== null) {
@@ -609,86 +664,38 @@ export class CodebaseIndexService {
       this.savePendingTimer = null
       this.saveStructuralIndexSync()
     }
-    this.worker?.terminate()
+    const worker = this.worker
     this.worker = null
+    void worker?.terminate()
+    const error = new Error('Index service destroyed')
+    this.pendingIndexReject?.(error)
+    this.pendingIndexResolve = null
+    this.pendingIndexReject = null
+    for (const pending of this.pendingWorkerUpdates.values()) pending.reject(error)
+    this.pendingWorkerUpdates.clear()
   }
 
   // ==================== 结构化索引 ====================
 
   private async buildStructuralIndex(): Promise<void> {
-    const files = await this.collectFiles()
-    this.status.totalFiles = files.length
-
     this.bm25Index.clear()
     this.symbolIndex.clear()
+    this.structuralBuildLanguages = {}
+    this.structuralBuildFileSymbols = new Map()
 
-    const languages: Record<string, number> = {}
-    const fileSymbols = new Map<string, SymbolInfo[]>()
-    let processed = 0
+    try {
+      await this.startWorkerIndex()
+      if (this.destroyed) return
 
-    for (const filePath of files) {
-      try {
-        const content = await fs.promises.readFile(filePath, 'utf-8')
-        if (content.length > this.config.maxFileSize) continue
-
-        const chunks = await this.chunkFile(filePath, content)
-        const relativePath = path.relative(this.workspacePath, filePath)
-        const symbols: SymbolInfo[] = []
-
-        for (const chunk of chunks) {
-          // 添加到 BM25
-          this.bm25Index.addDocument({
-            id: chunk.id,
-            filePath: chunk.filePath,
-            relativePath: chunk.relativePath,
-            content: chunk.content,
-            startLine: chunk.startLine,
-            endLine: chunk.endLine,
-            type: chunk.type,
-            language: chunk.language,
-            symbols: chunk.symbols || [],
-          })
-
-          // 提取符号
-          if (chunk.symbols) {
-            for (const name of chunk.symbols) {
-              const symbol: SymbolInfo = {
-                name,
-                kind: chunk.type === 'function' ? 'function' : chunk.type === 'class' ? 'class' : 'function',
-                filePath: chunk.filePath,
-                relativePath: chunk.relativePath,
-                startLine: chunk.startLine,
-                endLine: chunk.endLine,
-                signature: chunk.content.split('\n')[0].slice(0, 100),
-              }
-              symbols.push(symbol)
-              this.symbolIndex.add(symbol)
-            }
-          }
-
-          // 语言统计
-          languages[chunk.language] = (languages[chunk.language] || 0) + 1
-        }
-
-        if (symbols.length > 0) {
-          fileSymbols.set(relativePath, symbols)
-        }
-
-        this.status.totalChunks += chunks.length
-      } catch (e) {
-        logger.index.warn(`[IndexService] Failed to index ${filePath}: `, e)
-      }
-
-      processed++
-      this.status.indexedFiles = processed
-      if (processed % 20 === 0) this.emitProgress()
+      this.bm25Index.build()
+      this.projectSummary = this.summaryGenerator.generate(
+        this.structuralBuildFileSymbols,
+        this.structuralBuildLanguages,
+      )
+    } finally {
+      this.structuralBuildFileSymbols = null
+      this.structuralBuildLanguages = null
     }
-
-    // 构建 BM25 索引
-    this.bm25Index.build()
-
-    // 生成项目摘要
-    this.projectSummary = this.summaryGenerator.generate(fileSymbols, languages)
 
     logger.index.info(`[IndexService] Structural index built: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
   }
@@ -712,22 +719,24 @@ export class CodebaseIndexService {
   private async buildSemanticIndex(): Promise<void> {
     await this.initSemanticComponents()
 
-    if (!this.worker) {
-      this.initWorker()
-    }
-
     const existingHashesMap = await this.vectorStore!.getFileHashes()
     const existingHashes: Record<string, string> = Object.fromEntries(existingHashesMap)
+
+    return this.startWorkerIndex(existingHashes)
+  }
+
+  private startWorkerIndex(existingHashes?: Record<string, string>): Promise<void> {
+    if (!this.worker) this.initWorker()
+    if (!this.worker) return Promise.reject(new Error('Index worker is unavailable'))
 
     return new Promise<void>((resolve, reject) => {
       this.pendingIndexResolve = resolve
       this.pendingIndexReject = reject
-
-      this.worker?.postMessage({
+      this.worker!.postMessage({
         type: 'index',
         workspacePath: this.workspacePath,
         config: this.config,
-        existingHashes
+        existingHashes,
       })
     })
   }
@@ -735,98 +744,171 @@ export class CodebaseIndexService {
   private initWorker(): void {
     try {
       const workerPath = path.join(__dirname, 'indexer.worker.js')
-      this.worker = new Worker(workerPath)
+      const worker = new Worker(workerPath)
+      this.worker = worker
 
-      this.worker.on('message', async (message: WorkerMessage) => {
-        switch (message.type) {
-          case 'progress':
-            this.status.indexedFiles = message.processed
-            if (message.total) this.status.totalFiles = message.total
-            // 如果有 message 字段，这里可以更新 status.currentFile 或者专门的 message 字段
-            // 目前 IndexStatus 只有 error 字段比较接近文本信息，或者我们可以扩展 IndexStatus
-            // 暂时先用 log 记录，或者扩展 IndexStatus
-            // 更好的方式是扩展 IndexStatus 添加 message 字段
-            if (message.message) {
-              this.status.message = message.message
-              this.emitProgress(true) // Force emit on message change
-            }
-            this.emitProgress()
-            break
-
-          case 'result':
-            if (message.chunks?.length > 0) {
-              await this.vectorStore!.addBatch(message.chunks)
-              this.status.totalChunks += message.chunks.length
-            }
-            this.status.indexedFiles = message.processed
-            this.emitProgress()
-            break
-
-          case 'update_result':
-            if (message.deleted) {
-              await this.vectorStore!.deleteFile(message.filePath)
-            } else if (message.chunks?.length > 0) {
-              await this.vectorStore!.upsertFile(message.filePath, message.chunks)
-            }
-            this.emitProgress()
-            break
-
-          case 'batch_update_result':
-            for (const res of message.results) {
-              if (res.deleted) {
-                await this.vectorStore!.deleteFile(res.filePath)
-              } else if (res.chunks?.length > 0) {
-                await this.vectorStore!.upsertFile(res.filePath, res.chunks)
+      worker.on('message', (message: WorkerMessage) => {
+        // worker_threads does not await async event handlers. Chain messages so
+        // vector-store writes are committed in the same order the worker emits
+        // them, and `complete` cannot overtake an earlier result batch.
+        this.workerMessageQueue = this.workerMessageQueue.then(async () => {
+          if (this.destroyed) return
+          switch (message.type) {
+            case 'progress':
+              this.status.indexedFiles = message.processed
+              if (message.total) this.status.totalFiles = message.total
+              if (message.message) {
+                this.status.message = message.message
+                this.emitProgress(true)
               }
-            }
-            this.emitProgress()
-            break
+              this.emitProgress()
+              break
 
-          case 'complete':
-            this.status.isIndexing = false
-            this.status.lastIndexedAt = Date.now()
-            this.status.message = undefined
-            if (typeof message.totalChunks === 'number') {
-              this.status.totalChunks = message.totalChunks
-            }
-            logger.index.info(`[IndexService] Semantic indexing complete: ${this.status.totalChunks} chunks`)
-            this.saveIndex()
-            this.emitProgress(true)
-            if (this.pendingIndexResolve) {
-              this.pendingIndexResolve()
-              this.pendingIndexResolve = null
-              this.pendingIndexReject = null
-            }
-            break
+            case 'structural_result':
+              this.addStructuralChunks(message.chunks)
+              this.status.indexedFiles = message.processed
+              this.status.totalFiles = message.total
+              this.status.totalChunks += message.chunks.length
+              this.emitProgress()
+              break
 
-          case 'error':
-            logger.index.error('[IndexService] Worker error:', message.error)
-            this.status.error = message.error
-            this.status.isIndexing = false
-            this.status.message = undefined
-            this.emitProgress(true)
-            if (this.pendingIndexReject) {
-              this.pendingIndexReject(new Error(message.error))
-              this.pendingIndexResolve = null
-              this.pendingIndexReject = null
+            case 'result':
+              if (message.chunks?.length > 0) {
+                await this.vectorStore!.addBatch(message.chunks)
+                this.status.totalChunks += message.chunks.length
+              }
+              this.status.indexedFiles = message.processed
+              this.emitProgress()
+              break
+
+            case 'update_result':
+              if (message.deleted) {
+                await this.vectorStore!.deleteFile(message.filePath)
+              } else if (message.chunks?.length > 0) {
+                await this.vectorStore!.upsertFile(message.filePath, message.chunks)
+              }
+              this.emitProgress()
+              break
+
+            case 'batch_update_result':
+              for (const res of message.results) {
+                if (res.deleted) {
+                  await this.vectorStore!.deleteFile(res.filePath)
+                } else if (res.chunks?.length > 0) {
+                  await this.vectorStore!.upsertFile(res.filePath, res.chunks)
+                }
+              }
+              this.emitProgress()
+              this.pendingWorkerUpdates.get(message.requestId)?.resolve()
+              this.pendingWorkerUpdates.delete(message.requestId)
+              break
+
+            case 'complete':
+              if (typeof message.totalChunks === 'number') {
+                this.status.totalChunks = message.totalChunks
+              }
+              if (this.pendingIndexResolve) {
+                this.pendingIndexResolve()
+                this.pendingIndexResolve = null
+                this.pendingIndexReject = null
+              }
+              break
+
+            case 'error': {
+              logger.index.error('[IndexService] Worker error:', message.error)
+              const error = new Error(message.error)
+              if (message.requestId !== undefined) {
+                this.pendingWorkerUpdates.get(message.requestId)?.reject(error)
+                this.pendingWorkerUpdates.delete(message.requestId)
+                break
+              }
+              this.status.error = message.error
+              this.status.isIndexing = false
+              this.status.message = undefined
+              this.emitProgress(true)
+              if (this.pendingIndexReject) {
+                this.pendingIndexReject(error)
+                this.pendingIndexResolve = null
+                this.pendingIndexReject = null
+              }
+              break
             }
-            break
-        }
+          }
+        }).catch(error => {
+          this.handleWorkerFailure(error instanceof Error ? error : new Error(String(error)))
+        })
       })
 
-      this.worker.on('error', (err) => {
-        logger.index.error('[IndexService] Worker thread error:', err.message)
-        this.status.error = err.message
-        this.status.isIndexing = false
-        this.emitProgress()
-        if (this.pendingIndexReject) {
-          this.pendingIndexReject(err)
-          this.pendingIndexResolve = null
-          this.pendingIndexReject = null
-        }
+      worker.on('error', (err) => {
+        this.handleWorkerFailure(err)
+      })
+
+      worker.on('exit', (code) => {
+        if (this.destroyed || this.worker !== worker) return
+        this.worker = null
+        this.handleWorkerFailure(new Error(`Index worker exited unexpectedly with code ${code}`))
       })
     } catch (e) {
       logger.index.error('[IndexService] Failed to initialize worker:', e)
+    }
+  }
+
+  private handleWorkerFailure(error: Error): void {
+    if (this.destroyed) return
+
+    const worker = this.worker
+    this.worker = null
+    void worker?.terminate()
+
+    logger.index.error('[IndexService] Worker thread error:', error.message)
+    this.status.error = error.message
+    this.status.isIndexing = false
+    this.status.message = undefined
+    this.emitProgress(true)
+
+    this.pendingIndexReject?.(error)
+    this.pendingIndexResolve = null
+    this.pendingIndexReject = null
+
+    for (const pending of this.pendingWorkerUpdates.values()) pending.reject(error)
+    this.pendingWorkerUpdates.clear()
+  }
+
+  private addStructuralChunks(chunks: CodeChunk[]): void {
+    if (!this.structuralBuildLanguages || !this.structuralBuildFileSymbols) return
+
+    for (const chunk of chunks) {
+      this.bm25Index.addDocument({
+        id: chunk.id,
+        filePath: chunk.filePath,
+        relativePath: chunk.relativePath,
+        content: chunk.content,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine,
+        type: chunk.type,
+        language: chunk.language,
+        symbols: chunk.symbols || [],
+      })
+
+      this.structuralBuildLanguages[chunk.language] =
+        (this.structuralBuildLanguages[chunk.language] || 0) + 1
+
+      if (!chunk.symbols?.length) continue
+      const fileSymbols = this.structuralBuildFileSymbols.get(chunk.relativePath) || []
+      for (const name of chunk.symbols) {
+        const symbol: SymbolInfo = {
+          name,
+          kind: chunk.type === 'class' ? 'class' : 'function',
+          filePath: chunk.filePath,
+          relativePath: chunk.relativePath,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+          signature: chunk.content.split('\n')[0].slice(0, 100),
+        }
+        fileSymbols.push(symbol)
+        this.symbolIndex.add(symbol)
+      }
+      this.structuralBuildFileSymbols.set(chunk.relativePath, fileSymbols)
     }
   }
 
@@ -838,30 +920,6 @@ export class CodebaseIndexService {
       chunks = this.fallbackChunker.chunkFile(filePath, content, this.workspacePath)
     }
     return chunks
-  }
-
-  private async collectFiles(): Promise<string[]> {
-    const files: string[] = []
-
-    const walk = async (dir: string) => {
-      const entries = await fs.promises.readdir(dir, { withFileTypes: true })
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name)
-        if (entry.isDirectory()) {
-          if (!this.config.ignoredDirs.includes(entry.name) && !entry.name.startsWith('.')) {
-            await walk(fullPath)
-          }
-        } else if (entry.isFile()) {
-          const ext = path.extname(entry.name).toLowerCase()
-          if (this.config.includedExts.includes(ext)) {
-            files.push(fullPath)
-          }
-        }
-      }
-    }
-
-    await walk(this.workspacePath)
-    return files
   }
 
   private extractKeywords(query: string): string[] {
