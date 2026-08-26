@@ -106,23 +106,20 @@ export function useChatScrollController({
   }, [])
 
   const handleTotalListHeightChanged = useCallback(() => {
-    const { bottom } = getBottomMetrics()
-    if (!atBottomRef.current && !bottom) {
-      requestAnimationFrame(syncBottomStateFromScroller)
-      return
-    }
+    // Virtuoso already publishes bottom intent using the same threshold below.
+    // Reading scrollHeight here would force layout on every streamed row resize.
+    if (!atBottomRef.current) return
 
-    atBottomRef.current = true
     setShowScrollButton(false)
     scheduleStickToBottom()
-  }, [getBottomMetrics, scheduleStickToBottom, syncBottomStateFromScroller])
+  }, [scheduleStickToBottom])
 
   const handleBottomStateChange = useCallback((bottom: boolean) => {
     if (isAutoScrollingRef.current) return
-
-    const { hasOverflow } = getBottomMetrics()
-    syncBottomState(bottom, hasOverflow)
-  }, [getBottomMetrics, syncBottomState])
+    // A non-bottom Virtuoso state implies overflow; a bottom state always hides
+    // the button. No DOM measurement is needed on this hot callback.
+    syncBottomState(bottom)
+  }, [syncBottomState])
 
   const handleVisibleRangeChanged = useCallback((_range: VisibleRange) => {
     // Scroll metrics are the source of truth. Virtuoso range updates can arrive
@@ -215,6 +212,7 @@ export function useChatScrollController({
   }, [])
 
   return {
+    atBottomThreshold: CHAT_BOTTOM_THRESHOLD,
     attachScrollerNode,
     followOutput,
     handleBottomStateChange,

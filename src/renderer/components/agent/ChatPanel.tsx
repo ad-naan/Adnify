@@ -1,6 +1,6 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
-import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
+import { memo, useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import {
   AlertTriangle,
@@ -65,6 +65,20 @@ interface RenderableMessageItem {
   message: ChatMessageType
   hasCheckpoint: boolean
   renderKey: string
+}
+
+const MemoizedVirtuoso = memo(Virtuoso) as typeof Virtuoso
+const CHAT_TIMELINE_STYLE = {
+  minHeight: '100px',
+  overflowX: 'hidden',
+  overflowY: 'auto',
+} as const
+
+function computeTimelineItemKey(
+  _index: number,
+  item: ChatTimelineItem<RenderableMessageItem>
+): string {
+  return item.key
 }
 
 const HISTORY_REVEAL_BATCH_SIZE = 50
@@ -363,6 +377,7 @@ export default function ChatPanel() {
   // 用于防止工具卡片展开/收缩时误判滚动状态
   const isHydratingActiveThread = hasActiveThread && !activeThreadMessagesHydrated
   const {
+    atBottomThreshold,
     attachScrollerNode,
     followOutput,
     handleBottomStateChange,
@@ -1204,6 +1219,18 @@ export default function ChatPanel() {
     )
   }, [language, revealArchivedMessages])
 
+  const handleApprovePendingTool = useCallback(() => {
+    approveCurrentTool(pendingToolCall?.id)
+  }, [approveCurrentTool, pendingToolCall?.id])
+
+  const handleApprovePendingToolForTask = useCallback(() => {
+    approveCurrentToolForTask(pendingToolCall?.id)
+  }, [approveCurrentToolForTask, pendingToolCall?.id])
+
+  const handleRejectPendingTool = useCallback(() => {
+    rejectCurrentTool(pendingToolCall?.id)
+  }, [pendingToolCall?.id, rejectCurrentTool])
+
   const renderTimelineItem = useCallback((item: ChatTimelineItem<RenderableMessageItem>) => {
     if (item.kind === 'archive') {
       return renderArchiveItem(item)
@@ -1219,9 +1246,9 @@ export default function ChatPanel() {
         onEdit={handleEditMessage}
         onRegenerate={handleRegenerate}
         onRestore={handleRestore}
-        onApproveTool={() => approveCurrentTool(pendingToolCall?.id)}
-        onApproveToolForTask={canApprovePendingToolForTask ? () => approveCurrentToolForTask(pendingToolCall?.id) : undefined}
-        onRejectTool={() => rejectCurrentTool(pendingToolCall?.id)}
+        onApproveTool={handleApprovePendingTool}
+        onApproveToolForTask={canApprovePendingToolForTask ? handleApprovePendingToolForTask : undefined}
+        onRejectTool={handleRejectPendingTool}
         onStopTool={abort}
         onOpenDiff={handleShowDiff}
         pendingToolId={pendingToolCall?.id}
@@ -1229,7 +1256,12 @@ export default function ChatPanel() {
         isAwaitingApproval={isAwaitingApproval}
       />
     )
-  }, [abort, approveCurrentTool, approveCurrentToolForTask, canApprovePendingToolForTask, handleEditMessage, handleRegenerate, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, rejectCurrentTool, renderArchiveItem])
+  }, [abort, canApprovePendingToolForTask, handleApprovePendingTool, handleApprovePendingToolForTask, handleEditMessage, handleRegenerate, handleRejectPendingTool, handleRestore, handleShowDiff, isAwaitingApproval, pendingToolCall?.id, renderArchiveItem])
+
+  const renderTimelineItemContent = useCallback((
+    _index: number,
+    item: ChatTimelineItem<RenderableMessageItem>
+  ) => renderTimelineItem(item), [renderTimelineItem])
 
   const handleTimelineRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
     visibleRangeRef.current = range
@@ -1434,20 +1466,20 @@ export default function ChatPanel() {
               )}
             </AnimatePresence>
 
-            {chatMode === 'plan' ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} /> : <Virtuoso
+            {chatMode === 'plan' ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} /> : <MemoizedVirtuoso
                 key={currentThreadId ?? 'no-thread'}
                 ref={virtuosoRef}
                 data={timelineItems}
-                computeItemKey={(_, item) => item.key}
+                computeItemKey={computeTimelineItemKey}
                 atBottomStateChange={handleBottomStateChange}
                 rangeChanged={handleTimelineRangeChanged}
                 initialTopMostItemIndex={initialIndexRef.current}
                 followOutput={followOutput}
-                itemContent={(_, item) => renderTimelineItem(item)}
+                itemContent={renderTimelineItemContent}
                 className="flex-1 custom-scrollbar w-full h-full"
-                style={{ minHeight: '100px', overflowX: 'hidden', overflowY: 'auto' }}
+                style={CHAT_TIMELINE_STYLE}
                 overscan={12}
-                atBottomThreshold={100}
+                atBottomThreshold={atBottomThreshold}
                 totalListHeightChanged={handleTotalListHeightChanged}
                 skipAnimationFrameInResizeObserver
                 components={virtuosoComponents}

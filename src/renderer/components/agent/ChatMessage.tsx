@@ -59,6 +59,7 @@ import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { StreamingMarkdownPartitioner } from './streamingMarkdownPartition'
 import { skillService } from '@/renderer/agent/services/skillService'
 import { logger } from '@shared/utils/Logger'
+import { buildChatMessagePartKeys } from './chatMessagePartKeys'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -933,23 +934,13 @@ const AssistantMessageContent = React.memo(({
   isStreaming?: boolean
   messageId: string
 }) => {
-  const getStablePartKey = React.useCallback((part: AssistantPart, index: number) => {
-    if ('id' in part && typeof part.id === 'string') return `${part.type}:${part.id}`
-    if (isToolCallPart(part)) return `tool:${part.toolCall.id}`
-
-    let sameTypeAfter = 0
-    for (let cursor = index + 1; cursor < parts.length; cursor += 1) {
-      if (parts[cursor].type === part.type) sameTypeAfter += 1
-    }
-    return `${part.type}:from-end-${sameTypeAfter}`
-  }, [parts])
-
   // Memoize 分组逻辑
   const groups = React.useMemo(() => {
     const result: Array<
       | { type: 'part'; part: AssistantPart; index: number; key: string }
       | { type: 'tool_group'; toolCalls: ToolCall[]; startIndex: number; key: string }
     > = []
+    const stablePartKeys = buildChatMessagePartKeys(parts)
 
     let currentToolCalls: ToolCall[] = []
     let startIndex = -1
@@ -968,7 +959,7 @@ const AssistantMessageContent = React.memo(({
           })
           currentToolCalls = []
         }
-        result.push({ type: 'part', part, index, key: getStablePartKey(part, index) })
+        result.push({ type: 'part', part, index, key: stablePartKeys[index] })
       }
     })
 
@@ -982,7 +973,7 @@ const AssistantMessageContent = React.memo(({
     }
 
     return result
-  }, [getStablePartKey, parts])
+  }, [parts])
 
   return (
     <>
