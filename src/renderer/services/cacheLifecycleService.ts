@@ -1,5 +1,4 @@
 import { cacheManager, type CacheCleanupPhase } from '@shared/utils'
-import { clearExtraLibs } from './monacoTypeService'
 import { directoryCacheService } from './directoryCacheService'
 import { completionService } from './completionService'
 import { clearHealthCache } from './healthCheckService'
@@ -12,9 +11,6 @@ function registerHooks(): void {
   if (registered) return
   registered = true
 
-  cacheManager.registerCleanupHook('monaco-extra-libs', ['workspace-switch', 'shutdown', 'deep'], () => {
-    clearExtraLibs()
-  })
   cacheManager.registerCleanupHook('directory-cache', ['workspace-switch', 'shutdown', 'deep'], () => {
     directoryCacheService.clear()
   })
@@ -40,4 +36,3 @@ export async function runCacheCleanupPhase(phase: CacheCleanupPhase): Promise<vo
   registerHooks()
   await cacheManager.runPhase(phase)
 }
-

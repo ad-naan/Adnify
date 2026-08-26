@@ -4,8 +4,17 @@
  * 测试 js-tiktoken 精确 token 计数
  */
 
-import { describe, it, expect } from 'vitest'
-import { countTokens, countContentTokens, countMessagesTokens } from '@shared/utils/tokenCounter'
+import { beforeAll, describe, it, expect } from 'vitest'
+import {
+  countTokens,
+  countContentTokens,
+  countMessagesTokens,
+  ensureTokenEncoder,
+} from '@shared/utils/tokenCounter'
+
+beforeAll(async () => {
+  await ensureTokenEncoder()
+})
 
 describe('TokenCounter - Basic Counting', () => {
   it('should count English text tokens accurately', () => {

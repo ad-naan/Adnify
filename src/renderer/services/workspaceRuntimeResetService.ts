@@ -1,7 +1,6 @@
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { resetLspState } from './lspService'
-import { clearExtraLibs } from './monacoTypeService'
 import { lintService } from '@renderer/agent/services/lintService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { clearHealthCache } from './healthCheckService'
@@ -45,7 +44,6 @@ export function resetWorkspaceRuntimeState(): void {
   useStore.getState().clearToolCallLogs()
 
   resetLspState()
-  clearExtraLibs()
   lintService.clearCache()
   streamingEditService.clearAll()
   clearHealthCache()

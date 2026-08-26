@@ -19,7 +19,6 @@ import { getMonacoEditorOptions } from '@renderer/config/monacoConfig'
 import { getEditorConfig, saveEditorConfig } from '@renderer/settings'
 import { keybindingService } from '@services/keybindingService'
 import { monaco } from '@renderer/monacoWorker'
-import { initMonacoTypeService } from '@services/monacoTypeService'
 import { detectEolFromContent, syncFileEolFromModel } from '@services/fileFormatService'
 import { streamingEditService } from '@renderer/agent/services/streamingEditService'
 import { composerService } from '@renderer/agent/services/composerService'
@@ -317,7 +316,6 @@ export default function Editor() {
   const handleBeforeMount: BeforeMount = (monacoInstance) => {
     const { currentTheme } = useStore.getState() as { currentTheme: ThemeName }
     defineMonacoTheme(monacoInstance, currentTheme)
-    initMonacoTypeService(monacoInstance)
   }
 
   const handleEditorMount: OnMount = (editor, monacoInstance) => {
@@ -577,7 +575,7 @@ export default function Editor() {
         ) : activeFile && activeFile.contentState !== 'loaded' ? (
           <CodeSkeleton lines={12} />
         ) : activeFile?.kind === 'large-preview' ? (
-          <LargeFileViewer file={activeFile} language={language} />
+          <LargeFileViewer file={activeFile} language={language} theme={currentTheme} />
         ) : activeFile && (
           <>
             {/* Markdown 工具栏 */}

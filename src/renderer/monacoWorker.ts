@@ -13,10 +13,6 @@ import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import {
   typescriptDefaults,
   javascriptDefaults,
-  ScriptTarget,
-  ModuleKind,
-  ModuleResolutionKind,
-  JsxEmit,
 } from 'monaco-editor/esm/vs/language/typescript/monaco.contribution'
 
 // 配置 Monaco 环境
@@ -40,11 +36,10 @@ globalThis.MonacoEnvironment = {
   }
 }
 
-// 配置 TypeScript/JavaScript 语言服务
-// 注意：这些配置会在 monacoTypeService.ts 的 initMonacoTypeService 中被覆盖
-// 这里只做基础配置，避免在初始化前出现错误
-// 完全禁用内置诊断，因为我们使用外部 LSP 服务
-// Monaco 内置的 TS worker 无法正确处理 Electron 的文件路径
+// Adnify uses its project-aware LSP bridge for language intelligence. Keeping
+// Monaco's separate TypeScript service enabled duplicates every open model in
+// an 8 MB worker and performs the same completion/diagnostic work a second time.
+// Syntax highlighting does not depend on these providers.
 typescriptDefaults.setDiagnosticsOptions({
   noSemanticValidation: true,
   noSyntaxValidation: true, // 也禁用语法检查，避免路径解析错误
@@ -57,37 +52,26 @@ javascriptDefaults.setDiagnosticsOptions({
   noSuggestionDiagnostics: true,
 })
 
-// 禁用 eager model sync，减少 inmemory model 被提前处理的情况
-// 注意：这会在 initMonacoTypeService 中被设置为 true
 typescriptDefaults.setEagerModelSync(false)
 javascriptDefaults.setEagerModelSync(false)
 
-// 配置编译选项
-typescriptDefaults.setCompilerOptions({
-  target: ScriptTarget.ESNext,
-  module: ModuleKind.ESNext,
-  moduleResolution: ModuleResolutionKind.NodeJs,
-  jsx: JsxEmit.React,
-  allowNonTsExtensions: true,
-  allowJs: true,
-  checkJs: false,
-  strict: false,
-  noEmit: true,
-  esModuleInterop: true,
-  skipLibCheck: true,
-})
+const externalLspMode = {
+  completionItems: false,
+  hovers: false,
+  documentSymbols: false,
+  definitions: false,
+  references: false,
+  documentHighlights: false,
+  rename: false,
+  diagnostics: false,
+  documentRangeFormattingEdits: false,
+  signatureHelp: false,
+  onTypeFormattingEdits: false,
+  codeActions: false,
+  inlayHints: false,
+}
 
-javascriptDefaults.setCompilerOptions({
-  target: ScriptTarget.ESNext,
-  module: ModuleKind.ESNext,
-  moduleResolution: ModuleResolutionKind.NodeJs,
-  jsx: JsxEmit.React,
-  allowNonTsExtensions: true,
-  allowJs: true,
-  checkJs: false,
-  noEmit: true,
-  esModuleInterop: true,
-  skipLibCheck: true,
-})
+typescriptDefaults.setModeConfiguration(externalLspMode)
+javascriptDefaults.setModeConfiguration(externalLspMode)
 
 export { monaco }

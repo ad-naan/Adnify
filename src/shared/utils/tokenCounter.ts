@@ -1,5 +1,5 @@
 /**
- * Token 计数工具（使用 js-tiktoken 精确计算）
+ * Token 计数工具
  * 
  * 统一的 token 计数接口，支持：
  * - 文本 token 计数
@@ -8,7 +8,7 @@
  * - 工具调用 token 计数
  */
 
-import { Tiktoken, getEncoding } from 'js-tiktoken'
+import type { Tiktoken } from 'js-tiktoken'
 
 // ===== 类型定义 =====
 
@@ -23,18 +23,31 @@ export interface MessageTokenCountOptions extends TokenCountOptions {
 // ===== 编码器缓存 =====
 
 let cachedEncoder: Tiktoken | null = null
+let encoderLoadPromise: Promise<void> | null = null
 
 /**
- * 获取编码器（带缓存）
+ * Load the large tokenizer table on demand instead of putting roughly 5 MB of
+ * vocabulary data in the chat UI's initial chunk. AgentExecutor awaits this at
+ * the request boundary, so all request budgeting remains exact. Lightweight
+ * callers can still use the synchronous API before it is ready and receive the
+ * conservative fallback estimate.
  */
-function getEncoder(): Tiktoken {
-  if (!cachedEncoder) {
-    // cl100k_base is OpenAI's tokenizer, and the only one bundled. For other
-    // providers it is a baseline that gets corrected by measured feedback — see
-    // `recordObservedTokenUsage`.
-    cachedEncoder = getEncoding('cl100k_base')
-  }
-  return cachedEncoder
+export function ensureTokenEncoder(): Promise<void> {
+  if (cachedEncoder) return Promise.resolve()
+  if (encoderLoadPromise) return encoderLoadPromise
+
+  encoderLoadPromise = import('js-tiktoken')
+    .then(({ getEncoding }) => {
+      // cl100k_base is OpenAI's tokenizer, and the only one bundled. For other
+      // providers it is a baseline corrected by measured provider feedback.
+      cachedEncoder = getEncoding('cl100k_base')
+    })
+    .catch((error: unknown) => {
+      encoderLoadPromise = null
+      console.warn('[TokenCounter] Tokenizer load failed, using fallback:', error)
+    })
+
+  return encoderLoadPromise
 }
 
 /**
@@ -121,6 +134,7 @@ export function getActiveTokenModel(): string | null {
  */
 export function freeEncoder(): void {
   cachedEncoder = null
+  encoderLoadPromise = null
 }
 
 // ===== 核心函数 =====
@@ -146,12 +160,11 @@ export function countTokens(text: string, model?: string | null): number {
 function countRawTokens(text: string): number {
   if (!text) return 0
 
+  if (!cachedEncoder) return estimateTokensFallback(text)
+
   try {
-    const encoder = getEncoder()
-    const tokens = encoder.encode(text)
-    return tokens.length
+    return cachedEncoder.encode(text).length
   } catch (error) {
-    // 降级到简单估算
     console.warn('[TokenCounter] Encoding failed, using fallback:', error)
     return estimateTokensFallback(text)
   }

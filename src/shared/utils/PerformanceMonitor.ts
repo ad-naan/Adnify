@@ -269,14 +269,11 @@ class PerformanceMonitorClass {
     if (this.heapLimit !== undefined) return this.heapLimit
 
     this.heapLimit = null
-    try {
-      if (typeof process !== 'undefined' && process.versions?.node) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const v8 = require('v8') as { getHeapStatistics(): { heap_size_limit: number } }
-        this.heapLimit = v8.getHeapStatistics().heap_size_limit
-      }
-    } catch {
-      this.heapLimit = null
+    if (typeof performance !== 'undefined' && 'memory' in performance) {
+      const memory = (performance as typeof performance & {
+        memory?: { jsHeapSizeLimit: number }
+      }).memory
+      this.heapLimit = memory?.jsHeapSizeLimit ?? null
     }
     return this.heapLimit
   }

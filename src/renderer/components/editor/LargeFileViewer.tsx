@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import MonacoEditor from '@monaco-editor/react'
 import { ChevronLeft, ChevronRight, Loader2, Lock } from 'lucide-react'
 import type { OpenFile } from '@store/slices/fileSlice'
+import type { ThemeName } from '@store/slices/themeSlice'
 import type { TextFileChunk } from '@shared/types/fileChunk'
 import { api } from '@renderer/services/electronAPI'
+import { defineMonacoTheme } from './utils/monacoTheme'
 
 interface LargeFileViewerProps {
   file: OpenFile
   language: 'zh' | 'en'
+  theme: ThemeName
 }
 
 function formatBytes(bytes: number): string {
@@ -14,7 +18,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-export default function LargeFileViewer({ file, language }: LargeFileViewerProps) {
+export default function LargeFileViewer({ file, language, theme }: LargeFileViewerProps) {
   const metadata = file.largeFileView
   const [chunk, setChunk] = useState<TextFileChunk | null>(() => metadata ? {
     content: file.content,
@@ -26,9 +30,18 @@ export default function LargeFileViewer({ file, language }: LargeFileViewerProps
   const [history, setHistory] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const requestVersionRef = useRef(0)
+  const monacoRef = useRef<Parameters<typeof defineMonacoTheme>[0] | null>(null)
+
+  useEffect(() => {
+    if (!monacoRef.current) return
+    defineMonacoTheme(monacoRef.current, theme)
+    monacoRef.current.editor.setTheme('adnify-dynamic')
+  }, [theme])
 
   useEffect(() => {
     if (!metadata) return
+    requestVersionRef.current += 1
     setChunk({
       content: file.content,
       startOffset: metadata.startOffset,
@@ -37,16 +50,19 @@ export default function LargeFileViewer({ file, language }: LargeFileViewerProps
       eof: metadata.eof,
     })
     setHistory([])
+    setLoading(false)
     setError(false)
   }, [file.path, file.contentLoadVersion, metadata])
 
   if (!metadata || !chunk) return null
 
   const loadChunk = async (offset: number, previousHistory: number[]) => {
+    const requestVersion = ++requestVersionRef.current
     setLoading(true)
     setError(false)
     try {
       const next = await api.file.readTextChunk(file.path, offset, metadata.chunkSize)
+      if (requestVersion !== requestVersionRef.current) return
       if (!next) {
         setError(true)
         return
@@ -54,9 +70,9 @@ export default function LargeFileViewer({ file, language }: LargeFileViewerProps
       setChunk(next)
       setHistory(previousHistory)
     } catch {
-      setError(true)
+      if (requestVersion === requestVersionRef.current) setError(true)
     } finally {
-      setLoading(false)
+      if (requestVersion === requestVersionRef.current) setLoading(false)
     }
   }
 
@@ -97,12 +113,44 @@ export default function LargeFileViewer({ file, language }: LargeFileViewerProps
           {language === 'zh' ? '读取这一页失败，请重试。' : 'Could not read this page. Please retry.'}
         </div>
       )}
-      <textarea
-        readOnly
-        spellCheck={false}
-        value={chunk.content}
-        className="min-h-0 flex-1 resize-none whitespace-pre overflow-auto border-0 bg-background p-4 font-mono text-xs leading-5 text-text-primary outline-none"
-      />
+      <div className="min-h-0 flex-1">
+        <MonacoEditor
+          key={`${file.path}:${chunk.startOffset}`}
+          height="100%"
+          defaultLanguage="plaintext"
+          defaultValue={chunk.content}
+          theme="adnify-dynamic"
+          beforeMount={monaco => defineMonacoTheme(monaco, theme)}
+          onMount={(_, monaco) => {
+            monacoRef.current = monaco
+          }}
+          options={{
+            readOnly: true,
+            domReadOnly: true,
+            largeFileOptimizations: true,
+            minimap: { enabled: false },
+            folding: false,
+            glyphMargin: false,
+            wordWrap: 'off',
+            renderWhitespace: 'none',
+            renderLineHighlight: 'none',
+            guides: { indentation: false, bracketPairs: false },
+            matchBrackets: 'never',
+            occurrencesHighlight: 'off',
+            selectionHighlight: false,
+            links: false,
+            colorDecorators: false,
+            codeLens: false,
+            hover: { enabled: false },
+            quickSuggestions: false,
+            suggestOnTriggerCharacters: false,
+            parameterHints: { enabled: false },
+            stickyScroll: { enabled: false },
+            padding: { top: 8, bottom: 8 },
+            scrollBeyondLastLine: false,
+          }}
+        />
+      </div>
     </div>
   )
 }

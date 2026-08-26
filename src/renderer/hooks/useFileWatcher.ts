@@ -4,7 +4,6 @@ import { api } from '@renderer/services/electronAPI'
 import { t, type Language } from '@renderer/i18n'
 import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { getFileName, pathEquals } from '@shared/utils/pathUtils'
-import { removeFileFromTypeService } from '@renderer/services/monacoTypeService'
 import { internalWriteTracker } from '@renderer/services/internalWriteTracker'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 
@@ -22,8 +21,6 @@ export function useFileWatcher() {
       const { openFiles, markFileDeleted, markFileRestored, language } = useStore.getState()
 
       if (event.event === 'delete') {
-        removeFileFromTypeService(event.path)
-
         const openFile = openFiles.find((file) => pathEquals(file.path, event.path))
         if (openFile) {
           markFileDeleted(openFile.path)

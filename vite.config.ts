@@ -170,9 +170,10 @@ export default defineConfig({
             return 'animation'
           }
 
-          if (id.includes('/renderer/components/sidebar/')) {
-            return 'sidebar'
+          if (id.includes('js-tiktoken')) {
+            return 'tokenizer'
           }
+
         },
       },
     },

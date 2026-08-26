@@ -91,9 +91,11 @@ interface LoggerConfig {
   maxLogs: number
   fileLogging: boolean
   consoleLogging: boolean
-  logFilePath?: string
-  maxFileSize: number  // 最大文件大小（字节）
-  maxFiles: number     // 最大文件数量（轮转）
+}
+
+export interface LogFileWriter {
+  write(lines: string): Promise<void>
+  writeSync(lines: string): void
 }
 
 // 全局类型扩展（用于生产环境标记）
@@ -112,25 +114,12 @@ function isProduction(): boolean {
     }
   }
 
-  // 2. Electron 主进程 - 检查是否打包后运行
-  if (typeof process !== 'undefined') {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { app } = require('electron')
-      if (app?.isPackaged === true) {
-        return true
-      }
-    } catch {
-      // 不在 Electron 主进程环境中，继续其他检查
-    }
-  }
-
-  // 3. 检查 NODE_ENV（适用于所有环境）
+  // 2. 检查 NODE_ENV（适用于所有环境）
   if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') {
     return true
   }
 
-  // 4. 检查是否在打包后的环境中（通过检查路径，作为后备方案）
+  // 3. 检查是否在打包后的环境中（通过检查路径，作为后备方案）
   if (typeof process !== 'undefined' && process.execPath) {
     const execPath = process.execPath.toLowerCase()
     // 在打包后的 Electron 应用中，execPath 通常指向 .asar 文件或打包后的可执行文件
@@ -161,26 +150,6 @@ interface PerformanceTimer {
   category: LogCategory
   startTime: number
   metadata?: Record<string, unknown>
-}
-
-type NodeFsModule = typeof import('fs')
-type NodePathModule = typeof import('path')
-
-let cachedFsModule: NodeFsModule | null = null
-let cachedPathModule: NodePathModule | null = null
-
-function getNodeFs(): NodeFsModule {
-  if (cachedFsModule) return cachedFsModule
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  cachedFsModule = require('fs') as NodeFsModule
-  return cachedFsModule
-}
-
-function getNodePath(): NodePathModule {
-  if (cachedPathModule) return cachedPathModule
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  cachedPathModule = require('path') as NodePathModule
-  return cachedPathModule
 }
 
 // ANSI 颜色代码 (更加丰富的调色盘)
@@ -237,27 +206,13 @@ const CATEGORY_ANSI: Record<LogCategory | string, string> = {
   Security: ANSI_COLORS.red,
 }
 
-// 日志配置
-interface LoggerConfig {
-  // ... (previous interfaces)
-  minLevel: LogLevel
-  enabled: boolean
-  maxLogs: number
-  fileLogging: boolean
-  consoleLogging: boolean
-  logFilePath?: string
-  maxFileSize: number  // 最大文件大小（字节）
-  maxFiles: number     // 最大文件数量（轮转）
-}
-
-// ... (other internal interfaces/functions)
-
 class LoggerClass {
   private config: LoggerConfig
   private logs: LogEntry[] = []
   private timers: Map<string, PerformanceTimer> = new Map()
   private fileWriteQueue: LogEntry[] = []
   private isWriting = false
+  private fileWriter: LogFileWriter | null = null
 
   // 检测是否在主进程中运行
   private isMain = typeof process !== 'undefined' && process.versions?.node && typeof (globalThis as Record<string, unknown>).window === 'undefined'
@@ -274,8 +229,6 @@ class LoggerClass {
       maxLogs: 1000,
       fileLogging: false,
       consoleLogging: !isProd,
-      maxFileSize: 10 * 1024 * 1024,
-      maxFiles: 5,
     }
   }
 
@@ -320,9 +273,17 @@ class LoggerClass {
     }
   }
 
-  enableFileLogging(logFilePath: string): void {
+  setProductionMode(isProd: boolean): void {
+    this._isProd = isProd
+    if (isProd) {
+      this.config.minLevel = 'warn'
+      this.config.consoleLogging = false
+    }
+  }
+
+  enableFileLogging(fileWriter: LogFileWriter): void {
     this.config.fileLogging = true
-    this.config.logFilePath = logFilePath
+    this.fileWriter = fileWriter
     if (this.config.minLevel === 'debug' || this.config.minLevel === 'info') {
       this.config.minLevel = 'warn'
     }
@@ -458,22 +419,13 @@ class LoggerClass {
    */
   flushSync(): void {
     if (!this.isMain) return
-    if (!this.config.fileLogging || !this.config.logFilePath) return
+    if (!this.config.fileLogging || !this.fileWriter) return
     if (this.fileWriteQueue.length === 0) return
 
     try {
-      const fs = getNodeFs()
-      const path = getNodePath()
-      const logPath = this.config.logFilePath
-      const logDir = path.dirname(logPath)
-
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true })
-      }
-
       const entries = this.fileWriteQueue.splice(0)
       const lines = entries.map(e => this.formatLogLine(e)).join('\n') + '\n'
-      fs.appendFileSync(logPath, lines, 'utf-8')
+      this.fileWriter.writeSync(lines)
     } catch {
       // 退出路径，不再尝试补救
     }
@@ -482,31 +434,14 @@ class LoggerClass {
   private async processFileWriteQueue(): Promise<void> {
     if (!this.isMain) return
     if (this.isWriting || this.fileWriteQueue.length === 0) return
-    if (!this.config.logFilePath) return
+    if (!this.fileWriter) return
 
     this.isWriting = true
 
     try {
-      const fs = getNodeFs()
-      const path = getNodePath()
-
-      const logPath = this.config.logFilePath
-      const logDir = path.dirname(logPath)
-
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true })
-      }
-
-      if (fs.existsSync(logPath)) {
-        const stats = fs.statSync(logPath)
-        if (stats.size >= this.config.maxFileSize) {
-          await this.rotateLogFiles(logPath)
-        }
-      }
-
       const entries = this.fileWriteQueue.splice(0, 100)
       const lines = entries.map(e => this.formatLogLine(e)).join('\n') + '\n'
-      fs.appendFileSync(logPath, lines, 'utf-8')
+      await this.fileWriter.write(lines)
     } catch (error) {
       console.error('[Logger] Failed to write to file:', error)
     } finally {
@@ -515,32 +450,6 @@ class LoggerClass {
         setTimeout(() => this.processFileWriteQueue(), 100)
       }
     }
-  }
-
-  private async rotateLogFiles(logPath: string): Promise<void> {
-    if (!this.isMain) return
-    const fs = getNodeFs()
-    const path = getNodePath()
-
-    const dir = path.dirname(logPath)
-    const ext = path.extname(logPath)
-    const base = path.basename(logPath, ext)
-
-    const oldestPath = path.join(dir, `${base}.${this.config.maxFiles}${ext}`)
-    if (fs.existsSync(oldestPath)) {
-      fs.unlinkSync(oldestPath)
-    }
-
-    for (let i = this.config.maxFiles - 1; i >= 1; i--) {
-      const oldPath = path.join(dir, `${base}.${i}${ext}`)
-      const newPath = path.join(dir, `${base}.${i + 1}${ext}`)
-      if (fs.existsSync(oldPath)) {
-        fs.renameSync(oldPath, newPath)
-      }
-    }
-
-    const newPath = path.join(dir, `${base}.1${ext}`)
-    fs.renameSync(logPath, newPath)
   }
 
   private formatLogLine(entry: LogEntry): string {

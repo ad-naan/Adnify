@@ -6,6 +6,7 @@ import {
   resetObservedTokenUsage,
   setActiveTokenModel,
   getActiveTokenModel,
+  ensureTokenEncoder,
 } from '@shared/utils/tokenCounter'
 
 /**
@@ -19,6 +20,10 @@ import {
  * the prompt-token counts providers actually report.
  */
 describe('token counting', () => {
+  beforeEach(async () => {
+    await ensureTokenEncoder()
+  })
+
   beforeEach(() => {
     resetObservedTokenUsage()
     setActiveTokenModel(null)

@@ -22,7 +22,11 @@ import { ContextAssembler } from '../domains/context/ContextAssembler'
 import type { ContextAssemblyConfig } from '../domains/context/ContextAssembler'
 import { MessageAssembler, type RuntimeStateContext } from '../domains/message/MessageAssembler'
 import type { CompressionLevel } from '../domains/context/compressionShared'
-import { countTokens, setActiveTokenModel } from '@shared/utils/tokenCounter'
+import {
+  countTokens,
+  ensureTokenEncoder,
+  setActiveTokenModel,
+} from '@shared/utils/tokenCounter'
 import { useAgentStore } from '../store/AgentStore'
 
 // ===== Value Objects =====
@@ -131,6 +135,11 @@ export class AgentExecutor {
     // 1. 获取模式描述符
     const modeDescriptor = modeRegistry.getOrDefault(config.mode)
     logger.agent.info(`[AgentExecutor] Preparing execution for mode: ${modeDescriptor.displayName}`)
+
+    // Tokenizer vocabulary data is intentionally lazy so opening Chat does not
+    // parse several megabytes of static data. This request boundary guarantees
+    // exact counts before any context or message budgeting begins.
+    await ensureTokenEncoder()
 
     // 2. 创建预算控制器
     const contextLimit = config.contextLimit || 128_000

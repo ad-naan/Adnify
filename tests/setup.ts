@@ -265,11 +265,5 @@ vi.mock('monaco-editor', () => ({
   },
 }))
 
-// Mock monacoTypeService
-vi.mock('@renderer/services/monacoTypeService', () => ({
-  clearExtraLibs: vi.fn(),
-  addExtraLib: vi.fn(),
-}))
-
 // 导出 mock 以便测试中使用
 export { mockElectronAPI }

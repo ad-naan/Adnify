@@ -45,7 +45,6 @@ export {
   getDocumentSymbols,
 } from './lspService'
 export { registerLspProviders } from './lspProviders'
-export { initMonacoTypeService } from './monacoTypeService'
 
 // ===== 诊断 =====
 export { useDiagnosticsStore, initDiagnosticsListener, getFileStats } from './diagnosticsStore'

@@ -24,6 +24,7 @@ import { registerWebviewGuards } from './security/webviewGuard'
 import { cleanupFileWatcher } from './security/fileWatcher'
 import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from './services/fileAssociation'
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
+import { createFileLogWriter } from './services/fileLogWriter'
 import {
   shutdownWindowController,
   type ShutdownWindowPresentation,
@@ -51,6 +52,8 @@ const WINDOW_CONFIG = {
   EMPTY_MIN_HEIGHT: 400,
   BG_COLOR: '#09090b',
 } as const
+
+logger.setProductionMode(app.isPackaged)
 
 ipcMain.handle('clipboard:readText', () => clipboard.readText())
 ipcMain.handle('clipboard:writeText', (_event, text: string) => {
@@ -926,7 +929,7 @@ app.whenReady().then(async () => {
 
   if (enableFileLogging) {
     const logPath = path.join(getUserConfigDir(), 'logs', 'main.log')
-    logger.enableFileLogging(logPath)
+    logger.enableFileLogging(createFileLogWriter(logPath))
     // warn 级：enableFileLogging 会把 minLevel 抬到 warn，info 不会落盘。
     // 这行是排查现场的锚点（版本 / 架构 / 堆上限），必须留下。
     logger.system.warn('[Main] File logging enabled', {
