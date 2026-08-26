@@ -575,7 +575,12 @@ export default function Editor() {
         ) : activeFile && activeFile.contentState !== 'loaded' ? (
           <CodeSkeleton lines={12} />
         ) : activeFile?.kind === 'large-preview' ? (
-          <LargeFileViewer file={activeFile} language={language} theme={currentTheme} />
+          <LargeFileViewer
+            key={`${activeFile.path}:${activeFile.contentLoadVersion}`}
+            file={activeFile}
+            language={language}
+            theme={currentTheme}
+          />
         ) : activeFile && (
           <>
             {/* Markdown 工具栏 */}

@@ -26,6 +26,8 @@ import {
     type CheckpointSlice,
     type BranchSlice,
     type Branch,
+    type ToolExecutionResultRecord,
+    type ToolExecutionStreamContext,
 } from './slices'
 import {
     createPlanSlice,
@@ -119,6 +121,17 @@ export interface ThreadBoundStore {
     // 工具调用操作
     addToolCallPart: (messageId: string, toolCall: Omit<import('../types').ToolCall, 'status'>) => void
     updateToolCall: (messageId: string, toolCallId: string, updates: Partial<import('../types').ToolCall>) => void
+    startToolExecution: (
+        messageId: string,
+        toolCall: Omit<import('../types').ToolCall, 'status'>,
+        streamContext: ToolExecutionStreamContext
+    ) => void
+    finishToolExecution: (
+        messageId: string,
+        toolCallId: string,
+        updates: Partial<import('../types').ToolCall>,
+        result: ToolExecutionResultRecord
+    ) => string
 
     // 状态操作
     setStreamState: (state: Partial<StreamState>) => void
@@ -459,6 +472,10 @@ export const useAgentStore = create<AgentStore>()(
                     messageSlice.addToolCallPart(messageId, toolCall, threadId),
                 updateToolCall: (messageId, toolCallId, updates) =>
                     messageSlice.updateToolCall(messageId, toolCallId, updates, threadId),
+                startToolExecution: (messageId, toolCall, streamContext) =>
+                    messageSlice.startToolExecution(messageId, toolCall, streamContext, threadId),
+                finishToolExecution: (messageId, toolCallId, updates, result) =>
+                    messageSlice.finishToolExecution(messageId, toolCallId, updates, result, threadId),
 
                 // 状态操作
                 setStreamState: (state) => threadSlice.setStreamState(state, threadId),

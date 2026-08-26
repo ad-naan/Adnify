@@ -6,6 +6,7 @@ import type { TextFileChunk } from '@shared/types/fileChunk'
 import { LARGE_FILE_PAGE_BYTES } from '@shared/types/largeFile'
 
 const MAX_TEXT_CHUNK_BYTES = 4 * 1024 * 1024
+const MAX_LINE_ALIGNMENT_SCAN_BYTES = 64 * 1024
 
 export type SupportedEncoding = 'utf-8' | 'utf-8-bom' | 'gbk' | 'gb18030'
 
@@ -70,44 +71,68 @@ export async function readTextFileChunk(
   filePath: string,
   offset = 0,
   requestedBytes = LARGE_FILE_PAGE_BYTES,
+  alignStartToLine = false,
 ): Promise<TextFileChunk> {
   const stats = await fsPromises.stat(filePath)
   const totalSize = stats.size
   const finiteOffset = Number.isFinite(offset) ? offset : 0
   const finiteRequestedBytes = Number.isFinite(requestedBytes) ? requestedBytes : LARGE_FILE_PAGE_BYTES
-  const startOffset = Math.min(Math.max(0, Math.floor(finiteOffset)), totalSize)
+  const requestedOffset = Math.min(Math.max(0, Math.floor(finiteOffset)), totalSize)
   // Four bytes are enough for one complete UTF-8 code point, so even a
   // pathological tiny request always makes progress without corrupt decoding.
   const chunkBytes = Math.min(Math.max(4, Math.floor(finiteRequestedBytes)), MAX_TEXT_CHUNK_BYTES)
-  if (startOffset >= totalSize) {
-    return { content: '', startOffset, nextOffset: startOffset, totalSize, eof: true }
+  if (requestedOffset >= totalSize) {
+    return { content: '', startOffset: requestedOffset, nextOffset: requestedOffset, totalSize, eof: true }
   }
 
-  const bytesToRead = Math.min(chunkBytes, totalSize - startOffset)
+  const alignmentBytes = alignStartToLine
+    ? Math.min(MAX_LINE_ALIGNMENT_SCAN_BYTES, MAX_TEXT_CHUNK_BYTES - chunkBytes)
+    : 0
+  const bytesToRead = Math.min(chunkBytes + alignmentBytes, totalSize - requestedOffset)
   const buffer = Buffer.allocUnsafe(bytesToRead)
   const handle = await fsPromises.open(filePath, 'r')
   try {
-    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, startOffset)
-    let end = bytesRead
-    const reachesEof = startOffset + bytesRead >= totalSize
+    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, requestedOffset)
+    let contentStart = 0
 
-    if (!reachesEof) {
-      const newline = buffer.lastIndexOf(10, bytesRead - 1)
-      if (newline >= 0) {
-        end = newline + 1
-      } else {
-        end = findCompleteUtf8Boundary(buffer, bytesRead)
-        if (end === 0) {
-          const firstByte = buffer[0]
-          const firstCharacterBytes = firstByte < 0x80 ? 1 : firstByte < 0xe0 ? 2 : firstByte < 0xf0 ? 3 : 4
-          end = Math.min(firstCharacterBytes, bytesRead)
+    if (alignStartToLine && requestedOffset > 0 && bytesRead > 0) {
+      const previousByte = Buffer.allocUnsafe(1)
+      const previousRead = await handle.read(previousByte, 0, 1, requestedOffset - 1)
+      if (previousRead.bytesRead === 1 && previousByte[0] !== 10) {
+        const scanEnd = Math.min(bytesRead, MAX_LINE_ALIGNMENT_SCAN_BYTES)
+        const newline = buffer.indexOf(10, 0)
+        if (newline >= 0 && newline < scanEnd && newline + 1 < bytesRead) {
+          contentStart = newline + 1
+        } else {
+          while (contentStart < bytesRead && (buffer[contentStart] & 0xc0) === 0x80) {
+            contentStart += 1
+          }
         }
       }
     }
 
-    const nextOffset = startOffset + end
+    const contentLimit = Math.min(bytesRead, contentStart + chunkBytes)
+    let end = contentLimit
+    const reachesEof = requestedOffset + contentLimit >= totalSize
+
+    if (!reachesEof) {
+      const newline = buffer.lastIndexOf(10, contentLimit - 1)
+      if (newline >= contentStart) {
+        end = newline + 1
+      } else {
+        end = findCompleteUtf8Boundary(buffer, contentLimit)
+        if (end <= contentStart) {
+          const firstByte = buffer[contentStart]
+          const firstCharacterBytes = firstByte < 0x80 ? 1 : firstByte < 0xe0 ? 2 : firstByte < 0xf0 ? 3 : 4
+          end = Math.min(contentStart + firstCharacterBytes, contentLimit)
+        }
+      }
+    }
+
+    const startOffset = requestedOffset + contentStart
+    const nextOffset = requestedOffset + end
     return {
-      content: decodeBuffer(buffer.subarray(0, end), 'utf-8'),
+      content: decodeBuffer(buffer.subarray(contentStart, end), 'utf-8'),
       startOffset,
       nextOffset,
       totalSize,

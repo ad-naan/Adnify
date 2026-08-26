@@ -33,6 +33,18 @@ import { getAgentConfig } from '../../utils/AgentConfig'
 
 // ===== 类型定义 =====
 
+export interface ToolExecutionStreamContext {
+    requestId?: string
+    assistantId?: string
+}
+
+export interface ToolExecutionResultRecord {
+    name: string
+    content: string
+    type: ToolResultType
+    rawParams?: Record<string, unknown>
+}
+
 export interface MessageActions {
     // 消息操作（支持可选的 targetThreadId，默认使用 currentThreadId）
     addUserMessage: (content: MessageContent, contextItems?: ContextItem[], targetThreadId?: string) => string
@@ -56,6 +68,19 @@ export interface MessageActions {
     // 工具调用操作
     addToolCallPart: (messageId: string, toolCall: Omit<ToolCall, 'status'>, targetThreadId?: string) => void
     updateToolCall: (messageId: string, toolCallId: string, updates: Partial<ToolCall>, targetThreadId?: string) => void
+    startToolExecution: (
+        messageId: string,
+        toolCall: Omit<ToolCall, 'status'>,
+        streamContext: ToolExecutionStreamContext,
+        targetThreadId?: string
+    ) => void
+    finishToolExecution: (
+        messageId: string,
+        toolCallId: string,
+        updates: Partial<ToolCall>,
+        result: ToolExecutionResultRecord,
+        targetThreadId?: string
+    ) => string
 
     // Reasoning 操作
     addReasoningPart: (messageId: string, targetThreadId?: string) => string
@@ -889,6 +914,152 @@ export const createMessageSlice: StateCreator<
         if (shouldClearPreview) {
             get().clearToolStreamingPreview(toolCallId, threadId)
         }
+    },
+
+    /**
+     * Atomically publishes a tool's canonical running state. Tool execution is
+     * a single UI transition, so splitting it across message, preview and
+     * stream-state writes only multiplies subscriber work under concurrency.
+     */
+    startToolExecution: (messageId, toolCall, streamContext, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
+        store._flushTextBuffer?.(messageId)
+
+        const runningToolCall: ToolCall = {
+            ...toolCall,
+            status: 'running',
+            streamingState: undefined,
+        }
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messageIdx = thread.messages.findIndex(
+                message => message.id === messageId && message.role === 'assistant'
+            )
+            if (messageIdx === -1) return state
+
+            const assistantMessage = thread.messages[messageIdx] as AssistantMessage
+            const existingToolCall = assistantMessage.toolCalls?.find(call => call.id === toolCall.id)
+            const parts = existingToolCall
+                ? assistantMessage.parts.map(part =>
+                    part.type === 'tool_call' && part.toolCall.id === toolCall.id
+                        ? { ...part, toolCall: runningToolCall }
+                        : part
+                )
+                : [...assistantMessage.parts, { type: 'tool_call' as const, toolCall: runningToolCall }]
+            const toolCalls = existingToolCall
+                ? assistantMessage.toolCalls?.map(call => call.id === toolCall.id ? runningToolCall : call)
+                : [...(assistantMessage.toolCalls || []), runningToolCall]
+            const messages = thread.messages.slice()
+            messages[messageIdx] = {
+                ...assistantMessage,
+                _textFinalized: true,
+                parts,
+                toolCalls,
+            }
+
+            const toolStreamingPreviews = thread.toolStreamingPreviews?.[toolCall.id]
+                ? Object.fromEntries(
+                    Object.entries(thread.toolStreamingPreviews).filter(([id]) => id !== toolCall.id)
+                )
+                : thread.toolStreamingPreviews
+
+            return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                threads: {
+                    ...state.threads,
+                    [threadId]: {
+                        ...thread,
+                        messages,
+                        toolStreamingPreviews,
+                        streamState: {
+                            ...thread.streamState,
+                            phase: 'tool_running',
+                            currentToolCall: runningToolCall,
+                            statusText: undefined,
+                            ...streamContext,
+                        },
+                        lastModified: Date.now(),
+                    },
+                },
+            }
+        })
+    },
+
+    /** Atomically commits the final tool-call state and its model-facing result. */
+    finishToolExecution: (messageId, toolCallId, updates, result, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return ''
+
+        const resultMessage: ToolResultMessage = {
+            id: generateId(),
+            role: 'tool',
+            toolCallId,
+            name: result.name,
+            content: result.content,
+            timestamp: Date.now(),
+            type: result.type,
+            rawParams: result.rawParams,
+        }
+        const cleanUpdates = Object.fromEntries(
+            Object.entries(updates).filter(([key, value]) => key !== 'streamingState' && value !== undefined)
+        ) as Partial<ToolCall>
+
+        set(state => {
+            const thread = state.threads[threadId]
+            if (!thread) return state
+
+            const messages = thread.messages.slice()
+            const messageIdx = messages.findIndex(
+                message => message.id === messageId && message.role === 'assistant'
+            )
+
+            if (messageIdx !== -1) {
+                const assistantMessage = messages[messageIdx] as AssistantMessage
+                const existingToolCall = assistantMessage.toolCalls?.find(call => call.id === toolCallId)
+                if (existingToolCall) {
+                    const completedToolCall = { ...existingToolCall, ...cleanUpdates }
+                    messages[messageIdx] = {
+                        ...assistantMessage,
+                        parts: assistantMessage.parts.map(part =>
+                            part.type === 'tool_call' && part.toolCall.id === toolCallId
+                                ? { ...part, toolCall: completedToolCall }
+                                : part
+                        ),
+                        toolCalls: assistantMessage.toolCalls?.map(call =>
+                            call.id === toolCallId ? completedToolCall : call
+                        ),
+                    }
+                }
+            }
+            messages.push(resultMessage)
+
+            const toolStreamingPreviews = thread.toolStreamingPreviews?.[toolCallId]
+                ? Object.fromEntries(
+                    Object.entries(thread.toolStreamingPreviews).filter(([id]) => id !== toolCallId)
+                )
+                : thread.toolStreamingPreviews
+
+            return {
+                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                threads: {
+                    ...state.threads,
+                    [threadId]: {
+                        ...thread,
+                        messages,
+                        toolStreamingPreviews,
+                        lastModified: Date.now(),
+                    },
+                },
+            }
+        })
+
+        return resultMessage.id
     },
 
     // 添加推理部分

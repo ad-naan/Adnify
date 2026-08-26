@@ -34,6 +34,7 @@ import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
 import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 import type { ThreadBoundStore } from '../store/AgentStore'
+import type { LLMMessage } from '@shared/types'
 import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 
 export { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
@@ -197,7 +198,7 @@ async function callLLM(
   messages: LLMMessage[],
   systemPrompt: string | undefined,
   assistantId: string | null,
-  threadStore: import('../store/AgentStore').ThreadBoundStore,
+  threadStore: ThreadBoundStore,
   requestId: string,
   tools: import('@/shared/types/llm').ToolDefinition[],
   options?: { allowToolCalls?: boolean }
@@ -264,7 +265,7 @@ async function callLLMWithRetry(
   messages: LLMMessage[],
   systemPrompt: string | undefined,
   assistantId: string | null,
-  threadStore: import('../store/AgentStore').ThreadBoundStore,
+  threadStore: ThreadBoundStore,
   abortSignal?: AbortSignal,
   requestId?: string,
   tools: import('@/shared/types/llm').ToolDefinition[] = [],

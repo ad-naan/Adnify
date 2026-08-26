@@ -287,7 +287,7 @@ export interface ElectronAPI {
   readDir: (path: string) => Promise<{ name: string; path: string; isDirectory: boolean }[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string, encoding?: string, options?: { full?: boolean }) => Promise<string | null>
-  readTextChunk: (path: string, offset?: number, maxBytes?: number) => Promise<import('@shared/types/fileChunk').TextFileChunk | null>
+  readTextChunk: (path: string, offset?: number, maxBytes?: number, alignStartToLine?: boolean) => Promise<import('@shared/types/fileChunk').TextFileChunk | null>
   statFile: (path: string) => Promise<{ size: number; isDirectory: boolean; isFile: boolean; mtimeMs: number } | null>
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>
   readImageAnalysis: (request: ImageAnalysisRequest) => Promise<ImageAnalysisResult>
@@ -628,7 +628,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readDir: (path: string) => ipcRenderer.invoke('file:readDir', path),
   getFileTree: (path: string, maxDepth?: number) => ipcRenderer.invoke('file:getTree', path, maxDepth),
   readFile: (path: string, encoding?: string, options?: { full?: boolean }) => ipcRenderer.invoke('file:read', path, encoding, options),
-  readTextChunk: (path: string, offset?: number, maxBytes?: number) => ipcRenderer.invoke('file:readTextChunk', path, offset, maxBytes),
+  readTextChunk: (path: string, offset?: number, maxBytes?: number, alignStartToLine?: boolean) => ipcRenderer.invoke('file:readTextChunk', path, offset, maxBytes, alignStartToLine),
   statFile: (path: string) => ipcRenderer.invoke('file:stat', path),
   readBinaryFile: (path: string) => ipcRenderer.invoke('file:readBinary', path),
   readRichContent: (path: string, options?: ReadRichContentOptions) => ipcRenderer.invoke('file:readRichContent', path, options),

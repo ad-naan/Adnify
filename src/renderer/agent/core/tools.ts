@@ -541,22 +541,11 @@ async function executeSingle(
   const toolArguments = await enrichToolArgumentsWithRoutingMeta(toolCall, context)
 
   if (currentAssistantId) {
-    store.finalizeTextBeforeToolCall(currentAssistantId)
-    store.addToolCallPart(currentAssistantId, {
+    store.startToolExecution(currentAssistantId, {
       id: toolCall.id,
       name: toolCall.name,
       arguments: toolArguments,
-    })
-    store.updateToolCall(currentAssistantId, toolCall.id, {
-      arguments: toolArguments,
-      status: 'running',
-      streamingState: undefined,
-    })
-    store.clearToolStreamingPreview(toolCall.id)
-    store.setStreamState({
-      phase: 'tool_running',
-      currentToolCall: toolCall,
-      statusText: undefined,
+    }, {
       requestId: context.requestId,
       assistantId: currentAssistantId,
     })
@@ -631,15 +620,17 @@ async function executeSingle(
 
       const newStatus = result.success ? 'success' : 'error'
 
-      store.updateToolCall(currentAssistantId, toolCall.id, {
+      store.finishToolExecution(currentAssistantId, toolCall.id, {
         status: newStatus,
         result: content,
         arguments: updatedArguments,
         richContent,
         streamingState: undefined,  // 清除流式状态
+      }, {
+        name: toolCall.name,
+        content,
+        type: result.success ? 'success' : 'tool_error',
       })
-
-      store.addToolResult(toolCall.id, toolCall.name, content, result.success ? 'success' : 'tool_error')
     }
     if (result.success) {
       emitToolEvent({
@@ -681,12 +672,15 @@ async function executeSingle(
     }
 
     if (currentAssistantId) {
-      store.updateToolCall(currentAssistantId, toolCall.id, {
+      store.finishToolExecution(currentAssistantId, toolCall.id, {
         status: 'error',
         result: errorMsg,
         streamingState: undefined,  // 清除流式状态
+      }, {
+        name: toolCall.name,
+        content: `Error: ${errorMsg}`,
+        type: 'tool_error',
       })
-      store.addToolResult(toolCall.id, toolCall.name, `Error: ${errorMsg}`, 'tool_error')
     }
     emitToolEvent({ type: 'tool:error', id: toolCall.id, error: errorMsg, ...identity })
 

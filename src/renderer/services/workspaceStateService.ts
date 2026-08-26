@@ -104,6 +104,40 @@ function toPersistedOpenFile(file: OpenFile): WorkspaceStateData['openFiles'][nu
   return file.path
 }
 
+function nextPersistedFileIndex(files: OpenFile[], startIndex: number): number {
+  for (let index = startIndex; index < files.length; index++) {
+    const file = files[index]
+    if (!file.pinned && file.kind !== 'diff') return index
+  }
+  return -1
+}
+
+/**
+ * Content, dirty state and editor snapshots are not part of workspace state.
+ * Comparing only persisted tab identity prevents typing from scheduling disk
+ * writes while still detecting tab order, pinning and preview metadata changes.
+ */
+export function arePersistedOpenFilesEqual(current: OpenFile[], previous: OpenFile[]): boolean {
+  if (current === previous) return true
+
+  let currentIndex = nextPersistedFileIndex(current, 0)
+  let previousIndex = nextPersistedFileIndex(previous, 0)
+  while (currentIndex >= 0 && previousIndex >= 0) {
+    const currentFile = current[currentIndex]
+    const previousFile = previous[previousIndex]
+    const currentPreview = currentFile.kind === 'preview' ? currentFile.preview : undefined
+    const previousPreview = previousFile.kind === 'preview' ? previousFile.preview : undefined
+    if (currentFile.path !== previousFile.path) return false
+    if (Boolean(currentPreview) !== Boolean(previousPreview)) return false
+    if (currentPreview && currentPreview !== previousPreview) return false
+
+    currentIndex = nextPersistedFileIndex(current, currentIndex + 1)
+    previousIndex = nextPersistedFileIndex(previous, previousIndex + 1)
+  }
+
+  return currentIndex === previousIndex
+}
+
 function normalizePersistedOpenFiles(
   openFiles: WorkspaceStateData['openFiles'],
 ): {
@@ -231,7 +265,7 @@ export function initWorkspaceStateSync(): () => void {
   const unsubscribe = useStore.subscribe(
     (state, prevState) => {
       if (
-        state.openFiles !== prevState.openFiles ||
+        !arePersistedOpenFilesEqual(state.openFiles, prevState.openFiles) ||
         state.activeFilePath !== prevState.activeFilePath ||
         state.expandedFolders !== prevState.expandedFolders ||
         state.sidebarWidth !== prevState.sidebarWidth ||

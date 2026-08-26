@@ -402,7 +402,7 @@ export interface ElectronAPI {
   readDir: (path: string) => Promise<FileItem[]>
   getFileTree: (path: string, maxDepth?: number) => Promise<string>
   readFile: (path: string, encoding?: string, options?: { full?: boolean }) => Promise<string | null>
-  readTextChunk: (path: string, offset?: number, maxBytes?: number) => Promise<import('@shared/types/fileChunk').TextFileChunk | null>
+  readTextChunk: (path: string, offset?: number, maxBytes?: number, alignStartToLine?: boolean) => Promise<import('@shared/types/fileChunk').TextFileChunk | null>
   statFile: (path: string) => Promise<{ size: number; isDirectory: boolean; isFile: boolean; mtimeMs: number } | null>
   readBinaryFile: (path: string) => Promise<string | null>
   readRichContent: (path: string, options?: ReadRichContentOptions) => Promise<RichContentReadResult>

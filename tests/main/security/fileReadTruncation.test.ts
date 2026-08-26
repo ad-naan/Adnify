@@ -133,6 +133,26 @@ describe('readTextFileChunk', () => {
     expect(reconstructed).toBe(original)
   })
 
+  it('aligns random seeks to the next complete line without corrupting UTF-8', async () => {
+    const filePath = path.join(tempDir, 'random-seek.txt')
+    const original = [
+      'first line',
+      'second 性能 line',
+      'target 完整 line',
+      'tail line',
+    ].join('\n')
+    await fs.writeFile(filePath, original)
+
+    const offsetInsideSecondLine = Buffer.byteLength('first line\nsecond 性')
+    const chunk = await readTextFileChunk(filePath, offsetInsideSecondLine, 128, true)
+
+    expect(chunk.content).toBe('target 完整 line\ntail line')
+    expect(chunk.content).not.toContain('\uFFFD')
+    expect(chunk.startOffset).toBe(Buffer.byteLength('first line\nsecond 性能 line\n'))
+    expect(chunk.nextOffset).toBe(Buffer.byteLength(original))
+    expect(chunk.eof).toBe(true)
+  })
+
   it('enforces the per-request memory ceiling', async () => {
     const filePath = path.join(tempDir, 'bounded-page.txt')
     await fs.writeFile(filePath, 'x'.repeat(6 * 1024 * 1024))

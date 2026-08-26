@@ -337,13 +337,13 @@ describe('Tools Core - Parallel Execution', () => {
 
       // 监听工具完成事件（patch 传入 executeTools 的 thread-bound store）
       const store = getStore()
-      const originalUpdate = store.updateToolCall.bind(store)
-      store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
+      const originalFinish = store.finishToolExecution.bind(store)
+      store.finishToolExecution = vi.fn((msgId, tcId, updates, result) => {
         if (updates.status === 'success' || updates.status === 'error') {
           completionTimes[tcId] = Date.now() - startTime
         }
-        return originalUpdate(msgId, tcId, updates as unknown as Partial<ToolCall>)
-      }) as typeof store.updateToolCall
+        return originalFinish(msgId, tcId, updates, result)
+      })
 
       const { results } = await executeTools(toolCalls, context, store)
 
@@ -398,6 +398,38 @@ describe('Tools Core - Parallel Execution', () => {
       toolManager.execute = originalExecute
     })
 
+    it('keeps store commits bounded for a large parallel batch', async () => {
+      const toolCalls: ToolCall[] = Array.from({ length: 20 }, (_, index) => ({
+        id: `commit-${index + 1}`,
+        name: 'read_file',
+        arguments: { path: `file-${index + 1}.txt` },
+        status: 'pending',
+      }))
+      const originalExecute = toolManager.execute
+      toolManager.execute = vi.fn(async name => ({
+        success: true,
+        result: `Result from ${name}`,
+        meta: {},
+      }))
+
+      let commitCount = 0
+      const unsubscribe = useAgentStore.subscribe(() => {
+        commitCount += 1
+      })
+
+      try {
+        await executeTools(toolCalls, context, getStore())
+      } finally {
+        unsubscribe()
+        toolManager.execute = originalExecute
+      }
+
+      // One start and one completion commit per tool, plus the two batch-level
+      // stream transitions. This guards against multiplying React updates by
+      // splitting a single lifecycle transition across several store writes.
+      expect(commitCount).toBe(toolCalls.length * 2 + 2)
+    })
+
     it('should update UI state immediately when each tool completes', async () => {
       const toolCalls: ToolCall[] = [
         { id: 'tc1', name: 'read_file', arguments: { path: 'fast.txt' }, status: 'success' },
@@ -407,13 +439,13 @@ describe('Tools Core - Parallel Execution', () => {
 
       const updateOrder: string[] = []
       const store = getStore()
-      const originalUpdate = store.updateToolCall.bind(store)
-      store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
+      const originalFinish = store.finishToolExecution.bind(store)
+      store.finishToolExecution = vi.fn((msgId, tcId, updates, result) => {
         if (updates.status === 'success') {
           updateOrder.push(tcId)
         }
-        return originalUpdate(msgId, tcId, updates as unknown as Partial<ToolCall>)
-      }) as typeof store.updateToolCall
+        return originalFinish(msgId, tcId, updates, result)
+      })
 
       await executeTools(toolCalls, context, store)
 
@@ -497,13 +529,13 @@ describe('Tools Core - Parallel Execution', () => {
       const startTime = Date.now()
 
       const store = getStore()
-      const originalUpdate = store.updateToolCall.bind(store)
-      store.updateToolCall = vi.fn((msgId: string, tcId: string, updates: { status?: string }) => {
+      const originalFinish = store.finishToolExecution.bind(store)
+      store.finishToolExecution = vi.fn((msgId, tcId, updates, result) => {
         if (updates.status === 'success') {
           completionTimes[tcId] = Date.now() - startTime
         }
-        return originalUpdate(msgId, tcId, updates as unknown as Partial<ToolCall>)
-      }) as typeof store.updateToolCall
+        return originalFinish(msgId, tcId, updates, result)
+      })
 
       const { results } = await executeTools(toolCalls, context, store)
 

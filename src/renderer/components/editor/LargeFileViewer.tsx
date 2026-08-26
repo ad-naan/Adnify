@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MonacoEditor from '@monaco-editor/react'
 import { ChevronLeft, ChevronRight, Loader2, Lock } from 'lucide-react'
 import type { OpenFile } from '@store/slices/fileSlice'
@@ -6,6 +6,10 @@ import type { ThemeName } from '@store/slices/themeSlice'
 import type { TextFileChunk } from '@shared/types/fileChunk'
 import { api } from '@renderer/services/electronAPI'
 import { defineMonacoTheme } from './utils/monacoTheme'
+import { LargeFilePageCache } from './largeFilePageCache'
+
+const PAGE_CACHE_SIZE = 5
+const SEEK_STEPS = 1_000
 
 interface LargeFileViewerProps {
   file: OpenFile
@@ -18,20 +22,34 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function getProgress(chunk: TextFileChunk): number {
+  if (chunk.totalSize <= 0) return 0
+  return Math.min(SEEK_STEPS, Math.round((chunk.startOffset / chunk.totalSize) * SEEK_STEPS))
+}
+
 export default function LargeFileViewer({ file, language, theme }: LargeFileViewerProps) {
   const metadata = file.largeFileView
-  const [chunk, setChunk] = useState<TextFileChunk | null>(() => metadata ? {
+  const initialChunk = useMemo<TextFileChunk | null>(() => metadata ? {
     content: file.content,
     startOffset: metadata.startOffset,
     nextOffset: metadata.nextOffset,
     totalSize: metadata.totalSize,
     eof: metadata.eof,
-  } : null)
+  } : null, [file.content, metadata])
+  const [chunk, setChunk] = useState<TextFileChunk | null>(initialChunk)
   const [history, setHistory] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const [seekValue, setSeekValue] = useState(() => initialChunk ? getProgress(initialChunk) : 0)
   const requestVersionRef = useRef(0)
+  const revealEndRef = useRef(false)
   const monacoRef = useRef<Parameters<typeof defineMonacoTheme>[0] | null>(null)
+  const pageCache = useMemo(() => new LargeFilePageCache(PAGE_CACHE_SIZE), [])
+  const inFlightReads = useMemo(() => new Map<string, Promise<TextFileChunk | null>>(), [])
+
+  useEffect(() => {
+    if (initialChunk) pageCache.set(initialChunk)
+  }, [initialChunk, pageCache])
 
   useEffect(() => {
     if (!monacoRef.current) return
@@ -39,62 +57,133 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
     monacoRef.current.editor.setTheme('adnify-dynamic')
   }, [theme])
 
-  useEffect(() => {
-    if (!metadata) return
-    requestVersionRef.current += 1
-    setChunk({
-      content: file.content,
-      startOffset: metadata.startOffset,
-      nextOffset: metadata.nextOffset,
-      totalSize: metadata.totalSize,
-      eof: metadata.eof,
-    })
-    setHistory([])
-    setLoading(false)
-    setError(false)
-  }, [file.path, file.contentLoadVersion, metadata])
+  const readChunk = useCallback((offset: number, alignStartToLine = false): Promise<TextFileChunk | null> => {
+    if (!metadata) return Promise.resolve(null)
 
-  if (!metadata || !chunk) return null
+    if (!alignStartToLine) {
+      const cached = pageCache.get(offset)
+      if (cached) return Promise.resolve(cached)
+    }
 
-  const loadChunk = async (offset: number, previousHistory: number[]) => {
+    const requestKey = `${offset}:${alignStartToLine ? 1 : 0}`
+    const pending = inFlightReads.get(requestKey)
+    if (pending) return pending
+
+    const request = api.file
+      .readTextChunk(file.path, offset, metadata.chunkSize, alignStartToLine)
+      .then(next => {
+        if (next) pageCache.set(next)
+        return next
+      })
+      .finally(() => inFlightReads.delete(requestKey))
+    inFlightReads.set(requestKey, request)
+    return request
+  }, [file.path, inFlightReads, metadata, pageCache])
+
+  const loadChunk = useCallback(async (
+    offset: number,
+    previousHistory: number[],
+    options: { alignStartToLine?: boolean; revealEnd?: boolean } = {},
+  ) => {
     const requestVersion = ++requestVersionRef.current
     setLoading(true)
     setError(false)
     try {
-      const next = await api.file.readTextChunk(file.path, offset, metadata.chunkSize)
+      const next = await readChunk(offset, options.alignStartToLine)
       if (requestVersion !== requestVersionRef.current) return
       if (!next) {
         setError(true)
         return
       }
+
+      revealEndRef.current = options.revealEnd === true
       setChunk(next)
       setHistory(previousHistory)
+      setSeekValue(getProgress(next))
     } catch {
       if (requestVersion === requestVersionRef.current) setError(true)
     } finally {
       if (requestVersion === requestVersionRef.current) setLoading(false)
     }
-  }
+  }, [readChunk])
+
+  const loadNext = useCallback(() => {
+    if (!chunk || chunk.eof || loading) return
+    void loadChunk(chunk.nextOffset, [...history, chunk.startOffset])
+  }, [chunk, history, loadChunk, loading])
+
+  const loadPrevious = useCallback((revealEnd = false) => {
+    if (!chunk || chunk.startOffset <= 0 || loading || !metadata) return
+
+    const previousOffset = history[history.length - 1]
+    if (previousOffset !== undefined) {
+      void loadChunk(previousOffset, history.slice(0, -1), { revealEnd })
+      return
+    }
+
+    const approximateOffset = Math.max(0, chunk.startOffset - metadata.chunkSize)
+    void loadChunk(approximateOffset, [], {
+      alignStartToLine: approximateOffset > 0,
+      revealEnd,
+    })
+  }, [chunk, history, loadChunk, loading, metadata])
+
+  const seekToProgress = useCallback((progress: number) => {
+    if (!chunk || !metadata || loading) return
+    const clamped = Math.min(SEEK_STEPS, Math.max(0, progress))
+    const approximateOffset = clamped === 0
+      ? 0
+      : Math.floor((chunk.totalSize - 1) * (clamped / SEEK_STEPS))
+    void loadChunk(approximateOffset, [], { alignStartToLine: approximateOffset > 0 })
+  }, [chunk, loadChunk, loading, metadata])
+
+  useEffect(() => {
+    if (!chunk || chunk.eof) return
+    void readChunk(chunk.nextOffset)
+  }, [chunk, readChunk])
+
+  if (!metadata || !chunk) return null
 
   const pageEnd = Math.min(chunk.nextOffset, chunk.totalSize)
+  const percentage = chunk.totalSize > 0
+    ? Math.min(100, (chunk.startOffset / chunk.totalSize) * 100)
+    : 0
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3 text-xs text-text-muted">
-        <Lock className="h-3.5 w-3.5" />
-        <span>{language === 'zh' ? '超大文件只读模式' : 'Very large file · read only'}</span>
-        <span className="ml-auto tabular-nums">
-          {formatBytes(chunk.startOffset)}–{formatBytes(pageEnd)} / {formatBytes(chunk.totalSize)}
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 text-xs text-text-muted">
+        <Lock className="h-3.5 w-3.5 shrink-0" />
+        <span className="shrink-0">
+          {language === 'zh' ? '超大文件虚拟只读模式' : 'Virtualized large file · read only'}
         </span>
+        <span className="hidden shrink-0 text-text-muted/70 xl:inline">
+          {language === 'zh' ? '滚轮可连续跨页' : 'Scroll across windows continuously'}
+        </span>
+        <span className="ml-auto shrink-0 tabular-nums">
+          {percentage.toFixed(1)}% · {formatBytes(chunk.startOffset)}–{formatBytes(pageEnd)} / {formatBytes(chunk.totalSize)}
+        </span>
+        <input
+          aria-label={language === 'zh' ? '跳转到文件位置' : 'Seek through file'}
+          type="range"
+          min={0}
+          max={SEEK_STEPS}
+          value={seekValue}
+          disabled={loading}
+          className="h-1 w-28 cursor-pointer accent-accent disabled:opacity-40"
+          onChange={event => setSeekValue(Number(event.currentTarget.value))}
+          onPointerUp={event => seekToProgress(Number(event.currentTarget.value))}
+          onKeyUp={event => {
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) {
+              seekToProgress(Number(event.currentTarget.value))
+            }
+          }}
+        />
         <button
           type="button"
-          disabled={loading || history.length === 0}
+          disabled={loading || chunk.startOffset <= 0}
           className="rounded p-1 hover:bg-surface disabled:opacity-30"
-          onClick={() => {
-            const previousOffset = history[history.length - 1]
-            void loadChunk(previousOffset, history.slice(0, -1))
-          }}
-          title={language === 'zh' ? '上一页' : 'Previous page'}
+          onClick={() => loadPrevious()}
+          title={language === 'zh' ? '上一窗口' : 'Previous window'}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -102,15 +191,16 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
           type="button"
           disabled={loading || chunk.eof}
           className="rounded p-1 hover:bg-surface disabled:opacity-30"
-          onClick={() => void loadChunk(chunk.nextOffset, [...history, chunk.startOffset])}
-          title={language === 'zh' ? '下一页' : 'Next page'}
+          onClick={loadNext}
+          title={language === 'zh' ? '下一窗口' : 'Next window'}
         >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronRight className="h-4 w-4" />}
+          <ChevronRight className="h-4 w-4" />
         </button>
+        {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
       </div>
       {error && (
         <div className="border-b border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-          {language === 'zh' ? '读取这一页失败，请重试。' : 'Could not read this page. Please retry.'}
+          {language === 'zh' ? '读取当前位置失败，请重试。' : 'Could not read this position. Please retry.'}
         </div>
       )}
       <div className="min-h-0 flex-1">
@@ -121,8 +211,29 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
           defaultValue={chunk.content}
           theme="adnify-dynamic"
           beforeMount={monaco => defineMonacoTheme(monaco, theme)}
-          onMount={(_, monaco) => {
+          onMount={(editor, monaco) => {
             monacoRef.current = monaco
+            if (revealEndRef.current) {
+              revealEndRef.current = false
+              requestAnimationFrame(() => editor.setScrollTop(editor.getScrollHeight()))
+            }
+
+            const domNode = editor.getDomNode()
+            if (!domNode) return
+            const handleWheel = (event: WheelEvent) => {
+              if (loading) return
+              const atTop = editor.getScrollTop() <= 0
+              const atBottom = editor.getScrollTop() + editor.getLayoutInfo().height >= editor.getScrollHeight() - 2
+              if (event.deltaY > 0 && atBottom && !chunk.eof) {
+                event.preventDefault()
+                loadNext()
+              } else if (event.deltaY < 0 && atTop && chunk.startOffset > 0) {
+                event.preventDefault()
+                loadPrevious(true)
+              }
+            }
+            domNode.addEventListener('wheel', handleWheel, { passive: false })
+            editor.onDidDispose(() => domNode.removeEventListener('wheel', handleWheel))
           }}
           options={{
             readOnly: true,
@@ -131,6 +242,9 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
             minimap: { enabled: false },
             folding: false,
             glyphMargin: false,
+            lineNumbers: 'off',
+            lineDecorationsWidth: 0,
+            lineNumbersMinChars: 0,
             wordWrap: 'off',
             renderWhitespace: 'none',
             renderLineHighlight: 'none',

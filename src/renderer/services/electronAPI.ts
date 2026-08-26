@@ -79,7 +79,7 @@ function createGroupedAPI() {
       // readPreview. There is deliberately no ambiguous `read` method here.
       readPreview: (path: string, encoding?: string) => raw.readFile(path, encoding),
       readFull: (path: string, encoding?: string) => raw.readFile(path, encoding, { full: true }),
-      readTextChunk: (path: string, offset?: number, maxBytes?: number) => raw.readTextChunk(path, offset, maxBytes),
+      readTextChunk: (path: string, offset?: number, maxBytes?: number, alignStartToLine?: boolean) => raw.readTextChunk(path, offset, maxBytes, alignStartToLine),
       stat: (path: string) => raw.statFile(path),
       readBinary: (path: string) => raw.readBinaryFile(path),
       readRichContent: (path: string, options?: Parameters<typeof raw.readRichContent>[1]) => raw.readRichContent(path, options),

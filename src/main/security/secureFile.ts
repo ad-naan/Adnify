@@ -343,10 +343,16 @@ export function registerSecureFileHandlers(
     }
   })
 
-  ipcMain.handle('file:readTextChunk', async (event, filePath: string, offset?: number, maxBytes?: number) => {
+  ipcMain.handle('file:readTextChunk', async (
+    event,
+    filePath: string,
+    offset?: number,
+    maxBytes?: number,
+    alignStartToLine?: boolean,
+  ) => {
     if (!filePath || !canAccessFile(filePath, getWorkspaceSessionFn(event), 'read')) return null
     try {
-      const chunk = await readTextFileChunk(filePath, offset, maxBytes)
+      const chunk = await readTextFileChunk(filePath, offset, maxBytes, alignStartToLine)
       securityManager.logOperation(OperationType.FILE_READ, filePath, true, {
         size: chunk.nextOffset - chunk.startOffset,
         chunked: true,
