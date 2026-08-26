@@ -17,11 +17,10 @@ function doc(id: string, relativePath: string, content: string, symbols: string[
 }
 
 describe('BM25Index', () => {
-  it('returns nothing before build and finds matches after', () => {
+  it('is searchable immediately after documents are added', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a', 'a.ts', 'authentication token refresh handler'))
     idx.addDocument(doc('b', 'b.ts', 'unrelated rendering pipeline code'))
-    idx.build()
 
     const results = idx.search('authentication token')
     expect(results.length).toBeGreaterThan(0)
@@ -32,7 +31,6 @@ describe('BM25Index', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a', 'a.ts', 'cache invalidation cache eviction cache policy'))
     idx.addDocument(doc('b', 'b.ts', 'cache mentioned once here'))
-    idx.build()
 
     const results = idx.search('cache')
     expect(results[0].relativePath).toBe('a.ts')
@@ -42,7 +40,6 @@ describe('BM25Index', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a', 'a.ts', 'shared body text alpha', ['parseWorkspace']))
     idx.addDocument(doc('b', 'b.ts', 'shared body text alpha', []))
-    idx.build()
 
     const results = idx.search('parseworkspace')
     expect(results[0].relativePath).toBe('a.ts')
@@ -53,10 +50,8 @@ describe('BM25Index', () => {
     idx.addDocument(doc('a1', 'a.ts', 'authentication token part one'))
     idx.addDocument(doc('a2', 'a.ts', 'authentication token part two'))
     idx.addDocument(doc('b1', 'b.ts', 'unrelated rendering pipeline'))
-    idx.build()
 
     idx.deleteFile('a.ts')
-    idx.build()
 
     expect(idx.size).toBe(1)
     expect(idx.search('authentication token')).toHaveLength(0)
@@ -66,11 +61,9 @@ describe('BM25Index', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a', 'a.ts', 'zzuniqueterm appears only here'))
     idx.addDocument(doc('b', 'b.ts', 'unrelated rendering pipeline'))
-    idx.build()
     const vocabularyBefore = idx.vocabularySize
 
     idx.deleteFile('a.ts')
-    idx.build()
 
     // 该词已随文件移除，不应残留 IDF 条目（否则评分失真且内存无界增长）
     expect(idx.vocabularySize).toBeLessThan(vocabularyBefore)
@@ -82,14 +75,12 @@ describe('BM25Index', () => {
     for (let i = 0; i < 5; i++) {
       idx.addDocument(doc(`f${i}`, `f${i}.ts`, 'common filler text'))
     }
-    idx.build()
     const rareScoreBefore = idx.search('rare')[0].score
 
     // 让 "rare" 变成常见词，IDF 应当下降
     for (let i = 0; i < 5; i++) {
       idx.addDocument(doc(`g${i}`, `g${i}.ts`, 'rare term everywhere now'))
     }
-    idx.build()
     const rareScoreAfter = idx.search('rare')[0].score
 
     expect(rareScoreAfter).toBeLessThan(rareScoreBefore)
@@ -97,7 +88,6 @@ describe('BM25Index', () => {
 
   it('handles an empty index without throwing', () => {
     const idx = new BM25Index()
-    idx.build()
     expect(idx.search('anything')).toEqual([])
     expect(idx.size).toBe(0)
   })
@@ -105,7 +95,6 @@ describe('BM25Index', () => {
   it('clears all state', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a', 'a.ts', 'authentication token refresh'))
-    idx.build()
     idx.clear()
 
     expect(idx.size).toBe(0)

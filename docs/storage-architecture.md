@@ -39,6 +39,49 @@ SQLite / workspace-portable files / application preferences
 | Application preferences | `electron-store` | user configuration directory | small values only; localStorage may be a disposable UI cache, never authority |
 | Runtime queues and previews | memory/sessionStorage | renderer lifetime | explicitly non-durable |
 
+## SQLite boundaries
+
+Adnify owns exactly two SQLite domains. They intentionally do not share a file,
+connection, schema, or retention policy:
+
+| Database | Location | Authority | Main access pattern |
+| --- | --- | --- | --- |
+| Workspace session database | user configuration `session-storage/<workspace-id>.sqlite3` | authoritative | catalog ordering, one active thread's ordered messages, incremental tail replacement |
+| Structural index cache | workspace cache `structural-index.sqlite` | disposable and rebuildable | generation-scoped bulk writes, composite-key pagination, per-file replacement |
+
+Both databases are accessed only by dedicated workers. Renderer and Electron's
+main event loop never execute SQLite statements. The SQLite MCP preset is user
+configuration for an external MCP server and is not an Adnify storage backend.
+
+The session schema normalizes threads, messages, branches, plans, large blobs,
+and message-to-blob references. Blob liveness is determined by indexed foreign
+key relationships; commits never scan or parse the complete message history.
+The structural cache normalizes file metadata away from chunks and uses
+`(generation, relative_path, id)` as its storage and pagination order.
+
+## I/O budget
+
+- No SQLite task walks a drive or searches outside its explicit database and
+  companion blob directory.
+- WAL checkpoints are passive and triggered by write count or a 30-second quiet
+  period. Clean shutdown may truncate the WAL once.
+- Incremental vacuum runs only when at least 1,024 pages are free and free pages
+  exceed 20% of the database. It reclaims at most 256 pages per maintenance pass.
+- Recovery snapshots are copied only after committed changes and at most once per
+  24 hours. They are never refreshed on every message.
+- Full SQLite integrity checks run after an unclean shutdown, a schema migration,
+  or when the previous check is at least seven days old. Clean restarts do not
+  reread the complete session database.
+- Structural index reads use 512-row keyset pages. There is no offset scan and no
+  periodic full-project polling associated with SQLite.
+- The native workspace watcher updates an index only after that index has been
+  explicitly built or loaded. Editing a file cannot silently create a partial
+  index database.
+- Dependency, build-output, and application-cache globs are passed into the
+  native watcher backend, so those trees do not generate events that are merely
+  discarded later. Full indexing stats files before reading and uses four
+  bounded consumers; files above the configured limit are never read in full.
+
 JSONL is not an online session backend. The session worker may read the legacy
 format exactly once inside a transaction. A migration marker prevents old data
 from being imported again after the user clears the database.
@@ -104,5 +147,5 @@ The reproducible write-amplification benchmark is:
 
 ```sh
 pnpm build
-node scripts/benchmark-session-storage.cjs
+node scripts/benchmark-sqlite-storage.cjs
 ```

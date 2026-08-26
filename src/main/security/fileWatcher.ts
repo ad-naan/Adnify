@@ -36,7 +36,10 @@ interface WatcherEntry {
 }
 
 const DEFAULT_CONFIG: FileWatcherConfig = {
-  ignored: [/node_modules/, /\.git/, /dist/, /build/, /\.adnify/, '**/*.tmp', '**/*.temp'],
+  // String globs are passed to the native backend, preventing dependency and
+  // build trees from generating events at all. Git stays post-filtered because
+  // repositories whose metadata lives inside the workspace still need state signals.
+  ignored: ['**/node_modules/**', /\.git/, '**/dist/**', '**/build/**', '**/.adnify/**', '**/*.tmp', '**/*.temp'],
   persistent: true,
   ignoreInitial: true,
   bufferTimeMs: 500,
@@ -64,7 +67,7 @@ function createIgnoreMatcher(patterns: (string | RegExp)[]): (path: string) => b
     for (const regex of regexPatterns) {
       if (regex.test(filePath)) return true
     }
-    if (globMatcher && globMatcher(filePath)) return true
+    if (globMatcher && globMatcher(filePath.replace(/\\/g, '/'))) return true
     return false
   }
 }

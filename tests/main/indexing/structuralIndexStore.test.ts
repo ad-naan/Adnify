@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
 import * as path from 'path'
+import { DatabaseSync } from 'node:sqlite'
 import { executeStructuralIndexStoreOperation } from '@main/indexing/structuralIndexStore.worker'
 import type { CodeChunk } from '@main/indexing/types'
 
@@ -57,7 +58,7 @@ describe('structural index SQLite store', () => {
   }
 
   it('streams a committed generation in bounded batches', () => {
-    const chunks = Array.from({ length: 125 }, (_, index) => chunk(`chunk-${index}`, `src/${index}.ts`))
+    const chunks = Array.from({ length: 1025 }, (_, index) => chunk(`chunk-${index}`, `src/${index}.ts`))
     executeStructuralIndexStoreOperation({ type: 'beginReplace', databasePath, generation: 'one' })
     executeStructuralIndexStoreOperation({
       type: 'appendReplace', databasePath, generation: 'one', chunks,
@@ -66,13 +67,13 @@ describe('structural index SQLite store', () => {
       type: 'commitReplace',
       databasePath,
       generation: 'one',
-      metadata: { totalFiles: 125, totalChunks: 125, savedAt: 10 },
+      metadata: { totalFiles: 1025, totalChunks: 1025, savedAt: 10 },
     })
 
     const loaded = load()
-    expect(loaded.chunks).toHaveLength(125)
-    expect(loaded.metadata).toEqual({ totalFiles: 125, totalChunks: 125, savedAt: 10 })
-    expect(loaded.batchSizes).toEqual([50, 50, 25])
+    expect(loaded.chunks).toHaveLength(1025)
+    expect(loaded.metadata).toEqual({ totalFiles: 1025, totalChunks: 1025, savedAt: 10 })
+    expect(loaded.batchSizes).toEqual([512, 512, 1])
   })
 
   it('keeps the previous generation when a replacement is incomplete', () => {
@@ -130,5 +131,49 @@ describe('structural index SQLite store', () => {
     const loaded = load()
     expect(loaded.chunks.map(item => item.id)).toEqual(['a2'])
     expect(loaded.metadata).toEqual({ totalFiles: 2, totalChunks: 1, savedAt: 20 })
+  })
+
+  it('stores file metadata once and uses the tuned database layout', () => {
+    executeStructuralIndexStoreOperation({ type: 'beginReplace', databasePath, generation: 'layout' })
+    executeStructuralIndexStoreOperation({
+      type: 'appendReplace',
+      databasePath,
+      generation: 'layout',
+      chunks: [
+        chunk('part-1', 'shared.ts'),
+        { ...chunk('part-2', 'shared.ts'), startLine: 2, endLine: 2 },
+      ],
+    })
+    executeStructuralIndexStoreOperation({
+      type: 'commitReplace',
+      databasePath,
+      generation: 'layout',
+      metadata: { totalFiles: 1, totalChunks: 2, savedAt: 10 },
+    })
+
+    const database = new DatabaseSync(databasePath, { readOnly: true })
+    try {
+      const fileCount = database.prepare('SELECT COUNT(*) AS count FROM files').get() as { count: number }
+      const chunkCount = database.prepare('SELECT COUNT(*) AS count FROM chunks').get() as { count: number }
+      const columns = database.prepare("PRAGMA table_info('chunks')").all() as Array<{ name: string }>
+      const pageSize = database.prepare('PRAGMA page_size').get() as { page_size: number }
+      const journalMode = database.prepare('PRAGMA journal_mode').get() as { journal_mode: string }
+      const pagePlan = database.prepare(`
+        EXPLAIN QUERY PLAN
+        SELECT * FROM chunks
+        WHERE generation = ? AND (relative_path, id) > (?, ?)
+        ORDER BY relative_path, id LIMIT ?
+      `).all('generation-layout', '', '', 512) as Array<{ detail: string }>
+
+      expect(Number(fileCount.count)).toBe(1)
+      expect(Number(chunkCount.count)).toBe(2)
+      expect(columns.map(column => column.name)).not.toContain('payload_json')
+      expect(Number(pageSize.page_size)).toBe(8192)
+      expect(journalMode.journal_mode).toBe('wal')
+      expect(pagePlan.map(row => row.detail).join('\n'))
+        .toContain('PRIMARY KEY (generation=? AND (relative_path,id)>(?,?))')
+    } finally {
+      database.close()
+    }
   })
 })

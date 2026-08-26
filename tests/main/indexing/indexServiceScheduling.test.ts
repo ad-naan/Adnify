@@ -36,12 +36,6 @@ vi.mock('worker_threads', () => ({
   },
 }))
 
-vi.mock('@main/indexing/treeSitterChunker', () => ({
-  TreeSitterChunker: class {
-    init = vi.fn(async () => {})
-  },
-}))
-
 vi.mock('@main/indexing/vectorStore', () => ({
   VectorStoreService: class {},
 }))
@@ -114,6 +108,7 @@ describe('CodebaseIndexService scheduling', () => {
     internals.performWorkspaceIndex = vi.fn(async () => {
       order.push('index:start')
       await fullIndex.promise
+      ;(service as unknown as { status: { lastIndexedAt?: number } }).status.lastIndexedAt = 1
       order.push('index:end')
     })
     internals.performUpdateFiles = vi.fn(async paths => {
@@ -220,6 +215,57 @@ describe('CodebaseIndexService scheduling', () => {
     })
     expect(service.searchSymbols('cachedNeedle')).toHaveLength(1)
     await expect(service.search('cachedNeedle')).resolves.toHaveLength(1)
+  })
+
+  it('processes structural watcher updates through the worker and persists them', async () => {
+    structuralStoreState.metadata = { totalFiles: 1, totalChunks: 0, savedAt: 123 }
+    await service.initialize()
+    const updating = service.updateFiles(['C:/workspace/src/updated.ts'])
+    await vi.waitFor(() => expect(workerState.instances).toHaveLength(1))
+    const worker = workerState.instances[0]
+    expect(worker.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'batch_update',
+      files: ['C:/workspace/src/updated.ts'],
+      config: expect.objectContaining({ mode: 'structural' }),
+    }))
+
+    worker.emit('message', {
+      type: 'batch_update_result',
+      mode: 'structural',
+      requestId: 1,
+      results: [{
+        filePath: 'C:/workspace/src/updated.ts',
+        deleted: false,
+        chunks: [{
+          id: 'updated-chunk',
+          filePath: 'C:/workspace/src/updated.ts',
+          relativePath: 'src/updated.ts',
+          fileHash: 'hash',
+          content: 'function updatedNeedle() {}',
+          startLine: 1,
+          endLine: 1,
+          type: 'function',
+          language: 'typescript',
+          symbols: ['updatedNeedle'],
+        }],
+      }],
+    })
+
+    await updating
+    expect(service.searchSymbols('updatedNeedle')).toHaveLength(1)
+    await expect(service.search('updatedNeedle')).resolves.toHaveLength(1)
+    expect(structuralStoreState.operations.at(-1)).toMatchObject({
+      type: 'applyFiles',
+      files: [{ relativePath: 'src\\updated.ts' }],
+    })
+  })
+
+  it('does not create a partial index from watcher events before indexing is enabled', async () => {
+    await service.updateFiles(['C:/workspace/src/updated.ts'])
+    await service.deleteFileIndex('C:/workspace/src/deleted.ts')
+
+    expect(workerState.instances).toHaveLength(0)
+    expect(structuralStoreState.operations).toHaveLength(0)
   })
 
   it('finishes an active index with an error when the worker exits unexpectedly', async () => {

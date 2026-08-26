@@ -11,8 +11,6 @@ import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
 import { logger, normalizePath } from '@shared/utils'
-import { TreeSitterChunker } from './treeSitterChunker'
-import { ChunkerService } from './chunker'
 import { EmbeddingService } from './embedder'
 import { VectorStoreService } from './vectorStore'
 import { BM25Index, SymbolIndex, rerankCandidates } from './search'
@@ -29,7 +27,19 @@ import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
 interface WorkerStructuralResultMessage { type: 'structural_result'; requestId: number; chunks: CodeChunk[]; processed: number; total: number }
 interface WorkerResultMessage { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
 interface WorkerUpdateResultMessage { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
-interface WorkerBatchUpdateResultMessage { type: 'batch_update_result'; requestId: number; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
+type WorkerBatchUpdateResultMessage =
+  | {
+      type: 'batch_update_result'
+      mode: 'structural'
+      requestId: number
+      results: Array<{ filePath: string; chunks: CodeChunk[]; deleted: boolean }>
+    }
+  | {
+      type: 'batch_update_result'
+      mode: 'semantic'
+      requestId: number
+      results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }>
+    }
 interface WorkerCompleteMessage { type: 'complete'; totalChunks: number }
 interface WorkerErrorMessage { type: 'error'; error: string; requestId?: number }
 type WorkerMessage =
@@ -49,8 +59,6 @@ export class CodebaseIndexService {
   private mainWindow: BrowserWindow | null = null
 
   // 结构化索引组件
-  private chunker: TreeSitterChunker
-  private fallbackChunker: ChunkerService
   private bm25Index: BM25Index
   private symbolIndex: SymbolIndex
   private summaryGenerator: ProjectSummaryGenerator
@@ -95,8 +103,6 @@ export class CodebaseIndexService {
     this.status.mode = this.config.mode
 
     // 初始化结构化索引组件
-    this.chunker = new TreeSitterChunker(this.config)
-    this.fallbackChunker = new ChunkerService(this.config)
     this.bm25Index = new BM25Index()
     this.symbolIndex = new SymbolIndex()
     this.summaryGenerator = new ProjectSummaryGenerator(
@@ -129,8 +135,6 @@ export class CodebaseIndexService {
   async initialize(): Promise<void> {
     if (this.initialized) return
     if (this.destroyed) throw new Error('Index service has been destroyed')
-
-    await this.chunker.init()
 
     // 加载缓存的项目摘要
     this.projectSummary = await this.summaryGenerator.loadCache()
@@ -173,9 +177,8 @@ export class CodebaseIndexService {
         return
       }
 
-      this.bm25Index.build()
       this.status.totalChunks = metadata.totalChunks
-      this.status.indexedFiles = this.symbolIndex.fileCount
+      this.status.indexedFiles = this.bm25Index.fileCount
       this.status.totalFiles = metadata.totalFiles
       this.status.lastIndexedAt = metadata.savedAt
       logger.index.info(`[IndexService] Loaded structural index: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
@@ -430,74 +433,24 @@ export class CodebaseIndexService {
   /** 批量更新文件（用于文件监听） */
   async updateFiles(filePaths: string[]): Promise<void> {
     if (filePaths.length === 0 || this.destroyed) return
-    return this.enqueueMutation(() => this.performUpdateFiles(filePaths))
+    // The shared native watcher exists independently of code search. Do not
+    // create a partial SQLite index merely because an ordinary file changed.
+    if (!this.initialized && !this.pendingFullIndex) return
+    if (!this.pendingFullIndex && this.status.lastIndexedAt === undefined) return
+    return this.enqueueMutation(async () => {
+      // A queued full build may have failed. Never turn its trailing watcher
+      // events into an incomplete index.
+      if (this.status.lastIndexedAt === undefined) return
+      await this.performUpdateFiles(filePaths)
+    })
   }
 
   private async performUpdateFiles(filePaths: string[]): Promise<void> {
     logger.index.info(`[IndexService] Updating ${filePaths.length} files...`)
 
-    // 结构化模式：增量更新
-    if (this.config.mode === 'structural') {
-      let updated = 0
-      const persistedFiles: Array<{ relativePath: string; chunks: CodeChunk[] }> = []
-      for (const filePath of filePaths) {
-        try {
-          const ext = path.extname(filePath).toLowerCase()
-          if (!this.config.includedExts.includes(ext)) continue
-          const relativePath = path.relative(this.workspacePath, filePath)
-
-          // 检查文件是否存在
-          if (!fs.existsSync(filePath)) {
-            // 文件被删除，从索引中移除
-            await this.deleteFileFromStructuralIndex(filePath)
-            persistedFiles.push({ relativePath, chunks: [] })
-            updated++
-            continue
-          }
-
-          const content = await fs.promises.readFile(filePath, 'utf-8')
-          if (content.length > this.config.maxFileSize) {
-            await this.deleteFileFromStructuralIndex(filePath)
-            persistedFiles.push({ relativePath, chunks: [] })
-            updated++
-            continue
-          }
-
-          const chunks = await this.chunkFile(filePath, content)
-
-          // 先删除该文件的旧索引
-          await this.deleteFileFromStructuralIndex(filePath)
-          this.addStructuralChunks(chunks)
-          persistedFiles.push({ relativePath, chunks })
-          updated++
-        } catch (e) {
-          logger.index.warn(`[IndexService] Failed to update ${filePath}: `, e)
-        }
-      }
-
-      if (updated > 0) {
-        // 重建 BM25 索引（必须调用以更新 IDF）
-        this.bm25Index.build()
-        this.status.totalChunks = this.bm25Index.size
-        this.status.indexedFiles = this.symbolIndex.fileCount
-        await this.structuralStore.request({
-          type: 'applyFiles',
-          databasePath: this.structuralIndexPath,
-          files: persistedFiles,
-          metadata: {
-            totalFiles: this.status.totalFiles,
-            totalChunks: this.status.totalChunks,
-            savedAt: Date.now(),
-          },
-        })
-        logger.index.info(`[IndexService] Updated ${updated} files in structural index`)
-      }
-      return
-    }
-
-    // 语义模式：通过 worker 处理。Promise 只在向量存储提交完成后解析，
+    // 两种模式都通过 worker 处理。Promise 只在内存索引和持久化提交完成后解析，
     // 这样文件监听缓冲器才能提供真正的背压，而不是无限 postMessage。
-    await this.initSemanticComponents()
+    if (this.config.mode === 'semantic') await this.initSemanticComponents()
     if (!this.worker) this.initWorker()
     if (!this.worker) throw new Error('Index worker is unavailable')
 
@@ -528,7 +481,12 @@ export class CodebaseIndexService {
   /** 删除文件索引 */
   async deleteFileIndex(filePath: string): Promise<void> {
     if (this.destroyed) return
-    return this.enqueueMutation(() => this.performDeleteFileIndex(filePath))
+    if (!this.initialized && !this.pendingFullIndex) return
+    if (!this.pendingFullIndex && this.status.lastIndexedAt === undefined) return
+    return this.enqueueMutation(async () => {
+      if (this.status.lastIndexedAt === undefined) return
+      await this.performDeleteFileIndex(filePath)
+    })
   }
 
   private async performDeleteFileIndex(filePath: string): Promise<void> {
@@ -537,9 +495,8 @@ export class CodebaseIndexService {
     // 结构化模式：从索引中删除
     if (this.config.mode === 'structural') {
       await this.deleteFileFromStructuralIndex(filePath)
-      this.bm25Index.build()
       this.status.totalChunks = this.bm25Index.size
-      this.status.indexedFiles = this.symbolIndex.fileCount
+      this.status.indexedFiles = this.bm25Index.fileCount
       await this.structuralStore.request({
         type: 'applyFiles',
         databasePath: this.structuralIndexPath,
@@ -614,7 +571,7 @@ export class CodebaseIndexService {
       await this.startWorkerIndex()
       if (this.destroyed) return
 
-      this.bm25Index.build()
+      this.status.indexedFiles = this.bm25Index.fileCount
       this.projectSummary = this.summaryGenerator.generate(
         this.structuralBuildFileSymbols,
         this.structuralBuildLanguages,
@@ -747,11 +704,39 @@ export class CodebaseIndexService {
               break
 
             case 'batch_update_result':
-              for (const res of message.results) {
-                if (res.deleted) {
-                  await this.vectorStore!.deleteFile(res.filePath)
-                } else if (res.chunks?.length > 0) {
-                  await this.vectorStore!.upsertFile(res.filePath, res.chunks)
+              if (message.mode === 'structural') {
+                const persistedFiles: Array<{ relativePath: string; chunks: CodeChunk[] }> = []
+                for (const result of message.results) {
+                  const relativePath = path.relative(this.workspacePath, result.filePath)
+                  await this.deleteFileFromStructuralIndex(result.filePath)
+                  if (!result.deleted) this.addStructuralChunks(result.chunks)
+                  persistedFiles.push({
+                    relativePath,
+                    chunks: result.deleted ? [] : result.chunks,
+                  })
+                }
+                this.status.totalChunks = this.bm25Index.size
+                this.status.indexedFiles = this.bm25Index.fileCount
+                if (persistedFiles.length > 0) {
+                  await this.structuralStore.request({
+                    type: 'applyFiles',
+                    databasePath: this.structuralIndexPath,
+                    files: persistedFiles,
+                    metadata: {
+                      totalFiles: this.status.totalFiles,
+                      totalChunks: this.status.totalChunks,
+                      savedAt: Date.now(),
+                    },
+                  })
+                }
+                logger.index.info(`[IndexService] Updated ${persistedFiles.length} files in structural index`)
+              } else {
+                for (const result of message.results) {
+                  if (result.deleted) {
+                    await this.vectorStore!.deleteFile(result.filePath)
+                  } else if (result.chunks.length > 0) {
+                    await this.vectorStore!.upsertFile(result.filePath, result.chunks)
+                  }
                 }
               }
               this.emitProgress()
@@ -869,15 +854,6 @@ export class CodebaseIndexService {
   }
 
   // ==================== 工具方法 ====================
-
-  private async chunkFile(filePath: string, content: string): Promise<CodeChunk[]> {
-    let chunks = await this.chunker.chunkFile(filePath, content, this.workspacePath)
-    if (chunks.length === 0) {
-      chunks = this.fallbackChunker.chunkFile(filePath, content, this.workspacePath)
-    }
-    return chunks
-  }
-
   private extractKeywords(query: string): string[] {
     return query.split(/[\s,.:;!?()[\]{}'"<>]+/).map(t => t.trim()).filter(t => t.length >= 2 && !/^\d+$/.test(t))
   }

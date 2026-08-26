@@ -23,9 +23,11 @@ export interface BM25Document {
 }
 
 export class BM25Index {
-  private documents: BM25Document[] = []
-  private avgDocLength = 0
-  private idf: Map<string, number> = new Map()
+  private documents = new Set<BM25Document>()
+  private documentsByFile = new Map<string, Set<BM25Document>>()
+  private documentFrequency = new Map<string, number>()
+  private totalDocumentLength = 0
+
   /** 添加文档 */
   addDocument(doc: Omit<BM25Document, 'termFreq' | 'docLength'>): void {
     const terms = this.tokenize(doc.content)
@@ -33,7 +35,15 @@ export class BM25Index {
     for (const term of terms) {
       termFreq.set(term, (termFreq.get(term) || 0) + 1)
     }
-    this.documents.push({ ...doc, termFreq, docLength: terms.length })
+    const indexedDocument = { ...doc, termFreq, docLength: terms.length }
+    this.documents.add(indexedDocument)
+    const fileDocuments = this.documentsByFile.get(doc.relativePath) || new Set<BM25Document>()
+    fileDocuments.add(indexedDocument)
+    this.documentsByFile.set(doc.relativePath, fileDocuments)
+    this.totalDocumentLength += indexedDocument.docLength
+    for (const term of termFreq.keys()) {
+      this.documentFrequency.set(term, (this.documentFrequency.get(term) || 0) + 1)
+    }
   }
 
   /** 批量添加文档 */
@@ -43,44 +53,17 @@ export class BM25Index {
     }
   }
 
-  /** 构建索引（计算 IDF） */
-  build(): void {
-    // 先清空：增量更新会让部分词彻底离开语料库，
-    // 若保留旧条目，这些词的 IDF 会一直参与评分，且 Map 无界增长。
-    this.idf.clear()
-
-    if (this.documents.length === 0) {
-      this.avgDocLength = 0
-      return
-    }
-
-    // 平均文档长度
-    const totalLength = this.documents.reduce((sum, doc) => sum + doc.docLength, 0)
-    this.avgDocLength = totalLength / this.documents.length
-
-    // 计算 IDF
-    const docFreq = new Map<string, number>()
-    for (const doc of this.documents) {
-      const seenTerms = new Set<string>()
-      for (const term of doc.termFreq.keys()) {
-        if (!seenTerms.has(term)) {
-          docFreq.set(term, (docFreq.get(term) || 0) + 1)
-          seenTerms.add(term)
-        }
-      }
-    }
-
-    const N = this.documents.length
-    for (const [term, df] of docFreq) {
-      this.idf.set(term, Math.log((N - df + 0.5) / (df + 0.5) + 1))
-    }
-  }
-
   /** 搜索 */
   search(query: string, topK: number = 10): SearchResult[] {
-    if (this.documents.length === 0) return []
+    if (this.documents.size === 0) return []
 
     const queryTerms = this.tokenize(query)
+    const documentCount = this.documents.size
+    const averageDocumentLength = this.totalDocumentLength / documentCount
+    const queryIdf = new Map(queryTerms.map(term => {
+      const frequency = this.documentFrequency.get(term) || 0
+      return [term, Math.log((documentCount - frequency + 0.5) / (frequency + 0.5) + 1)]
+    }))
     const scores: { doc: BM25Document; score: number }[] = []
 
     for (const doc of this.documents) {
@@ -90,9 +73,11 @@ export class BM25Index {
         const tf = doc.termFreq.get(term) || 0
         if (tf === 0) continue
 
-        const idf = this.idf.get(term) || 0
+        const idf = queryIdf.get(term) || 0
         const numerator = tf * (BM25_K1 + 1)
-        const denominator = tf + BM25_K1 * (1 - BM25_B + BM25_B * (doc.docLength / this.avgDocLength))
+        const denominator = tf + BM25_K1 * (
+          1 - BM25_B + BM25_B * (doc.docLength / averageDocumentLength)
+        )
         score += idf * (numerator / denominator)
       }
 
@@ -127,31 +112,46 @@ export class BM25Index {
 
   /** 清空 */
   clear(): void {
-    this.documents = []
-    this.idf.clear()
-    this.avgDocLength = 0
+    this.documents.clear()
+    this.documentsByFile.clear()
+    this.documentFrequency.clear()
+    this.totalDocumentLength = 0
   }
 
   /**
    * 删除文件的所有文档
    *
-   * 返回是否真的删除了内容，供调用者判断能否跳过 build()。
-   * 注意：文档数变化后 IDF 已失效，调用者需在批量删除结束后调用 build()。
+   * 返回是否真的删除了内容。
    */
   deleteFile(relativePath: string): boolean {
-    const before = this.documents.length
-    this.documents = this.documents.filter(doc => doc.relativePath !== relativePath)
-    return this.documents.length !== before
+    const fileDocuments = this.documentsByFile.get(relativePath)
+    if (!fileDocuments) return false
+
+    for (const doc of fileDocuments) {
+      this.documents.delete(doc)
+      this.totalDocumentLength -= doc.docLength
+      for (const term of doc.termFreq.keys()) {
+        const nextFrequency = (this.documentFrequency.get(term) || 0) - 1
+        if (nextFrequency <= 0) this.documentFrequency.delete(term)
+        else this.documentFrequency.set(term, nextFrequency)
+      }
+    }
+    this.documentsByFile.delete(relativePath)
+    return true
   }
 
   /** 获取文档数量 */
   get size(): number {
-    return this.documents.length
+    return this.documents.size
+  }
+
+  get fileCount(): number {
+    return this.documentsByFile.size
   }
 
   /** Number of searchable terms, useful for status and invariant checks. */
   get vocabularySize(): number {
-    return this.idf.size
+    return this.documentFrequency.size
   }
 
   /** 分词 */

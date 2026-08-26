@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'fs'
+import { mkdirSync, rmSync } from 'fs'
 import * as path from 'path'
 import { parentPort } from 'worker_threads'
 import type { CodeChunk } from './types'
@@ -13,21 +13,51 @@ import type {
 } from './structuralIndexStore.types'
 
 const databases = new Map<string, DatabaseSync>()
-const LOAD_BATCH_SIZE = 50
+// Keep worker IPC amortized without creating multi-megabyte structured-clone
+// payloads for the main process. The old size of 50 made a 1M-chunk cache
+// require 20,000 request/response turns during startup.
+const LOAD_BATCH_SIZE = 512
+const SCHEMA_VERSION = 1
 
-function openDatabase(databasePath: string): DatabaseSync {
-  const existing = databases.get(databasePath)
-  if (existing) return existing
+interface StoredChunkRow {
+  id: string
+  relative_path: string
+  file_path: string
+  file_hash: string
+  content: string
+  start_line: number
+  end_line: number
+  type: CodeChunk['type']
+  language: string
+  symbols_json: string
+}
 
-  mkdirSync(path.dirname(databasePath), { recursive: true })
-  const database = new DatabaseSync(databasePath)
+function removeDatabaseFiles(databasePath: string): void {
+  for (const target of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]) {
+    rmSync(target, { force: true })
+  }
+}
+
+function hasTables(database: DatabaseSync): boolean {
+  return Boolean(database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' LIMIT 1",
+  ).get())
+}
+
+function createSchema(database: DatabaseSync): void {
   database.exec(`
+    PRAGMA page_size = 8192;
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
+    PRAGMA foreign_keys = ON;
     PRAGMA temp_store = MEMORY;
     PRAGMA busy_timeout = 5000;
+    PRAGMA cache_size = -32768;
+    PRAGMA mmap_size = 268435456;
+    PRAGMA wal_autocheckpoint = 4096;
+    PRAGMA journal_size_limit = 16777216;
 
-    CREATE TABLE IF NOT EXISTS index_state (
+    CREATE TABLE index_state (
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
       active_generation TEXT NOT NULL,
       total_files INTEGER NOT NULL CHECK (total_files >= 0),
@@ -35,21 +65,63 @@ function openDatabase(databasePath: string): DatabaseSync {
       saved_at INTEGER NOT NULL
     ) STRICT;
 
-    CREATE TABLE IF NOT EXISTS chunks (
+    CREATE TABLE files (
       generation TEXT NOT NULL,
-      id TEXT NOT NULL,
       relative_path TEXT NOT NULL,
-      payload_json TEXT NOT NULL,
-      PRIMARY KEY (generation, id)
+      file_path TEXT NOT NULL,
+      file_hash TEXT NOT NULL,
+      PRIMARY KEY (generation, relative_path)
     ) WITHOUT ROWID, STRICT;
 
-    CREATE INDEX IF NOT EXISTS chunks_generation_file
-      ON chunks(generation, relative_path);
+    CREATE TABLE chunks (
+      generation TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      start_line INTEGER NOT NULL CHECK (start_line >= 0),
+      end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+      type TEXT NOT NULL,
+      language TEXT NOT NULL,
+      symbols_json TEXT NOT NULL,
+      PRIMARY KEY (generation, relative_path, id),
+      FOREIGN KEY (generation, relative_path)
+        REFERENCES files(generation, relative_path) ON DELETE CASCADE
+    ) WITHOUT ROWID, STRICT;
+
+    PRAGMA user_version = ${SCHEMA_VERSION};
+  `)
+}
+
+function openDatabase(databasePath: string): DatabaseSync {
+  const existing = databases.get(databasePath)
+  if (existing) return existing
+
+  mkdirSync(path.dirname(databasePath), { recursive: true })
+  let database = new DatabaseSync(databasePath)
+  const version = Number(
+    (database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
+  )
+  if (version !== SCHEMA_VERSION && (version !== 0 || hasTables(database))) {
+    database.close()
+    removeDatabaseFiles(databasePath)
+    database = new DatabaseSync(databasePath)
+  }
+  if (!hasTables(database)) createSchema(database)
+  else database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+    PRAGMA foreign_keys = ON;
+    PRAGMA temp_store = MEMORY;
+    PRAGMA busy_timeout = 5000;
+    PRAGMA cache_size = -32768;
+    PRAGMA mmap_size = 268435456;
+    PRAGMA wal_autocheckpoint = 4096;
+    PRAGMA journal_size_limit = 16777216;
   `)
   // A terminated rebuild may leave an uncommitted generation behind. Only the
   // active generation is authoritative, so orphan rows are safe to remove.
   database.exec(`
-    DELETE FROM chunks
+    DELETE FROM files
     WHERE generation NOT IN (SELECT active_generation FROM index_state WHERE singleton = 1)
   `)
   databases.set(databasePath, database)
@@ -67,13 +139,46 @@ function inTransaction(database: DatabaseSync, operation: () => void): void {
   }
 }
 
-function insertChunks(database: DatabaseSync, generation: string, chunks: CodeChunk[]): void {
-  const insert = database.prepare(`
-    INSERT OR REPLACE INTO chunks(generation, id, relative_path, payload_json)
+function createChunkStatements(database: DatabaseSync) {
+  const insertFile = database.prepare(`
+    INSERT INTO files(generation, relative_path, file_path, file_hash)
     VALUES (?, ?, ?, ?)
+    ON CONFLICT(generation, relative_path) DO UPDATE SET
+      file_path = excluded.file_path,
+      file_hash = excluded.file_hash
   `)
+  const insertChunk = database.prepare(`
+    INSERT INTO chunks(
+      generation, relative_path, id, content, start_line, end_line,
+      type, language, symbols_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  return { insertFile, insertChunk }
+}
+
+function insertChunks(
+  statements: ReturnType<typeof createChunkStatements>,
+  generation: string,
+  chunks: CodeChunk[],
+): void {
+  const { insertFile, insertChunk } = statements
+  const insertedFiles = new Set<string>()
   for (const chunk of chunks) {
-    insert.run(generation, chunk.id, chunk.relativePath, JSON.stringify(chunk))
+    if (!insertedFiles.has(chunk.relativePath)) {
+      insertFile.run(generation, chunk.relativePath, chunk.filePath, chunk.fileHash)
+      insertedFiles.add(chunk.relativePath)
+    }
+    insertChunk.run(
+      generation,
+      chunk.relativePath,
+      chunk.id,
+      chunk.content,
+      chunk.startLine,
+      chunk.endLine,
+      chunk.type,
+      chunk.language,
+      JSON.stringify(chunk.symbols || []),
+    )
   }
 }
 
@@ -106,31 +211,45 @@ function loadPage(
 
   const rows = cursor
     ? database.prepare(`
-        SELECT id, relative_path, payload_json FROM chunks
-        WHERE generation = ?
-          AND (relative_path > ? OR (relative_path = ? AND id > ?))
-        ORDER BY relative_path, id LIMIT ?
+        SELECT
+          c.id, c.relative_path, f.file_path, f.file_hash, c.content,
+          c.start_line, c.end_line, c.type, c.language, c.symbols_json
+        FROM chunks c
+        JOIN files f USING (generation, relative_path)
+        WHERE c.generation = ?
+          AND (c.relative_path, c.id) > (?, ?)
+        ORDER BY c.relative_path, c.id LIMIT ?
       `).all(
         metadata.generation,
         cursor.relativePath,
-        cursor.relativePath,
         cursor.id,
         LOAD_BATCH_SIZE,
-      ) as Array<{ id: string; relative_path: string; payload_json: string }>
+      ) as unknown as StoredChunkRow[]
     : database.prepare(`
-        SELECT id, relative_path, payload_json FROM chunks
-        WHERE generation = ? ORDER BY relative_path, id LIMIT ?
-      `).all(metadata.generation, LOAD_BATCH_SIZE) as Array<{
-        id: string
-        relative_path: string
-        payload_json: string
-      }>
+        SELECT
+          c.id, c.relative_path, f.file_path, f.file_hash, c.content,
+          c.start_line, c.end_line, c.type, c.language, c.symbols_json
+        FROM chunks c
+        JOIN files f USING (generation, relative_path)
+        WHERE c.generation = ? ORDER BY c.relative_path, c.id LIMIT ?
+      `).all(metadata.generation, LOAD_BATCH_SIZE) as unknown as StoredChunkRow[]
   const { generation: _generation, ...result } = metadata
   const last = rows.at(-1)
   return {
     type: 'loadedPage',
     metadata: result,
-    chunks: rows.map(row => JSON.parse(row.payload_json) as CodeChunk),
+    chunks: rows.map(row => ({
+      id: row.id,
+      filePath: row.file_path,
+      relativePath: row.relative_path,
+      fileHash: row.file_hash,
+      content: row.content,
+      startLine: row.start_line,
+      endLine: row.end_line,
+      type: row.type,
+      language: row.language,
+      symbols: JSON.parse(row.symbols_json) as string[],
+    })),
     nextCursor: rows.length === LOAD_BATCH_SIZE && last
       ? { relativePath: last.relative_path, id: last.id }
       : null,
@@ -145,10 +264,12 @@ export function executeStructuralIndexStoreOperation(
     case 'loadPage':
       return loadPage(database, operation.cursor)
     case 'beginReplace':
-      database.prepare('DELETE FROM chunks WHERE generation = ?').run(operation.generation)
+      database.prepare('DELETE FROM files WHERE generation = ?').run(operation.generation)
       return { type: 'ok' }
     case 'appendReplace':
-      inTransaction(database, () => insertChunks(database, operation.generation, operation.chunks))
+      inTransaction(database, () => {
+        insertChunks(createChunkStatements(database), operation.generation, operation.chunks)
+      })
       return { type: 'ok' }
     case 'commitReplace': {
       const row = database.prepare(
@@ -174,23 +295,24 @@ export function executeStructuralIndexStoreOperation(
           operation.metadata.totalChunks,
           operation.metadata.savedAt,
         )
-        database.prepare('DELETE FROM chunks WHERE generation <> ?').run(operation.generation)
+        database.prepare('DELETE FROM files WHERE generation <> ?').run(operation.generation)
       })
       return { type: 'ok' }
     }
     case 'abortReplace':
-      database.prepare('DELETE FROM chunks WHERE generation = ?').run(operation.generation)
+      database.prepare('DELETE FROM files WHERE generation = ?').run(operation.generation)
       return { type: 'ok' }
     case 'applyFiles': {
       const current = readMetadata(database)
       const generation = current?.generation || `incremental-${operation.metadata.savedAt}`
       inTransaction(database, () => {
+        const statements = createChunkStatements(database)
         const remove = database.prepare(
-          'DELETE FROM chunks WHERE generation = ? AND relative_path = ?',
+          'DELETE FROM files WHERE generation = ? AND relative_path = ?',
         )
         for (const file of operation.files) {
           remove.run(generation, file.relativePath)
-          insertChunks(database, generation, file.chunks)
+          insertChunks(statements, generation, file.chunks)
         }
         const row = database.prepare(
           'SELECT COUNT(*) AS count FROM chunks WHERE generation = ?',
@@ -218,10 +340,11 @@ export function executeStructuralIndexStoreOperation(
     }
     case 'clear':
       inTransaction(database, () => {
-        database.exec('DELETE FROM chunks; DELETE FROM index_state;')
+        database.exec('DELETE FROM files; DELETE FROM index_state;')
       })
       return { type: 'ok' }
     case 'close':
+      database.exec('PRAGMA optimize')
       database.exec('PRAGMA wal_checkpoint(TRUNCATE)')
       database.close()
       databases.delete(operation.databasePath)

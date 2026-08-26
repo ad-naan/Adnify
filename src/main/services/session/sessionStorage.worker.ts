@@ -23,6 +23,7 @@ interface OpenDatabase {
   writesSinceCheckpoint: number
   dirtySinceBackup: boolean
   idleCheckpoint: ReturnType<typeof setTimeout> | null
+  protectedBackupBlobHashes: Set<string> | null
 }
 
 interface BlobDescriptor {
@@ -52,14 +53,16 @@ const DEFAULT_STATE: SessionStateRecord = {
   activeBranchId: {},
   version: 0,
 }
-const LATEST_SCHEMA_VERSION = 4
+const LATEST_SCHEMA_VERSION = 5
 const BLOB_THRESHOLD_BYTES = 256 * 1024
 const IDLE_CHECKPOINT_MS = 30_000
 const CHECKPOINT_WRITE_THRESHOLD = 32
 const BACKUP_MIN_INTERVAL_MS = 24 * 60 * 60 * 1_000
+const INTEGRITY_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1_000
 
 function configure(database: DatabaseSync): void {
   database.exec(`
+    PRAGMA page_size = 8192;
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = FULL;
     PRAGMA foreign_keys = ON;
@@ -67,6 +70,9 @@ function configure(database: DatabaseSync): void {
     PRAGMA wal_autocheckpoint = 0;
     PRAGMA journal_size_limit = 16777216;
     PRAGMA temp_store = MEMORY;
+    PRAGMA cache_size = -32768;
+    PRAGMA mmap_size = 268435456;
+    PRAGMA trusted_schema = OFF;
   `)
 }
 
@@ -233,6 +239,113 @@ function migrateV4(database: DatabaseSync): void {
   `)
 }
 
+function migrateV5(database: DatabaseSync): void {
+  if (tableExists(database, 'message_blobs') && tableExists(database, 'branch_message_blobs')) {
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS threads_last_modified_id
+        ON threads(last_modified DESC, id ASC);
+      DROP INDEX IF EXISTS plans_updated_at;
+      CREATE INDEX IF NOT EXISTS plans_updated_at_id
+        ON plans(updated_at DESC, id ASC);
+      DROP INDEX IF EXISTS messages_thread_id_id;
+      CREATE TABLE IF NOT EXISTS maintenance_state (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        last_quick_check_at INTEGER NOT NULL,
+        clean_shutdown INTEGER NOT NULL CHECK (clean_shutdown IN (0, 1))
+      ) STRICT;
+      INSERT OR IGNORE INTO maintenance_state(singleton, last_quick_check_at, clean_shutdown)
+        VALUES (1, 0, 1);
+    `)
+    return
+  }
+
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS threads_last_modified_id
+      ON threads(last_modified DESC, id ASC);
+
+    DROP INDEX IF EXISTS plans_updated_at;
+    DROP INDEX IF EXISTS messages_thread_id_id;
+    CREATE INDEX IF NOT EXISTS plans_updated_at_id
+      ON plans(updated_at DESC, id ASC);
+
+    CREATE TABLE blobs_v5 (
+      hash TEXT PRIMARY KEY,
+      encoding TEXT NOT NULL CHECK (encoding IN ('utf8', 'base64')),
+      byte_length INTEGER NOT NULL CHECK (byte_length >= 0),
+      created_at INTEGER NOT NULL
+    ) STRICT;
+
+    INSERT INTO blobs_v5(hash, encoding, byte_length, created_at)
+      SELECT hash, encoding, byte_length, created_at FROM blobs;
+
+    CREATE TABLE message_blobs (
+      thread_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      hash TEXT NOT NULL REFERENCES blobs_v5(hash) ON DELETE RESTRICT,
+      PRIMARY KEY (thread_id, ordinal, hash),
+      FOREIGN KEY (thread_id, ordinal)
+        REFERENCES messages(thread_id, ordinal) ON DELETE CASCADE
+    ) WITHOUT ROWID, STRICT;
+
+    CREATE INDEX message_blobs_hash ON message_blobs(hash);
+
+    CREATE TABLE branch_message_blobs (
+      thread_id TEXT NOT NULL,
+      branch_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      hash TEXT NOT NULL REFERENCES blobs_v5(hash) ON DELETE RESTRICT,
+      PRIMARY KEY (thread_id, branch_id, ordinal, hash),
+      FOREIGN KEY (thread_id, branch_id, ordinal)
+        REFERENCES branch_messages(thread_id, branch_id, ordinal) ON DELETE CASCADE
+    ) WITHOUT ROWID, STRICT;
+
+    CREATE INDEX branch_message_blobs_hash ON branch_message_blobs(hash);
+
+    CREATE TABLE IF NOT EXISTS maintenance_state (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      last_quick_check_at INTEGER NOT NULL,
+      clean_shutdown INTEGER NOT NULL CHECK (clean_shutdown IN (0, 1))
+    ) STRICT;
+
+    INSERT OR IGNORE INTO maintenance_state(singleton, last_quick_check_at, clean_shutdown)
+      VALUES (1, 0, 1);
+  `)
+
+  const insertMessageBlob = database.prepare(`
+    INSERT OR IGNORE INTO message_blobs(thread_id, ordinal, hash) VALUES (?, ?, ?)
+  `)
+  const insertBranchMessageBlob = database.prepare(`
+    INSERT OR IGNORE INTO branch_message_blobs(thread_id, branch_id, ordinal, hash)
+    VALUES (?, ?, ?, ?)
+  `)
+  const messages = database.prepare(
+    'SELECT thread_id, ordinal, payload_json FROM messages',
+  ).all() as Array<{ thread_id: string; ordinal: number; payload_json: string }>
+  for (const row of messages) {
+    for (const reference of blobReferences(row.payload_json)) {
+      insertMessageBlob.run(row.thread_id, row.ordinal, reference.hash)
+    }
+  }
+  const branchMessages = database.prepare(
+    'SELECT thread_id, branch_id, ordinal, payload_json FROM branch_messages',
+  ).all() as Array<{
+    thread_id: string
+    branch_id: string
+    ordinal: number
+    payload_json: string
+  }>
+  for (const row of branchMessages) {
+    for (const reference of blobReferences(row.payload_json)) {
+      insertBranchMessageBlob.run(row.thread_id, row.branch_id, row.ordinal, reference.hash)
+    }
+  }
+
+  database.exec(`
+    DROP TABLE blobs;
+    ALTER TABLE blobs_v5 RENAME TO blobs;
+  `)
+}
+
 function migrateSchema(database: DatabaseSync): boolean {
   let version = Number((database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version)
   if (version > LATEST_SCHEMA_VERSION) {
@@ -240,7 +353,7 @@ function migrateSchema(database: DatabaseSync): boolean {
   }
 
   const startingVersion = version
-  const migrations = [migrateV1, migrateV2, migrateV3, migrateV4]
+  const migrations = [migrateV1, migrateV2, migrateV3, migrateV4, migrateV5]
   while (version < LATEST_SCHEMA_VERSION) {
     const nextVersion = version + 1
     database.exec('BEGIN IMMEDIATE')
@@ -264,11 +377,10 @@ function assertHealthy(database: DatabaseSync): void {
   }
 }
 
-function openCheckedDatabase(databasePath: string): DatabaseSync {
+function openConfiguredDatabase(databasePath: string): DatabaseSync {
   const database = new DatabaseSync(databasePath)
   try {
     configure(database)
-    assertHealthy(database)
     return database
   } catch (error) {
     try { database.close() } catch { /* preserve original failure */ }
@@ -321,21 +433,43 @@ async function recoverFromBackup(databasePath: string, openError: unknown): Prom
     if (await fileExists(source)) await fs.rename(source, `${source}${suffix}`)
   }
   await fs.copyFile(backupPath, databasePath)
-  return openCheckedDatabase(databasePath)
+  return openConfiguredDatabase(databasePath)
 }
 
 async function openHealthyDatabase(databasePath: string): Promise<{ database: DatabaseSync; migrated: boolean }> {
-  let database: DatabaseSync
+  let database: DatabaseSync | undefined
+  let checkedAt = 0
   try {
-    database = openCheckedDatabase(databasePath)
+    database = openConfiguredDatabase(databasePath)
+    const maintenance = tableExists(database, 'maintenance_state')
+      ? database.prepare(`
+          SELECT last_quick_check_at, clean_shutdown
+          FROM maintenance_state WHERE singleton = 1
+        `).get() as { last_quick_check_at: number; clean_shutdown: number } | undefined
+      : undefined
+    const now = Date.now()
+    if (!maintenance || maintenance.clean_shutdown !== 1 ||
+      now - maintenance.last_quick_check_at >= INTEGRITY_CHECK_INTERVAL_MS) {
+      assertHealthy(database)
+      checkedAt = now
+    }
   } catch (error) {
+    try { database?.close() } catch { /* recovery owns the next connection */ }
     database = await recoverFromBackup(databasePath, error)
+    checkedAt = Date.now()
   }
 
+  if (!database) throw new Error('Session database failed to open')
   try {
     if (!tableExists(database, 'threads')) database.exec('PRAGMA auto_vacuum = INCREMENTAL')
     const schemaMigrated = migrateSchema(database)
     const payloadsMigrated = await externalizeLegacyPayloads(database, databasePath)
+    database.prepare(`
+      UPDATE maintenance_state
+      SET last_quick_check_at = CASE WHEN ? > 0 THEN ? ELSE last_quick_check_at END,
+          clean_shutdown = 0
+      WHERE singleton = 1
+    `).run(checkedAt, checkedAt)
     return { database, migrated: schemaMigrated || payloadsMigrated }
   } catch (error) {
     database.close()
@@ -356,6 +490,7 @@ async function getDatabase(databasePath: string): Promise<OpenDatabase> {
     writesSinceCheckpoint: 0,
     dirtySinceBackup: initialized.migrated,
     idleCheckpoint: null,
+    protectedBackupBlobHashes: null,
   }
   databases.set(databasePath, opened)
   return opened
@@ -370,7 +505,11 @@ function blobPath(databasePath: string, hash: string): string {
   return path.join(blobDirectory(databasePath), hash.slice(0, 2), hash)
 }
 
-async function writeBlob(databasePath: string, bytes: Buffer): Promise<string> {
+async function writeBlob(
+  databasePath: string,
+  bytes: Buffer,
+  createdHashes: Set<string>,
+): Promise<string> {
   const hash = createHash('sha256').update(bytes).digest('hex')
   const target = blobPath(databasePath, hash)
   if (await fileExists(target)) return hash
@@ -387,6 +526,7 @@ async function writeBlob(databasePath: string, bytes: Buffer): Promise<string> {
   try {
     await fs.rename(temporary, target)
     await syncDirectory(path.dirname(target))
+    createdHashes.add(hash)
   } catch (error) {
     await fs.rm(temporary, { force: true })
     if (!await fileExists(target)) throw error
@@ -406,6 +546,7 @@ async function externalizeValue(
   value: unknown,
   databasePath: string,
   blobs: BlobDescriptor[],
+  createdHashes: Set<string>,
   key?: string,
   parent?: Record<string, unknown>,
 ): Promise<unknown> {
@@ -414,7 +555,7 @@ async function externalizeValue(
     const bytes = isBase64 ? Buffer.from(value, 'base64') : Buffer.from(value, 'utf8')
     if (bytes.byteLength < BLOB_THRESHOLD_BYTES) return value
     const descriptor: BlobDescriptor = {
-      hash: await writeBlob(databasePath, bytes),
+      hash: await writeBlob(databasePath, bytes, createdHashes),
       encoding: isBase64 ? 'base64' : 'utf8',
       byteLength: bytes.byteLength,
     }
@@ -422,23 +563,27 @@ async function externalizeValue(
     return { __adnifyBlob: 1, hash: descriptor.hash, encoding: descriptor.encoding } satisfies BlobReference
   }
   if (Array.isArray(value)) {
-    return Promise.all(value.map(item => externalizeValue(item, databasePath, blobs)))
+    return Promise.all(value.map(item => externalizeValue(item, databasePath, blobs, createdHashes)))
   }
   if (!value || typeof value !== 'object') return value
 
   const record = value as Record<string, unknown>
   const entries = await Promise.all(Object.entries(record).map(async ([childKey, child]) => [
     childKey,
-    await externalizeValue(child, databasePath, blobs, childKey, record),
+    await externalizeValue(child, databasePath, blobs, createdHashes, childKey, record),
   ] as const))
   return Object.fromEntries(entries)
 }
 
-async function prepareMessage(databasePath: string, message: SessionMessageWrite): Promise<PreparedMessage> {
+async function prepareMessage(
+  databasePath: string,
+  message: SessionMessageWrite,
+  createdHashes: Set<string>,
+): Promise<PreparedMessage> {
   // Preserve JSON.stringify semantics (including rejecting BigInt) before any transaction begins.
   const compatible = JSON.parse(JSON.stringify(message.payload)) as unknown
   const blobs: BlobDescriptor[] = []
-  const externalized = await externalizeValue(compatible, databasePath, blobs)
+  const externalized = await externalizeValue(compatible, databasePath, blobs, createdHashes)
   return {
     ordinal: message.ordinal,
     id: message.id,
@@ -461,20 +606,31 @@ async function externalizeLegacyPayloads(database: DatabaseSync, databasePath: s
   ).all() as Array<{ thread_id: string; branch_id: string; ordinal: number; payload_json: string }>
   const preparedMessages: Array<typeof messageRows[number] & { nextJson: string; blobs: BlobDescriptor[] }> = []
   const preparedBranches: Array<typeof branchRows[number] & { nextJson: string; blobs: BlobDescriptor[] }> = []
+  const createdHashes = new Set<string>()
 
-  for (const row of messageRows) {
-    const blobs: BlobDescriptor[] = []
-    const nextJson = JSON.stringify(await externalizeValue(JSON.parse(row.payload_json), databasePath, blobs))
-    if (blobs.length > 0) preparedMessages.push({ ...row, nextJson, blobs })
-  }
-  for (const row of branchRows) {
-    const blobs: BlobDescriptor[] = []
-    const nextJson = JSON.stringify(await externalizeValue(JSON.parse(row.payload_json), databasePath, blobs))
-    if (blobs.length > 0) preparedBranches.push({ ...row, nextJson, blobs })
+  try {
+    for (const row of messageRows) {
+      const blobs: BlobDescriptor[] = []
+      const nextJson = JSON.stringify(await externalizeValue(
+        JSON.parse(row.payload_json), databasePath, blobs, createdHashes,
+      ))
+      if (blobs.length > 0) preparedMessages.push({ ...row, nextJson, blobs })
+    }
+    for (const row of branchRows) {
+      const blobs: BlobDescriptor[] = []
+      const nextJson = JSON.stringify(await externalizeValue(
+        JSON.parse(row.payload_json), databasePath, blobs, createdHashes,
+      ))
+      if (blobs.length > 0) preparedBranches.push({ ...row, nextJson, blobs })
+    }
+  } catch (error) {
+    await removeUnreferencedCreatedBlobs(database, databasePath, createdHashes)
+    throw error
   }
 
   database.exec('BEGIN IMMEDIATE')
   try {
+    const blobStatements = createBlobStatements(database)
     const updateMessage = database.prepare(
       'UPDATE messages SET payload_json = ? WHERE thread_id = ? AND ordinal = ?',
     )
@@ -482,18 +638,24 @@ async function externalizeLegacyPayloads(database: DatabaseSync, databasePath: s
       'UPDATE branch_messages SET payload_json = ? WHERE thread_id = ? AND branch_id = ? AND ordinal = ?',
     )
     for (const row of preparedMessages) {
-      incrementBlobRefs(database, row.blobs)
       updateMessage.run(row.nextJson, row.thread_id, row.ordinal)
+      insertBlobReferences(blobStatements, {
+        type: 'message', threadId: row.thread_id, ordinal: row.ordinal,
+      }, row.blobs)
     }
     for (const row of preparedBranches) {
-      incrementBlobRefs(database, row.blobs)
       updateBranch.run(row.nextJson, row.thread_id, row.branch_id, row.ordinal)
+      insertBlobReferences(blobStatements, {
+        type: 'branchMessage', threadId: row.thread_id,
+        branchId: row.branch_id, ordinal: row.ordinal,
+      }, row.blobs)
     }
     database.prepare('INSERT INTO migration_log(name, completed_at) VALUES (?, ?)')
       .run(migrationName, Date.now())
     database.exec('COMMIT')
   } catch (error) {
     database.exec('ROLLBACK')
+    await removeUnreferencedCreatedBlobs(database, databasePath, createdHashes)
     throw error
   }
   return true
@@ -527,53 +689,126 @@ function blobReferences(payloadJson: string): BlobReference[] {
   return found
 }
 
-function incrementBlobRefs(database: DatabaseSync, blobs: BlobDescriptor[]): void {
-  const statement = database.prepare(`
-    INSERT INTO blobs(hash, encoding, byte_length, ref_count, created_at)
-    VALUES (?, ?, ?, 1, ?)
-    ON CONFLICT(hash) DO UPDATE SET ref_count = ref_count + 1
-  `)
-  for (const blob of blobs) statement.run(blob.hash, blob.encoding, blob.byteLength, Date.now())
-}
-
-function decrementRowsBlobRefs(database: DatabaseSync, rows: Array<{ payload_json: string }>): void {
-  const decrement = database.prepare(`
-    UPDATE blobs SET ref_count = ref_count - 1 WHERE hash = ? AND ref_count > 0
-  `)
-  for (const row of rows) {
-    for (const reference of blobReferences(row.payload_json)) decrement.run(reference.hash)
+function createBlobStatements(database: DatabaseSync) {
+  return {
+    insertBlob: database.prepare(`
+      INSERT OR IGNORE INTO blobs(hash, encoding, byte_length, created_at)
+      VALUES (?, ?, ?, ?)
+    `),
+    insertMessageBlob: database.prepare(`
+      INSERT OR IGNORE INTO message_blobs(thread_id, ordinal, hash) VALUES (?, ?, ?)
+    `),
+    insertBranchMessageBlob: database.prepare(`
+      INSERT OR IGNORE INTO branch_message_blobs(thread_id, branch_id, ordinal, hash)
+      VALUES (?, ?, ?, ?)
+    `),
   }
 }
 
-async function collectGarbageBlobs(database: DatabaseSync, databasePath: string): Promise<void> {
+type BlobOwner =
+  | { type: 'message'; threadId: string; ordinal: number }
+  | { type: 'branchMessage'; threadId: string; branchId: string; ordinal: number }
+
+function insertBlobReferences(
+  statements: ReturnType<typeof createBlobStatements>,
+  owner: BlobOwner,
+  blobs: BlobDescriptor[],
+): void {
+  const inserted = new Set<string>()
+  for (const blob of blobs) {
+    if (inserted.has(blob.hash)) continue
+    inserted.add(blob.hash)
+    statements.insertBlob.run(blob.hash, blob.encoding, blob.byteLength, Date.now())
+    if (owner.type === 'message') {
+      statements.insertMessageBlob.run(owner.threadId, owner.ordinal, blob.hash)
+    } else {
+      statements.insertBranchMessageBlob.run(
+        owner.threadId, owner.branchId, owner.ordinal, blob.hash,
+      )
+    }
+  }
+}
+
+async function removeUnreferencedCreatedBlobs(
+  database: DatabaseSync,
+  databasePath: string,
+  createdHashes: Set<string>,
+): Promise<void> {
+  if (createdHashes.size === 0) return
+  const isTracked = database.prepare('SELECT 1 FROM blobs WHERE hash = ?')
+  await Promise.all([...createdHashes].map(async hash => {
+    if (isTracked.get(hash)) return
+    await fs.rm(blobPath(databasePath, hash), { force: true }).catch(() => undefined)
+  }))
+}
+
+function readBackupBlobHashes(backup: DatabaseSync): Set<string> {
+  const hashes = new Set<string>()
+  if (tableExists(backup, 'message_blobs') && tableExists(backup, 'branch_message_blobs')) {
+    const rows = backup.prepare(`
+      SELECT hash FROM message_blobs
+      UNION
+      SELECT hash FROM branch_message_blobs
+    `).all() as Array<{ hash: string }>
+    for (const row of rows) hashes.add(row.hash)
+    return hashes
+  }
+
+  // A pre-v5 recovery snapshot can survive the first application upgrade.
+  // Parse it once per worker lifetime, then the next snapshot rotation removes
+  // this compatibility path from the hot commit loop.
+  for (const table of ['messages', 'branch_messages'] as const) {
+    if (!tableExists(backup, table)) continue
+    const rows = backup.prepare(`SELECT payload_json FROM ${table}`).all() as Array<{ payload_json: string }>
+    for (const row of rows) {
+      for (const reference of blobReferences(row.payload_json)) hashes.add(reference.hash)
+    }
+  }
+  return hashes
+}
+
+async function protectedBackupBlobHashes(opened: OpenDatabase): Promise<Set<string> | null> {
+  if (opened.protectedBackupBlobHashes) return opened.protectedBackupBlobHashes
   const protectedHashes = new Set<string>()
-  for (const backupPath of [`${databasePath}.bak`, `${databasePath}.bak.previous`]) {
+  for (const backupPath of [`${opened.path}.bak`, `${opened.path}.bak.previous`]) {
     if (!await fileExists(backupPath)) continue
     let backup: DatabaseSync | undefined
     try {
       backup = new DatabaseSync(backupPath, { readOnly: true })
       assertHealthy(backup)
-      for (const table of ['messages', 'branch_messages'] as const) {
-        if (!tableExists(backup, table)) continue
-        const rows = backup.prepare(`SELECT payload_json FROM ${table}`).all() as Array<{ payload_json: string }>
-        for (const row of rows) for (const reference of blobReferences(row.payload_json)) {
-          protectedHashes.add(reference.hash)
-        }
-      }
+      for (const hash of readBackupBlobHashes(backup)) protectedHashes.add(hash)
     } catch {
       // Fail closed: an unreadable snapshot must never cause companion data loss.
-      return
+      return null
     } finally {
       backup?.close()
     }
   }
+  opened.protectedBackupBlobHashes = protectedHashes
+  return protectedHashes
+}
 
-  const rows = database.prepare('SELECT hash FROM blobs WHERE ref_count = 0').all() as Array<{ hash: string }>
-  const removeRow = database.prepare('DELETE FROM blobs WHERE hash = ? AND ref_count = 0')
+async function collectGarbageBlobs(opened: OpenDatabase): Promise<void> {
+  const rows = opened.database.prepare(`
+    SELECT b.hash
+    FROM blobs b
+    WHERE NOT EXISTS (SELECT 1 FROM message_blobs m WHERE m.hash = b.hash)
+      AND NOT EXISTS (SELECT 1 FROM branch_message_blobs bm WHERE bm.hash = b.hash)
+  `).all() as Array<{ hash: string }>
+  if (rows.length === 0) return
+
+  const protectedHashes = await protectedBackupBlobHashes(opened)
+  if (!protectedHashes) return
+  const removeRow = opened.database.prepare(`
+    DELETE FROM blobs
+    WHERE hash = ?
+      AND NOT EXISTS (SELECT 1 FROM message_blobs m WHERE m.hash = blobs.hash)
+      AND NOT EXISTS (SELECT 1 FROM branch_message_blobs bm WHERE bm.hash = blobs.hash)
+  `)
   for (const row of rows) {
     if (protectedHashes.has(row.hash)) continue
     try {
-      await fs.rm(blobPath(databasePath, row.hash), { force: true })
+      await fs.rm(blobPath(opened.path, row.hash), { force: true })
       removeRow.run(row.hash)
     } catch { /* retry during the next maintenance cycle */ }
   }
@@ -597,7 +832,7 @@ function readState(database: DatabaseSync): SessionStateRecord {
 function readThreads(database: DatabaseSync): SessionThreadMetadata[] {
   const rows = database.prepare(`
     SELECT id, created_at, last_modified, title, message_count, metadata_json
-    FROM threads ORDER BY last_modified DESC
+    FROM threads ORDER BY last_modified DESC, id ASC
   `).all() as Array<{
     id: string
     created_at: number
@@ -664,16 +899,21 @@ async function readBranchMessages(
   const branches = database.prepare(
     'SELECT branch_id FROM branches WHERE thread_id = ? ORDER BY ordinal',
   ).all(threadId) as Array<{ branch_id: string }>
-  return Promise.all(branches.map(async branch => {
-    const rows = database.prepare(`
-      SELECT payload_json FROM branch_messages
-      WHERE thread_id = ? AND branch_id = ? ORDER BY ordinal
-    `).all(threadId, branch.branch_id) as Array<{ payload_json: string }>
-    return {
-      id: branch.branch_id,
-      messages: await Promise.all(rows.map(row => hydrateValue(JSON.parse(row.payload_json), databasePath))),
-    }
-  }))
+  const rows = database.prepare(`
+    SELECT branch_id, payload_json FROM branch_messages
+    WHERE thread_id = ? ORDER BY branch_id, ordinal
+  `).all(threadId) as Array<{ branch_id: string; payload_json: string }>
+  const payloadsByBranch = new Map<string, string[]>()
+  for (const row of rows) {
+    const payloads = payloadsByBranch.get(row.branch_id) || []
+    if (!payloadsByBranch.has(row.branch_id)) payloadsByBranch.set(row.branch_id, payloads)
+    payloads.push(row.payload_json)
+  }
+  return Promise.all(branches.map(async branch => ({
+    id: branch.branch_id,
+    messages: await Promise.all((payloadsByBranch.get(branch.branch_id) || [])
+      .map(payload => hydrateValue(JSON.parse(payload), databasePath))),
+  })))
 }
 
 function upsertThread(database: DatabaseSync, thread: SessionThreadMetadata): void {
@@ -707,6 +947,7 @@ function insertMessages(
     throw new Error('branchId is required for branch messages')
   }
   const messageBranchId = branchId ?? ''
+  const blobStatements = createBlobStatements(database)
   const insert = table === 'messages'
     ? database.prepare(`
         INSERT INTO messages(thread_id, ordinal, message_id, role, timestamp, payload_json)
@@ -718,51 +959,56 @@ function insertMessages(
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `)
   for (const message of messages) {
-    incrementBlobRefs(database, message.blobs)
     if (table === 'messages') {
       insert.run(threadId, message.ordinal, message.id, message.role, message.timestamp, message.payloadJson)
+      insertBlobReferences(blobStatements, {
+        type: 'message', threadId, ordinal: message.ordinal,
+      }, message.blobs)
     } else {
       insert.run(threadId, messageBranchId, message.ordinal, message.id, message.role, message.timestamp, message.payloadJson)
+      insertBlobReferences(blobStatements, {
+        type: 'branchMessage', threadId, branchId: messageBranchId, ordinal: message.ordinal,
+      }, message.blobs)
     }
   }
 }
 
-function deleteThreadBlobRefs(database: DatabaseSync, threadId: string): void {
-  const rows = [
-    ...database.prepare('SELECT payload_json FROM messages WHERE thread_id = ?').all(threadId),
-    ...database.prepare('SELECT payload_json FROM branch_messages WHERE thread_id = ?').all(threadId),
-  ] as Array<{ payload_json: string }>
-  decrementRowsBlobRefs(database, rows)
-}
-
-async function applyPatch(database: DatabaseSync, databasePath: string, patch: SessionPatch): Promise<void> {
-  const preparedThreads = await Promise.all(patch.threads.map(async thread => ({
-    ...thread,
-    messages: await Promise.all((thread.messages || []).map(message => prepareMessage(databasePath, message))),
-  })))
-  const preparedBranchThreads = await Promise.all(patch.branchThreads.map(async entry => ({
-    threadId: entry.threadId,
-    branches: await Promise.all(entry.branches.map(async branch => ({
-      ...branch,
-      messages: await Promise.all(branch.messages.map(message => prepareMessage(databasePath, message))),
-    } satisfies PreparedBranch))),
-  })))
+async function applyPatch(opened: OpenDatabase, patch: SessionPatch): Promise<void> {
+  const { database, path: databasePath } = opened
+  const createdHashes = new Set<string>()
+  let preparedThreads: Array<Omit<SessionPatch['threads'][number], 'messages'> & {
+    messages: PreparedMessage[]
+  }>
+  let preparedBranchThreads: Array<{ threadId: string; branches: PreparedBranch[] }>
+  try {
+    preparedThreads = await Promise.all(patch.threads.map(async thread => ({
+      ...thread,
+      messages: await Promise.all((thread.messages || [])
+        .map(message => prepareMessage(databasePath, message, createdHashes))),
+    })))
+    preparedBranchThreads = await Promise.all(patch.branchThreads.map(async entry => ({
+      threadId: entry.threadId,
+      branches: await Promise.all(entry.branches.map(async branch => ({
+        ...branch,
+        messages: await Promise.all(branch.messages
+          .map(message => prepareMessage(databasePath, message, createdHashes))),
+      } satisfies PreparedBranch))),
+    })))
+  } catch (error) {
+    await removeUnreferencedCreatedBlobs(database, databasePath, createdHashes)
+    throw error
+  }
 
   database.exec('BEGIN IMMEDIATE')
   try {
     const deleteThread = database.prepare('DELETE FROM threads WHERE id = ?')
     for (const threadId of patch.deletedThreadIds) {
-      deleteThreadBlobRefs(database, threadId)
       deleteThread.run(threadId)
     }
 
     for (const threadPatch of preparedThreads) {
       upsertThread(database, threadPatch.metadata)
       if (threadPatch.replaceFrom !== undefined) {
-        const oldRows = database.prepare(`
-          SELECT payload_json FROM messages WHERE thread_id = ? AND ordinal >= ?
-        `).all(threadPatch.metadata.id, threadPatch.replaceFrom) as Array<{ payload_json: string }>
-        decrementRowsBlobRefs(database, oldRows)
         database.prepare('DELETE FROM messages WHERE thread_id = ? AND ordinal >= ?')
           .run(threadPatch.metadata.id, threadPatch.replaceFrom)
         insertMessages(database, 'messages', threadPatch.metadata.id, threadPatch.messages)
@@ -777,10 +1023,6 @@ async function applyPatch(database: DatabaseSync, databasePath: string, patch: S
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const entry of preparedBranchThreads) {
-      const oldRows = database.prepare(
-        'SELECT payload_json FROM branch_messages WHERE thread_id = ?',
-      ).all(entry.threadId) as Array<{ payload_json: string }>
-      decrementRowsBlobRefs(database, oldRows)
       deleteBranches.run(entry.threadId)
       for (const branch of entry.branches) {
         insertBranch.run(
@@ -807,9 +1049,12 @@ async function applyPatch(database: DatabaseSync, databasePath: string, patch: S
     database.exec('COMMIT')
   } catch (error) {
     database.exec('ROLLBACK')
+    await removeUnreferencedCreatedBlobs(database, databasePath, createdHashes)
     throw error
   }
-  await collectGarbageBlobs(database, databasePath)
+  const mayHaveOrphanedBlobs = patch.deletedThreadIds.length > 0 ||
+    patch.branchThreads.length > 0 || patch.threads.some(thread => thread.replaceFrom !== undefined)
+  if (mayHaveOrphanedBlobs) await collectGarbageBlobs(opened)
 }
 
 async function importLegacy(database: DatabaseSync, databasePath: string, sessionsDir: string): Promise<boolean> {
@@ -928,7 +1173,9 @@ async function importLegacy(database: DatabaseSync, databasePath: string, sessio
     }]
   })
 
-  await applyPatch(database, databasePath, { state, threads, deletedThreadIds: [], branchThreads })
+  const opened = databases.get(databasePath)
+  if (!opened) throw new Error('Session database is not registered')
+  await applyPatch(opened, { state, threads, deletedThreadIds: [], branchThreads })
   markComplete()
   return true
 }
@@ -1020,7 +1267,18 @@ function scheduleCheckpoint(opened: OpenDatabase): void {
     opened.idleCheckpoint = null
     try {
       checkpoint(opened, false)
-      opened.database.exec('PRAGMA incremental_vacuum(256); PRAGMA optimize;')
+      const pageCount = Number(
+        (opened.database.prepare('PRAGMA page_count').get() as { page_count: number }).page_count,
+      )
+      const freePages = Number(
+        (opened.database.prepare('PRAGMA freelist_count').get() as { freelist_count: number }).freelist_count,
+      )
+      // Reclaim only meaningful fragmentation. Running incremental_vacuum on
+      // every quiet period creates needless SSD writes for normal append-only use.
+      if (freePages >= 1024 && freePages / Math.max(1, pageCount) >= 0.2) {
+        opened.database.exec(`PRAGMA incremental_vacuum(${Math.min(256, freePages)})`)
+      }
+      opened.database.exec('PRAGMA optimize')
     } catch { /* retry on next idle/close */ }
   }, delay)
 }
@@ -1028,6 +1286,11 @@ function scheduleCheckpoint(opened: OpenDatabase): void {
 async function closeAll(): Promise<void> {
   for (const opened of databases.values()) {
     if (opened.idleCheckpoint) clearTimeout(opened.idleCheckpoint)
+    try {
+      opened.database.prepare(
+        'UPDATE maintenance_state SET clean_shutdown = 1 WHERE singleton = 1',
+      ).run()
+    } catch { /* an older failed migration remains recoverable */ }
     try { checkpoint(opened, true) } catch { /* WAL remains recoverable */ }
     opened.database.close()
     try {
@@ -1072,18 +1335,7 @@ async function clearDatabase(opened: OpenDatabase): Promise<void> {
   await fs.rm(`${opened.path}.bak`, { force: true })
   await fs.rm(`${opened.path}.bak.previous`, { force: true })
   await fs.rm(blobDirectory(opened.path), { recursive: true, force: true })
-}
-
-async function directoryBytes(directory: string): Promise<number> {
-  let total = 0
-  let entries
-  try { entries = await fs.readdir(directory, { withFileTypes: true }) } catch { return 0 }
-  for (const entry of entries) {
-    const target = path.join(directory, entry.name)
-    if (entry.isDirectory()) total += await directoryBytes(target)
-    else if (entry.isFile()) total += await fs.stat(target).then(stat => stat.size).catch(() => 0)
-  }
-  return total
+  opened.protectedBackupBlobHashes = new Set()
 }
 
 async function readStats(database: DatabaseSync, databasePath: string): Promise<SessionStorageStats> {
@@ -1096,11 +1348,11 @@ async function readStats(database: DatabaseSync, databasePath: string): Promise<
   return {
     databaseBytes: await fileBytes(databasePath),
     walBytes: await fileBytes(`${databasePath}-wal`),
-    blobBytes: await directoryBytes(blobDirectory(databasePath)),
+    blobBytes: scalar('SELECT COALESCE(SUM(byte_length), 0) AS value FROM blobs', 'value'),
     threadCount: scalar('SELECT COUNT(*) AS value FROM threads', 'value'),
     messageCount: scalar('SELECT COUNT(*) AS value FROM messages', 'value'),
     branchCount: scalar('SELECT COUNT(*) AS value FROM branches', 'value'),
-    blobCount: scalar('SELECT COUNT(*) AS value FROM blobs WHERE ref_count > 0', 'value'),
+    blobCount: scalar('SELECT COUNT(*) AS value FROM blobs', 'value'),
     planCount: scalar('SELECT COUNT(*) AS value FROM plans', 'value'),
     pageSize: scalar('PRAGMA page_size', 'page_size'),
     freePages: scalar('PRAGMA freelist_count', 'freelist_count'),
@@ -1149,7 +1401,7 @@ export async function executeSessionStorageOperation(
       scheduleCheckpoint(opened)
       return { type: 'ok' }
     case 'applyPatch':
-      await applyPatch(opened.database, opened.path, operation.patch)
+      await applyPatch(opened, operation.patch)
       scheduleCheckpoint(opened)
       return { type: 'ok' }
     case 'clear':
@@ -1162,7 +1414,9 @@ export async function executeSessionStorageOperation(
   }
 }
 
-parentPort?.on('message', async (request: SessionWorkerRequest) => {
+const operationQueues = new Map<string, Promise<void>>()
+
+async function respond(request: SessionWorkerRequest): Promise<void> {
   let response: SessionWorkerResponse
   try {
     response = {
@@ -1178,4 +1432,20 @@ parentPort?.on('message', async (request: SessionWorkerRequest) => {
     }
   }
   parentPort?.postMessage(response)
+}
+
+parentPort?.on('message', (request: SessionWorkerRequest) => {
+  if (request.operation.type === 'closeAll') {
+    const pending = [...operationQueues.values()]
+    void Promise.allSettled(pending).then(() => respond(request))
+    return
+  }
+
+  const databasePath = request.operation.databasePath
+  const previous = operationQueues.get(databasePath) || Promise.resolve()
+  const next = previous.catch(() => undefined).then(() => respond(request))
+  operationQueues.set(databasePath, next)
+  void next.finally(() => {
+    if (operationQueues.get(databasePath) === next) operationQueues.delete(databasePath)
+  })
 })

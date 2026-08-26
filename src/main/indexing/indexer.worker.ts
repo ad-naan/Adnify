@@ -27,7 +27,18 @@ type WorkerResponse =
   | { type: 'structural_result'; requestId: number; chunks: CodeChunk[]; processed: number; total: number }
   | { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
   | { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
-  | { type: 'batch_update_result'; requestId: number; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
+  | {
+      type: 'batch_update_result'
+      mode: 'structural'
+      requestId: number
+      results: Array<{ filePath: string; chunks: CodeChunk[]; deleted: boolean }>
+    }
+  | {
+      type: 'batch_update_result'
+      mode: 'semantic'
+      requestId: number
+      results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }>
+    }
   | { type: 'complete'; totalChunks: number }
   | { type: 'error'; error: string; requestId?: number }
 
@@ -131,7 +142,6 @@ async function handleIndex(
 
   const { regexChunker, tsChunker } = await getChunkers(config)
   const embedder = config.mode === 'semantic' ? new EmbeddingService(config.embedding) : null
-  const limit = pLimit(4)
 
   // 预热 Embedder (触发模型加载) 并通知 UI
   if (config.mode === 'semantic' && config.embedding.provider === 'transformers') {
@@ -149,7 +159,7 @@ async function handleIndex(
   let skippedFiles = 0
   let pendingChunks: IndexedChunk[] = []
   let pendingStructuralChunks: CodeChunk[] = []
-  const RESULT_BATCH_SIZE = 50
+  const resultBatchSize = config.mode === 'structural' ? 512 : 50
 
   const flushChunks = async (): Promise<void> => {
     if (pendingStructuralChunks.length > 0) {
@@ -162,8 +172,13 @@ async function handleIndex(
     }
   }
 
-  const tasks = files.map(filePath => limit(async () => {
+  const processFile = async (filePath: string): Promise<void> => {
     try {
+      const stats = await fs.stat(filePath)
+      if (!stats.isFile() || stats.size > config.maxFileSize) {
+        processedFiles++
+        return
+      }
       const content = await fs.readFile(filePath, 'utf-8')
 
       if (content.length > config.maxFileSize) {
@@ -171,16 +186,17 @@ async function handleIndex(
         return
       }
 
-      const currentHash = crypto.createHash('sha256').update(content).digest('hex')
-
-      // 使用对象属性访问（不是 Map.get）
-      if (existingHashes && existingHashes[filePath] === currentHash) {
-        skippedFiles++
-        processedFiles++
-        if (processedFiles % 10 === 0) {
-          postResponse({ type: 'progress', processed: processedFiles, total: totalFiles })
+      if (existingHashes) {
+        const currentHash = crypto.createHash('sha256').update(content).digest('hex')
+        // 使用对象属性访问（不是 Map.get）
+        if (existingHashes[filePath] === currentHash) {
+          skippedFiles++
+          processedFiles++
+          if (processedFiles % 10 === 0) {
+            postResponse({ type: 'progress', processed: processedFiles, total: totalFiles })
+          }
+          return
         }
-        return
       }
 
       const chunks = await chunkFile(tsChunker, regexChunker, filePath, content, workspacePath)
@@ -203,7 +219,7 @@ async function handleIndex(
 
       processedFiles++
 
-      if (pendingChunks.length >= RESULT_BATCH_SIZE || pendingStructuralChunks.length >= RESULT_BATCH_SIZE) {
+      if (pendingChunks.length >= resultBatchSize || pendingStructuralChunks.length >= resultBatchSize) {
         await flushChunks()
       } else if (processedFiles % 10 === 0) {
         postResponse({ type: 'progress', processed: processedFiles, total: totalFiles })
@@ -212,9 +228,16 @@ async function handleIndex(
       logger.index.error(`Error processing file ${filePath}:`, error)
       processedFiles++
     }
-  }))
+  }
 
-  await Promise.all(tasks)
+  let nextFileIndex = 0
+  const consumers = Array.from({ length: Math.min(4, files.length) }, async () => {
+    while (nextFileIndex < files.length) {
+      const filePath = files[nextFileIndex++]
+      await processFile(filePath)
+    }
+  })
+  await Promise.all(consumers)
   await flushChunks()
 
   logger.index.info(`[Worker] Indexing complete. Total: ${totalFiles}, Skipped: ${skippedFiles}, Chunks: ${totalChunks}`)
@@ -231,42 +254,60 @@ async function handleBatchUpdate(
   config: IndexConfig,
 ): Promise<void> {
   const { regexChunker, tsChunker } = await getChunkers(config)
-  const embedder = new EmbeddingService(config.embedding)
-  const limit = pLimit(5) // 批量更新时降低并发
-
-  const results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> = []
+  const embedder = config.mode === 'semantic' ? new EmbeddingService(config.embedding) : null
+  const limit = pLimit(4)
+  const structuralResults: Array<{ filePath: string; chunks: CodeChunk[]; deleted: boolean }> = []
+  const semanticResults: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> = []
 
   const tasks = files.map(filePath => limit(async () => {
     try {
-      // 检查文件是否存在
+      const ext = path.extname(filePath).toLowerCase()
+      if (!config.includedExts.includes(ext)) return
+
+      let stats
       try {
-        await fs.access(filePath)
+        stats = await fs.stat(filePath)
       } catch {
-        results.push({ filePath, chunks: [], deleted: true })
+        if (config.mode === 'structural') structuralResults.push({ filePath, chunks: [], deleted: true })
+        else semanticResults.push({ filePath, chunks: [], deleted: true })
+        return
+      }
+
+      if (!stats.isFile() || stats.size > config.maxFileSize) {
+        if (config.mode === 'structural') structuralResults.push({ filePath, chunks: [], deleted: true })
+        else semanticResults.push({ filePath, chunks: [], deleted: true })
         return
       }
 
       const content = await fs.readFile(filePath, 'utf-8')
 
       if (content.length > config.maxFileSize) {
+        if (config.mode === 'structural') structuralResults.push({ filePath, chunks: [], deleted: true })
+        else semanticResults.push({ filePath, chunks: [], deleted: true })
         return
       }
 
       const chunks = await chunkFile(tsChunker, regexChunker, filePath, content, workspacePath)
 
       if (chunks.length === 0) {
-        results.push({ filePath, chunks: [], deleted: true })
+        if (config.mode === 'structural') structuralResults.push({ filePath, chunks: [], deleted: true })
+        else semanticResults.push({ filePath, chunks: [], deleted: true })
+        return
+      }
+
+      if (config.mode === 'structural') {
+        structuralResults.push({ filePath, chunks, deleted: false })
         return
       }
 
       const texts = chunks.map(c => prepareTextForEmbedding(c))
-      const vectors = await embedder.embedBatch(texts)
+      const vectors = await embedder!.embedBatch(texts)
 
       const indexedChunks: IndexedChunk[] = chunks
         .map((chunk, idx) => vectors[idx] ? { ...chunk, vector: vectors[idx] } : null)
         .filter((c): c is IndexedChunk => c !== null)
 
-      results.push({ filePath, chunks: indexedChunks, deleted: false })
+      semanticResults.push({ filePath, chunks: indexedChunks, deleted: false })
     } catch (error) {
       logger.index.error(`[Worker] Error updating file ${filePath}:`, error)
       // 出错的文件跳过，不影响其他文件
@@ -275,7 +316,11 @@ async function handleBatchUpdate(
 
   await Promise.all(tasks)
 
-  postResponse({ type: 'batch_update_result', requestId, results })
+  if (config.mode === 'structural') {
+    postResponse({ type: 'batch_update_result', mode: 'structural', requestId, results: structuralResults })
+  } else {
+    postResponse({ type: 'batch_update_result', mode: 'semantic', requestId, results: semanticResults })
+  }
 }
 
 /**
