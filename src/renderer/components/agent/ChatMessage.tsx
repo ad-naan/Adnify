@@ -56,7 +56,7 @@ import { fixMarkdownTables } from '@renderer/utils/markdownTableFixer'
 import { ImageLightbox } from './ImageLightbox'
 import { projectAssistantTurn, type AssistantProcessSummary } from './assistantTurnProjection'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { partitionStreamingMarkdown } from './streamingMarkdownPartition'
+import { StreamingMarkdownPartitioner } from './streamingMarkdownPartition'
 import { skillService } from '@/renderer/agent/services/skillService'
 import { logger } from '@shared/utils/Logger'
 
@@ -585,7 +585,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
   const cleanedContent = React.useMemo(() => {
     // Use identical normalization before and after completion so the final
     // stream frame does not swap to a differently shaped Markdown tree.
-    return fixMarkdownTables(cleanStreamingContent(content))
+    return cleanStreamingContent(content)
   }, [content])
 
   // 检测系统警告
@@ -607,9 +607,10 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   // 平滑流式插入
   const smoothContent = useSmoothStream(contentWithoutAlert || '', !!isStreaming, 1.5)
+  const streamingPartitioner = React.useMemo(() => new StreamingMarkdownPartitioner(), [])
   const streamingPartition = React.useMemo(
-    () => keepStreamingLayout ? partitionStreamingMarkdown(smoothContent) : null,
-    [keepStreamingLayout, smoothContent],
+    () => keepStreamingLayout ? streamingPartitioner.update(smoothContent, !!isStreaming) : null,
+    [isStreaming, keepStreamingLayout, smoothContent, streamingPartitioner],
   )
 
   const workspacePath = useStore(s => s.workspacePath)
@@ -737,7 +738,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
                       components={markdownComponents}
                       skipHtml
                     >
-                      {streamingPartition.activeBlock}
+                      {fixMarkdownTables(streamingPartition.activeBlock)}
                     </ReactMarkdown>
                   )}
                 </div>
@@ -751,7 +752,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
               components={markdownComponents}
               skipHtml
             >
-              {smoothContent}
+              {fixMarkdownTables(smoothContent)}
             </ReactMarkdown>
           )}
         </div>
