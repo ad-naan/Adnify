@@ -1,21 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { calculateWorkerPoolSize } from '@/renderer/services/workerPoolPolicy'
+import { WorkerService } from '@/renderer/services/workerService'
 
 describe('workerService resource usage', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
-    vi.resetModules()
   })
 
-  it('caps the renderer-local worker pool at two workers', async () => {
-    const { calculateWorkerPoolSize } = await import('@/renderer/services/workerService')
-
+  it('caps the renderer-local worker pool at two workers', () => {
     expect(calculateWorkerPoolSize(1)).toBe(1)
     expect(calculateWorkerPoolSize(2)).toBe(1)
     expect(calculateWorkerPoolSize(4)).toBe(2)
     expect(calculateWorkerPoolSize(32)).toBe(2)
   })
 
-  it('does not create workers until the service is used', async () => {
+  it('does not create workers until the service is used', () => {
     let created = 0
     let terminated = 0
 
@@ -34,10 +33,9 @@ describe('workerService resource usage', () => {
       }
     }
 
-    vi.stubGlobal('navigator', { hardwareConcurrency: 32 })
     vi.stubGlobal('Worker', MockWorker)
 
-    const { workerService } = await import('@/renderer/services/workerService')
+    const workerService = new WorkerService(2)
     expect(created).toBe(0)
 
     workerService.init()

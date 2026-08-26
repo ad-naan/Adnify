@@ -5,6 +5,29 @@ import { createShellIntegrationOscParser } from '@renderer/services/terminalShel
 
 const windowsIt = process.platform === 'win32' ? it : it.skip
 
+async function closeShell(shell: pty.IPty): Promise<void> {
+  await new Promise<void>((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(forceKillTimer)
+      clearTimeout(giveUpTimer)
+      resolve()
+    }
+    const forceKillTimer = setTimeout(() => {
+      try {
+        shell.kill()
+      } catch {
+        finish()
+      }
+    }, 2_000)
+    const giveUpTimer = setTimeout(finish, 4_000)
+    shell.onExit(finish)
+    shell.write('exit\r')
+  })
+}
+
 describe('shell integration on a real Windows ConPTY', () => {
   windowsIt('reports command completion for mixed PowerShell statements', async () => {
     const script = path.resolve(process.cwd(), 'resources/shell-integration/shellIntegration.ps1')
@@ -52,7 +75,7 @@ describe('shell integration on a real Windows ConPTY', () => {
       expect(payloads.some(payload => /^D;0(?:;|$)/.test(payload))).toBe(true)
       expect(payloads.some(payload => payload === 'A')).toBe(true)
     } finally {
-      shell.kill()
+      await closeShell(shell)
     }
   }, 15_000)
 })

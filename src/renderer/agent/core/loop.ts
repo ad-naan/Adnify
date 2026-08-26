@@ -15,7 +15,6 @@ import { recordObservedTokenUsage } from '@shared/utils/tokenCounter'
 import { getRelativeChangePath, isFileWriteToolResult } from '../utils/fileChangeUtils'
 import type { TokenBudgetController } from '../domains/budget/TokenBudgetController'
 import type { LintCheckFile, ChatMessage, AssistantMessage, InteractiveContent } from '../types'
-import type { LLMMessage } from '@/shared/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext, LoopCheckResult } from './types'
 import {
@@ -35,44 +34,13 @@ import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
 import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 import type { ThreadBoundStore } from '../store/AgentStore'
+import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
+
+export { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 
 const importToolRuntime = () => import('../tools')
 const importExecuteTools = () => import('./tools').then(m => m.executeTools)
 const importLintService = () => import('../services/lintService').then(m => m.lintService)
-
-type ToolCardCleanupStore = Pick<
-  ThreadBoundStore,
-  'getMessages' | 'updateMessage' | 'clearToolStreamingPreview'
->
-
-export function clearUnexecutedToolCards(
-  threadStore: ToolCardCleanupStore,
-  assistantId: string | undefined,
-  toolCallsToClear?: Array<{ id: string }>
-): void {
-  if (!assistantId) return
-
-  const assistantMessage = threadStore.getMessages().find(message => message.id === assistantId)
-  if (assistantMessage?.role !== 'assistant') return
-
-  const cancelledIds = new Set((toolCallsToClear || []).map(toolCall => toolCall.id).filter(Boolean))
-  if (cancelledIds.size === 0) return
-
-  threadStore.updateMessage(assistantId, {
-    parts: assistantMessage.parts.filter(part =>
-      part.type !== 'tool_call' || !cancelledIds.has(part.toolCall.id)
-    ),
-    toolCalls: (assistantMessage.toolCalls || []).filter(toolCall =>
-      !cancelledIds.has(toolCall.id)
-    ),
-  })
-
-  // Streaming previews are stored outside the message. Clear both representations
-  // for this rejected proposal without touching calls from earlier iterations.
-  for (const toolCallId of cancelledIds) {
-    threadStore.clearToolStreamingPreview(toolCallId)
-  }
-}
 
 function getLocalizedText(language: string, zh: string, en: string): string {
   return pickLocalizedText(zh, en, language as 'en' | 'zh')
@@ -362,17 +330,6 @@ async function callLLMWithRetry(
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
   }
-}
-
-export function prepareLLMRequestMessages(
-  messages: LLMMessage[],
-  systemPrompt?: string,
-): LLMMessage[] {
-  if (!systemPrompt) {
-    return messages
-  }
-
-  return messages.filter(message => message.role !== 'system')
 }
 
 interface AutoFixResult {

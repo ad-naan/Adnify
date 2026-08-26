@@ -6,19 +6,9 @@
 import { logger } from '@utils/Logger'
 import { getEditorConfig } from '@renderer/settings'
 import type { WorkerRequest, WorkerResponse, WorkerMessageType } from '../workers/computeWorker'
+import { calculateWorkerPoolSize } from './workerPoolPolicy'
 
-// A renderer-local pool is duplicated in every BrowserWindow. Keep it small:
-// these tasks are occasional UI helpers, not a sustained parallel workload.
-export function calculateWorkerPoolSize(hardwareConcurrency?: number): number {
-  const availableCores = Number.isFinite(hardwareConcurrency) && hardwareConcurrency! > 0
-    ? Math.floor(hardwareConcurrency!)
-    : 4
-  return Math.min(2, Math.max(1, availableCores - 1))
-}
-
-const POOL_SIZE = calculateWorkerPoolSize(
-  typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
-)
+export { calculateWorkerPoolSize } from './workerPoolPolicy'
 
 interface PendingTask {
   resolve: (result: unknown) => void
@@ -26,13 +16,17 @@ interface PendingTask {
   timeout: NodeJS.Timeout
 }
 
-class WorkerService {
+export class WorkerService {
   private workers: Worker[] = []
   private pendingTasks = new Map<string, PendingTask>()
   private taskQueue: WorkerRequest[] = []
   private busyWorkers = new Set<Worker>()
   private initialized = false
   private taskIdCounter = 0
+
+  constructor(private readonly poolSize = calculateWorkerPoolSize(
+    typeof navigator === 'undefined' ? undefined : navigator.hardwareConcurrency,
+  )) {}
 
   /**
    * 初始化 Worker 池
@@ -41,7 +35,7 @@ class WorkerService {
     if (this.initialized) return
 
     try {
-      for (let i = 0; i < POOL_SIZE; i++) {
+      for (let i = 0; i < this.poolSize; i++) {
         const worker = new Worker(
           new URL('../workers/computeWorker.ts', import.meta.url),
           { type: 'module' }
@@ -60,7 +54,7 @@ class WorkerService {
       }
 
       this.initialized = true
-      logger.system.info(`[WorkerService] Initialized with ${POOL_SIZE} workers`)
+      logger.system.info(`[WorkerService] Initialized with ${this.poolSize} workers`)
     } catch (e) {
       logger.system.error('[WorkerService] Failed to initialize:', e)
     }

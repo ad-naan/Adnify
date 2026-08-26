@@ -45,6 +45,26 @@ describe('BM25Index', () => {
     expect(results[0].relativePath).toBe('a.ts')
   })
 
+  it('finds camelCase and snake_case identifier components', () => {
+    const idx = new BM25Index()
+    idx.addDocument(doc('a', 'a.ts', 'function parseWorkspaceIndex() {}'))
+    idx.addDocument(doc('b', 'b.ts', 'const structural_index_store = true'))
+
+    expect(idx.search('workspace')[0].relativePath).toBe('a.ts')
+    expect(idx.search('structural')[0].relativePath).toBe('b.ts')
+  })
+
+  it('supports arbitrary symbol substrings without scanning unrelated documents', () => {
+    const idx = new BM25Index()
+    idx.addDocument(doc('a', 'a.ts', 'shared text', ['parseWorkspaceIndex']))
+    idx.addDocument(doc('b', 'b.ts', 'shared text', ['wordOrder']))
+
+    const results = idx.search('workspace')
+
+    expect(results[0].relativePath).toBe('a.ts')
+    expect(idx.lastSearchCandidateCount).toBe(1)
+  })
+
   it('removes every chunk belonging to a deleted file', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a1', 'a.ts', 'authentication token part one'))
@@ -85,6 +105,47 @@ describe('BM25Index', () => {
 
     expect(rareScoreAfter).toBeLessThan(rareScoreBefore)
   })
+
+  it('replaces duplicate document IDs without leaving stale postings', () => {
+    const idx = new BM25Index()
+    idx.addDocument(doc('same', 'old.ts', 'obsolete authentication', ['oldSymbol']))
+    idx.addDocument(doc('same', 'new.ts', 'current rendering', ['newSymbol']))
+
+    expect(idx.size).toBe(1)
+    expect(idx.fileCount).toBe(1)
+    expect(idx.search('obsolete')).toEqual([])
+    expect(idx.search('oldsymbol')).toEqual([])
+    expect(idx.search('current')[0].relativePath).toBe('new.ts')
+  })
+
+  it('returns only the strongest topK results with deterministic ties', () => {
+    const idx = new BM25Index()
+    idx.addDocument(doc('c', 'c.ts', 'cache'))
+    idx.addDocument(doc('b', 'b.ts', 'cache cache'))
+    idx.addDocument(doc('a', 'a.ts', 'cache cache'))
+    idx.addDocument(doc('d', 'd.ts', 'cache cache cache cache'))
+
+    const results = idx.search('cache', 3)
+
+    expect(results.map(result => result.relativePath)).toEqual(['d.ts', 'a.ts', 'b.ts'])
+    expect(idx.search('cache', 0)).toEqual([])
+  })
+
+  it('searches a bounded candidate set in a 100,000-document corpus', () => {
+    const idx = new BM25Index()
+    for (let index = 0; index < 100_000; index++) {
+      idx.addDocument(doc(`f${index}`, `f${index}.ts`, 'shared filler rendering pipeline'))
+    }
+    idx.addDocument(doc('rare-a', 'rare-a.ts', 'needleterm alpha'))
+    idx.addDocument(doc('rare-b', 'rare-b.ts', 'needleterm needleterm beta'))
+    idx.addDocument(doc('rare-c', 'rare-c.ts', 'needleterm needleterm needleterm gamma'))
+
+    const results = idx.search('needleterm', 2)
+
+    expect(idx.size).toBe(100_003)
+    expect(idx.lastSearchCandidateCount).toBe(3)
+    expect(results.map(result => result.relativePath)).toEqual(['rare-c.ts', 'rare-b.ts'])
+  }, 30_000)
 
   it('handles an empty index without throwing', () => {
     const idx = new BM25Index()
