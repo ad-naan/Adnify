@@ -176,4 +176,23 @@ describe('structural index SQLite store', () => {
       database.close()
     }
   })
+
+  it('discards an incompatible cache schema instead of retaining legacy keys', () => {
+    const legacy = new DatabaseSync(databasePath)
+    legacy.exec(`
+      CREATE TABLE legacy_index(relative_path TEXT PRIMARY KEY);
+      PRAGMA user_version = 1;
+    `)
+    legacy.close()
+
+    expect(load()).toEqual({ chunks: [], metadata: null, batchSizes: [] })
+
+    const rebuilt = new DatabaseSync(databasePath, { readOnly: true })
+    try {
+      const version = rebuilt.prepare('PRAGMA user_version').get() as { user_version: number }
+      expect(Number(version.user_version)).toBe(2)
+    } finally {
+      rebuilt.close()
+    }
+  })
 })

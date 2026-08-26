@@ -160,11 +160,6 @@ const CodeBlock = React.memo(({ language, children, fontSize }: { language: stri
 
 CodeBlock.displayName = 'CodeBlock'
 
-const cleanStreamingContent = (text: string): string => {
-  if (!text) return ''
-  return stripToolCallLeaks(text)
-}
-
 const StableStreamingMarkdownBlock = React.memo(({
   content,
   components,
@@ -583,10 +578,10 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
 
   // 所有 useMemo 必须在前面
   const cleanedContent = React.useMemo(() => {
-    // Use identical normalization before and after completion so the final
-    // stream frame does not swap to a differently shaped Markdown tree.
-    return cleanStreamingContent(content)
-  }, [content])
+    // Live text was filtered before entering the store. Settled and historical
+    // messages keep one defensive pass for older persisted data.
+    return isStreaming ? content.trim() : stripToolCallLeaks(content)
+  }, [content, isStreaming])
 
   // 检测系统警告
   const systemAlert = React.useMemo(() => {

@@ -10,7 +10,7 @@ import { EventBus } from './EventBus'
 import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
-import { filterToolCallLeakChunk } from '../utils/toolCallLeakFilter'
+import { ToolCallLeakFilter } from '../utils/toolCallLeakFilter'
 import { t } from '@/renderer/i18n'
 import { StreamingEditPreviewCoordinator } from '../services/streamingEditPreview'
 import type { LLMResponseMetadata, LLMStreamSource } from '@/shared/types/llm'
@@ -55,7 +55,7 @@ export function createStreamProcessor(
   let metadata: LLMResponseMetadata | undefined
   let error: string | undefined
   let isCleanedUp = false
-  let filteredToolMarkupBuffer = ''
+  const toolCallLeakFilter = new ToolCallLeakFilter()
 
   const streamingToolCalls = new Map<string, {
     id: string
@@ -75,6 +75,13 @@ export function createStreamProcessor(
       partialArgs,
       useStore.getState().workspacePath
     )
+  }
+
+  const publishVisibleText = (visibleChunk: string) => {
+    if (!visibleChunk) return
+    content += visibleChunk
+    if (assistantId) store.appendToAssistant(assistantId, visibleChunk)
+    EventBus.emit({ type: 'stream:text', text: visibleChunk })
   }
 
   const cleanup = () => {
@@ -108,9 +115,7 @@ export function createStreamProcessor(
     switch (data.type) {
       case 'text':
         if (data.content) {
-          const filtered = filterToolCallLeakChunk(data.content, filteredToolMarkupBuffer)
-          const visibleChunk = filtered.visibleText
-          filteredToolMarkupBuffer = filtered.buffer
+          const visibleChunk = toolCallLeakFilter.consume(data.content)
 
           if (isInReasoning && assistantId && reasoningPartId) {
             store.finalizeReasoningPart(assistantId, reasoningPartId)
@@ -118,13 +123,7 @@ export function createStreamProcessor(
             isInReasoning = false
           }
 
-          content += visibleChunk
-          if (assistantId && visibleChunk) {
-            store.appendToAssistant(assistantId, visibleChunk)
-          }
-          if (visibleChunk) {
-            EventBus.emit({ type: 'stream:text', text: visibleChunk })
-          }
+          publishVisibleText(visibleChunk)
         }
         break
 
@@ -328,6 +327,7 @@ export function createStreamProcessor(
 
     logger.agent.error('[StreamProcessor] Error:', errorMsg)
     error = errorMsg
+    publishVisibleText(toolCallLeakFilter.finalize())
     finalizeReasoning()
     doResolve({ content, toolCalls, sources, usage, error: errorMsg })
   }
@@ -359,6 +359,8 @@ export function createStreamProcessor(
     // `llm:done:*` and `llm:stream:*` are delivered on different IPC channels.
     // Give any in-flight final tool-call event one tick to arrive before resolving.
     window.setTimeout(() => {
+      publishVisibleText(toolCallLeakFilter.finalize())
+
       // Compatibility fallback for providers that stream a complete argument
       // object but never emit tool_call_available. Never promote an empty or
       // malformed payload into an executable call.

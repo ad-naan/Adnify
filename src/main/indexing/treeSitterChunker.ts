@@ -1,4 +1,5 @@
 import { logger } from '@shared/utils/Logger'
+import { normalizePath } from '@shared/utils/pathUtils'
 import * as path from 'path'
 import * as crypto from 'crypto'
 import type Parser = require('web-tree-sitter')
@@ -212,7 +213,7 @@ export class TreeSitterChunker {
     }
 
     const chunks: CodeChunk[] = []
-    const relativePath = path.relative(workspacePath, filePath)
+    const relativePath = normalizePath(path.relative(workspacePath, filePath))
 
     // Store ranges covered by TS captures to fill gaps later
     const coveredRanges: Array<{ start: number, end: number }> = []

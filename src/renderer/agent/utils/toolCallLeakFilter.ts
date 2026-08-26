@@ -1,103 +1,150 @@
 const TOOL_LEAK_TAGS = [
-  'tool_call',
-  'tool_calls',
-  'function_call',
   'function_calls',
+  'function_call',
+  'tool_calls',
+  'tool_call',
 ] as const
 
-interface ToolLeakTagSpec {
-  name: string
-  openPattern: RegExp
-  closePattern: RegExp
-}
+type ToolLeakTagName = typeof TOOL_LEAK_TAGS[number]
+const MAX_OPENING_PREFIX_LENGTH = Math.max(...TOOL_LEAK_TAGS.map(name => name.length + 1))
 
-const TOOL_LEAK_SPECS: ToolLeakTagSpec[] = TOOL_LEAK_TAGS.map(name => ({
-  name,
-  openPattern: new RegExp(`<${name}(?:\\s[^>]*)?>`, 'i'),
-  closePattern: new RegExp(`</${name}>`, 'i'),
-}))
+type OpeningTagResolution =
+  | { type: 'match'; name: ToolLeakTagName; endIndex: number }
+  | { type: 'await-end'; name: ToolLeakTagName }
+  | { type: 'incomplete' }
+  | { type: 'none' }
 
-export interface ToolCallLeakFilterResult {
-  visibleText: string
-  buffer: string
-}
+function resolveOpeningTag(text: string, startIndex: number): OpeningTagResolution {
+  for (const name of TOOL_LEAK_TAGS) {
+    const prefix = `<${name}`
+    if (text.slice(startIndex, startIndex + prefix.length).toLowerCase() !== prefix) continue
 
-function findNextOpenTagIndex(text: string, startIndex: number): number {
-  let nextIndex = -1
-
-  for (const spec of TOOL_LEAK_SPECS) {
-    const slice = text.slice(startIndex)
-    const match = spec.openPattern.exec(slice)
-    if (!match || typeof match.index !== 'number') continue
-
-    const absoluteIndex = startIndex + match.index
-    if (nextIndex === -1 || absoluteIndex < nextIndex) {
-      nextIndex = absoluteIndex
+    const delimiter = text[startIndex + prefix.length]
+    if (delimiter === undefined) return { type: 'incomplete' }
+    if (delimiter === '>') {
+      return { type: 'match', name, endIndex: startIndex + prefix.length + 1 }
+    }
+    if (/\s/.test(delimiter)) {
+      const endIndex = text.indexOf('>', startIndex + prefix.length + 1)
+      return endIndex === -1
+        ? { type: 'await-end', name }
+        : { type: 'match', name, endIndex: endIndex + 1 }
     }
   }
 
-  return nextIndex
+  const possiblePrefix = text.slice(startIndex, startIndex + MAX_OPENING_PREFIX_LENGTH).toLowerCase()
+  if (TOOL_LEAK_TAGS.some(name => `<${name}`.startsWith(possiblePrefix))) {
+    return { type: 'incomplete' }
+  }
+
+  return { type: 'none' }
 }
 
-function resolveOpenTag(text: string, startIndex: number): { spec: ToolLeakTagSpec; openTagEnd: number } | null {
-  const slice = text.slice(startIndex)
+function longestClosingPrefix(text: string, closingTag: string): string {
+  const maxLength = Math.min(text.length, closingTag.length - 1)
+  const tail = text.slice(-maxLength)
+  const normalizedTail = tail.toLowerCase()
 
-  for (const spec of TOOL_LEAK_SPECS) {
-    const match = spec.openPattern.exec(slice)
-    if (match && match.index === 0) {
-      return {
-        spec,
-        openTagEnd: startIndex + match[0].length,
+  for (let length = maxLength; length > 0; length--) {
+    if (closingTag.startsWith(normalizedTail.slice(-length))) {
+      return tail.slice(-length)
+    }
+  }
+
+  return ''
+}
+
+function findClosingTag(text: string, closingTag: string): number {
+  let index = text.indexOf('<')
+
+  while (index !== -1) {
+    if (text.slice(index, index + closingTag.length).toLowerCase() === closingTag) {
+      return index
+    }
+    index = text.indexOf('<', index + 1)
+  }
+
+  return -1
+}
+
+/**
+ * Removes provider tool-call markup from streamed text without retaining the
+ * hidden payload. State is bounded to partial opening/closing tag markers.
+ */
+export class ToolCallLeakFilter {
+  private pendingVisible = ''
+  private hiddenClosingTag: string | null = null
+  private awaitingOpeningTagEnd = false
+  private pendingHidden = ''
+
+  consume(chunk: string): string {
+    let input = this.pendingVisible + chunk
+    let visibleText = ''
+    this.pendingVisible = ''
+
+    while (input) {
+      if (this.hiddenClosingTag) {
+        if (this.awaitingOpeningTagEnd) {
+          const openingEnd = input.indexOf('>')
+          if (openingEnd === -1) return visibleText
+          input = input.slice(openingEnd + 1)
+          this.awaitingOpeningTagEnd = false
+          continue
+        }
+
+        const hiddenInput = this.pendingHidden + input
+        const closingIndex = findClosingTag(hiddenInput, this.hiddenClosingTag)
+        if (closingIndex === -1) {
+          this.pendingHidden = longestClosingPrefix(hiddenInput, this.hiddenClosingTag)
+          return visibleText
+        }
+
+        input = hiddenInput.slice(closingIndex + this.hiddenClosingTag.length)
+        this.hiddenClosingTag = null
+        this.pendingHidden = ''
+        continue
       }
+
+      const openingIndex = input.indexOf('<')
+      if (openingIndex === -1) return visibleText + input
+
+      visibleText += input.slice(0, openingIndex)
+      const openingTag = resolveOpeningTag(input, openingIndex)
+
+      if (openingTag.type === 'incomplete') {
+        this.pendingVisible = input.slice(openingIndex)
+        return visibleText
+      }
+      if (openingTag.type === 'none') {
+        visibleText += '<'
+        input = input.slice(openingIndex + 1)
+        continue
+      }
+
+      this.hiddenClosingTag = `</${openingTag.name}>`
+      if (openingTag.type === 'await-end') {
+        this.awaitingOpeningTagEnd = true
+        return visibleText
+      }
+      input = input.slice(openingTag.endIndex)
     }
+
+    return visibleText
   }
 
-  return null
-}
-
-export function filterToolCallLeakChunk(chunk: string, buffered = ''): ToolCallLeakFilterResult {
-  const combined = buffered + chunk
-  let visibleText = ''
-  let cursor = 0
-
-  while (cursor < combined.length) {
-    const nextOpenIndex = findNextOpenTagIndex(combined, cursor)
-    if (nextOpenIndex === -1) {
-      visibleText += combined.slice(cursor)
-      return { visibleText, buffer: '' }
-    }
-
-    visibleText += combined.slice(cursor, nextOpenIndex)
-
-    const openTag = resolveOpenTag(combined, nextOpenIndex)
-    if (!openTag) {
-      visibleText += combined.slice(nextOpenIndex, nextOpenIndex + 1)
-      cursor = nextOpenIndex + 1
-      continue
-    }
-
-    const closingSlice = combined.slice(openTag.openTagEnd)
-    const closeMatch = openTag.spec.closePattern.exec(closingSlice)
-    if (!closeMatch || typeof closeMatch.index !== 'number') {
-      return { visibleText, buffer: combined.slice(nextOpenIndex) }
-    }
-
-    cursor = openTag.openTagEnd + closeMatch.index + closeMatch[0].length
+  finalize(): string {
+    const trailingText = this.hiddenClosingTag ? '' : this.pendingVisible
+    this.pendingVisible = ''
+    this.hiddenClosingTag = null
+    this.awaitingOpeningTagEnd = false
+    this.pendingHidden = ''
+    return trailingText
   }
-
-  return { visibleText, buffer: '' }
 }
 
 export function stripToolCallLeaks(text: string): string {
   if (!text) return ''
 
-  let sanitized = text
-
-  for (const spec of TOOL_LEAK_SPECS) {
-    sanitized = sanitized
-      .replace(new RegExp(`<${spec.name}(?:\\s[^>]*)?>[\\s\\S]*?</${spec.name}>`, 'gi'), '')
-      .replace(new RegExp(`<${spec.name}(?:\\s[^>]*)?>[\\s\\S]*$`, 'gi'), '')
-  }
-
-  return sanitized.trim()
+  const filter = new ToolCallLeakFilter()
+  return `${filter.consume(text)}${filter.finalize()}`.trim()
 }

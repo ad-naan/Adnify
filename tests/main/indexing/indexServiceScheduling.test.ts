@@ -256,7 +256,7 @@ describe('CodebaseIndexService scheduling', () => {
     await expect(service.search('updatedNeedle')).resolves.toHaveLength(1)
     expect(structuralStoreState.operations.at(-1)).toMatchObject({
       type: 'applyFiles',
-      files: [{ relativePath: 'src\\updated.ts' }],
+      files: [{ relativePath: 'src/updated.ts' }],
     })
   })
 

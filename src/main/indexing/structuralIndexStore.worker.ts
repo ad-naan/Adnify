@@ -17,7 +17,7 @@ const databases = new Map<string, DatabaseSync>()
 // payloads for the main process. The old size of 50 made a 1M-chunk cache
 // require 20,000 request/response turns during startup.
 const LOAD_BATCH_SIZE = 512
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 interface StoredChunkRow {
   id: string

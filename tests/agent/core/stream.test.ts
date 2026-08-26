@@ -121,4 +121,29 @@ describe('tool call stream assembly', () => {
     const result = await processor.wait()
     expect(result.toolCalls).toEqual([])
   })
+
+  it('filters tool markup split across arbitrary text chunks', async () => {
+    const processor = createProcessor()
+    const leaked = '<tool_call id="write-5">hidden arguments</tool_call>'
+
+    streamHarness.stream!({ type: 'text', content: 'visible before ' })
+    for (const character of leaked) {
+      streamHarness.stream!({ type: 'text', content: character })
+    }
+    streamHarness.stream!({ type: 'text', content: ' visible after' })
+    streamHarness.done!({})
+
+    const result = await processor.wait()
+    expect(result.content).toBe('visible before  visible after')
+  })
+
+  it('flushes a partial non-tool tag prefix when the stream ends', async () => {
+    const processor = createProcessor()
+
+    streamHarness.stream!({ type: 'text', content: 'visible <tool_' })
+    streamHarness.done!({})
+
+    const result = await processor.wait()
+    expect(result.content).toBe('visible <tool_')
+  })
 })

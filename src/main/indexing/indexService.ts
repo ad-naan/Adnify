@@ -469,7 +469,7 @@ export class CodebaseIndexService {
 
   /** 从结构化索引中删除文件 */
   private async deleteFileFromStructuralIndex(filePath: string): Promise<void> {
-    const relativePath = path.relative(this.workspacePath, filePath)
+    const relativePath = normalizePath(path.relative(this.workspacePath, filePath))
 
     // 从 BM25 索引中删除
     this.bm25Index.deleteFile(relativePath)
@@ -490,7 +490,7 @@ export class CodebaseIndexService {
   }
 
   private async performDeleteFileIndex(filePath: string): Promise<void> {
-    const relativePath = path.relative(this.workspacePath, filePath)
+    const relativePath = normalizePath(path.relative(this.workspacePath, filePath))
 
     // 结构化模式：从索引中删除
     if (this.config.mode === 'structural') {
@@ -707,7 +707,7 @@ export class CodebaseIndexService {
               if (message.mode === 'structural') {
                 const persistedFiles: Array<{ relativePath: string; chunks: CodeChunk[] }> = []
                 for (const result of message.results) {
-                  const relativePath = path.relative(this.workspacePath, result.filePath)
+                  const relativePath = normalizePath(path.relative(this.workspacePath, result.filePath))
                   await this.deleteFileFromStructuralIndex(result.filePath)
                   if (!result.deleted) this.addStructuralChunks(result.chunks)
                   persistedFiles.push({

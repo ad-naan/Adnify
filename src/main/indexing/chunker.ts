@@ -5,6 +5,7 @@
 
 import * as path from 'path'
 import * as crypto from 'crypto'
+import { normalizePath } from '@shared/utils/pathUtils'
 import { CodeChunk, IndexConfig, DEFAULT_INDEX_CONFIG } from './types'
 
 export class ChunkerService {
@@ -27,7 +28,6 @@ export class ChunkerService {
    */
   chunkFile(filePath: string, content: string, workspacePath: string): CodeChunk[] {
     const ext = path.extname(filePath).slice(1).toLowerCase()
-    // const relativePath = path.relative(workspacePath, filePath)
 
     // Calculate hash
     const fileHash = crypto.createHash('sha256').update(content).digest('hex')
@@ -50,7 +50,7 @@ export class ChunkerService {
     baseLineNumber: number = 1
   ): CodeChunk[] {
     const lines = content.split('\n')
-    const relativePath = path.relative(workspacePath, filePath)
+    const relativePath = normalizePath(path.relative(workspacePath, filePath))
     const chunks: CodeChunk[] = []
     const { chunkSize, chunkOverlap } = this.config
 
@@ -119,4 +119,3 @@ export class ChunkerService {
     return this.config.ignoredDirs.includes(dirName) || dirName.startsWith('.')
   }
 }
-
