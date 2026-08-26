@@ -7,6 +7,12 @@ const workerState = vi.hoisted(() => ({
   }>,
 }))
 
+const structuralStoreState = vi.hoisted(() => ({
+  operations: [] as Array<Record<string, unknown>>,
+  loadBatches: [] as Array<Array<Record<string, unknown>>>,
+  metadata: null as null | { totalFiles: number; totalChunks: number; savedAt: number },
+}))
+
 vi.mock('worker_threads', () => ({
   Worker: class {
     private listeners = new Map<string, Array<(value: unknown) => void>>()
@@ -38,6 +44,22 @@ vi.mock('@main/indexing/treeSitterChunker', () => ({
 
 vi.mock('@main/indexing/vectorStore', () => ({
   VectorStoreService: class {},
+}))
+
+vi.mock('@main/indexing/structuralIndexStore', () => ({
+  StructuralIndexStore: class {
+    async load(onBatch: (chunks: Array<Record<string, unknown>>) => void) {
+      for (const batch of structuralStoreState.loadBatches) onBatch(batch)
+      return structuralStoreState.metadata
+    }
+
+    async request(operation: Record<string, unknown>) {
+      structuralStoreState.operations.push(operation)
+      return { type: 'ok' }
+    }
+
+    async close() {}
+  },
 }))
 
 vi.mock('@main/indexing/summary', () => ({
@@ -75,6 +97,9 @@ describe('CodebaseIndexService scheduling', () => {
 
   beforeEach(() => {
     workerState.instances.length = 0
+    structuralStoreState.operations.length = 0
+    structuralStoreState.loadBatches = []
+    structuralStoreState.metadata = null
     service = new CodebaseIndexService('C:/workspace')
   })
 
@@ -136,6 +161,7 @@ describe('CodebaseIndexService scheduling', () => {
 
     worker.emit('message', {
       type: 'structural_result',
+      requestId: 7,
       processed: 1,
       total: 1,
       chunks: [{
@@ -162,6 +188,38 @@ describe('CodebaseIndexService scheduling', () => {
     })
     expect(service.searchSymbols('needle')).toHaveLength(1)
     await expect(service.search('needle')).resolves.toHaveLength(1)
+    expect(worker.postMessage).toHaveBeenCalledWith({ type: 'structural_ack', requestId: 7 })
+    expect(structuralStoreState.operations.map(operation => operation.type)).toEqual([
+      'beginReplace',
+      'appendReplace',
+      'commitReplace',
+    ])
+  })
+
+  it('rebuilds the in-memory search indexes from persisted batches', async () => {
+    structuralStoreState.loadBatches = [[{
+      id: 'cached-chunk',
+      filePath: 'C:/workspace/src/cached.ts',
+      relativePath: 'src/cached.ts',
+      fileHash: 'hash',
+      content: 'function cachedNeedle() {}',
+      startLine: 1,
+      endLine: 1,
+      type: 'function',
+      language: 'typescript',
+      symbols: ['cachedNeedle'],
+    }]]
+    structuralStoreState.metadata = { totalFiles: 1, totalChunks: 1, savedAt: 123 }
+
+    await service.initialize()
+
+    expect(service.getStatus()).toMatchObject({
+      totalFiles: 1,
+      totalChunks: 1,
+      lastIndexedAt: 123,
+    })
+    expect(service.searchSymbols('cachedNeedle')).toHaveLength(1)
+    await expect(service.search('cachedNeedle')).resolves.toHaveLength(1)
   })
 
   it('finishes an active index with an error when the worker exits unexpectedly', async () => {

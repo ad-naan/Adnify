@@ -16,10 +16,6 @@ function doc(id: string, relativePath: string, content: string, symbols: string[
   }
 }
 
-function encode(index: BM25Index): string {
-  return Array.from(index.toJSONChunks()).join('')
-}
-
 describe('BM25Index', () => {
   it('returns nothing before build and finds matches after', () => {
     const idx = new BM25Index()
@@ -52,20 +48,6 @@ describe('BM25Index', () => {
     expect(results[0].relativePath).toBe('a.ts')
   })
 
-  it('survives a serialization round-trip with identical ranking', () => {
-    const idx = new BM25Index()
-    idx.addDocument(doc('a', 'a.ts', 'authentication token refresh handler'))
-    idx.addDocument(doc('b', 'b.ts', 'unrelated rendering pipeline code'))
-    idx.build()
-    const before = idx.search('authentication token')
-
-    const restored = new BM25Index()
-    restored.fromJSON(JSON.parse(JSON.stringify(idx.toJSON())))
-
-    expect(restored.size).toBe(idx.size)
-    expect(restored.search('authentication token')).toEqual(before)
-  })
-
   it('removes every chunk belonging to a deleted file', () => {
     const idx = new BM25Index()
     idx.addDocument(doc('a1', 'a.ts', 'authentication token part one'))
@@ -85,13 +67,13 @@ describe('BM25Index', () => {
     idx.addDocument(doc('a', 'a.ts', 'zzuniqueterm appears only here'))
     idx.addDocument(doc('b', 'b.ts', 'unrelated rendering pipeline'))
     idx.build()
-    expect(idx.toJSON().idf.some(([term]) => term === 'zzuniqueterm')).toBe(true)
+    const vocabularyBefore = idx.vocabularySize
 
     idx.deleteFile('a.ts')
     idx.build()
 
     // 该词已随文件移除，不应残留 IDF 条目（否则评分失真且内存无界增长）
-    expect(idx.toJSON().idf.some(([term]) => term === 'zzuniqueterm')).toBe(false)
+    expect(idx.vocabularySize).toBeLessThan(vocabularyBefore)
   })
 
   it('recomputes IDF after incremental edits rather than reusing stale values', () => {
@@ -101,16 +83,16 @@ describe('BM25Index', () => {
       idx.addDocument(doc(`f${i}`, `f${i}.ts`, 'common filler text'))
     }
     idx.build()
-    const rareIdfBefore = new Map(idx.toJSON().idf).get('rare')!
+    const rareScoreBefore = idx.search('rare')[0].score
 
     // 让 "rare" 变成常见词，IDF 应当下降
     for (let i = 0; i < 5; i++) {
       idx.addDocument(doc(`g${i}`, `g${i}.ts`, 'rare term everywhere now'))
     }
     idx.build()
-    const rareIdfAfter = new Map(idx.toJSON().idf).get('rare')!
+    const rareScoreAfter = idx.search('rare')[0].score
 
-    expect(rareIdfAfter).toBeLessThan(rareIdfBefore)
+    expect(rareScoreAfter).toBeLessThan(rareScoreBefore)
   })
 
   it('handles an empty index without throwing', () => {
@@ -128,63 +110,7 @@ describe('BM25Index', () => {
 
     expect(idx.size).toBe(0)
     expect(idx.search('authentication')).toEqual([])
-    expect(idx.toJSON().idf).toEqual([])
+    expect(idx.vocabularySize).toBe(0)
   })
 
-  // Streaming serialization caches a JSON fragment per document so a file-watcher burst
-  // does not re-encode the whole index on the main process. These pin the two
-  // things that can go wrong: output must match the uncached encoding, and a
-  // stale fragment must never survive a mutation.
-  describe('streaming serialization', () => {
-    it('matches JSON.stringify(toJSON()) exactly', () => {
-      const idx = new BM25Index()
-      idx.addDocument(doc('a', 'a.ts', 'authentication token refresh', ['login']))
-      idx.addDocument(doc('b', 'b.ts', 'rendering pipeline code'))
-      idx.build()
-
-      expect(encode(idx)).toBe(JSON.stringify(idx.toJSON()))
-    })
-
-    it('stays correct across add, delete and clear after caching fragments', () => {
-      const idx = new BM25Index()
-      idx.addDocument(doc('a1', 'a.ts', 'authentication token part one'))
-      idx.addDocument(doc('b1', 'b.ts', 'rendering pipeline'))
-      idx.build()
-      encode(idx) // warm the fragment cache
-
-      idx.addDocument(doc('c1', 'c.ts', 'search indexing service'))
-      idx.build()
-      expect(encode(idx)).toBe(JSON.stringify(idx.toJSON()))
-
-      idx.deleteFile('a.ts')
-      idx.build()
-      expect(encode(idx)).toBe(JSON.stringify(idx.toJSON()))
-
-      // Re-adding the same id must not resurrect the old fragment.
-      idx.addDocument(doc('b1', 'b.ts', 'completely different content now'))
-      idx.build()
-      const encoded = encode(idx)
-      expect(encoded).toBe(JSON.stringify(idx.toJSON()))
-      expect(encoded).toContain('completely different content now')
-
-      idx.clear()
-      expect(encode(idx)).toBe(JSON.stringify(idx.toJSON()))
-    })
-
-    it('round-trips through fromJSON with identical ranking', () => {
-      const idx = new BM25Index()
-      idx.addDocument(doc('a', 'a.ts', 'authentication token refresh handler'))
-      idx.addDocument(doc('b', 'b.ts', 'unrelated rendering pipeline code'))
-      idx.build()
-      const before = idx.search('authentication token')
-
-      const restored = new BM25Index()
-      restored.fromJSON(JSON.parse(encode(idx)))
-
-      expect(restored.size).toBe(idx.size)
-      expect(restored.search('authentication token')).toEqual(before)
-      // A restored index has no cached fragments; it must still encode correctly.
-      expect(encode(restored)).toBe(JSON.stringify(restored.toJSON()))
-    })
-  })
 })

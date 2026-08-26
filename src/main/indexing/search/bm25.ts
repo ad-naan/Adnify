@@ -26,25 +26,6 @@ export class BM25Index {
   private documents: BM25Document[] = []
   private avgDocLength = 0
   private idf: Map<string, number> = new Map()
-  /**
-   * Per-document JSON fragments.
-   *
-   * Persisting the index used to `JSON.stringify` every document on every save —
-   * ~37 ms of blocked main process for a 20k-chunk workspace, and the file
-   * watcher re-triggers it after any burst (a `git checkout`, an `npm install`).
-   * Blocking the main process stalls every renderer IPC, so the whole window
-   * freezes. A watcher burst typically touches a handful of chunks, so caching
-   * each document's fragment and re-encoding only the changed ones cuts that to
-   * ~8 ms. The persistence path now also consumes these fragments as a stream,
-   * so it never joins them into an index-sized allocation.
-   *
-   * Keyed by the document object rather than its id: `addDocument` never mutates
-   * an existing entry, but ids are not guaranteed unique (a caller that re-adds a
-   * file without deleting it first would collide), and a WeakMap also lets
-   * dropped documents release their fragments without explicit bookkeeping.
-   */
-  private readonly serializedDocuments = new WeakMap<BM25Document, string>()
-
   /** 添加文档 */
   addDocument(doc: Omit<BM25Document, 'termFreq' | 'docLength'>): void {
     const terms = this.tokenize(doc.content)
@@ -168,54 +149,9 @@ export class BM25Index {
     return this.documents.length
   }
 
-  /** 序列化为 JSON */
-  toJSON(): { documents: BM25Document[]; avgDocLength: number; idf: [string, number][] } {
-    return {
-      documents: this.documents.map(doc => ({
-        ...doc,
-        termFreq: Array.from(doc.termFreq.entries()),
-      })) as unknown as BM25Document[],
-      avgDocLength: this.avgDocLength,
-      idf: Array.from(this.idf.entries()),
-    }
-  }
-
-  /**
-   * Yield JSON in bounded fragments, reusing cached per-document encodings.
-   * Consumers can stream these chunks without allocating one index-sized string.
-   */
-  *toJSONChunks(): Generator<string> {
-    yield '{"documents":['
-    for (let index = 0; index < this.documents.length; index++) {
-      const doc = this.documents[index]
-      let fragment = this.serializedDocuments.get(doc)
-      if (fragment === undefined) {
-        fragment = JSON.stringify({ ...doc, termFreq: Array.from(doc.termFreq.entries()) })
-        this.serializedDocuments.set(doc, fragment)
-      }
-      if (index > 0) yield ','
-      yield fragment
-    }
-    yield `],"avgDocLength":${JSON.stringify(this.avgDocLength)},"idf":[`
-    let index = 0
-    for (const entry of this.idf) {
-      if (index++ > 0) yield ','
-      yield JSON.stringify(entry)
-    }
-    yield ']}'
-  }
-
-  /** 从 JSON 恢复 */
-  fromJSON(data: { documents: unknown[]; avgDocLength: number; idf: [string, number][] }): void {
-    this.documents = data.documents.map((doc: unknown) => {
-      const d = doc as BM25Document & { termFreq: [string, number][] }
-      return {
-        ...d,
-        termFreq: new Map(d.termFreq),
-      }
-    })
-    this.avgDocLength = data.avgDocLength
-    this.idf = new Map(data.idf)
+  /** Number of searchable terms, useful for status and invariant checks. */
+  get vocabularySize(): number {
+    return this.idf.size
   }
 
   /** 分词 */

@@ -113,6 +113,23 @@ export default defineConfig({
         }
       },
       {
+        entry: 'src/main/indexing/structuralIndexStore.worker.ts',
+        vite: {
+          resolve: { alias: aliases },
+          build: {
+            outDir: 'dist/main',
+            lib: {
+              entry: 'src/main/indexing/structuralIndexStore.worker.ts',
+              formats: ['cjs'],
+              fileName: () => 'structuralIndexStore.worker.js'
+            },
+            rollupOptions: {
+              external: ['node:sqlite']
+            }
+          }
+        }
+      },
+      {
         entry: 'src/main/preload.ts',
         onstart(options) { options.reload() },
         vite: {

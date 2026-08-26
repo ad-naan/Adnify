@@ -127,37 +127,6 @@ export class SymbolIndex {
     return this.byFile.size
   }
 
-  /** 序列化为 JSON */
-  toJSON(): { byName: [string, SymbolInfo[]][]; byFile: [string, SymbolInfo[]][] } {
-    return {
-      byName: Array.from(this.byName.entries()),
-      byFile: Array.from(this.byFile.entries()),
-    }
-  }
-
-  /** Yield the serialized index without allocating one index-sized string. */
-  *toJSONChunks(): Generator<string> {
-    yield '{"byName":['
-    let index = 0
-    for (const entry of this.byName) {
-      if (index++ > 0) yield ','
-      yield JSON.stringify(entry)
-    }
-    yield '],"byFile":['
-    index = 0
-    for (const entry of this.byFile) {
-      if (index++ > 0) yield ','
-      yield JSON.stringify(entry)
-    }
-    yield ']}'
-  }
-
-  /** 从 JSON 恢复 */
-  fromJSON(data: { byName: [string, SymbolInfo[]][]; byFile: [string, SymbolInfo[]][] }): void {
-    this.byName = new Map(data.byName)
-    this.byFile = new Map(data.byFile)
-  }
-
   /** 分割标识符 */
   private splitIdentifier(name: string): string[] {
     return name

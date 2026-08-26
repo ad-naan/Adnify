@@ -17,13 +17,14 @@ import { CodeChunk, IndexedChunk, IndexConfig } from './types'
 type WorkerMessage =
   | { type: 'index'; workspacePath: string; config: IndexConfig; existingHashes?: Record<string, string> }
   | { type: 'batch_update'; requestId: number; workspacePath: string; files: string[]; config: IndexConfig }
+  | { type: 'structural_ack'; requestId: number }
 
 /**
  * Worker 响应消息类型
  */
 type WorkerResponse =
   | { type: 'progress'; processed: number; total: number; message?: string }
-  | { type: 'structural_result'; chunks: CodeChunk[]; processed: number; total: number }
+  | { type: 'structural_result'; requestId: number; chunks: CodeChunk[]; processed: number; total: number }
   | { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
   | { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
   | { type: 'batch_update_result'; requestId: number; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
@@ -57,8 +58,16 @@ function postResponse(response: WorkerResponse): void {
 }
 
 let operationQueue = Promise.resolve()
+let nextStructuralRequestId = 1
+const pendingStructuralAcks = new Map<number, () => void>()
 
 parentPort.on('message', (message: WorkerMessage) => {
+  if (message.type === 'structural_ack') {
+    pendingStructuralAcks.get(message.requestId)?.()
+    pendingStructuralAcks.delete(message.requestId)
+    return
+  }
+
   // Tree-sitter and embedding instances are shared by design. A single queue
   // prevents a full index and watcher updates from mutating them concurrently.
   operationQueue = operationQueue
@@ -82,6 +91,14 @@ parentPort.on('message', (message: WorkerMessage) => {
       })
     })
 })
+
+function postStructuralBatch(chunks: CodeChunk[], processed: number, total: number): Promise<void> {
+  const requestId = nextStructuralRequestId++
+  return new Promise(resolve => {
+    pendingStructuralAcks.set(requestId, resolve)
+    postResponse({ type: 'structural_result', requestId, chunks, processed, total })
+  })
+}
 
 /**
  * 处理全量索引请求
@@ -134,15 +151,11 @@ async function handleIndex(
   let pendingStructuralChunks: CodeChunk[] = []
   const RESULT_BATCH_SIZE = 50
 
-  const flushChunks = (): void => {
+  const flushChunks = async (): Promise<void> => {
     if (pendingStructuralChunks.length > 0) {
-      postResponse({
-        type: 'structural_result',
-        chunks: pendingStructuralChunks,
-        processed: processedFiles,
-        total: totalFiles,
-      })
+      const chunks = pendingStructuralChunks
       pendingStructuralChunks = []
+      await postStructuralBatch(chunks, processedFiles, totalFiles)
     } else if (pendingChunks.length > 0) {
       postResponse({ type: 'result', chunks: pendingChunks, processed: processedFiles, total: totalFiles })
       pendingChunks = []
@@ -191,7 +204,7 @@ async function handleIndex(
       processedFiles++
 
       if (pendingChunks.length >= RESULT_BATCH_SIZE || pendingStructuralChunks.length >= RESULT_BATCH_SIZE) {
-        flushChunks()
+        await flushChunks()
       } else if (processedFiles % 10 === 0) {
         postResponse({ type: 'progress', processed: processedFiles, total: totalFiles })
       }
@@ -202,7 +215,7 @@ async function handleIndex(
   }))
 
   await Promise.all(tasks)
-  flushChunks()
+  await flushChunks()
 
   logger.index.info(`[Worker] Indexing complete. Total: ${totalFiles}, Skipped: ${skippedFiles}, Chunks: ${totalChunks}`)
   postResponse({ type: 'complete', totalChunks })

@@ -7,8 +7,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { once } from 'events'
-import { finished } from 'stream/promises'
+import { randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
 import { logger, normalizePath } from '@shared/utils'
@@ -18,6 +17,7 @@ import { EmbeddingService } from './embedder'
 import { VectorStoreService } from './vectorStore'
 import { BM25Index, SymbolIndex, rerankCandidates } from './search'
 import { ProjectSummaryGenerator } from './summary'
+import { StructuralIndexStore } from './structuralIndexStore'
 import {
   IndexConfig, IndexStatus, IndexMode, SearchResult,
   EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk, IndexedChunk,
@@ -26,7 +26,7 @@ import {
 import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
 
 // Worker 消息类型
-interface WorkerStructuralResultMessage { type: 'structural_result'; chunks: CodeChunk[]; processed: number; total: number }
+interface WorkerStructuralResultMessage { type: 'structural_result'; requestId: number; chunks: CodeChunk[]; processed: number; total: number }
 interface WorkerResultMessage { type: 'result'; chunks: IndexedChunk[]; processed: number; total: number }
 interface WorkerUpdateResultMessage { type: 'update_result'; filePath: string; chunks: IndexedChunk[]; deleted: boolean }
 interface WorkerBatchUpdateResultMessage { type: 'batch_update_result'; requestId: number; results: Array<{ filePath: string; chunks: IndexedChunk[]; deleted: boolean }> }
@@ -70,6 +70,8 @@ export class CodebaseIndexService {
   private pendingFullIndex: Promise<void> | null = null
   private structuralBuildLanguages: Record<string, number> | null = null
   private structuralBuildFileSymbols: Map<string, SymbolInfo[]> | null = null
+  private structuralBuildGeneration: string | null = null
+  private structuralStore: StructuralIndexStore
 
   private status: IndexStatus = {
     mode: 'structural',
@@ -81,16 +83,6 @@ export class CodebaseIndexService {
 
   private lastProgressEmit = 0
   private readonly PROGRESS_THROTTLE_MS = 100
-
-  /**
-   * 结构化索引落盘节流。
-   *
-   * 文件监听在连续保存时会高频触发 updateFiles，因此这里合并写入。
-   * 保存本身以有背压的小片段流式写入，不构造索引大小的连续字符串；
-   * 并且和索引变更共用 mutationQueue，保证磁盘快照内部一致。
-   */
-  private savePendingTimer: ReturnType<typeof setTimeout> | null = null
-  private readonly SAVE_DEBOUNCE_MS = 2000
 
   constructor(workspacePath: string, config?: Partial<IndexConfig>) {
     this.workspacePath = workspacePath
@@ -111,6 +103,7 @@ export class CodebaseIndexService {
       workspacePath,
       path.join(this.workspaceCachePath, 'project-summary.json'),
     )
+    this.structuralStore = new StructuralIndexStore(this.structuralIndexPath)
   }
 
   // ==================== 公共 API ====================
@@ -120,6 +113,10 @@ export class CodebaseIndexService {
   }
 
   private get structuralIndexPath(): string {
+    return path.join(this.workspaceCachePath, 'structural-index.sqlite')
+  }
+
+  private get legacyStructuralIndexPath(): string {
     return path.join(this.workspaceCachePath, 'structural-index.json')
   }
 
@@ -153,97 +150,50 @@ export class CodebaseIndexService {
   /** 加载结构化索引缓存 */
   private async loadStructuralIndex(): Promise<void> {
     try {
-      if (fs.existsSync(this.structuralIndexPath)) {
-        const content = await fs.promises.readFile(this.structuralIndexPath, 'utf-8')
-        const data = JSON.parse(content)
-        if (data.bm25) this.bm25Index.fromJSON(data.bm25)
-        if (data.symbols) this.symbolIndex.fromJSON(data.symbols)
-        this.status.totalChunks = this.bm25Index.size
-        this.status.indexedFiles = this.symbolIndex.fileCount
-        this.status.totalFiles = data.totalFiles || this.symbolIndex.fileCount
-        if (data.savedAt) this.status.lastIndexedAt = data.savedAt
-        logger.index.info(`[IndexService] Loaded structural index: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
+      const discardedLegacyCache = fs.existsSync(this.legacyStructuralIndexPath)
+      if (discardedLegacyCache) {
+        await fs.promises.rm(this.legacyStructuralIndexPath, { force: true })
       }
-    } catch (e) {
-      logger.index.warn('[IndexService] Failed to load structural index:', e)
-    }
-  }
+      this.bm25Index.clear()
+      this.symbolIndex.clear()
+      this.structuralBuildLanguages = {}
+      this.structuralBuildFileSymbols = new Map()
+      const metadata = await this.structuralStore.load(chunks => this.addStructuralChunks(chunks))
+      this.structuralBuildLanguages = null
+      this.structuralBuildFileSymbols = null
 
-  /**
-   * 请求落盘（去抖）。多次连续保存只产生一次写入。
-   */
-  private scheduleSaveStructuralIndex(): void {
-    if (this.savePendingTimer !== null) {
-      clearTimeout(this.savePendingTimer)
-    }
-    this.savePendingTimer = setTimeout(() => {
-      this.savePendingTimer = null
-      void this.enqueueMutation(() => this.saveStructuralIndex())
-    }, this.SAVE_DEBOUNCE_MS)
-    // 定时器不应阻止进程退出
-    this.savePendingTimer.unref?.()
-  }
-
-  /**
-   * 立即落盘并取消待执行的去抖写入（退出/切换工作区前调用）。
-   */
-  async flushPendingSave(): Promise<void> {
-    if (this.savePendingTimer !== null) {
-      clearTimeout(this.savePendingTimer)
-      this.savePendingTimer = null
-    }
-    await this.enqueueMutation(() => this.saveStructuralIndex())
-  }
-
-  private *structuralIndexJSONChunks(): Generator<string> {
-    yield '{"bm25":'
-    yield* this.bm25Index.toJSONChunks()
-    yield ',"symbols":'
-    yield* this.symbolIndex.toJSONChunks()
-    yield `,"totalFiles":${JSON.stringify(this.status.totalFiles)},`
-    yield `"savedAt":${Date.now()}}`
-  }
-
-  /** 保存结构化索引缓存 */
-  private async saveStructuralIndex(): Promise<void> {
-    const temporaryPath = `${this.structuralIndexPath}.tmp`
-    try {
-      const dir = path.dirname(this.structuralIndexPath)
-      if (!fs.existsSync(dir)) {
-        await fs.promises.mkdir(dir, { recursive: true })
-      }
-
-      const output = fs.createWriteStream(temporaryPath, { encoding: 'utf-8' })
-      try {
-        for (const chunk of this.structuralIndexJSONChunks()) {
-          if (!output.write(chunk)) await once(output, 'drain')
+      if (!metadata) {
+        this.status.totalChunks = 0
+        this.status.indexedFiles = 0
+        this.status.totalFiles = 0
+        if (discardedLegacyCache) {
+          this.projectSummary = null
+          await this.summaryGenerator.clearCache()
         }
-        output.end()
-        await finished(output)
-      } catch (error) {
-        output.destroy()
-        throw error
+        return
       }
 
-      await fs.promises.rename(temporaryPath, this.structuralIndexPath)
-      logger.index.info('[IndexService] Saved structural index')
+      this.bm25Index.build()
+      this.status.totalChunks = metadata.totalChunks
+      this.status.indexedFiles = this.symbolIndex.fileCount
+      this.status.totalFiles = metadata.totalFiles
+      this.status.lastIndexedAt = metadata.savedAt
+      logger.index.info(`[IndexService] Loaded structural index: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
     } catch (e) {
-      await fs.promises.unlink(temporaryPath).catch(() => {})
-      logger.index.warn('[IndexService] Failed to save structural index:', e)
+      this.bm25Index.clear()
+      this.symbolIndex.clear()
+      this.status.totalChunks = 0
+      this.status.indexedFiles = 0
+      this.status.totalFiles = 0
+      logger.index.warn('[IndexService] Failed to load structural index:', e)
+    } finally {
+      this.structuralBuildLanguages = null
+      this.structuralBuildFileSymbols = null
     }
   }
 
   private async saveIndex(): Promise<void> {
     try {
-      if (this.config.mode === 'structural') {
-        // 显式保存：取消待执行的去抖写入，避免随后再写一次旧内容
-        if (this.savePendingTimer !== null) {
-          clearTimeout(this.savePendingTimer)
-          this.savePendingTimer = null
-        }
-        await this.saveStructuralIndex()
-      }
-
       // 保存通用状态
       const dir = path.dirname(this.indexStatusPath)
       if (!fs.existsSync(dir)) {
@@ -283,9 +233,8 @@ export class CodebaseIndexService {
   /** 清除结构化索引缓存 */
   private async clearStructuralIndexCache(): Promise<void> {
     try {
-      if (fs.existsSync(this.structuralIndexPath)) {
-        await fs.promises.unlink(this.structuralIndexPath)
-      }
+      await this.structuralStore.request({ type: 'clear', databasePath: this.structuralIndexPath })
+      await fs.promises.rm(this.legacyStructuralIndexPath, { force: true })
     } catch (e) {
       logger.index.warn('[IndexService] Failed to clear structural index cache:', e)
     }
@@ -490,55 +439,36 @@ export class CodebaseIndexService {
     // 结构化模式：增量更新
     if (this.config.mode === 'structural') {
       let updated = 0
+      const persistedFiles: Array<{ relativePath: string; chunks: CodeChunk[] }> = []
       for (const filePath of filePaths) {
         try {
           const ext = path.extname(filePath).toLowerCase()
           if (!this.config.includedExts.includes(ext)) continue
+          const relativePath = path.relative(this.workspacePath, filePath)
 
           // 检查文件是否存在
           if (!fs.existsSync(filePath)) {
             // 文件被删除，从索引中移除
             await this.deleteFileFromStructuralIndex(filePath)
+            persistedFiles.push({ relativePath, chunks: [] })
             updated++
             continue
           }
 
           const content = await fs.promises.readFile(filePath, 'utf-8')
-          if (content.length > this.config.maxFileSize) continue
+          if (content.length > this.config.maxFileSize) {
+            await this.deleteFileFromStructuralIndex(filePath)
+            persistedFiles.push({ relativePath, chunks: [] })
+            updated++
+            continue
+          }
 
           const chunks = await this.chunkFile(filePath, content)
-          const relativePath = path.relative(this.workspacePath, filePath)
 
           // 先删除该文件的旧索引
           await this.deleteFileFromStructuralIndex(filePath)
-
-          // 添加新索引
-          for (const chunk of chunks) {
-            this.bm25Index.addDocument({
-              id: chunk.id,
-              filePath: chunk.filePath,
-              relativePath: chunk.relativePath,
-              content: chunk.content,
-              startLine: chunk.startLine,
-              endLine: chunk.endLine,
-              type: chunk.type,
-              language: chunk.language,
-              symbols: chunk.symbols || [],
-            })
-
-            if (chunk.symbols) {
-              for (const name of chunk.symbols) {
-                this.symbolIndex.add({
-                  name,
-                  kind: chunk.type === 'function' ? 'function' : chunk.type === 'class' ? 'class' : 'function',
-                  filePath: chunk.filePath,
-                  relativePath,
-                  startLine: chunk.startLine,
-                  endLine: chunk.endLine,
-                })
-              }
-            }
-          }
+          this.addStructuralChunks(chunks)
+          persistedFiles.push({ relativePath, chunks })
           updated++
         } catch (e) {
           logger.index.warn(`[IndexService] Failed to update ${filePath}: `, e)
@@ -548,8 +478,18 @@ export class CodebaseIndexService {
       if (updated > 0) {
         // 重建 BM25 索引（必须调用以更新 IDF）
         this.bm25Index.build()
-        // 落盘走去抖：内存索引已是最新，磁盘缓存无需与每次保存同步
-        this.scheduleSaveStructuralIndex()
+        this.status.totalChunks = this.bm25Index.size
+        this.status.indexedFiles = this.symbolIndex.fileCount
+        await this.structuralStore.request({
+          type: 'applyFiles',
+          databasePath: this.structuralIndexPath,
+          files: persistedFiles,
+          metadata: {
+            totalFiles: this.status.totalFiles,
+            totalChunks: this.status.totalChunks,
+            savedAt: Date.now(),
+          },
+        })
         logger.index.info(`[IndexService] Updated ${updated} files in structural index`)
       }
       return
@@ -598,7 +538,18 @@ export class CodebaseIndexService {
     if (this.config.mode === 'structural') {
       await this.deleteFileFromStructuralIndex(filePath)
       this.bm25Index.build()
-      this.scheduleSaveStructuralIndex()
+      this.status.totalChunks = this.bm25Index.size
+      this.status.indexedFiles = this.symbolIndex.fileCount
+      await this.structuralStore.request({
+        type: 'applyFiles',
+        databasePath: this.structuralIndexPath,
+        files: [{ relativePath, chunks: [] }],
+        metadata: {
+          totalFiles: this.status.totalFiles,
+          totalChunks: this.status.totalChunks,
+          savedAt: Date.now(),
+        },
+      })
       logger.index.info(`[IndexService] Deleted structural index for: ${relativePath} `)
       return
     }
@@ -630,12 +581,9 @@ export class CodebaseIndexService {
     if (this.destroyed) return
     this.destroyed = true
     this.status.isIndexing = false
-    // 缓存仅用于下次启动加速。退出路径不能为了缓存同步阻塞主线程；
-    // 最近一次已完成的原子快照仍然有效，未落盘的增量会在下次重建。
-    if (this.savePendingTimer !== null) {
-      clearTimeout(this.savePendingTimer)
-      this.savePendingTimer = null
-    }
+    void this.structuralStore.close().catch(error => {
+      logger.index.warn('[IndexService] Failed to close structural index store:', error)
+    })
     const worker = this.worker
     this.worker = null
     void worker?.terminate()
@@ -654,8 +602,15 @@ export class CodebaseIndexService {
     this.symbolIndex.clear()
     this.structuralBuildLanguages = {}
     this.structuralBuildFileSymbols = new Map()
+    const generation = randomUUID()
+    this.structuralBuildGeneration = generation
 
     try {
+      await this.structuralStore.request({
+        type: 'beginReplace',
+        databasePath: this.structuralIndexPath,
+        generation,
+      })
       await this.startWorkerIndex()
       if (this.destroyed) return
 
@@ -664,7 +619,27 @@ export class CodebaseIndexService {
         this.structuralBuildFileSymbols,
         this.structuralBuildLanguages,
       )
+      await this.structuralStore.request({
+        type: 'commitReplace',
+        databasePath: this.structuralIndexPath,
+        generation,
+        metadata: {
+          totalFiles: this.status.totalFiles,
+          totalChunks: this.bm25Index.size,
+          savedAt: Date.now(),
+        },
+      })
+    } catch (error) {
+      await this.structuralStore.request({
+        type: 'abortReplace',
+        databasePath: this.structuralIndexPath,
+        generation,
+      }).catch(() => {})
+      this.bm25Index.clear()
+      this.symbolIndex.clear()
+      throw error
     } finally {
+      this.structuralBuildGeneration = null
       this.structuralBuildFileSymbols = null
       this.structuralBuildLanguages = null
     }
@@ -738,6 +713,15 @@ export class CodebaseIndexService {
 
             case 'structural_result':
               this.addStructuralChunks(message.chunks)
+              if (this.structuralBuildGeneration) {
+                await this.structuralStore.request({
+                  type: 'appendReplace',
+                  databasePath: this.structuralIndexPath,
+                  generation: this.structuralBuildGeneration,
+                  chunks: message.chunks,
+                })
+              }
+              worker.postMessage({ type: 'structural_ack', requestId: message.requestId })
               this.status.indexedFiles = message.processed
               this.status.totalFiles = message.total
               this.status.totalChunks += message.chunks.length
@@ -847,8 +831,6 @@ export class CodebaseIndexService {
   }
 
   private addStructuralChunks(chunks: CodeChunk[]): void {
-    if (!this.structuralBuildLanguages || !this.structuralBuildFileSymbols) return
-
     for (const chunk of chunks) {
       this.bm25Index.addDocument({
         id: chunk.id,
@@ -862,11 +844,13 @@ export class CodebaseIndexService {
         symbols: chunk.symbols || [],
       })
 
-      this.structuralBuildLanguages[chunk.language] =
-        (this.structuralBuildLanguages[chunk.language] || 0) + 1
+      if (this.structuralBuildLanguages) {
+        this.structuralBuildLanguages[chunk.language] =
+          (this.structuralBuildLanguages[chunk.language] || 0) + 1
+      }
 
       if (!chunk.symbols?.length) continue
-      const fileSymbols = this.structuralBuildFileSymbols.get(chunk.relativePath) || []
+      const fileSymbols = this.structuralBuildFileSymbols?.get(chunk.relativePath) || []
       for (const name of chunk.symbols) {
         const symbol: SymbolInfo = {
           name,
@@ -880,7 +864,7 @@ export class CodebaseIndexService {
         fileSymbols.push(symbol)
         this.symbolIndex.add(symbol)
       }
-      this.structuralBuildFileSymbols.set(chunk.relativePath, fileSymbols)
+      this.structuralBuildFileSymbols?.set(chunk.relativePath, fileSymbols)
     }
   }
 
