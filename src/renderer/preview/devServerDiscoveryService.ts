@@ -204,7 +204,7 @@ export class DevServerDiscoveryService {
 
   private async inferPortsForWorkspace(workspaceRoot: string): Promise<Set<number>> {
     const ports = new Set<number>()
-    const packageJson = await api.file.read(`${workspaceRoot}/package.json`).catch(() => null)
+    const packageJson = await api.file.readFull(`${workspaceRoot}/package.json`).catch(() => null)
 
     if (packageJson) {
       try {

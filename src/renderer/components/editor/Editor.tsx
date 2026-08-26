@@ -1,7 +1,7 @@
 /**
  * 编辑器主组件
  */
-import { useRef, useCallback, useEffect, useState, lazy, Suspense } from 'react'
+import { useRef, useCallback, useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import MonacoEditor, { OnMount, BeforeMount, loader } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
@@ -13,7 +13,7 @@ import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { api } from '@renderer/services/electronAPI'
-import { didChangeDocument } from '@services/lspService'
+import { scheduleDidChangeDocument } from '@services/lspService'
 import { getFileInfo } from '@services/largeFileService'
 import { getMonacoEditorOptions } from '@renderer/config/monacoConfig'
 import { getEditorConfig, saveEditorConfig } from '@renderer/settings'
@@ -95,6 +95,8 @@ export default function Editor() {
   const updateFileContent = useStore((state) => state.updateFileContent)
   const updateFileDirtyState = useStore((state) => state.updateFileDirtyState)
   const markFileSaved = useStore((state) => state.markFileSaved)
+  const reloadFileFromDisk = useStore((state) => state.reloadFileFromDisk)
+  const setFileContentState = useStore((state) => state.setFileContentState)
   const setFileEol = useStore((state) => state.setFileEol)
   const language = useStore((state) => state.language)
   const closeFile = useStore((state) => state.closeFile)
@@ -123,7 +125,10 @@ export default function Editor() {
 
   const activeLanguage = activeFile && !isPreviewDocument && !isPlanBoardDocument ? getLanguage(activeFile.path) : 'plaintext'
   const activeFileType = activeFile && !isPreviewDocument && !isPlanBoardDocument ? getFileType(activeFile.path) : 'text'
-  const activeFileInfo = (activeFile && activeFile.content != null && !isPlanBoardDocument) ? getFileInfo(activeFile.path, activeFile.content) : null
+  const activeFileInfo = useMemo(() => {
+    if (activeFile?.contentState !== 'loaded' || isPlanBoardDocument) return null
+    return activeFile.largeFileInfo || getFileInfo(activeFile.path, activeFile.content)
+  }, [activeFile?.path, activeFile?.contentState, activeFile?.contentLoadVersion, activeFile?.largeFileInfo, isPlanBoardDocument])
   const currentTheme = useStore((state) => state.currentTheme) as ThemeName
   const fontZoomRafRef = useRef<number | null>(null)
   const fontZoomSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -209,11 +214,33 @@ export default function Editor() {
     }
   }, [])
 
+  // Rehydrate an LRU-unloaded buffer before mounting Monaco. An empty string is
+  // valid file content, so loading state is explicit and never inferred from it.
+  useEffect(() => {
+    if (!activeFilePath) return
+    const file = useStore.getState().openFiles.find(candidate => candidate.path === activeFilePath)
+    if (!file || file.contentState !== 'unloaded') return
+
+    let cancelled = false
+    void api.file.readFull(file.path, file.encoding).then((content) => {
+      if (cancelled) return
+      if (content === null) {
+        setFileContentState(file.path, 'error')
+        return
+      }
+      reloadFileFromDisk(file.path, content)
+    }).catch(() => {
+      if (!cancelled) setFileContentState(file.path, 'error')
+    })
+
+    return () => { cancelled = true }
+  }, [activeFilePath, activeFile?.contentState, reloadFileFromDisk, setFileContentState])
+
   // 文件切换时清除 lint 错误并通知 LSP
   // 同时检查是否有跨文件 Go-to-Definition 待处理的跳转定位
   useEffect(() => {
     clearLintErrors()
-    if (activeFile && activeFile.content != null && !isPreviewDocument && !isPlanBoardDocument) {
+    if (activeFile?.contentState === 'loaded' && !isPreviewDocument && !isPlanBoardDocument) {
       notifyFileOpened(activeFile.path, activeFile.content)
       // 检查是否有跨文件跳转定义的待定位请求
       const nav = consumePendingNavigation(activeFile.path)
@@ -235,7 +262,7 @@ export default function Editor() {
 
     const validUris = new Set(
       useStore.getState().openFiles.map(f => {
-        if (f.path.startsWith('diff://') || f.kind === 'preview') return ''
+        if (f.path.startsWith('diff://') || f.kind === 'preview' || f.contentState !== 'loaded') return ''
         return monacoInstance.Uri.file(f.path).toString()
       })
     )
@@ -332,7 +359,6 @@ export default function Editor() {
 
       const contentDisposable = editor.onDidChangeModelContent(() => {
         const currentVersionId = model.getAlternativeVersionId()
-        const editorContent = editor.getValue()
         const { openFiles: currentFiles } = useStore.getState()
         const currentFile = currentFiles.find(f => f.path === currentFilePath)
         syncFileEolFromModel(currentFilePath)
@@ -345,11 +371,7 @@ export default function Editor() {
           return
         }
 
-        if (editorContent === currentFile.content) {
-          markFileSaved(currentFilePath, currentVersionId)
-        } else {
-          updateFileDirtyState(currentFilePath, currentVersionId)
-        }
+        updateFileDirtyState(currentFilePath, currentVersionId)
       })
       disposables.push(contentDisposable)
     }
@@ -529,6 +551,19 @@ export default function Editor() {
           <Suspense fallback={<CodeSkeleton lines={8} />}>
             <BrowserPreviewTab file={activeFile} />
           </Suspense>
+        ) : activeFile?.contentState === 'error' ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-text-muted">
+            <span>{language === 'zh' ? '无法重新加载文件内容' : 'Could not reload file content'}</span>
+            <button
+              type="button"
+              className="rounded-md border border-border px-3 py-1.5 text-text-secondary hover:bg-surface"
+              onClick={() => setFileContentState(activeFile.path, 'unloaded')}
+            >
+              {language === 'zh' ? '重试' : 'Retry'}
+            </button>
+          </div>
+        ) : activeFile && activeFile.contentState !== 'loaded' ? (
+          <CodeSkeleton lines={12} />
         ) : activeFile && (
           <>
             {/* Markdown 工具栏 */}
@@ -569,7 +604,7 @@ export default function Editor() {
                     onChange={(value) => {
                       if (value !== undefined) {
                         updateFileContent(activeFile.path, value)
-                        didChangeDocument(activeFile.path, value)
+                        scheduleDidChangeDocument(activeFile.path, value)
                       }
                     }}
                     loading={<CodeSkeleton lines={12} />}
@@ -617,7 +652,7 @@ export default function Editor() {
                 onChange={(value) => {
                   if (value !== undefined) {
                     updateFileContent(activeFile.path, value)
-                    didChangeDocument(activeFile.path, value)
+                    scheduleDidChangeDocument(activeFile.path, value)
                     triggerAutoSave(activeFile.path)
                   }
                 }}

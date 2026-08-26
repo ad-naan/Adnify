@@ -26,7 +26,7 @@ export function useFileWatcher() {
       if (event.event === 'create') {
         const openFile = openFiles.find((file) => pathEquals(file.path, event.path))
         if (openFile?.isDeleted) {
-          const newContent = await api.file.read(event.path)
+          const newContent = await api.file.readFull(event.path)
           if (newContent !== null) {
             reloadFileFromDisk(openFile.path, newContent)
             scheduleSavedVersionSync(openFile.path, newContent)
@@ -42,7 +42,7 @@ export function useFileWatcher() {
       const openFile = openFiles.find((file) => pathEquals(file.path, event.path))
       if (!openFile) return
 
-      const newContent = await api.file.read(event.path)
+      const newContent = await api.file.readFull(event.path)
       if (newContent === null || newContent === openFile.content) return
 
       const isInternal = internalWriteTracker.consume(event.path)

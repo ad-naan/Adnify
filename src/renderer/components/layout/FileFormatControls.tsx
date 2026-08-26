@@ -3,6 +3,7 @@ import { useStore } from '@store'
 import BottomBarPopover from '../ui/BottomBarPopover'
 import { applyFileEol } from '@services/fileFormatService'
 import { toast } from '../common/ToastProvider'
+import { api } from '@renderer/services/electronAPI'
 
 const EOL_OPTIONS = [
   { id: 'LF', label: 'LF', descriptionZh: 'Unix / macOS', descriptionEn: 'Unix / macOS' },
@@ -70,7 +71,7 @@ export default function FileFormatControls() {
   const handleEncodingChange = async (nextEncoding: string) => {
     if (nextEncoding === currentEncoding) return
 
-    const nextContent = await window.electronAPI.readFile(activeFile.path, nextEncoding)
+    const nextContent = await api.file.readFull(activeFile.path, nextEncoding)
     if (nextContent === null) {
       toast.error(
         language === 'zh' ? '切换编码失败' : 'Failed to switch encoding',

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
     file: {
-      read: vi.fn(),
+      readFull: vi.fn(),
       readRichContent: vi.fn(),
       readImageAnalysis: vi.fn(),
       write: vi.fn(),

@@ -506,7 +506,7 @@ export default function ChatPanel() {
   // 处理显示 diff
   const handleShowDiff = useCallback(async (filePath: string, oldContent: string, newContent: string) => {
     const fullPath = toFullPath(filePath, workspacePath)
-    const currentContent = await api.file.read(fullPath)
+    const currentContent = await api.file.readFull(fullPath)
     if (currentContent !== null) {
       openFile(fullPath, currentContent)
       setActiveFile(fullPath)
@@ -573,14 +573,8 @@ export default function ChatPanel() {
     // 辅助函数：检测路径是否是文件夹
     const checkIsDirectory = async (path: string): Promise<boolean> => {
       try {
-        // 先尝试读取文件，如果成功则是文件
-        const content = await api.file.read(path)
-        if (content !== null) {
-          return false // 是文件
-        }
-        // 读取失败，尝试读取目录
-        const result = await api.file.readDir(path)
-        return Array.isArray(result) && result.length >= 0
+        const stats = await api.file.stat(path)
+        return stats?.isDirectory === true
       } catch {
         return false
       }
@@ -1126,7 +1120,7 @@ export default function ChatPanel() {
   const handleReviewFile = useCallback(async (filePath: string) => {
     const change = pendingChanges.find(c => c.filePath === filePath)
     if (!change) return
-    const currentContent = await api.file.read(filePath)
+    const currentContent = await api.file.readFull(filePath)
     if (currentContent !== null) {
       const diffUri = `diff://${filePath}`
       openFile(diffUri, currentContent, change.snapshot.content || '')

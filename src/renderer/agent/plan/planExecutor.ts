@@ -256,7 +256,7 @@ export async function startPlanExecution(
 
     try {
         const requirementsPath = `${workspacePath}/.adnify/plan/${plan.requirementsDoc}`
-        const requirementsContent = await api.file.read(requirementsPath)
+        const requirementsContent = await api.file.readFull(requirementsPath)
         store.updatePlan(plan.id, { requirementsContent: requirementsContent || undefined })
     } catch (e) {
         logger.agent.warn('[PlanExecutor] Failed to load requirements document:', e)

@@ -38,7 +38,8 @@ Object.defineProperty(globalThis, 'self', {
 // Mock window.electronAPI
 const mockElectronAPI: Record<string, unknown> = {
   file: {
-    read: vi.fn(),
+    readFull: vi.fn(),
+    readPreview: vi.fn(),
     readBinary: vi.fn(),
     readRichContent: vi.fn(),
     readImageAnalysis: vi.fn(),

@@ -225,7 +225,7 @@ export async function addProjectFilesToTypeService(workspacePath: string) {
     let addedCount = 0
     for (const filePath of filesToAdd) {
       try {
-        const content = await api.file.read(filePath)
+        const content = await api.file.readFull(filePath)
         if (content) {
           addFileToTypeService(filePath, content)
           addedCount++

@@ -146,7 +146,7 @@ async function processFileContext(
     const content = await fileContentCache.getOrSet(
       filePath,
       async () => {
-        const fileContent = await api.file.read(filePath)
+        const fileContent = await api.file.readPreview(filePath)
         if (!fileContent) throw new Error('File not found')
         return fileContent
       },

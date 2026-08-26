@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fileApi = {
   exists: vi.fn(),
-  read: vi.fn(),
+  readFull: vi.fn(),
   write: vi.fn(),
 }
 
@@ -44,7 +44,7 @@ describe('git exclude helpers', () => {
       existsCalls.push(path)
       return path === 'E:/repo/.gitignore'
     })
-    vi.mocked(fileApi.read).mockImplementation(async path => {
+    vi.mocked(fileApi.readFull).mockImplementation(async path => {
       readCalls.push(path)
       return path === 'E:/repo/.gitignore' ? '/logs/\n/.agent/cache/\n' : ''
     })
@@ -56,7 +56,7 @@ describe('git exclude helpers', () => {
       exclude: { pattern: '/.agent/cache/', ignored: false, available: true },
     })
 
-    vi.mocked(fileApi.read).mockImplementation(async path => {
+    vi.mocked(fileApi.readFull).mockImplementation(async path => {
       readCalls.push(path)
       return path === 'E:/repo/.gitignore' ? '/logs/\n' : ''
     })
@@ -118,6 +118,6 @@ describe('git exclude helpers', () => {
         gitignore: { pattern: '/logs/', ignored: false, available: true },
         exclude: { pattern: '/logs/', ignored: false, available: true },
       })
-    expect(fileApi.read).not.toHaveBeenCalled()
+    expect(fileApi.readFull).not.toHaveBeenCalled()
   })
 })

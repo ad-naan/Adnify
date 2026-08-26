@@ -169,7 +169,7 @@ export function SearchView() {
       filePath = joinPath(workspacePath, filePath)
     }
 
-    const content = await api.file.read(filePath)
+    const content = await api.file.readFull(filePath)
     if (content !== null) {
       openFile(filePath, content)
       setActiveFile(filePath)
@@ -206,7 +206,7 @@ export function SearchView() {
 
     if (searchResults.length === 0) return
 
-    const content = await api.file.read(filePath)
+    const content = await api.file.readFull(filePath)
     if (content === null) return
 
     let newContent = content
@@ -268,7 +268,7 @@ export function SearchView() {
 
     let replacedCount = 0
     for (const filePath of filePaths) {
-      const content = await api.file.read(filePath)
+      const content = await api.file.readFull(filePath)
       if (content === null) continue
 
       let newContent = content

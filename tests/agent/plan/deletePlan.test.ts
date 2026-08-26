@@ -9,7 +9,7 @@ vi.mock('@/renderer/services/electronAPI', () => ({
       exists: vi.fn(async () => true),
       delete: vi.fn(async () => undefined),
       write: vi.fn(async () => undefined),
-      read: vi.fn(async () => null),
+      readFull: vi.fn(async () => null),
       readDir: vi.fn(async () => []),
       mkdir: vi.fn(async () => undefined),
     },

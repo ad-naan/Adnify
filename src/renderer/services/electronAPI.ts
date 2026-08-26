@@ -74,7 +74,11 @@ function createGroupedAPI() {
       selectFolder: () => raw.selectFolder(),
       readDir: (path: string) => raw.readDir(path),
       getTree: (path: string, maxDepth?: number) => raw.getFileTree(path, maxDepth),
-      read: (path: string, encoding?: string, options?: Parameters<typeof raw.readFile>[2]) => raw.readFile(path, encoding, options),
+      // Read intent is explicit at every call site. Writable buffers, parsers,
+      // and read-modify-write flows use readFull; bounded AI context uses
+      // readPreview. There is deliberately no ambiguous `read` method here.
+      readPreview: (path: string, encoding?: string) => raw.readFile(path, encoding),
+      readFull: (path: string, encoding?: string) => raw.readFile(path, encoding, { full: true }),
       stat: (path: string) => raw.statFile(path),
       readBinary: (path: string) => raw.readBinaryFile(path),
       readRichContent: (path: string, options?: Parameters<typeof raw.readRichContent>[1]) => raw.readRichContent(path, options),

@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
     file: {
-      read: vi.fn(),
+      readFull: vi.fn(),
       readRichContent: vi.fn(),
       readImageAnalysis: vi.fn(),
       write: vi.fn(),
@@ -127,7 +127,7 @@ beforeEach(() => {
 
 describe('read_file 的预算', () => {
   it('单文件超预算时给出可继续的下一次调用参数', async () => {
-    vi.mocked(api.file.read).mockResolvedValue(hugeSource(4000))
+    vi.mocked(api.file.readFull).mockResolvedValue(hugeSource(4000))
 
     const result = await toolExecutors.read_file({ path: 'src/big.ts' }, ctx)
 
@@ -139,7 +139,7 @@ describe('read_file 的预算', () => {
   })
 
   it('未超预算时不附加任何截断说明', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('const a = 1\nconst b = 2\n')
+    vi.mocked(api.file.readFull).mockResolvedValue('const a = 1\nconst b = 2\n')
 
     const result = await toolExecutors.read_file({ path: 'src/small.ts' }, ctx)
 
@@ -150,7 +150,7 @@ describe('read_file 的预算', () => {
   it('多文件读取平分预算，后面的文件不会只剩碎片', async () => {
     // 旧行为：每个文件各自按全预算截断再拼接，总长 N 倍，然后被边界层从整体
     // 头尾切一刀 —— 第一个文件基本完整，后面的被切没。
-    vi.mocked(api.file.read).mockResolvedValue(hugeSource(4000))
+    vi.mocked(api.file.readFull).mockResolvedValue(hugeSource(4000))
 
     const result = await toolExecutors.read_file({
       paths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
@@ -169,7 +169,7 @@ describe('read_file 的预算', () => {
 describe('search_files 的触顶报告', () => {
   it('单文件命中超上限时报告总数', async () => {
     vi.mocked(api.file.readDir).mockResolvedValue(null as any)
-    vi.mocked(api.file.read).mockResolvedValue(Array.from({ length: 300 }, () => 'needle here').join('\n'))
+    vi.mocked(api.file.readFull).mockResolvedValue(Array.from({ length: 300 }, () => 'needle here').join('\n'))
 
     const result = await toolExecutors.search_files({ path: 'src/a.ts', pattern: 'needle' }, ctx)
 
@@ -181,7 +181,7 @@ describe('search_files 的触顶报告', () => {
 
   it('未触顶时不谈上限', async () => {
     vi.mocked(api.file.readDir).mockResolvedValue(null as any)
-    vi.mocked(api.file.read).mockResolvedValue('needle here\nother line\n')
+    vi.mocked(api.file.readFull).mockResolvedValue('needle here\nother line\n')
 
     const result = await toolExecutors.search_files({ path: 'src/a.ts', pattern: 'needle' }, ctx)
 
@@ -205,7 +205,7 @@ describe('search_files 的触顶报告', () => {
 
 describe('get_document_symbols 的降级阶梯', () => {
   it('大文件的结果始终可解析，且报告真实符号总数', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('source')
+    vi.mocked(api.file.readFull).mockResolvedValue('source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue(manySymbols(250, 3) as any)
 
@@ -226,7 +226,7 @@ describe('get_document_symbols 的降级阶梯', () => {
   })
 
   it('小文件走第一级，没有降级标记', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('source')
+    vi.mocked(api.file.readFull).mockResolvedValue('source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue(manySymbols(3) as any)
 
@@ -238,7 +238,7 @@ describe('get_document_symbols 的降级阶梯', () => {
   })
 
   it('max_symbols 触顶时报告真实总数与返回数', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('source')
+    vi.mocked(api.file.readFull).mockResolvedValue('source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue(manySymbols(40) as any)
 
@@ -260,7 +260,7 @@ describe('find_symbol 的候选范围报告', () => {
     vi.mocked(api.index.searchSymbols).mockResolvedValue(
       Array.from({ length: 80 }, (_, index) => ({ relativePath: `src/f${index}.ts` })) as any
     )
-    vi.mocked(api.file.read).mockResolvedValue('source')
+    vi.mocked(api.file.readFull).mockResolvedValue('source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([] as any)
 
@@ -273,7 +273,7 @@ describe('find_symbol 的候选范围报告', () => {
 
   it('候选未被裁剪且无命中时，直接说没有', async () => {
     vi.mocked(api.index.searchSymbols).mockResolvedValue([{ relativePath: 'src/a.ts' }] as any)
-    vi.mocked(api.file.read).mockResolvedValue('source')
+    vi.mocked(api.file.readFull).mockResolvedValue('source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([] as any)
 
@@ -286,7 +286,7 @@ describe('find_symbol 的候选范围报告', () => {
 
 describe('find_references 的限流', () => {
   it('只为要返回的引用解析所属符号', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('source')
+    vi.mocked(api.file.readFull).mockResolvedValue('source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue(manySymbols(1) as any)
     vi.mocked(api.lsp.references).mockResolvedValue(

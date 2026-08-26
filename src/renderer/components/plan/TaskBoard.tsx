@@ -251,7 +251,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
 
   useEffect(() => {
     if (!plan?.requirementsDoc || !workspacePath) return
-    api.file.read(`${workspacePath}/.adnify/plan/${plan.requirementsDoc}`).then(content => setRequirementsContent(content || '')).catch(() => setRequirementsContent(''))
+    api.file.readFull(`${workspacePath}/.adnify/plan/${plan.requirementsDoc}`).then(content => setRequirementsContent(content || '')).catch(() => setRequirementsContent(''))
   }, [plan?.requirementsDoc, workspacePath])
 
   const stats = useMemo(() => {

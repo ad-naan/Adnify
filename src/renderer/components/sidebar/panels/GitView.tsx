@@ -1563,7 +1563,7 @@ Commit message:`
         try {
             const targetRoot = rootPath || selectedRepoRoot || workspacePath
             const fullPath = toFullPath(path, targetRoot)
-            const content = await api.file.read(fullPath)
+            const content = await api.file.readFull(fullPath)
 
             // 如果读取失败，只有在文件被删除的情况下才允许继续（因为删除了就读不到内容了）
             if (content === null && fileStatus !== 'deleted') {

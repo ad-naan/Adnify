@@ -582,7 +582,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         openFile(node.item.path, '')
         setActiveFile(node.item.path)
       } else {
-        const content = await api.file.read(node.item.path)
+        const content = await api.file.readFull(node.item.path)
         if (content !== null) {
           openFile(node.item.path, content)
           setActiveFile(node.item.path)

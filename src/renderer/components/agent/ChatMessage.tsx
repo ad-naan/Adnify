@@ -276,7 +276,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
           // ignore
         }
 
-        const content = await api.file.read(targetPath)
+        const content = await api.file.readFull(targetPath)
         if (content !== null) {
           openFile(targetPath, content)
           setActiveFile(targetPath)
@@ -620,7 +620,7 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     const resolvedPath = toFullPath(filePath, workspacePath)
 
     try {
-      const content = await api.file.read(resolvedPath)
+      const content = await api.file.readFull(resolvedPath)
       if (content !== null) {
         openFile(resolvedPath, content)
         setActiveFile(resolvedPath)

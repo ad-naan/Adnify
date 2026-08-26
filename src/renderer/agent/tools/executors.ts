@@ -821,7 +821,7 @@ async function guardedWriteFile(opts: {
     const originalHash = hashContent(opts.originalContent)
     if (!opts.skipStaleCheck) {
         // 陈旧检查比对整文件哈希，必须读全文，否则超大文件的哈希只反映前导切片。
-        const currentContent = await api.file.read(opts.path, undefined, { full: true })
+        const currentContent = await api.file.readFull(opts.path)
         const currentHash = hashContent(currentContent)
 
         if (currentHash !== originalHash) {
@@ -871,7 +871,7 @@ async function loadAgentSymbolsForFile(
 ): Promise<{ fullPath: string; relativePath: string; symbols: AgentSymbol[] }> {
     const fullPath = await resolvePath(inputPath, ctx.workspacePath, 'read', ctx.securityApproval)
     const relativePath = toRelativePath(fullPath, ctx.workspacePath).replace(/\\/g, '/')
-    const content = await api.file.read(fullPath, undefined, { full: true })
+    const content = await api.file.readFull(fullPath)
     if (content === null || content === undefined) {
         throw new Error(`Source file not found or unreadable: ${relativePath}. If the exact file path is uncertain, use find_symbol without relative_path.`)
     }
@@ -973,7 +973,7 @@ async function includeSymbolBodies(symbols: AgentSymbol[], ctx: ToolExecutionCon
         let content = contentByPath.get(symbol.relativePath)
         if (content === undefined) {
             const fullPath = await resolvePath(symbol.relativePath, ctx.workspacePath, 'read', ctx.securityApproval)
-            content = await api.file.read(fullPath, undefined, { full: true }) ?? ''
+            content = await api.file.readFull(fullPath) ?? ''
             fileCacheService.markFileAsRead(fullPath, content)
             contentByPath.set(symbol.relativePath, content)
         }
@@ -1107,7 +1107,7 @@ async function collectDiagnosticsForTarget(
     target: AgentSymbol | AgentSymbol[] | undefined,
     minSeverity: number,
 ): Promise<Record<string, any[]>> {
-    const content = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''
+    const content = await api.file.readFull(loaded.fullPath) ?? ''
     await didOpenDocument(loaded.fullPath, content)
     await waitForDiagnostics(loaded.fullPath)
 
@@ -1197,7 +1197,7 @@ async function applyWorkspaceEditAtomically(
     const prepared: PreparedWorkspaceFile[] = []
     for (const [uri, edits] of editsByUri) {
         const path = await resolvePath(lspUriToPath(uri), ctx.workspacePath, 'write', ctx.securityApproval)
-        const originalContent = await api.file.read(path, undefined, { full: true })
+        const originalContent = await api.file.readFull(path)
         if (originalContent === null || originalContent === undefined) {
             return { success: false, result: '', error: `Cannot edit missing file: ${path}` }
         }
@@ -1220,7 +1220,7 @@ async function applyWorkspaceEditAtomically(
     const rollback = async (): Promise<string[]> => {
         const conflicts: string[] = []
         for (const committed of [...written].reverse()) {
-            const current = await api.file.read(committed.path, undefined, { full: true })
+            const current = await api.file.readFull(committed.path)
             if (hashContent(current) !== hashContent(committed.nextContent)) {
                 conflicts.push(committed.path)
                 continue
@@ -1473,7 +1473,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 }
             }
 
-            const content = await api.file.read(validPath)
+            const content = await api.file.readFull(validPath)
             if (content === null) {
                 return {
                     success: false,
@@ -1647,7 +1647,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         if (!isDirectory) {
             // 单文件搜索模式（替代原 search_in_file）
-            const content = await api.file.read(resolvedPath)
+            const content = await api.file.readFull(resolvedPath)
             if (content === null) return { success: false, result: '', error: `File not found: ${resolvedPath}` }
 
             // 验证正则表达式
@@ -1702,7 +1702,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
     async edit_file(args, ctx) {
         const path = await resolvePath(args.path, ctx.workspacePath, 'write', ctx.securityApproval)
         // 编辑会把结果整体写回，读取截断等于把文件尾部删掉。
-        const originalContent = await api.file.read(path, undefined, { full: true })
+        const originalContent = await api.file.readFull(path)
         if (originalContent === null) return { success: false, result: '', error: `File not found: ${path}. Use write_file to create new files.` }
 
         const resolution = resolveEditFileRequest(args)
@@ -2120,7 +2120,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         // 因此在真正落盘前，先经过统一策略守卫，避免把局部修改误用成整文件覆盖。
         const path = await resolvePath(args.path, ctx.workspacePath, 'write', ctx.securityApproval)
         const content = args.content as string
-        const originalContent = await api.file.read(path, undefined, { full: true }) || ''
+        const originalContent = await api.file.readFull(path) || ''
         const writeDecision = guardWriteFile({
             path,
             originalContent,
@@ -3210,7 +3210,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
 
         let edit = symbolRangeEdit(symbol, args.body as string)
         if (action !== 'replace') {
-            const original = await api.file.read(loaded.fullPath, undefined, { full: true }) ?? ''
+            const original = await api.file.readFull(loaded.fullPath) ?? ''
             const eol = original.includes('\r\n') ? '\r\n' : '\n'
             if (action === 'insert_before') {
                 edit = symbolRangeEdit(symbol, `${args.body as string}${eol}`)
@@ -3588,7 +3588,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             // 更新需求文档
             if (updateRequirements) {
                 const mdPath = `${ctx.workspacePath}/.adnify/plan/${plan.requirementsDoc}`
-                const existingContent = await api.file.read(mdPath)
+                const existingContent = await api.file.readFull(mdPath)
                 const newContent = `${existingContent}\n\n---\n## Updates\n${updateRequirements}`
                 internalWriteTracker.mark(mdPath)
                 await api.file.write(mdPath, newContent)

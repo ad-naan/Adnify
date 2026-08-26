@@ -56,7 +56,7 @@ class IgnoreServiceClass {
         for (const fileName of ignoreFiles) {
             const ignorePath = `${workspacePath}/${fileName}`
             try {
-                const content = await api.file.read(ignorePath)
+                const content = await api.file.readFull(ignorePath)
                 if (content) {
                     this.parsePatterns(content)
                     logger.system.info(`[IgnoreService] Loaded ${fileName} with ${this.patterns.length} patterns`)

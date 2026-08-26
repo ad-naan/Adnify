@@ -29,6 +29,11 @@ export interface LargeFileInfo {
 export interface OpenFile {
   path: string
   content: string
+  /** Whether the in-memory text buffer is available. Empty content is valid and
+   * must never be used as a sentinel for an unloaded file. */
+  contentState: 'loaded' | 'unloaded' | 'error'
+  /** Changes only when text is loaded from an external source, not on edits. */
+  contentLoadVersion: number
   kind?: 'file' | 'diff' | 'preview'
   isDirty: boolean
   originalContent?: string
@@ -102,6 +107,7 @@ export interface FileSlice {
   markFileSaved: (path: string, versionId?: number) => void
   /** 从磁盘重新加载文件内容（不设置 dirty） */
   reloadFileFromDisk: (path: string, content: string) => void
+  setFileContentState: (path: string, contentState: OpenFile['contentState']) => void
   /** 标记文件已被外部删除 */
   markFileDeleted: (path: string) => void
   /** 标记文件已恢复（不再是删除状态） */
@@ -127,6 +133,13 @@ function upsertOpenFiles(
       ? { ...file, ...nextFile, lastAccessed: Date.now() }
       : file,
   )
+}
+
+let contentLoadVersion = 0
+
+function nextContentLoadVersion(): number {
+  contentLoadVersion += 1
+  return contentLoadVersion
 }
 
 export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set) => ({
@@ -195,6 +208,8 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         path: normalizedPath,
         kind: options?.kind || (normalizedPath.startsWith('diff://') ? 'diff' : 'file'),
         content,
+        contentState: 'loaded',
+        contentLoadVersion: nextContentLoadVersion(),
         isDirty: false,
         originalContent,
         savedVersionId: 1,
@@ -209,17 +224,21 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
 
       // LRU 淘汰：当打开文件超过阈值时，卸载最久未访问的非 dirty 文件内容
       const MAX_OPEN_FILES_WITH_CONTENT = 30
-      if (resultFiles.length > MAX_OPEN_FILES_WITH_CONTENT) {
+      const loadedFileCount = resultFiles.filter(file => file.contentState === 'loaded').length
+      const loadedFileOverflow = loadedFileCount - MAX_OPEN_FILES_WITH_CONTENT
+      if (loadedFileOverflow > 0) {
         const evictCandidates = resultFiles
-          .filter(f => !f.isDirty && f.path !== normalizedPath && f.content.length > 0)
+          .filter(f => f.contentState === 'loaded' && !f.isDirty && f.path !== normalizedPath && f.content.length > 0)
           .sort((a, b) => (a.lastAccessed || 0) - (b.lastAccessed || 0))
 
-        const toEvict = evictCandidates.slice(0, resultFiles.length - MAX_OPEN_FILES_WITH_CONTENT)
+        const toEvict = evictCandidates.slice(0, loadedFileOverflow)
         const evictPaths = new Set(toEvict.map(f => f.path))
 
         return {
           openFiles: resultFiles.map(f =>
-            evictPaths.has(f.path) ? { ...f, content: '', originalContent: undefined } : f
+            evictPaths.has(f.path)
+              ? { ...f, content: '', contentState: 'unloaded' as const, originalContent: undefined }
+              : f
           ),
           activeFilePath: normalizedPath,
         }
@@ -238,6 +257,8 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
         path,
         kind: 'preview',
         content: '',
+        contentState: 'loaded',
+        contentLoadVersion: nextContentLoadVersion(),
         isDirty: false,
         preview,
         lastAccessed: Date.now(),
@@ -251,9 +272,11 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
 
   restoreOpenFiles: (files, activeFilePath) =>
     set(() => {
-      const restoredFiles: OpenFile[] = files.map((file, index) => ({
+      const restoredFiles: OpenFile[] = files.map((file) => ({
         path: normalizePath(file.path),
         content: file.content,
+        contentState: 'loaded',
+        contentLoadVersion: nextContentLoadVersion(),
         kind: file.options?.kind || (normalizePath(file.path).startsWith('diff://') ? 'diff' : 'file'),
         isDirty: false,
         originalContent: file.originalContent,
@@ -297,7 +320,7 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
   updateFileContent: (path, content) =>
     set((state) => ({
       openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, content } : f
+        f.path === path ? { ...f, content, contentState: 'loaded' } : f
       ),
     })),
 
@@ -320,7 +343,25 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
   reloadFileFromDisk: (path, content) =>
     set((state) => ({
       openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, content, originalContent: undefined, isDirty: false, isDeleted: false, savedVersionId: undefined } : f
+        f.path === path
+          ? {
+              ...f,
+              content,
+              contentState: 'loaded',
+              contentLoadVersion: nextContentLoadVersion(),
+              originalContent: undefined,
+              isDirty: false,
+              isDeleted: false,
+              savedVersionId: undefined,
+            }
+          : f
+      ),
+    })),
+
+  setFileContentState: (path, contentState) =>
+    set((state) => ({
+      openFiles: state.openFiles.map((file) =>
+        file.path === path ? { ...file, contentState } : file
       ),
     })),
 

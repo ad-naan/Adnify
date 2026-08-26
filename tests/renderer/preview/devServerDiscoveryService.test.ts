@@ -15,7 +15,7 @@ const { probe, readFile, terminalState, outputBuffer, dataListeners } = vi.hoist
 vi.mock('@/renderer/services/electronAPI', () => ({
   api: {
     preview: { probe: (url: string, timeout?: number) => probe(url, timeout) },
-    file: { read: (path: string) => readFile(path) },
+    file: { readFull: (path: string) => readFile(path) },
   },
 }))
 

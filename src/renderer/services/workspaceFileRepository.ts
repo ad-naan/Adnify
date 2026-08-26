@@ -183,7 +183,7 @@ class WorkspaceFileRepository {
   async readText(file: AdnifyFile | string, rootPath?: string): Promise<string | null> {
     const target = this.resolveIoPath(file, rootPath)
     if (!target) return null
-    return api.file.read(target)
+    return api.file.readFull(target)
   }
 
   async writeText(file: AdnifyFile | string, content: string, rootPath?: string): Promise<boolean> {

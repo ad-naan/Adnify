@@ -199,7 +199,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                     const snapshot: ProjectFileSnapshot = { name: entry.name, isDirectory: entry.isDirectory }
                     if (entry.isDirectory || !TASK_MANIFESTS.has(entry.name.toLowerCase())) return snapshot
                     try {
-                        const manifestContent = await api.file.read(`${root}/${entry.name}`)
+                        const manifestContent = await api.file.readFull(`${root}/${entry.name}`)
                         if (manifestContent !== null) snapshot.content = manifestContent
                     } catch {
                         // A malformed or temporarily unavailable manifest should not hide other ecosystems.

@@ -70,7 +70,7 @@ async function saveFileSnapshots(
       : rawPath
 
     try {
-      const content = await api.file.read(fullPath)
+      const content = await api.file.readFull(fullPath)
       return { filePath: fullPath, content }
     } catch {
       // 文件不存在，content 为 null（新建文件）

@@ -126,7 +126,7 @@ function FileChangeCard({
         }
 
         try {
-            const content = await api.file.read(absPath)
+            const content = await api.file.readFull(absPath)
             if (content !== null) {
                 openFile(absPath, content)
                 setActiveFile(absPath)
@@ -282,7 +282,7 @@ function FileChangeCard({
                                                 absPath = joinPath(workspacePath, absPath)
                                             }
 
-                                            api.file.read(absPath).then(content => {
+                                            api.file.readFull(absPath).then(content => {
                                                 if (content !== null) {
                                                     const diffUri = `diff://${absPath}`
                                                     openFile(diffUri, newContent, oldContent)

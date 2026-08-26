@@ -209,7 +209,7 @@ class SkillService {
             if (!item.isDirectory || item.name.startsWith('.')) continue
 
             const skillMdPath = joinPath(skillsDir, item.name, 'SKILL.md')
-            const raw = await api.file.read(skillMdPath)
+            const raw = await api.file.readFull(skillMdPath)
             if (!raw) continue
 
             const parsed = parseSkillMd(raw)
@@ -232,7 +232,7 @@ class SkillService {
                 || 'auto'
 
             // 项目级覆盖全局级（后扫描的覆盖先扫描的）
-            const originRaw = await api.file.read(joinPath(skillsDir, item.name, '.adnify-origin.json'))
+            const originRaw = await api.file.readFull(joinPath(skillsDir, item.name, '.adnify-origin.json'))
             let importedFrom: SkillImportedOrigin | undefined
             if (originRaw) {
                 try {
@@ -444,7 +444,7 @@ class SkillService {
         const skillMdPath = joinPath(skillDir, 'SKILL.md')
 
         // 检查是否已存在
-        const existing = await api.file.read(skillMdPath)
+        const existing = await api.file.readFull(skillMdPath)
         if (existing !== null) {
             return { success: false, error: `Skill "${name}" already exists` }
         }
@@ -637,7 +637,7 @@ ${sections}`
         if (!workspacePath) return { disabled: [] }
 
         const configPath = joinPath(workspacePath, this.CONFIG_FILE)
-        const content = await api.file.read(configPath)
+        const content = await api.file.readFull(configPath)
 
         if (!content) return { disabled: [] }
 

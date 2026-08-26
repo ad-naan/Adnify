@@ -54,7 +54,7 @@ class RulesService {
 
     for (const ruleFile of this.ruleFiles) {
       const fullPath = joinPath(workspacePath, ruleFile)
-      const content = await api.file.read(fullPath)
+      const content = await api.file.readFull(fullPath)
       
       if (content !== null) {
         this.cachedRules = {

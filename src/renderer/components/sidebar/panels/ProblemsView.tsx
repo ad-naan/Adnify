@@ -42,7 +42,7 @@ export function ProblemsView() {
       }
     }
 
-    const content = await api.file.read(filePath)
+    const content = await api.file.readFull(filePath)
     if (content !== null) {
       openFile(filePath, content)
       setActiveFile(filePath)

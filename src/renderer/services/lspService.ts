@@ -14,6 +14,22 @@ import { pathStartsWith } from '@shared/utils/pathUtils'
 // 文档版本追踪
 const documentVersions = new Map<string, number>()
 const openedDocuments = new Set<string>()
+const pendingDocumentChanges = new Map<string, { content: string; timer: ReturnType<typeof setTimeout> }>()
+const DOCUMENT_CHANGE_DEBOUNCE_MS = 75
+
+function cancelPendingDocumentChange(uri: string): void {
+  const pending = pendingDocumentChanges.get(uri)
+  if (!pending) return
+  clearTimeout(pending.timer)
+  pendingDocumentChanges.delete(uri)
+}
+
+function clearPendingDocumentChanges(): void {
+  for (const pending of pendingDocumentChanges.values()) {
+    clearTimeout(pending.timer)
+  }
+  pendingDocumentChanges.clear()
+}
 
 function getFileDirectory(filePath: string): string {
   const normalized = filePath.replace(/\\/g, '/')
@@ -160,11 +176,13 @@ export async function startLspServer(workspacePath: string): Promise<boolean> {
 export async function stopLspServer(): Promise<void> {
   try {
     await api.lsp.stop()
-    documentVersions.clear()
-    openedDocuments.clear()
   } catch (err) {
     const error = toAppError(err)
     logger.lsp.error(`[LSP] Failed to stop: ${error.code}`, error)
+  } finally {
+    clearPendingDocumentChanges()
+    documentVersions.clear()
+    openedDocuments.clear()
   }
 }
 
@@ -173,6 +191,7 @@ export async function stopLspServer(): Promise<void> {
  * 只清理客户端状态，不停止服务器
  */
 export function resetLspState(): void {
+  clearPendingDocumentChanges()
   documentVersions.clear()
   openedDocuments.clear()
   logger.lsp.info('[LSP] State reset')
@@ -215,6 +234,8 @@ async function openDocumentIfNeeded(filePath: string, content: string): Promise<
   // Pyright needs an initial didChange after open to trigger diagnostics.
   if (languageId === 'python') {
     setTimeout(() => {
+      // Never let Pyright's initial diagnostic nudge overwrite a newer edit.
+      if (documentVersions.get(uri) !== version || pendingDocumentChanges.has(uri)) return
       didChangeDocument(filePath, content)
     }, 100)
   }
@@ -244,7 +265,7 @@ export async function didOpenDocument(filePath: string, content: string): Promis
 /**
  * 通知服务器文档已变更
  */
-export async function didChangeDocument(filePath: string, content: string): Promise<void> {
+async function sendDidChangeDocument(filePath: string, content: string): Promise<void> {
   const uri = pathToLspUri(filePath)
   const languageId = getLanguageId(filePath)
   if (!isLanguageSupported(languageId)) return
@@ -262,6 +283,39 @@ export async function didChangeDocument(filePath: string, content: string): Prom
   await api.lsp.didChange(params)
 }
 
+/** Sends a document change immediately and supersedes any queued editor change. */
+export async function didChangeDocument(filePath: string, content: string): Promise<void> {
+  cancelPendingDocumentChange(pathToLspUri(filePath))
+  await sendDidChangeDocument(filePath, content)
+}
+
+/**
+ * Coalesces high-frequency editor changes. LSP receives the newest full text
+ * after a short idle window instead of one IPC payload per keystroke.
+ */
+export function scheduleDidChangeDocument(filePath: string, content: string): void {
+  const languageId = getLanguageId(filePath)
+  if (!isLanguageSupported(languageId)) return
+
+  const uri = pathToLspUri(filePath)
+  cancelPendingDocumentChange(uri)
+  const timer = setTimeout(() => {
+    pendingDocumentChanges.delete(uri)
+    void sendDidChangeDocument(filePath, content).catch((error) => {
+      logger.lsp.warn('[LSP] Debounced didChange failed', { filePath, error })
+    })
+  }, DOCUMENT_CHANGE_DEBOUNCE_MS)
+  pendingDocumentChanges.set(uri, { content, timer })
+}
+
+async function flushPendingDocumentChange(filePath: string): Promise<void> {
+  const uri = pathToLspUri(filePath)
+  const pending = pendingDocumentChanges.get(uri)
+  if (!pending) return
+  cancelPendingDocumentChange(uri)
+  await sendDidChangeDocument(filePath, pending.content)
+}
+
 /**
  * 通知服务器文档已关闭
  */
@@ -270,6 +324,7 @@ export async function didCloseDocument(filePath: string): Promise<void> {
   const languageId = getLanguageId(filePath)
   if (!isLanguageSupported(languageId)) return
 
+  cancelPendingDocumentChange(uri)
   documentVersions.delete(uri)
   openedDocuments.delete(uri)
 
@@ -289,6 +344,7 @@ export async function didSaveDocument(filePath: string, content?: string): Promi
   const languageId = getLanguageId(filePath)
   if (!isLanguageSupported(languageId)) return
 
+  await flushPendingDocumentChange(filePath)
   const workspacePath = getFileWorkspaceRoot(filePath)
   const params: LspRequestParams & { text?: string } = {
     uri,

@@ -124,7 +124,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
     const loadFile = async () => {
       setIsLoading(true)
       try {
-        const fileContent = await api.file.read(filePath)
+        const fileContent = await api.file.readFull(filePath)
         if (fileContent) {
           setContent(fileContent)
           setResolvedContent(fileContent)

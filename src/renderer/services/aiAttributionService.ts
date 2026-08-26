@@ -877,7 +877,7 @@ class AiAttributionService {
     const hooksDir = joinPath(resolvedGitDir, 'hooks')
     const hookPath = joinPath(hooksDir, 'post-commit')
     // hook 内容会被追加后整体写回，截断读取会毁掉用户已有的 hook。
-    const existing = await api.file.read(hookPath, undefined, { full: true }) || ''
+    const existing = await api.file.readFull(hookPath) || ''
     if (existing.includes(HOOK_MARKER_START) && existing.includes(HOOK_MARKER_END)) {
       return true
     }
@@ -913,7 +913,7 @@ class AiAttributionService {
       ? gitDir.trim()
       : joinPath(repoRoot, gitDir.trim())
     const hookPath = joinPath(resolvedGitDir, 'hooks', 'post-commit')
-    const hookContent = await api.file.read(hookPath, undefined, { full: true })
+    const hookContent = await api.file.readFull(hookPath)
     const pending = await this.readPendingCommits(repoRoot)
     return {
       installed: Boolean(hookContent?.includes(HOOK_MARKER_START)),
@@ -1275,7 +1275,7 @@ class AiAttributionService {
       ? gitDir.trim()
       : joinPath(repoRoot, gitDir.trim())
     const pendingPath = joinPath(resolvedGitDir, HOOK_PENDING_FILE)
-    const content = await api.file.read(pendingPath)
+    const content = await api.file.readFull(pendingPath)
     if (!content) {
       return []
     }

@@ -151,7 +151,7 @@ export async function safeOpenFile(
 
     // 5. 读取完整内容。编辑器缓冲区是可写的，必须拿到全文，
     // 否则一次保存就会把文件截断到预览切片的长度。
-    const content = await api.file.read(filePath, undefined, { full: true })
+    const content = await api.file.readFull(filePath)
 
     if (content === null) {
       const msg = language === 'zh' ? '文件不存在' : 'File not found'

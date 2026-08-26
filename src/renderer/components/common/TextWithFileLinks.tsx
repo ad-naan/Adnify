@@ -21,7 +21,7 @@ export function TextWithFileLinks({ text, className = '' }: TextWithFileLinksPro
         }
 
         try {
-            const content = await api.file.read(absPath)
+            const content = await api.file.readFull(absPath)
             if (content !== null) {
                 openFile(absPath, content)
                 setActiveFile(absPath)

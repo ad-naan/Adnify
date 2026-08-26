@@ -71,7 +71,7 @@ class GitExcludeService {
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
     const filePath = resolveIgnoreFilePath(repository.root, target)
     const exists = await api.file.exists(filePath)
-    const current = exists ? (await api.file.read(filePath, undefined, { full: true }) || '') : ''
+    const current = exists ? (await api.file.readFull(filePath) || '') : ''
     const next = updateGitExcludeContent(current, pattern, action)
     if (next === current) return { changed: false, pattern, target }
 
@@ -106,8 +106,8 @@ class GitExcludeService {
     ])
 
     const [gitignoreContent, excludeContent] = await Promise.all([
-      gitignoreExists ? (await api.file.read(gitignorePath) || '') : '',
-      excludeExists ? (await api.file.read(excludePath) || '') : '',
+      gitignoreExists ? (await api.file.readFull(gitignorePath) || '') : '',
+      excludeExists ? (await api.file.readFull(excludePath) || '') : '',
     ])
 
     return {

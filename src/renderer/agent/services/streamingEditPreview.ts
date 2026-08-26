@@ -174,7 +174,7 @@ export class StreamingEditPreviewCoordinator {
     }
 
     const loadPromise = (async () => {
-      const originalContent = await api.file.read(filePath, undefined, { full: true })
+      const originalContent = await api.file.readFull(filePath)
       if (originalContent === null) {
         return null
       }

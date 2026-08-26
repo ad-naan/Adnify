@@ -252,7 +252,7 @@ export default function QuickOpen({ onClose }: QuickOpenProps) {
     if (!workspacePath) return
 
     const fullPath = `${workspacePath}/${filePath}`
-    const content = await api.file.read(fullPath)
+    const content = await api.file.readFull(fullPath)
 
     if (content !== null) {
       openFile(fullPath, content)

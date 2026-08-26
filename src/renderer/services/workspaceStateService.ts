@@ -26,7 +26,7 @@ async function readFilesWithConcurrency(
         try {
           // 恢复的内容会回填到编辑器缓冲区，随后可能被保存回磁盘，
           // 所以必须读完整文件而不是预览切片。
-          const fileContent = await api.file.read(filePath, undefined, { full: true })
+          const fileContent = await api.file.readFull(filePath)
           return fileContent !== null ? { path: filePath, content: fileContent } : null
         } catch {
           logger.system.warn('[WorkspaceState] Failed to restore file:', filePath)

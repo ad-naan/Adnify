@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
     file: {
-      read: vi.fn(),
+      readFull: vi.fn(),
       readRichContent: vi.fn(),
       readImageAnalysis: vi.fn(),
       write: vi.fn(),
@@ -145,7 +145,7 @@ describe('document read tool executors', () => {
   })
 
   it('opens a source document before requesting semantic symbols', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('export class Cache { get() {} }')
+    vi.mocked(api.file.readFull).mockResolvedValue('export class Cache { get() {} }')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
       name: 'Cache',
@@ -169,7 +169,7 @@ describe('document read tool executors', () => {
   })
 
   it('reports an unavailable language server as a failure instead of an empty success', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('export const value = 1')
+    vi.mocked(api.file.readFull).mockResolvedValue('export const value = 1')
     vi.mocked(didOpenDocument).mockResolvedValue(false)
 
     const result = await toolExecutors.get_document_symbols({ relative_path: 'src/value.ts' }, ctx)
@@ -180,7 +180,7 @@ describe('document read tool executors', () => {
   })
 
   it('guides uncertain document paths back to workspace symbol search', async () => {
-    vi.mocked(api.file.read).mockResolvedValue(null)
+    vi.mocked(api.file.readFull).mockResolvedValue(null)
 
     const result = await toolExecutors.get_document_symbols({ relative_path: 'src/GuessedController.ts' }, ctx)
 
@@ -194,7 +194,7 @@ describe('document read tool executors', () => {
       { relativePath: 'src/infrastructure/llm/Gateway.ts' },
       { relativePath: 'src/presentation/GatewayView.ts' },
     ] as any)
-    vi.mocked(api.file.read).mockResolvedValue('export class Gateway { stream() {} }')
+    vi.mocked(api.file.readFull).mockResolvedValue('export class Gateway { stream() {} }')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
       name: 'Gateway',
@@ -216,12 +216,12 @@ describe('document read tool executors', () => {
 
     expect(result.success).toBe(true)
     expect(result.result).toContain('src/infrastructure/llm/Gateway.ts')
-    expect(api.file.read).toHaveBeenCalledTimes(1)
-    expect(api.file.read).not.toHaveBeenCalledWith('/workspace/src/presentation/GatewayView.ts', expect.anything(), expect.anything())
+    expect(api.file.readFull).toHaveBeenCalledTimes(1)
+    expect(api.file.readFull).not.toHaveBeenCalledWith('/workspace/src/presentation/GatewayView.ts', expect.anything(), expect.anything())
   })
 
   it('uses call hierarchy through navigate_symbol instead of text search', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('export function run() {}')
+    vi.mocked(api.file.readFull).mockResolvedValue('export function run() {}')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
       name: 'run',
@@ -257,7 +257,7 @@ describe('document read tool executors', () => {
   })
 
   it('routes type definitions through navigate_symbol', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('export const value: Item = source')
+    vi.mocked(api.file.readFull).mockResolvedValue('export const value: Item = source')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
       name: 'value',
@@ -279,7 +279,7 @@ describe('document read tool executors', () => {
   })
 
   it('blocks symbol deletion when references remain outside the symbol', async () => {
-    vi.mocked(api.file.read).mockResolvedValue('export function run() {}')
+    vi.mocked(api.file.readFull).mockResolvedValue('export function run() {}')
     vi.mocked(didOpenDocument).mockResolvedValue(true)
     vi.mocked(api.lsp.documentSymbol).mockResolvedValue([{
       name: 'run',
@@ -305,7 +305,7 @@ describe('document read tool executors', () => {
   })
 
   it('checks diagnostics in symbols that reference a changed public symbol', async () => {
-    vi.mocked(api.file.read).mockImplementation(async path => (
+    vi.mocked(api.file.readFull).mockImplementation(async path => (
       String(path).replace(/\\/g, '/').endsWith('src/run.ts')
         ? 'export function run() {}'
         : 'export function main() { run() }'
@@ -370,7 +370,7 @@ describe('document read tool executors', () => {
       '/workspace/docs/spec.docx',
       vi.mocked(getReadRichContentOptions).mock.results[0]?.value,
     )
-    expect(api.file.read).not.toHaveBeenCalled()
+    expect(api.file.readFull).not.toHaveBeenCalled()
     expect(result.meta).toMatchObject({
       contentKind: 'document',
       sourceFormat: 'docx',
@@ -380,7 +380,7 @@ describe('document read tool executors', () => {
   })
 
   it('supports mixed multi-file reads across text and rich documents', async () => {
-    vi.mocked(api.file.read).mockResolvedValueOnce('const answer = 42\n')
+    vi.mocked(api.file.readFull).mockResolvedValueOnce('const answer = 42\n')
     vi.mocked(api.file.readRichContent).mockResolvedValueOnce({
       success: true,
       content: 'Quarterly report',
@@ -465,6 +465,6 @@ describe('document read tool executors', () => {
       filePath: '/workspace/images/settings.png',
       routedFrom: 'read_file',
     })
-    expect(api.file.read).not.toHaveBeenCalled()
+    expect(api.file.readFull).not.toHaveBeenCalled()
   })
 })

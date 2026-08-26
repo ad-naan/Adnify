@@ -216,7 +216,7 @@ ${lines}
     }
 
     const filePath = joinPath(workspacePath, this.MEMORY_FILE)
-    const content = await api.file.read(filePath)
+    const content = await api.file.readFull(filePath)
 
     if (!content) {
       return this.createEmptyStore()

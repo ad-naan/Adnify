@@ -217,7 +217,7 @@ class PathLinkService {
     for (const ext of extensions) {
       const fullPath = basePath + ext
       try {
-        const content = await api.file.read(fullPath)
+        const content = await api.file.readFull(fullPath)
         if (content !== null) {
           openFile(fullPath, content)
           setActiveFile(fullPath)

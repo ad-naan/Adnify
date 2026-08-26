@@ -33,6 +33,7 @@ export {
   stopLspServer,
   didOpenDocument,
   didChangeDocument,
+  scheduleDidChangeDocument,
   goToDefinition,
   getHoverInfo,
   getCompletions,

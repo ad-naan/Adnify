@@ -61,7 +61,7 @@ export default function DebugPanel() {
     const launchPath = `${workspacePath}/.adnify/launch.json`
 
     // 检查文件是否存在，不存在则创建默认配置
-    let content = await api.file.read(launchPath)
+    let content = await api.file.readFull(launchPath)
     if (!content) {
       await api.file.ensureDir(`${workspacePath}/.adnify`)
       const defaultConfig = {
@@ -98,7 +98,7 @@ export default function DebugPanel() {
 
     try {
       const launchPath = `${workspacePath}/.adnify/launch.json`
-      const content = await api.file.read(launchPath)
+      const content = await api.file.readFull(launchPath)
       if (content) {
         // 移除注释后解析
         const cleaned = content.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')

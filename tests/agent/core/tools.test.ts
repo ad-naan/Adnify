@@ -29,7 +29,7 @@ const { mainStoreState } = vi.hoisted(() => ({
 vi.mock('@renderer/services/electronAPI', () => ({
   api: {
     file: {
-      read: vi.fn(async (path: string) => {
+      readFull: vi.fn(async (path: string) => {
         // 模拟不同速度的文件读取
         const delay = path.includes('slow') ? 1000 : path.includes('medium') ? 500 : 100
         await new Promise(resolve => setTimeout(resolve, delay))

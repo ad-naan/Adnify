@@ -297,7 +297,7 @@ export default function EditorContextMenu({ x, y, editor, onClose }: EditorConte
   const handleJumpToCall = async (item: CallHierarchyResult['items'][0]) => {
     const filePath = lspUriToPath(item.uri)
     if (filePath) {
-      const content = await api.file.read(filePath)
+      const content = await api.file.readFull(filePath)
       if (content === null) return
       openFile(filePath, content)
       setActiveFile(filePath)
