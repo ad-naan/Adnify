@@ -417,8 +417,10 @@ export const createMessageSlice: StateCreator<
             const nextMessages = [...thread.messages]
             nextMessages[messageIdx] = { ...cleanMsg, content: newContent, parts: newParts }
 
+            // A token chunk changes only the active row, not timeline membership.
+            // Keep the settled message-list revision stable so ChatPanel does not
+            // rescan long history; finalizeAssistant publishes the final revision.
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
                     [threadId]: {
@@ -1134,7 +1136,9 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                ...(isStreaming ? {} : {
+                    threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                }),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },
@@ -1238,7 +1242,9 @@ export const createMessageSlice: StateCreator<
             })
 
             return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                ...(isStreaming ? {} : {
+                    threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+                }),
                 threads: {
                     ...state.threads,
                     [threadId]: { ...thread, messages },

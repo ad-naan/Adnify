@@ -553,7 +553,6 @@ const DEFAULT_STREAM_STATE: StreamState = { phase: 'idle' }
 const IDLE_HANDOFF_STATE = createIdleHandoffState()
 const DEFAULT_MESSAGE_LIST_STATE = { messages: EMPTY_MESSAGES, version: 0 }
 let lastMessageListThreadId: string | null = null
-let lastMessageListMessages: ChatMessage[] = EMPTY_MESSAGES
 let lastMessageListVersion = 0
 let lastMessageListState = DEFAULT_MESSAGE_LIST_STATE
 let hasInitializedAgentSessionSync = false
@@ -587,17 +586,23 @@ export const selectMessageListState = (state: AgentStore) => {
 
     const messages = thread.messages || EMPTY_MESSAGES
     const version = state.threadMessageVersions[threadId] || 0
+    const isLiveStreamingReplacement = thread.streamState.phase === 'streaming'
 
+    // Live token chunks replace the canonical message array, but they do not
+    // change the timeline's membership or order. Keep the parent list snapshot
+    // stable until a settled/structural message revision is published; the one
+    // active ChatMessage reads its live parts through a narrow store selector.
+    // Outside streaming, retain the message identity check so hydration or a
+    // workspace reload cannot reuse a stale projection with the same version.
     if (
         lastMessageListThreadId === threadId &&
-        lastMessageListMessages === messages &&
-        lastMessageListVersion === version
+        lastMessageListVersion === version &&
+        (lastMessageListState.messages === messages || isLiveStreamingReplacement)
     ) {
         return lastMessageListState
     }
 
     lastMessageListThreadId = threadId
-    lastMessageListMessages = messages
     lastMessageListVersion = version
     lastMessageListState = { messages, version }
 

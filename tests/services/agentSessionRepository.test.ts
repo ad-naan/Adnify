@@ -69,6 +69,39 @@ describe('AgentSessionRepository incremental patches', () => {
     })
   })
 
+  it('persists a changed live message reference even before its settled version advances', async () => {
+    const repository = new AgentSessionRepository()
+    const first = { id: 'm1', role: 'user', timestamp: 1, content: 'one' }
+    const second = { id: 'm2', role: 'assistant', timestamp: 2, content: 'partial' }
+    session.loadMessages.mockResolvedValue([first, second])
+
+    const snapshot = await repository.getSnapshot()
+    await repository.loadThreadMessages('t1')
+    const thread = snapshot!.threads.t1
+    const completedSecond = { ...second, content: 'partial response' }
+    repository.stageSnapshot({
+      ...snapshot!,
+      // Streaming chunks intentionally keep this revision stable so the parent
+      // timeline does not rebuild. A shutdown flush must still see the new
+      // immutable message-array reference and persist its changed tail.
+      threadMessageVersions: { t1: snapshot!.threadMessageVersions?.t1 || 0 },
+      threads: {
+        t1: {
+          ...thread,
+          messages: [first, completedSecond] as typeof thread.messages,
+          messagesHydrated: true,
+        },
+      },
+    })
+    await repository.flush()
+
+    expect(session.applyPatch).toHaveBeenCalledTimes(1)
+    expect(session.applyPatch.mock.calls[0][0].threads[0]).toMatchObject({
+      replaceFrom: 1,
+      messages: [{ ordinal: 1, id: 'm2', payload: completedSecond }],
+    })
+  })
+
   // Dirty detection used to JSON.stringify each thread's metadata, which
   // transitively serialized every checkpoint's file contents on every persist.
   // It is now identity-based, so these two cases pin the behaviour it replaced:

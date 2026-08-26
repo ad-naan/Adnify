@@ -4,8 +4,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useAgentStore } from '@renderer/agent/store/AgentStore'
+import { selectMessageListState, useAgentStore } from '@renderer/agent/store/AgentStore'
 import type { HandoffDocument } from '@renderer/agent/domains/context/types'
+import type { ChatMessage } from '@renderer/agent/types'
 
 describe('AgentStore', () => {
   beforeEach(() => {
@@ -104,6 +105,90 @@ describe('AgentStore', () => {
       store.clearMessages()
       const messages = store.getMessages()
       expect(messages).toHaveLength(0)
+    })
+
+    it('keeps the timeline projection stable while a long conversation streams live parts', () => {
+      const threadId = useAgentStore.getState().createThread()
+      const history: ChatMessage[] = Array.from({ length: 10_000 }, (_, index) => ({
+        id: `history-${index}`,
+        role: 'user',
+        content: `message-${index}`,
+        timestamp: index,
+      }))
+      useAgentStore.setState(state => ({
+        threadMessageVersions: {
+          ...state.threadMessageVersions,
+          [threadId]: (state.threadMessageVersions[threadId] || 0) + 1,
+        },
+        threads: {
+          ...state.threads,
+          [threadId]: {
+            ...state.threads[threadId],
+            messages: history,
+          },
+        },
+      }))
+
+      const assistantId = useAgentStore.getState().addAssistantMessage()
+      let projection = selectMessageListState(useAgentStore.getState())
+      let projectionChanges = 0
+      const unsubscribe = useAgentStore.subscribe(state => {
+        const nextProjection = selectMessageListState(state)
+        if (nextProjection !== projection) {
+          projection = nextProjection
+          projectionChanges += 1
+        }
+      })
+
+      try {
+        for (let index = 0; index < 100; index += 1) {
+          useAgentStore.getState()._doAppendToAssistant(assistantId, 'x', threadId)
+        }
+
+        const assistant = useAgentStore.getState().threads[threadId].messages.at(-1)
+        expect(assistant?.role === 'assistant' ? assistant.content : '').toHaveLength(100)
+        expect(projectionChanges).toBe(0)
+
+        useAgentStore.getState().finalizeAssistant(assistantId, threadId)
+        expect(projectionChanges).toBe(1)
+
+        useAgentStore.getState().setStreamState({
+          phase: 'streaming',
+          assistantId,
+        }, threadId)
+        const reasoningPartId = useAgentStore.getState().addReasoningPart(assistantId)
+        projectionChanges = 0
+        for (let index = 0; index < 100; index += 1) {
+          useAgentStore.getState()._doUpdateReasoningPart(
+            assistantId,
+            reasoningPartId,
+            'r',
+            true,
+            threadId,
+          )
+        }
+        expect(projectionChanges).toBe(0)
+        useAgentStore.getState().finalizeReasoningPart(assistantId, reasoningPartId, threadId)
+        expect(projectionChanges).toBe(1)
+
+        const searchPartId = useAgentStore.getState().addSearchPart(assistantId, threadId)
+        projectionChanges = 0
+        for (let index = 0; index < 100; index += 1) {
+          useAgentStore.getState().updateSearchPart(
+            assistantId,
+            searchPartId,
+            's',
+            true,
+            true,
+            threadId,
+          )
+        }
+        expect(projectionChanges).toBe(0)
+        useAgentStore.getState().finalizeSearchPart(assistantId, searchPartId, threadId)
+        expect(projectionChanges).toBe(1)
+      } finally {
+        unsubscribe()
+      }
     })
   })
 

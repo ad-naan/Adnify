@@ -364,7 +364,11 @@ export class AgentSessionRepository {
         !baseline || !metadataSignatureEquals(baseline.metadata, metadataSignature(metadata))
       let replaceFrom: number | undefined
 
-      if (thread.messagesHydrated !== false && (!baseline || baseline.messageVersion !== messageVersion)) {
+      const messagesChanged = !baseline ||
+        baseline.messageVersion !== messageVersion ||
+        baseline.messages !== thread.messages
+
+      if (thread.messagesHydrated !== false && messagesChanged) {
         if (!baseline?.messages) {
           replaceFrom = 0
         } else {
