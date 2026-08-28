@@ -126,6 +126,16 @@ export function useFileSave() {
     }
   }, [closeFileWithConfirm])
 
+  // 关闭所有已保存文件，保留未保存的编辑内容
+  const closeSavedFiles = useCallback(() => {
+    const openFiles = useStore.getState().openFiles
+    for (const file of openFiles) {
+      if (!file.isDirty) {
+        closeFile(file.path)
+      }
+    }
+  }, [closeFile])
+
   // 关闭右侧文件
   const closeFilesToRight = useCallback(async (filePath: string) => {
     const openFiles = useStore.getState().openFiles
@@ -216,6 +226,7 @@ export function useFileSave() {
     closeFileWithConfirm,
     closeOtherFiles,
     closeAllFiles,
+    closeSavedFiles,
     closeFilesToRight,
     triggerAutoSave,
   }

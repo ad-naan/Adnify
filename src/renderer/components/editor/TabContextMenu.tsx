@@ -16,6 +16,7 @@ interface TabContextMenuProps {
   onClose: () => void
   onCloseFile: (path: string) => void
   onCloseOthers: (path: string) => void
+  onCloseSaved: () => void
   onCloseAll: () => void
   onCloseToRight: (path: string) => void
   onSave: (path: string) => void
@@ -30,6 +31,7 @@ export function TabContextMenu({
   onClose,
   onCloseFile,
   onCloseOthers,
+  onCloseSaved,
   onCloseAll,
   onCloseToRight,
   onSave,
@@ -65,6 +67,7 @@ export function TabContextMenu({
   const menuItems = [
     { label: isZh ? '关闭' : 'Close', action: () => onCloseFile(filePath), shortcut: formatShortcut('Ctrl+W') },
     { label: isZh ? '关闭其他' : 'Close Others', action: () => onCloseOthers(filePath) },
+    { label: isZh ? '关闭已保存' : 'Close Saved', action: () => onCloseSaved() },
     { label: isZh ? '关闭右侧' : 'Close to the Right', action: () => onCloseToRight(filePath) },
     { label: isZh ? '关闭全部' : 'Close All', action: () => onCloseAll() },
     { type: 'separator' as const },

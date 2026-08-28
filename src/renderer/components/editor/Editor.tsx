@@ -117,7 +117,7 @@ export default function Editor() {
 
   // Hooks
   const { registerProviders, setupDiagnostics, setupLinkNavigation, notifyFileOpened } = useLspIntegration()
-  const { saveFile, closeFileWithConfirm, closeOtherFiles, closeAllFiles, closeFilesToRight, triggerAutoSave } = useFileSave()
+  const { saveFile, closeFileWithConfirm, closeOtherFiles, closeAllFiles, closeSavedFiles, closeFilesToRight, triggerAutoSave } = useFileSave()
   const { isLinting, runLintCheck, clearLintErrors, errorCount, warningCount } = useLintCheck()
   const { setupCursorTracking } = useEditorEvents(editorRef)
 
@@ -693,6 +693,7 @@ export default function Editor() {
           onClose={() => setTabContextMenu(null)}
           onCloseFile={closeFileWithConfirm}
           onCloseOthers={closeOtherFiles}
+          onCloseSaved={closeSavedFiles}
           onCloseAll={closeAllFiles}
           onCloseToRight={closeFilesToRight}
           onSave={saveFile}
