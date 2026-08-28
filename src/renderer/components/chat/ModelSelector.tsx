@@ -33,7 +33,7 @@ export default function ModelSelector({ className = '', alignLeft = false }: Mod
   // OAuth providers have no API key — availability depends on sign-in state.
   const [oauthSignedIn, setOauthSignedIn] = useState(false)
   useEffect(() => {
-    window.electronAPI.openaiAuthStatus()
+    window.electronAPI.credentialsOAuthStatus()
       .then(s => setOauthSignedIn(s.loggedIn))
       .catch(() => setOauthSignedIn(false))
   }, [isOpen])

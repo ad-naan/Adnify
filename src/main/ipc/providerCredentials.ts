@@ -1,17 +1,11 @@
 import { safeIpcHandle } from './safeHandle'
+import { ProviderCredentialStore } from '../services/credentials/ProviderCredentialStore'
 import { OpenAIAuthService } from '../services/openai/OpenAIAuthService'
 import { OpenAIUsageStore } from '../services/openai/OpenAIUsageStore'
 import { logger } from '@shared/utils/Logger'
 
 const CHATGPT_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
 
-/**
- * Refresh the usage snapshot by issuing a deliberately invalid request.
- *
- * The ChatGPT backend has no quota endpoint, but it attaches `x-codex-*` usage
- * headers to *every* response — including 4xx ones. Sending an empty input is
- * rejected before any tokens are billed, which makes it a cheap probe.
- */
 async function refreshUsage(): Promise<boolean> {
   const token = await OpenAIAuthService.getValidToken()
   if (!token) return false
@@ -34,7 +28,7 @@ async function refreshUsage(): Promise<boolean> {
     })
     return OpenAIUsageStore.captureFromHeaders(response.headers)
   } catch (error) {
-    logger.ipc.warn('[OpenAIAuth] Usage refresh failed', {
+    logger.ipc.warn('[Credentials] OAuth usage refresh failed', {
       error: error instanceof Error ? error.message : String(error),
     })
     return false
@@ -43,33 +37,31 @@ async function refreshUsage(): Promise<boolean> {
   }
 }
 
-export function registerOpenAIAuthHandlers(): void {
-  safeIpcHandle('openai:auth:login', async () => {
+export function registerProviderCredentialHandlers(): void {
+  safeIpcHandle('credentials:api-keys:get', async () => ProviderCredentialStore.getApiKeys())
+  safeIpcHandle('credentials:api-keys:replace', async (_event, apiKeys: Record<string, string>) => {
+    ProviderCredentialStore.replaceApiKeys(apiKeys)
+    return true
+  })
+
+  safeIpcHandle('credentials:oauth:login', async () => {
     const tokens = await OpenAIAuthService.login()
     return { success: true, accountID: tokens.accountID }
   })
 
-  safeIpcHandle('openai:auth:logout', async () => {
+  safeIpcHandle('credentials:oauth:logout', async () => {
     await OpenAIAuthService.logout()
     OpenAIUsageStore.clear()
     return { success: true }
   })
 
-  safeIpcHandle('openai:auth:usage', async (_event, options?: { refresh?: boolean }) => {
-    // Serve the cached snapshot unless the caller explicitly wants a probe;
-    // every real request keeps it current for free.
-    if (options?.refresh || !OpenAIUsageStore.get()) {
-      await refreshUsage()
-    }
+  safeIpcHandle('credentials:oauth:usage', async (_event, options?: { refresh?: boolean }) => {
+    if (options?.refresh || !OpenAIUsageStore.get()) await refreshUsage()
     return { usage: OpenAIUsageStore.get() }
   })
 
-  safeIpcHandle('openai:auth:status', async () => {
-    return OpenAIAuthService.getStatus()
-  })
-
-  safeIpcHandle('openai:auth:token', async () => {
-    const token = await OpenAIAuthService.getValidToken()
-    return { token }
-  })
+  safeIpcHandle('credentials:oauth:status', async () => OpenAIAuthService.getStatus())
+  safeIpcHandle('credentials:oauth:token', async () => ({
+    token: await OpenAIAuthService.getValidToken(),
+  }))
 }

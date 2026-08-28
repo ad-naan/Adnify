@@ -519,11 +519,14 @@ export interface ElectronAPI {
   }>
   mcpRefreshCapabilities: (serverId: string) => Promise<{ success: boolean; error?: string }>
 
-  // OpenAI OAuth
-  openaiAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
-  openaiAuthLogout: () => Promise<{ success: boolean; error?: string }>
-  openaiAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string }>
-  openaiAuthToken: () => Promise<{ token: string | null }>
+  // Provider credentials
+  credentialsGetApiKeys: () => Promise<Record<string, string>>
+  credentialsReplaceApiKeys: (apiKeys: Record<string, string>) => Promise<boolean>
+  credentialsOAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
+  credentialsOAuthLogout: () => Promise<{ success: boolean; error?: string }>
+  credentialsOAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string }>
+  credentialsOAuthToken: () => Promise<{ token: string | null }>
+  credentialsOAuthUsage: (options?: { refresh?: boolean }) => Promise<{ usage: unknown }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
   mcpDiscoverExternalConfigs: () => Promise<{ success: boolean; configs?: any[]; error?: string }>
@@ -901,13 +904,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('mcp:getPrompt', request),
   mcpRefreshCapabilities: (serverId: string) => ipcRenderer.invoke('mcp:refreshCapabilities', serverId),
 
-  // OpenAI OAuth
-  openaiAuthLogin: () => ipcRenderer.invoke('openai:auth:login'),
-  openaiAuthLogout: () => ipcRenderer.invoke('openai:auth:logout'),
-  openaiAuthStatus: () => ipcRenderer.invoke('openai:auth:status'),
-  openaiAuthToken: () => ipcRenderer.invoke('openai:auth:token'),
-  openaiAuthUsage: (options?: { refresh?: boolean }) =>
-    ipcRenderer.invoke('openai:auth:usage', options),
+  // Provider credentials
+  credentialsGetApiKeys: () => ipcRenderer.invoke('credentials:api-keys:get'),
+  credentialsReplaceApiKeys: (apiKeys: Record<string, string>) =>
+    ipcRenderer.invoke('credentials:api-keys:replace', apiKeys),
+  credentialsOAuthLogin: () => ipcRenderer.invoke('credentials:oauth:login'),
+  credentialsOAuthLogout: () => ipcRenderer.invoke('credentials:oauth:logout'),
+  credentialsOAuthStatus: () => ipcRenderer.invoke('credentials:oauth:status'),
+  credentialsOAuthToken: () => ipcRenderer.invoke('credentials:oauth:token'),
+  credentialsOAuthUsage: (options?: { refresh?: boolean }) =>
+    ipcRenderer.invoke('credentials:oauth:usage', options),
   mcpGetConfigPaths: () => ipcRenderer.invoke('mcp:getConfigPaths'),
   mcpReloadConfig: () => ipcRenderer.invoke('mcp:reloadConfig'),
   mcpDiscoverExternalConfigs: () => ipcRenderer.invoke('mcp:discoverExternalConfigs'),

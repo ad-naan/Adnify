@@ -1518,11 +1518,11 @@ export const createMessageSlice: StateCreator<
     },
 
     // 添加上下文项
-    addContextItem: (item) => {
-        let threadId = get().currentThreadId
+    addContextItem: (item, targetThreadId) => {
+        let threadId = targetThreadId || get().currentThreadId
 
         if (!threadId || !get().threads[threadId]) {
-            threadId = get().createThread()
+            threadId = get().createThread({ activate: !targetThreadId })
         }
 
         if (!threadId) return
@@ -1557,8 +1557,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 移除上下文项
-    removeContextItem: (index) => {
-        const threadId = get().currentThreadId
+    removeContextItem: (index, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {
@@ -1578,8 +1578,8 @@ export const createMessageSlice: StateCreator<
     },
 
     // 清空上下文项
-    clearContextItems: () => {
-        const threadId = get().currentThreadId
+    clearContextItems: (targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
         set(state => {

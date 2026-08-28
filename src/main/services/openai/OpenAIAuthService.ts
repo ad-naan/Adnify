@@ -1,6 +1,9 @@
 import { createServer } from 'node:http'
 import { shell } from 'electron'
-import { OpenAIAuthStore, type OpenAITokens } from './OpenAIAuthStore'
+import {
+  ProviderCredentialStore,
+  type OAuthCredential,
+} from '../credentials/ProviderCredentialStore'
 import { logger } from '@shared/utils/Logger'
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
@@ -129,7 +132,7 @@ async function refreshTokens(refreshToken: string): Promise<TokenResponse> {
   return (await res.json()) as TokenResponse
 }
 
-function tokensFromResponse(res: TokenResponse): OpenAITokens {
+function tokensFromResponse(res: TokenResponse): OAuthCredential {
   const info = extractAccountInfo(res)
   return {
     accessToken: res.access_token,
@@ -146,7 +149,7 @@ export const OpenAIAuthService = {
    * Start the browser-based PKCE OAuth flow.
    * Opens the user's browser, waits for the callback, exchanges the code, and persists tokens.
    */
-  async login(): Promise<OpenAITokens> {
+  async login(): Promise<OAuthCredential> {
     const pkce = await generatePKCE()
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
 
@@ -230,25 +233,25 @@ export const OpenAIAuthService = {
 
     const tokenRes = await exchangeCode(code, pkce)
     const tokens = tokensFromResponse(tokenRes)
-    await OpenAIAuthStore.set(tokens)
+    ProviderCredentialStore.setOAuth('openai-oauth', tokens)
     logger.security.info('[OpenAIAuth] Login successful', { accountID: tokens.accountID })
     return tokens
   },
 
   async logout(): Promise<void> {
-    await OpenAIAuthStore.clear()
+    ProviderCredentialStore.clear('openai-oauth')
   },
 
   async getValidToken(): Promise<string | null> {
-    const tokens = await OpenAIAuthStore.get()
+    const tokens = ProviderCredentialStore.getOAuth('openai-oauth')
     if (!tokens) return null
 
-    if (await OpenAIAuthStore.isExpired()) {
+    if (tokens.expiresAt < Date.now() + 60_000) {
       try {
         const refreshed = await refreshTokens(tokens.refreshToken)
         const next = tokensFromResponse(refreshed)
         // Refresh responses may omit id_token — keep the profile claims we already have.
-        await OpenAIAuthStore.set({
+        ProviderCredentialStore.setOAuth('openai-oauth', {
           ...next,
           accountID: next.accountID ?? tokens.accountID,
           email: next.email ?? tokens.email,
@@ -257,7 +260,7 @@ export const OpenAIAuthService = {
         return next.accessToken
       } catch (err) {
         logger.security.warn('[OpenAIAuth] Token refresh failed, clearing tokens', err)
-        await OpenAIAuthStore.clear()
+        ProviderCredentialStore.clear('openai-oauth')
         return null
       }
     }
@@ -272,7 +275,7 @@ export const OpenAIAuthService = {
     planType?: string
     expiresAt?: number
   }> {
-    const tokens = await OpenAIAuthStore.get()
+    const tokens = ProviderCredentialStore.getOAuth('openai-oauth')
     if (!tokens) return { loggedIn: false }
     // Re-derive from the access token so sessions stored by an earlier version
     // (which missed the namespaced claims) report their plan without re-login.

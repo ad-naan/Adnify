@@ -931,14 +931,6 @@ export default function ChatPanel() {
     }
 
     if (targetThreadId) {
-      const currentContextItems = useAgentStore.getState().threads[targetThreadId]?.contextItems || []
-      const hasDifferentContext =
-        currentContextItems.length !== contextItemsForSend.length ||
-        currentContextItems.some((item, index) => item !== contextItemsForSend[index])
-      if (hasDifferentContext) {
-        useAgentStore.getState().clearContextItems(targetThreadId)
-        contextItemsForSend.forEach((item) => useAgentStore.getState().addContextItem(item, targetThreadId))
-      }
       if (explicitServer.lastActiveServer) {
         useAgentStore.getState().setLastActiveServer(explicitServer.lastActiveServer, targetThreadId)
       }
@@ -957,10 +949,13 @@ export default function ChatPanel() {
       return
     }
 
-    // 发送消息后主动滚到底部，确保用户消息和即将出现的 AI 回复可见
-    // 不依赖 followOutput 的时序，因为发送瞬间 isStreaming 还是 false
-    scrollToBottom('smooth')
-    await sendMessage(userMessage, { mode: effectiveMode, threadId: targetThreadId })
+    const sendPromise = sendMessage(userMessage, {
+      mode: effectiveMode,
+      threadId: targetThreadId,
+      contextItems: contextItemsForSend,
+    })
+    requestAnimationFrame(() => scrollToBottom('auto'))
+    await sendPromise
   }, [input, images, isStreaming, sendMessage, contextFilePath, selectedCode, workspacePath, setChatMode, scrollToBottom, visibleContextItems, chatMode, toast, language, currentThreadId, createThread])
 
   // 编辑消息
@@ -1057,7 +1052,7 @@ export default function ChatPanel() {
 
   const [oauthSignedIn, setOauthSignedIn] = useState(false)
   useEffect(() => {
-    window.electronAPI?.openaiAuthStatus?.()
+    window.electronAPI?.credentialsOAuthStatus?.()
       .then(s => setOauthSignedIn(s?.loggedIn ?? false))
       .catch(() => setOauthSignedIn(false))
   }, [])

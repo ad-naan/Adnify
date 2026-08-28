@@ -118,4 +118,17 @@ describe('stored message history cap', () => {
     // 2 turns => 4 messages, far below the cap.
     expect(useAgentStore.getState().threads[threadId].messages).toHaveLength(4)
   })
+
+  it('updates context on the explicitly targeted thread', () => {
+    const store = useAgentStore.getState()
+    const activeId = store.createThread({ activate: true, mode: 'agent', origin: 'user' })
+    const targetId = store.createThread({ activate: false, mode: 'plan', origin: 'user' })
+
+    store.addContextItem({ type: 'Web' }, targetId)
+    expect(useAgentStore.getState().threads[activeId].contextItems).toEqual([])
+    expect(useAgentStore.getState().threads[targetId].contextItems).toEqual([{ type: 'Web' }])
+
+    store.clearContextItems(targetId)
+    expect(useAgentStore.getState().threads[targetId].contextItems).toEqual([])
+  })
 })

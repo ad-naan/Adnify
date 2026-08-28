@@ -83,6 +83,7 @@ export class AgentClass {
       threadId?: string
       requestId?: string
       planTaskId?: string
+      contextItems?: import('../types').ContextItem[]
       /** 该次执行是否为子代理（隐藏线程）。会剔除 task/ask_user 等工具。 */
       isSubAgent?: boolean
     }
@@ -98,33 +99,23 @@ export class AgentClass {
       throw new Error(`Thread ${threadId} is already running`)
     }
 
-    // 验证凭证：OAuth provider 没有 API Key，其 access token 由主进程
-    // resolveAuthForConfig() 解析，这里只校验是否已登录。
-    if (getBuiltinProvider(config.provider)?.auth.type === 'oauth') {
-      const status = await window.electronAPI?.openaiAuthStatus?.().catch(() => null)
-      if (!status?.loggedIn) {
-        this.showError(translateAgentText('oauthSignInWarning'))
-        throw new Error('Not signed in to ChatGPT')
-      }
-    } else if (!config.apiKey) {
-      this.showError(translateAgentText('apiKeyWarning'))
-      throw new Error('Missing API key')
-    }
-
     const abortController = new AbortController()
     const requestId = executionOptions?.requestId || crypto.randomUUID()
-    const contextItems = threadId
+    const contextItems = executionOptions?.contextItems ?? (threadId
       ? (store.threads[threadId]?.contextItems || [])
-      : (store.getCurrentThread()?.contextItems || [])
+      : (store.getCurrentThread()?.contextItems || []))
 
     let persistSuspended = false
     let taskRegistered = false
+    let assistantId = ''
 
     try {
       suspendAgentStorageWrites()
       persistSuspended = true
       // 1. 【性能关键】批量初始化消息环境（合并用户消息、助手气泡、上下文清理）
-      const { assistantId, threadId: preparedThreadId } = store.prepareExecution(userMessage, contextItems, executionOptions?.threadId)
+      const prepared = store.prepareExecution(userMessage, contextItems, executionOptions?.threadId)
+      assistantId = prepared.assistantId
+      const preparedThreadId = prepared.threadId
 
       threadId = preparedThreadId
       if (!threadId) {
@@ -160,6 +151,12 @@ export class AgentClass {
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
       await new Promise(resolve => setTimeout(resolve, 0))
+
+      // Local validation happens after the optimistic commit. OAuth resolution
+      // stays centralized in the main-process credential service.
+      if (getBuiltinProvider(config.provider)?.auth.type !== 'oauth' && !config.apiKey) {
+        throw new Error(translateAgentText('apiKeyWarning'))
+      }
 
       // 3. 提取提到的 Skills
       const mentionedSkills = contextItems
@@ -235,7 +232,7 @@ export class AgentClass {
       // 统一错误处理
       const appError = AppError.fromError(error)
       logger.agent.error('[Agent] Error:', appError.toJSON())
-      this.showError(formatErrorMessage(appError))
+      this.showError(formatErrorMessage(appError), assistantId, threadId || undefined)
       throw error
     } finally {
       if (persistSuspended) {
@@ -491,15 +488,15 @@ export class AgentClass {
   /**
    * 显示错误消息给用户
    */
-  private showError(message: string): void {
+  private showError(message: string, assistantId?: string, threadId?: string): void {
     const store = useAgentStore.getState()
-    const id = store.addAssistantMessage()
+    const id = assistantId || store.addAssistantMessage('', threadId)
     store.addSystemAlertPart(id, {
       alertType: 'error',
       title: translateAgentText('error'),
       message,
-    })
-    store.finalizeAssistant(id)
+    }, threadId)
+    store.finalizeAssistant(id, threadId)
   }
 
   /**

@@ -24,6 +24,7 @@ import { registerWebviewGuards } from './security/webviewGuard'
 import { cleanupFileWatcher } from './security/fileWatcher'
 import { collectLaunchFiles, flushLaunchFilesToWindow, queueLaunchFiles } from './services/fileAssociation'
 import { createScopedStore, getBootstrapStore, getUserConfigDir } from './services/configPath'
+import { ProviderCredentialStore } from './services/credentials/ProviderCredentialStore'
 import { createFileLogWriter } from './services/fileLogWriter'
 import {
   shutdownWindowController,
@@ -88,6 +89,7 @@ function resolveStore(_key: string): Store<Record<string, unknown>> {
 async function initStores() {
   bootstrapStore = getBootstrapStore()
   configStore = createScopedStore('config', bootstrapStore)
+  await ProviderCredentialStore.initialize(configStore)
 }
 
 // ==========================================
@@ -739,7 +741,6 @@ async function initializeModules(firstWin: BrowserWindow) {
     getMainWindow,
     createWindow,
     resolveStore,
-    credentialsStore: configStore,
     preferencesStore: configStore,
     workspaceMetaStore: configStore,
     bootstrapStore,

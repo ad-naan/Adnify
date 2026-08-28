@@ -8,8 +8,9 @@
  *
  * Architecture:
  * - `llmConfig` persistence only stores active model selection + generation behavior
- * - provider/network fields (apiKey/baseUrl/timeout/headers/protocol) live in `providerConfigs`
- * - runtime `LLMConfig` is reconstructed from persisted llmConfig + providerConfigs + defaults
+ * - provider/network fields live in `providerConfigs`
+ * - credentials are persisted by the main-process provider credential store
+ * - runtime `LLMConfig` is reconstructed from persisted settings + credentials + defaults
  */
 
 import { api } from '@/renderer/services/electronAPI'
@@ -89,8 +90,6 @@ function cleanProviderConfig(
   const resolvedProtocol = config.protocol ?? builtinDef?.protocol
   const defaultOpenAIProfile = getDefaultOpenAICompatibilityProfile(providerId, resolvedProtocol)
 
-  if (config.apiKey) cleaned.apiKey = config.apiKey
-
   if (config.baseUrl && config.baseUrl !== builtinDef?.baseUrl) {
     cleaned.baseUrl = config.baseUrl
   }
@@ -128,13 +127,12 @@ function cleanProviderConfig(
 
 function mergeProviderConfigs(
   saved: Record<string, ProviderConfig> | undefined,
+  apiKeys: Record<string, string> = {},
 ): Record<string, ProviderModelConfig> {
   const defaults = SETTINGS.providerConfigs.default
-  if (!saved) return { ...defaults }
-
   const merged: Record<string, ProviderModelConfig> = { ...defaults }
 
-  for (const [id, config] of Object.entries(saved)) {
+  for (const [id, config] of Object.entries(saved || {})) {
     if (isBuiltinProvider(id)) {
       const resolved = { ...defaults[id], ...config }
       merged[id] = {
@@ -156,6 +154,10 @@ function mergeProviderConfigs(
         config.openAICompatibilityProfile,
       ),
     }
+  }
+
+  for (const [id, apiKey] of Object.entries(apiKeys)) {
+    merged[id] = { ...(merged[id] || {}), apiKey }
   }
 
   return merged
@@ -191,17 +193,18 @@ class SettingsService {
     await this.migrateLegacyCacheOnce()
 
     try {
-      const [appSettings, editorConfig, securitySettings] = await Promise.all([
+      const [appSettings, editorConfig, securitySettings, apiKeys] = await Promise.all([
         api.settings.get(STORAGE_KEYS.APP),
         api.settings.get(STORAGE_KEYS.EDITOR),
         api.settings.get(STORAGE_KEYS.SECURITY),
+        window.electronAPI.credentialsGetApiKeys(),
       ])
 
       const merged = this.merge({
         ...(appSettings as object || {}),
         editorConfig,
         securitySettings,
-      })
+      }, apiKeys)
 
       this.cache = merged
       return merged
@@ -266,8 +269,10 @@ class SettingsService {
   async save(settings: SettingsState): Promise<void> {
     try {
       const cleanedProviderConfigs: Record<string, ProviderConfig> = {}
+      const apiKeys: Record<string, string> = {}
 
       for (const [id, config] of Object.entries(settings.providerConfigs)) {
+        if (config.apiKey) apiKeys[id] = config.apiKey
         const cleaned = cleanProviderConfig(id, config, id === settings.llmConfig.provider)
         if (cleaned) cleanedProviderConfigs[id] = cleaned as ProviderConfig
       }
@@ -277,6 +282,7 @@ class SettingsService {
       this.cache = settings
 
       await Promise.all([
+        window.electronAPI.credentialsReplaceApiKeys(apiKeys),
         api.settings.set(STORAGE_KEYS.APP, appSettings),
         api.settings.set(STORAGE_KEYS.EDITOR, settings.editorConfig),
         api.settings.set(STORAGE_KEYS.SECURITY, settings.securitySettings),
@@ -314,10 +320,11 @@ class SettingsService {
     }
   }
 
-  private merge(saved: Record<string, unknown>): SettingsState {
+  private merge(saved: Record<string, unknown>, apiKeys: Record<string, string> = {}): SettingsState {
     const defaults = getAllDefaults()
     const providerConfigs = mergeProviderConfigs(
       saved.providerConfigs as Record<string, ProviderConfig> | undefined,
+      apiKeys,
     )
     const llmConfig = resolveRuntimeLLMConfig(
       saved.llmConfig as Partial<PersistedLLMConfig> | undefined,

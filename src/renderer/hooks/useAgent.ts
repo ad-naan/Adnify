@@ -94,7 +94,11 @@ export function useAgentCommands() {
     planPhase,
   }
 
-  const sendMessage = useCallback(async (content: MessageContent, options?: { mode?: WorkMode, threadId?: string }) => {
+  const sendMessage = useCallback(async (content: MessageContent, options?: {
+    mode?: WorkMode
+    threadId?: string
+    contextItems?: import('@/renderer/agent/types').ContextItem[]
+  }) => {
     const {
       llmConfig: config,
       workspacePath: currentWorkspacePath,
@@ -124,7 +128,7 @@ export function useAgentCommands() {
         promptTemplateId: currentPromptTemplateId,
         planPhase: targetMode === 'plan' ? currentPlanPhase : undefined,
       },
-      { threadId: options?.threadId }
+      { threadId: options?.threadId, contextItems: options?.contextItems }
     )
   }, [])
 

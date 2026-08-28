@@ -21,7 +21,7 @@ import { registerDebugHandlers } from './debug' // 调试
 import { registerHealthCheckHandlers } from './healthCheck' // 健康检查
 import { registerRemoteShellHandlers } from './remoteShell' // 远程 Shell / SFTP
 import { registerSkillsHandlers } from './skills' // Skills
-import { registerOpenAIAuthHandlers } from './openaiAuth' // OpenAI OAuth
+import { registerProviderCredentialHandlers } from './providerCredentials'
 import { registerSessionStorageHandlers } from './sessionStorage'
 import { registerFormatterHandlers } from './formatter'
 import { registerSystemPrivilegeHandlers } from './systemPrivilege'
@@ -44,7 +44,6 @@ export interface IPCContext {
   createWindow: (isEmpty?: boolean) => BrowserWindow
   /** 根据 key 路由到正确的 store */
   resolveStore: (key: string) => Store
-  credentialsStore: Store
   preferencesStore: Store
   workspaceMetaStore: Store
   bootstrapStore: Store
@@ -133,8 +132,7 @@ export function registerAllHandlers(context: IPCContext) {
   // Skills
   registerSkillsHandlers()
 
-  // OpenAI OAuth
-  registerOpenAIAuthHandlers()
+  registerProviderCredentialHandlers()
 
   registerSessionStorageHandlers({
     getWindowWorkspace: context.getWindowWorkspace,

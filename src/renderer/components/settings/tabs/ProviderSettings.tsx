@@ -212,7 +212,7 @@ function reconcileCustomHeaderDrafts(
 }
 
 type ChatGPTUsage = Awaited<
-  ReturnType<typeof window.electronAPI.openaiAuthUsage>
+  ReturnType<typeof window.electronAPI.credentialsOAuthUsage>
 >['usage']
 
 /** Human-readable label for a rolling quota window, e.g. 43800 min -> "30 天". */
@@ -370,14 +370,14 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
   } | null>(null)
   const [busy, setBusy] = useState(false)
   const [usage, setUsage] = useState<
-    Awaited<ReturnType<typeof window.electronAPI.openaiAuthUsage>>['usage']
+    Awaited<ReturnType<typeof window.electronAPI.credentialsOAuthUsage>>['usage']
   >(null)
   const [usageBusy, setUsageBusy] = useState(false)
 
   const loadUsage = useCallback(async (refreshFromServer = false) => {
     setUsageBusy(true)
     try {
-      const result = await window.electronAPI.openaiAuthUsage({ refresh: refreshFromServer })
+      const result = await window.electronAPI.credentialsOAuthUsage({ refresh: refreshFromServer })
       setUsage(result?.usage ?? null)
     } catch {
       setUsage(null)
@@ -388,7 +388,7 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
 
   const refresh = useCallback(async () => {
     try {
-      const next = await window.electronAPI.openaiAuthStatus()
+      const next = await window.electronAPI.credentialsOAuthStatus()
       setStatus(next)
       if (next?.loggedIn) void loadUsage()
       else setUsage(null)
@@ -404,7 +404,7 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
   const handleLogin = async () => {
     setBusy(true)
     try {
-      const result = await window.electronAPI.openaiAuthLogin()
+      const result = await window.electronAPI.credentialsOAuthLogin()
       if (result.success) {
         toast.success(language === 'zh' ? 'ChatGPT 登录成功' : 'Signed in to ChatGPT')
         await refresh()
@@ -421,7 +421,7 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
   const handleLogout = async () => {
     setBusy(true)
     try {
-      await window.electronAPI.openaiAuthLogout()
+      await window.electronAPI.credentialsOAuthLogout()
       toast.success(language === 'zh' ? '已退出登录' : 'Signed out')
       await refresh()
     } finally {
@@ -1029,7 +1029,7 @@ export function ProviderSettings({
   const [oauthSignedIn, setOauthSignedIn] = useState(false)
   const refreshOAuthStatus = useCallback(async () => {
     try {
-      const status = await window.electronAPI.openaiAuthStatus()
+      const status = await window.electronAPI.credentialsOAuthStatus()
       setOauthSignedIn(status.loggedIn)
     } catch {
       setOauthSignedIn(false)

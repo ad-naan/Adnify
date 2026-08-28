@@ -52,7 +52,11 @@ export function useMessageQueueConsumer() {
           setMode(next.chatMode)
           // 发送消息
           try {
-            await sendMessage(next.content, { mode: next.chatMode, threadId: next.targetThreadId })
+            await sendMessage(next.content, {
+              mode: next.chatMode,
+              threadId: next.targetThreadId,
+              contextItems: next.contextItems,
+            })
           } catch {
             // 发送失败不阻塞，错误已由 Agent 内部处理
           }
