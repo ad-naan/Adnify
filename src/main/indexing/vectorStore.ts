@@ -290,6 +290,31 @@ export class VectorStoreService {
     await this.table.add(data)
   }
 
+  /** Replace the indexed chunks for several files with one delete and one add. */
+  async upsertFiles(files: Array<{ filePath: string; chunks: IndexedChunk[] }>): Promise<void> {
+    if (!this.table || !this.db || files.length === 0) return
+
+    await this.deleteFiles(files.map(file => file.filePath))
+    const chunks = files.flatMap(file => file.chunks)
+    if (chunks.length === 0) return
+
+    const data = chunks.map(chunk => ({
+      id: chunk.id,
+      filePath: chunk.filePath,
+      relativePath: chunk.relativePath,
+      fileHash: chunk.fileHash,
+      content: chunk.content,
+      startLine: chunk.startLine,
+      endLine: chunk.endLine,
+      type: chunk.type,
+      language: chunk.language,
+      symbols: chunk.symbols?.join(',') || '',
+      vector: chunk.vector,
+    }))
+
+    await this.table.add(data)
+  }
+
   /**
    * 安全删除指定文件的 chunks
    * 通过查询-过滤-重建的方式避免 SQL 注入

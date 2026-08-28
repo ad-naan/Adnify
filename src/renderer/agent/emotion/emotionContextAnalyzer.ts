@@ -139,10 +139,13 @@ class EmotionContextAnalyzer {
     )
 
     // 4. 监听 AgentStore — 用户发送消息
-    let prevMsgCount = selectMessages(useAgentStore.getState()).length
+    let prevMessages = selectMessages(useAgentStore.getState())
+    let prevMsgCount = prevMessages.length
     this.unsubscribers.push(
       useAgentStore.subscribe((state) => {
         const messages = selectMessages(state)
+        if (messages === prevMessages) return
+        prevMessages = messages
         if (messages.length > prevMsgCount) {
           // 新增的消息
           const newMessages = messages.slice(prevMsgCount)
@@ -151,8 +154,8 @@ class EmotionContextAnalyzer {
               this.recordAI({ type: 'user_message' })
             }
           }
-          prevMsgCount = messages.length
         }
+        prevMsgCount = messages.length
       }),
     )
   }

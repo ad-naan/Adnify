@@ -731,13 +731,10 @@ export class CodebaseIndexService {
                 }
                 logger.index.info(`[IndexService] Updated ${persistedFiles.length} files in structural index`)
               } else {
-                for (const result of message.results) {
-                  if (result.deleted) {
-                    await this.vectorStore!.deleteFile(result.filePath)
-                  } else if (result.chunks.length > 0) {
-                    await this.vectorStore!.upsertFile(result.filePath, result.chunks)
-                  }
-                }
+                await this.vectorStore!.upsertFiles(message.results.map(result => ({
+                  filePath: result.filePath,
+                  chunks: result.deleted ? [] : result.chunks,
+                })))
               }
               this.emitProgress()
               this.pendingWorkerUpdates.get(message.requestId)?.resolve()

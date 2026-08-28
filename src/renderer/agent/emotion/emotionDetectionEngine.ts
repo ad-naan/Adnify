@@ -62,6 +62,7 @@ class EmotionDetectionEngine {
   // 事件监听器引用
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null
   private mousemoveHandler: (() => void) | null = null
+  private lastMouseActivityAt = 0
   private blurHandler: (() => void) | null = null
   private focusHandler: (() => void) | null = null
 
@@ -214,7 +215,12 @@ class EmotionDetectionEngine {
 
   private setupEventListeners(): void {
     this.keydownHandler = (e: KeyboardEvent) => this.recordKeystroke(e.key)
-    this.mousemoveHandler = () => { this._lastActivityTime = Date.now() }
+    this.mousemoveHandler = () => {
+      const now = Date.now()
+      if (now - this.lastMouseActivityAt < 1000) return
+      this.lastMouseActivityAt = now
+      this._lastActivityTime = now
+    }
     this.blurHandler = () => this.handlePause()
     this.focusHandler = () => { this._lastActivityTime = Date.now() }
 

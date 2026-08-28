@@ -31,6 +31,29 @@ describe('fileSlice pinned tabs', () => {
 })
 
 describe('fileSlice content lifecycle', () => {
+  it('does not notify subscribers when the file EOL is unchanged', () => {
+    const store = createFileStore()
+    store.getState().openFile('E:/workspace/app.ts', 'initial', undefined, { eol: 'LF' })
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => { notifications += 1 })
+
+    store.getState().setFileEol('E:/workspace/app.ts', 'LF')
+
+    unsubscribe()
+    expect(notifications).toBe(0)
+  })
+
+  it('does not notify subscribers when saving view state for a closed file', () => {
+    const store = createFileStore()
+    let notifications = 0
+    const unsubscribe = store.subscribe(() => { notifications += 1 })
+
+    store.getState().setFileScrollPosition('E:/workspace/closed.ts', { scrollTop: 10, scrollLeft: 0 })
+
+    unsubscribe()
+    expect(notifications).toBe(0)
+  })
+
   it('does not notify subscribers for repeated equivalent editor updates', () => {
     const store = createFileStore()
     store.getState().openFile('E:/workspace/app.ts', 'initial')

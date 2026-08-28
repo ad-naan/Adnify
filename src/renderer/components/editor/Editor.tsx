@@ -347,14 +347,32 @@ export default function Editor() {
       }
     }
 
-    // 监听滚动变化并保存视图状态
-    const scrollDisposable = editor.onDidScrollChange(() => {
-      if (currentFilePath && typeof editor.saveViewState === 'function') {
+    // 滚动事件频率很高，只按固定间隔保存一次完整视图状态。
+    let scrollSaveTimer: ReturnType<typeof setTimeout> | null = null
+    const saveScrollState = () => {
+      if (!currentFilePath || typeof editor.saveViewState !== 'function') return
+      try {
         const state = editor.saveViewState()
-        setFileScrollPosition(currentFilePath, state as any)
+        if (state) setFileScrollPosition(currentFilePath, state as any)
+      } catch {
+        // The editor may already be disposed while React switches models.
       }
+    }
+    const scrollDisposable = editor.onDidScrollChange(() => {
+      if (scrollSaveTimer) return
+      scrollSaveTimer = setTimeout(() => {
+        scrollSaveTimer = null
+        saveScrollState()
+      }, 100)
     })
-    disposables.push(scrollDisposable)
+    disposables.push(scrollDisposable, {
+      dispose: () => {
+        if (!scrollSaveTimer) return
+        clearTimeout(scrollSaveTimer)
+        scrollSaveTimer = null
+        saveScrollState()
+      },
+    })
 
     // 监听内容变化，基于版本号更新 dirty 状态
     const model = editor.getModel()
@@ -646,7 +664,7 @@ export default function Editor() {
                   editorRef.current = modifiedEditor
                   monacoRef.current = monacoInstance
                   modifiedEditor.onDidChangeModelContent(() => {
-                    updateFileContent(activeFile.path, modifiedEditor.getValue())
+                    scheduleEditorBufferSnapshot(activeFile.path, modifiedEditor.getValue())
                   })
                 }}
                 options={{

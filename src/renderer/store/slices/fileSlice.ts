@@ -396,11 +396,14 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
     })),
 
   setFileScrollPosition: (path, scrollPosition) =>
-    set((state) => ({
-      openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, scrollPosition } : f
-      ),
-    })),
+    set((state) => {
+      if (!state.openFiles.some(file => file.path === path)) return state
+      return {
+        openFiles: state.openFiles.map((file) =>
+          file.path === path ? { ...file, scrollPosition } : file
+        ),
+      }
+    }),
 
   setFileEncoding: (path, encoding) =>
     set((state) => ({
@@ -410,9 +413,13 @@ export const createFileSlice: StateCreator<FileSlice, [], [], FileSlice> = (set)
     })),
 
   setFileEol: (path, eol) =>
-    set((state) => ({
-      openFiles: state.openFiles.map((f) =>
-        f.path === path ? { ...f, eol } : f
-      ),
-    })),
+    set((state) => {
+      const file = state.openFiles.find(candidate => candidate.path === path)
+      if (!file || file.eol === eol) return state
+      return {
+        openFiles: state.openFiles.map((candidate) =>
+          candidate.path === path ? { ...candidate, eol } : candidate
+        ),
+      }
+    }),
 })
