@@ -12,7 +12,7 @@ import { t } from '@renderer/i18n'
 import { getEditorConfig } from '@renderer/settings'
 import { monaco } from '@renderer/monacoWorker'
 import type { FileMutationResult } from '@shared/types/fileMutation'
-import { commitEditorBufferSnapshot, getEditorBufferContent } from '@renderer/services/editorBufferService'
+import { commitEditorBufferSnapshot, getEditorBufferContent, isWritableDocumentKind } from '@renderer/services/editorBufferService'
 
 function getSaveErrorMessage(result: FileMutationResult, language: 'zh' | 'en'): string {
   if (result.success) return ''
@@ -54,6 +54,7 @@ export function useFileSave() {
   const saveFile = useCallback(async (filePath: string): Promise<boolean> => {
     const file = useStore.getState().openFiles.find(f => f.path === filePath)
     if (!file || file.pinned) return false
+    if (!isWritableDocumentKind(file.kind)) return false
 
     try {
       const content = getEditorBufferContent(file.path, file.content)
@@ -160,7 +161,7 @@ export function useFileSave() {
         const doSave = async (fPath: string) => {
           const { openFiles: currentFiles, markFileSaved: currentMarkSaved } = useStore.getState()
           const file = currentFiles.find(f => f.path === fPath)
-          if (file?.isDirty) {
+          if (file?.isDirty && isWritableDocumentKind(file.kind)) {
             const content = getEditorBufferContent(file.path, file.content)
             const success = await api.file.write(file.path, content, file.encoding)
             if (success) {
@@ -196,7 +197,7 @@ export function useFileSave() {
     const handleBlur = async () => {
       const openFiles = useStore.getState().openFiles
       for (const file of openFiles) {
-        if (file.isDirty) {
+        if (file.isDirty && isWritableDocumentKind(file.kind)) {
           const content = getEditorBufferContent(file.path, file.content)
           const success = await api.file.write(file.path, content, file.encoding)
           if (success) {

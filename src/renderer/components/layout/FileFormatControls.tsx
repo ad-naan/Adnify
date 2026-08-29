@@ -3,6 +3,9 @@ import { useStore } from '@store'
 import BottomBarPopover from '../ui/BottomBarPopover'
 import { applyFileEol } from '@services/fileFormatService'
 import { toast } from '../common/ToastProvider'
+import { globalConfirm } from '../common/ConfirmDialog'
+import { t, type Language } from '@renderer/i18n'
+import { getFileName } from '@shared/utils/pathUtils'
 import { api } from '@renderer/services/electronAPI'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 
@@ -70,6 +73,19 @@ export default function FileFormatControls() {
 
   const handleEncodingChange = async (nextEncoding: string) => {
     if (nextEncoding === currentEncoding) return
+
+    // 切换编码必须按新编码重新解码磁盘内容，因此会丢弃编辑器里未保存的修改。
+    // 与外部修改重载（useFileWatcher）保持一致：脏文件先征得用户同意。
+    if (activeFile.isDirty) {
+      const confirmed = await globalConfirm({
+        title: getFileName(activeFile.path),
+        message: t('file.reencodeDiscardChanges', language as Language, { name: getFileName(activeFile.path) }),
+        confirmText: language === 'zh' ? '继续' : 'Continue',
+        cancelText: t('cancel', language as Language),
+        variant: 'warning',
+      })
+      if (!confirmed) return
+    }
 
     const nextContent = await api.file.readFull(activeFile.path, nextEncoding)
     if (nextContent === null) {

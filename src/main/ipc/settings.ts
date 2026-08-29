@@ -15,6 +15,7 @@ import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/c
 import { systemPrivilegeService } from '../services/systemPrivilegeService'
 import { isSystemPermissionError } from '@shared/utils/permissionError'
 import { mutationFailureFromError, mutationSuccess } from '../services/fileMutationResult'
+import { isSensitiveSettingsKey, sensitiveSettingsKeyError } from './sensitiveSettings'
 
 interface SecurityModuleRef {
   securityManager: any
@@ -107,6 +108,10 @@ export function registerSettingsHandlers(
 
   ipcMain.handle('settings:get', (_, key: string) => {
     try {
+      if (isSensitiveSettingsKey(key)) {
+        logger.ipc.warn('[Settings] Blocked sensitive settings read', { key })
+        throw sensitiveSettingsKeyError(key)
+      }
       const store = resolveStore(key)
       if (!store) {
         logger.ipc.error('[Settings] resolveStore returned null for key:', key)
@@ -121,6 +126,10 @@ export function registerSettingsHandlers(
 
   ipcMain.handle('settings:set', (_event, key: string, value: unknown) => {
     try {
+      if (isSensitiveSettingsKey(key)) {
+        logger.ipc.warn('[Settings] Blocked sensitive settings write', { key })
+        throw sensitiveSettingsKeyError(key)
+      }
       const store = resolveStore(key)
       if (!store) {
         logger.ipc.error('[Settings] resolveStore returned null for key:', key)

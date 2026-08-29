@@ -131,16 +131,41 @@ export class CodebaseIndexService {
   }
 
   private initialized = false
+  private initializePromise: Promise<void> | null = null
 
+  /**
+   * 并发调用必须共享同一次初始化。
+   *
+   * `initialized` 只在三个 await 之后才置位，而 8 个 IPC 处理器（index:status、
+   * index:hasIndex、index:search、index:getProjectSummary…）每个都以
+   * `await indexService.initialize()` 开头，ipcMain.handle 之间没有互斥 ——
+   * 打开工作区时随手两个请求就会同时进入加载流程。
+   *
+   * 后果有两种：symbolIndex.add 不是按 id 幂等的，两次加载会把每个符号留成两份，
+   * 进而在 fuseResults 里对同一个块重复加分；更糟的是与 buildStructuralIndex
+   * 交错时，loadStructuralIndex 的 finally 会把 structuralBuildFileSymbols
+   * 置空，构建方随后把 null 传给摘要生成器，整次索引构建以 TypeError 收场。
+   */
   async initialize(): Promise<void> {
     if (this.initialized) return
     if (this.destroyed) throw new Error('Index service has been destroyed')
+    if (this.initializePromise) return this.initializePromise
 
+    const running = this.performInitialize().finally(() => {
+      if (this.initializePromise === running) this.initializePromise = null
+    })
+    this.initializePromise = running
+    return running
+  }
+
+  private async performInitialize(): Promise<void> {
     // 加载缓存的项目摘要
     this.projectSummary = await this.summaryGenerator.loadCache()
 
-    // 加载索引状态和结构化索引
-    await this.loadIndex()
+    // 加载索引状态和结构化索引。走 mutationQueue 是为了和构建 / 增量更新串行：
+    // 两边都会 clear 内存索引并改写 status，交错就会互相覆盖。
+    await this.enqueueMutation(() => this.loadIndex())
+    if (this.destroyed) return
 
     // 语义模式：初始化向量存储
     if (this.config.mode === 'semantic') {
@@ -426,7 +451,22 @@ export class CodebaseIndexService {
     await this.summaryGenerator.clearCache()
     await this.clearStructuralIndexCache()
 
-    this.status = { ...this.status, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
+    // lastIndexedAt 必须一起清掉，并且必须落盘。
+    // updateFiles / deleteFileIndex 都用 `lastIndexedAt === undefined` 判断
+    // 「还没有过一次完整索引」，清空后留着它，随后任意一次文件保存都会被当成
+    // 增量更新放行，于是 SQLite 里长出一个只含那一个文件、却自称完整的索引：
+    // hasIndex() 返回 true，而检索只能看见那一个文件。
+    // 不 saveIndex 的话这个陈旧标记还会跨重启存活（loadIndex 会把它读回来）。
+    this.status = {
+      ...this.status,
+      totalFiles: 0,
+      indexedFiles: 0,
+      totalChunks: 0,
+      lastIndexedAt: undefined,
+      error: undefined,
+      message: undefined,
+    }
+    await this.saveIndex()
     logger.index.info('[IndexService] Index cleared')
   }
 
@@ -940,8 +980,16 @@ export function initIndexServiceWithConfig(workspacePath: string, config: Partia
     instance = new CodebaseIndexService(workspacePath, config)
     instances.set(normalized, instance)
   } else {
-    // 更新现有实例的配置
-    if (config.mode) instance.setMode(config.mode)
+    // 更新现有实例的配置。
+    // setMode 走 mutationQueue，这里同步入队即可保证它排在随后的
+    // initialize()/indexWorkspace() 之前；但返回的 promise 必须接住 ——
+    // 不接的话 initSemanticComponents 的失败会变成主进程里的
+    // unhandledRejection，而这个函数的调用方（7 个 IPC 处理器）都不等它。
+    if (config.mode) {
+      void instance.setMode(config.mode).catch(error => {
+        logger.index.error('[IndexService] Failed to apply index mode:', error)
+      })
+    }
     if (config.embedding) instance.updateEmbeddingConfig(config.embedding)
   }
   return instance

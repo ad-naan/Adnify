@@ -274,6 +274,7 @@ export const en = {
   'confirmUnsavedChanges': '"{name}" has unsaved changes. Save?',
   'confirmRestoreCheckpoint': 'This will restore all files to their state before this message and delete all messages after it. Continue?',
   'file.externalModifiedReload': 'File "{name}" was modified outside Adnify. Reload and discard local changes?',
+  'file.reencodeDiscardChanges': 'Switching encoding re-reads "{name}" from disk, discarding your unsaved changes. Continue?',
 
   // Error Messages (新增)
   'error.unknown': 'An unexpected error occurred',

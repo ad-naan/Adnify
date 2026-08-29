@@ -104,6 +104,37 @@ describe('structural index SQLite store', () => {
     expect(loaded.metadata).toEqual({ totalFiles: 1, totalChunks: 1, savedAt: 10 })
   })
 
+  // 回归：chunk id 是 `${filePath}:${startRow}`，TS/JS 查询对每个 export 声明
+  // 会双重捕获（function_declaration + export_statement），产生同 id 的块。
+  // 上游 treeSitterChunker 已按 id 去重，这里是最后一道兜底：单个重复 id
+  // 不应该以 UNIQUE constraint failed 把整个索引构建带崩。
+  it('tolerates a repeated chunk id instead of aborting the whole build', () => {
+    executeStructuralIndexStoreOperation({ type: 'beginReplace', databasePath, generation: 'dup' })
+    expect(() => executeStructuralIndexStoreOperation({
+      type: 'appendReplace',
+      databasePath,
+      generation: 'dup',
+      chunks: [
+        chunk('same', 'a.ts', 'export class Foo {}'),
+        chunk('same', 'a.ts', 'class Foo {}'),
+        chunk('other', 'a.ts'),
+      ],
+    })).not.toThrow()
+
+    // indexService 汇报的 totalChunks 是 bm25Index.size，而 BM25 按 id 建索引，
+    // 重复块在两侧都折叠成一行，所以 commitReplace 的 COUNT(*) 校验依然平衡。
+    executeStructuralIndexStoreOperation({
+      type: 'commitReplace',
+      databasePath,
+      generation: 'dup',
+      metadata: { totalFiles: 1, totalChunks: 2, savedAt: 10 },
+    })
+
+    const loaded = load()
+    expect(loaded.chunks.map(item => item.id)).toEqual(['other', 'same'])
+    expect(loaded.chunks.find(item => item.id === 'same')?.content).toBe('class Foo {}')
+  })
+
   it('replaces and deletes individual files atomically', () => {
     executeStructuralIndexStoreOperation({ type: 'beginReplace', databasePath, generation: 'base' })
     executeStructuralIndexStoreOperation({

@@ -294,7 +294,7 @@ export class TreeSitterChunker {
       tree.delete()
     }
 
-    return chunks
+    return dedupeById(chunks)
   }
 
   /**
@@ -509,4 +509,40 @@ export class TreeSitterChunker {
     const name = findId(node)
     return name ? [name] : []
   }
+}
+
+/**
+ * 按 id 去重，保留第一个出现的块。
+ *
+ * 块 id 是 `${filePath}:${startPosition.row}`，同一行起始的两个捕获就会撞 id。
+ * 这在 TS/JS 里是常态而非边缘情况：QUERIES 同时匹配 (function_declaration)
+ * 和 (export_statement (function_declaration))，于是每个 `export function` /
+ * `export class` 都被捕获两次，起始行相同 —— 本仓库自身实测 5 个文件里就有 11 个重复。
+ * 而 chunks 表是 PRIMARY KEY (generation, relative_path, id) + 普通 INSERT，
+ * 于是结构化索引（默认模式）在第一批就会抛
+ * `UNIQUE constraint failed: chunks.generation, chunks.relative_path, chunks.id`，
+ * 整个索引构建被带崩。
+ *
+ * 为什么在这里去重而不是在 SQL 里用 INSERT OR REPLACE：indexService.addStructuralChunks
+ * 除了写 bm25（按 id 覆盖，天然幂等）之外还会对每个符号无条件 symbolIndex.add，
+ * 重复块会留下重复符号 —— 那是 SQL 层的 upsert 修不到的地方。
+ *
+ * 为什么"保留第一个"是安全的：captures 已按 startIndex 排序，外层的
+ * export_statement 排在内层声明之前，且其 text 完整包含内层声明，不会丢内容。
+ *
+ * 导出仅为可测试性：tests/setup.ts 会设置 global.window，而 web-tree-sitter 0.20
+ * 的 UMD 在 window 存在但 window.document 不存在时会抛错，因此整个 chunkFile
+ * 无法在 vitest 里驱动，只能单独覆盖这个纯函数。
+ */
+export function dedupeById(chunks: CodeChunk[]): CodeChunk[] {
+  if (chunks.length < 2) return chunks
+
+  const seen = new Set<string>()
+  const result: CodeChunk[] = []
+  for (const chunk of chunks) {
+    if (seen.has(chunk.id)) continue
+    seen.add(chunk.id)
+    result.push(chunk)
+  }
+  return result
 }

@@ -10,6 +10,7 @@
 
 import type { StateCreator } from 'zustand'
 import type { ChatMessage, MessageContent } from '../../types'
+import { bumpThreadMessageVersion, withReplacedMessages } from '../threadMessages'
 import type { ThreadSlice } from './threadSlice'
 import type { MessageSlice } from './messageSlice'
 
@@ -229,9 +230,14 @@ export const createBranchSlice: StateCreator<
       ]
 
       return {
+        threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
         threads: {
           ...state.threads,
-          [threadId]: { ...currentThread, messages: newMessages, lastModified: Date.now() },
+          [threadId]: {
+            ...currentThread,
+            ...withReplacedMessages(currentThread, newMessages),
+            lastModified: Date.now(),
+          },
         },
         branches: { ...state.branches, [threadId]: updatedBranches },
         activeBranchId: { ...state.activeBranchId, [threadId]: branchId },
@@ -286,9 +292,14 @@ export const createBranchSlice: StateCreator<
       }
 
       return {
+        threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
         threads: {
           ...state.threads,
-          [threadId]: { ...currentThread, messages: newMessages, lastModified: Date.now() },
+          [threadId]: {
+            ...currentThread,
+            ...withReplacedMessages(currentThread, newMessages),
+            lastModified: Date.now(),
+          },
         },
         branches: { ...state.branches, [threadId]: updatedBranches },
         activeBranchId: { ...state.activeBranchId, [threadId]: null },
@@ -449,6 +460,7 @@ export const createBranchSlice: StateCreator<
       const newMessages = currentThread.messages.slice(0, userMessageIndex)
 
       return {
+        threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
         branches: {
           ...state.branches,
           [threadId]: updatedBranches,
@@ -457,7 +469,7 @@ export const createBranchSlice: StateCreator<
           ...state.threads,
           [threadId]: {
             ...currentThread,
-            messages: newMessages,
+            ...withReplacedMessages(currentThread, newMessages),
             lastModified: Date.now(),
           },
         },

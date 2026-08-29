@@ -60,6 +60,21 @@ interface LanceDBSearchResult extends LanceDBRecord {
   _distance: number
 }
 
+/**
+ * 把值转义成 SQL 字符串字面量的内容部分。
+ *
+ * 只做单引号翻倍 —— 这是唯一能让值逃出 `'...'` 的字符，翻倍之后里面的
+ * `--` 和 `;` 都只是普通字符，不需要（也绝不能）删掉。
+ *
+ * 早先的实现顺手把 `--` 和 `;` 从路径里删掉、并截断到 1000 字符，
+ * 结果是把「转义」写成了「改写」：工作区路径里带 `--`（`E:/Project/my--app/`）
+ * 时删除条件匹配不到任何行，LanceDB 对零行删除也不报错，
+ * 于是每次重建索引都在旧行上再追加一份。
+ */
+export function escapeSqlStringLiteral(value: string): string {
+  return value.replace(/'/g, "''")
+}
+
 export class VectorStoreService {
   private db: LanceDBConnection | null = null
   private table: LanceDBTable | null = null
@@ -268,8 +283,13 @@ export class VectorStoreService {
   async upsertFile(filePath: string, chunks: IndexedChunk[]): Promise<void> {
     if (!this.table || !this.db) return
 
-    // Delete existing rows first; if this fails, abort to avoid duplicates
-    await this.safeDeleteByFilePath(filePath)
+    // 先删旧行。删除失败时必须放弃这次写入：LanceDB 的 add 是纯追加，
+    // 在没删掉的旧行上再加一遍就是每次重建索引多留一份副本，
+    // 语义检索会把同一个块连着旧内容重复返回，在固定 topK 下挤掉别的文件。
+    if (!(await this.safeDeleteByFilePath(filePath))) {
+      logger.index.warn('[VectorStore] Skipping upsert: stale rows could not be removed', { filePath })
+      return
+    }
 
     if (chunks.length === 0) return
 
@@ -294,7 +314,10 @@ export class VectorStoreService {
   async upsertFiles(files: Array<{ filePath: string; chunks: IndexedChunk[] }>): Promise<void> {
     if (!this.table || !this.db || files.length === 0) return
 
-    await this.deleteFiles(files.map(file => file.filePath))
+    if (!(await this.deleteFiles(files.map(file => file.filePath)))) {
+      logger.index.warn(`[VectorStore] Skipping upsert of ${files.length} files: stale rows could not be removed`)
+      return
+    }
     const chunks = files.flatMap(file => file.chunks)
     if (chunks.length === 0) return
 
@@ -319,35 +342,21 @@ export class VectorStoreService {
    * 安全删除指定文件的 chunks
    * 通过查询-过滤-重建的方式避免 SQL 注入
    */
-  private async safeDeleteByFilePath(filePath: string): Promise<void> {
-    if (!this.table) return
+  /**
+   * 删除指定文件的 chunks。返回是否确实执行成功。
+   *
+   * 调用方必须看返回值：静默失败加上后续的 add 就是无声地累积重复行。
+   */
+  private async safeDeleteByFilePath(filePath: string): Promise<boolean> {
+    if (!this.table) return false
 
     try {
-      // 方案1：使用参数化的方式（如果 LanceDB 支持）
-      // 方案2：严格验证和转义文件路径
-      const safePath = this.sanitizeFilePath(filePath)
-      await this.table.delete(`filePath = '${safePath}'`)
+      await this.table.delete(`filePath = '${escapeSqlStringLiteral(filePath)}'`)
+      return true
     } catch (e) {
-      logger.index.warn('[VectorStore] Safe delete failed, using fallback:', e)
-      // 如果删除失败，记录警告但不阻塞操作
+      logger.index.warn('[VectorStore] Delete by filePath failed:', e)
+      return false
     }
-  }
-
-  /**
-   * 清理文件路径，防止 SQL 注入
-   */
-  private sanitizeFilePath(filePath: string): string {
-    // 1. 转义单引号
-    let safe = filePath.replace(/'/g, "''")
-    // 2. 移除可能的 SQL 注释
-    safe = safe.replace(/--/g, '')
-    // 3. 移除分号（防止多语句注入）
-    safe = safe.replace(/;/g, '')
-    // 4. 限制长度
-    if (safe.length > 1000) {
-      safe = safe.substring(0, 1000)
-    }
-    return safe
   }
 
   /**
@@ -355,35 +364,30 @@ export class VectorStoreService {
    */
   async deleteFile(filePath: string): Promise<void> {
     if (!this.table) return
-
-    try {
-      await this.safeDeleteByFilePath(filePath)
-    } catch {
-      // ignore
-    }
+    await this.safeDeleteByFilePath(filePath)
   }
 
   /**
    * 批量删除多个文件的 chunks
    * 比逐个删除更高效
    */
-  async deleteFiles(filePaths: string[]): Promise<void> {
-    if (!this.table || filePaths.length === 0) return
+  async deleteFiles(filePaths: string[]): Promise<boolean> {
+    if (!this.table || filePaths.length === 0) return true
 
     try {
       // 构建安全的 OR 条件
       const conditions = filePaths
-        .map(fp => `filePath = '${this.sanitizeFilePath(fp)}'`)
+        .map(fp => `filePath = '${escapeSqlStringLiteral(fp)}'`)
         .join(' OR ')
 
       await this.table.delete(conditions)
       logger.index.info(`[VectorStore] Deleted chunks for ${filePaths.length} files`)
+      return true
     } catch (e) {
       logger.index.error('[VectorStore] Batch delete failed:', e)
-      // 回退到逐个删除
-      for (const fp of filePaths) {
-        await this.deleteFile(fp)
-      }
+      // 回退到逐个删除：一个路径出问题不该让整批都删不掉
+      const results = await Promise.all(filePaths.map(fp => this.safeDeleteByFilePath(fp)))
+      return results.every(Boolean)
     }
   }
 

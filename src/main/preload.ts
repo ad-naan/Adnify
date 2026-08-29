@@ -525,7 +525,6 @@ export interface ElectronAPI {
   credentialsOAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
   credentialsOAuthLogout: () => Promise<{ success: boolean; error?: string }>
   credentialsOAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string }>
-  credentialsOAuthToken: () => Promise<{ token: string | null }>
   credentialsOAuthUsage: (options?: { refresh?: boolean }) => Promise<{ usage: unknown }>
   mcpGetConfigPaths: () => Promise<{ success: boolean; paths?: { user: string; workspace: string[] }; error?: string }>
   mcpReloadConfig: () => Promise<{ success: boolean; error?: string }>
@@ -911,7 +910,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   credentialsOAuthLogin: () => ipcRenderer.invoke('credentials:oauth:login'),
   credentialsOAuthLogout: () => ipcRenderer.invoke('credentials:oauth:logout'),
   credentialsOAuthStatus: () => ipcRenderer.invoke('credentials:oauth:status'),
-  credentialsOAuthToken: () => ipcRenderer.invoke('credentials:oauth:token'),
   credentialsOAuthUsage: (options?: { refresh?: boolean }) =>
     ipcRenderer.invoke('credentials:oauth:usage', options),
   mcpGetConfigPaths: () => ipcRenderer.invoke('mcp:getConfigPaths'),

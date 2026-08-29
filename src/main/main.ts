@@ -6,7 +6,7 @@
  * - 启用 TypeScript 增量编译以提升构建速度
  */
 
-import { app, BrowserWindow, Menu, clipboard, crashReporter, ipcMain, net, shell } from 'electron'
+import { app, BrowserWindow, Menu, clipboard, crashReporter, dialog, ipcMain, net, shell } from 'electron'
 // 补充 Language 类型（与渲染端对齐）
 export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
@@ -14,6 +14,7 @@ import * as os from 'os'
 import * as path from 'path'
 import * as v8 from 'v8'
 import { logger } from '@shared/utils/Logger'
+import { performanceMonitor } from '@shared/utils/PerformanceMonitor'
 import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import type Store from 'electron-store'
 import { destroyIndexService } from './indexing/indexService'
@@ -55,6 +56,11 @@ const WINDOW_CONFIG = {
 } as const
 
 logger.setProductionMode(app.isPackaged)
+
+// 主进程没有 Chrome 的 performance.memory，堆上限只能由这里注入，
+// 否则 performanceMonitor 的 OOM 预警在主进程恒不触发。
+// 放在模块顶层而非 whenReady：indexService 一 import 就会拉起监控单例并开始采样。
+performanceMonitor.setHeapLimitProvider(() => v8.getHeapStatistics().heap_size_limit ?? null)
 
 ipcMain.handle('clipboard:readText', () => clipboard.readText())
 ipcMain.handle('clipboard:writeText', (_event, text: string) => {
@@ -965,6 +971,28 @@ app.whenReady().then(async () => {
 
   // 6. 模块就绪，加载页面内容
   loadWindowContent(firstWin, false)
+}).catch(error => {
+  // 启动链条里任何一步抛出都必须显式收场。
+  // 上面注册的 process.on('unhandledRejection') 只记日志，同时也压掉了 Node
+  // 默认的致命行为，于是进程会带着 0 个窗口活下来并继续占着 single-instance 锁：
+  // 用户再点图标走的是 second-instance 分支，能开出一个窗口，
+  // 但 registerWindowHandlers / initializeModules 一个都没跑过，
+  // 渲染进程每个 invoke 都失败 —— 一个永久坏掉的界面，比直接退出难查得多。
+  // 真实触发点：config.json 被截断（conf 的 clearInvalidConfig 默认 false，
+  // 构造时就会抛 SyntaxError），或配置目录只读。
+  logger.system.error('[Main] Startup failed:', error)
+  try {
+    dialog.showErrorBox(
+      'Adnify failed to start',
+      `${error instanceof Error ? error.message : String(error)}\n\n` +
+      // 用 app.getPath 而不是 getUserConfigDir()：后者要读 bootstrap store，
+      // 而「store 读不出来」正是这里最可能的失败原因。
+      `Configuration directory: ${app.getPath('userData')}`
+    )
+  } catch {
+    // 连对话框都开不出来（whenReady 之前就挂了）时不要再套一层错误
+  }
+  app.exit(1)
 })
 
 app.on('second-instance', (_event, argv) => {

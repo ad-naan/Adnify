@@ -43,6 +43,156 @@ export interface MajorReleaseGroup {
 
 export const CHANGELOG_DATA: ReleaseNote[] = [
   {
+    "version": "1.7.64",
+    "rawVersion": "1.7.64",
+    "date": "2026-08-29",
+    "title": "文件保存防截断、聊天记录一致性、代码索引可靠性与凭据存储加固",
+    "titleEn": "Save-Path Truncation Guards, Chat History Consistency, Codebase Index Reliability & Credential Hardening",
+    "highlight": "修复大文件只读预览误入保存流程导致文件被截断的问题；修正聊天界面、本地数据库与模型上下文三者不一致（隐藏内容被存档、工具结果丢失、回滚后卡在“正在生成”）；修复结构化索引因重复符号在构建首批即整体失败，以及清空索引后残留标记长出“假完整”索引的问题；收紧凭据文件权限并移除渲染进程可触达的凭据通道；恢复长上下文的提示缓存命中与主进程内存预警。",
+    "highlightEn": "Fixed large-file read-only previews entering the save path and truncating files on disk; resolved divergence between the visible transcript, the local database, and the model context (hidden content persisted, tool results lost, threads stuck in a streaming state after rollback); fixed structural indexing aborting on duplicate symbols and stale markers producing a falsely complete index after a reset; tightened credential file permissions and removed credential surfaces reachable from the renderer; restored prompt-cache hits for long contexts and out-of-memory warnings in the main process.",
+    "tag": "latest",
+    "isLatest": true,
+    "categories": [
+      {
+        "type": "fix",
+        "label": "核心修复 / Bug Fixes",
+        "labelEn": "Bug Fixes",
+        "items": [
+          {
+            "title": "文件保存不再截断磁盘内容",
+            "titleEn": "Save Path No Longer Truncates Files on Disk",
+            "details": [
+              "修复超大文件的只读分页预览会进入保存流程的问题：Ctrl+S、切换标签自动保存与窗口失焦保存都曾可能把整个文件写成 0 字节或仅剩首个分页",
+              "保存前校验编辑器实例仍持有文档模型，避免已卸载的编辑器返回空内容并据此覆盖原文件",
+              "切换文件编码需要按新编码重新读盘，现在会先就未保存的更改征求确认，与外部修改重载的行为保持一致"
+            ],
+            "detailsEn": [
+              "Fixed read-only paginated previews of very large files entering the save path, where Ctrl+S, tab-switch autosave, and window-blur autosave could write the file as zero bytes or as only its first page",
+              "Verified the editor still holds a document model before saving, so a disposed editor can no longer return empty content and overwrite the file with it",
+              "Switching a file's encoding re-reads it from disk, so unsaved changes now prompt for confirmation first, matching the external-modification reload flow"
+            ]
+          },
+          {
+            "title": "聊天记录、本地存档与模型上下文保持一致",
+            "titleEn": "Consistent Transcript, Local Archive and Model Context",
+            "details": [
+              "修复按下停止后仍在到达的输出会被写进存档却不显示的问题：这些内容此前看不见、却被存入数据库并随后发给模型，重启后又突然出现在对话里",
+              "修复工具调用的状态与执行结果在流式输出期间可能被旧快照覆盖而丢失",
+              "修复流式输出中途回滚检查点或切换消息分支后，会话可能永久停留在“正在生成”状态，导致该会话不再落盘、新消息只进队列不发送"
+            ],
+            "detailsEn": [
+              "Fixed output that arrives after Stop being archived without ever being displayed: it was invisible in the UI yet written to the database and replayed to the model, resurfacing in the conversation after a restart",
+              "Fixed tool call status and results being overwritten by a stale snapshot while a response was streaming",
+              "Fixed threads permanently stuck in a streaming state after rolling back a checkpoint or switching branches mid-stream, which stopped the thread from being persisted and left new messages queued but never sent"
+            ]
+          },
+          {
+            "title": "代码索引的构建、清空与增量更新",
+            "titleEn": "Codebase Index Build, Reset and Incremental Updates",
+            "details": [
+              "修复结构化索引（默认模式）在写入首批数据时即因重复符号整体中断，导致索引长期为空、代码检索无结果",
+              "修复清空索引后残留的完成标记：随后任意一次文件保存都会被当作增量更新，长出一个只含单个文件却自称完整的索引",
+              "单个文件的索引删除失败不再中断整批更新；并发触发的索引初始化现在共用一次加载，不再产生重复符号"
+            ],
+            "detailsEn": [
+              "Fixed structural indexing (the default mode) aborting on its very first batch when duplicate symbols collided, leaving the index empty and codebase search without results",
+              "Fixed a stale completion marker surviving an index reset, after which any single file save was treated as an incremental update and produced a one-file index that reported itself as complete",
+              "A failed per-file index deletion no longer aborts the rest of the batch, and concurrent initialization requests now share one load instead of duplicating symbols"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "security",
+        "label": "凭据与数据安全 / Credentials & Data Security",
+        "labelEn": "Credentials & Data Security",
+        "items": [
+          {
+            "title": "配置文件权限收紧至仅当前用户可读",
+            "titleEn": "Configuration Files Restricted to the Current User",
+            "details": [
+              "存放 API Key 与登录令牌的配置文件改为 0600 权限创建，同一台机器上的其他账户无法再直接读取",
+              "升级安装同样生效：启动时会对已存在的配置文件补齐权限，而非只在新建时生效"
+            ],
+            "detailsEn": [
+              "Configuration files holding API keys and login tokens are now created with 0600 permissions, so other accounts on the same machine can no longer read them directly",
+              "Existing installations are covered as well: permissions are tightened on startup rather than only at file creation"
+            ]
+          },
+          {
+            "title": "凭据不再经由通用配置通道与界面进程暴露",
+            "titleEn": "Credentials No Longer Reachable via Generic Config or the UI Process",
+            "details": [
+              "通用配置读写通道现在拒绝凭据相关键（含点号子路径），界面展示 API Key 与登录状态改走各自的专用通道",
+              "移除一个从未被使用、却可把刷新后的登录令牌交给界面进程的通道，减少一处无谓的暴露面",
+              "修正凭据写入的提交顺序，避免写入中途失败留下半旧半新的凭据记录"
+            ],
+            "detailsEn": [
+              "The generic configuration channel now rejects credential keys, including dotted sub-paths; the UI reads API keys and login status through dedicated channels instead",
+              "Removed an unused channel that handed a refreshed login token to the UI process, eliminating an unnecessary exposure surface",
+              "Fixed the commit ordering of credential writes so an interrupted write can no longer leave a half-old, half-new record"
+            ]
+          },
+          {
+            "title": "工作区标记校验与启动失败的明确收场",
+            "titleEn": "Workspace Marker Validation and Explicit Startup Failure",
+            "details": [
+              "打开的仓库自带的工作区标记会被直接用于会话数据库文件名，现在对其字符集做校验，非法标记按缺失处理并重新生成",
+              "启动链路中任意一步失败（如配置文件损坏或配置目录只读）现在会给出错误提示并退出，不再留下一个没有窗口、却占着单实例锁的进程"
+            ],
+            "detailsEn": [
+              "A workspace marker shipped inside an opened repository feeds directly into a session database filename, so its characters are now validated; invalid markers are treated as missing and regenerated",
+              "A failure anywhere in the startup chain (a corrupted config file, a read-only config directory) now reports an error and exits instead of leaving a window-less process holding the single-instance lock"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "improvement",
+        "label": "性能与运行稳定性 / Performance & Runtime Stability",
+        "labelEn": "Performance & Runtime Stability",
+        "items": [
+          {
+            "title": "长上下文的提示缓存恢复命中",
+            "titleEn": "Prompt Cache Hits Restored for Long Contexts",
+            "details": [
+              "修复主进程在计算上下文长度时一路降级到字符估算的问题：中文与源码被低估三到四成，本该命中缓存的长对话被判为不够长而跳过缓存，属于不报错的成本回归",
+              "改为在请求边界预热词表，与界面进程口径一致，且不在启动阶段解析大体积词表"
+            ],
+            "detailsEn": [
+              "Fixed the main process silently falling back to character-based estimation when sizing a context: Chinese text and source code were underestimated by 30-40%, so long conversations that should have been cached were judged too short — a cost regression that never surfaced as an error",
+              "The tokenizer is now warmed at the request boundary, matching the UI process, without parsing large vocabularies during startup"
+            ]
+          },
+          {
+            "title": "内存预警与原生模块加载",
+            "titleEn": "Memory Warnings and Native Module Loading",
+            "details": [
+              "恢复主进程的内存压力预警：此前堆上限探测依赖仅浏览器可用的接口，导致索引、向量化等大内存操作所在的进程从不告警",
+              "修正打包时的依赖布局，使传递依赖中的原生模块能被正确解包加载，恢复远程连接的加密加速"
+            ],
+            "detailsEn": [
+              "Restored memory pressure warnings in the main process, where heap limit detection previously relied on a browser-only API and never fired — even though indexing and embedding allocate there",
+              "Fixed the packaged dependency layout so native modules pulled in transitively are unpacked and loadable again, restoring cryptographic acceleration for remote connections"
+            ]
+          },
+          {
+            "title": "以普通权限重启与向量库写入",
+            "titleEn": "Relaunch Without Elevation and Vector Store Writes",
+            "details": [
+              "修复“以普通权限重启”时新进程误判旧进程已退出，抢锁失败后直接退出、一个窗口都不剩的问题",
+              "修正向量库删除条件的转义：工作区路径中包含特定字符时删除条件匹配不到任何行；同时删除失败后不再继续追加，避免每次重建索引叠加一份副本"
+            ],
+            "detailsEn": [
+              "Fixed \"relaunch without elevation\" where the new process mistook the still-running old process for an exited one, then failed to acquire the lock and exited, leaving no window at all",
+              "Fixed escaping in vector store delete predicates, which matched no rows when the workspace path contained certain characters, and stopped appending rows after a failed delete so index rebuilds no longer stack duplicate copies"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
     "version": "1.7.63",
     "rawVersion": "1.7.63",
     "date": "2026-08-25",
@@ -50,8 +200,8 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
     "titleEn": "AI Attribution Pipeline Fix, LSP Space-Path Compatibility, Git Performance Optimization & Command Palette Localization",
     "highlight": "修复主分支 AI 代码统计为 0 及 Git Notes 冗余探测问题；彻底解决 Windows 下由于 Node.js 路径包含空格导致的语言服务器安装失败；消除 Git 高频无谓子进程轮询并接入防抖调度；重构命令面板实现全量中英双语与中文关键词搜索；优化输入区域 Dock 占位与聊天面板整页自然滚动体验。",
     "highlightEn": "Fixed AI code attribution showing zero on main branches and added batch pre-checking for Git Notes; resolved LSP installation failures caused by spaces in Windows execution paths; eliminated unnecessary high-frequency Git polling in favor of debounced events; fully localized the Command Palette with Chinese keyword search; and improved input dock slot transitions and full-page scrolling for empty chat suggestions.",
-    "tag": "latest",
-    "isLatest": true,
+    "tag": "patch",
+    "isLatest": false,
     "categories": [
       {
         "type": "fix",

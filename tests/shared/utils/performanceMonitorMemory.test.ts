@@ -194,4 +194,69 @@ describe('PerformanceMonitor 内存诊断', () => {
       expect(errorSpy).toHaveBeenCalledTimes(2)
     })
   })
+
+  // 上面的用例都直接给 state.heapLimit 赋值，绕开了「上限从哪来」这一步——
+  // 而回归恰恰出在那里：getHeapLimit 曾只有 performance.memory 一条分支，
+  // 它是 Chrome 独有的，于是主进程恒得 null、压力检测全程 early-return。
+  describe('getHeapLimit 来源', () => {
+    const snapshotAt = (heapUsedMB: number, timestamp: number): MemorySnapshot => ({
+      timestamp,
+      heapUsed: heapUsedMB * MB,
+      heapTotal: heapUsedMB * 1.2 * MB,
+      external: 0,
+      rss: heapUsedMB * 1.5 * MB,
+    })
+
+    afterEach(() => {
+      performanceMonitor.setHeapLimitProvider(null)
+    })
+
+    it('Node 环境（无 performance.memory）下经注入的 provider 取到上限', () => {
+      expect('memory' in performance).toBe(false)
+
+      performanceMonitor.setHeapLimitProvider(() => 1000 * MB)
+      const state = internals()
+
+      // 不预设 heapLimit，强制走 getHeapLimit 的真实取值路径
+      state.detectMemoryPressure(snapshotAt(850, 10_000))
+
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      const payload = errorSpy.mock.calls[0][1] as Record<string, string>
+      expect(payload.heapUsedPercent).toBe('85.0%')
+      expect(payload.heapLimit).toBe('1000.0MB')
+    })
+
+    it('未注入 provider 时静默跳过，不误报', () => {
+      const state = internals()
+
+      state.detectMemoryPressure(snapshotAt(5_000, 10_000))
+
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
+
+    it('setHeapLimitProvider 会让缓存失效，避免沿用注入前探测到的 null', () => {
+      const state = internals()
+
+      // 先触发一次探测，把 null 缓存下来
+      state.detectMemoryPressure(snapshotAt(5_000, 10_000))
+      expect(errorSpy).not.toHaveBeenCalled()
+      expect(state.heapLimit).toBe(null)
+
+      performanceMonitor.setHeapLimitProvider(() => 1000 * MB)
+      expect(state.heapLimit).toBe(undefined)
+
+      state.detectMemoryPressure(snapshotAt(850, 20_000))
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('provider 抛错时降级为 null 而不是崩掉采样', () => {
+      const state = internals()
+      performanceMonitor.setHeapLimitProvider(() => {
+        throw new Error('v8 unavailable')
+      })
+
+      expect(() => state.detectMemoryPressure(snapshotAt(5_000, 10_000))).not.toThrow()
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
+  })
 })

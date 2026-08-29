@@ -147,11 +147,25 @@ function createChunkStatements(database: DatabaseSync) {
       file_path = excluded.file_path,
       file_hash = excluded.file_hash
   `)
+  // Last write wins on a repeated chunk id instead of aborting the transaction.
+  // A duplicate id used to fail the whole appendReplace batch with
+  // `UNIQUE constraint failed`, which aborts the entire index build — a very
+  // expensive way to react to one colliding row. The upsert is also consistent
+  // with the caller's chunk count: indexService reports `bm25Index.size`, and
+  // BM25 keys documents by id, so a duplicate collapses to one row on both
+  // sides and commitReplace's COUNT(*) check still balances.
   const insertChunk = database.prepare(`
     INSERT INTO chunks(
       generation, relative_path, id, content, start_line, end_line,
       type, language, symbols_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(generation, relative_path, id) DO UPDATE SET
+      content = excluded.content,
+      start_line = excluded.start_line,
+      end_line = excluded.end_line,
+      type = excluded.type,
+      language = excluded.language,
+      symbols_json = excluded.symbols_json
   `)
   return { insertFile, insertChunk }
 }

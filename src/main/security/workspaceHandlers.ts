@@ -117,18 +117,41 @@ async function restartWindowFileWatcher(sender: Electron.WebContents, roots: str
   }
 }
 
+/**
+ * 工作区标记 id 会被直接拼进文件名（`<id>.sqlite3`，见 ipc/sessionStorage.ts），
+ * 而这个 id 来自被打开仓库里的 `.adnify/workspace-meta.json` —— 也就是仓库内容，
+ * 不是我们自己生成的值。不做字符集校验的话，一个提交了
+ * `{"id":"../../../../Users/Public/pwn"}` 的仓库就能让我们在
+ * session-storage 目录之外创建目录和文件。
+ *
+ * ensureWorkspaceMarker 生成的是 `ws_<时间戳>_<base36>`，本来就在这个字符集里，
+ * 所以收紧不影响任何正常工作区；不合法的标记按「没有标记」处理，
+ * 随后会被重新生成一个合法 id。
+ */
+const WORKSPACE_MARKER_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
+
+function normalizeWorkspaceMarkerId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!WORKSPACE_MARKER_ID_PATTERN.test(trimmed)) {
+    if (trimmed) {
+      logger.security.warn('[Workspace] Ignoring workspace marker id with unsupported characters')
+    }
+    return null
+  }
+  return trimmed
+}
+
 export async function readWorkspaceMarkerId(root: string): Promise<string | null> {
   try {
     const markerPath = path.join(root, WORKSPACE_MARKER_RELATIVE_PATH)
     const content = await fsPromises.readFile(markerPath, 'utf-8')
-    const parsed = JSON.parse(content) as { id?: string }
-    return typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id : null
+    return normalizeWorkspaceMarkerId((JSON.parse(content) as { id?: unknown }).id)
   } catch {
     try {
       const legacyMarkerPath = path.join(root, '.adnify', 'workspace.json')
       const content = await fsPromises.readFile(legacyMarkerPath, 'utf-8')
-      const parsed = JSON.parse(content) as { id?: string }
-      return typeof parsed.id === 'string' && parsed.id.trim() ? parsed.id : null
+      return normalizeWorkspaceMarkerId((JSON.parse(content) as { id?: unknown }).id)
     } catch {
       return null
     }

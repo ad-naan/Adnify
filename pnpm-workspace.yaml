@@ -13,6 +13,21 @@ packageManagerStrictVersion: true
 # 不让 pnpm 在后台隐式重装整棵依赖树。
 verifyDepsBeforeRun: false
 
+# 扁平化 node_modules（原 .npmrc 的 node-linker=hoisted / shamefully-hoist=true
+# / public-hoist-pattern=* 三项，随 .npmrc 删除后必须在此保留）。
+#
+# 这不是偏好，而是打包正确性的前提：package.json 的 asarUnpack 用
+# `node_modules/<pkg>/**` 形式匹配需要解包的原生模块。传递依赖里的原生模块
+# —— 例如 ssh2 依赖的 cpu-features —— 只有在扁平布局下才位于顶层，
+# 否则它落在 node_modules/.pnpm/<pkg>@<version>/node_modules/<pkg>，
+# asarUnpack 规则匹配不到任何文件，.node 二进制被打进 asar 而无法加载。
+# ssh2 对 cpu-features 的 require 有 try/catch 兜底，缺失时不会崩溃，
+# 只会静默丢失 CPU 特性检测带来的加密加速 —— 属于不报错的性能回归。
+nodeLinker: hoisted
+shamefullyHoist: true
+publicHoistPattern:
+  - '*'
+
 # 安全 override：把传递依赖顶到已修复的补丁版本。
 #
 overrides:

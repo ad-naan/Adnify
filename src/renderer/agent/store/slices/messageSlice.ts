@@ -30,6 +30,7 @@ import type { BranchSlice } from './branchSlice'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
 import { buildPersistedAgentSessionState, persistCriticalAgentSessionState } from '../agentStorage'
+import { bumpThreadMessageVersion } from '../threadMessages'
 import { getAgentConfig } from '../../utils/AgentConfig'
 
 // ===== 类型定义 =====
@@ -136,14 +137,6 @@ function getInterruptedToolMessage(): string {
     return t('agent.tool.interruptedOrParseFailed', language)
 }
 
-const bumpThreadMessageVersion = (
-    versions: Record<string, number>,
-    threadId: string
-): Record<string, number> => ({
-    ...versions,
-    [threadId]: (versions[threadId] || 0) + 1,
-})
-
 function getAssistantMessage(thread: ChatThread, messageId: string): AssistantMessage | undefined {
     if (thread.liveAssistantMessage?.id === messageId) {
         return thread.liveAssistantMessage
@@ -164,6 +157,58 @@ function replaceAssistantMessage(
     const nextMessages = thread.messages.slice()
     nextMessages[messageIndex] = assistantMessage
     return nextMessages
+}
+
+/**
+ * 发布一条助手消息的新版本，自动选择「覆盖层」还是「落进 messages」。
+ *
+ * 流式期间走覆盖层（`liveAssistantMessage`）：token 只改动活跃那一行，不改时间线
+ * 成员关系，因此不发布新的 messages 版本，ChatPanel 不必重扫长历史。
+ *
+ * 但覆盖层只在消息仍然 `isStreaming` 时会被渲染 —— ChatMessage 的 live selector
+ * 要求 `messageIsStreaming` 为真才读 live parts。所以对已经收尾的消息写覆盖层，
+ * 结果是「看不见、却存下来了」：materializeThreadMessages 会把覆盖层内容写进
+ * SQLite 和发给模型的历史，于是界面上的正文、库里的正文、模型看到的正文三者不一致，
+ * 而且重启后那段内容会突然冒出来。
+ *
+ * 这条路径不是理论上的：用户按停止时 Agent.stop() 会立刻 finalizeAssistant，
+ * 而 IPC 上的流事件监听还没摘掉，随后到达的 token / 检索结果收尾
+ * （retrievalService.finalizeUI）打的就是一条已收尾的消息。
+ *
+ * 所以收尾之后的更新直接落进 messages 并发布新版本：可见、可持久化、与模型一致。
+ * 消息已被截断（回滚检查点 / 切分支）时丢弃这次更新 —— 不能把它复活。
+ */
+function publishAssistantMessage(
+    state: { threads: Record<string, ChatThread>; threadMessageVersions: Record<string, number> },
+    threadId: string,
+    thread: ChatThread,
+    nextMessage: AssistantMessage
+): Partial<{ threads: Record<string, ChatThread>; threadMessageVersions: Record<string, number> }> | null {
+    if (nextMessage.isStreaming) {
+        return {
+            threads: {
+                ...state.threads,
+                [threadId]: { ...thread, liveAssistantMessage: nextMessage },
+            },
+        }
+    }
+
+    const messages = replaceAssistantMessage(thread, nextMessage)
+    if (!messages) return null
+
+    return {
+        threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+        threads: {
+            ...state.threads,
+            [threadId]: {
+                ...thread,
+                messages,
+                ...(thread.liveAssistantMessage?.id === nextMessage.id
+                    ? { liveAssistantMessage: undefined }
+                    : {}),
+            },
+        },
+    }
 }
 
 /**
@@ -437,7 +482,7 @@ export const createMessageSlice: StateCreator<
 
             // 构建新消息对象，清除 _textFinalized 标记（通过解构避免直接修改 state）
             const { _textFinalized: _, ...cleanMsg } = assistantMsg
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...cleanMsg,
                 content: newContent,
                 parts: newParts,
@@ -446,15 +491,7 @@ export const createMessageSlice: StateCreator<
             // A token chunk changes only the active row, not timeline membership.
             // Keep the settled message-list revision stable so ChatPanel does not
             // rescan long history; finalizeAssistant publishes the final revision.
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: {
-                        ...thread,
-                        liveAssistantMessage,
-                    },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
     },
 
@@ -485,8 +522,13 @@ export const createMessageSlice: StateCreator<
                     ? { ...part, toolCall: cleanToolCall(part.toolCall) }
                     : part),
             }
+            // 消息可能已经不在 messages 里了（回滚检查点 / 切分支会截断历史，
+            // 而这些操作没有被 isStreaming 拦住）。这时仍然必须收尾：
+            // 早期实现在这里直接 return state，于是 liveAssistantMessage 和
+            // phase: 'streaming' 被永久留下 —— selectIsStreaming 恒为 true，
+            // 持久化订阅整个会话不再落盘，新消息全被塞进发送队列且永不消费，
+            // 只有按停止键才能恢复。丢一条已经不存在的消息可以，卡死不行。
             const messages = replaceAssistantMessage(thread, finalizedMessage)
-            if (!messages) return state
 
             return {
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
@@ -494,7 +536,7 @@ export const createMessageSlice: StateCreator<
                     ...state.threads,
                     [threadId]: {
                         ...thread,
-                        messages,
+                        ...(messages ? { messages } : {}),
                         liveAssistantMessage: undefined,
                         streamState: { ...thread.streamState, phase: 'idle' },
                     },
@@ -892,7 +934,11 @@ export const createMessageSlice: StateCreator<
             if (!thread) return state
 
             let updated = false
-            const messages = thread.messages.map(msg => {
+            // 必须读 materializeThreadMessages 而不是 thread.messages：覆盖层存在时
+            // thread.messages 里那条是旧快照，在它上面改工具状态再写回去，
+            // 随后任何一次 materialize（持久化 / 发给模型 / 下一次落地写入）都会
+            // 用覆盖层把整条消息盖回去，这次工具更新就凭空消失了。
+            const messages = materializeThreadMessages(thread).map(msg => {
                 if (msg.id === messageId && msg.role === 'assistant') {
                     const assistantMsg = msg as AssistantMessage
 
@@ -932,7 +978,7 @@ export const createMessageSlice: StateCreator<
                 threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
                 threads: {
                     ...state.threads,
-                    [threadId]: { ...thread, messages, lastModified: Date.now() },
+                    [threadId]: { ...thread, messages, liveAssistantMessage: undefined, lastModified: Date.now() },
                 },
             }
         })
@@ -1042,7 +1088,10 @@ export const createMessageSlice: StateCreator<
             const thread = state.threads[threadId]
             if (!thread) return state
 
-            const messages = thread.messages.slice()
+            // 同 updateToolCall：覆盖层存在时 thread.messages 里的那条是旧快照，
+            // 直接改它会在下一次 materialize 时被覆盖层整条盖掉，工具的终态和结果
+            // 就都丢了。这里顺手把覆盖层落地（settle），流式的下一个 token 会重建它。
+            const messages = materializeThreadMessages(thread).slice()
             const messageIdx = messages.findIndex(
                 message => message.id === messageId && message.role === 'assistant'
             )
@@ -1080,6 +1129,7 @@ export const createMessageSlice: StateCreator<
                     [threadId]: {
                         ...thread,
                         messages,
+                        liveAssistantMessage: undefined,
                         toolStreamingPreviews,
                         lastModified: Date.now(),
                     },
@@ -1110,17 +1160,12 @@ export const createMessageSlice: StateCreator<
                 startTime: Date.now(),
                 isStreaming: true,
             }
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...assistantMsg,
                 parts: [...assistantMsg.parts, newPart],
             }
 
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, liveAssistantMessage },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
 
         return partId
@@ -1147,7 +1192,7 @@ export const createMessageSlice: StateCreator<
 
             const assistantMsg = getAssistantMessage(thread, messageId)
             if (!assistantMsg) return state
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...assistantMsg,
                 parts: assistantMsg.parts.map(part => {
                     if (part.type === 'reasoning' && part.id === partId) {
@@ -1157,12 +1202,7 @@ export const createMessageSlice: StateCreator<
                 }),
             }
 
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, liveAssistantMessage },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
     },
 
@@ -1177,7 +1217,7 @@ export const createMessageSlice: StateCreator<
 
             const assistantMsg = getAssistantMessage(thread, messageId)
             if (!assistantMsg) return state
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...assistantMsg,
                 parts: assistantMsg.parts.map(part => {
                     if (part.type === 'reasoning' && part.id === partId) {
@@ -1187,12 +1227,7 @@ export const createMessageSlice: StateCreator<
                 }),
             }
 
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, liveAssistantMessage },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
     },
 
@@ -1215,17 +1250,12 @@ export const createMessageSlice: StateCreator<
                 content: '',
                 isStreaming: true,
             }
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...assistantMsg,
                 parts: [...assistantMsg.parts, newPart],
             }
 
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, liveAssistantMessage },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
 
         return partId
@@ -1242,7 +1272,7 @@ export const createMessageSlice: StateCreator<
 
             const assistantMsg = getAssistantMessage(thread, messageId)
             if (!assistantMsg) return state
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...assistantMsg,
                 parts: assistantMsg.parts.map(part => {
                     if (part.type === 'search' && part.id === partId) {
@@ -1253,12 +1283,7 @@ export const createMessageSlice: StateCreator<
                 }),
             }
 
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, liveAssistantMessage },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
     },
 
@@ -1273,7 +1298,7 @@ export const createMessageSlice: StateCreator<
 
             const assistantMsg = getAssistantMessage(thread, messageId)
             if (!assistantMsg) return state
-            const liveAssistantMessage: AssistantMessage = {
+            const nextMessage: AssistantMessage = {
                 ...assistantMsg,
                 parts: assistantMsg.parts.map(part => {
                     if (part.type === 'search' && part.id === partId) {
@@ -1283,12 +1308,7 @@ export const createMessageSlice: StateCreator<
                 }),
             }
 
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, liveAssistantMessage },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, nextMessage) ?? state
         })
     },
 
@@ -1328,24 +1348,7 @@ export const createMessageSlice: StateCreator<
             }
             const updatedMessage: AssistantMessage = { ...assistantMsg, parts: nextParts }
 
-            if (thread.liveAssistantMessage?.id === messageId) {
-                return {
-                    threads: {
-                        ...state.threads,
-                        [threadId]: { ...thread, liveAssistantMessage: updatedMessage },
-                    },
-                }
-            }
-
-            const messages = replaceAssistantMessage(thread, updatedMessage)
-            if (!messages) return state
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, messages, lastModified: Date.now() },
-                },
-            }
+            return publishAssistantMessage(state, threadId, thread, updatedMessage) ?? state
         })
     },
 

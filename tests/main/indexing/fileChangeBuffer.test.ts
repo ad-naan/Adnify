@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { FileChangeBuffer, type FileChangeEvent } from '@main/indexing/fileChangeBuffer'
+import { FileChangeBuffer, createFileChangeHandler, type FileChangeEvent } from '@main/indexing/fileChangeBuffer'
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void
@@ -84,5 +84,49 @@ describe('FileChangeBuffer', () => {
     await buffer.waitForIdle()
     expect(onFlush).toHaveBeenCalledTimes(1)
     expect(buffer.size()).toBe(0)
+  })
+})
+
+// drain() 在调用 onFlush 之前就把这批事件从缓冲区清掉了，而且没有重投递。
+// 所以处理器内部一旦让一个失败的删除冒出去，同一批里剩下的删除和整批更新
+// 都会被跳过，那些文件的检索结果永久停留在旧内容上。
+describe('createFileChangeHandler', () => {
+  it('isolates a failed deletion from the rest of the batch', async () => {
+    const deleted: string[] = []
+    const indexService = {
+      updateFiles: vi.fn(async () => {}),
+      deleteFileIndex: vi.fn(async (path: string) => {
+        if (path === 'boom.ts') throw new Error('structural store timeout')
+        deleted.push(path)
+      }),
+    }
+
+    const buffer = createFileChangeHandler(indexService)
+    buffer.addBatch([
+      event('boom.ts', 'delete'),
+      event('gone.ts', 'delete'),
+      event('changed.ts'),
+    ])
+    buffer.flush()
+    await buffer.waitForIdle()
+
+    expect(indexService.deleteFileIndex).toHaveBeenCalledTimes(2)
+    expect(deleted).toEqual(['gone.ts'])
+    expect(indexService.updateFiles).toHaveBeenCalledWith(['changed.ts'])
+  })
+
+  it('still propagates update failures so the flush is logged as failed', async () => {
+    const indexService = {
+      updateFiles: vi.fn(async () => {
+        throw new Error('embedder unavailable')
+      }),
+      deleteFileIndex: vi.fn(async () => {}),
+    }
+
+    const buffer = createFileChangeHandler(indexService)
+    buffer.add(event('changed.ts'))
+    buffer.flush()
+    await expect(buffer.waitForIdle()).resolves.toBeUndefined()
+    expect(indexService.updateFiles).toHaveBeenCalledTimes(1)
   })
 })

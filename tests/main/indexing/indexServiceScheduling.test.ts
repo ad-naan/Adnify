@@ -59,6 +59,7 @@ vi.mock('@main/indexing/structuralIndexStore', () => ({
 vi.mock('@main/indexing/summary', () => ({
   ProjectSummaryGenerator: class {
     loadCache = vi.fn(async () => null)
+    clearCache = vi.fn(async () => {})
     generate = vi.fn(() => ({
       name: 'workspace',
       structure: [],
@@ -281,5 +282,63 @@ describe('CodebaseIndexService scheduling', () => {
       isIndexing: false,
       error: 'Index worker exited unexpectedly with code 1',
     })
+  })
+
+  // initialized 只在几个 await 之后才置位，而 8 个 IPC 处理器都以
+  // `await indexService.initialize()` 开头，彼此没有互斥。两次并发加载会把
+  // 每个符号留成两份，与全量构建交错时还会让构建方拿到 null 的符号表。
+  it('shares one initialization across concurrent callers', async () => {
+    const loading = deferred()
+    let loads = 0
+    const internals = service as unknown as { loadIndex(): Promise<void> }
+    internals.loadIndex = vi.fn(async () => {
+      loads += 1
+      await loading.promise
+    })
+
+    const first = service.initialize()
+    const second = service.initialize()
+    await vi.waitFor(() => expect(loads).toBe(1))
+
+    loading.resolve()
+    await Promise.all([first, second])
+    expect(loads).toBe(1)
+
+    await service.initialize()
+    expect(loads).toBe(1)
+  })
+
+  // 清空之后 lastIndexedAt 若还留着，updateFiles 会把随后任意一次文件保存
+  // 当成增量更新放行，于是长出一个只含那一个文件、却自称完整的索引。
+  it('clears the completed-index marker and persists the cleared status', async () => {
+    const internals = service as unknown as { saveIndex(): Promise<void> }
+    const saveIndex = vi.fn(async () => {})
+    internals.saveIndex = saveIndex
+
+    structuralStoreState.loadBatches = [[{
+      id: 'cached-chunk',
+      filePath: 'C:/workspace/src/cached.ts',
+      relativePath: 'src/cached.ts',
+      fileHash: 'hash',
+      content: 'function cachedNeedle() {}',
+      startLine: 1,
+      endLine: 1,
+      type: 'function',
+      language: 'typescript',
+      symbols: ['cachedNeedle'],
+    }]]
+    structuralStoreState.metadata = { totalFiles: 1, totalChunks: 1, savedAt: 123 }
+    await service.initialize()
+    expect(service.getStatus().lastIndexedAt).toBe(123)
+
+    await service.clearIndex()
+
+    expect(service.getStatus()).toMatchObject({ totalFiles: 0, indexedFiles: 0, totalChunks: 0 })
+    expect(service.getStatus().lastIndexedAt).toBeUndefined()
+    expect(saveIndex).toHaveBeenCalled()
+    await expect(service.hasIndex()).resolves.toBe(false)
+
+    await service.updateFiles(['C:/workspace/src/a.ts'])
+    expect(workerState.instances).toHaveLength(0)
   })
 })

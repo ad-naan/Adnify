@@ -101,13 +101,26 @@ export async function waitForRelaunchReady(ticket: RelaunchTicket, timeoutMs = 2
   return false
 }
 
+/**
+ * 等旧进程退出。只有 ESRCH（查无此进程）算退出。
+ *
+ * 原先是 `try { process.kill(pid, 0) } catch { return true }` —— 任何异常都当成
+ * 「已退出」，而 EPERM 恰恰意味着进程还活着、只是拿不到句柄。降权重启
+ * （scheduleNormalRelaunch 用 Shell.Application 刻意生成一个中完整性子进程）
+ * 正好落在这个方向上：中完整性的新进程去探测高完整性的旧进程，
+ * Windows 返回 ERROR_ACCESS_DENIED → EPERM → 第一轮就返回 true，
+ * 整个握手形同不存在。新进程随即去抢 single-instance 锁，
+ * 而旧进程的 before-quit 清理还要跑上好几秒（渲染进程保存 8s + 全局清理 5s），
+ * 于是抢锁失败并退出 —— 用户点了「以普通权限重启」，结果一个窗口都没有。
+ */
 export async function waitForParentExit(context: RelaunchContext, timeoutMs = 30_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
       process.kill(context.parentPid, 0)
-    } catch {
-      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true
+      // EPERM：进程仍在，继续等。其他错误码也按「还在」处理，宁可等到超时。
     }
     await new Promise(resolve => setTimeout(resolve, 100))
   }

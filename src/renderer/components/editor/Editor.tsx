@@ -29,6 +29,7 @@ import { consumePendingNavigation } from '@services/editorNavigation'
 import {
   commitEditorBufferSnapshot,
   flushEditorBufferSnapshots,
+  isWritableDocumentKind,
   replaceEditorBufferContent,
   scheduleEditorBufferSnapshot,
 } from '@services/editorBufferService'
@@ -433,7 +434,13 @@ export default function Editor() {
 
   const handleSave = useCallback(async () => {
     if (isPlanBoardDocument) return
+    // 只读预览（large-preview）不参与写盘：此时主编辑器已卸载并 dispose，
+    // 但 editorRef 仍指向旧实例，getValue() 会返回 '' 并把整个文件截成 0 字节。
+    if (!isWritableDocumentKind(activeFile?.kind)) return
     if (activeFile && editorRef.current) {
+      // 已 dispose 的编辑器 getModel() 返回 null；此时 getValue() 是 '' 而非真实内容，
+      // 绝不能据此写盘。
+      if (!editorRef.current.getModel()) return
       const config = getEditorConfig()
       if (config.formatOnSave) {
         const formatAction = editorRef.current.getAction('editor.action.formatDocument')

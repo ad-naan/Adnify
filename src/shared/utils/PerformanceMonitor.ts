@@ -114,6 +114,7 @@ class PerformanceMonitorClass {
   private lastLeakWarningAt = Number.NEGATIVE_INFINITY
   private lastPressureWarningAt = Number.NEGATIVE_INFINITY
   private heapLimit: number | null | undefined = undefined
+  private heapLimitProvider: (() => number | null) | null = null
   
   // 新增：采样计数器（用于确定性采样）
   private sampleCounters: Map<MetricCategory, number> = new Map()
@@ -263,18 +264,37 @@ class PerformanceMonitorClass {
   }
 
   /**
-   * V8 堆上限（仅主进程可得）。渲染进程返回 null。
+   * V8 堆上限。渲染进程用 Chrome 的 performance.memory；主进程没有该 API，
+   * 需由宿主通过 setHeapLimitProvider 注入 v8.getHeapStatistics()。
+   *
+   * 之前这里只有 performance.memory 一条分支，而它是 Chrome 独有的
+   * （Node 里 `'memory' in performance` 为 false），于是主进程恒得 null、
+   * detectMemoryPressure 全程 early-return —— 偏偏主进程才是最需要 OOM 预警的
+   * 地方（索引 / embedding / tree-sitter 都在这里分配大块内存）。
+   *
+   * 用注入而非在此 require('node:v8')：src/shared 是 main/renderer 共用代码，
+   * 全目录零 node builtin 引用，不能为这一处破例把 node:v8 拖进渲染进程 bundle。
    */
   private getHeapLimit(): number | null {
     if (this.heapLimit !== undefined) return this.heapLimit
 
     this.heapLimit = null
-    if (typeof performance !== 'undefined' && 'memory' in performance) {
+
+    if (this.heapLimitProvider) {
+      try {
+        this.heapLimit = this.heapLimitProvider() ?? null
+      } catch {
+        this.heapLimit = null
+      }
+    }
+
+    if (this.heapLimit === null && typeof performance !== 'undefined' && 'memory' in performance) {
       const memory = (performance as typeof performance & {
         memory?: { jsHeapSizeLimit: number }
       }).memory
       this.heapLimit = memory?.jsHeapSizeLimit ?? null
     }
+
     return this.heapLimit
   }
 
@@ -320,6 +340,17 @@ class PerformanceMonitorClass {
    */
   setEnabled(enabled: boolean): void {
     this.config.enabled = enabled
+  }
+
+  /**
+   * 注入 V8 堆上限来源。主进程在启动时调用并传入 v8.getHeapStatistics()，
+   * 否则 detectMemoryPressure 在主进程里拿不到上限、无法发出 OOM 预警。
+   * 详见 getHeapLimit 的注释。
+   */
+  setHeapLimitProvider(provider: (() => number | null) | null): void {
+    this.heapLimitProvider = provider
+    // 清掉缓存的探测结果，让下一次采样按新 provider 重新取值。
+    this.heapLimit = undefined
   }
 
   /**

@@ -61,7 +61,9 @@ export function registerProviderCredentialHandlers(): void {
   })
 
   safeIpcHandle('credentials:oauth:status', async () => OpenAIAuthService.getStatus())
-  safeIpcHandle('credentials:oauth:token', async () => ({
-    token: await OpenAIAuthService.getValidToken(),
-  }))
+  // 这里曾经有一个 credentials:oauth:token 通道，直接把刷新后的 ChatGPT
+  // access token 交给渲染进程，而渲染进程从来没有调用过它 —— 所有真正的消费方
+  // （modelFactory、healthCheck）都在主进程里直接调 getValidToken()。
+  // 打包后的 CSP 是 connect-src 'self' https:，一个能在渲染进程里执行的脚本
+  // 拿到 bearer token 就能发去任意 HTTPS 主机，所以这是纯粹白送的攻击面。
 }

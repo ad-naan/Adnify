@@ -199,9 +199,16 @@ export function createFileChangeHandler(
     const deleteEvents = events.filter(e => e.type === 'delete')
     const updateEvents = events.filter(e => e.type !== 'delete')
 
-    // 处理删除
-    for (const event of deleteEvents) {
-      await indexService.deleteFileIndex(event.path)
+    // 处理删除。每个删除单独兜错：这一批事件在 drain() 里已经从缓冲区清掉了，
+    // 没有重投递，所以第一个删除失败（结构化存储 30s 超时、worker 挂掉、
+    // 一致性校验拒绝）不能把同一批里其余的删除和整批更新一起带走 ——
+    // 那些文件的检索结果会永久停留在旧内容上，只有手动全量重建才能恢复。
+    const deleteResults = await Promise.allSettled(
+      deleteEvents.map(event => indexService.deleteFileIndex(event.path))
+    )
+    const failedDeletes = deleteResults.filter(result => result.status === 'rejected').length
+    if (failedDeletes > 0) {
+      logger.index.warn(`[FileChangeBuffer] ${failedDeletes}/${deleteEvents.length} deletions failed`)
     }
 
     // 批量处理更新

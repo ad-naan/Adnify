@@ -273,6 +273,7 @@ export const zh = {
   'confirmUnsavedChanges': '"{name}" 有未保存的更改。是否保存？',
   'confirmRestoreCheckpoint': '这将把所有文件恢复到此消息之前的状态，并删除之后的所有消息。确定继续吗？',
   'file.externalModifiedReload': '文件 "{name}" 已被外部修改。重新加载并丢弃本地更改吗？',
+  'file.reencodeDiscardChanges': '切换编码需要按新编码重新读取磁盘内容，"{name}" 的未保存更改将被丢弃。继续吗？',
 
   // Error Messages (新增)
   'error.unknown': '发生未知错误',

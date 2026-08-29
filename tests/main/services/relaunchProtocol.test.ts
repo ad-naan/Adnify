@@ -54,6 +54,57 @@ describe('relaunch protocol', () => {
     await expect(waitForParentExit({ ...ticket, parentPid: 2_147_483_647 }, 250)).resolves.toBe(true)
   })
 
+  // 降权重启（Shell.Application）会让中完整性的新进程去探测高完整性的旧进程，
+  // Windows 返回 ERROR_ACCESS_DENIED → EPERM。把它当成「已退出」等于整个握手不存在：
+  // 新进程立刻去抢 single-instance 锁，而旧进程的 before-quit 清理还要好几秒，
+  // 抢不到就退出 —— 用户点了「以普通权限重启」却什么都没打开。
+  it('keeps waiting when the parent handle is not accessible (EPERM)', async () => {
+    const ticket = createRelaunchTicket()
+    tickets.push(ticket)
+    const realKill = process.kill
+    let probes = 0
+    process.kill = ((pid: number, signal?: string | number) => {
+      if (signal === 0 && pid === ticket.parentPid) {
+        probes += 1
+        const error = new Error('operation not permitted') as NodeJS.ErrnoException
+        error.code = 'EPERM'
+        throw error
+      }
+      return realKill(pid, signal as never)
+    }) as typeof process.kill
+
+    try {
+      await expect(waitForParentExit(ticket, 300)).resolves.toBe(false)
+    } finally {
+      process.kill = realKill
+    }
+    expect(probes).toBeGreaterThan(1)
+  })
+
+  it('stops waiting as soon as the parent probe reports ESRCH', async () => {
+    const ticket = createRelaunchTicket()
+    tickets.push(ticket)
+    const realKill = process.kill
+    let probes = 0
+    process.kill = ((pid: number, signal?: string | number) => {
+      if (signal === 0 && pid === ticket.parentPid) {
+        probes += 1
+        if (probes < 2) return true
+        const error = new Error('no such process') as NodeJS.ErrnoException
+        error.code = 'ESRCH'
+        throw error
+      }
+      return realKill(pid, signal as never)
+    }) as typeof process.kill
+
+    try {
+      await expect(waitForParentExit(ticket, 5_000)).resolves.toBe(true)
+    } finally {
+      process.kill = realKill
+    }
+    expect(probes).toBe(2)
+  })
+
   it('encodes executable paths and arguments in elevated and normal launch scripts', () => {
     const executable = 'C:\\Program Files\\Adnify\\Adnify.exe'
     const args = ['C:\\Project With Spaces\\app', '--adnify-relaunch-token=token']

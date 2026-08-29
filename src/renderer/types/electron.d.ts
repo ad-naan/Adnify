@@ -701,7 +701,6 @@ export interface ElectronAPI {
   credentialsOAuthLogin: () => Promise<{ success: boolean; accountID?: string; error?: string }>
   credentialsOAuthLogout: () => Promise<{ success: boolean; error?: string }>
   credentialsOAuthStatus: () => Promise<{ loggedIn: boolean; accountID?: string; email?: string; planType?: string; expiresAt?: number }>
-  credentialsOAuthToken: () => Promise<{ token: string | null }>
   credentialsOAuthUsage: (options?: { refresh?: boolean }) => Promise<{
     usage: {
       planType?: string

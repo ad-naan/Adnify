@@ -1,5 +1,6 @@
 import { monaco } from '@renderer/monacoWorker'
 import { useStore } from '@store'
+import type { EditorDocumentKind } from '@shared/types/editorDocument'
 
 const SNAPSHOT_DELAY_MS = 100
 const pendingSnapshots = new Map<string, { content: string; timer: ReturnType<typeof setTimeout> }>()
@@ -9,6 +10,21 @@ function cancelPendingSnapshot(filePath: string): void {
   if (!pending) return
   clearTimeout(pending.timer)
   pendingSnapshots.delete(filePath)
+}
+
+/**
+ * 只读预览文档不得参与任何写盘路径。
+ *
+ * `large-preview` 只把首个分页载入 store，并由 LargeFileViewer(readOnly) 渲染 ——
+ * 它从不为该路径注册 `file://` model。因此一旦它进入保存流程：
+ * getEditorBufferContent 回退到 store 里的首页内容（把 GB 级文件截成 2MB），
+ * 或者 Editor 里那个已 dispose 的 editorRef 返回 ''（Monaco 在 _modelData 为空时
+ * 返回空串而非抛错），file:write 只挡 undefined/null，于是整个文件被截成 0 字节。
+ *
+ * 因此写盘的判定放在这里，而不是各个调用点 —— 新增保存入口时默认就是安全的。
+ */
+export function isWritableDocumentKind(kind: EditorDocumentKind | undefined): boolean {
+  return kind !== 'large-preview'
 }
 
 export function getEditorBufferContent(filePath: string, fallback: string): string {

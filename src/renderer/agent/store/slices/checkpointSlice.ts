@@ -3,6 +3,7 @@ import type { StateCreator } from 'zustand'
 import { logger } from '@utils/Logger'
 import { internalWriteTracker } from '@/renderer/services/internalWriteTracker'
 import { buildAgentSessionSnapshot, persistCriticalAgentSessionState, stageAgentSessionState } from '../agentStorage'
+import { bumpThreadMessageVersion, withReplacedMessages } from '../threadMessages'
 import type {
   ChatThread,
   CheckpointImage,
@@ -387,12 +388,20 @@ export const createCheckpointSlice: StateCreator<
       const currentThread = currentState.threads[threadId]
       if (!currentThread) return currentState
 
+      // 回滚不受 isStreaming 拦截，用户可以在流式输出中途点回滚，
+      // 于是截断后的 messages 里可能已经没有 liveAssistantMessage 指向的那条。
+      // withReplacedMessages 会顺手收回悬空的覆盖层，否则线程永久卡在 streaming。
+      const nextMessages = messageIdx === -1
+        ? currentThread.messages
+        : currentThread.messages.slice(0, messageIdx)
+
       return {
+        threadMessageVersions: bumpThreadMessageVersion(currentState.threadMessageVersions, threadId),
         threads: {
           ...currentState.threads,
           [threadId]: {
             ...currentThread,
-            messages: messageIdx === -1 ? currentThread.messages : currentThread.messages.slice(0, messageIdx),
+            ...withReplacedMessages(currentThread, nextMessages),
             messageCheckpoints: nextCheckpoints,
             lastModified: Date.now(),
           },
