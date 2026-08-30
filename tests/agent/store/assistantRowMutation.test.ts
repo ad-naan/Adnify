@@ -101,6 +101,50 @@ describe('mutateAssistantRow', () => {
     expect(thread.streamState).toMatchObject({ phase: 'tool_running', requestId: 'req-1' })
   })
 
+  it('行被截断时 finishToolExecution 不留孤儿 tool message，返回空 id', () => {
+    const threadId = useAgentStore.getState().createThread()
+    useAgentStore.getState().addUserMessage('hi', undefined, threadId)
+    const countBefore = useAgentStore.getState().threads[threadId].messages.length
+
+    const resultId = useAgentStore.getState().finishToolExecution('truncated-message', 'tc-gone', {
+      status: 'success',
+      result: 'ok',
+    }, {
+      name: 'read_file',
+      content: 'ok',
+      type: 'success',
+    }, threadId)
+
+    expect(resultId).toBe('')
+    expect(useAgentStore.getState().threads[threadId].messages).toHaveLength(countBefore)
+    expect(useAgentStore.getState().threads[threadId].messages.some(m => m.role === 'tool')).toBe(false)
+  })
+
+  it('行还在时照常落地工具终态与结果消息', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+    useAgentStore.getState().addToolCallPart(assistantId, {
+      id: 'tc-done',
+      name: 'read_file',
+      arguments: {},
+    }, threadId)
+
+    const resultId = useAgentStore.getState().finishToolExecution(assistantId, 'tc-done', {
+      status: 'success',
+      result: 'file content',
+    }, {
+      name: 'read_file',
+      content: 'file content',
+      type: 'success',
+    }, threadId)
+
+    const messages = useAgentStore.getState().threads[threadId].messages
+    expect(messages.at(-1)).toMatchObject({ id: resultId, role: 'tool', toolCallId: 'tc-done' })
+    const assistant = messages.find(message => message.id === assistantId)
+    if (assistant?.role !== 'assistant') throw new Error('assistant row missing')
+    expect(assistant.toolCalls?.[0]).toMatchObject({ status: 'success', result: 'file content' })
+  })
+
   it('落地的工具调用不带流式预览状态（streamingState 不进持久化）', () => {
     const threadId = useAgentStore.getState().createThread()
     const assistantId = useAgentStore.getState().addAssistantMessage()

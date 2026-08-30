@@ -1036,60 +1036,36 @@ export const createMessageSlice: StateCreator<
             Object.entries(updates).filter(([key, value]) => key !== 'streamingState' && value !== undefined)
         ) as Partial<ToolCall>
 
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
-
-            // 同 updateToolCall：覆盖层存在时 thread.messages 里的那条是旧快照，
-            // 直接改它会在下一次 materialize 时被覆盖层整条盖掉，工具的终态和结果
-            // 就都丢了。这里顺手把覆盖层落地（settle），流式的下一个 token 会重建它。
-            const messages = materializeThreadMessages(thread).slice()
-            const messageIdx = messages.findIndex(
-                message => message.id === messageId && message.role === 'assistant'
-            )
-
-            if (messageIdx !== -1) {
-                const assistantMessage = messages[messageIdx] as AssistantMessage
+        // 行被截断（回滚检查点 / 切分支）时整条放弃：以前这里无条件 push 工具结果，
+        // 留下一条没有父 assistant 消息的 tool message —— 正是 trimStoredMessages
+        // 特意规避的那种形态，多数 provider 直接拒绝整段历史。
+        const committed = mutateAssistantRow(set, get, {
+            threadId,
+            messageId,
+            edit: assistantMessage => {
                 const existingToolCall = assistantMessage.toolCalls?.find(call => call.id === toolCallId)
-                if (existingToolCall) {
-                    const completedToolCall = { ...existingToolCall, ...cleanUpdates }
-                    messages[messageIdx] = {
-                        ...assistantMessage,
-                        parts: assistantMessage.parts.map(part =>
-                            part.type === 'tool_call' && part.toolCall.id === toolCallId
-                                ? { ...part, toolCall: completedToolCall }
-                                : part
-                        ),
-                        toolCalls: assistantMessage.toolCalls?.map(call =>
-                            call.id === toolCallId ? completedToolCall : call
-                        ),
-                    }
+                if (!existingToolCall) return assistantMessage
+
+                const completedToolCall = { ...existingToolCall, ...cleanUpdates }
+
+                return {
+                    ...assistantMessage,
+                    parts: assistantMessage.parts.map(part =>
+                        part.type === 'tool_call' && part.toolCall.id === toolCallId
+                            ? { ...part, toolCall: completedToolCall }
+                            : part
+                    ),
+                    toolCalls: assistantMessage.toolCalls?.map(call =>
+                        call.id === toolCallId ? completedToolCall : call
+                    ),
                 }
-            }
-            messages.push(resultMessage)
-
-            const toolStreamingPreviews = thread.toolStreamingPreviews?.[toolCallId]
-                ? Object.fromEntries(
-                    Object.entries(thread.toolStreamingPreviews).filter(([id]) => id !== toolCallId)
-                )
-                : thread.toolStreamingPreviews
-
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: {
-                        ...thread,
-                        messages,
-                        liveAssistantMessage: undefined,
-                        toolStreamingPreviews,
-                        lastModified: Date.now(),
-                    },
-                },
-            }
+            },
+            append: [resultMessage],
+            dropPreviews: [toolCallId],
+            touchLastModified: true,
         })
 
-        return resultMessage.id
+        return committed ? resultMessage.id : ''
     },
 
     // 添加推理部分
