@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest'
 import { selectLiveState, type LiveSelectorState } from './chatMessageLiveSelector'
 import type { InteractiveContent } from '@renderer/agent/types/interactive'
+import type { StreamPhase } from '@renderer/agent/types/thread'
 
 const INTERACTIVE: InteractiveContent = {
   type: 'interactive',
@@ -19,7 +20,7 @@ const INTERACTIVE: InteractiveContent = {
 function makeState(opts: {
   threadId?: string
   assistantId?: string
-  phase?: string
+  phase?: StreamPhase
   messageId?: string
   partsContent?: string
 }): LiveSelectorState {
@@ -85,7 +86,7 @@ describe('selectLiveState — 引用稳定性（卡顿的根因）', () => {
   })
 
   it('phase 不在活跃集合内时保留当前回复的最终帧', () => {
-    for (const phase of ['idle', 'done', 'error', 'compressing']) {
+    for (const phase of ['idle', 'error'] as const) {
       const r = selectLiveState(makeState({ phase }), 'm1', true, true)
       expect(r.isStreaming, `phase=${phase}`).toBe(false)
       expect(r.liveParts, `phase=${phase}`).toEqual([{ type: 'text', content: 'hello' }])
@@ -126,7 +127,7 @@ describe('selectLiveState — 流式中仍要拿到实时数据', () => {
   })
 
   it('三种活跃 phase 都算流式', () => {
-    for (const phase of ['streaming', 'tool_running', 'tool_pending']) {
+    for (const phase of ['streaming', 'tool_running', 'tool_pending'] as const) {
       const r = selectLiveState(makeState({ phase }), 'm1', true, true)
       expect(r.isStreaming, `phase=${phase}`).toBe(true)
     }

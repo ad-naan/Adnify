@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { TURN_ACTIVE_PHASES } from '@/renderer/agent/types/thread'
 import { useAgentCommands } from './useAgent'
 import { useModeStore } from '@/renderer/modes/modeStore'
 
@@ -19,13 +20,14 @@ import { useModeStore } from '@/renderer/modes/modeStore'
 export function useMessageQueueConsumer() {
   const { sendMessage } = useAgentCommands()
 
-  // 使用与 selectIsStreaming 一致的逻辑：streaming 或 tool_running 都算 busy
+  // 这里要的是 TURN_ACTIVE_PHASES（含 tool_pending）而**不是** selectIsStreaming：
+  // 等审批期间也算忙，否则队列会在人还没点批准的时候就把下一条消息塞进去。
+  // 三个 phase 集合的分工见 types/thread.ts
   const isBusy = useAgentStore(state => {
     const threadId = state.currentThreadId
     if (!threadId) return false
-    const thread = state.threads[threadId]
-    const phase = thread?.streamState?.phase
-    return phase === 'streaming' || phase === 'tool_running' || phase === 'tool_pending'
+    const phase = state.threads[threadId]?.streamState?.phase
+    return phase !== undefined && TURN_ACTIVE_PHASES.has(phase)
   })
 
   const queue = useMessageQueueStore(s => s.queue)

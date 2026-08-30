@@ -31,6 +31,45 @@ export interface TodoItem {
 
 export type StreamPhase = 'idle' | 'streaming' | 'tool_pending' | 'tool_running' | 'error'
 
+/**
+ * 三个「算不算在流式中」的谓词，回答的是**三个不同问题**，所以刻意保持三个。
+ * 合并任意两个都会具体弄坏一处（下面每条都写了坏法），不要「统一」。
+ *
+ * `phase` 的写入方也分散：`startToolExecution` 会写 `'tool_running'`，而把它恢复成
+ * `'streaming'` 的地方在 `core/tools.ts` 的 `executeToolCalls` 收尾处（工具批次全部结束、
+ * 且 `!abortSignal?.aborted` 时）——这是整个子系统里最难发现的耦合。任何提前 return 掉
+ * 那段恢复逻辑的改动都会让会话永久卡在 `tool_running`：停止按钮一直亮着、持久化一直暂停。
+ */
+
+/** 这一轮对话还在进行中 → 这条消息要显示活跃态（转圈、光标、工具卡片的运行样式）。 */
+export const TURN_ACTIVE_PHASES: ReadonlySet<StreamPhase> = new Set<StreamPhase>([
+    'streaming',
+    'tool_running',
+    'tool_pending',
+])
+
+/**
+ * 请求真的在飞 → 显示停止按钮、暂停会话持久化。
+ *
+ * 不含 `tool_pending`：那是在等人做决定，可能等几分钟。把它算进来会让会话持久化
+ * **无限期挂起**（AgentStore 的持久化早退分支）。
+ */
+export const REQUEST_IN_FLIGHT_PHASES: ReadonlySet<StreamPhase> = new Set<StreamPhase>([
+    'streaming',
+    'tool_running',
+])
+
+/**
+ * 覆盖层（`thread.liveAssistantMessage`）此刻是权威的 → `selectMessageListState` 可以
+ * 忽略 `messages` 引用变化、只认版本号。
+ *
+ * 只含 `'streaming'`：这是唯一有 token 每帧换引用的阶段。加进 `tool_running` 会**放宽
+ * memo 的窗口**，让那些改了引用却不 bump 版本的写入更长时间不可见。
+ */
+export const OVERLAY_AUTHORITATIVE_PHASES: ReadonlySet<StreamPhase> = new Set<StreamPhase>([
+    'streaming',
+])
+
 export type CompressionPhase = 'idle' | 'analyzing' | 'compressing' | 'summarizing' | 'done'
 export type ThreadHandoffStatus = 'idle' | 'ready' | 'transitioning' | 'failed'
 

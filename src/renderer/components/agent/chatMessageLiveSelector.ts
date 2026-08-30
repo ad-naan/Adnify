@@ -25,9 +25,7 @@
 
 import type { AssistantPart } from '@renderer/agent/types'
 import type { InteractiveContent } from '@renderer/agent/types/interactive'
-
-/** 这些 phase 才算「流式进行中」 */
-export const ACTIVE_STREAM_PHASES = new Set(['streaming', 'tool_running', 'tool_pending'])
+import { TURN_ACTIVE_PHASES, type StreamPhase } from '@renderer/agent/types/thread'
 
 /**
  * selector 只依赖 store 的这几个字段。写成窄接口而不是引用整个 AgentStore
@@ -38,7 +36,7 @@ export interface LiveSelectorState {
   threads: Record<
     string,
     | {
-        streamState?: { assistantId?: string; phase?: string }
+        streamState?: { assistantId?: string; phase?: StreamPhase }
         liveAssistantMessage?: {
           id: string
           role: string
@@ -85,7 +83,8 @@ export function selectLiveState(
     Boolean(messageIsStreaming) &&
     !!threadId &&
     streamState?.assistantId === messageId
-  const isActiveAssistant = isCurrentAssistant && ACTIVE_STREAM_PHASES.has(streamState?.phase ?? 'idle')
+  // 词表在 types/thread.ts：那里并排放着三个 phase 集合，写清了为什么必须是三个
+  const isActiveAssistant = isCurrentAssistant && TURN_ACTIVE_PHASES.has(streamState?.phase ?? 'idle')
 
   // 静态消息不订阅 live 引用。当前回复刚结束时，streamState 会先退出活跃
   // phase，而父列表传下来的 message props 可能晚一帧更新；这时继续读取最终

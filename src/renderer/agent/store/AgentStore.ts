@@ -35,6 +35,7 @@ import {
 } from './slices/planSlice'
 import { createStreamFlushSlice, type StreamFlushSlice } from './slices/streamFlushSlice'
 import { createIdleHandoffState } from '../types'
+import { OVERLAY_AUTHORITATIVE_PHASES, REQUEST_IN_FLIGHT_PHASES } from '../types/thread'
 import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats, ThreadHandoffState, AssistantMessage } from '../types'
 import type { LastActiveServer } from '../types'
 import type { CompressionStats } from '../core/types'
@@ -584,7 +585,7 @@ export const selectMessageListState = (state: AgentStore) => {
 
     const messages = thread.messages || EMPTY_MESSAGES
     const version = state.threadMessageVersions[threadId] || 0
-    const isLiveStreamingReplacement = thread.streamState.phase === 'streaming'
+    const isLiveStreamingReplacement = OVERLAY_AUTHORITATIVE_PHASES.has(thread.streamState.phase)
 
     // Live token chunks replace the canonical message array, but they do not
     // change the timeline's membership or order. Keep the parent list snapshot
@@ -633,7 +634,8 @@ export const selectContextItems = (state: AgentStore) => {
 
 export const selectIsStreaming = (state: AgentStore) => {
     const streamState = selectStreamState(state)
-    return streamState.phase === 'streaming' || streamState.phase === 'tool_running'
+    // 不含 tool_pending：那是在等人做决定。词表与理由见 types/thread.ts
+    return REQUEST_IN_FLIGHT_PHASES.has(streamState.phase)
 }
 
 export const selectIsAwaitingApproval = (state: AgentStore) => {
