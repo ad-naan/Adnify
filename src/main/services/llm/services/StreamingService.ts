@@ -13,9 +13,15 @@ import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { prepareExecutionRequest } from '../core/RequestExecution'
 import { executeWithGenerationRecovery } from '../core/GenerationRecovery'
-import { LLMError, convertUsage } from '../types'
-import type { StreamEvent, TokenUsage, ResponseMetadata } from '../types'
-import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
+import { LLMError, convertUsage, isImmediateStreamEvent } from '../types'
+import type {
+  StreamEvent,
+  BufferedStreamEvent,
+  ImmediateStreamEvent,
+  TokenUsage,
+  ResponseMetadata,
+} from '../types'
+import type { LLMConfig, LLMMessage, ToolDefinition, RendererStreamChunk } from '@shared/types'
 import type { ModelMessage } from '@ai-sdk/provider-utils'
 import { ThinkingStrategyFactory, type ThinkingStrategy } from '../strategies/ThinkingStrategy'
 
@@ -330,8 +336,8 @@ export class StreamingService {
   private window: BrowserWindow
   private messageConverter: MessageConverter
   private toolConverter: ToolConverter
-  // IPC 批量发送缓冲区
-  private eventBuffer = new Map<string, StreamEvent[]>()
+  // IPC 批量发送缓冲区（只装合批事件——立即事件永远不进这里）
+  private eventBuffer = new Map<string, BufferedStreamEvent[]>()
   private flushTimers = new Map<string, NodeJS.Timeout>()
 
   constructor(window: BrowserWindow) {
@@ -780,16 +786,16 @@ export class StreamingService {
   private sendEvent(requestId: string, event: StreamEvent): void {
     if (this.window.isDestroyed()) return
 
-    // 立即发送的事件类型（不批量）
-    const immediateEvents = ['error', 'done', 'tool-call-start', 'tool-call-available']
-
-    if (immediateEvents.includes(event.type)) {
-      this.flushEvents(requestId) // 先刷新缓冲区
+    // 立即事件绕过合批：它们的载荷由 sendEventImmediate 手写，且发送前会强制冲刷
+    // 缓冲区，保证「工具卡片出现在它前面的正文之后」。划分见 types.ts 的
+    // IMMEDIATE_STREAM_EVENT_TYPES——挪动任何一个都会在两侧编译报错。
+    if (isImmediateStreamEvent(event)) {
+      this.flushEvents(requestId)
       this.sendEventImmediate(requestId, event)
       return
     }
 
-    // 批量发送的事件类型（text, reasoning, tool-call-delta）
+    // 批量发送的事件类型（text, reasoning, tool-call-delta, tool-call-delta-end, source）
     if (!this.eventBuffer.has(requestId)) {
       this.eventBuffer.set(requestId, [])
     }
@@ -838,9 +844,14 @@ export class StreamingService {
   }
 
   /**
-   * 序列化事件
+   * kebab-case 的内部事件翻成渲染端的 snake_case 线协议。
+   *
+   * 返回类型是 RendererStreamChunk 而不是 any，入参是 BufferedStreamEvent 而不是
+   * StreamEvent，所以这个 switch 必须穷尽——原来的 `default: return event` 会把
+   * 未翻译的事件原样上线（kebab-case），而渲染端的 switch 没有 default，结果是
+   * 静默丢弃。现在少写一个 case 就是编译错误。
    */
-  private serializeEvent(event: StreamEvent): any {
+  private serializeEvent(event: BufferedStreamEvent): RendererStreamChunk {
     switch (event.type) {
       case 'text':
         return { type: 'text', content: event.content }
@@ -857,15 +868,13 @@ export class StreamingService {
         return { type: 'tool_call_delta_end', id: event.id }
       case 'source':
         return { type: 'source', source: event.source }
-      default:
-        return event
     }
   }
 
   /**
    * 立即发送事件（不批量）
    */
-  private sendEventImmediate(requestId: string, event: StreamEvent): void {
+  private sendEventImmediate(requestId: string, event: ImmediateStreamEvent): void {
     if (this.window.isDestroyed()) return
 
     try {

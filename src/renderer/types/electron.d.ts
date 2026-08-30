@@ -47,7 +47,7 @@ import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/
 
 // 从 @shared/types/llm 重新导出
 export type {
-  LLMStreamChunk,
+  RendererStreamChunk,
   LLMToolCall,
   LLMResult,
   LLMError,
@@ -445,7 +445,7 @@ export interface ElectronAPI {
     code?: string
   }>
   abortMessage: (requestId?: string) => void
-  onLLMStream: (requestId: string, callback: (chunk: LLMStreamChunk) => void) => () => void
+  onLLMStream: (requestId: string, callback: (chunk: RendererStreamChunk) => void) => () => void
   onLLMToolCall: (callback: (toolCall: LLMToolCall) => void) => () => void
   onLLMError: (requestId: string, callback: (error: LLMError) => void) => () => void
   onLLMDone: (requestId: string, callback: (result: LLMResult) => void) => () => void

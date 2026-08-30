@@ -12,6 +12,11 @@ import type {
 import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/formatter'
 import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, PrivilegeRequiredEvent, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
 import type { FileMutationResult } from '@shared/types/fileMutation'
+import type { RendererStreamChunk } from '@shared/types/llm'
+// 值导入必须用相对路径：vite.config.ts 的 preload 入口没有配 resolve.alias
+// （main 和三个 worker 都配了），preload 今天能编译只因为它所有别名导入都是
+// `import type`，会被擦除。
+import { forEachStreamChunk, type StreamBatchEnvelope } from '../shared/utils/llmStreamBatch'
 
 // 本地类型定义（避免从 renderer 导入）
 type Language = 'en' | 'zh'
@@ -30,24 +35,6 @@ interface SearchFileResult {
   path: string
   line: number
   text: string
-}
-
-interface LLMStreamChunk {
-  type: 'text' | 'reasoning' | 'error' | 'tool_call' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_delta_end' | 'tool_call_end' | 'tool_call_available' | 'source'
-  content?: string
-  error?: string
-  id?: string
-  name?: string
-  arguments?: Record<string, unknown>
-  argumentsDelta?: string
-  source?: {
-    id: string
-    sourceType: 'url' | 'document'
-    url?: string
-    title?: string
-    mediaType?: string
-    filename?: string
-  }
 }
 
 interface LLMError {
@@ -327,7 +314,7 @@ export interface ElectronAPI {
   embedText: (params: { text: string; config: any }) => Promise<any>
   embedMany: (params: { texts: string[]; config: any }) => Promise<any>
   findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => Promise<any>
-  onLLMStream: (requestId: string, callback: (data: LLMStreamChunk) => void) => () => void
+  onLLMStream: (requestId: string, callback: (data: RendererStreamChunk) => void) => () => void
   onLLMError: (requestId: string, callback: (error: LLMError) => void) => () => void
   onLLMDone: (requestId: string, callback: (data: LLMResult) => void) => () => void
 
@@ -692,15 +679,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   embedMany: (params: { texts: string[]; config: any }) => ipcRenderer.invoke('llm:embedMany', params),
   findSimilar: (params: { query: string; candidates: string[]; config: any; topK?: number }) => ipcRenderer.invoke('llm:findSimilar', params),
   // LLM 事件订阅（使用动态 IPC 频道实现请求隔离）
-  onLLMStream: (requestId: string, callback: (data: LLMStreamChunk) => void) => {
+  onLLMStream: (requestId: string, callback: (data: RendererStreamChunk) => void) => {
     const channel = `llm:stream:${requestId}`
-    const handler = (_: IpcRendererEvent, data: LLMStreamChunk | { type: 'batch'; events: LLMStreamChunk[] }) => {
-      // 处理批量事件
-      if (data.type === 'batch' && 'events' in data) {
-        data.events.forEach(event => callback(event))
-      } else {
-        callback(data as LLMStreamChunk)
-      }
+    // 合批信封的拆包只允许存在一份实现，主进程的 golden 测试用的是同一个函数，
+    // 否则它钉住的就不是渲染端真正看到的序列。
+    const handler = (_: IpcRendererEvent, data: StreamBatchEnvelope<RendererStreamChunk>) => {
+      forEachStreamChunk(data, callback)
     }
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)

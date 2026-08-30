@@ -110,6 +110,38 @@ export type StreamEvent =
   | { type: 'error'; error: LLMError }
   | { type: 'done'; usage?: TokenUsage; metadata?: ResponseMetadata; reasoning?: string; reasoningSignature?: string }
 
+/**
+ * 必须绕过合批、立即送达的事件。
+ *
+ * 为什么这个划分要上升到类型：这些事件的载荷是 sendEventImmediate 手写的，而合批
+ * 通道的载荷是 serializeEvent 翻译的（kebab→snake）。以前这个划分是一个裸的
+ * `string[]`，`includes` 不会窄化任何东西，于是把某个事件从立即通道挪进合批通道
+ * 只需要动一个字符串——它就会命中 serializeEvent 的 `default: return event`，
+ * 以 kebab-case 上线，被渲染端无 default 的 switch 静默丢弃。工具调用整个消失，
+ * 而类型检查全绿。
+ *
+ * 现在两侧的形参类型都由这里派生：挪动一个事件会在 serializeEvent 少一个 case
+ * 或 sendEventImmediate 多一个未处理分支上直接编译报错。
+ */
+export const IMMEDIATE_STREAM_EVENT_TYPES = [
+  'error',
+  'done',
+  'tool-call-start',
+  'tool-call-available',
+] as const
+
+export type ImmediateStreamEventType = typeof IMMEDIATE_STREAM_EVENT_TYPES[number]
+
+/** 走 llm:error / llm:done / 裸 llm:stream 载荷的事件 */
+export type ImmediateStreamEvent = Extract<StreamEvent, { type: ImmediateStreamEventType }>
+
+/** 进合批缓冲、由 serializeEvent 翻成 snake_case 的事件 */
+export type BufferedStreamEvent = Exclude<StreamEvent, ImmediateStreamEvent>
+
+export function isImmediateStreamEvent(event: StreamEvent): event is ImmediateStreamEvent {
+  return (IMMEDIATE_STREAM_EVENT_TYPES as readonly string[]).includes(event.type)
+}
+
 // ============================================
 // 结构化输出类型
 // ============================================

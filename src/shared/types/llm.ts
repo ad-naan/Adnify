@@ -198,32 +198,54 @@ export interface LLMResponseMetadata {
     finishReason?: string
 }
 
-export interface LLMStreamChunk {
-    type:
-        | 'text'
-        | 'tool_call'
-        | 'tool_call_start'
-        | 'tool_call_delta'
-        | 'tool_call_delta_end'
-        | 'tool_call_end'
-        | 'tool_call_available'
-        | 'reasoning'
-        | 'source'
-        | 'error'
-    content?: string
-    toolCall?: LLMToolCall
-    toolCallDelta?: {
-        id?: string
-        name?: string
-        args?: string
-    }
-    source?: LLMStreamSource
-    error?: string
+/**
+ * 渲染端在 `llm:stream:${requestId}` 频道上实际看到的一条事件。
+ *
+ * 这是这条线协议的**唯一**声明。以前同一个形状被写了四遍（主进程 StreamEvent
+ * 用 kebab-case、preload 一份、这里一份、stream.ts 内联一份），而这一份还是错的：
+ * 带一个无人读写的 `toolCallDelta`，却缺了真正在线上传的 `id`/`name`/`arguments`。
+ * 于是「改一个字段名」不会有任何地方报错，只会在运行时静默丢事件。
+ *
+ * 改成判别联合而不是宽松的可选字段包，是为了让 `switch (chunk.type)` 能被编译器
+ * 窄化——少写一个 case 或多读一个字段都会变成编译错误。
+ *
+ * 注意这里**不含** error 与 done：它们走各自的 `llm:error:*` / `llm:done:*` 频道，
+ * 载荷形状也不同。旧类型把 `'error'` 列在这里，而渲染端 switch 从来没有对应的
+ * case，属于纯误导。
+ *
+ * 形状由 tests/main/streamingServiceGolden.test.ts 逐字段钉住。
+ */
+export type RendererStreamChunk =
+    | { type: 'text'; content: string }
+    | { type: 'reasoning'; content: string }
+    | { type: 'tool_call_start'; id: string; name: string }
+    | { type: 'tool_call_delta'; id: string; name?: string; argumentsDelta: string }
+    | { type: 'tool_call_delta_end'; id: string }
+    | { type: 'tool_call_available'; id: string; name: string; arguments: Record<string, unknown> }
+    | { type: 'source'; source: LLMStreamSource }
+
+export type RendererStreamChunkType = RendererStreamChunk['type']
+
+/** `llm:error:${requestId}` 的载荷（见 StreamingService.sendEventImmediate） */
+export interface RendererStreamError {
+    message: string
+    code: string
+    retryable: boolean
+}
+
+/** `llm:done:${requestId}` 的载荷（见 StreamingService.sendEventImmediate） */
+export interface RendererStreamDone {
+    reasoning?: string
+    reasoningSignature?: string
+    usage?: LLMResult['usage']
+    metadata?: LLMResponseMetadata
 }
 
 export interface LLMResult {
     content: string
     reasoning?: string
+    /** 部分 provider（Anthropic）要求把推理签名原样回传，否则下一轮会被拒 */
+    reasoningSignature?: string
     toolCalls?: LLMToolCall[]
     usage?: {
         promptTokens: number
@@ -271,6 +293,8 @@ export interface LLMSendMessageParams {
     tools?: ToolDefinition[]
     systemPrompt?: string
     activeTools?: string[]
+    /** IPC 频道隔离的依据，整套 per-request 通道都靠它；实际调用一直在传 */
+    requestId?: string
 }
 
 // ============================================

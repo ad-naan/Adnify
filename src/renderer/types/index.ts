@@ -12,7 +12,7 @@ export type {
   TextContent,
   ImageContent,
   LLMMessage,
-  LLMStreamChunk,
+  RendererStreamChunk,
   LLMToolCall,
   LLMResult,
   LLMConfig,

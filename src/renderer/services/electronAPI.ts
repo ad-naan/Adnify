@@ -160,28 +160,14 @@ function createGroupedAPI() {
       compactContext: (params: Parameters<typeof raw.compactContext>[0]) => raw.compactContext(params),
       abort: (requestId?: string) => raw.abortMessage(requestId),
       // LLM 事件订阅（使用动态 IPC 频道实现请求隔离）
-      onStream: (requestId: string, callback: (data: {
-        type: string
-        content?: string
-        id?: string
-        name?: string
-        arguments?: unknown
-        argumentsDelta?: string
-        source?: {
-          id: string
-          sourceType: 'url' | 'document'
-          url?: string
-          title?: string
-          mediaType?: string
-          filename?: string
-        }
-      }) => void) =>
+      // 三个频道的载荷形状都由 @shared/types/llm 单点声明，这里不再内联复制。
+      onStream: (requestId: string, callback: (data: import('@/shared/types/llm').RendererStreamChunk) => void) =>
         raw.onLLMStream(requestId, callback),
-      onError: (requestId: string, callback: (error: { message: string; code: string; retryable: boolean }) => void) =>
+      onError: (requestId: string, callback: (error: import('@/shared/types/llm').RendererStreamError) => void) =>
         raw.onLLMError(requestId, callback),
       onDone: (
         requestId: string,
-        callback: (data: { reasoning?: string; usage?: unknown; metadata?: import('@/shared/types/llm').LLMResponseMetadata }) => void
+        callback: (data: import('@/shared/types/llm').RendererStreamDone) => void
       ) =>
         raw.onLLMDone(requestId, callback),
       // Structured Output

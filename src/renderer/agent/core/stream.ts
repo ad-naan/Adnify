@@ -13,7 +13,7 @@ import type { LLMCallResult } from './types'
 import { ToolCallLeakFilter } from '../utils/toolCallLeakFilter'
 import { t } from '@/renderer/i18n'
 import { StreamingEditPreviewCoordinator } from '../services/streamingEditPreview'
-import type { LLMResponseMetadata, LLMStreamSource } from '@/shared/types/llm'
+import type { LLMResponseMetadata, LLMStreamSource, RendererStreamChunk } from '@/shared/types/llm'
 import {
   arePartialArgsEqual,
   parseFinalJsonArgs,
@@ -102,16 +102,7 @@ export function createStreamProcessor(
     logger.agent.info('[StreamProcessor] Active listeners remaining:', activeListenerCount)
   }
 
-  const handleStream = (data: {
-    type: string
-    content?: string
-    id?: string
-    name?: string
-    arguments?: unknown
-    argumentsDelta?: string
-    usage?: unknown
-    source?: LLMStreamSource
-  }) => {
+  const handleStream = (data: RendererStreamChunk) => {
     switch (data.type) {
       case 'text':
         if (data.content) {
@@ -262,12 +253,6 @@ export function createStreamProcessor(
         break
       }
 
-      case 'usage':
-        if (data.usage) {
-          usage = data.usage as TokenUsage
-        }
-        break
-
       case 'source':
         if (data.source) {
           sources.push(data.source)
@@ -276,6 +261,16 @@ export function createStreamProcessor(
           }
         }
         break
+
+      default: {
+        // 以前这里什么都没有：主进程新增或改名一个事件类型，渲染端会静默丢弃它，
+        // 而类型检查全绿——工具调用整个消失就是这么发生的。现在类型上已经不可能
+        // 走到这里（RendererStreamChunk 是判别联合），留下这条日志是为了兜住
+        // 「主进程版本比渲染端新」的热更新窗口。
+        const unknownChunk: never = data
+        logger.agent.warn('[StreamProcessor] Unknown stream chunk type, dropped:', unknownChunk)
+        break
+      }
     }
   }
 
