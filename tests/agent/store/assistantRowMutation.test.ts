@@ -230,6 +230,63 @@ describe('mutateAssistantRow', () => {
   })
 })
 
+describe('commitTimelineMessages 的两个追加型写入', () => {
+  beforeEach(() => {
+    streamingBuffer.clear()
+    useAgentStore.setState({ threads: {}, currentThreadId: null, threadMessageVersions: {} })
+  })
+
+  it('addToolResult 先合成覆盖层，工具结果排在带最新正文的助手行之后', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+    // 覆盖层里带着流式正文，thread.messages 里那份快照还是空的
+    useAgentStore.getState().appendToAssistant(assistantId, 'streamed body', threadId)
+    streamingBuffer.flushNow()
+
+    const resultId = useAgentStore.getState().addToolResult('tc-res', 'read_file', 'ok', 'success', undefined, threadId)
+
+    const messages = useAgentStore.getState().threads[threadId].messages
+    expect(messages.at(-1)).toMatchObject({ id: resultId, role: 'tool' })
+    const assistant = messages.find(message => message.id === assistantId)
+    if (assistant?.role !== 'assistant') throw new Error('assistant row missing')
+    expect(assistant.content).toBe('streamed body')
+    // 覆盖层已落地，后续 materialize 不会再把空快照盖回来
+    expect(useAgentStore.getState().threads[threadId].liveAssistantMessage).toBeUndefined()
+  })
+
+  it('addCheckpoint 会 bump 版本：否则流式期间加的检查点看不见', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const before = version(threadId)
+
+    const checkpointId = useAgentStore.getState().addCheckpoint('tool_edit', {}, threadId)
+
+    expect(version(threadId)).toBe(before + 1)
+    expect(useAgentStore.getState().threads[threadId].messages.at(-1)).toMatchObject({
+      id: checkpointId,
+      role: 'checkpoint',
+    })
+  })
+
+  it('addCheckpoint 保留 MAX_CHECKPOINTS=20 的裁剪，丢最老那个', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const ids: string[] = []
+    for (let i = 0; i < 21; i++) {
+      ids.push(useAgentStore.getState().addCheckpoint('tool_edit', {}, threadId))
+    }
+
+    const messages = useAgentStore.getState().threads[threadId].messages
+    const checkpoints = messages.filter(m => m.role === 'checkpoint')
+    expect(checkpoints).toHaveLength(20)
+    expect(checkpoints.some(m => m.id === ids[0])).toBe(false)
+    expect(checkpoints.at(-1)?.id).toBe(ids[20])
+  })
+
+  it('线程不存在时两个写入都放弃并返回空 id', () => {
+    expect(useAgentStore.getState().addToolResult('tc-x', 'read_file', 'ok', 'success', undefined, 'no-such-thread')).toBe('')
+    expect(useAgentStore.getState().addCheckpoint('tool_edit', {}, 'no-such-thread')).toBe('')
+  })
+})
+
 describe('storeUpdaterGuard', () => {
   it('updater 内部调用会抛错，而不是静默盖掉内层写入', () => {
     expect(() => runStoreUpdater(() => assertOutsideStoreUpdater('_flushTextBuffer'))).toThrow(/set\(\)/)

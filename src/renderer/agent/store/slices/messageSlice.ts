@@ -28,7 +28,7 @@ import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
 import type { BranchSlice } from './branchSlice'
 import type { StreamFlushSlice } from './streamFlushSlice'
-import { mutateAssistantRow } from './assistantRowMutation'
+import { commitTimelineMessages, mutateAssistantRow } from './assistantRowMutation'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
 import { buildPersistedAgentSessionState, persistCriticalAgentSessionState } from '../agentStorage'
@@ -651,24 +651,15 @@ export const createMessageSlice: StateCreator<
             rawParams,
         }
 
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
-
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: {
-                        ...thread,
-                        messages: [...thread.messages, message],
-                        lastModified: Date.now(),
-                    },
-                },
-            }
+        // 走统一通道：以前这里直接读 `thread.messages`，流式期间助手行还在覆盖层里，
+        // 于是工具结果被追加到**不含最新正文**的那份快照后面
+        const committed = commitTimelineMessages(set, {
+            threadId,
+            build: messages => [...messages, message],
+            touchLastModified: true,
         })
 
-        return message.id
+        return committed ? message.id : ''
     },
 
     // 添加检查点
@@ -684,32 +675,25 @@ export const createMessageSlice: StateCreator<
             fileSnapshots,
         }
 
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
+        // 走统一通道，顺带补上缺的版本 bump：以前只改 messages 引用不 bump，而
+        // selectMessageListState 在流式期间忽略引用变化，所以流式中加的 checkpoint
+        // 一直到下一次别的写入顺手 bump 了才突然出现
+        const committed = commitTimelineMessages(set, {
+            threadId,
+            build: messages => {
+                const withCheckpoint = [...messages, message]
 
-            let newMessages = [...thread.messages, message]
+                // 限制 checkpoint 消息数量，防止内存膨胀
+                const MAX_CHECKPOINTS = 20
+                const checkpointMessages = withCheckpoint.filter(m => m.role === 'checkpoint')
+                if (checkpointMessages.length <= MAX_CHECKPOINTS) return withCheckpoint
 
-            // 限制 checkpoint 消息数量，防止内存膨胀
-            const MAX_CHECKPOINTS = 20
-            const checkpointMessages = newMessages.filter(m => m.role === 'checkpoint')
-            if (checkpointMessages.length > MAX_CHECKPOINTS) {
                 const oldestCheckpointId = checkpointMessages[0].id
-                newMessages = newMessages.filter(m => m.id !== oldestCheckpointId)
-            }
-
-            return {
-                threads: {
-                    ...state.threads,
-                    [threadId]: {
-                        ...thread,
-                        messages: newMessages,
-                    },
-                },
-            }
+                return withCheckpoint.filter(m => m.id !== oldestCheckpointId)
+            },
         })
 
-        return message.id
+        return committed ? message.id : ''
     },
 
     // 清空消息（同时清理检查点和待确认更改）

@@ -1,23 +1,27 @@
 /**
- * 助手行的唯一写入通道。
+ * 时间线与助手行的唯一写入通道。
+ *
+ * 两层：`commitTimelineMessages` 管「往合成后的时间线上提交一次改动」，
+ * `mutateAssistantRow` 在它之上多做一件事——定位并改写那条助手行。
  *
  * 「助手行」= 时间线里那条 `role === 'assistant'` 的消息。流式期间它有两个可能的载体：
  * `thread.messages[i]` 里的已落地快照，和 `thread.liveAssistantMessage` 这个覆盖层
  * （token 只改动活跃那一行，不发布新的 messages 版本，ChatPanel 因此不必重扫长历史；
  * 完整的覆盖层不变量见 messageSlice 里 `publishAssistantMessage` 的注释）。
  *
- * 结构性写入（加工具调用 part、工具执行开始/结束、工具调用前收尾正文）必须读**合成后**
- * 的那一条：直接改 `thread.messages` 里的旧快照，下一次 materialize 就会用覆盖层把整条
- * 消息盖回去，这次写入凭空消失。五个 mutation 以前各写一遍这套顺序，于是在六个维度上
- * 互不一致（刷不刷缓冲、读不读覆盖层、行不存在时放弃还是照写、bump 不 bump 版本……）。
- * 其中两个不一致是真 bug：行被截断时仍然 push 工具结果，留下没有父消息的 tool message；
- * 以及改了 `messages` 引用却不 bump 版本，流式期间那次改动**看不见**。
+ * 任何结构性写入都必须读**合成后**的那一条：直接改 `thread.messages` 里的旧快照，下一次
+ * materialize 就会用覆盖层把整条消息盖回去，这次写入凭空消失。七个写入点以前各写一遍这套
+ * 顺序，于是互不一致（刷不刷缓冲、读不读覆盖层、行不存在时放弃还是照写、bump 不 bump
+ * 版本……）。其中四个不一致是真 bug：行被截断时仍然 push 工具结果，留下没有父消息的
+ * tool message；改了 `messages` 引用却不 bump 版本，流式期间那次改动**看不见**
+ * （`addCheckpoint`）；以及 `addToolResult` 直接追加在 `thread.messages` 后面而不合成
+ * 覆盖层，流式期间工具结果会排在**缺了最新正文**的助手行之后。
  *
  * 所以这里把顺序固定成一条：
  *   1. 在 updater **之外**排空这条消息的流式缓冲（顺序：先落地正文，再改 parts）
- *   2. `materializeThreadMessages` 一次，在合成结果上找行
- *   3. 找不到（回滚检查点 / 切分支截断了历史）→ 整体放弃：不追加、不 bump、不清覆盖层
- *   4. `edit` 返回同引用 = 未改，返回 `null` = 放弃
+ *   2. `materializeThreadMessages` 一次，在合成结果上定位/构建
+ *   3. 找不到行（回滚检查点 / 切分支截断了历史）→ 整体放弃：不追加、不 bump、不清覆盖层
+ *   4. `build`/`edit` 返回同引用 = 未改，返回 `null` = 放弃
  *   5. 真的有事要做才提交：写回 messages + bump 版本 + 落地覆盖层 + 合并 streamState
  *      + 清工具预览 + 写 lastModified
  */
@@ -60,6 +64,18 @@ export interface AssistantRowMutation {
     touchLastModified?: boolean
 }
 
+export interface TimelineCommit {
+    threadId: string
+    /**
+     * 收到**合成后**的时间线（覆盖层已并入）。返回新数组表示要提交，返回同引用表示
+     * 「这一段没变」，返回 `null` 表示整体放弃。
+     */
+    build: (messages: ChatMessage[]) => ChatMessage[] | null
+    streamState?: Partial<StreamState>
+    dropPreviews?: string[]
+    touchLastModified?: boolean
+}
+
 function dropToolStreamingPreviews(
     thread: ChatThread,
     previewIds: string[]
@@ -71,6 +87,57 @@ function dropToolStreamingPreviews(
     if (present.length === 0) return previews
 
     return Object.fromEntries(Object.entries(previews).filter(([id]) => !present.includes(id)))
+}
+
+/**
+ * 提交一次时间线写入：materialize 一次 → `build` → 真有变化才 bump 版本、落地覆盖层。
+ *
+ * 「改了 `messages` 引用就必须 bump 版本」是这里最容易漏的一条：`selectMessageListState`
+ * 在 `phase === 'streaming'` 时**忽略数组引用变化**（流式 token 每帧都在换引用，比对引用
+ * 只会让 ChatPanel 白扫长历史），只认版本号。所以流式期间不 bump 的写入是**看不见**的，
+ * 直到下一次别的写入顺手 bump 了它才突然出现。
+ */
+export function commitTimelineMessages(set: AssistantRowSet, commit: TimelineCommit): boolean {
+    const { threadId, build, streamState, dropPreviews, touchLastModified } = commit
+
+    assertOutsideStoreUpdater('commitTimelineMessages')
+
+    let committed = false
+
+    set(state => runStoreUpdater(() => {
+        const thread = state.threads[threadId]
+        if (!thread) return state
+
+        const materialized = materializeThreadMessages(thread)
+        const messages = build(materialized)
+        if (messages === null) return state
+
+        const nextPreviews = dropPreviews
+            ? dropToolStreamingPreviews(thread, dropPreviews)
+            : thread.toolStreamingPreviews
+        const hasOtherWork = streamState !== undefined || nextPreviews !== thread.toolStreamingPreviews
+        if (messages === materialized && !hasOtherWork) return state
+
+        committed = true
+
+        // 提交时总是写回合成结果并落地覆盖层：只清覆盖层却不写 messages 会丢内容
+        return {
+            threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
+            threads: {
+                ...state.threads,
+                [threadId]: {
+                    ...thread,
+                    messages,
+                    liveAssistantMessage: undefined,
+                    toolStreamingPreviews: nextPreviews,
+                    ...(streamState ? { streamState: { ...thread.streamState, ...streamState } } : {}),
+                    ...(touchLastModified ? { lastModified: Date.now() } : {}),
+                },
+            },
+        }
+    }))
+
+    return committed
 }
 
 /**
@@ -90,55 +157,30 @@ export function mutateAssistantRow(
     // 必须在 updater 之外：它内部会走 _doAppendToAssistant → set()
     get()._flushTextBuffer(messageId)
 
-    let committed = false
+    return commitTimelineMessages(set, {
+        threadId,
+        build: materialized => {
+            const rowIndex = materialized.findIndex(
+                message => message.id === messageId && message.role === 'assistant'
+            )
+            // 行已被截断（回滚检查点 / 切分支）：不能把它复活，追加的工具结果也不能留下
+            if (rowIndex === -1) return null
 
-    set(state => runStoreUpdater(() => {
-        const thread = state.threads[threadId]
-        if (!thread) return state
+            const currentRow = materialized[rowIndex] as AssistantMessage
+            const nextRow = edit(currentRow)
+            if (nextRow === null) return null
+            if (nextRow === currentRow && !append?.length) return materialized
 
-        const materialized = materializeThreadMessages(thread)
-        const rowIndex = materialized.findIndex(
-            message => message.id === messageId && message.role === 'assistant'
-        )
-        // 行已被截断（回滚检查点 / 切分支）：不能把它复活，追加的工具结果也不能留下
-        if (rowIndex === -1) return state
-
-        const currentRow = materialized[rowIndex] as AssistantMessage
-        const nextRow = edit(currentRow)
-        if (nextRow === null) return state
-
-        const rowChanged = nextRow !== currentRow
-        const nextPreviews = dropPreviews ? dropToolStreamingPreviews(thread, dropPreviews) : thread.toolStreamingPreviews
-        const hasOtherWork =
-            (append?.length ?? 0) > 0 ||
-            streamState !== undefined ||
-            nextPreviews !== thread.toolStreamingPreviews
-        if (!rowChanged && !hasOtherWork) return state
-
-        // 提交时总是写回合成结果并落地覆盖层：只清覆盖层却不写 messages 会丢内容
-        const messages = materialized.slice()
-        messages[rowIndex] = nextRow
-        if (append?.length) {
-            messages.push(...append)
-        }
-
-        committed = true
-
-        return {
-            threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-            threads: {
-                ...state.threads,
-                [threadId]: {
-                    ...thread,
-                    messages,
-                    liveAssistantMessage: undefined,
-                    toolStreamingPreviews: nextPreviews,
-                    ...(streamState ? { streamState: { ...thread.streamState, ...streamState } } : {}),
-                    ...(touchLastModified ? { lastModified: Date.now() } : {}),
-                },
-            },
-        }
-    }))
-
-    return committed
+            const messages = materialized.slice()
+            messages[rowIndex] = nextRow
+            if (append?.length) {
+                messages.push(...append)
+            }
+            return messages
+        },
+        streamState,
+        dropPreviews,
+        touchLastModified,
+    })
 }
+
