@@ -577,35 +577,18 @@ export const createMessageSlice: StateCreator<
         const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
-        // 关键修复：先刷新文本缓冲区，确保所有文本都已写入
-        get()._flushTextBuffer(messageId)
-
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
-
-            const assistantMsg = getAssistantMessage(thread, messageId)
-            if (!assistantMsg) return state
-            const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1]
-            const hasLiveMessage = thread.liveAssistantMessage?.id === messageId
-            if (lastPart?.type !== 'text' && !hasLiveMessage) return state
-            const finalizedMessage: AssistantMessage = lastPart?.type === 'text'
-                ? { ...assistantMsg, _textFinalized: true }
-                : assistantMsg
-            const messages = replaceAssistantMessage(thread, finalizedMessage)
-            if (!messages) return state
-
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: {
-                        ...thread,
-                        messages,
-                        liveAssistantMessage: undefined,
-                    },
-                },
-            }
+        mutateAssistantRow(set, get, {
+            threadId,
+            messageId,
+            // 最后一段不是文字就没什么要收尾的：返回同引用 = 不发布新版本。
+            // 以前这里带一个 `|| hasLiveMessage` 的分支，会为了「顺手落地覆盖层」白发
+            // 一次时间线版本；紧跟着的 addToolCallPart 本来就会落地它。
+            edit: assistantMsg => {
+                const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1]
+                return lastPart?.type === 'text'
+                    ? { ...assistantMsg, _textFinalized: true }
+                    : assistantMsg
+            },
         })
     },
 

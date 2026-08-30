@@ -176,6 +176,42 @@ describe('mutateAssistantRow', () => {
     expect(version(threadId)).toBe(before)
   })
 
+  it('finalizeTextBeforeToolCall 落地缓冲后收尾正文，下一段文字另起一个 part', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+
+    useAgentStore.getState().appendToAssistant(assistantId, 'first', threadId)
+    useAgentStore.getState().finalizeTextBeforeToolCall(assistantId, threadId)
+    useAgentStore.getState().addToolCallPart(assistantId, {
+      id: 'tc-split',
+      name: 'read_file',
+      arguments: {},
+    }, threadId)
+    useAgentStore.getState().appendToAssistant(assistantId, 'second', threadId)
+    streamingBuffer.flushNow()
+
+    const assistant = useAgentStore.getState().getMessages(threadId)
+      .find(message => message.id === assistantId)
+    if (assistant?.role !== 'assistant') throw new Error('assistant row missing')
+    expect(assistant.parts.map(part => part.type)).toEqual(['text', 'tool_call', 'text'])
+    expect(assistant.content).toBe('firstsecond')
+  })
+
+  it('最后一段不是文字时 finalizeTextBeforeToolCall 不发布新版本', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+    useAgentStore.getState().addToolCallPart(assistantId, {
+      id: 'tc-last',
+      name: 'read_file',
+      arguments: {},
+    }, threadId)
+    const before = version(threadId)
+
+    useAgentStore.getState().finalizeTextBeforeToolCall(assistantId, threadId)
+
+    expect(version(threadId)).toBe(before)
+  })
+
   it('落地的工具调用不带流式预览状态（streamingState 不进持久化）', () => {
     const threadId = useAgentStore.getState().createThread()
     const assistantId = useAgentStore.getState().addAssistantMessage()
