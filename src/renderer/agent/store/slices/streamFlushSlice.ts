@@ -12,6 +12,7 @@
  */
 
 import { streamingBuffer } from '../StreamingBuffer'
+import { assertOutsideStoreUpdater } from '../storeUpdaterGuard'
 
 export interface StreamFlushSlice {
     /**
@@ -26,6 +27,7 @@ export interface StreamFlushSlice {
 
 export const createStreamFlushSlice = (): StreamFlushSlice => ({
     _flushTextBuffer: (messageId: string) => {
+        assertOutsideStoreUpdater('_flushTextBuffer')
         streamingBuffer.flushMessage(messageId)
     },
 })

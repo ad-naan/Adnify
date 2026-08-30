@@ -28,6 +28,7 @@ import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
 import type { BranchSlice } from './branchSlice'
 import type { StreamFlushSlice } from './streamFlushSlice'
+import { mutateAssistantRow } from './assistantRowMutation'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
 import { buildPersistedAgentSessionState, persistCriticalAgentSessionState } from '../agentStorage'
@@ -835,44 +836,28 @@ export const createMessageSlice: StateCreator<
         const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
-        // 关键修复：在添加工具调用 part 之前，先刷新文本缓冲区
-        // 这确保了工具调用 part 会出现在正确的位置（在之前的文本之后）
-        // 注意：这个调用是同步的，不会影响性能
-        get()._flushTextBuffer(messageId)
-
         const persistedToolCall: Omit<ToolCall, 'status'> = {
             ...toolCall,
             streamingState: undefined,
         }
 
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
+        // 刷缓冲由 mutateAssistantRow 负责，它保证「先落地正文，再改 parts」——
+        // 否则工具卡片会插到它本应跟随的那段文字前面
+        mutateAssistantRow(set, get, {
+            threadId,
+            messageId,
+            edit: assistantMsg => {
+                // 重复宣告同一个工具调用：什么都不做（以前这里仍然 bump 版本 + 清覆盖层）
+                if (assistantMsg.toolCalls?.some(tc => tc.id === toolCall.id)) return assistantMsg
 
-            const messages = materializeThreadMessages(thread).map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
+                const newToolCall: ToolCall = { ...persistedToolCall, status: 'pending' }
 
-                    if (assistantMsg.toolCalls?.some(tc => tc.id === toolCall.id)) {
-                        return msg
-                    }
-
-                    const newToolCall: ToolCall = { ...persistedToolCall, status: 'pending' }
-                    const newParts: AssistantPart[] = [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }]
-                    const newToolCalls = [...(assistantMsg.toolCalls || []), newToolCall]
-
-                    return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
+                return {
+                    ...assistantMsg,
+                    parts: [...assistantMsg.parts, { type: 'tool_call', toolCall: newToolCall }],
+                    toolCalls: [...(assistantMsg.toolCalls || []), newToolCall],
                 }
-                return msg
-            })
-
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, messages, liveAssistantMessage: undefined },
-                },
-            }
+            },
         })
     },
 
