@@ -27,6 +27,7 @@ import { createIdleHandoffState, materializeThreadMessages } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
 import type { BranchSlice } from './branchSlice'
+import type { StreamFlushSlice } from './streamFlushSlice'
 import { useStore } from '@/renderer/store'
 import { t } from '@/renderer/i18n'
 import { buildPersistedAgentSessionState, persistCriticalAgentSessionState } from '../agentStorage'
@@ -270,7 +271,7 @@ function mergeSourceEntry(current: LLMStreamSource, incoming: LLMStreamSource): 
 // ===== Slice 创建器 =====
 
 export const createMessageSlice: StateCreator<
-    ThreadSlice & MessageSlice & BranchSlice,
+    ThreadSlice & MessageSlice & BranchSlice & StreamFlushSlice,
     [],
     [],
     MessageSlice
@@ -576,10 +577,7 @@ export const createMessageSlice: StateCreator<
         if (!threadId) return
 
         // 关键修复：先刷新文本缓冲区，确保所有文本都已写入
-        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
-        if (store._flushTextBuffer) {
-            store._flushTextBuffer(messageId)
-        }
+        get()._flushTextBuffer(messageId)
 
         set(state => {
             const thread = state.threads[threadId]
@@ -840,10 +838,7 @@ export const createMessageSlice: StateCreator<
         // 关键修复：在添加工具调用 part 之前，先刷新文本缓冲区
         // 这确保了工具调用 part 会出现在正确的位置（在之前的文本之后）
         // 注意：这个调用是同步的，不会影响性能
-        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
-        if (store._flushTextBuffer) {
-            store._flushTextBuffer(messageId)
-        }
+        get()._flushTextBuffer(messageId)
 
         const persistedToolCall: Omit<ToolCall, 'status'> = {
             ...toolCall,
@@ -997,8 +992,7 @@ export const createMessageSlice: StateCreator<
         const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
-        const store = get() as ThreadSlice & MessageSlice & { _flushTextBuffer?: (id: string) => void }
-        store._flushTextBuffer?.(messageId)
+        get()._flushTextBuffer(messageId)
 
         const runningToolCall: ToolCall = {
             ...toolCall,

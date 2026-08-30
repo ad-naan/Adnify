@@ -33,6 +33,7 @@ import {
     createPlanSlice,
     type PlanSlice,
 } from './slices/planSlice'
+import { createStreamFlushSlice, type StreamFlushSlice } from './slices/streamFlushSlice'
 import { createIdleHandoffState } from '../types'
 import type { ChatMessage, ContextItem, MessageCheckpoint, StreamState, TodoItem, ContextStats, ThreadHandoffState, AssistantMessage } from '../types'
 import type { LastActiveServer } from '../types'
@@ -183,8 +184,7 @@ export interface ThreadBoundStore {
     setInteractive: (messageId: string, interactive: import('../types').InteractiveContent) => void
 }
 
-export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & PlanSlice & UIState & {
-    _flushTextBuffer: (messageId: string) => void
+export type AgentStore = ThreadSlice & MessageSlice & CheckpointSlice & BranchSlice & PlanSlice & UIState & StreamFlushSlice & {
     forThread: (threadId: string) => ThreadBoundStore
 }
 
@@ -436,10 +436,8 @@ export const useAgentStore = create<AgentStore>()(
                 originalFinalizeReasoningPart(messageId, partId, targetThreadId)
             }
 
-            // 内部方法：刷新文本缓冲区
-            const _flushTextBuffer = (_messageId: string) => {
-                streamingBuffer.flushNow()
-            }
+            // 内部方法：只落地目标消息的缓冲（见 streamFlushSlice 的注释）
+            const streamFlushSlice = createStreamFlushSlice()
 
             // 创建线程绑定的 Store（用于后台任务）
             const forThread = (threadId: string): ThreadBoundStore => ({
@@ -537,7 +535,7 @@ export const useAgentStore = create<AgentStore>()(
                 ...branchSlice,
                 ...planSlice,
                 ...uiState,
-                _flushTextBuffer,
+                ...streamFlushSlice,
                 forThread,
             }
         }

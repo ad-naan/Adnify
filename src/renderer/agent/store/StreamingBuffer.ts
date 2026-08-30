@@ -136,6 +136,33 @@ class StreamingBuffer {
         })
     }
 
+    /**
+     * 只排空一条消息的缓冲（正文 + 该消息下所有推理段）。
+     *
+     * 「改这条消息的 parts 之前先把它的正文落地」要的只有这一条。以前这个需求走的是
+     * flushNow()，于是同时在流的其他线程（后台任务）的缓冲也被一并写进 store ——
+     * 一个没人声明过的跨线程副作用。已排定的定时器保持不动，其余消息照原节奏落地。
+     */
+    flushMessage(messageId: string): void {
+        const text = this.buffer.get(messageId)
+        if (text) {
+            this.buffer.delete(messageId)
+            if (text.content) {
+                this.flushCallback?.(messageId, text.content, text.threadId)
+            }
+        }
+
+        const byPart = this.reasoningBuffer.get(messageId)
+        if (byPart) {
+            this.reasoningBuffer.delete(messageId)
+            byPart.forEach(({ partId, content, isStreaming, threadId }) => {
+                if (content) {
+                    this.reasoningFlushCallback?.(messageId, partId, content, isStreaming, threadId)
+                }
+            })
+        }
+    }
+
     flushNow(): void {
         if (this.timerId !== null) {
             clearTimeout(this.timerId)

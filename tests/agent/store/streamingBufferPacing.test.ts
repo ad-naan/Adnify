@@ -127,18 +127,45 @@ describe('StreamingBuffer 的界面节奏', () => {
     expect(text).toHaveLength(1)
   })
 
-  it('【今天的耦合】flushNow 无法只排空一条消息：它是跨线程的全局副作用', () => {
+  it('flushNow 是全局的：所有消息一起排空（关闭应用 / 收尾整条流走这条）', () => {
     const { text } = collect()
 
     streamingBuffer.append('m1', 'a')
     streamingBuffer.append('m2', 'b')
 
-    // messageSlice 里那三处「刷完再改」想要的是「排空 m1」，
-    // 但 AgentStore.ts:440 的 _flushTextBuffer 忽略 messageId 直接 flushNow()，
-    // 于是另一个线程的 m2 也被一起写进 store。P5 要收窄成 flushMessage(id)。
     streamingBuffer.flushNow()
 
     expect(text.map(f => f.messageId)).toEqual(['m1', 'm2'])
+  })
+
+  it('flushMessage 只排空目标消息，其余保持原节奏（这才是「改这条消息前先落地正文」要的语义）', () => {
+    const { text, reasoning } = collect()
+
+    streamingBuffer.append('m1', 'a')
+    streamingBuffer.append('m2', 'b')
+    streamingBuffer.appendReasoning('m1', 'p1', 'x', true)
+    streamingBuffer.appendReasoning('m2', 'p2', 'y', true)
+
+    streamingBuffer.flushMessage('m1')
+
+    // m2 还压在缓冲里：以前这里走 flushNow()，另一个线程的 m2 会被一起写进 store
+    expect(text.map(f => f.messageId)).toEqual(['m1'])
+    expect(reasoning.map(f => f.messageId)).toEqual(['m1'])
+
+    // 已排定的定时器没被动过，m2 照原节奏落地
+    vi.advanceTimersByTime(33)
+    expect(text.map(f => f.messageId)).toEqual(['m1', 'm2'])
+    expect(reasoning.map(f => f.messageId)).toEqual(['m1', 'm2'])
+  })
+
+  it('flushMessage 排空过的消息不会在下一次 flush 里重复落地', () => {
+    const { text } = collect()
+
+    streamingBuffer.append('m1', 'a')
+    streamingBuffer.flushMessage('m1')
+    vi.advanceTimersByTime(100)
+
+    expect(text.map(f => f.content)).toEqual(['a'])
   })
 
   it('clear 丢弃缓冲内容且不触发回调（abort / 切换会话走这条）', () => {
