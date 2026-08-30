@@ -20,6 +20,8 @@
  * 放回正文；finalize 时同理。
  */
 
+import { findJsonValueEnd } from '@shared/utils/jsonScan'
+import { JSON_PAYLOAD_MARKUP_TAGS, markupOpenTag, markupCloseTag } from '@shared/utils/toolCallMarkup'
 import type { StreamEvent } from '../../types'
 
 /** 还没宣告工具调用时，capturing 最多吞多少字符就认输放回正文 */
@@ -28,8 +30,8 @@ const MAX_CAPTURE_CHARS = 8192
 /** 探测阶段最多暂存多少字符还没认出形状，就判定是普通正文 */
 const MAX_PROBE_CHARS = 256
 
-const XML_OPEN = '<tool_call>'
-const XML_CLOSE = '</tool_call>'
+const XML_OPEN = markupOpenTag(JSON_PAYLOAD_MARKUP_TAGS[0])
+const XML_CLOSE = markupCloseTag(JSON_PAYLOAD_MARKUP_TAGS[0])
 
 export interface PseudoToolCallPayload {
   name: string
@@ -105,55 +107,6 @@ export function findParametersObjectStart(text: string): number {
   const keyMatch = /"parameters"\s*:/.exec(text)
   if (!keyMatch) return -1
   return text.indexOf('{', keyMatch.index + keyMatch[0].length)
-}
-
-/** 转义/字符串感知的花括号配对扫描。P4 会把这一份并进 shared 的 jsonScan */
-export function findJsonObjectEnd(text: string, startIndex: number): number {
-  if (startIndex < 0 || text[startIndex] !== '{') {
-    return -1
-  }
-
-  let depth = 0
-  let inString = false
-  let escaped = false
-
-  for (let i = startIndex; i < text.length; i++) {
-    const ch = text[i]
-
-    if (inString) {
-      if (escaped) {
-        escaped = false
-        continue
-      }
-      if (ch === '\\') {
-        escaped = true
-        continue
-      }
-      if (ch === '"') {
-        inString = false
-      }
-      continue
-    }
-
-    if (ch === '"') {
-      inString = true
-      continue
-    }
-
-    if (ch === '{') {
-      depth++
-      continue
-    }
-
-    if (ch === '}') {
-      depth--
-      if (depth === 0) {
-        return i
-      }
-    }
-  }
-
-  return -1
 }
 
 /** provider 的 tool input 可能是对象也可能是 JSON 字符串，统一成对象 */
@@ -330,7 +283,7 @@ export class PseudoToolCallStreamAdapter {
     const paramStart = findParametersObjectStart(this.captureBuffer)
     if (paramStart < 0) return ''
 
-    const paramEnd = findJsonObjectEnd(this.captureBuffer, paramStart)
+    const paramEnd = findJsonValueEnd(this.captureBuffer, paramStart)
     const availableEnd = paramEnd >= 0 ? paramEnd + 1 : this.captureBuffer.length
     if (availableEnd <= paramStart + this.emittedArgumentChars) return ''
 

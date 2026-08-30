@@ -14,7 +14,6 @@ import {
   normalizeToolCallArguments,
   looksLikePseudoToolPayloadStart,
   tryParsePseudoToolPayload,
-  findJsonObjectEnd,
 } from '@main/services/llm/services/streaming/pseudoToolCallAdapter'
 import type { StreamEvent } from '@main/services/llm/types'
 
@@ -162,15 +161,5 @@ describe('normalizeToolCallArguments', () => {
     expect(normalizeToolCallArguments('[1,2]')).toEqual({})
     expect(normalizeToolCallArguments(undefined)).toEqual({})
     expect(normalizeToolCallArguments('')).toEqual({})
-  })
-})
-
-describe('findJsonObjectEnd', () => {
-  it('括号配对是字符串与转义感知的', () => {
-    expect(findJsonObjectEnd('{"a":"}"}', 0)).toBe(8)
-    expect(findJsonObjectEnd('{"a":"\\""}', 0)).toBe(9)
-    expect(findJsonObjectEnd('{"a":{"b":1}}', 0)).toBe(12)
-    expect(findJsonObjectEnd('{"a":1', 0)).toBe(-1)
-    expect(findJsonObjectEnd('x{}', 0)).toBe(-1)
   })
 })

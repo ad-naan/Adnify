@@ -1,11 +1,8 @@
-const TOOL_LEAK_TAGS = [
-  'function_calls',
-  'function_call',
-  'tool_calls',
-  'tool_call',
-] as const
+import { TOOL_CALL_MARKUP_TAGS, type ToolCallMarkupTag } from '@shared/utils/toolCallMarkup'
 
-type ToolLeakTagName = typeof TOOL_LEAK_TAGS[number]
+const TOOL_LEAK_TAGS = TOOL_CALL_MARKUP_TAGS
+
+type ToolLeakTagName = ToolCallMarkupTag
 const MAX_OPENING_PREFIX_LENGTH = Math.max(...TOOL_LEAK_TAGS.map(name => name.length + 1))
 
 type OpeningTagResolution =

@@ -7,6 +7,7 @@ import { streamText } from 'ai'
 import type { StreamTextResult } from 'ai'
 import { BrowserWindow } from 'electron'
 import { logger } from '@shared/utils/Logger'
+import { closeUnterminatedJson } from '@shared/utils/jsonScan'
 import { ErrorCode } from '@shared/utils/errorHandler'
 import { createModel, resolveAuthForConfig } from '../modelFactory'
 import { MessageConverter } from '../core/MessageConverter'
@@ -163,26 +164,10 @@ export class StreamingService {
           })
 
           try {
-            const inputText = toolCall.input
+            // 一份共享的转义/字符串感知扫描器补收尾。以前这里是三个朴素正则：不认转义、
+            // 不认字符串，`{"path":"a}b"}` 会被判成缺一个 `}`，补出来的 JSON 更坏。
+            const fixed = closeUnterminatedJson(toolCall.input)
 
-            // 1. 修复未闭合的引号
-            let fixed = inputText.replace(/([^\\])"([^"]*?)$/g, '$1"$2"')
-
-            // 2. 修复未闭合的大括号
-            const openBraces = (fixed.match(/\{/g) || []).length
-            const closeBraces = (fixed.match(/\}/g) || []).length
-            if (openBraces > closeBraces) {
-              fixed += '}'.repeat(openBraces - closeBraces)
-            }
-
-            // 3. 修复未闭合的方括号
-            const openBrackets = (fixed.match(/\[/g) || []).length
-            const closeBrackets = (fixed.match(/\]/g) || []).length
-            if (openBrackets > closeBrackets) {
-              fixed += ']'.repeat(openBrackets - closeBrackets)
-            }
-
-            // 4. 尝试解析修复后的 JSON
             JSON.parse(fixed)
 
             logger.llm.info('[StreamingService] Tool call repaired successfully')

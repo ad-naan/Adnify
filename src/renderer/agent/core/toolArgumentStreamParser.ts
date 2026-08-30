@@ -1,3 +1,5 @@
+import { sliceJsonValue } from '@shared/utils/jsonScan'
+
 const STREAMABLE_TOOL_ARG_KEYS = new Set([
   'path',
   'command',
@@ -94,57 +96,6 @@ function extractPartialStringField(scanTarget: string, key: string): string | nu
   return value
 }
 
-function extractJsonObjectSlice(source: string, startIndex: number): { slice: string; complete: boolean } | null {
-  if (source[startIndex] !== '{') return null
-
-  let cursor = startIndex
-  let depth = 0
-  let inString = false
-  let escaped = false
-
-  while (cursor < source.length) {
-    const ch = source[cursor]
-
-    if (escaped) {
-      escaped = false
-      cursor++
-      continue
-    }
-
-    if (ch === '\\') {
-      escaped = true
-      cursor++
-      continue
-    }
-
-    if (ch === '"') {
-      inString = !inString
-      cursor++
-      continue
-    }
-
-    if (!inString) {
-      if (ch === '{') depth++
-      if (ch === '}') {
-        depth--
-        if (depth === 0) {
-          return {
-            slice: source.slice(startIndex, cursor + 1),
-            complete: true,
-          }
-        }
-      }
-    }
-
-    cursor++
-  }
-
-  return {
-    slice: source.slice(startIndex),
-    complete: false,
-  }
-}
-
 function parsePartialEditObject(fragment: string): Record<string, unknown> | null {
   const actionMatch = fragment.match(/"action":\s*"(replace|insert|delete)"/)
   if (!actionMatch) return null
@@ -197,7 +148,7 @@ function extractPartialEditsField(scanTarget: string): Record<string, unknown>[]
       continue
     }
 
-    const objectSlice = extractJsonObjectSlice(scanTarget, cursor)
+    const objectSlice = sliceJsonValue(scanTarget, cursor)
     if (!objectSlice) break
 
     if (objectSlice.complete) {

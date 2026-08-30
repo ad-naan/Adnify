@@ -27,18 +27,15 @@ export {
   isSensitivePath,
 } from './pathUtils'
 
-// JSON 工具函数
+// JSON 扫描（流式工具调用参数天然是不完整 JSON，收口在这一份）
 export {
-  getByPath,
-  setByPath,
-  hasPath,
-  joinJsonPath,
-  cleanToolCallArgs,
-  fixUnescapedNewlines,
-  fixMalformedJson,
-  safeParseJson,
-  generateId,
-} from './jsonUtils'
+  scanJson,
+  findJsonValueEnd,
+  sliceJsonValue,
+  closeUnterminatedJson,
+  type JsonScanResult,
+  type JsonOpenBracket,
+} from './jsonScan'
 
 // 性能监控
 export {
