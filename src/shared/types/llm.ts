@@ -115,6 +115,16 @@ export interface LLMCapabilities {
      * inside textual wrappers instead of native reasoning events.
      */
     thinkingTagFormat?: 'native' | 'xml-think'
+    /**
+     * Whether to run the pseudo tool-call compatibility adapter, which turns
+     * tool calls streamed as plain text (`[{"name":...,"parameters":{...}}]` or
+     * `<tool_call>{...}</tool_call>`) into standard tool-call events.
+     *
+     * Defaults to enabled whenever the request carries tools — that is the
+     * historical behaviour, and it also probes routes whose native tool calls
+     * work fine. Set to `false` on those routes to skip the probe entirely.
+     */
+    pseudoToolCallFallback?: boolean
 }
 
 export interface LLMConfig {

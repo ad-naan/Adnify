@@ -13,16 +13,12 @@ import { MessageConverter } from '../core/MessageConverter'
 import { ToolConverter } from '../core/ToolConverter'
 import { prepareExecutionRequest } from '../core/RequestExecution'
 import { executeWithGenerationRecovery } from '../core/GenerationRecovery'
-import { LLMError, convertUsage, isImmediateStreamEvent } from '../types'
-import { createKeyedLeadingEdgeThrottle } from '@shared/utils/keyedLeadingEdgeThrottle'
-import type {
-  StreamEvent,
-  BufferedStreamEvent,
-  ImmediateStreamEvent,
-  TokenUsage,
-  ResponseMetadata,
-} from '../types'
-import type { LLMConfig, LLMMessage, ToolDefinition, RendererStreamChunk } from '@shared/types'
+import { LLMError, convertUsage } from '../types'
+import type { TokenUsage, ResponseMetadata, StreamEvent } from '../types'
+import { StreamTransport } from './streaming/streamTransport'
+import { PseudoToolCallStreamAdapter } from './streaming/pseudoToolCallAdapter'
+import { routeStreamPart, type StreamShapeFlags } from './streaming/streamPartRouter'
+import type { LLMConfig, LLMMessage, ToolDefinition } from '@shared/types'
 import type { ModelMessage } from '@ai-sdk/provider-utils'
 import { ThinkingStrategyFactory, type ThinkingStrategy } from '../strategies/ThinkingStrategy'
 
@@ -46,289 +42,6 @@ export interface StreamingResult {
 
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 15_000
 
-/**
- * IPC 合批的出货间隔上限。
- *
- * 这里只负责「IPC 频率上限」，不负责界面节奏——界面节奏的唯一权威是渲染端的
- * StreamingBuffer（33ms、对齐 rAF）。所以这个值要明显小于 33ms，否则主进程就成了
- * 那条更慢的链，渲染端再怎么对齐绘制也匀不出来。
- */
-const STREAM_IPC_INTERVAL_MS = 16
-
-interface PseudoToolCallPayload {
-  name: string
-  arguments: Record<string, unknown>
-}
-
-type PseudoToolCaptureMode = 'json-array' | 'xml-tag'
-
-function createCompatToolCallId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `compat-tool-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function looksLikePseudoToolPayloadStart(text: string): PseudoToolCaptureMode | null {
-  const trimmed = text.trimStart()
-  if (!trimmed) return null
-  if (trimmed.startsWith('<tool_call>')) {
-    return 'xml-tag'
-  }
-
-  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) {
-    return null
-  }
-
-  const probe = trimmed.slice(0, 256)
-  if (/"name"\s*:/.test(probe) && /"parameters"\s*:/.test(probe)) {
-    return 'json-array'
-  }
-
-  return null
-}
-
-function tryParsePseudoToolPayload(text: string): PseudoToolCallPayload | null {
-  const trimmed = text.trim()
-  if (!trimmed) return null
-
-  const payloadText = trimmed.startsWith('<tool_call>') && trimmed.endsWith('</tool_call>')
-    ? trimmed.slice('<tool_call>'.length, trimmed.length - '</tool_call>'.length).trim()
-    : trimmed
-
-  try {
-    const parsed = JSON.parse(payloadText) as unknown
-    const candidate = Array.isArray(parsed) ? parsed[0] : parsed
-    if (!candidate || typeof candidate !== 'object') {
-      return null
-    }
-
-    const name = (candidate as Record<string, unknown>).name
-    const parameters = (candidate as Record<string, unknown>).parameters
-    if (typeof name !== 'string' || !parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
-      return null
-    }
-
-    return {
-      name,
-      arguments: parameters as Record<string, unknown>,
-    }
-  } catch {
-    return null
-  }
-}
-
-function extractPseudoToolName(text: string): string | null {
-  const match = text.match(/"name"\s*:\s*"([^"]+)"/)
-  return match?.[1] ?? null
-}
-
-function findParametersObjectStart(text: string): number {
-  const keyMatch = /"parameters"\s*:/.exec(text)
-  if (!keyMatch) return -1
-  return text.indexOf('{', keyMatch.index + keyMatch[0].length)
-}
-
-function findJsonObjectEnd(text: string, startIndex: number): number {
-  if (startIndex < 0 || text[startIndex] !== '{') {
-    return -1
-  }
-
-  let depth = 0
-  let inString = false
-  let escaped = false
-
-  for (let i = startIndex; i < text.length; i++) {
-    const ch = text[i]
-
-    if (inString) {
-      if (escaped) {
-        escaped = false
-        continue
-      }
-      if (ch === '\\') {
-        escaped = true
-        continue
-      }
-      if (ch === '"') {
-        inString = false
-      }
-      continue
-    }
-
-    if (ch === '"') {
-      inString = true
-      continue
-    }
-
-    if (ch === '{') {
-      depth++
-      continue
-    }
-
-    if (ch === '}') {
-      depth--
-      if (depth === 0) {
-        return i
-      }
-    }
-  }
-
-  return -1
-}
-
-function normalizeToolCallArguments(input: unknown): Record<string, unknown> {
-  if (input && typeof input === 'object' && !Array.isArray(input)) {
-    return input as Record<string, unknown>
-  }
-
-  if (typeof input !== 'string' || !input.trim()) {
-    return {}
-  }
-
-  try {
-    const parsed = JSON.parse(input) as unknown
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>
-    }
-  } catch {
-    // Ignore malformed provider payloads and fall back to an empty object.
-  }
-
-  return {}
-}
-
-class PseudoToolCallStreamAdapter {
-  private mode: 'idle' | 'probing' | 'capturing' | 'disabled' = 'idle'
-  private probeBuffer = ''
-  private captureBuffer = ''
-  private toolCallId: string | null = null
-  private toolName: string | null = null
-  private emittedArgumentChars = 0
-  private started = false
-  private completed = false
-
-  constructor(private readonly enabled: boolean) {}
-
-  consume(chunk: string): { visibleText: string; events: StreamEvent[] } {
-    if (!this.enabled || !chunk) {
-      return { visibleText: chunk, events: [] }
-    }
-
-    if (this.mode === 'disabled') {
-      return { visibleText: chunk, events: [] }
-    }
-
-    if (this.mode === 'capturing') {
-      return this.consumeCapturedChunk(chunk)
-    }
-
-    this.probeBuffer += chunk
-    const trimmed = this.probeBuffer.trimStart()
-    if (trimmed) {
-      const firstChar = trimmed[0]
-      if (firstChar !== '[' && firstChar !== '{' && firstChar !== '<') {
-        const visibleText = this.probeBuffer
-        this.probeBuffer = ''
-        this.mode = 'disabled'
-        return { visibleText, events: [] }
-      }
-    }
-
-    const detectedMode = looksLikePseudoToolPayloadStart(this.probeBuffer)
-    if (!detectedMode) {
-      if (trimmed.startsWith('<') && !'<tool_call>'.startsWith(trimmed.slice(0, Math.min(trimmed.length, '<tool_call>'.length)))) {
-        const visibleText = this.probeBuffer
-        this.probeBuffer = ''
-        this.mode = 'disabled'
-        return { visibleText, events: [] }
-      }
-
-      if (trimmed && this.probeBuffer.length >= 256) {
-        const visibleText = this.probeBuffer
-        this.probeBuffer = ''
-        this.mode = 'disabled'
-        return { visibleText, events: [] }
-      }
-      return { visibleText: '', events: [] }
-    }
-
-    this.mode = 'capturing'
-    this.captureBuffer = this.probeBuffer
-    this.probeBuffer = ''
-    return this.consumeCapturedChunk('')
-  }
-
-  hasCapturedToolCall(): boolean {
-    return this.started
-  }
-
-  finalize(): { visibleText: string; events: StreamEvent[] } {
-    if (this.mode === 'probing' || this.mode === 'idle') {
-      const visibleText = this.probeBuffer
-      this.probeBuffer = ''
-      return { visibleText, events: [] }
-    }
-
-    return { visibleText: '', events: [] }
-  }
-
-  private consumeCapturedChunk(chunk: string): { visibleText: string; events: StreamEvent[] } {
-    if (chunk) {
-      this.captureBuffer += chunk
-    }
-
-    const events: StreamEvent[] = []
-    const name = extractPseudoToolName(this.captureBuffer)
-
-    if (!this.started && name) {
-      this.toolCallId = createCompatToolCallId()
-      this.toolName = name
-      this.started = true
-      events.push({
-        type: 'tool-call-start',
-        id: this.toolCallId,
-        name,
-      })
-    }
-
-    if (this.started && this.toolCallId) {
-      const paramStart = findParametersObjectStart(this.captureBuffer)
-      if (paramStart >= 0) {
-        const paramEnd = findJsonObjectEnd(this.captureBuffer, paramStart)
-        const availableEnd = paramEnd >= 0 ? paramEnd + 1 : this.captureBuffer.length
-        if (availableEnd > paramStart + this.emittedArgumentChars) {
-          const delta = this.captureBuffer.slice(paramStart + this.emittedArgumentChars, availableEnd)
-          this.emittedArgumentChars += delta.length
-          if (delta) {
-            events.push({
-              type: 'tool-call-delta',
-              id: this.toolCallId,
-              name: this.toolName ?? undefined,
-              argumentsDelta: delta,
-            })
-          }
-        }
-      }
-    }
-
-    if (!this.completed) {
-      const parsed = tryParsePseudoToolPayload(this.captureBuffer)
-      if (parsed && this.toolCallId) {
-        this.completed = true
-        events.push({
-          type: 'tool-call-delta-end',
-          id: this.toolCallId,
-        })
-        events.push({
-          type: 'tool-call-available',
-          id: this.toolCallId,
-          name: parsed.name,
-          arguments: parsed.arguments,
-        })
-      }
-    }
-
-    return { visibleText: '', events }
-  }
-}
 
 function resolveStreamIdleTimeoutMs(timeoutMs?: number): number {
   if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
@@ -342,31 +55,27 @@ function stripSystemMessages(messages: ModelMessage[]): ModelMessage[] {
   return messages.filter(message => message.role !== 'system')
 }
 
+/**
+ * 伪工具调用兼容适配器的开关。
+ *
+ * 历史行为是隐式的「这次请求带了工具就跑」——包括那些原生 tool-call 完全正常的
+ * provider，它们白白付一次探测（首块正文被暂存到探测出形状为止）。现在把它写成
+ * 显式能力位：默认仍是历史行为，路由可以用 `pseudoToolCallFallback: false` 关掉。
+ * 没有工具时永远不跑，因为那时候不可能有工具调用要还原。
+ */
+function resolvePseudoToolAdapterEnabled(config: LLMConfig, tools?: ToolDefinition[]): boolean {
+  if ((tools?.length ?? 0) === 0) return false
+  return config.capabilities?.pseudoToolCallFallback ?? true
+}
+
 export class StreamingService {
-  private window: BrowserWindow
   private messageConverter: MessageConverter
   private toolConverter: ToolConverter
-  /**
-   * 按 requestId 分组的 IPC 合批节流器（只装合批事件——立即事件永远不进这里）。
-   *
-   * 以前这里是 `eventBuffer` + `flushTimers` 两张表加一段 30ms 的**防抖**（每次
-   * append 都 clearTimeout 重排），持续 token 流会把出货时机无限推迟，表现为
-   * 「憋一大段然后蹦出来」。换成前沿节流之后：首块零延迟，之后按 16ms 稳定出货。
-   *
-   * 顺带解决了条目泄漏：以前只有 flushEvents 会删表项，abort / 异常路径留着空条目；
-   * 现在空窗一轮节流器自己就把 key 摘掉了。
-   */
-  private readonly eventPacer = createKeyedLeadingEdgeThrottle<string, BufferedStreamEvent[]>({
-    intervalMs: STREAM_IPC_INTERVAL_MS,
-    accumulate: (pending, next) => (pending ? [...pending, ...next] : next),
-    emit: (requestId, events) => this.sendBatch(requestId, events),
-    onEmitError: (error, requestId) => {
-      logger.llm.error('[StreamingService] Failed to flush events:', { requestId, error })
-    },
-  })
+  /** 线协议 + 合批节流都在这里，本类只管编排 */
+  private readonly transport: StreamTransport
 
   constructor(window: BrowserWindow) {
-    this.window = window
+    this.transport = new StreamTransport(window)
     this.messageConverter = new MessageConverter()
     this.toolConverter = new ToolConverter()
   }
@@ -494,7 +203,7 @@ export class StreamingService {
         strategy,
         requestId,
         resolveStreamIdleTimeoutMs(preparedRequest.callOptions.timeout),
-        (tools?.length ?? 0) > 0,
+        resolvePseudoToolAdapterEnabled(resolvedConfig, tools),
         preparedRequest.cacheWriteTokens,
       )
     } catch (error) {
@@ -530,191 +239,43 @@ export class StreamingService {
     let reasoningSignature = ''
     let streamedText = ''
     let streamedResponseMetadata: ResponseMetadata | undefined
-    let sawNonTextOutput = false
-    const hasCustomParser = !!strategy.parseStreamText
+    let fallbackResponseMetadata: ResponseMetadata | undefined
     let streamError: Error | null = null
-    let sawToolActivity = false
-    let sawExecutableToolCall = false
+    const shape: StreamShapeFlags = {
+      sawToolActivity: false,
+      sawExecutableToolCall: false,
+      sawNonTextOutput: false,
+    }
     const iterator = result.stream[Symbol.asyncIterator]()
     const pseudoToolAdapter = new PseudoToolCallStreamAdapter(enablePseudoToolAdapter)
 
     while (true) {
       const next = await this.nextStreamPart(iterator, requestId, streamIdleTimeoutMs)
       if (next.done) break
-      const part = next.value
-      if (this.window.isDestroyed()) break
+      if (this.transport.isWindowDestroyed()) break
 
       try {
-        switch (part.type) {
-          case 'text-start':
-          case 'text-end':
-          case 'reasoning-start':
-          case 'reasoning-end':
-          case 'start':
-          case 'finish':
-          case 'raw':
-          case 'abort':
-            break
+        const outcome = routeStreamPart(next.value, {
+          strategy,
+          adapter: pseudoToolAdapter,
+          requestId,
+        })
 
-          case 'start-step':
-            if (part.warnings.length > 0) {
-              logger.llm.warn('[StreamingService] Provider warnings', {
-                requestId,
-                warnings: part.warnings,
-              })
-            }
-            break
-
-          case 'text-delta':
-            if (hasCustomParser && strategy.parseStreamText) {
-              const parsed = strategy.parseStreamText(part.text)
-              if (parsed.thinking) {
-                reasoning += parsed.thinking
-                this.sendEvent(requestId, { type: 'reasoning', content: parsed.thinking })
-              }
-              if (parsed.content) {
-                const adapted = pseudoToolAdapter.consume(parsed.content)
-                for (const event of adapted.events) {
-                  if (event.type === 'tool-call-start' || event.type === 'tool-call-delta' || event.type === 'tool-call-delta-end') {
-                    sawToolActivity = true
-                  }
-                  if (event.type === 'tool-call-available') {
-                    sawToolActivity = true
-                    sawExecutableToolCall = true
-                  }
-                  this.sendEvent(requestId, event)
-                }
-                if (adapted.visibleText) {
-                  streamedText += adapted.visibleText
-                  this.sendEvent(requestId, { type: 'text', content: adapted.visibleText })
-                }
-              }
-            } else {
-              const adapted = pseudoToolAdapter.consume(part.text)
-              for (const event of adapted.events) {
-                if (event.type === 'tool-call-start' || event.type === 'tool-call-delta' || event.type === 'tool-call-delta-end') {
-                  sawToolActivity = true
-                }
-                if (event.type === 'tool-call-available') {
-                  sawToolActivity = true
-                  sawExecutableToolCall = true
-                }
-                this.sendEvent(requestId, event)
-              }
-              if (adapted.visibleText) {
-                streamedText += adapted.visibleText
-                this.sendEvent(requestId, { type: 'text', content: adapted.visibleText })
-              }
-            }
-            break
-
-          case 'reasoning-delta':
-            if (part.text) {
-              reasoning += part.text
-              this.sendEvent(requestId, { type: 'reasoning', content: part.text })
-            }
-            // Capture signature from Anthropic provider metadata (used for thinking block replay)
-            if ((part as any).providerMetadata?.anthropic?.signature) {
-              reasoningSignature += (part as any).providerMetadata.anthropic.signature
-            }
-            break
-
-          case 'tool-input-start':
-            sawToolActivity = true
-            this.sendEvent(requestId, {
-              type: 'tool-call-start',
-              id: part.id,
-              name: part.toolName,
-            })
-            break
-
-          case 'tool-input-delta':
-            sawToolActivity = true
-            this.sendEvent(requestId, {
-              type: 'tool-call-delta',
-              id: part.id,
-              argumentsDelta: part.delta,
-            })
-            break
-
-          case 'tool-input-end':
-            sawToolActivity = true
-            this.sendEvent(requestId, {
-              type: 'tool-call-delta-end',
-              id: part.id,
-            })
-            break
-
-          case 'tool-call':
-            sawToolActivity = true
-            sawExecutableToolCall = true
-            this.sendEvent(requestId, {
-              type: 'tool-call-available',
-              id: part.toolCallId,
-              name: part.toolName,
-              arguments: normalizeToolCallArguments(part.input),
-            })
-            break
-
-          case 'tool-result':
-          case 'tool-error':
-          case 'tool-output-denied':
-          case 'tool-approval-request':
-          case 'file':
-          case 'reasoning-file':
-            sawNonTextOutput = true
-            break
-
-          case 'source':
-            sawNonTextOutput = true
-            this.sendEvent(requestId, {
-              type: 'source',
-              source: {
-                id: part.id,
-                sourceType: part.sourceType,
-                ...(part.sourceType === 'url'
-                  ? {
-                      url: part.url,
-                      title: part.title,
-                    }
-                  : {
-                      mediaType: part.mediaType,
-                      title: part.title,
-                      filename: part.filename,
-                    }),
-              },
-            })
-            break
-
-          case 'response-metadata':
-            streamedResponseMetadata = {
-              id: part.id,
-              modelId: part.modelId,
-              timestamp: part.timestamp,
-            }
-            break
-
-          case 'finish-step':
-            if (!streamedResponseMetadata) {
-              streamedResponseMetadata = {
-                id: part.response.id,
-                modelId: part.response.modelId,
-                timestamp: part.response.timestamp,
-              }
-            }
-            break
-
-          case 'error':
-            // 捕获流中的错误，稍后抛出
-            if (!streamError) {
-              streamError = part.error instanceof Error
-                ? part.error
-                : new Error(String(part.error ?? 'Unknown stream error'))
-            }
-            break
+        for (const event of outcome.events) {
+          this.sendEvent(requestId, event)
         }
+
+        streamedText += outcome.textAppend
+        reasoning += outcome.reasoningAppend
+        reasoningSignature += outcome.reasoningSignatureAppend
+        if (outcome.responseMetadata) streamedResponseMetadata = outcome.responseMetadata
+        if (outcome.responseMetadataFallback) fallbackResponseMetadata ??= outcome.responseMetadataFallback
+        if (outcome.error && !streamError) streamError = outcome.error
+        if (outcome.shape.sawToolActivity) shape.sawToolActivity = true
+        if (outcome.shape.sawExecutableToolCall) shape.sawExecutableToolCall = true
+        if (outcome.shape.sawNonTextOutput) shape.sawNonTextOutput = true
       } catch (error) {
-        if (!this.window.isDestroyed()) {
+        if (!this.transport.isWindowDestroyed()) {
           logger.llm.warn('[StreamingService] Error processing stream part:', error)
         }
       }
@@ -755,7 +316,7 @@ export class StreamingService {
 
     const finishReason = await result.finishReason
 
-    if (finishReason === 'tool-calls' && !sawExecutableToolCall) {
+    if (finishReason === 'tool-calls' && !shape.sawExecutableToolCall) {
       throw new LLMError(
         'Model stopped with tool-calls finish reason but did not produce any executable tool call',
         ErrorCode.LLM_NO_OUTPUT,
@@ -763,7 +324,7 @@ export class StreamingService {
       )
     }
 
-    if (!finalText.trim() && !finalReasoning.trim() && !sawToolActivity && !sawNonTextOutput) {
+    if (!finalText.trim() && !finalReasoning.trim() && !shape.sawToolActivity && !shape.sawNonTextOutput) {
       throw new LLMError(
         'Model returned an empty response after the API call completed',
         ErrorCode.LLM_EMPTY_RESPONSE,
@@ -775,11 +336,11 @@ export class StreamingService {
       requestId,
       contentLength: finalText.length,
       reasoningLength: finalReasoning.length,
-      sawToolActivity,
-      sawExecutableToolCall,
-      sawNonTextOutput,
+      ...shape,
       finishReason,
     })
+
+    const resolvedMetadata = streamedResponseMetadata ?? fallbackResponseMetadata
 
     const streamingResult: StreamingResult = {
       content: finalText,
@@ -787,9 +348,9 @@ export class StreamingService {
       reasoningSignature: reasoningSignature || undefined,
       usage: usage ? convertUsage(usage, providerMetadata, { cacheWriteTokens }) : undefined,
       metadata: {
-        id: streamedResponseMetadata?.id ?? response.id,
-        modelId: streamedResponseMetadata?.modelId ?? response.modelId,
-        timestamp: streamedResponseMetadata?.timestamp ?? response.timestamp,
+        id: resolvedMetadata?.id ?? response.id,
+        modelId: resolvedMetadata?.modelId ?? response.modelId,
+        timestamp: resolvedMetadata?.timestamp ?? response.timestamp,
         finishReason: finishReason || undefined,
       },
     }
@@ -805,125 +366,9 @@ export class StreamingService {
     return streamingResult
   }
 
-  /**
-   * 发送事件到渲染进程（合批 + 前沿节流）
-   */
+  /** 发往渲染端的唯一出口：线协议与合批时序都在 StreamTransport 里 */
   private sendEvent(requestId: string, event: StreamEvent): void {
-    if (this.window.isDestroyed()) return
-
-    // 立即事件绕过合批：它们的载荷由 sendEventImmediate 手写，且发送前会强制冲刷
-    // 缓冲区，保证「工具卡片出现在它前面的正文之后」。划分见 types.ts 的
-    // IMMEDIATE_STREAM_EVENT_TYPES——挪动任何一个都会在两侧编译报错。
-    if (isImmediateStreamEvent(event)) {
-      this.eventPacer.flush(requestId)
-      this.sendEventImmediate(requestId, event)
-      return
-    }
-
-    this.eventPacer.push(requestId, [event])
-  }
-
-  /**
-   * 把一窗合并后的事件作为一个 batch 信封送出。
-   * 渲染端由 forEachStreamChunk 统一拆批。
-   */
-  private sendBatch(requestId: string, events: BufferedStreamEvent[]): void {
-    if (events.length === 0) return
-
-    if (this.window.isDestroyed()) {
-      this.eventPacer.release(requestId)
-      return
-    }
-
-    this.window.webContents.send(`llm:stream:${requestId}`, {
-      type: 'batch',
-      events: events.map(e => this.serializeEvent(e)),
-    })
-  }
-
-  /**
-   * kebab-case 的内部事件翻成渲染端的 snake_case 线协议。
-   *
-   * 返回类型是 RendererStreamChunk 而不是 any，入参是 BufferedStreamEvent 而不是
-   * StreamEvent，所以这个 switch 必须穷尽——原来的 `default: return event` 会把
-   * 未翻译的事件原样上线（kebab-case），而渲染端的 switch 没有 default，结果是
-   * 静默丢弃。现在少写一个 case 就是编译错误。
-   */
-  private serializeEvent(event: BufferedStreamEvent): RendererStreamChunk {
-    switch (event.type) {
-      case 'text':
-        return { type: 'text', content: event.content }
-      case 'reasoning':
-        return { type: 'reasoning', content: event.content }
-      case 'tool-call-delta':
-        return {
-          type: 'tool_call_delta',
-          id: event.id,
-          name: event.name,
-          argumentsDelta: event.argumentsDelta,
-        }
-      case 'tool-call-delta-end':
-        return { type: 'tool_call_delta_end', id: event.id }
-      case 'source':
-        return { type: 'source', source: event.source }
-    }
-  }
-
-  /**
-   * 立即发送事件（不批量）
-   */
-  private sendEventImmediate(requestId: string, event: ImmediateStreamEvent): void {
-    if (this.window.isDestroyed()) return
-
-    try {
-      switch (event.type) {
-        case 'tool-call-start':
-          this.window.webContents.send(`llm:stream:${requestId}`, {
-            type: 'tool_call_start',
-            id: event.id,
-            name: event.name,
-          })
-          break
-
-        case 'tool-call-available':
-          this.window.webContents.send(`llm:stream:${requestId}`, {
-            type: 'tool_call_available',
-            id: event.id,
-            name: event.name,
-            arguments: event.arguments,
-          })
-          break
-
-        case 'error':
-          this.window.webContents.send(`llm:error:${requestId}`, {
-            message: event.error.message,
-            code: event.error.code,
-            retryable: event.error.retryable,
-          })
-          break
-
-        case 'done':
-          logger.llm.info('[StreamingService] Sending done event', { requestId, channel: `llm:done:${requestId}` })
-          this.window.webContents.send(`llm:done:${requestId}`, {
-            reasoning: event.reasoning,
-            reasoningSignature: event.reasoningSignature,
-            usage: event.usage ? {
-              promptTokens: event.usage.inputTokens,
-              completionTokens: event.usage.outputTokens,
-              totalTokens: event.usage.totalTokens,
-              cachedInputTokens: event.usage.cachedInputTokens,
-              cacheWriteTokens: event.usage.cacheWriteTokens,
-              reasoningTokens: event.usage.reasoningTokens,
-              cacheReadSource: event.usage.cacheReadSource,
-              cacheWriteSource: event.usage.cacheWriteSource,
-            } : undefined,
-            metadata: event.metadata,
-          })
-          break
-      }
-    } catch (error) {
-      logger.llm.error('[StreamingService] Failed to send event:', error)
-    }
+    this.transport.send(requestId, event)
   }
 
   private async nextStreamPart(
