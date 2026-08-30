@@ -14,6 +14,7 @@ import { ToolConverter } from '../core/ToolConverter'
 import { prepareExecutionRequest } from '../core/RequestExecution'
 import { executeWithGenerationRecovery } from '../core/GenerationRecovery'
 import { LLMError, convertUsage, isImmediateStreamEvent } from '../types'
+import { createKeyedLeadingEdgeThrottle } from '@shared/utils/keyedLeadingEdgeThrottle'
 import type {
   StreamEvent,
   BufferedStreamEvent,
@@ -44,6 +45,15 @@ export interface StreamingResult {
 }
 
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 15_000
+
+/**
+ * IPC 合批的出货间隔上限。
+ *
+ * 这里只负责「IPC 频率上限」，不负责界面节奏——界面节奏的唯一权威是渲染端的
+ * StreamingBuffer（33ms、对齐 rAF）。所以这个值要明显小于 33ms，否则主进程就成了
+ * 那条更慢的链，渲染端再怎么对齐绘制也匀不出来。
+ */
+const STREAM_IPC_INTERVAL_MS = 16
 
 interface PseudoToolCallPayload {
   name: string
@@ -336,9 +346,24 @@ export class StreamingService {
   private window: BrowserWindow
   private messageConverter: MessageConverter
   private toolConverter: ToolConverter
-  // IPC 批量发送缓冲区（只装合批事件——立即事件永远不进这里）
-  private eventBuffer = new Map<string, BufferedStreamEvent[]>()
-  private flushTimers = new Map<string, NodeJS.Timeout>()
+  /**
+   * 按 requestId 分组的 IPC 合批节流器（只装合批事件——立即事件永远不进这里）。
+   *
+   * 以前这里是 `eventBuffer` + `flushTimers` 两张表加一段 30ms 的**防抖**（每次
+   * append 都 clearTimeout 重排），持续 token 流会把出货时机无限推迟，表现为
+   * 「憋一大段然后蹦出来」。换成前沿节流之后：首块零延迟，之后按 16ms 稳定出货。
+   *
+   * 顺带解决了条目泄漏：以前只有 flushEvents 会删表项，abort / 异常路径留着空条目；
+   * 现在空窗一轮节流器自己就把 key 摘掉了。
+   */
+  private readonly eventPacer = createKeyedLeadingEdgeThrottle<string, BufferedStreamEvent[]>({
+    intervalMs: STREAM_IPC_INTERVAL_MS,
+    accumulate: (pending, next) => (pending ? [...pending, ...next] : next),
+    emit: (requestId, events) => this.sendBatch(requestId, events),
+    onEmitError: (error, requestId) => {
+      logger.llm.error('[StreamingService] Failed to flush events:', { requestId, error })
+    },
+  })
 
   constructor(window: BrowserWindow) {
     this.window = window
@@ -781,7 +806,7 @@ export class StreamingService {
   }
 
   /**
-   * 发送事件到渲染进程（批量发送优化）
+   * 发送事件到渲染进程（合批 + 前沿节流）
    */
   private sendEvent(requestId: string, event: StreamEvent): void {
     if (this.window.isDestroyed()) return
@@ -790,57 +815,30 @@ export class StreamingService {
     // 缓冲区，保证「工具卡片出现在它前面的正文之后」。划分见 types.ts 的
     // IMMEDIATE_STREAM_EVENT_TYPES——挪动任何一个都会在两侧编译报错。
     if (isImmediateStreamEvent(event)) {
-      this.flushEvents(requestId)
+      this.eventPacer.flush(requestId)
       this.sendEventImmediate(requestId, event)
       return
     }
 
-    // 批量发送的事件类型（text, reasoning, tool-call-delta, tool-call-delta-end, source）
-    if (!this.eventBuffer.has(requestId)) {
-      this.eventBuffer.set(requestId, [])
-    }
-
-    this.eventBuffer.get(requestId)!.push(event)
-
-    // 清除旧的定时器
-    const existingTimer = this.flushTimers.get(requestId)
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-    }
-
-    // 设置新的定时器（30ms 批量发送，更细粒度喂给 renderer 的插值动画）
-    const timer = setTimeout(() => {
-      this.flushEvents(requestId)
-    }, 30)
-
-    this.flushTimers.set(requestId, timer)
+    this.eventPacer.push(requestId, [event])
   }
 
   /**
-   * 刷新事件缓冲区
+   * 把一窗合并后的事件作为一个 batch 信封送出。
+   * 渲染端由 forEachStreamChunk 统一拆批。
    */
-  private flushEvents(requestId: string): void {
-    const events = this.eventBuffer.get(requestId)
-    if (!events || events.length === 0) return
+  private sendBatch(requestId: string, events: BufferedStreamEvent[]): void {
+    if (events.length === 0) return
 
     if (this.window.isDestroyed()) {
-      this.eventBuffer.delete(requestId)
-      this.flushTimers.delete(requestId)
+      this.eventPacer.release(requestId)
       return
     }
 
-    try {
-      // 批量发送所有事件
-      this.window.webContents.send(`llm:stream:${requestId}`, {
-        type: 'batch',
-        events: events.map(e => this.serializeEvent(e))
-      })
-    } catch (error) {
-      logger.llm.error('[StreamingService] Failed to flush events:', error)
-    }
-
-    this.eventBuffer.delete(requestId)
-    this.flushTimers.delete(requestId)
+    this.window.webContents.send(`llm:stream:${requestId}`, {
+      type: 'batch',
+      events: events.map(e => this.serializeEvent(e)),
+    })
   }
 
   /**

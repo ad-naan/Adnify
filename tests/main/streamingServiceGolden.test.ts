@@ -301,14 +301,14 @@ describe('StreamingService 主进程流式路径（golden）', () => {
       ),
     ).rejects.toMatchObject({ code: 'LLM_NO_OUTPUT', retryable: true })
 
-    // 抛错的那一刻缓冲区还没被冲刷：这条路径上没有任何立即事件（done 不会发），
-    // 只剩一个 30ms 定时器悬着。
-    expect(h.shape()).toEqual([])
+    // 前沿节流：第一块合批事件（reasoning）在 push 的那一刻就已经上线，不等窗口。
+    // 抛错这一刻还没出货的只有窗口内累积的那部分。
+    expect(h.shape()).toEqual(['stream:reasoning'])
 
-    // 定时器照常到点，于是这批文字在异常抛出之后才到达渲染端。线上没有 reset
-    // 事件，GenerationRecovery 又会重放整个流，所以渲染端会把重放的文字追加在
-    // 这批后面——这就是「反复输出 think 和文字」看起来在累积的原因。
-    // 同时这也钉住了 eventBuffer/flushTimers 在异常路径上不被清理（P2 要修）。
+    // 窗口到点，剩下的文字在异常抛出之后才到达渲染端。线上没有 reset 事件，
+    // GenerationRecovery 又会重放整个流，所以渲染端会把重放的文字追加在这批后面
+    // ——这就是「反复输出 think 和文字」看起来在累积的原因（P2 之后依然如此，
+    // 这是 GenerationRecovery 的问题，不是节流的问题）。
     await vi.advanceTimersByTimeAsync(30)
     expect(h.shape()).toEqual(['stream:reasoning', 'stream:text'])
   })
@@ -341,9 +341,9 @@ describe('StreamingService 主进程流式路径（golden）', () => {
     ).rejects.toThrow('provider exploded')
 
     // 没有 error:*。error 只由 generate() 的 catch 和 abort 分支发出。
-    // 注意 text 停在缓冲区里没有被冲刷——只有立即事件才会触发冲刷。
-    expect(h.shape()).toEqual([])
-    expect(h.rawPayloads()).toEqual([])
+    // 前沿节流下首块文字已经上线，其余没有——error part 不触发冲刷。
+    expect(h.shape()).toEqual(['stream:text'])
+    expect(h.rawPayloads()).toHaveLength(1)
   })
 })
 
@@ -377,18 +377,22 @@ describe('StreamingService 的立即/合批分流', () => {
     }))
 
     expect(envelopes).toEqual([
-      // 三个合批事件被 tool_call_start 的强制冲刷一次性发出
-      { channel: 'stream', type: 'batch', batched: ['text', 'reasoning', 'tool_call_delta'], },
+      // 前沿：第一个合批事件自己一个信封，零延迟上线
+      { channel: 'stream', type: 'batch', batched: ['text'] },
+      // 同一窗口内累积的两个，被 tool_call_start 的强制冲刷一次性发出
+      { channel: 'stream', type: 'batch', batched: ['reasoning', 'tool_call_delta'] },
       { channel: 'stream', type: 'tool_call_start', batched: undefined },
       { channel: 'stream', type: 'tool_call_available', batched: undefined },
       { channel: 'done', type: '(bare)', batched: undefined },
     ])
   })
 
-  it('【记录当前的 bug】sendEvent 是防抖不是节流：持续 token 流会被无限推迟到流结束', async () => {
+  it('持续 token 流边产边出，不憋到流结束（前沿节流取代了原来的 30ms 防抖）', async () => {
     const h = harness()
 
-    // 20ms 一个 token，比 30ms 的窗口短——这就是真实的持续输出。
+    // 20ms 一个 token。原来的实现是防抖：每次 append 都 clearTimeout 重排 30ms，
+    // 定时器被推到 110ms，于是 95ms 时一条都没送，直到 done 强制冲刷才一次性蹦出
+    // 五个 token——这正是「憋一大段然后蹦出来」。
     const parts = async function* () {
       for (const text of ['a', 'b', 'c', 'd', 'e']) {
         yield { type: 'text-delta', text }
@@ -398,25 +402,50 @@ describe('StreamingService 的立即/合批分流', () => {
 
     const pending = h.drive(parts, { text: 'abcde', usage: EMPTY_USAGE, finishReason: 'stop' })
 
-    // 95ms：五个 token 都已产出，流还没结束（最后一次 sleep 到 100ms）。
-    // 前沿节流下这时应该已经送出好几批；防抖下每次 append 都 clear 重排，
-    // 定时器被推到了 110ms，所以一条都没送。
+    // 首个 token 零延迟：一个 tick 就能看到它，不等 16ms 窗口。
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.shape()).toEqual(['stream:text'])
+
+    // 之后每个 token 的间隔（20ms）都大于窗口（16ms），所以每个都是「停顿后的
+    // 第一块」，各自零延迟送出。95ms 时五个全部在渲染端了，流还没结束。
     await vi.advanceTimersByTimeAsync(95)
-    expect(h.shape()).toEqual([])
-
-    await vi.advanceTimersByTimeAsync(100)
-    await pending
-
-    // 直到 done（立即事件）强制冲刷，五个 token 才一次性到达渲染端——
-    // 这正是「憋一大段然后蹦出来」。P2 换成前沿节流之后，上面那条断言会变成
-    // 「已经分批送出」，届时必须有意识地更新这个 golden。
     expect(h.shape()).toEqual([
       'stream:text',
       'stream:text',
       'stream:text',
       'stream:text',
       'stream:text',
-      'done:-',
     ])
+
+    await vi.advanceTimersByTimeAsync(100)
+    await pending
+
+    expect(h.shape().at(-1)).toBe('done:-')
+  })
+
+  it('比窗口更密的 token 流按 16ms 合批出货，缓冲不会无界增长', async () => {
+    const h = harness()
+
+    // 4ms 一个 token，远快于窗口。防抖下除了被 done 冲刷什么都出不来；
+    // 前沿节流下首块立即，之后每 16ms 一批。
+    const parts = async function* () {
+      for (let i = 0; i < 12; i++) {
+        yield { type: 'text-delta', text: String(i) }
+        await new Promise(resolve => setTimeout(resolve, 4))
+      }
+    }
+
+    const pending = h.drive(parts, { text: '0123456789', usage: EMPTY_USAGE, finishReason: 'stop' })
+
+    await vi.advanceTimersByTimeAsync(50)
+    await pending
+
+    // 12 个 token 压成 4 个信封：t=0 首块 + t=16/32/48 三次窗口出货。
+    const batches = h
+      .rawPayloads()
+      .filter(({ payload }) => payload.type === 'batch')
+      .map(({ payload }) => payload.events.map((e: any) => e.content).join(''))
+
+    expect(batches).toEqual(['0', '123', '4567', '891011'])
   })
 })

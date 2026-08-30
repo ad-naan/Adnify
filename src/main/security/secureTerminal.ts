@@ -4,6 +4,7 @@
 
 import { logger } from '@shared/utils/Logger'
 import { toAppError } from '@shared/utils/errorHandler'
+import { createKeyedLeadingEdgeThrottle } from '@shared/utils/keyedLeadingEdgeThrottle'
 import { BrowserWindow, app, ipcMain } from 'electron'
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from 'child_process'
 import { promisify } from 'util'
@@ -1024,40 +1025,38 @@ export function registerSecureTerminalHandlers(
      * 用节流而非防抖：持续输出的命令（如 npm install）在防抖下会被
      * 一直推迟，直到输出停顿才刷新，表现为终端长时间空白后突然刷屏。
      * 节流保证首块立即送达，之后稳定按帧率输出。
+     *
+     * 实现来自 @shared/utils/keyedLeadingEdgeThrottle——原来这里内联了一份，
+     * 且是后沿的（首块也要等满 16ms）。LLM 流式事件那边踩的是同一个坑，现在
+     * 两边共用一份带不变量测试的实现。
      */
-    let pending = ''
-    let flushTimer: ReturnType<typeof setTimeout> | null = null
-    const FLUSH_INTERVAL_MS = 16
+    const PTY_FLUSH_INTERVAL_MS = 16
 
-    const flushPtyData = () => {
-      if (flushTimer !== null) {
-        clearTimeout(flushTimer)
-        flushTimer = null
-      }
-      if (pending.length === 0) return
-      const data = pending
-      pending = ''
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('terminal:data', { id, data, ...nextMeta() })
-      }
-    }
+    const ptyPacer = createKeyedLeadingEdgeThrottle<string, string>({
+      intervalMs: PTY_FLUSH_INTERVAL_MS,
+      accumulate: (pending, next) => (pending ?? '') + next,
+      emit: (terminalId, data) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('terminal:data', { id: terminalId, data, ...nextMeta() })
+        }
+      },
+      onEmitError: (error, terminalId) => {
+        logger.security.error(`[Terminal] Failed to send PTY data (id: ${terminalId}):`, error)
+      },
+    })
 
     terminalProcess.onData((data: string | Buffer) => {
       const text = typeof data === 'string' ? data : ptyUtf8.write(data)
       if (text.length === 0) {
         return
       }
-      pending += text
-      // 已排定的 flush 不被后续数据推迟，因此持续输出不会无限延后
-      if (flushTimer === null) {
-        flushTimer = setTimeout(flushPtyData, FLUSH_INTERVAL_MS)
-      }
+      ptyPacer.push(id, text)
     })
 
     terminalProcess.on('error', (err: any) => {
       logger.security.error(`[Terminal] PTY Error (id: ${id}):`, err)
       // 先刷出已缓冲的输出，错误信息才不会跑到它前面
-      flushPtyData()
+      ptyPacer.flush(id)
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:error', {
           id,
@@ -1073,8 +1072,11 @@ export function registerSecureTerminalHandlers(
       logger.security.info(`[Terminal] Terminal ${id} exited with code ${exitCode}, signal ${signal}`)
       terminals.delete(id)
       // 解码残留字节并入缓冲，再整体刷出，保证退出前不丢输出且顺序正确
-      pending += ptyUtf8.end()
-      flushPtyData()
+      const tail = ptyUtf8.end()
+      if (tail.length > 0) {
+        ptyPacer.push(id, tail)
+      }
+      ptyPacer.flush(id)
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('terminal:exit', {
           id,
