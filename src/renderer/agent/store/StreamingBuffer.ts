@@ -1,8 +1,18 @@
 /**
- * 流式响应节流缓冲区
- * 
- * 用于优化高频更新，通过 requestAnimationFrame 实现约 60fps 的批量更新
- * 减少 React 渲染次数，提升性能
+ * 流式响应节流缓冲区 —— 界面节奏的**唯一权威**。
+ *
+ * 分工：主进程只负责压住 IPC 频率上限（`keyedLeadingEdgeThrottle`，16ms），到了渲染端
+ * 由这里独占决定「多久把累积的 token 写进 store 一次」。两边都做节奏会相乘，表现为
+ * 输出一顿一顿的。
+ *
+ * 三条不变量：
+ *   1. **前沿触发**：首个 token 立刻落地，不等一个间隔。等待首帧是「点了发送之后空白
+ *      一下」的直接来源，而它对吞吐毫无帮助。
+ *   2. **已排定的 flush 不被推迟**（节流，不是防抖）：持续 token 流下缓冲不会无界增长。
+ *      主进程那个 30ms 防抖的 bug 就是这一条的反面——「憋一大段再蹦出来」。
+ *   3. **对齐绘制**：到点后在 `requestAnimationFrame` 里写 store，让这次 React 渲染紧贴
+ *      下一次绘制。但窗口被遮挡/最小化时 rAF **不再触发**，所以必须带一个超时兜底，
+ *      否则后台标签页里的文字会永久停住（工具执行、持久化都在等它）。
  */
 
 type FlushCallback = (messageId: string, content: string, threadId?: string) => void
@@ -27,12 +37,17 @@ class StreamingBuffer {
     private buffer: Map<string, { content: string; threadId?: string }> = new Map()
     private reasoningBuffer: Map<string, Map<string, ReasoningEntry>> = new Map()
     private timerId: ReturnType<typeof setTimeout> | null = null
+    private rafId: number | null = null
+    private rafFallbackId: ReturnType<typeof setTimeout> | null = null
+    private lastFlushAt: number | null = null
     private flushCallback: FlushCallback | null = null
     private reasoningFlushCallback: ReasoningFlushCallback | null = null
     // Keep the display cadence at ~30fps. Renderer work is reduced downstream
     // instead of delaying chunks, so the visible text can keep up with fast
     // model output and still finish on the final flush.
     private readonly flushIntervalMs = 33
+    /** rAF 在窗口被遮挡时不触发，超过这个时间就不再等它 */
+    private readonly occlusionFallbackMs = 100
 
     setFlushCallback(callback: FlushCallback) {
         this.flushCallback = callback
@@ -93,14 +108,70 @@ class StreamingBuffer {
     }
 
     private scheduleFlush(): void {
-        if (this.timerId !== null) return
+        // 已经有一次 flush 在路上：不重排（这就是「节流而非防抖」）
+        if (this.timerId !== null || this.rafId !== null || this.rafFallbackId !== null) return
 
-        // 节流到约 30fps（flushIntervalMs）；已排定的 flush 不会被后续 append 推迟，
-        // 因此持续的 token 流不会让缓冲无界增长。
+        const sinceLastFlush = this.lastFlushAt === null ? Infinity : Date.now() - this.lastFlushAt
+        if (sinceLastFlush >= this.flushIntervalMs) {
+            // 前沿触发：从没落地过（首个 token），或距上次落地已经够久 —— 立刻走
+            this.requestPaintAlignedFlush()
+            return
+        }
+
         this.timerId = setTimeout(() => {
             this.timerId = null
-            this.flush()
-        }, this.flushIntervalMs)
+            this.requestPaintAlignedFlush()
+        }, this.flushIntervalMs - sinceLastFlush)
+    }
+
+    /**
+     * 把这次落地对齐到下一次绘制，并带遮挡兜底。
+     *
+     * 没有 rAF 的环境（单测跑在 node 上）直接同步落地，节流语义不变。
+     */
+    private requestPaintAlignedFlush(): void {
+        if (typeof requestAnimationFrame !== 'function') {
+            this.runFlush()
+            return
+        }
+
+        this.rafId = requestAnimationFrame(() => {
+            this.rafId = null
+            this.cancelRafFallback()
+            this.runFlush()
+        })
+
+        this.rafFallbackId = setTimeout(() => {
+            this.rafFallbackId = null
+            this.cancelRaf()
+            this.runFlush()
+        }, this.occlusionFallbackMs)
+    }
+
+    private cancelRaf(): void {
+        if (this.rafId === null) return
+        if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.rafId)
+        this.rafId = null
+    }
+
+    private cancelRafFallback(): void {
+        if (this.rafFallbackId === null) return
+        clearTimeout(this.rafFallbackId)
+        this.rafFallbackId = null
+    }
+
+    private cancelScheduled(): void {
+        if (this.timerId !== null) {
+            clearTimeout(this.timerId)
+            this.timerId = null
+        }
+        this.cancelRaf()
+        this.cancelRafFallback()
+    }
+
+    private runFlush(): void {
+        this.lastFlushAt = Date.now()
+        this.flush()
     }
 
     private flush(): void {
@@ -164,18 +235,13 @@ class StreamingBuffer {
     }
 
     flushNow(): void {
-        if (this.timerId !== null) {
-            clearTimeout(this.timerId)
-            this.timerId = null
-        }
-        this.flush()
+        this.cancelScheduled()
+        this.runFlush()
     }
 
     clear(): void {
-        if (this.timerId !== null) {
-            clearTimeout(this.timerId)
-            this.timerId = null
-        }
+        this.cancelScheduled()
+        this.lastFlushAt = null
         this.buffer.clear()
         this.reasoningBuffer.clear()
     }

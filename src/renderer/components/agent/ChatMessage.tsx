@@ -42,7 +42,6 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Tooltip } from '../ui/Tooltip'
 import { LazyImage } from '../common/LazyImage'
-import { useSmoothStream } from '@renderer/hooks/useSmoothStream'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { CompressionDigestCard } from './CompressionDigestCard'
 import { t } from '../../i18n'
@@ -516,15 +515,13 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
     return () => el.removeEventListener('scroll', checkScroll)
   }, [isExpanded, content])
 
-  // Fluid effect for thinking content, ONLY when streaming
-  const fluidContent = useSmoothStream(content, isStreaming, 1.5)
 
   // 流式输出时自动滚动到底部
   useEffect(() => {
     if (isStreaming && isExpanded && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [fluidContent, isStreaming, isExpanded])
+  }, [content, isStreaming, isExpanded])
 
   const durationText = !isStreaming
     ? (lastElapsed.current > 0 ? `Thought for ${lastElapsed.current}s` : 'Thought')
@@ -555,7 +552,7 @@ const ThinkingBlock = React.memo(({ content, startTime, isStreaming, fontSize }:
                 style={{ fontSize: `${fontSize - 1}px` }}
                 className={`text-text-muted/70 leading-relaxed whitespace-pre-wrap font-sans ${isStreaming ? 'animate-block-reveal' : ''}`}
               >
-                {fluidContent}
+                {content}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-text-muted/50 italic text-xs py-1">
@@ -601,12 +598,10 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     return cleanedContent
   }, [cleanedContent, systemAlert])
 
-  // 平滑流式插入
-  const smoothContent = useSmoothStream(contentWithoutAlert || '', !!isStreaming, 1.5)
   const streamingPartitioner = React.useMemo(() => new StreamingMarkdownPartitioner(), [])
   const streamingPartition = React.useMemo(
-    () => keepStreamingLayout ? streamingPartitioner.update(smoothContent, !!isStreaming) : null,
-    [isStreaming, keepStreamingLayout, smoothContent, streamingPartitioner],
+    () => keepStreamingLayout ? streamingPartitioner.update(contentWithoutAlert, !!isStreaming) : null,
+    [contentWithoutAlert, isStreaming, keepStreamingLayout, streamingPartitioner],
   )
 
   const workspacePath = useStore(s => s.workspacePath)
@@ -727,29 +722,19 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
                       {streamingPartition.activeBlock}
                     </div>
                   ) : (
-                    <ReactMarkdown
-                      className="prose prose-invert max-w-none"
-                      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-                      rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-                      components={markdownComponents}
-                      skipHtml
-                    >
-                      {fixMarkdownTables(streamingPartition.activeBlock)}
-                    </ReactMarkdown>
+                    <StableStreamingMarkdownBlock
+                      content={streamingPartition.activeBlock}
+                      components={markdownComponents as any}
+                    />
                   )}
                 </div>
               )}
             </>
           ) : (
-            <ReactMarkdown
-              className="prose prose-invert max-w-none"
-              remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-              rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
-              components={markdownComponents}
-              skipHtml
-            >
-              {fixMarkdownTables(smoothContent)}
-            </ReactMarkdown>
+            <StableStreamingMarkdownBlock
+              content={contentWithoutAlert}
+              components={markdownComponents as any}
+            />
           )}
         </div>
       )}
@@ -1453,7 +1438,7 @@ const ChatMessage = React.memo(({
                         onStopTool={onStopTool}
                         onOpenDiff={onOpenDiff}
                         fontSize={fontSize}
-                        isStreaming={false}
+                        isStreaming={isStreaming}
                         messageId={message.id}
                       />
                     )}

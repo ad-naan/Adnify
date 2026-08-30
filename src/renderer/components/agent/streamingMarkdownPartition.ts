@@ -13,6 +13,7 @@ interface StreamingMarkdownPartitionState {
 }
 
 const SOURCE_TAIL_LENGTH = 64
+const EMPTY_BLOCKS: readonly string[] = []
 
 function getPartitionTail(partition: StreamingMarkdownPartition, length: number): string {
   let tail = partition.activeBlock
@@ -38,9 +39,18 @@ function appendContent(
   appendOnly: boolean,
 ): StreamingMarkdownPartitionState {
   const canAppend = appendOnly && previous && isAppend(previous, content)
-  const completedBlocks: string[] = canAppend
-    ? previous.partition.completedBlocks as string[]
-    : []
+
+  // 已完成的块列表**从不原地改动**：上一次 update 返回的 partition 是调用方还持有的
+  // 值（useMemo 的缓存、React 上一帧的渲染结果），原地 push 会让那些「过去的值」
+  // 跟着变，StrictMode 双调用下就成了同一段文字被数进去两次。真有块收尾时才拷一份，
+  // 而收尾只发生在栅栏之外的空行处 —— 绝大多数 token 帧一次都不会拷。
+  const baseBlocks: readonly string[] = canAppend ? previous.partition.completedBlocks : EMPTY_BLOCKS
+  let grownBlocks: string[] | undefined
+  const completeBlock = (block: string) => {
+    if (!grownBlocks) grownBlocks = baseBlocks.slice()
+    grownBlocks.push(block)
+  }
+
   let activeBlock = canAppend ? previous.partition.activeBlock : ''
   let pendingLineLength = canAppend ? previous.pendingLineLength : 0
   let fenceChar = canAppend ? previous.fenceChar : ''
@@ -68,7 +78,7 @@ function appendContent(
     }
 
     if (!fenceChar && line.trim().length === 0 && activeBlock.trim().length > 0) {
-      completedBlocks.push(activeBlock)
+      completeBlock(activeBlock)
       activeBlock = ''
     }
 
@@ -84,7 +94,7 @@ function appendContent(
 
   return {
     partition: {
-      completedBlocks,
+      completedBlocks: grownBlocks ?? baseBlocks,
       activeBlock,
       hasOpenFence: fenceChar.length > 0,
     },
@@ -100,12 +110,25 @@ function appendContent(
  * updates. Finalized block strings retain their identity while the owned list
  * only grows; only the new suffix is scanned. A bounded tail check catches
  * stream rollbacks, and a non-append update fully rebuilds the final result.
+ *
+ * `update` 是**幂等**的：同一对 `(content, appendOnly)` 连续调用返回同一个
+ * partition 对象，内部状态不再推进。调用方是 `useMemo` 里的一次副作用，而
+ * StrictMode 会把 useMemo 的计算函数跑两遍 —— 不幂等的话第二遍会把同一段
+ * 文字再数一次。
  */
 export class StreamingMarkdownPartitioner {
   private state: StreamingMarkdownPartitionState | undefined
+  private lastContent: string | undefined
+  private lastAppendOnly: boolean | undefined
 
   update(content: string, appendOnly: boolean): StreamingMarkdownPartition {
+    if (this.state && content === this.lastContent && appendOnly === this.lastAppendOnly) {
+      return this.state.partition
+    }
+
     this.state = appendContent(this.state, content, appendOnly)
+    this.lastContent = content
+    this.lastAppendOnly = appendOnly
     return this.state.partition
   }
 }

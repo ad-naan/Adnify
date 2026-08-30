@@ -57,12 +57,29 @@ describe('partitionStreamingMarkdown', () => {
     const first = partitioner.update('第一段。\n\n正在', true)
     const second = partitioner.update('第一段。\n\n正在输出', true)
 
+    // 没有新块收尾：列表引用与块字符串都原样传下去，React 那侧不会重渲染已完成的块
     expect(second.completedBlocks).toBe(first.completedBlocks)
     expect(second.completedBlocks[0]).toBe(first.completedBlocks[0])
 
     const third = partitioner.update('第一段。\n\n正在输出。\n\n下一段', true)
     expect(third.completedBlocks[0]).toBe(first.completedBlocks[0])
-    expect(third.completedBlocks).toBe(second.completedBlocks)
+    // 有新块收尾时拷一份，而不是原地 push：上一次返回的 partition 是调用方还持有的值
+    expect(third.completedBlocks).not.toBe(second.completedBlocks)
+    expect(second.completedBlocks).toHaveLength(1)
+    expect(third.completedBlocks).toHaveLength(2)
+  })
+
+  it('update 是幂等的：同一对入参连续调用返回同一个 partition，不会把文字数两遍', () => {
+    const partitioner = new StreamingMarkdownPartitioner()
+    partitioner.update('第一段。\n\n', true)
+
+    const once = partitioner.update('第一段。\n\n第二段。\n\n尾部', true)
+    // StrictMode 会把 useMemo 的计算函数跑两遍
+    const twice = partitioner.update('第一段。\n\n第二段。\n\n尾部', true)
+
+    expect(twice).toBe(once)
+    expect(twice.completedBlocks).toHaveLength(2)
+    expect(twice.activeBlock).toBe('尾部')
   })
 
   it('resets when streamed content is replaced or shortened', () => {
