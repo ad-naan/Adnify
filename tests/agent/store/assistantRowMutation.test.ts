@@ -70,6 +70,37 @@ describe('mutateAssistantRow', () => {
     expect(assistant.content).toBe('before the tool')
   })
 
+  it('行被截断时 startToolExecution 不写 phase：否则停不下来的 tool_running 会挂住整个会话', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const phaseBefore = useAgentStore.getState().threads[threadId].streamState.phase
+
+    useAgentStore.getState().startToolExecution('truncated-message', {
+      id: 'tc-phase',
+      name: 'read_file',
+      arguments: {},
+    }, {}, threadId)
+
+    expect(useAgentStore.getState().threads[threadId].streamState.phase).toBe(phaseBefore)
+  })
+
+  it('startToolExecution 清掉这个工具的流式预览，其他工具的预览留着', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+    useAgentStore.getState().setToolStreamingPreview('tc-run', { isStreaming: true }, threadId)
+    useAgentStore.getState().setToolStreamingPreview('tc-other', { isStreaming: true }, threadId)
+
+    useAgentStore.getState().startToolExecution(assistantId, {
+      id: 'tc-run',
+      name: 'read_file',
+      arguments: {},
+    }, { requestId: 'req-1' }, threadId)
+
+    const thread = useAgentStore.getState().threads[threadId]
+    expect(thread.toolStreamingPreviews?.['tc-run']).toBeUndefined()
+    expect(thread.toolStreamingPreviews?.['tc-other']).toBeDefined()
+    expect(thread.streamState).toMatchObject({ phase: 'tool_running', requestId: 'req-1' })
+  })
+
   it('落地的工具调用不带流式预览状态（streamingState 不进持久化）', () => {
     const threadId = useAgentStore.getState().createThread()
     const assistantId = useAgentStore.getState().addAssistantMessage()

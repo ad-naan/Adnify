@@ -977,70 +977,43 @@ export const createMessageSlice: StateCreator<
         const threadId = targetThreadId || get().currentThreadId
         if (!threadId) return
 
-        get()._flushTextBuffer(messageId)
-
         const runningToolCall: ToolCall = {
             ...toolCall,
             status: 'running',
             streamingState: undefined,
         }
 
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
+        mutateAssistantRow(set, get, {
+            threadId,
+            messageId,
+            edit: assistantMessage => {
+                const existingToolCall = assistantMessage.toolCalls?.find(call => call.id === toolCall.id)
 
-            const messageIdx = thread.messages.findIndex(
-                message => message.id === messageId && message.role === 'assistant'
-            )
-            if (messageIdx === -1) return state
-
-            const assistantMessage = getAssistantMessage(thread, messageId)
-            if (!assistantMessage) return state
-            const existingToolCall = assistantMessage.toolCalls?.find(call => call.id === toolCall.id)
-            const parts = existingToolCall
-                ? assistantMessage.parts.map(part =>
-                    part.type === 'tool_call' && part.toolCall.id === toolCall.id
-                        ? { ...part, toolCall: runningToolCall }
-                        : part
-                )
-                : [...assistantMessage.parts, { type: 'tool_call' as const, toolCall: runningToolCall }]
-            const toolCalls = existingToolCall
-                ? assistantMessage.toolCalls?.map(call => call.id === toolCall.id ? runningToolCall : call)
-                : [...(assistantMessage.toolCalls || []), runningToolCall]
-            const messages = thread.messages.slice()
-            messages[messageIdx] = {
-                ...assistantMessage,
-                _textFinalized: true,
-                parts,
-                toolCalls,
-            }
-
-            const toolStreamingPreviews = thread.toolStreamingPreviews?.[toolCall.id]
-                ? Object.fromEntries(
-                    Object.entries(thread.toolStreamingPreviews).filter(([id]) => id !== toolCall.id)
-                )
-                : thread.toolStreamingPreviews
-
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: {
-                        ...thread,
-                        messages,
-                        liveAssistantMessage: undefined,
-                        toolStreamingPreviews,
-                        streamState: {
-                            ...thread.streamState,
-                            phase: 'tool_running',
-                            currentToolCall: runningToolCall,
-                            statusText: undefined,
-                            ...streamContext,
-                        },
-                        lastModified: Date.now(),
-                    },
-                },
-            }
+                return {
+                    ...assistantMessage,
+                    _textFinalized: true,
+                    parts: existingToolCall
+                        ? assistantMessage.parts.map(part =>
+                            part.type === 'tool_call' && part.toolCall.id === toolCall.id
+                                ? { ...part, toolCall: runningToolCall }
+                                : part
+                        )
+                        : [...assistantMessage.parts, { type: 'tool_call' as const, toolCall: runningToolCall }],
+                    toolCalls: existingToolCall
+                        ? assistantMessage.toolCalls?.map(call => call.id === toolCall.id ? runningToolCall : call)
+                        : [...(assistantMessage.toolCalls || []), runningToolCall],
+                }
+            },
+            // phase 在这里被写成 'tool_running'，但恢复成 'streaming' 发生在整个子系统的
+            // 另一头（core/tools.ts 的工具循环收尾）。这是最难自己看出来的一条耦合。
+            streamState: {
+                phase: 'tool_running',
+                currentToolCall: runningToolCall,
+                statusText: undefined,
+                ...streamContext,
+            },
+            dropPreviews: [toolCall.id],
+            touchLastModified: true,
         })
     },
 
