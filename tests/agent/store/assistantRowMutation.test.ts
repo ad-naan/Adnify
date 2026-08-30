@@ -145,6 +145,37 @@ describe('mutateAssistantRow', () => {
     expect(assistant.toolCalls?.[0]).toMatchObject({ status: 'success', result: 'file content' })
   })
 
+  it('updateToolCall 先落地缓冲里的正文，且那段文字只落地一次', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+    useAgentStore.getState().addToolCallPart(assistantId, {
+      id: 'tc-flush',
+      name: 'read_file',
+      arguments: {},
+    }, threadId)
+
+    useAgentStore.getState().appendToAssistant(assistantId, 'tail text', threadId)
+    useAgentStore.getState().updateToolCall(assistantId, 'tc-flush', { status: 'success', result: 'ok' }, threadId)
+    // 缓冲已被排空，后续的定时 flush 不该把同一段文字再写一遍
+    streamingBuffer.flushNow()
+
+    const assistant = useAgentStore.getState().getMessages(threadId)
+      .find(message => message.id === assistantId)
+    if (assistant?.role !== 'assistant') throw new Error('assistant row missing')
+    expect(assistant.content).toBe('tail text')
+    expect(assistant.toolCalls?.[0]).toMatchObject({ status: 'success', result: 'ok' })
+  })
+
+  it('工具调用还没落地时 updateToolCall 不发布新版本', () => {
+    const threadId = useAgentStore.getState().createThread()
+    const assistantId = useAgentStore.getState().addAssistantMessage()
+    const before = version(threadId)
+
+    useAgentStore.getState().updateToolCall(assistantId, 'tc-missing', { status: 'success' }, threadId)
+
+    expect(version(threadId)).toBe(before)
+  })
+
   it('落地的工具调用不带流式预览状态（streamingState 不进持久化）', () => {
     const threadId = useAgentStore.getState().createThread()
     const assistantId = useAgentStore.getState().addAssistantMessage()

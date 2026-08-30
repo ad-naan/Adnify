@@ -902,6 +902,8 @@ export const createMessageSlice: StateCreator<
             delete cleanUpdates.name
         }
 
+        // 只带 streamingState 的更新（流式参数预览）在这里就返回了，不进 store 写入，
+        // 也因此不会触发刷缓冲——参数流那条热路径保持零额外开销。
         if (Object.keys(cleanUpdates).length === 0) {
             if (shouldClearPreview) {
                 get().clearToolStreamingPreview(toolCallId, threadId)
@@ -909,58 +911,29 @@ export const createMessageSlice: StateCreator<
             return
         }
 
-        set(state => {
-            const thread = state.threads[threadId]
-            if (!thread) return state
+        mutateAssistantRow(set, get, {
+            threadId,
+            messageId,
+            edit: assistantMsg => {
+                const existingToolCall = assistantMsg.toolCalls?.find(tc => tc.id === toolCallId)
+                // 工具调用还没落地：这次更新没有落脚点，放弃（不 bump、不清覆盖层）
+                if (!existingToolCall) return assistantMsg
 
-            let updated = false
-            // 必须读 materializeThreadMessages 而不是 thread.messages：覆盖层存在时
-            // thread.messages 里那条是旧快照，在它上面改工具状态再写回去，
-            // 随后任何一次 materialize（持久化 / 发给模型 / 下一次落地写入）都会
-            // 用覆盖层把整条消息盖回去，这次工具更新就凭空消失了。
-            const messages = materializeThreadMessages(thread).map(msg => {
-                if (msg.id === messageId && msg.role === 'assistant') {
-                    const assistantMsg = msg as AssistantMessage
+                const updatedToolCall = { ...existingToolCall, ...cleanUpdates }
 
-                    // 检查工具调用是否已存在
-                    const existingToolCall = assistantMsg.toolCalls?.find(tc => tc.id === toolCallId)
-
-                    if (existingToolCall) {
-                        // 更新已存在的工具调用
-                        updated = true
-
-                        // 创建新的 toolCall 对象（确保引用变化）
-                        const updatedToolCall = { ...existingToolCall, ...cleanUpdates }
-
-                        const newParts = assistantMsg.parts.map(part => {
-                            if (part.type === 'tool_call' && part.toolCall.id === toolCallId) {
-                                return { ...part, toolCall: updatedToolCall }
-                            }
-                            return part
-                        })
-
-                        const newToolCalls = assistantMsg.toolCalls?.map(tc =>
-                            tc.id === toolCallId ? updatedToolCall : tc
-                        )
-
-                        return { ...assistantMsg, parts: newParts, toolCalls: newToolCalls }
-                    }
-
-                    return msg
+                return {
+                    ...assistantMsg,
+                    parts: assistantMsg.parts.map(part =>
+                        part.type === 'tool_call' && part.toolCall.id === toolCallId
+                            ? { ...part, toolCall: updatedToolCall }
+                            : part
+                    ),
+                    toolCalls: assistantMsg.toolCalls?.map(tc =>
+                        tc.id === toolCallId ? updatedToolCall : tc
+                    ),
                 }
-                return msg
-            })
-
-            // 如果没有更新，返回原状态避免不必要的重渲染
-            if (!updated) return state
-
-            return {
-                threadMessageVersions: bumpThreadMessageVersion(state.threadMessageVersions, threadId),
-                threads: {
-                    ...state.threads,
-                    [threadId]: { ...thread, messages, liveAssistantMessage: undefined, lastModified: Date.now() },
-                },
-            }
+            },
+            touchLastModified: true,
         })
 
         if (shouldClearPreview) {
