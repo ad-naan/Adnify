@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { Copy, Check, Edit2, RotateCcw, ChevronDown, X, Wrench, FileText, Code, Folder, Link2, Server } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { SyntaxHighlighter } from '@renderer/utils/syntaxHighlighter'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { themeManager } from '../../config/themeConfig'
@@ -59,6 +59,7 @@ import { StreamingMarkdownPartitioner } from './streamingMarkdownPartition'
 import { skillService } from '@/renderer/agent/services/skillService'
 import { logger } from '@shared/utils/Logger'
 import { buildChatMessagePartKeys } from './chatMessagePartKeys'
+import { parseThreadDeepLink } from '@/renderer/agent/threads/threadReference'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -172,6 +173,7 @@ const StableStreamingMarkdownBlock = React.memo(({
     remarkPlugins={MARKDOWN_REMARK_PLUGINS}
     rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
     components={components as any}
+    urlTransform={(url) => parseThreadDeepLink(url) ? url : defaultUrlTransform(url)}
     skipHtml
   >
     {fixMarkdownTables(content)}
@@ -661,9 +663,13 @@ const MarkdownContent = React.memo(({ content: rawContent, fontSize, isStreaming
     ul: ({ children }: any) => <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>,
     ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>,
     li: ({ children }: any) => <li className="pl-1">{children}</li>,
-    a: ({ href, children }: any) => (
-      <a href={href} target="_blank" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
-    ),
+    a: ({ href, children }: any) => {
+      const threadId = parseThreadDeepLink(href)
+      if (threadId) {
+        return <a href={href} onClick={(event) => { event.preventDefault(); useAgentStore.getState().switchThread(threadId) }} className="rounded bg-accent/[0.08] px-1.5 py-0.5 font-medium text-accent hover:bg-accent/[0.13]">{children}</a>
+      }
+      return <a href={href} target="_blank" rel="noreferrer" className="text-accent hover:underline decoration-accent/50 underline-offset-2 font-medium">{children}</a>
+    },
     strong: ({ children, ...props }: any) => <strong {...props}>{children}</strong>,
     em: ({ children, ...props }: any) => <em {...props}>{children}</em>,
     blockquote: ({ children }: any) => (

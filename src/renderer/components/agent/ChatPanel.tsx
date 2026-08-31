@@ -43,6 +43,7 @@ import { Button } from '../ui'
 import { globalConfirm } from '../common/ConfirmDialog'
 import { useToast } from '@/renderer/components/common/ToastProvider'
 import TaskCommandCenter from './TaskCommandCenter'
+import ActiveTaskQuickSwitch from './ActiveTaskQuickSwitch'
 import { BranchSelector } from './BranchControls'
 import { composerService } from '@/renderer/agent/services/composerService'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
@@ -1333,7 +1334,7 @@ export default function ChatPanel() {
 
         {/* Header - 简洁版 */}
         {chatMode !== 'plan' && <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between h-10 px-3 bg-background/80 backdrop-blur-xl select-none transition-all duration-300">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {/* 分支选择器 - 始终显示，点击展开分支管理 */}
             <BranchSelector
               language={language}
@@ -1342,9 +1343,16 @@ export default function ChatPanel() {
                 setSidebarOpen(true)
               }}
             />
+            <ActiveTaskQuickSwitch
+              language={language}
+              onOpenTaskCenter={() => {
+                setSidebarTab('history')
+                setSidebarOpen(true)
+              }}
+            />
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="ml-2 flex shrink-0 items-center gap-1">
             <AnimatePresence>
               {showScrollButton && (
                 <motion.div
@@ -1372,11 +1380,12 @@ export default function ChatPanel() {
                 setSidebarTab('history')
                 setSidebarOpen(true)
               }}
-              title={language === 'zh' ? 'Agent 任务' : 'Agent tasks'}
-              className="relative hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title={language === 'zh'
+                ? `Agent 任务${taskAttentionCount > 0 ? ` · ${taskAttentionCount} 个需要关注` : ''}`
+                : `Agent tasks${taskAttentionCount > 0 ? ` · ${taskAttentionCount} need attention` : ''}`}
+              className={`transition-colors ${taskAttentionCount > 0 ? 'bg-accent/[0.1] text-accent hover:bg-accent/[0.14]' : 'text-text-muted hover:bg-surface-hover hover:text-text-primary'}`}
             >
               <ListTree className="w-4 h-4" />
-              {taskAttentionCount > 0 && <span className="absolute right-0.5 top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-accent px-0.5 text-[7px] font-semibold leading-none text-white">{taskAttentionCount > 9 ? '9+' : taskAttentionCount}</span>}
             </Button>
             <Button
               variant="ghost"

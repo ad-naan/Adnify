@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
@@ -7,9 +7,12 @@ import {
   ChevronDown,
   Circle,
   Clock3,
+  Copy,
   GitBranch,
   ListTree,
   LoaderCircle,
+  MessageSquarePlus,
+  MoreHorizontal,
   PauseCircle,
   Plus,
   Search,
@@ -25,6 +28,16 @@ import { getRelativeTime } from '@shared/utils'
 import { useStore } from '@store'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { Button } from '../ui'
+import { toast } from '../common/ToastProvider'
+import { writeClipboardText } from '@/renderer/services/clipboardService'
+import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
+import { generateSummary } from '@/renderer/agent/domains/context/summaryService'
+import { getThreadDisplayTitle, type ChatThread } from '@/renderer/agent/types'
+import {
+  createThreadLinkMarkdown,
+  formatGeneratedThreadReference,
+  formatStructuredThreadReference,
+} from '@/renderer/agent/threads/threadReference'
 import {
   flattenTaskNodes,
   isAgentTaskThread,
@@ -36,6 +49,7 @@ import {
 
 type LegacyTab = 'history' | 'branches'
 type CenterTab = 'focus' | 'all' | 'branches'
+type ThreadReferenceAction = 'copy-reference' | 'reference-new'
 
 interface TaskCommandCenterProps {
   isOpen: boolean
@@ -77,29 +91,56 @@ function relationLabel(node: TaskCenterNode, language: string): string | null {
   return null
 }
 
+function ThreadActionStrip({
+  language,
+  onAction,
+  onDelete,
+  deleteLabel,
+}: {
+  language: string
+  onAction: (action: ThreadReferenceAction) => void
+  onDelete?: () => void
+  deleteLabel?: string
+}) {
+  const actions: Array<{ id: ThreadReferenceAction; label: string; icon: typeof Copy }> = [
+    { id: 'copy-reference', label: language === 'zh' ? '复制会话引用' : 'Copy thread reference', icon: Copy },
+    { id: 'reference-new', label: language === 'zh' ? '新对话引用' : 'Reference in new chat', icon: MessageSquarePlus },
+  ]
+
+  return <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-surface/45 p-0.5">
+    {actions.map(action => <button key={action.id} type="button" onClick={() => onAction(action.id)} title={action.label} aria-label={action.label} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45"><action.icon className="h-3.5 w-3.5" /></button>)}
+    {onDelete && <button type="button" onClick={onDelete} title={deleteLabel || (language === 'zh' ? '删除' : 'Delete')} aria-label={deleteLabel || (language === 'zh' ? '删除' : 'Delete')} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:ring-2 focus-visible:ring-red-400/45"><Trash2 className="h-3.5 w-3.5" /></button>}
+  </div>
+}
+
 function TaskNodeRow({
   node,
   currentThreadId,
   language,
   onOpen,
+  onReference,
+  onDelete,
 }: {
   node: TaskCenterNode
   currentThreadId: string | null
   language: string
   onOpen: (threadId: string) => void
+  onReference: (threadId: string, action: ThreadReferenceAction) => void
+  onDelete: (node: TaskCenterNode) => void
 }) {
   const [expanded, setExpanded] = useState(true)
+  const [actionsOpen, setActionsOpen] = useState(false)
   const hasChildren = node.children.length > 0
   const relation = relationLabel(node, language)
   const active = node.threadId === currentThreadId
 
   return <div>
-    <div className="relative" style={{ paddingLeft: `${node.depth * 17}px` }}>
+    <div className="group relative" style={{ paddingLeft: `${node.depth * 17}px` }}>
       <button
         type="button"
         disabled={!node.threadId}
         onClick={() => node.threadId && onOpen(node.threadId)}
-        className={`group relative flex min-h-11 w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/45 ${active ? 'bg-accent/[0.065]' : 'hover:bg-surface/40'} disabled:cursor-default`}
+        className={`group relative flex min-h-11 w-full items-start gap-2 rounded-md py-1.5 pl-2 text-left transition-[background-color,padding] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/45 ${actionsOpen ? 'pr-32' : 'pr-9'} ${active ? 'bg-accent/[0.065]' : 'hover:bg-surface/40'} disabled:cursor-default`}
       >
         {hasChildren ? <span
           role="button"
@@ -122,10 +163,14 @@ function TaskNodeRow({
             {node.messageCount > 0 && <span className="shrink-0 tabular-nums">{node.messageCount} msg</span>}
           </span>
         </span>
-        {node.status === 'waiting' && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 motion-reduce:animate-none" />}
+        {node.status === 'waiting' && !actionsOpen && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 motion-reduce:animate-none" />}
       </button>
+      {node.threadId && <div className="absolute right-1 top-2 flex items-center gap-0.5">
+        {actionsOpen && <ThreadActionStrip language={language} onAction={action => { setActionsOpen(false); onReference(node.threadId!, action) }} onDelete={() => { setActionsOpen(false); onDelete(node) }} deleteLabel={language === 'zh' ? '删除子会话' : 'Delete sub-thread'} />}
+        <button type="button" aria-label={language === 'zh' ? '会话操作' : 'Thread actions'} onClick={() => setActionsOpen(value => !value)} className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted/55 transition-all hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45 ${actionsOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><MoreHorizontal className="h-3.5 w-3.5" /></button>
+      </div>}
     </div>
-    {expanded && node.children.map(child => <TaskNodeRow key={child.id} node={child} currentThreadId={currentThreadId} language={language} onOpen={onOpen} />)}
+    {expanded && node.children.map(child => <TaskNodeRow key={child.id} node={child} currentThreadId={currentThreadId} language={language} onOpen={onOpen} onReference={onReference} onDelete={onDelete} />)}
   </div>
 }
 
@@ -134,13 +179,17 @@ function TaskGroupCard({
   currentThreadId,
   language,
   onOpen,
+  onReference,
   onDelete,
+  onDeleteNode,
 }: {
   group: TaskCenterGroup
   currentThreadId: string | null
   language: string
   onOpen: (threadId: string) => void
+  onReference: (threadId: string, action: ThreadReferenceAction) => void
   onDelete?: () => void
+  onDeleteNode: (node: TaskCenterNode) => void
 }) {
   const flatNodes = flattenTaskNodes(group.nodes)
   const rootNode = group.nodes[0]
@@ -148,6 +197,7 @@ function TaskGroupCard({
   const isSimpleTask = group.kind === 'task' && flatNodes.length === 1
   const visibleNodes = group.kind === 'task' ? (rootNode?.children || []) : group.nodes
   const [expanded, setExpanded] = useState(containsCurrent || group.status === 'running' || group.status === 'waiting')
+  const [actionsOpen, setActionsOpen] = useState(false)
   const copy = statusCopy[group.status][language === 'zh' ? 'zh' : 'en']
   const openRoot = () => {
     if (rootNode?.threadId) onOpen(rootNode.threadId)
@@ -174,12 +224,13 @@ function TaskGroupCard({
           {group.progress && <span className="tabular-nums">{group.progress.completed}/{group.progress.total}</span>}
         </span>
       </button>
-      {onDelete && <button type="button" onClick={onDelete} aria-label={language === 'zh' ? '删除任务' : 'Delete task'} className="rounded-md p-1.5 text-text-muted/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-red-400/50"><Trash2 className="h-3.5 w-3.5" /></button>}
+      {actionsOpen && rootNode?.threadId && <ThreadActionStrip language={language} onAction={action => { setActionsOpen(false); onReference(rootNode.threadId!, action) }} onDelete={() => { setActionsOpen(false); onDelete?.() }} deleteLabel={language === 'zh' ? '删除任务' : 'Delete task'} />}
+      {rootNode?.threadId && <button type="button" onClick={() => setActionsOpen(value => !value)} aria-label={language === 'zh' ? '会话操作' : 'Thread actions'} className={`rounded-md p-1.5 text-text-muted/45 transition-all hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45 ${actionsOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><MoreHorizontal className="h-3.5 w-3.5" /></button>}
     </div>
     <AnimatePresence initial={false}>
       {!isSimpleTask && expanded && visibleNodes.length > 0 && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.16 }} className="overflow-hidden">
         <div className="space-y-0.5 bg-surface/[0.08] py-1 pl-2 pr-1.5">
-          {visibleNodes.map(node => <TaskNodeRow key={node.id} node={node} currentThreadId={currentThreadId} language={language} onOpen={onOpen} />)}
+          {visibleNodes.map(node => <TaskNodeRow key={node.id} node={node} currentThreadId={currentThreadId} language={language} onOpen={onOpen} onReference={onReference} onDelete={onDeleteNode} />)}
         </div>
       </motion.div>}
     </AnimatePresence>
@@ -217,6 +268,7 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
   const threads = useAgentStore(state => state.threads)
   const branches = useAgentStore(state => state.branches)
   const currentThreadId = useAgentStore(state => state.currentThreadId)
+  const setInputPrompt = useAgentStore(state => state.setInputPrompt)
   const { switchThread, deleteThread, createThread } = useAgentActions()
   const [tab, setTab] = useState<CenterTab>(initialTab === 'branches' ? 'branches' : 'focus')
   const [query, setQuery] = useState('')
@@ -270,6 +322,54 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
 
   const openThread = (threadId: string) => { switchThread(threadId); onClose() }
 
+  const buildThreadReference = useCallback(async (thread: ChatThread): Promise<string> => {
+    const title = getThreadDisplayTitle(thread)
+    const structuredSummary = thread.contextSummary || thread.handoff.document?.summary
+    if (structuredSummary) {
+      return formatStructuredThreadReference(thread.id, title, structuredSummary, language)
+    }
+
+    const messages = thread.messagesHydrated === false
+      ? await agentSessionRepository.loadThreadMessages(thread.id)
+      : thread.messages
+    if (messages.length === 0) return `> ${createThreadLinkMarkdown(thread.id, title, language)}`
+
+    const generated = await generateSummary(messages, {
+      type: 'detailed',
+      maxTokens: 700,
+      todos: thread.todos,
+    })
+    return formatGeneratedThreadReference(thread.id, title, generated, language)
+  }, [language])
+
+  const handleThreadReference = useCallback(async (threadId: string, action: ThreadReferenceAction) => {
+    const thread = threads[threadId]
+    if (!thread) return
+
+    try {
+      toast.info(language === 'zh' ? '正在整理会话摘要…' : 'Preparing thread summary…')
+      const reference = await buildThreadReference(thread)
+      if (action === 'copy-reference') {
+        const copied = await writeClipboardText(reference)
+        if (!copied) throw new Error('clipboard unavailable')
+        toast.success(language === 'zh' ? '已复制会话引用' : 'Thread reference copied')
+        return
+      }
+
+      createThread({ mode: 'agent', origin: 'user' })
+      setInputPrompt(`${language === 'zh' ? '请基于以下会话上下文继续：' : 'Continue from the following thread context:'}\n\n${reference}`)
+      onClose()
+    } catch {
+      toast.error(language === 'zh' ? '处理会话引用失败' : 'Could not prepare thread reference')
+    }
+  }, [buildThreadReference, createThread, language, onClose, setInputPrompt, threads])
+
+  const deleteTaskNodes = useCallback((nodes: TaskCenterNode[]) => {
+    flattenTaskNodes(nodes).reverse().forEach(node => {
+      if (node.threadId) deleteThread(node.threadId)
+    })
+  }, [deleteThread])
+
   if (currentMode === 'plan') return null
 
   return <AnimatePresence>
@@ -294,11 +394,7 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
           {tab === 'branches' ? <div className="pt-2"><BranchPanel language={language} onClose={onClose} /></div> : <div>
             {taskSections.map(section => <section key={section.id}>
               <div className="flex h-8 items-center justify-between bg-surface/[0.14] px-3 text-[9px] font-semibold text-text-secondary"><span>{section.title}</span><span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-surface-active/55 px-1 text-[8px] tabular-nums text-text-muted">{section.groups.length}</span></div>
-              <div className="space-y-0.5 px-1 pb-1 pt-0.5">{section.groups.map(group => <TaskGroupCard key={group.id} group={group} currentThreadId={currentThreadId} language={language} onOpen={openThread} onDelete={() => {
-                flattenTaskNodes(group.nodes).forEach(node => {
-                  if (node.threadId) deleteThread(node.threadId)
-                })
-              }} />)}</div>
+              <div className="space-y-0.5 px-1 pb-1 pt-0.5">{section.groups.map(group => <TaskGroupCard key={group.id} group={group} currentThreadId={currentThreadId} language={language} onOpen={openThread} onReference={handleThreadReference} onDelete={() => deleteTaskNodes(group.nodes)} onDeleteNode={node => deleteTaskNodes([node])} />)}</div>
             </section>)}
             {taskSections.length === 0 && <div className="flex flex-col items-center px-10 py-14 text-center"><Clock3 className="h-6 w-6 text-text-muted/30" /><p className="mt-3 text-[10px] font-medium text-text-secondary">{tab === 'focus' ? (language === 'zh' ? '当前没有任务记录' : 'No task activity yet') : (language === 'zh' ? '没有匹配的任务' : 'No matching tasks')}</p><p className="mt-1 max-w-52 text-[8px] leading-4 text-text-muted">{language === 'zh' ? '新建任务后，执行状态和子任务关系会显示在这里。' : 'Execution and sub-task lineage appears here after creating a task.'}</p><button type="button" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md bg-surface/45 px-2.5 text-[9px] text-text-secondary hover:bg-surface-hover hover:text-accent"><Plus className="h-3 w-3" />{language === 'zh' ? '新建任务' : 'New task'}</button></div>}
           </div>}
