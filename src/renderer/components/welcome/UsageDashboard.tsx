@@ -8,6 +8,7 @@ import { Modal } from '../ui/Modal'
 import { getRelativeTime } from '@shared/utils/dateUtils'
 import { WorkPosterModal } from './poster/WorkPosterModal'
 import { buildWorkPosterData } from './poster/workPosterData'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 const MODEL_COLORS = ['rgb(var(--accent))', 'rgb(var(--accent-subtle))', '#10b981', '#f59e0b', '#9ca3af']
 
@@ -247,7 +248,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
         </div>
 
         <div className="insight-banner">
-          <img src={publicAsset('brand/ip/1.png')} alt="" />
+          <img src={publicAsset('brand/ip/1.webp')} alt="" />
           <div className="insight-text">
             <strong>{overviewCopy.title}</strong>
             <p>{overviewCopy.body}</p>
@@ -302,7 +303,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
                 ? `${data.workspace.updatesToday} 个项目今天有重要更新`
                 : `${data.workspace.updatesToday} projects have important updates today`}
             </span>
-            <img src={publicAsset('brand/ip/2.png')} className="mascot-overlap" alt="" />
+            <img src={publicAsset('brand/ip/2.webp')} className="mascot-overlap" alt="" />
           </div>
         </div>
 
@@ -419,7 +420,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
           </div>
 
           <div className="ai-panel-copy">
-            <img src={publicAsset('brand/ip/3.png')} alt="" />
+            <img src={publicAsset('brand/ip/3.webp')} alt="" />
             <div className="ai-panel-copy-text">
               <strong>{aiStatusCopy.title}</strong>
               <p>{aiStatusCopy.body}</p>
@@ -442,7 +443,8 @@ export default function UsageDashboard({ language }: { language: Language }) {
               </>
             ) : (
               <div className="ai-last-commit-empty">
-                {language === 'zh' ? '还没有生成 commit 级 AI 归因报告。' : 'No commit-level AI attribution report has been generated yet.'}
+                <OtterAsset asset="gitStamping" className="h-10 w-10 shrink-0 object-contain opacity-75" />
+                <span>{language === 'zh' ? '还没有生成 commit 级 AI 归因报告。' : 'No commit-level AI attribution report has been generated yet.'}</span>
               </div>
             )}
           </div>
@@ -1298,6 +1300,12 @@ function DashboardStyles() {
       .ai-last-commit-empty {
         font-size: 11px;
         color: rgb(var(--text-muted));
+      }
+      .ai-last-commit-empty {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
       }
       .ai-last-commit-main {
         display: flex;

@@ -15,6 +15,7 @@ import { emotionAdapter } from '@/renderer/agent/emotion/emotionAdapter'
 import { getRecommendedActions } from '@/renderer/agent/emotion/emotionActions'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { EmotionOtterAsset } from '@/renderer/components/brand/EmotionOtterAsset'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 export const EmotionEditorBar: React.FC = () => {
@@ -100,7 +101,7 @@ export const EmotionEditorBar: React.FC = () => {
                   transition={decorativeAnimations ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : undefined}
                   className="h-8 w-8 overflow-hidden rounded-lg bg-white/5 p-0.5"
                 >
-                  <OtterAsset asset={meta.asset} className="h-full w-full object-contain" />
+                  <EmotionOtterAsset state={state} className="h-full w-full" />
                 </motion.div>
                 <div className="flex flex-col">
                   <span className="text-xs font-medium leading-none" style={{ color: meta.color }}>

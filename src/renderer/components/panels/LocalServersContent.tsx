@@ -20,6 +20,7 @@ import {
 } from '@/renderer/preview/previewSettings'
 import { Switch } from '../ui'
 import type { PreviewServerCandidate, PreviewServerStatus } from '@shared/types/preview'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 const STATUS_DOT: Record<PreviewServerStatus, string> = {
   ready: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]',
@@ -80,7 +81,7 @@ export default function LocalServersContent({ language }: { language: Language }
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
         {candidates.length === 0 ? (
           <div className="px-2 py-6 text-center">
-            <Globe className="mx-auto mb-2 h-6 w-6 text-text-muted/50" />
+            <OtterAsset asset="standFront" className="mx-auto mb-2 h-12 w-12 object-contain opacity-75" />
             <p className="text-[11px] font-medium text-text-secondary">{t('preview.servers.empty', language)}</p>
             <p className="mt-1 text-[10px] leading-relaxed text-text-muted">{t('preview.servers.emptyHint', language)}</p>
           </div>

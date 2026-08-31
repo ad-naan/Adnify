@@ -17,6 +17,7 @@ import { useEmotionState } from '@/renderer/hooks/useEmotionState'
 import { EMOTION_META, EMOTION_STATUS_MESSAGE_KEYS } from '@/renderer/agent/emotion'
 import { loadEmotionPanelSettings, subscribeEmotionPanelSettings } from '@/renderer/agent/emotion/panelSettings'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { EmotionOtterAsset } from '@/renderer/components/brand/EmotionOtterAsset'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
 
 const EMOTION_MESSAGES = EMOTION_STATUS_MESSAGE_KEYS
@@ -233,7 +234,7 @@ export const EmotionStatusIndicator: React.FC = () => {
             <div className="bg-background-secondary/95 backdrop-blur-xl border border-white/10 rounded-xl p-3 shadow-2xl min-w-[220px]">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: meta.color }} />
-                <OtterAsset asset={meta.asset} className="h-7 w-7 object-contain rounded-md bg-white/5 p-0.5" />
+                <EmotionOtterAsset state={state} className="h-7 w-7" />
                 <span className="text-sm font-medium text-text-primary">{label}</span>
                 <span
                   className="text-xs px-1.5 py-0.5 rounded-full ml-auto"

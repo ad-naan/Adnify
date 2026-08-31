@@ -34,14 +34,14 @@ export function EditorWelcome() {
             className="adnify-welcome-secondary-button"
             icon={<FolderOpen className="h-4 w-4" />}
             label={t('editorWelcome.openRecentFile', language)}
-            ipSrc={publicAsset('brand/ip/5.png')}
+            ipSrc={publicAsset('brand/ip/5.webp')}
           />
           <InteractiveIPButton
             onClick={() => setShowSettings(true)}
             className="adnify-welcome-secondary-button"
             icon={<Settings className="h-4 w-4" />}
             label={t('settings', language)}
-            ipSrc={publicAsset('brand/ip/6.png')}
+            ipSrc={publicAsset('brand/ip/6.webp')}
           />
         </>
       }
@@ -125,7 +125,7 @@ function WelcomeWorkbench({
                     onClick={onPrimary}
                     icon={primaryIcon}
                     label={primaryLabel}
-                    ipSrc={publicAsset('brand/ip/4.png')}
+                    ipSrc={publicAsset('brand/ip/4.webp')}
                   />
                   <InteractiveIPButton
                     className="adnify-welcome-outline-button"

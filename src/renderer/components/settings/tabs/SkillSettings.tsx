@@ -288,8 +288,9 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             {t('请先打开一个项目', 'Please open a project first')}
                         </div>
                     ) : skills.length === 0 ? (
-                        <div className="h-20 flex items-center justify-center text-text-muted text-xs">
-                            {t('暂无 Skills，点击下方按钮安装或创建', 'No skills yet. Use the buttons below to install or create one.')}
+                        <div className="h-24 flex flex-col items-center justify-center gap-1.5 text-text-muted text-xs">
+                            <OtterAsset asset="creative" className="h-12 w-12 object-contain opacity-75" />
+                            <span>{t('暂无 Skills，点击下方按钮安装或创建', 'No skills yet. Use the buttons below to install or create one.')}</span>
                         </div>
                     ) : (
                         skills.map((skill) => (

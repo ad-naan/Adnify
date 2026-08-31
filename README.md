@@ -346,19 +346,19 @@ Adnify keeps its brand resources in `public/brand/`. The README hero, welcome sc
 </div>
 
 <div align="center">
-  <img src="public/brand/ip/1.png" alt="Adnify IP asset 1" width="120" />
-  <img src="public/brand/ip/2.png" alt="Adnify IP asset 2" width="120" />
-  <img src="public/brand/ip/3.png" alt="Adnify IP asset 3" width="120" />
-  <img src="public/brand/ip/4.png" alt="Adnify IP asset 4" width="120" />
-  <img src="public/brand/ip/5.png" alt="Adnify IP asset 5" width="120" />
-  <img src="public/brand/ip/6.png" alt="Adnify IP asset 6" width="120" />
+  <img src="public/brand/ip/1.webp" alt="Adnify IP asset 1" width="120" />
+  <img src="public/brand/ip/2.webp" alt="Adnify IP asset 2" width="120" />
+  <img src="public/brand/ip/3.webp" alt="Adnify IP asset 3" width="120" />
+  <img src="public/brand/ip/4.webp" alt="Adnify IP asset 4" width="120" />
+  <img src="public/brand/ip/5.webp" alt="Adnify IP asset 5" width="120" />
+  <img src="public/brand/ip/6.webp" alt="Adnify IP asset 6" width="120" />
 </div>
 
 | Folder | Purpose | Notes |
 |:---|:---|:---|
 | `public/brand/logos/` | In-app logos | `app.png` for dark surfaces, `app-light.png` for light surfaces |
 | `public/brand/icons/` | System and platform icons | Windows `.ico`, macOS `.icns`, Linux `.png`, and generated multi-size PNG outputs |
-| `public/brand/ip/` | AI assistant and IP assets | Static IP images plus `ai-avatar.gif` for README, welcome screens, and assistant identity |
+| `public/brand/ip/` | AI assistant and IP assets | Optimized WebP illustrations for README, welcome screens, and assistant identity |
 | `public/brand/welcome/` | Welcome visuals | `dark.webp` and `light.webp` for dark/light theme presentation |
 
 Icons are generated from `public/brand/logos/*.png`. After replacing the logo source files, run:

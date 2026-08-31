@@ -71,7 +71,7 @@ export default function WelcomePage() {
                     onClick={handleOpenFolder}
                     icon={<FolderOpen className="h-4 w-4" />}
                     label={t('welcome.openFolder', language)}
-                    ipSrc={publicAsset('brand/ip/4.png')}
+                    ipSrc={publicAsset('brand/ip/4.webp')}
                   />
                   <InteractiveIPButton
                     className="adnify-welcome-outline-button"
@@ -103,14 +103,14 @@ export default function WelcomePage() {
                   className="adnify-welcome-secondary-button"
                   icon={<Plus className="h-4 w-4" />}
                   label={t('welcome.newWindow', language)}
-                  ipSrc={publicAsset('brand/ip/5.png')}
+                  ipSrc={publicAsset('brand/ip/5.webp')}
                 />
                 <InteractiveIPButton
                   onClick={() => setShowSettings(true)}
                   className="adnify-welcome-secondary-button"
                   icon={<Settings className="h-4 w-4" />}
                   label={t('settings', language)}
-                  ipSrc={publicAsset('brand/ip/6.png')}
+                  ipSrc={publicAsset('brand/ip/6.webp')}
                 />
               </div>
             </div>

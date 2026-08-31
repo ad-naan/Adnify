@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import type { PlanTask } from '@/renderer/agent/plan/types'
 import { layoutPlanGraph } from '@/renderer/agent/plan/planGraphLayout'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 export interface PlanDependencyGraphProps {
   tasks: PlanTask[]
@@ -45,7 +46,8 @@ export const PlanDependencyGraph = memo(function PlanDependencyGraph({
 }: PlanDependencyGraphProps) {
   const layout = useMemo(() => layoutPlanGraph(tasks), [tasks])
 
-  if (!tasks.length) return <div className="flex min-h-[320px] items-center justify-center text-[11px] text-text-muted">
+  if (!tasks.length) return <div className="flex min-h-[320px] flex-col items-center justify-center text-[11px] text-text-muted">
+    <OtterAsset asset="idlePaws" className="mb-3 h-16 w-16 object-contain opacity-80" />
     {copy(language, '计划中还没有任务', 'No tasks in this plan yet')}
   </div>
 
@@ -107,4 +109,3 @@ export const PlanDependencyGraph = memo(function PlanDependencyGraph({
 })
 
 export default PlanDependencyGraph
-

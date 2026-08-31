@@ -242,8 +242,9 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                 <RefreshCw className="w-4 h-4 animate-spin" />
               </div>
             ) : memories.length === 0 ? (
-              <div className="h-20 flex items-center justify-center text-text-muted text-xs">
-                {t('暂无记忆', 'No memories yet')}
+              <div className="h-24 flex flex-col items-center justify-center gap-1.5 text-text-muted text-xs">
+                <OtterAsset asset="relaxed" className="h-12 w-12 object-contain opacity-75" />
+                <span>{t('暂无记忆', 'No memories yet')}</span>
               </div>
             ) : (
               memories.map((item) => (

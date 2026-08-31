@@ -8,9 +8,12 @@ This folder separates source-like internal assets from generated platform assets
 - `logos/app-light.png`: light-theme in-app logo source.
 - `welcome/dark.webp`: dark welcome illustration.
 - `welcome/light.webp`: light welcome illustration.
-- `ip/ai-avatar.gif`: in-app assistant/avatar asset.
+- `ip/1.webp` through `ip/6.webp`: optimized 1024 px mascot illustrations.
+- `ip/otter/`: normalized transparent runtime assets for mascot actions, bodies, faces, effects, and props.
 
 These are referenced by renderer UI and loading screens.
+
+Authoring-quality mascot originals are stored in the repository-level `original/otter` directory, which is excluded from application packaging. Renderer code must reference only the optimized WebP files in `public/brand`.
 
 ## System / Platform Icons
 

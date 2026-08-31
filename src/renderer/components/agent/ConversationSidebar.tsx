@@ -21,6 +21,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { getRelativeTime } from '@shared/utils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { projectThreadsForMode } from '@/renderer/agent/threads/threadModeProjection'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
@@ -210,7 +211,7 @@ function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: st
   }, [allThreads, mode, searchQuery])
 
   if (filteredThreads.length === 0) {
-    return <EmptyState icon={History} text={language === 'zh' ? '无历史记录' : 'No history found'} />
+    return <EmptyState asset="sitThreeQuarter" text={language === 'zh' ? '无历史记录' : 'No history found'} />
   }
 
   return (
@@ -519,7 +520,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
 
         {filteredBranches.length === 0 && (
           <EmptyState
-            icon={GitBranch}
+            asset="waveStand"
             text={language === 'zh' ? '暂无分支' : 'No branches found'}
             subText={language === 'zh' ? '在消息上点击“重新生成”可创建分支' : 'Click "Regenerate" on messages to create branches'}
           />
@@ -529,11 +530,11 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
   )
 }
 
-function EmptyState({ text, subText }: { icon: any, text: string, subText?: string }) {
+function EmptyState({ asset, text, subText }: { asset: OtterAssetKey, text: string, subText?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-70 select-none">
       <div className="w-16 h-16 rounded-2xl bg-surface/50 flex items-center justify-center mb-4 border border-white/8">
-        <OtterAsset asset="chat" className="h-12 w-12 object-contain" />
+        <OtterAsset asset={asset} className="h-12 w-12 object-contain" />
       </div>
       <p className="text-sm font-medium">{text}</p>
       {subText && <p className="text-xs mt-1.5 text-center max-w-[200px] leading-relaxed opacity-70">{subText}</p>}

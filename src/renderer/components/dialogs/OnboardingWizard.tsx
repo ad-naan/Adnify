@@ -292,7 +292,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
                 {isZh ? '开始使用' : 'Get Started'}
               </span>
               <span className="adnify-onboarding-button-mascot">
-                <img src={publicAsset('brand/ip/4.png')} alt="" draggable={false} />
+                <img src={publicAsset('brand/ip/4.webp')} alt="" draggable={false} />
               </span>
             </button>
           ) : (
@@ -390,7 +390,7 @@ function WelcomeStep({
               {isZh ? '开始设置' : 'Start setup'}
             </span>
             <span className="adnify-onboarding-button-mascot">
-              <img src={publicAsset('brand/ip/1.png')} alt="" draggable={false} />
+              <img src={publicAsset('brand/ip/1.webp')} alt="" draggable={false} />
             </span>
           </button>
         </div>
@@ -743,7 +743,7 @@ function WorkspaceStep({
             onClick={onOpenFolder}
           >
             <span className="adnify-onboarding-workspace-mascot" aria-hidden="true">
-              <img src={publicAsset('brand/ip/3.png')} alt="" draggable={false} />
+              <img src={publicAsset('brand/ip/3.webp')} alt="" draggable={false} />
             </span>
             <span className="adnify-onboarding-workspace-text">
               <span className="adnify-onboarding-workspace-cta-icon">

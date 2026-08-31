@@ -36,7 +36,7 @@ export function MascotIP() {
           whileTap={{ scale: 0.95 }}
         >
           <OtterAsset
-            asset={chatVisible ? 'assistantFace' : 'assistant'}
+            asset={chatVisible ? 'assistantFace' : 'chat'}
             alt="Adnify Mascot"
             className="h-9 w-9 rounded-full object-cover"
           />

@@ -32,7 +32,7 @@ export function KaomojiPet({ language = 'en', isStreaming = false, hasInput = fa
         transition={{ duration: 0.18 }}
         className="relative h-8 w-8 shrink-0 rounded-full bg-surface/40 p-[2px] ring-1 ring-white/10 shadow-sm"
       >
-        <OtterAsset asset={isStreaming ? 'assistant' : 'assistantFace'} className="h-full w-full rounded-full object-cover" />
+        <OtterAsset asset={isStreaming ? 'typing' : 'assistantFace'} className="h-full w-full rounded-full object-cover" />
         <span
           className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-background ${
             isStreaming ? 'animate-pulse bg-accent shadow-[0_0_10px_rgba(var(--accent),0.7)]' : 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]'

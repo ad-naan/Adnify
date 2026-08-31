@@ -933,7 +933,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-border bg-surface/10 p-4 flex flex-col items-center justify-center text-center space-y-2 min-h-[140px]">
-                <OtterAsset asset="workspace" className="w-12 h-12 object-contain opacity-70" />
+                <OtterAsset asset="standFront" className="w-12 h-12 object-contain opacity-70" />
                 <div className="text-xs font-medium text-text-muted">
                   {language === 'zh' ? '暂未检测到项目级 MCP 配置' : 'No workspace MCP config detected'}
                 </div>

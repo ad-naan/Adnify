@@ -1,6 +1,7 @@
-import { History, Plus, Search, Trash2, X } from 'lucide-react'
+import { Plus, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PlanHistoryEntry } from '@/renderer/agent/plan/planHistoryProjection'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 const statusText = (status: PlanHistoryEntry['status'], language: string) => {
   if (!status) return language === 'zh' ? '需求对话' : 'Conversation'
@@ -96,7 +97,7 @@ export function PlanHistoryDrawer({ open, entries, language, onClose, onSelect, 
               </div> : <button onClick={() => setConfirmingId(entry.id)} aria-label={language === 'zh' ? '删除计划记录' : 'Delete plan history'} className="shrink-0 self-center rounded p-1.5 text-text-muted opacity-0 hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>}
             </div>)}
           </div>
-        </section>) : <div className="flex min-h-48 flex-col items-center justify-center text-center"><History className="h-5 w-5 text-text-muted/40" /><div className="mt-3 text-[10px] font-medium text-text-secondary">{language === 'zh' ? '没有匹配的计划' : 'No matching plans'}</div><div className="mt-1 text-[8px] text-text-muted">{language === 'zh' ? '换一个关键词试试' : 'Try another search'}</div></div>}
+        </section>) : <div className="flex min-h-48 flex-col items-center justify-center text-center"><OtterAsset asset="sleepyFace" className="h-12 w-12 object-contain opacity-75" /><div className="mt-3 text-[10px] font-medium text-text-secondary">{language === 'zh' ? '没有匹配的计划' : 'No matching plans'}</div><div className="mt-1 text-[8px] text-text-muted">{language === 'zh' ? '换一个关键词试试' : 'Try another search'}</div></div>}
       </div>
       <footer className="shrink-0 border-t border-border/40 p-3.5">
         <button

@@ -2,6 +2,8 @@
 
 Brand assets live in `public/brand/`. Replace files in this directory directly; the app, renderer, loader, and installer configuration all read from here.
 
+Authoring originals live in the repository-level `original/` directory. Keep full-resolution source artwork there and export normalized, compressed WebP runtime copies into `public/brand/`; renderer code must not reference `original/`.
+
 ## Directory Map
 
 ```text
@@ -10,6 +12,15 @@ public/brand/
   logos/      In-app logo images
   ip/         IP character/avatar assets
   welcome/    Startup and welcome-page visual assets
+
+original/
+  main.png             Full-resolution brand board
+  welcome-*.png        Full-resolution welcome sources
+  brand-cropper.html   Local crop/export helper
+  otter/
+    anchors/           Six full-resolution primary mascot illustrations
+    generated/         Retained high-resolution generated originals
+    masters/           Lossless PNG masters for shipped WebP assets
 ```
 
 ## Files
@@ -28,7 +39,8 @@ public/brand/
 
 ### `ip/`
 
-- `ai-avatar.gif`: assistant/IP avatar used in chat surfaces.
+- `1.webp` through `6.webp`: optimized primary mascot illustrations.
+- `otter/`: normalized action, body, face, effect, and prop assets used by the renderer.
 
 ### `welcome/`
 

@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
-  Clock3,
   Copy,
   GitBranch,
   ListTree,
@@ -34,6 +33,7 @@ import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { agentSessionRepository } from '@/renderer/services/agentSessionRepository'
 import { generateSummary } from '@/renderer/agent/domains/context/summaryService'
 import { getThreadDisplayTitle, type ChatThread } from '@/renderer/agent/types'
+import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import {
   createThreadLinkMarkdown,
   formatGeneratedThreadReference,
@@ -304,7 +304,7 @@ function BranchPanel({ language, onClose }: { language: string; onClose: () => v
     {visible.map(branch => <button key={branch.id} type="button" onClick={() => openBranch(branch)} className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left ${activeBranchId === branch.id ? 'bg-accent/[0.09]' : 'hover:bg-surface/35'}`}>
       <Split className="h-4 w-4 text-text-muted" /><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-primary">{branch.name}</strong><span className="mt-0.5 block text-[8px] text-text-muted">{branch.messages.length} msg · {getRelativeTime(branch.createdAt, language)}</span></span>{activeBranchId === branch.id && <Check className="h-3.5 w-3.5 text-accent" />}
     </button>)}
-    {visible.length === 0 && <div className="flex flex-col items-center px-8 py-14 text-center"><GitBranch className="h-7 w-7 text-text-muted/30" /><p className="mt-3 text-[11px] font-medium text-text-secondary">{language === 'zh' ? '当前任务还没有对话分支' : 'No conversation branches yet'}</p><p className="mt-1 text-[9px] leading-4 text-text-muted">{language === 'zh' ? '从某条消息重新生成时，备选路径会出现在这里。' : 'Alternative paths appear here after regenerating from a message.'}</p></div>}
+    {visible.length === 0 && <div className="flex flex-col items-center px-8 py-14 text-center"><OtterAsset asset="waveStand" className="h-14 w-14 object-contain opacity-80" /><p className="mt-3 text-[11px] font-medium text-text-secondary">{language === 'zh' ? '当前任务还没有对话分支' : 'No conversation branches yet'}</p><p className="mt-1 text-[9px] leading-4 text-text-muted">{language === 'zh' ? '从某条消息重新生成时，备选路径会出现在这里。' : 'Alternative paths appear here after regenerating from a message.'}</p></div>}
   </div>
 }
 
@@ -442,7 +442,7 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
               <div className="flex h-8 items-center justify-between bg-surface/[0.14] px-3 text-[9px] font-semibold text-text-secondary"><span>{section.title}</span><span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-surface-active/55 px-1 text-[8px] tabular-nums text-text-muted">{section.groups.length}</span></div>
               <div className="space-y-0.5 px-1 pb-1 pt-0.5">{section.groups.map(group => <TaskGroupCard key={group.id} group={group} currentThreadId={currentThreadId} language={language} onOpen={openThread} onReference={handleThreadReference} onRename={renameThread} onDelete={() => deleteTaskNodes(group.nodes)} onDeleteNode={node => deleteTaskNodes([node])} />)}</div>
             </section>)}
-            {taskSections.length === 0 && <div className="flex flex-col items-center px-10 py-14 text-center"><Clock3 className="h-6 w-6 text-text-muted/30" /><p className="mt-3 text-[10px] font-medium text-text-secondary">{tab === 'focus' ? (language === 'zh' ? '当前没有任务记录' : 'No task activity yet') : (language === 'zh' ? '没有匹配的任务' : 'No matching tasks')}</p><p className="mt-1 max-w-52 text-[8px] leading-4 text-text-muted">{language === 'zh' ? '新建任务后，执行状态和子任务关系会显示在这里。' : 'Execution and sub-task lineage appears here after creating a task.'}</p><button type="button" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md bg-surface/45 px-2.5 text-[9px] text-text-secondary hover:bg-surface-hover hover:text-accent"><Plus className="h-3 w-3" />{language === 'zh' ? '新建任务' : 'New task'}</button></div>}
+            {taskSections.length === 0 && <div className="flex flex-col items-center px-10 py-14 text-center"><OtterAsset asset="sitFront" className="h-14 w-14 object-contain opacity-80" /><p className="mt-3 text-[10px] font-medium text-text-secondary">{tab === 'focus' ? (language === 'zh' ? '当前没有任务记录' : 'No task activity yet') : (language === 'zh' ? '没有匹配的任务' : 'No matching tasks')}</p><p className="mt-1 max-w-52 text-[8px] leading-4 text-text-muted">{language === 'zh' ? '新建任务后，执行状态和子任务关系会显示在这里。' : 'Execution and sub-task lineage appears here after creating a task.'}</p><button type="button" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md bg-surface/45 px-2.5 text-[9px] text-text-secondary hover:bg-surface-hover hover:text-accent"><Plus className="h-3 w-3" />{language === 'zh' ? '新建任务' : 'New task'}</button></div>}
           </div>}
         </div>
       </motion.aside>

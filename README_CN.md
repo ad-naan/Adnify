@@ -343,19 +343,19 @@ Adnify 的品牌资源统一收纳在 `public/brand/`，README 首屏、欢迎�
 </div>
 
 <div align="center">
-  <img src="public/brand/ip/1.png" alt="Adnify IP 形象 1" width="120" />
-  <img src="public/brand/ip/2.png" alt="Adnify IP 形象 2" width="120" />
-  <img src="public/brand/ip/3.png" alt="Adnify IP 形象 3" width="120" />
-  <img src="public/brand/ip/4.png" alt="Adnify IP 形象 4" width="120" />
-  <img src="public/brand/ip/5.png" alt="Adnify IP 形象 5" width="120" />
-  <img src="public/brand/ip/6.png" alt="Adnify IP 形象 6" width="120" />
+  <img src="public/brand/ip/1.webp" alt="Adnify IP 形象 1" width="120" />
+  <img src="public/brand/ip/2.webp" alt="Adnify IP 形象 2" width="120" />
+  <img src="public/brand/ip/3.webp" alt="Adnify IP 形象 3" width="120" />
+  <img src="public/brand/ip/4.webp" alt="Adnify IP 形象 4" width="120" />
+  <img src="public/brand/ip/5.webp" alt="Adnify IP 形象 5" width="120" />
+  <img src="public/brand/ip/6.webp" alt="Adnify IP 形象 6" width="120" />
 </div>
 
 | 目录 | 用途 | 说明 |
 |:---|:---|:---|
 | `public/brand/logos/` | 应用内 Logo | `app.png` 用于深色场景，`app-light.png` 用于浅色场景 |
 | `public/brand/icons/` | 系统/平台图标 | Windows `.ico`、macOS `.icns`、Linux `.png` 与多尺寸图标输出 |
-| `public/brand/ip/` | AI 助手与 IP 形象 | 包含静态 IP 图和 `ai-avatar.gif`，可用于 README、欢迎页、聊天助手形象 |
+| `public/brand/ip/` | AI 助手与 IP 形象 | 包含优化后的 WebP 素材，可用于 README、欢迎页与聊天助手形象 |
 | `public/brand/welcome/` | 欢迎页视觉 | `dark.webp` 与 `light.webp` 分别服务深色/浅色主题 |
 
 图标资源由 `public/brand/logos/*.png` 生成。替换 Logo 后可运行：
