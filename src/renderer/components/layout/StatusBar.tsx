@@ -261,14 +261,11 @@ export default function StatusBar() {
     [currentThreadId, toolCallLogs]
   )
   const layerColorClass =
-    compressionStats?.memoryHealth?.risk === 'high' ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
-      compressionStats?.memoryHealth?.risk === 'medium' ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
-        compressionStats?.memoryHealth?.risk === 'low' ? 'text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.4)]' :
-          compressionStats?.level === 4 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
-            compressionStats?.level === 3 ? 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]' :
-              compressionStats?.level === 2 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
-                compressionStats?.level === 1 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
-                  'text-text-muted group-hover:text-text-primary'
+    compressionStats?.level === 4 ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
+      compressionStats?.level === 3 ? 'text-orange-400 drop-shadow-[0_0_6px_rgba(251,146,60,0.4)]' :
+        compressionStats?.level === 2 ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :
+          compressionStats?.level === 1 ? 'text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.4)]' :
+            'text-text-muted group-hover:text-text-primary'
 
   const contextIndicatorCopy = useMemo(() => ({
     compressing: language === 'zh' ? '压缩中' : 'Compressing',
@@ -276,7 +273,7 @@ export default function StatusBar() {
     switching: language === 'zh' ? '切换中' : 'Switching',
     switched: language === 'zh' ? '已切换' : 'Switched',
   }), [language])
-  const peakContextUsage = compressionStats?.peakRatio ?? null
+  const currentContextUsage = compressionStats?.ratio ?? null
 
   return (
     <div className="h-8 bg-background-secondary/40 backdrop-blur-md flex items-center justify-between px-3 text-[10px] select-none text-text-muted z-50 font-medium border-t border-border/30 shadow-[0_-1px_15px_rgba(0,0,0,0.03)]">
@@ -515,7 +512,7 @@ export default function StatusBar() {
                         <Maximize2 className={`w-3 h-3 transition-colors ${layerColorClass}`} />
                       </div>
                       <span className="text-[9px] font-bold font-mono text-text-muted group-hover:text-text-primary transition-colors">
-                        {peakContextUsage !== null ? `${Math.round(peakContextUsage * 100)}%` : '--'}
+                        {currentContextUsage !== null ? `${Math.round(currentContextUsage * 100)}%` : '--'}
                       </span>
                     </div>
                   </motion.div>
