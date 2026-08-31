@@ -42,7 +42,7 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
           <h2 className={`text-[12px] font-semibold text-text-primary ${waiting ? '' : 'tool-text-shimmer'}`}>{language === 'zh' ? copy.zh : copy.en}</h2>
-          <time className="shrink-0 text-[9px] tabular-nums text-text-muted">{elapsedSeconds}s</time>
+          <time className="shrink-0 text-[11px] tabular-nums text-text-muted">{elapsedSeconds}s</time>
         </div>
         <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{language === 'zh' ? copy.zhDetail : copy.enDetail}</p>
       </div>
@@ -53,13 +53,13 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
     </div>}
 
     <div className="border-t border-border/40 px-4 py-3.5">
-      <div className="mb-2.5 text-[9px] font-medium text-text-muted">{language === 'zh' ? '实时过程' : 'Live process'}</div>
+      <div className="mb-2.5 text-[11px] font-medium text-text-muted">{language === 'zh' ? '实时过程' : 'Live process'}</div>
       {recent.length > 0 ? <div className="space-y-2.5">
         {recent.map(activity => <div key={activity.id} className="grid grid-cols-[16px_minmax(0,1fr)] gap-2.5">
           <span className="mt-0.5">{activityIcon(activity.status)}</span>
-          <div className="min-w-0"><div className="truncate text-[10px] font-medium text-text-secondary">{activity.title}</div>{activity.detail && <div className="mt-0.5 line-clamp-2 text-[9px] leading-4 text-text-muted">{activity.detail}</div>}</div>
+          <div className="min-w-0"><div className="truncate text-[10px] font-medium text-text-secondary">{activity.title}</div>{activity.detail && <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-text-muted">{activity.detail}</div>}</div>
         </div>)}
-      </div> : waiting ? <div className="flex items-center gap-2 text-[9px] text-text-muted"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />{language === 'zh' ? '等待输入后继续' : 'Waiting for input'}</div> : <div className="space-y-2.5" aria-label={language === 'zh' ? '正在处理' : 'Processing'}>
+      </div> : waiting ? <div className="flex items-center gap-2 text-[11px] text-text-muted"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />{language === 'zh' ? '等待输入后继续' : 'Waiting for input'}</div> : <div className="space-y-2.5" aria-label={language === 'zh' ? '正在处理' : 'Processing'}>
         {[0, 1, 2].map(index => <div key={index} className="flex items-center gap-2.5"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/60" style={{ animationDelay: `${index * 160}ms` }} /><span className="h-2.5 animate-pulse rounded bg-text-primary/[0.055]" style={{ width: `${72 - index * 13}%`, animationDelay: `${index * 160}ms` }} /></div>)}
       </div>}
     </div>

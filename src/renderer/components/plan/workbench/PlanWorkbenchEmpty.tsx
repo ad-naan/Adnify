@@ -22,17 +22,17 @@ export function PlanWorkbenchEmpty({ language, recent, onOpenHistory, onSelectHi
       </div>
 
       {recent.length > 0 && <div className="mt-7">
-        <div className="mb-2 flex items-center justify-between px-1"><span className="text-[9px] font-medium text-text-muted">{language === 'zh' ? '最近计划' : 'Recent plans'}</span><button onClick={onOpenHistory} className="inline-flex items-center gap-1 text-[9px] text-text-muted hover:text-accent"><History className="h-3 w-3" />{language === 'zh' ? '全部' : 'All'}</button></div>
+        <div className="mb-2 flex items-center justify-between px-1"><span className="text-[11px] font-medium text-text-muted">{language === 'zh' ? '最近计划' : 'Recent plans'}</span><button onClick={onOpenHistory} className="inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-accent"><History className="h-3 w-3" />{language === 'zh' ? '全部' : 'All'}</button></div>
         <div className="divide-y divide-border/35 overflow-hidden rounded-xl border border-border/50 bg-surface/[0.08]">
           {recent.slice(0, 3).map(entry => <button key={entry.id} onClick={() => onSelectHistory(entry)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-hover/40">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-text-muted/35" />
             <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-text-secondary">{entry.title}</span>
-            {entry.taskCount !== undefined && <span className="shrink-0 text-[9px] tabular-nums text-text-muted">{entry.completedCount}/{entry.taskCount}</span>}
+            {entry.taskCount !== undefined && <span className="shrink-0 text-[11px] tabular-nums text-text-muted">{entry.completedCount}/{entry.taskCount}</span>}
           </button>)}
         </div>
       </div>}
 
-      {recent.length === 0 && <div className="mt-6 text-center text-[8px] text-text-muted/65">{language === 'zh' ? '创建后的计划会自动保留在这里' : 'Created plans will be kept here automatically'}</div>}
+      {recent.length === 0 && <div className="mt-6 text-center text-[10px] text-text-muted/65">{language === 'zh' ? '创建后的计划会自动保留在这里' : 'Created plans will be kept here automatically'}</div>}
     </div>
   </div>
 }

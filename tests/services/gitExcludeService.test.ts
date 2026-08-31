@@ -10,6 +10,7 @@ vi.mock('@renderer/services/electronAPI', () => ({ api: { file: fileApi } }))
 vi.mock('@renderer/services/gitService', () => ({
   gitService: {
     discoverRepositories: vi.fn(),
+    getExcludeFilePath: vi.fn(async (repoRoot: string) => `${repoRoot}/.git/info/exclude`),
   },
 }))
 

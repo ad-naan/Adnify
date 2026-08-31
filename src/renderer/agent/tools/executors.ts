@@ -3434,6 +3434,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             suggestedModel: string
             suggestedRole: string
             dependencies?: string[]
+            acceptanceCriteria?: string[]
+            producesFiles?: string[]
+            consumesFiles?: string[]
+            executionClass?: import('@/renderer/agent/plan/types').TaskExecutionClass
         }>
         const executionMode = (args.executionMode as 'sequential' | 'parallel') || 'sequential'
         const stageContent = normalizePlanStageMap(args.stageContent)
@@ -3500,6 +3504,17 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                     model: assignment.model,
                     role: resolveDefault(t.suggestedRole, 'coder'),
                     dependencies: t.dependencies || [],
+                    acceptanceCriteria: (t.acceptanceCriteria || []).map((text: string, criterionIndex: number) => ({
+                        id: `task-${idx + 1}-criterion-${criterionIndex + 1}`,
+                        text: text.trim(),
+                        status: 'pending' as const,
+                        evidenceIds: [],
+                    })).filter(item => item.text),
+                    evidence: [],
+                    modelSelection: 'auto' as const,
+                    producesFiles: t.producesFiles || [],
+                    consumesFiles: t.consumesFiles || [],
+                    executionClass: t.executionClass,
                     status: 'pending' as const,
                 }
             })
@@ -3560,6 +3575,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 suggestedProvider?: string
                 suggestedModel?: string
                 suggestedRole?: string
+                acceptanceCriteria?: string[]
                 insertAfter?: string
             }> | undefined
             const removeTasks = args.removeTasks as string[] | undefined
@@ -3570,6 +3586,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 provider?: string
                 model?: string
                 role?: string
+                acceptanceCriteria?: string[]
             }> | undefined
             const executionMode = args.executionMode as 'sequential' | 'parallel' | undefined
             const stageContentPatch = normalizePlanStageMap(args.stageContent)
@@ -3621,6 +3638,14 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                         role: t.suggestedRole || 'coder',
                         status: 'pending' as const,
                         dependencies: [],
+                        acceptanceCriteria: (t.acceptanceCriteria || []).map((text, criterionIndex) => ({
+                            id: `task-${timestamp}-${i}-criterion-${criterionIndex + 1}`,
+                            text: text.trim(),
+                            status: 'pending' as const,
+                            evidenceIds: [],
+                        })).filter(item => item.text),
+                        evidence: [],
+                        modelSelection: 'auto' as const,
                     }
                 })
 
@@ -3657,6 +3682,13 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                             provider: assignment?.provider,
                             model: assignment?.model,
                             role: update.role,
+                            modelSelection: (update.provider !== undefined || update.model !== undefined) ? 'manual' : undefined,
+                            acceptanceCriteria: update.acceptanceCriteria?.map((text, criterionIndex) => ({
+                                id: `${currentTask.id}-criterion-${criterionIndex + 1}`,
+                                text: text.trim(),
+                                status: 'pending' as const,
+                                evidenceIds: [],
+                            })).filter(item => item.text),
                         }).filter(([, value]) => value !== undefined),
                     )
                     nextTasks[taskIndex] = {
@@ -4066,6 +4098,8 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 constraints: args.enable_write_tools
                     ? undefined
                     : ['Read-only mode: do NOT modify any files or run commands that change state.'],
+                writeCapable: Boolean(args.enable_write_tools),
+                concurrent: Boolean(args.parallel),
             },
             llmConfig,
             ctx.workspacePath,
@@ -4083,6 +4117,7 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
                 subAgentThreadId: result.threadId,
                 subAgentStatus: result.success ? 'completed' : 'failed',
                 subAgentDurationMs: result.durationMs,
+                worktree: result.worktree,
             },
         }
     },

@@ -24,6 +24,8 @@ import { Agent } from '../core/Agent'
 import type { LLMConfig } from '../core/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { SubAgentLifecycleCallbacks, SubAgentRequest, SubAgentResult, SubAgentStatus } from './types'
+import { ExecutionLaneCoordinator, type ExecutionLaneAssignment } from './ExecutionLaneCoordinator'
+import type { WorktreeLaneCompletion } from './WorktreeLaneService'
 
 /** 单个子代理的运行句柄 */
 interface SubAgentHandle {
@@ -37,6 +39,7 @@ interface SubAgentHandle {
   startedAt: number
   completedAt?: number
   abortController: AbortController
+  laneAssignment?: ExecutionLaneAssignment
 }
 
 /** 默认超时：单个子代理最多运行 5 分钟 */
@@ -113,6 +116,16 @@ class SubAgentManagerClass {
 
     logger.agent.info(`[SubAgent] Spawning sub-agent "${request.description.slice(0, 60)}" (id=${id})`)
 
+    let laneAssignment: ExecutionLaneAssignment
+    try {
+      laneAssignment = await ExecutionLaneCoordinator.acquire({
+        kind: 'sub-agent', workspacePath, label: request.description,
+        mayWrite: request.writeCapable === true, concurrent: request.concurrent === true,
+      })
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error), subAgentId: id }
+    }
+
     // 1. 创建隐藏线程（不激活，不影响主 UI）
     const store = useAgentStore.getState()
     const parentThread = parentThreadId ? store.threads[parentThreadId] : undefined
@@ -137,6 +150,7 @@ class SubAgentManagerClass {
       status: 'running',
       startedAt: Date.now(),
       abortController,
+      laneAssignment,
     }
     this.activeHandles.set(id, handle)
     store.renameThread(threadId, `↳ ${request.description.slice(0, 72)}`)
@@ -158,7 +172,7 @@ class SubAgentManagerClass {
       const execution = await Agent.send(
         message,
         config,
-        workspacePath,
+        laneAssignment.workspacePath,
         chatMode,
         {
           // 子代理使用简洁模板，不携带主 agent 的完整 skills / 上下文
@@ -275,6 +289,7 @@ class SubAgentManagerClass {
   private setupCompletionListener(handle: SubAgentHandle, timeoutMs: number): Promise<SubAgentResult> {
     return new Promise<SubAgentResult>((resolve) => {
       let settled = false
+      let finishing = false
       let timer: ReturnType<typeof setTimeout> | null = null
 
       const cleanup = () => {
@@ -295,6 +310,8 @@ class SubAgentManagerClass {
       const unsubscribe = EventBus.on('loop:end', (event) => {
         if (event.threadId !== handle.threadId) return
         if (event.requestId !== handle.requestId) return
+        if (finishing) return
+        finishing = true
 
         // 用共享判定，不要在这里各自列举 reason。原来列的是失败项且含一个
         // 从不存在的 'failed'，于是 handoff_required / no_messages /
@@ -317,19 +334,33 @@ class SubAgentManagerClass {
         }
 
         const output = this.extractOutput(handle)
+        if (timer) {
+          clearTimeout(timer)
+          timer = null
+        }
+        unsubscribe()
 
-        this.settle(handle.id, {
-          success: succeeded,
-          output: succeeded
-            ? output || 'Sub-agent completed with no output.'
-            : undefined,
-          // 失败时把 reason 带出去，不然主 agent 只知道「失败了」无从判断要不要重试
-          error: succeeded ? undefined : `Sub-agent did not finish (${event.reason})`,
-          subAgentId: handle.id,
-          threadId: handle.threadId,
-          assistantId: handle.assistantId,
-          durationMs: Date.now() - handle.startedAt,
-        })
+        void (async () => {
+          let laneResult: WorktreeLaneCompletion | undefined
+          if (succeeded && handle.laneAssignment?.isolated) {
+            laneResult = await ExecutionLaneCoordinator.complete(handle.laneAssignment, `Adnify agent task: ${handle.description}`) || undefined
+          }
+          const laneSucceeded = !laneResult || laneResult.success
+          this.settle(handle.id, {
+            success: succeeded && laneSucceeded,
+            output: succeeded && laneSucceeded ? output || 'Sub-agent completed with no output.' : undefined,
+            error: !succeeded ? `Sub-agent did not finish (${event.reason})` : laneResult?.error,
+            subAgentId: handle.id,
+            threadId: handle.threadId,
+            assistantId: handle.assistantId,
+            durationMs: Date.now() - handle.startedAt,
+            worktree: laneResult
+              ? { path: laneResult.path, branch: laneResult.branch, commit: laneResult.commit, merged: laneResult.merged, conflicts: laneResult.conflicts }
+              : handle.laneAssignment?.lane
+                ? { path: handle.laneAssignment.lane.path, branch: handle.laneAssignment.lane.branch }
+                : undefined,
+          })
+        })()
       })
 
       timer = setTimeout(() => {

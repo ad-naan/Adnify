@@ -25,6 +25,10 @@ export interface SubAgentRequest {
   maxIterations?: number
   /** 超时毫秒数（可选），默认 5 分钟 */
   timeoutMs?: number
+  /** Whether tools may mutate the repository. */
+  writeCapable?: boolean
+  /** Whether this execution may overlap another writer. */
+  concurrent?: boolean
 }
 
 /**
@@ -45,6 +49,7 @@ export interface SubAgentResult {
   assistantId?: string
   /** 实际运行时长（毫秒） */
   durationMs?: number
+  worktree?: { path: string; branch: string; commit?: string; merged?: boolean; conflicts?: string[] }
 }
 
 export interface SubAgentStartedInfo {

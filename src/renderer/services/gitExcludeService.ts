@@ -50,10 +50,10 @@ async function findRepositoryForPath(workspacePath: string, targetPath: string) 
     .sort((left, right) => right.root.length - left.root.length)[0]
 }
 
-function resolveIgnoreFilePath(repoRoot: string, target: GitIgnoreTarget): string {
+async function resolveIgnoreFilePath(repoRoot: string, target: GitIgnoreTarget): Promise<string> {
   return target === 'gitignore'
     ? `${repoRoot}/.gitignore`
-    : `${repoRoot}/.git/info/exclude`
+    : await gitService.getExcludeFilePath(repoRoot)
 }
 
 class GitExcludeService {
@@ -69,7 +69,7 @@ class GitExcludeService {
     if (!repository) throw new Error('所选内容不在 Git 仓库中')
 
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
-    const filePath = resolveIgnoreFilePath(repository.root, target)
+    const filePath = await resolveIgnoreFilePath(repository.root, target)
     const exists = await api.file.exists(filePath)
     const current = exists ? (await api.file.readFull(filePath) || '') : ''
     const next = updateGitExcludeContent(current, pattern, action)
@@ -97,8 +97,8 @@ class GitExcludeService {
     }
 
     const pattern = createGitExcludePattern(repository.root, targetPath, isDirectory)
-    const gitignorePath = resolveIgnoreFilePath(repository.root, 'gitignore')
-    const excludePath = resolveIgnoreFilePath(repository.root, 'exclude')
+    const gitignorePath = await resolveIgnoreFilePath(repository.root, 'gitignore')
+    const excludePath = await resolveIgnoreFilePath(repository.root, 'exclude')
 
     const [gitignoreExists, excludeExists] = await Promise.all([
       api.file.exists(gitignorePath),

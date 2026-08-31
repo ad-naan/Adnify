@@ -84,6 +84,15 @@ interface GitExecResult {
     exitCode: number
 }
 
+export interface GitWorktreeLaneResult {
+    success: boolean
+    path?: string
+    branch?: string
+    commit?: string
+    conflicts?: string[]
+    error?: string
+}
+
 class GitService {
     private primaryWorkspacePath: string | null = null
     private readonly repositoryDiscoveryCache = new Map<string, GitRepository[]>()
@@ -317,6 +326,11 @@ class GitService {
         } catch {
             return null
         }
+    }
+
+    async isWorkingTreeClean(rootPath?: string): Promise<boolean> {
+        const result = await this.exec(['status', '--porcelain'], rootPath)
+        return result.exitCode === 0 && result.stdout.trim().length === 0
     }
 
     /**
@@ -932,6 +946,43 @@ class GitService {
         } catch (err) {
             return { success: false, error: handleGitError(err) }
         }
+    }
+
+    async createWorktree(path: string, branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
+        const result = await this.exec(['worktree', 'add', '-b', branch, path, 'HEAD'], rootPath)
+        return result.exitCode === 0
+            ? { success: true, path, branch }
+            : { success: false, error: (result.stderr || result.stdout || 'Unable to create worktree').trim() }
+    }
+
+    async commitWorktree(message: string, rootPath: string): Promise<GitWorktreeLaneResult> {
+        const add = await this.exec(['add', '-A'], rootPath)
+        if (add.exitCode !== 0) return { success: false, error: add.stderr.trim() || 'Unable to stage worktree changes' }
+        const diff = await this.exec(['diff', '--cached', '--quiet'], rootPath)
+        if (diff.exitCode === 0) {
+            const head = await this.exec(['rev-parse', 'HEAD'], rootPath)
+            return { success: true, commit: head.stdout.trim() }
+        }
+        const commit = await this.exec(['commit', '-m', message], rootPath)
+        if (commit.exitCode !== 0) return { success: false, error: (commit.stderr || commit.stdout || 'Unable to commit worktree changes').trim() }
+        const head = await this.exec(['rev-parse', 'HEAD'], rootPath)
+        return { success: true, commit: head.stdout.trim() }
+    }
+
+    async mergeWorktreeBranch(branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
+        const result = await this.exec(['merge', '--no-ff', branch, '-m', `Merge Adnify lane ${branch}`], rootPath)
+        if (result.exitCode === 0) return { success: true, branch }
+        const status = await this.exec(['status', '--porcelain'], rootPath)
+        const conflicts = status.stdout.split('\n')
+            .filter(line => /^(UU|AA|DD|AU|UA|DU|UD)/.test(line))
+            .map(line => line.slice(3).trim())
+        await this.exec(['merge', '--abort'], rootPath)
+        return { success: false, branch, conflicts, error: (result.stderr || result.stdout || 'Worktree merge failed').trim() }
+    }
+
+    async removeWorktree(path: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        const result = await this.exec(['worktree', 'remove', path], rootPath)
+        return { success: result.exitCode === 0, error: result.exitCode === 0 ? undefined : (result.stderr || result.stdout).trim() }
     }
 
     /**

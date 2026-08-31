@@ -6,4 +6,6 @@
  */
 
 export { SubAgentManager } from './SubAgentManager'
+export { WorktreeLaneService } from './WorktreeLaneService'
+export { ExecutionLaneCoordinator } from './ExecutionLaneCoordinator'
 export type { SubAgentLifecycleCallbacks, SubAgentRequest, SubAgentResult, SubAgentStartedInfo, SubAgentStatus } from './types'

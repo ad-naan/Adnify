@@ -5,6 +5,7 @@
  * - role → 映射到 promptTemplateId
  * - provider/model → 使用现有的 providerConfigs
  */
+import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 
 // ============================================
 // 任务类型
@@ -72,6 +73,48 @@ export interface DependencySummary {
     status: Extract<TaskStatus, 'completed' | 'failed' | 'skipped'>
 }
 
+export type AcceptanceCriterionStatus = 'pending' | 'proven' | 'failed'
+export type PlanEvidenceType = 'test' | 'diagnostic' | 'artifact' | 'diff' | 'review' | 'manual'
+export type PlanEvidenceStatus = 'passed' | 'failed' | 'informational'
+
+export interface AcceptanceCriterion {
+    id: string
+    text: string
+    status: AcceptanceCriterionStatus
+    evidenceIds: string[]
+}
+
+export interface PlanEvidence {
+    id: string
+    type: PlanEvidenceType
+    label: string
+    summary?: string
+    status: PlanEvidenceStatus
+    command?: string
+    path?: string
+    sourceThreadId?: string
+    createdAt: number
+}
+
+export interface ModelOutcome {
+    provider: string
+    model: string
+    executionClass: TaskExecutionClass
+    succeeded: boolean
+    duration: number
+    reviewLoops: number
+    recordedAt: number
+}
+
+export interface ModelRecommendation {
+    provider: string
+    model: string
+    sampleSize: number
+    successRate: number
+    averageDuration: number
+    reason: string
+}
+
 /** 单个任务 */
 export interface PlanTask {
     id: string
@@ -117,6 +160,17 @@ export interface PlanTask {
     executionClass?: TaskExecutionClass
     /** 上游任务输出摘要，供下游任务注入上下文 */
     dependencySummary?: DependencySummary[]
+    /** User-reviewable completion conditions. */
+    acceptanceCriteria?: AcceptanceCriterion[]
+    /** Structured proof collected while executing or reviewing the task. */
+    evidence?: PlanEvidence[]
+    /** Optional isolated Git worktree used by write-heavy tasks. */
+    worktreeLane?: ExecutionLaneProjection
+    /** Historical execution outcome used for local model recommendations. */
+    modelOutcome?: ModelOutcome
+    /** Auto uses local outcome history; manual preserves an explicit user choice. */
+    modelSelection?: 'auto' | 'manual'
+    modelRecommendation?: ModelRecommendation
 }
 
 /** 任务计划 */

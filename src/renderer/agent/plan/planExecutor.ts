@@ -32,6 +32,11 @@ import {
     type ExecutionSessionTaskBinding,
     type DependencySummary,
 } from './types'
+import { buildReviewProof, parseProofGraph, stripProofGraph } from './proofGraph'
+import { ExecutionLaneCoordinator } from '../orchestration/ExecutionLaneCoordinator'
+import { recommendModelForTask } from './modelOutcomeLedger'
+import { getConfiguredPlanProviders } from './planProviderCatalog'
+import { planTaskMayWrite } from './planExecutionPolicy'
 
 const sessions = new Map<string, ExecutionSession>()
 const planToSessionId = new Map<string, string>()
@@ -236,9 +241,24 @@ export async function startPlanExecution(
     }
 
     let repairedAssignments = 0
+    let recommendedAssignments = 0
+    const allowedModels = new Set(getConfiguredPlanProviders().flatMap(provider => provider.models.map(model => `${provider.id}\u0000${model}`)))
     for (const task of plan.tasks) {
         if (task.status !== 'pending') continue
-        const assignment = resolvePlanProviderAssignment(task.provider, task.model)
+        if (task.modelSelection !== 'manual') {
+            const recommendation = recommendModelForTask(task, store.plans, allowedModels)
+            if (recommendation) {
+                store.updateTask(plan.id, task.id, {
+                    provider: recommendation.provider,
+                    model: recommendation.model,
+                    modelRecommendation: recommendation,
+                    modelSelection: 'auto',
+                })
+                recommendedAssignments += 1
+            }
+        }
+        const assignedTask = store.getPlan(plan.id)?.tasks.find(item => item.id === task.id) || task
+        const assignment = resolvePlanProviderAssignment(assignedTask.provider, assignedTask.model)
         if (!assignment) {
             return { success: false, message: 'No usable Plan task provider is configured. Add an API key, endpoint, and model first.' }
         }
@@ -247,7 +267,7 @@ export async function startPlanExecution(
             repairedAssignments += 1
         }
     }
-    if (repairedAssignments > 0) plan = store.getPlan(plan.id) || plan
+    if (repairedAssignments > 0 || recommendedAssignments > 0) plan = store.getPlan(plan.id) || plan
 
     const validationError = await validatePlanTaskModels(plan)
     if (validationError) {
@@ -464,7 +484,39 @@ async function executeTask(
     logger.agent.info(`[PlanExecutor] Executing task: ${existingTask.title}`)
 
     try {
-        const result = await runTaskWithAgent(session, existingTask, store.getPlan(plan.id) || plan, threadId, requestId)
+        const needsLane = plan.executionMode === 'parallel' && planTaskMayWrite(existingTask)
+        const laneAssignment = await ExecutionLaneCoordinator.acquire({
+            kind: 'plan-task', workspacePath: session.workspacePath, label: `${plan.name}-${existingTask.title}`,
+            mayWrite: needsLane, concurrent: plan.executionMode === 'parallel',
+        })
+        if (laneAssignment.lane) {
+            const lane = laneAssignment.lane
+            store.updateTask(plan.id, existingTask.id, {
+                worktreeLane: { status: 'active', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch },
+            })
+        }
+
+        let result = await runTaskWithAgent(session, existingTask, store.getPlan(plan.id) || plan, threadId, requestId, laneAssignment.workspacePath || undefined)
+        if (result.success && laneAssignment.lane) {
+            const lane = laneAssignment.lane
+            const laneResult = await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify plan: ${existingTask.title}`)
+            if (!laneResult) throw new Error('Isolated Plan task lost its worktree lane')
+            store.updateTask(plan.id, existingTask.id, {
+                worktreeLane: laneResult.success
+                    ? { status: 'merged', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch, commit: laneResult.commit }
+                    : { status: laneResult.conflicts?.length ? 'conflict' : 'failed', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch, commit: laneResult.commit, conflicts: laneResult.conflicts, error: laneResult.error },
+            })
+            if (!laneResult.success) result = { ...result, success: false, error: laneResult.error || 'Worktree lane merge failed' }
+        }
+        if (!result.success && laneAssignment.lane) {
+            const lane = laneAssignment.lane
+            const latestLane = store.getPlan(plan.id)?.tasks.find(item => item.id === existingTask.id)?.worktreeLane
+            if (!latestLane || latestLane.status === 'active') {
+                store.updateTask(plan.id, existingTask.id, {
+                    worktreeLane: { status: 'failed', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch, error: result.error || 'Task failed; lane retained for recovery' },
+                })
+            }
+        }
 
         if (!result.success && isCancellationReason(result.error)) {
             session.scheduler.markTaskPending(existingTask)
@@ -494,10 +546,23 @@ async function executeTask(
         if (result.success) {
             session.scheduler.markTaskCompleted(existingTask, result.output)
             store.markTaskCompleted(plan.id, existingTask.id, result.output)
+            const latestTask = store.getPlan(plan.id)?.tasks.find(candidate => candidate.id === existingTask.id) || existingTask
+            const proof = parseProofGraph(result.proofText || result.output, latestTask, result.threadId)
+                || (result.reviewAccepted ? buildReviewProof(latestTask, result.threadId, true) : null)
             store.updateTask(plan.id, existingTask.id, {
                 threadId: result.threadId,
                 assistantId: result.assistantId,
                 requestId: result.requestId,
+                ...proof,
+                modelOutcome: {
+                    provider: existingTask.provider,
+                    model: existingTask.model,
+                    executionClass: existingTask.executionClass || 'general',
+                    succeeded: true,
+                    duration: Date.now() - (existingTask.startedAt || Date.now()),
+                    reviewLoops: result.reviewLoops,
+                    recordedAt: Date.now(),
+                },
             })
 
             EventBus.emit({
@@ -516,6 +581,15 @@ async function executeTask(
                 threadId: result.threadId,
                 assistantId: result.assistantId,
                 requestId: result.requestId,
+                modelOutcome: {
+                    provider: existingTask.provider,
+                    model: existingTask.model,
+                    executionClass: existingTask.executionClass || 'general',
+                    succeeded: false,
+                    duration: Date.now() - (existingTask.startedAt || Date.now()),
+                    reviewLoops: result.reviewLoops,
+                    recordedAt: Date.now(),
+                },
             })
 
             EventBus.emit({
@@ -575,7 +649,8 @@ async function runTaskWithAgent(
     plan: TaskPlan,
     threadId: string,
     requestId: string,
-): Promise<{ success: boolean; output: string; error?: string; threadId: string; assistantId?: string; requestId: string }> {
+    taskWorkspacePath?: string,
+): Promise<{ success: boolean; output: string; error?: string; threadId: string; assistantId?: string; requestId: string; reviewAccepted: boolean; reviewLoops: number; proofText?: string }> {
     try {
         const isCoderTask = /coder|developer|engineer/i.test(task.role || '')
         const maxReviewLoops = 3
@@ -583,20 +658,23 @@ async function runTaskWithAgent(
         let currentRole = task.role || 'default'
         let feedbackMessage = buildTaskMessage(task, plan)
         let finalOutput = ''
+        let implementationOutput = ''
+        let proofText: string | undefined
+        let reviewAccepted = false
         let lastAssistantId: string | undefined
         let activeRequestId = requestId
 
         while (currentLoop < maxReviewLoops && session.status === 'running') {
             const llmConfig = await getLLMConfigForTask(task.provider, task.model)
             if (!llmConfig) {
-                return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${task.model}`, threadId, requestId: activeRequestId }
+                return { success: false, output: '', error: `Failed to get LLM config for ${task.provider}/${task.model}`, threadId, requestId: activeRequestId, reviewAccepted, reviewLoops: currentLoop }
             }
 
             const templateId = mapRoleToTemplateId(currentRole)
             logger.agent.info(`[PlanExecutor] Emitting subtask. Loop: ${currentLoop}, Role: ${currentRole} (Template: ${templateId})`)
 
             if (session.status !== 'running') {
-                return { success: false, output: '', error: 'aborted', threadId, requestId: activeRequestId }
+                return { success: false, output: '', error: 'aborted', threadId, requestId: activeRequestId, reviewAccepted, reviewLoops: currentLoop }
             }
 
             const completionPromise = waitForAgentCompletion({
@@ -608,7 +686,7 @@ async function runTaskWithAgent(
             const sendPromise = Agent.send(
                 feedbackMessage,
                 llmConfig,
-                session.workspacePath,
+                taskWorkspacePath || session.workspacePath,
                 'plan',
                 {
                     promptTemplateId: templateId,
@@ -631,13 +709,13 @@ async function runTaskWithAgent(
 
             if ('error' in firstOutcome) {
                 const errorMsg = firstOutcome.error instanceof Error ? firstOutcome.error.message : String(firstOutcome.error)
-                return { success: false, output: '', error: errorMsg, threadId, requestId: activeRequestId }
+                return { success: false, output: '', error: errorMsg, threadId, requestId: activeRequestId, reviewAccepted, reviewLoops: currentLoop }
             }
 
             const sendOutcome = 'execution' in firstOutcome ? firstOutcome : await sendPromise
             if ('error' in sendOutcome) {
                 const errorMsg = sendOutcome.error instanceof Error ? sendOutcome.error.message : String(sendOutcome.error)
-                return { success: false, output: '', error: errorMsg, threadId, requestId: activeRequestId }
+                return { success: false, output: '', error: errorMsg, threadId, requestId: activeRequestId, reviewAccepted, reviewLoops: currentLoop }
             }
 
             const execution = sendOutcome.execution
@@ -653,17 +731,20 @@ async function runTaskWithAgent(
             })
 
             if (!result.success) {
-                return { ...result, threadId: execution.threadId, assistantId: lastAssistantId, requestId: execution.requestId }
+                return { ...result, threadId: execution.threadId, assistantId: lastAssistantId, requestId: execution.requestId, reviewAccepted, reviewLoops: currentLoop }
             }
 
             finalOutput = result.output
+            proofText = result.output
 
             if (isCoderTask) {
                 if (currentRole !== 'reviewer') {
+                    implementationOutput = finalOutput
                     currentRole = 'reviewer'
-                    feedbackMessage = `[System: Reviewer Phase]\nCoder has completed the sequence for task: "${task.title}".\nPlease verify the latest changes. Use reading tools if necessary. If everything is fully correct and meets requirements without regressions, output exactly <LGTM>. Otherwise, point out the exact logical flaws or remaining steps.`
+                    feedbackMessage = buildReviewerMessage(task)
                     currentLoop++
                 } else if (finalOutput.includes('<LGTM>')) {
+                    reviewAccepted = true
                     break
                 } else {
                     currentRole = task.role || 'coder'
@@ -675,11 +756,16 @@ async function runTaskWithAgent(
             }
         }
 
-        return { success: true, output: finalOutput, threadId, assistantId: lastAssistantId, requestId: activeRequestId }
+        return { success: true, output: implementationOutput || stripProofGraph(finalOutput), proofText, threadId, assistantId: lastAssistantId, requestId: activeRequestId, reviewAccepted, reviewLoops: currentLoop }
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
-        return { success: false, output: '', error: errorMsg, threadId, requestId }
+        return { success: false, output: '', error: errorMsg, threadId, requestId, reviewAccepted: false, reviewLoops: 0 }
     }
+}
+
+function buildReviewerMessage(task: PlanTask): string {
+    const criteria = (task.acceptanceCriteria || []).map(item => `- ${item.id}: ${item.text}`).join('\n') || '- No explicit criteria were declared; verify the task description and regressions.'
+    return `[System: Reviewer Phase]\nCoder has completed the sequence for task: "${task.title}".\nVerify the latest changes with available tools.\n\nAcceptance criteria:\n${criteria}\n\nIf unresolved issues remain, describe them precisely. If the implementation is correct, begin with <LGTM> and append a machine-readable report:\n<proof_graph>{"evidence":[{"id":"e1","type":"test|diagnostic|artifact|diff|review","label":"...","status":"passed|failed|informational","command":"optional","path":"optional","summary":"optional"}],"criteria":[{"id":"criterion id","status":"proven|failed|pending","evidenceIds":["e1"]}]}</proof_graph>`
 }
 
 function buildTaskMessage(task: PlanTask, plan: TaskPlan): string {
@@ -700,6 +786,16 @@ function buildTaskMessage(task: PlanTask, plan: TaskPlan): string {
             ? plan.requirementsContent.slice(0, 3000) + '\n\n... (truncated)'
             : plan.requirementsContent
         lines.push(truncated)
+        lines.push('')
+    }
+
+    if (task.acceptanceCriteria?.length) {
+        lines.push('### Acceptance Criteria')
+        lines.push('')
+        for (const criterion of task.acceptanceCriteria) lines.push(`- ${criterion.id}: ${criterion.text}`)
+        lines.push('')
+        lines.push('Collect concrete test, diagnostic, artifact, diff, or review evidence for these criteria.')
+        lines.push('In the final response append <proof_graph>{"evidence":[...],"criteria":[{"id":"criterion id","status":"proven|failed|pending","evidenceIds":[...]}]}</proof_graph>. Do not claim proven without concrete evidence.')
         lines.push('')
     }
 

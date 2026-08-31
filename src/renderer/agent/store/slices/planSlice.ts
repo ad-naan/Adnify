@@ -73,17 +73,28 @@ function normalizeLoadedPlan(plan: TaskPlan): TaskPlan {
     return {
         ...plan,
         status: wasInterrupted ? 'paused' : plan.status,
-        tasks: plan.tasks.map(task => (
-            task.status === 'running'
+        tasks: plan.tasks.map(task => {
+            const normalized = {
+                ...task,
+                acceptanceCriteria: (task.acceptanceCriteria || []).map((criterion, index) => ({
+                    id: criterion.id || `${task.id}-criterion-${index + 1}`,
+                    text: criterion.text,
+                    status: criterion.status || 'pending' as const,
+                    evidenceIds: criterion.evidenceIds || [],
+                })),
+                evidence: task.evidence || [],
+                modelSelection: task.modelSelection || 'auto' as const,
+            }
+            return task.status === 'running'
                 ? {
-                    ...task,
+                    ...normalized,
                     status: 'pending',
                     error: undefined,
                     startedAt: undefined,
                     completedAt: undefined,
-                }
-                : task
-        )),
+                } as PlanTask
+                : normalized
+        }),
     }
 }
 
@@ -264,6 +275,9 @@ export const createPlanSlice: StateCreator<
                             requestId: undefined,
                             dependencySummary: undefined,
                             executionClass: undefined,
+                            evidence: [],
+                            acceptanceCriteria: (task.acceptanceCriteria || []).map(criterion => ({ ...criterion, status: 'pending', evidenceIds: [] })),
+                            worktreeLane: undefined,
                         }
                     }),
                 })

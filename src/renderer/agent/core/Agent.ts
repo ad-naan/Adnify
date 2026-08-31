@@ -40,6 +40,7 @@ import { agentExecutor } from '../application/AgentExecutor'
 import type { ExecutionConfig } from '../application/AgentExecutor'
 import { translateAgentText } from '../utils/agentText'
 import { getBuiltinProvider } from '@shared/config/providers'
+import { ExecutionLaneCoordinator, type ExecutionLaneAssignment } from '../orchestration/ExecutionLaneCoordinator'
 
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
@@ -108,6 +109,8 @@ export class AgentClass {
     let persistSuspended = false
     let taskRegistered = false
     let assistantId = ''
+    let laneAssignment: ExecutionLaneAssignment | undefined
+    let executionWorkspacePath = workspacePath
 
     try {
       suspendAgentStorageWrites()
@@ -149,6 +152,16 @@ export class AgentClass {
       })
       taskRegistered = true
 
+      // A second top-level Agent execution may write concurrently with the
+      // already-running task. Isolate it at the execution-node boundary. Plan
+      // and sub-agent callers own their lanes through the same shared service.
+      const isTopLevelAgent = chatMode === 'agent' && !executionOptions?.isSubAgent && !executionOptions?.planTaskId
+      laneAssignment = await ExecutionLaneCoordinator.acquire({
+        kind: 'agent-session', workspacePath, label: preparedThread?.title || `agent-${threadId.slice(0, 8)}`,
+        mayWrite: isTopLevelAgent, concurrent: isTopLevelAgent && this.runningTasks.size > 1,
+      })
+      executionWorkspacePath = laneAssignment.workspacePath
+
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
       await new Promise(resolve => setTimeout(resolve, 0))
 
@@ -165,7 +178,7 @@ export class AgentClass {
 
       // 4. 构建系统提示词（异步执行）
       const buildAgentSystemPrompt = await importBuildAgentSystemPrompt()
-      const { prompt: systemPrompt, runtimeEnvironment, activeSkills } = await buildAgentSystemPrompt(chatMode, workspacePath, {
+      const { prompt: systemPrompt, runtimeEnvironment, activeSkills } = await buildAgentSystemPrompt(chatMode, executionWorkspacePath, {
         ...promptOptions,
         threadId,
         isSubAgent: executionOptions?.isSubAgent,
@@ -190,7 +203,7 @@ export class AgentClass {
       // 6. 使用 AgentExecutor 准备执行
       const executionConfig: ExecutionConfig = {
         mode: chatMode,
-        workspacePath,
+        workspacePath: executionWorkspacePath,
         threadId,
         assistantId,
         requestId,
@@ -214,7 +227,7 @@ export class AgentClass {
       // 8. 运行主循环
       const runLoop = await importRunLoop()
       const executionContext: ExecutionContext = {
-        workspacePath,
+        workspacePath: executionWorkspacePath,
         chatMode,
         planPhase: promptOptions?.planPhase,
         systemPrompt,
@@ -227,10 +240,24 @@ export class AgentClass {
       }
       await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
 
+      if (laneAssignment.isolated) {
+        const laneResult = await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify agent task: ${preparedThread?.title || threadId}`)
+        if (!laneResult) throw new Error('Isolated Agent execution lost its worktree lane')
+        if (!laneResult.success) {
+          throw new Error(`${laneResult.error || 'Unable to merge Agent worktree lane'}${laneResult.conflicts?.length ? ` Conflicts: ${laneResult.conflicts.join(', ')}` : ''}`)
+        }
+      }
+
       return { threadId, assistantId, requestId }
     } catch (error) {
       // 统一错误处理
-      const appError = AppError.fromError(error)
+      const laneNote = laneAssignment?.lane
+        ? ` Worktree lane retained at ${laneAssignment.lane.path} (${laneAssignment.lane.branch}).`
+        : ''
+      const effectiveError = laneNote
+        ? new Error(`${error instanceof Error ? error.message : String(error)}${laneNote}`)
+        : error
+      const appError = AppError.fromError(effectiveError)
       logger.agent.error('[Agent] Error:', appError.toJSON())
       this.showError(formatErrorMessage(appError), assistantId, threadId || undefined)
       throw error
