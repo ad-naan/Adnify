@@ -333,6 +333,9 @@ export default function SettingsModal() {
             set('editorConfig', finalEditorConfig)
 
             await save()
+            if (!localAgentConfig.enableToolCallLogging) {
+                useStore.getState().clearToolCallLogs()
+            }
 
             try {
                 window.electronAPI?.setLanguage?.(localLanguage);

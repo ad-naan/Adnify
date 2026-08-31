@@ -95,6 +95,7 @@ export interface AgentConfig {
   toolTimeoutMs: number
   enableAutoFix: boolean
   expandAgentBlocksByDefault: boolean
+  enableToolCallLogging: boolean
   keepRecentTurns: number
   deepCompressionTurns: number
   maxImportantOldTurns: number

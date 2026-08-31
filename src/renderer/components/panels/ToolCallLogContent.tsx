@@ -17,13 +17,14 @@ import {
   Clock,
   Zap,
 } from 'lucide-react'
-import { Button } from '../ui'
+import { Button, Switch } from '../ui'
 import { JsonHighlight } from '@/renderer/utils/jsonHighlight'
 import { useStore } from '@/renderer/store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
 import { useShallow } from 'zustand/react/shallow'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { toast } from '@/renderer/components/common/ToastProvider'
 
 interface ToolCallLogContentProps {
   language?: 'en' | 'zh'
@@ -32,12 +33,19 @@ interface ToolCallLogContentProps {
 type ViewMode = 'logs' | 'stats'
 
 export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogContentProps) {
-  const { toolCallLogs: logs, clearToolCallLogs, getToolStats, getPerformanceInsights } = useStore(useShallow(s => ({ toolCallLogs: s.toolCallLogs, clearToolCallLogs: s.clearToolCallLogs, getToolStats: s.getToolStats, getPerformanceInsights: s.getPerformanceInsights })))
+  const { toolCallLogs: logs, loggingEnabled, clearToolCallLogs, getToolStats, getPerformanceInsights } = useStore(useShallow(s => ({
+    toolCallLogs: s.toolCallLogs,
+    loggingEnabled: s.agentConfig.enableToolCallLogging ?? false,
+    clearToolCallLogs: s.clearToolCallLogs,
+    getToolStats: s.getToolStats,
+    getPerformanceInsights: s.getPerformanceInsights,
+  })))
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<'all' | 'request' | 'response'>('all')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('logs')
+  const [savingLoggingSetting, setSavingLoggingSetting] = useState(false)
 
   const threadLogs = useMemo(
     () => currentThreadId ? logs.filter(log => log.threadId === currentThreadId) : [],
@@ -77,11 +85,31 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
   const filteredLogs = filter === 'all' ? threadLogs : threadLogs.filter((log) => log.type === filter)
   const t = (zh: string, en: string) => (language === 'zh' ? zh : en)
 
+  const handleLoggingChange = async (enabled: boolean) => {
+    if (savingLoggingSetting) return
+
+    const store = useStore.getState()
+    const previousConfig = store.agentConfig
+
+    setSavingLoggingSetting(true)
+    store.set('agentConfig', { ...previousConfig, enableToolCallLogging: enabled })
+
+    try {
+      await store.save()
+      if (!enabled) store.clearToolCallLogs()
+    } catch {
+      store.set('agentConfig', previousConfig)
+      toast.error(t('工具调用日志设置保存失败', 'Failed to save tool call logging setting'))
+    } finally {
+      setSavingLoggingSetting(false)
+    }
+  }
+
 
   return (
     <div className="h-full flex flex-col">
       {/* 工具栏 */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border-subtle bg-surface/30">
+      {loggingEnabled && <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border-subtle bg-surface/30">
         {/* 视图切换 */}
         <div className="flex bg-surface/50 rounded p-0.5">
           <button
@@ -126,16 +154,37 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
           className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-red-400 hover:bg-red-500/10" title={t('清除', 'Clear')}>
           <Trash2 className="w-3 h-3" />
         </Button>
-      </div>
+      </div>}
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-auto">
-        {viewMode === 'logs' ? (
+        {!loggingEnabled ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-text-muted">
+            <OtterAsset asset="logs" className="h-12 w-12 object-contain opacity-55 grayscale" />
+            <span className="text-xs font-medium text-text-secondary">{t('工具调用日志已关闭', 'Tool call logging is off')}</span>
+            <span className="text-[10px] leading-relaxed">{t('开启后将记录后续工具调用；关闭不会影响 Agent 使用工具。', 'Turn it on to capture future tool calls. Keeping it off does not affect tool use.')}</span>
+          </div>
+        ) : viewMode === 'logs' ? (
           <LogsView logs={filteredLogs} expandedIds={expandedIds} toggleExpand={toggleExpand}
             handleCopy={handleCopy} copiedId={copiedId} language={language} />
         ) : (
           <StatsView stats={stats} insights={insights} language={language} />
         )}
+      </div>
+
+      <div className="px-2 py-2 border-t border-border/40">
+        <label className="flex cursor-pointer items-center justify-between gap-3 px-1">
+          <div className="min-w-0">
+            <div className="text-[10px] font-medium text-text-secondary">{t('记录工具调用日志', 'Record tool call logs')}</div>
+            <div className="mt-0.5 text-[9px] leading-snug text-text-muted">{t('默认关闭，仅记录开启后的调用', 'Off by default; only captures calls made while enabled')}</div>
+          </div>
+          <Switch
+            checked={loggingEnabled}
+            disabled={savingLoggingSetting}
+            onChange={(event) => void handleLoggingChange(event.target.checked)}
+            className="scale-[0.6] origin-right"
+          />
+        </label>
       </div>
     </div>
   )

@@ -107,6 +107,7 @@ export interface AgentRuntimeConfig {
   // 工具执行
   toolTimeoutMs: number
   enableAutoFix: boolean
+  enableToolCallLogging: boolean
 
   // 动态并发控制
   dynamicConcurrency: {

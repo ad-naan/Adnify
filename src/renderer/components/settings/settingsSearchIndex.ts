@@ -50,6 +50,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ========== agent（智能体）==========
   { id: 'agent.automation', tab: 'agent', label: { en: 'Agent Automation', zh: 'Agent 自动化' }, keywords: ['auto', 'automation', '自动化', 'fix', '修复'] },
   { id: 'agent.autoFix', tab: 'agent', label: { en: 'Auto-check & Fix', zh: '自动检查与修复' }, keywords: ['auto', 'fix', 'check', '自动', '修复', '检查', 'lint'] },
+  { id: 'agent.toolCallLogging', tab: 'agent', label: { en: 'Tool Call Logging', zh: '工具调用日志' }, keywords: ['tool', 'call', 'log', 'logging', '工具', '调用', '日志', '性能'] },
   { id: 'agent.promptTemplate', tab: 'agent', label: { en: 'Prompt Template', zh: 'Prompt 模板' }, keywords: ['prompt', 'template', '模板', '提示词', 'system prompt'] },
   { id: 'agent.instructions', tab: 'agent', label: { en: 'Custom Instructions', zh: '自定义系统指令' }, keywords: ['instruction', 'custom', '指令', '自定义', 'system', '系统'] },
   { id: 'agent.webSearch', tab: 'agent', label: { en: 'Web Search', zh: '网络搜索' }, keywords: ['web', 'search', '搜索', '网络', 'google', 'api'] },

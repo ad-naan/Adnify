@@ -72,6 +72,12 @@ export function AgentSettings({
                                 checked={agentConfig.expandAgentBlocksByDefault ?? false}
                                 onChange={(checked) => setAgentConfig({ ...agentConfig, expandAgentBlocksByDefault: checked })}
                             />
+                            <SettingToggle
+                                label={t('记录工具调用日志', 'Record tool call logs')}
+                                description={t('保存工具请求、响应、耗时和错误，供底部日志面板查看。默认关闭以减少内存和序列化开销。', 'Keeps tool requests, responses, timing, and errors for the bottom log panel. Off by default to reduce memory and serialization overhead.')}
+                                checked={agentConfig.enableToolCallLogging ?? false}
+                                onChange={(checked) => setAgentConfig({ ...agentConfig, enableToolCallLogging: checked })}
+                            />
                         </div>
                     </section>
 

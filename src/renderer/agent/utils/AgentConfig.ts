@@ -48,6 +48,7 @@ export function getAgentConfig(): AgentRuntimeConfig {
         // 工具执行
         toolTimeoutMs: agentConfig.toolTimeoutMs ?? DEFAULT_AGENT_CONFIG.toolTimeoutMs,
         enableAutoFix: agentConfig.enableAutoFix ?? DEFAULT_AGENT_CONFIG.enableAutoFix,
+        enableToolCallLogging: agentConfig.enableToolCallLogging ?? DEFAULT_AGENT_CONFIG.enableToolCallLogging,
 
         // 上下文压缩
         keepRecentTurns: agentConfig.keepRecentTurns ?? DEFAULT_AGENT_CONFIG.keepRecentTurns,

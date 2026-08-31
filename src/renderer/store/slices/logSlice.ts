@@ -1,4 +1,5 @@
 import { StateCreator } from 'zustand'
+import type { SettingsSlice } from './settingsSlice'
 
 /**
  * 工具调用日志条目
@@ -53,10 +54,14 @@ export interface LogSlice {
 
 const MAX_LOGS = 200
 
-export const createLogSlice: StateCreator<LogSlice> = (set, get) => ({
+type LogSliceStore = LogSlice & Pick<SettingsSlice, 'agentConfig'>
+
+export const createLogSlice: StateCreator<LogSliceStore, [], [], LogSlice> = (set, get) => ({
   toolCallLogs: [],
 
-  addToolCallLog: (entry) =>
+  addToolCallLog: (entry) => {
+    if (!get().agentConfig.enableToolCallLogging) return
+
     set((state) => {
       const newEntry: ToolCallLogEntry = {
         ...entry,
@@ -65,7 +70,8 @@ export const createLogSlice: StateCreator<LogSlice> = (set, get) => ({
       }
       const newLogs = [newEntry, ...state.toolCallLogs].slice(0, MAX_LOGS)
       return { toolCallLogs: newLogs }
-    }),
+    })
+  },
 
   clearToolCallLogs: (threadId) => set(state => ({
     toolCallLogs: threadId
