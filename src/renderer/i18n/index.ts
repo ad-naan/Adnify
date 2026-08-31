@@ -36,6 +36,16 @@ export function createTranslator(lang: Language) {
 }
 
 /**
+ * 把 store 里的 `language: string` 收敛成 `Language`。
+ *
+ * 组件不该为了拿一个联合类型各自写 `language === 'zh' ? 'zh' : 'en'`；
+ * 未知取值统一落到 en（和 `t` 的兜底一致）。
+ */
+export function asLanguage(value: string | undefined | null): Language {
+  return value === 'zh' ? 'zh' : 'en'
+}
+
+/**
  * 获取所有支持的语言
  */
 export function getSupportedLanguages(): Array<{ code: Language; name: string }> {

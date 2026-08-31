@@ -2,8 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const git = vi.hoisted(() => ({ isInsideWorkTree: vi.fn(), hasCommits: vi.fn() }))
 const lanes = vi.hoisted(() => ({ create: vi.fn(), complete: vi.fn(), discard: vi.fn() }))
+// 车道服务被 mock 掉了，但协调器要用 LaneUnavailableError 判断"这次失败带没带原因码"，
+// 所以桩里必须给出同名的类，否则 instanceof 会拿到 undefined。
+const LaneUnavailableError = vi.hoisted(() => class LaneUnavailableError extends Error {
+  constructor(message: string, readonly notice: { code: string }) {
+    super(message)
+    this.name = 'LaneUnavailableError'
+  }
+})
 vi.mock('@/renderer/services/gitService', () => ({ gitService: git }))
-vi.mock('@/renderer/agent/orchestration/WorktreeLaneService', () => ({ WorktreeLaneService: lanes }))
+vi.mock('@/renderer/agent/orchestration/WorktreeLaneService', () => ({ WorktreeLaneService: lanes, LaneUnavailableError }))
 
 import { ExecutionLaneCoordinator } from '@/renderer/agent/orchestration/ExecutionLaneCoordinator'
 
@@ -50,16 +58,33 @@ describe('ExecutionLaneCoordinator', () => {
     expect(result.isolated).toBe(true)
   })
 
+  // 退回共享工作区时给出的是原因码而不是英文句子：渲染层才知道当前语言。
   it.each([
-    { case: 'no repository', setup: () => git.isInsideWorkTree.mockResolvedValue(false), expected: 'requires a Git repository' },
-    { case: 'dirty base', setup: () => lanes.create.mockRejectedValue(new Error('uncommitted changes')), expected: 'uncommitted changes' },
-  ])('falls back to the shared workspace for agent sessions ($case)', async ({ setup, expected }) => {
+    { case: 'no repository', setup: () => git.isInsideWorkTree.mockResolvedValue(false), code: 'noRepository' },
+    { case: 'no commits', setup: () => git.hasCommits.mockResolvedValue(false), code: 'noCommits' },
+    {
+      case: 'dirty base',
+      setup: () => lanes.create.mockRejectedValue(new LaneUnavailableError('uncommitted changes', { code: 'dirtyBase' })),
+      code: 'dirtyBase',
+    },
+    {
+      case: 'an unclassified Git failure',
+      setup: () => lanes.create.mockRejectedValue(new Error('fatal: something else')),
+      code: 'createFailed',
+    },
+  ])('falls back to the shared workspace for agent sessions ($case)', async ({ setup, code }) => {
     setup()
     const result = await ExecutionLaneCoordinator.acquire({
       kind: 'agent-session', workspacePath: 'D:/repo', label: 'chat', mayWrite: true, concurrent: true, allowSharedFallback: true,
     })
     expect(result).toMatchObject({ workspacePath: 'D:/repo', isolated: false })
-    expect(result.fallbackReason).toContain(expected)
+    expect(result.fallbackNotice).toEqual({ code })
+  })
+
+  it('carries the notice code on the hard-failure path too', async () => {
+    git.isInsideWorkTree.mockResolvedValue(false)
+    await expect(ExecutionLaneCoordinator.acquire({ kind: 'sub-agent', workspacePath: 'D:/plain', label: 'task', mayWrite: true, concurrent: true }))
+      .rejects.toMatchObject({ notice: { code: 'noRepository' } })
   })
 
   it('discards the lane when an execution node is released', async () => {

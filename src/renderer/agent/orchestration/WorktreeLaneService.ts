@@ -16,6 +16,7 @@ import { gitService } from '@/renderer/services/gitService'
 import { logger } from '@utils/Logger'
 import { gitExcludeService } from '@/renderer/services/gitExcludeService'
 import { ADNIFY_INTERNAL_DIR, WORKTREE_LANE_BRANCH_PREFIX, WORKTREE_LANE_DIR } from '@shared/constants'
+import type { ExecutionLaneNotice, ExecutionLaneNoticeCode } from '@shared/types/executionLane'
 
 export interface WorktreeLaneHandle {
   id: string
@@ -38,6 +39,36 @@ export interface WorktreeLaneCompletion extends WorktreeLaneHandle {
   /** worktree 目录已回收，分支与提交仍在 */
   archived?: boolean
   conflicts?: string[]
+  /** 面向用户的原因码，由渲染层翻译（laneNoticeText） */
+  notice?: ExecutionLaneNotice
+  /** Git 原始报错，只用于日志与诊断 */
+  error?: string
+}
+
+/**
+ * 车道建不起来时抛出的错误。
+ *
+ * 带上原因码，这样调用方（ExecutionLaneCoordinator）不需要去解析英文句子就能给出
+ * 可翻译的提示；`message` 仍然是英文，因为它进日志和异常栈。
+ */
+export class LaneUnavailableError extends Error {
+  constructor(message: string, readonly notice: ExecutionLaneNotice) {
+    super(message)
+    this.name = 'LaneUnavailableError'
+  }
+}
+
+const notice = (code: ExecutionLaneNoticeCode, params?: Record<string, string | number>): ExecutionLaneNotice =>
+  params ? { code, params } : { code }
+
+
+/** 恢复动作（重试合并 / 丢弃）的结果 */
+export interface LaneActionResult {
+  success: boolean
+  conflicts?: string[]
+  /** 面向用户的原因码 */
+  notice?: ExecutionLaneNotice
+  /** Git 原始报错，只用于日志与诊断 */
   error?: string
 }
 
@@ -81,7 +112,10 @@ class WorktreeLaneServiceClass {
     await this.sweepOnce(workspacePath)
 
     if (!await gitService.isWorkingTreeClean(workspacePath)) {
-      throw new Error('Cannot start an isolated parallel writer while the base workspace has uncommitted changes. Commit or stash them, or run the task exclusively.')
+      throw new LaneUnavailableError(
+        'Cannot start an isolated parallel writer while the base workspace has uncommitted changes.',
+        notice('dirtyBase'),
+      )
     }
     const id = crypto.randomUUID().slice(0, 8)
     const segment = laneSegment(label)
@@ -92,7 +126,7 @@ class WorktreeLaneServiceClass {
 
     await this.ensureExcluded(workspacePath)
     const result = await gitService.createWorktree(path, branch, workspacePath)
-    if (!result.success) throw new Error(result.error || 'Unable to create worktree lane')
+    if (!result.success) throw new LaneUnavailableError(result.error || 'Unable to create worktree lane', notice('createFailed'))
 
     const handle: WorktreeLaneHandle = { id, workspacePath, path, branch, baseBranch, baseCommit }
     this.activeLanes.set(path, handle)
@@ -125,13 +159,20 @@ class WorktreeLaneServiceClass {
     const commit = await gitService.commitWorktree(message, handle.path)
     if (!commit.success) {
       this.activeLanes.delete(handle.path)
-      return { ...handle, success: false, outcome: 'failed', error: commit.error }
+      return { ...handle, success: false, outcome: 'failed', notice: notice('commitFailed'), error: commit.error }
     }
 
     // 车道里一行都没改：没有值得保留的提交，目录和分支一起收掉。
     if (commit.committed === false && !await this.hasOwnCommits(handle)) {
       const dropped = await this.drop(handle)
-      return { ...handle, success: true, outcome: 'discarded', commit: commit.commit, error: dropped }
+      return {
+        ...handle,
+        success: true,
+        outcome: 'discarded',
+        commit: commit.commit,
+        notice: notice('emptyDiscarded', { branch: handle.branch }),
+        error: dropped,
+      }
     }
 
     return await new Promise<WorktreeLaneCompletion>(resolve => {
@@ -139,34 +180,56 @@ class WorktreeLaneServiceClass {
         resolve(await this.mergeNow(handle, commit.commit))
       }).catch(async error => {
         const archived = await this.archive(handle)
-        resolve({ ...handle, success: false, outcome: 'failed', commit: commit.commit, archived, error: errorMessage(error) })
+        resolve({
+          ...handle,
+          success: false,
+          outcome: 'failed',
+          commit: commit.commit,
+          archived,
+          notice: notice('mergeFailed'),
+          error: errorMessage(error),
+        })
       })
     })
   }
 
   /** 串行合并队列里的实际动作：校验基准 → 合并 → 回收目录与分支 */
   private async mergeNow(handle: WorktreeLaneHandle, commit?: string): Promise<WorktreeLaneCompletion> {
-    const retain = async (error: string, conflicts?: string[]): Promise<WorktreeLaneCompletion> => {
+    // 归档保留：目录回收、分支留着。原因码交给渲染层翻译，`error` 只留 Git 原文。
+    const retain = async (
+      reason: ExecutionLaneNotice,
+      options?: { conflicts?: string[]; error?: string },
+    ): Promise<WorktreeLaneCompletion> => {
       const archived = await this.archive(handle)
-      const hint = archived
-        ? `Lane ${handle.branch} is archived: the worktree folder was removed and the commit is kept on the branch.`
-        : `Lane ${handle.branch} is retained at ${handle.path}.`
-      return { ...handle, success: false, outcome: 'retained', commit, conflicts, archived, error: `${error} ${hint}` }
+      return {
+        ...handle,
+        success: false,
+        outcome: 'retained',
+        commit,
+        conflicts: options?.conflicts,
+        archived,
+        notice: reason,
+        error: options?.error,
+      }
     }
 
     if (!await gitService.isWorkingTreeClean(handle.workspacePath)) {
-      return await retain('The base workspace has uncommitted changes, so this lane could not be merged.')
+      return await retain(notice('dirtyBaseMerge'))
     }
 
     // 基准分支被切走以后合并会把车道提交落到别的分支上，宁可保留。
     const currentBranch = await gitService.getCurrentBranch(handle.workspacePath) || undefined
     if (handle.baseBranch && currentBranch !== handle.baseBranch) {
-      return await retain(`The workspace is now on "${currentBranch || 'a detached HEAD'}" instead of the lane base "${handle.baseBranch}", so this lane was not merged.`)
+      return await retain(notice('baseBranchChanged', { current: currentBranch || 'detached HEAD', base: handle.baseBranch }))
     }
 
     const merged = await gitService.mergeWorktreeBranch(handle.branch, handle.workspacePath)
     if (!merged.success) {
-      return await retain(merged.error || 'Merge failed.', merged.conflicts)
+      const conflicts = merged.conflicts?.length ? merged.conflicts : undefined
+      return await retain(
+        conflicts ? notice('conflicts', { files: conflicts.join(', ') }) : notice('mergeFailed'),
+        { conflicts, error: merged.error },
+      )
     }
 
     const archived = await this.archive(handle)
@@ -192,7 +255,14 @@ class WorktreeLaneServiceClass {
     if (!hasWork) {
       const dropped = await this.drop(handle)
       logger.agent.info(`[WorktreeLane] Discarded empty lane ${handle.branch} (${reason})`)
-      return { ...handle, success: true, outcome: 'discarded', commit: commit.commit, error: dropped }
+      return {
+        ...handle,
+        success: true,
+        outcome: 'discarded',
+        commit: commit.commit,
+        notice: notice('emptyDiscarded', { branch: handle.branch }),
+        error: dropped,
+      }
     }
 
     const archived = await this.archive(handle)
@@ -203,7 +273,7 @@ class WorktreeLaneServiceClass {
       outcome: 'retained',
       commit: commit.commit,
       archived,
-      error: `Lane ${handle.branch} kept for recovery (${reason}).`,
+      notice: notice('keptForRecovery', { branch: handle.branch }),
     }
   }
 
@@ -270,24 +340,32 @@ class WorktreeLaneServiceClass {
    *
    * 走同一条串行合并队列，所以不会和正在结束的车道抢基准工作区。
    */
-  async retryMerge(workspacePath: string, branch: string): Promise<{ success: boolean; conflicts?: string[]; error?: string }> {
-    if (!branch.startsWith(WORKTREE_LANE_BRANCH_PREFIX)) return { success: false, error: `${branch} is not an Adnify lane branch` }
+  async retryMerge(workspacePath: string, branch: string): Promise<LaneActionResult> {
+    if (!branch.startsWith(WORKTREE_LANE_BRANCH_PREFIX)) {
+      return { success: false, notice: notice('notLaneBranch', { branch }) }
+    }
 
     return await new Promise(resolve => {
       this.mergeQueue = this.mergeQueue.then(async () => {
         if (!await gitService.isWorkingTreeClean(workspacePath)) {
-          resolve({ success: false, error: 'Commit or stash the base workspace changes first.' })
+          resolve({ success: false, notice: notice('dirtyBaseMerge') })
           return
         }
         const merged = await gitService.mergeWorktreeBranch(branch, workspacePath)
         if (!merged.success) {
-          resolve({ success: false, conflicts: merged.conflicts, error: merged.error })
+          const conflicts = merged.conflicts?.length ? merged.conflicts : undefined
+          resolve({
+            success: false,
+            conflicts,
+            notice: conflicts ? notice('conflicts', { files: conflicts.join(', ') }) : notice('mergeFailed'),
+            error: merged.error,
+          })
           return
         }
         const deleted = await gitService.deleteBranch(branch, false, workspacePath)
         if (!deleted.success) logger.agent.warn(`[WorktreeLane] Merged ${branch}, but branch cleanup failed: ${deleted.error}`)
         resolve({ success: true })
-      }).catch(error => resolve({ success: false, error: errorMessage(error) }))
+      }).catch(error => resolve({ success: false, notice: notice('mergeFailed'), error: errorMessage(error) }))
     })
   }
 
@@ -295,9 +373,11 @@ class WorktreeLaneServiceClass {
    * 彻底丢弃一条车道：目录 + 分支都删掉，提交不可恢复。
    * 只应该由用户显式触发。
    */
-  async dropLane(workspacePath: string, lane: { branch: string; path?: string }): Promise<{ success: boolean; error?: string }> {
-    if (!lane.branch.startsWith(WORKTREE_LANE_BRANCH_PREFIX)) return { success: false, error: `${lane.branch} is not an Adnify lane branch` }
-    if (lane.path && this.activeLanes.has(lane.path)) return { success: false, error: 'This lane is still running.' }
+  async dropLane(workspacePath: string, lane: { branch: string; path?: string }): Promise<LaneActionResult> {
+    if (!lane.branch.startsWith(WORKTREE_LANE_BRANCH_PREFIX)) {
+      return { success: false, notice: notice('notLaneBranch', { branch: lane.branch }) }
+    }
+    if (lane.path && this.activeLanes.has(lane.path)) return { success: false, notice: notice('laneStillRunning') }
 
     if (lane.path) {
       let removed = await gitService.removeWorktree(lane.path, workspacePath)

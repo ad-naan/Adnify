@@ -5,8 +5,9 @@
  * 隔离粒度是执行节点而不是消息：一个执行节点从开始到结束只看见一份工作区快照。
  */
 import { gitService } from '@/renderer/services/gitService'
-import { WorktreeLaneService, type WorktreeLaneCompletion, type WorktreeLaneHandle } from './WorktreeLaneService'
+import { LaneUnavailableError, WorktreeLaneService, type WorktreeLaneCompletion, type WorktreeLaneHandle } from './WorktreeLaneService'
 import { logger } from '@utils/Logger'
+import type { ExecutionLaneNotice } from '@shared/types/executionLane'
 
 export type ExecutionNodeKind = 'agent-session' | 'sub-agent' | 'plan-task'
 
@@ -30,8 +31,14 @@ export interface ExecutionLaneAssignment {
   workspacePath: string | null
   isolated: boolean
   lane?: WorktreeLaneHandle
-  /** 本该隔离但退回了共享工作区的原因（需要提示用户） */
-  fallbackReason?: string
+  /** 本该隔离但退回了共享工作区的原因码（需要提示用户，由渲染层翻译） */
+  fallbackNotice?: ExecutionLaneNotice
+}
+
+/** 车道不可用时的英文诊断文本，只进日志和异常栈 */
+const BLOCKER_DETAIL: Record<'noRepository' | 'noCommits', string> = {
+  noRepository: 'Isolated parallel writing requires a Git repository.',
+  noCommits: 'Isolated parallel writing requires at least one commit to branch from.',
 }
 
 class ExecutionLaneCoordinatorClass {
@@ -41,13 +48,15 @@ class ExecutionLaneCoordinatorClass {
     }
 
     const blocker = await this.findBlocker(intent.workspacePath)
-    if (blocker) return this.fallbackOrThrow(intent, blocker)
+    if (blocker) return this.fallbackOrThrow(intent, { code: blocker }, BLOCKER_DETAIL[blocker])
 
     try {
       const lane = await WorktreeLaneService.create(intent.workspacePath, intent.label)
       return { workspacePath: lane.path, isolated: true, lane }
     } catch (error) {
-      return this.fallbackOrThrow(intent, error instanceof Error ? error.message : String(error))
+      const detail = error instanceof Error ? error.message : String(error)
+      const reason: ExecutionLaneNotice = error instanceof LaneUnavailableError ? error.notice : { code: 'createFailed' }
+      return this.fallbackOrThrow(intent, reason, detail)
     }
   }
 
@@ -58,22 +67,22 @@ class ExecutionLaneCoordinatorClass {
    * 空仓库都会返回空，前者其实完全可以建车道，后者根本没有 HEAD 可以作为基点，
    * 两种情况给出的提示也应该不一样。
    */
-  private async findBlocker(workspacePath: string): Promise<string | null> {
-    if (!await gitService.isInsideWorkTree(workspacePath)) {
-      return 'Isolated parallel writing requires a Git repository.'
-    }
-    if (!await gitService.hasCommits(workspacePath)) {
-      return 'Isolated parallel writing requires at least one commit to branch from.'
-    }
+  private async findBlocker(workspacePath: string): Promise<'noRepository' | 'noCommits' | null> {
+    if (!await gitService.isInsideWorkTree(workspacePath)) return 'noRepository'
+    if (!await gitService.hasCommits(workspacePath)) return 'noCommits'
     return null
   }
 
-  private fallbackOrThrow(intent: ExecutionLaneIntent, reason: string): ExecutionLaneAssignment {
+  private fallbackOrThrow(
+    intent: ExecutionLaneIntent,
+    reason: ExecutionLaneNotice,
+    detail: string,
+  ): ExecutionLaneAssignment {
     if (!intent.allowSharedFallback) {
-      throw new Error(`${reason} Run this task exclusively instead (${intent.kind}).`)
+      throw new LaneUnavailableError(`${detail} Run this task exclusively instead (${intent.kind}).`, reason)
     }
-    logger.agent.warn(`[ExecutionLane] ${intent.kind} falling back to the shared workspace: ${reason}`)
-    return { workspacePath: intent.workspacePath, isolated: false, fallbackReason: reason }
+    logger.agent.warn(`[ExecutionLane] ${intent.kind} falling back to the shared workspace: ${detail}`)
+    return { workspacePath: intent.workspacePath, isolated: false, fallbackNotice: reason }
   }
 
   async complete(assignment: ExecutionLaneAssignment, message: string): Promise<WorktreeLaneCompletion | null> {

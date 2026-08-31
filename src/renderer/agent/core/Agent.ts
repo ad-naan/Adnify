@@ -38,9 +38,10 @@ import type { CheckpointImage } from '../types'
 import type { LLMConfig, ExecutionContext } from './types'
 import { agentExecutor } from '../application/AgentExecutor'
 import type { ExecutionConfig } from '../application/AgentExecutor'
-import { translateAgentText } from '../utils/agentText'
+import { getAgentLanguage, translateAgentText } from '../utils/agentText'
 import { getBuiltinProvider } from '@shared/config/providers'
 import { ExecutionLaneCoordinator, type ExecutionLaneAssignment } from '../orchestration/ExecutionLaneCoordinator'
+import { laneNoticeText, laneOutcomeText } from '../orchestration/laneNoticeText'
 
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
@@ -164,8 +165,8 @@ export class AgentClass {
         allowSharedFallback: true,
       })
       executionWorkspacePath = laneAssignment.workspacePath
-      if (laneAssignment.fallbackReason) {
-        this.showLaneNotice('warning', translateAgentText('worktreeLane.fallbackTitle'), laneAssignment.fallbackReason, assistantId, threadId)
+      if (laneAssignment.fallbackNotice) {
+        this.showLaneNotice('warning', translateAgentText('worktreeLane.fallbackTitle'), laneNoticeText(laneAssignment.fallbackNotice, getAgentLanguage()), assistantId, threadId)
       }
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
@@ -252,7 +253,7 @@ export class AgentClass {
         if (abortController.signal.aborted) {
           const released = await ExecutionLaneCoordinator.release(laneAssignment, 'aborted by user')
           if (released?.outcome === 'retained') {
-            this.showLaneNotice('info', translateAgentText('worktreeLane.retainedTitle'), released.error || `Lane ${released.branch} kept for recovery.`, assistantId, threadId)
+            this.showLaneNotice('info', translateAgentText('worktreeLane.retainedTitle'), laneOutcomeText(released, getAgentLanguage()), assistantId, threadId)
           }
           return { threadId, assistantId, requestId }
         }
@@ -261,11 +262,10 @@ export class AgentClass {
         // 车道没能合并不代表这次运行失败了：工作已经安全地留在车道分支上。抛错会把
         // 整条助手消息标成错误、还会触发上层重试，所以这里降级成一条可见的提示。
         if (laneResult && !laneResult.success) {
-          const conflicts = laneResult.conflicts?.length ? ` Conflicts: ${laneResult.conflicts.join(', ')}` : ''
           this.showLaneNotice(
             laneResult.outcome === 'retained' ? 'warning' : 'error',
             translateAgentText('worktreeLane.retainedTitle'),
-            `${laneResult.error || 'Unable to merge the Agent worktree lane.'}${conflicts}`,
+            laneOutcomeText(laneResult, getAgentLanguage()),
             assistantId,
             threadId,
           )
@@ -279,11 +279,9 @@ export class AgentClass {
       const released = laneAssignment?.lane
         ? await ExecutionLaneCoordinator.release(laneAssignment, error instanceof Error ? error.message : 'execution failed')
         : null
-      const laneNote = released?.outcome === 'retained'
-        ? ` Worktree lane kept for recovery on branch ${released.branch}.`
-        : released?.outcome === 'discarded'
-          ? ` Worktree lane ${released.branch} had no commits and was removed.`
-          : ''
+      // 车道的去向对用户是关键信息（提交还在不在？），所以拼进这条错误里 ——
+      // 文案取自原因码，service 层不需要知道当前语言。
+      const laneNote = released?.notice ? ` ${laneNoticeText(released.notice, getAgentLanguage())}` : ''
       const effectiveError = laneNote
         ? new Error(`${error instanceof Error ? error.message : String(error)}${laneNote}`)
         : error

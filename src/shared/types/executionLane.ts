@@ -10,6 +10,34 @@
  */
 export type ExecutionLaneStatus = 'active' | 'ready' | 'merged' | 'conflict' | 'discarded' | 'failed'
 
+/**
+ * 车道提示的原因码。
+ *
+ * 车道逻辑跑在没有语言上下文的 service 层，所以它只回传原因码 + 参数，
+ * 由渲染层统一翻译（见 laneNoticeText）。service 层直接拼英文句子的话，
+ * UI 要么原样显示英文，要么在每个消费点再写一遍中英分支。
+ */
+export type ExecutionLaneNoticeCode =
+  | 'noRepository'
+  | 'noCommits'
+  | 'dirtyBase'
+  | 'createFailed'
+  | 'dirtyBaseMerge'
+  | 'baseBranchChanged'
+  | 'conflicts'
+  | 'mergeFailed'
+  | 'commitFailed'
+  | 'keptForRecovery'
+  | 'emptyDiscarded'
+  | 'notLaneBranch'
+  | 'laneStillRunning'
+
+export interface ExecutionLaneNotice {
+  code: ExecutionLaneNoticeCode
+  /** 只放可序列化的值：这个结构会随 PlanTask 一起落盘 */
+  params?: Record<string, string | number>
+}
+
 export interface ExecutionLaneProjection {
   status: ExecutionLaneStatus
   path?: string
@@ -17,6 +45,8 @@ export interface ExecutionLaneProjection {
   baseBranch?: string
   commit?: string
   conflicts?: string[]
+  /** 面向用户的原因（可翻译）；`error` 只留给日志和诊断 */
+  notice?: ExecutionLaneNotice
   error?: string
   /** worktree 目录已回收（`ready` / `conflict` 时为 true） */
   archived?: boolean

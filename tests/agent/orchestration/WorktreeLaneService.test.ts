@@ -94,7 +94,8 @@ describe('WorktreeLaneService', () => {
     const result = await service.complete(lane, 'done')
     expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
     expect(result).toMatchObject({ success: false, outcome: 'retained', archived: true })
-    expect(result.error).toContain('release/1.0')
+    // 分支名现在走原因码的参数，而不是 service 拼出来的英文句子
+    expect(result.notice).toEqual({ code: 'baseBranchChanged', params: { current: 'release/1.0', base: 'main' } })
   })
 
   it('retains the lane when the base workspace turned dirty while it ran', async () => {
@@ -246,7 +247,7 @@ describe('WorktreeLaneService', () => {
 
     it('refuses to drop a lane that is still running', async () => {
       const lane = await service.create('D:/repo', 'write task')
-      await expect(service.dropLane('D:/repo', lane)).resolves.toMatchObject({ success: false, error: expect.stringContaining('still running') })
+      await expect(service.dropLane('D:/repo', lane)).resolves.toMatchObject({ success: false, notice: { code: 'laneStillRunning' } })
       expect(git.removeWorktree).not.toHaveBeenCalled()
     })
 

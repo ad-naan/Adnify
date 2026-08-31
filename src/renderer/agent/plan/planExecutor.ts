@@ -35,6 +35,8 @@ import {
 import { buildReviewProof, parseProofGraph, stripProofGraph } from './proofGraph'
 import { ExecutionLaneCoordinator } from '../orchestration/ExecutionLaneCoordinator'
 import type { WorktreeLaneCompletion, WorktreeLaneHandle } from '../orchestration/WorktreeLaneService'
+import { laneOutcomeText } from '../orchestration/laneNoticeText'
+import { getAgentLanguage } from '../utils/agentText'
 import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 import { recommendModelForTask } from './modelOutcomeLedger'
 import { getConfiguredPlanProviders } from './planProviderCatalog'
@@ -61,6 +63,7 @@ function projectLane(lane: WorktreeLaneHandle, completion: WorktreeLaneCompletio
         baseBranch: lane.baseBranch,
         commit: completion.commit,
         conflicts: completion.conflicts,
+        notice: completion.notice,
         error: status === 'merged' || status === 'discarded' ? undefined : completion.error,
         archived: completion.archived,
     }
@@ -534,7 +537,9 @@ async function executeTask(
             if (completion) {
                 store.updateTask(plan.id, existingTask.id, { worktreeLane: projectLane(laneAssignment.lane, completion) })
                 if (result.success && !completion.success) {
-                    result = { ...result, success: false, error: completion.error || 'Worktree lane merge failed' }
+                    // 任务错误会直接显示在计划面板上，所以用可翻译的车道文案，
+                    // 拿不到原因码时才退回 Git 原文。
+                    result = { ...result, success: false, error: laneOutcomeText(completion, getAgentLanguage()) || completion.error }
                 }
             }
         }

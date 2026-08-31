@@ -25,6 +25,7 @@ import { PlanModelSelector } from './PlanModelSelector'
 import { PlanTaskInspector } from './PlanTaskInspector'
 import { PlanStageContentView } from './PlanStageContentView'
 import { WorktreeLanePanel } from './WorktreeLanePanel'
+import { asLanguage, t } from '@renderer/i18n'
 import { legacyRequirementsToStageContent } from '@/renderer/agent/plan/planStageContent'
 import { getPlanProviderDisplayName } from '@/renderer/agent/plan/planProviderCatalog'
 import { summarizeProofGraph } from '@/renderer/agent/plan/proofGraph'
@@ -466,13 +467,13 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
         {selectedTask && <div className="mx-auto max-w-4xl">
           <section className="border-b border-border/45 pb-5">
             <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="mb-2 flex items-center gap-2">{(() => { const meta = statusMeta(selectedTask, Boolean(selectedRuntime?.waitingApproval), language); const Icon = meta.icon; return <><Icon className={`h-3.5 w-3.5 ${meta.tone} ${selectedTask.status === 'running' && !selectedRuntime?.waitingApproval ? 'animate-spin' : ''}`} /><span className={`text-[11px] font-medium ${meta.tone}`}>{meta.label}</span>{selectedTask.startedAt && <span className="text-[10px] tabular-nums text-text-muted">{formatDuration((selectedTask.completedAt || now) - selectedTask.startedAt)}</span>}</> })()}</div><h2 className="text-[18px] font-semibold text-text-primary">{selectedTask.title}</h2><p className="mt-2 max-w-3xl text-[11px] leading-5 text-text-secondary">{selectedTask.description}</p></div>{selectedTask.threadId && <Button variant="ghost" size="sm" onClick={() => switchThread(selectedTask.threadId!)} leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>{copy(language, '完整记录', 'Full log')}</Button>}</div>
-            <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{getPlanProviderDisplayName(selectedTask.provider)} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}{selectedTask.modelRecommendation && <span className="rounded bg-accent/[0.08] px-2 py-1 text-accent">{copy(language, '历史推荐', 'History pick')} · {Math.round(selectedTask.modelRecommendation.successRate * 100)}% · n={selectedTask.modelRecommendation.sampleSize}</span>}{selectedTask.worktreeLane && <span className={`rounded px-2 py-1 ${selectedTask.worktreeLane.status === 'merged' ? 'bg-emerald-400/[0.08] text-emerald-500' : selectedTask.worktreeLane.status === 'discarded' ? 'bg-surface/60' : selectedTask.worktreeLane.status === 'conflict' || selectedTask.worktreeLane.status === 'failed' ? 'bg-red-400/[0.08] text-red-400' : 'bg-amber-400/[0.08] text-amber-500'}`}>Worktree · {selectedTask.worktreeLane.status}</span>}</div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{getPlanProviderDisplayName(selectedTask.provider)} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}{selectedTask.modelRecommendation && <span className="rounded bg-accent/[0.08] px-2 py-1 text-accent">{copy(language, '历史推荐', 'History pick')} · {Math.round(selectedTask.modelRecommendation.successRate * 100)}% · n={selectedTask.modelRecommendation.sampleSize}</span>}{selectedTask.worktreeLane && <span className={`rounded px-2 py-1 ${selectedTask.worktreeLane.status === 'merged' ? 'bg-emerald-400/[0.08] text-emerald-500' : selectedTask.worktreeLane.status === 'discarded' ? 'bg-surface/60' : selectedTask.worktreeLane.status === 'conflict' || selectedTask.worktreeLane.status === 'failed' ? 'bg-red-400/[0.08] text-red-400' : 'bg-amber-400/[0.08] text-amber-500'}`}>{t('worktreeLane.chipLabel', asLanguage(language))} · {t(`worktreeLane.status.${selectedTask.worktreeLane.status}`, asLanguage(language))}</span>}</div>
             {selectedTask.worktreeLane && <WorktreeLanePanel
               lane={selectedTask.worktreeLane}
               workspacePath={workspacePath}
-              language={language}
+              language={asLanguage(language)}
               onResolved={status => updateTask(plan.id, selectedTask.id, {
-                worktreeLane: { ...selectedTask.worktreeLane!, status, error: undefined, conflicts: undefined },
+                worktreeLane: { ...selectedTask.worktreeLane!, status, notice: undefined, error: undefined, conflicts: undefined },
               })}
             />}
           </section>
