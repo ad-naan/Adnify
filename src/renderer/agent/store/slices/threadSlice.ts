@@ -29,12 +29,14 @@ export interface ThreadActions {
         origin?: ChatThread['origin']
         planId?: string
         taskId?: string
+        parentThreadId?: string
+        rootThreadId?: string
     }) => string
     renameThread: (threadId: string, title: string) => boolean
     switchThread: (threadId: string) => void
     deleteThread: (threadId: string) => void
     getCurrentThread: () => ChatThread | null
-    setThreadMetadata: (threadId: string, metadata: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId'>) => void
+    setThreadMetadata: (threadId: string, metadata: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId' | 'parentThreadId' | 'rootThreadId'>) => void
 
     setStreamState: (state: Partial<StreamState>, threadId?: string) => void
     setStreamPhase: (phase: StreamState['phase'], threadId?: string) => void
@@ -71,7 +73,7 @@ function deletePersistedThread(threadId: string): void {
     })
 }
 
-export const createEmptyThread = (metadata?: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId'>): ChatThread => ({
+export const createEmptyThread = (metadata?: Pick<ChatThread, 'mode' | 'origin' | 'planId' | 'taskId' | 'parentThreadId' | 'rootThreadId'>): ChatThread => ({
     id: generateId(),
     createdAt: Date.now(),
     lastModified: Date.now(),
@@ -225,6 +227,8 @@ export const createThreadSlice: StateCreator<
             origin: options?.origin,
             planId: options?.planId,
             taskId: options?.taskId,
+            parentThreadId: options?.parentThreadId,
+            rootThreadId: options?.rootThreadId,
         })
         const activate = options?.activate ?? true
         const evictedThreadIds: string[] = []

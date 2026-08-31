@@ -171,12 +171,16 @@ export interface ChatThread {
   // ===== Thread Ownership Metadata (Phase 3.1) =====
   /** Thread mode: chat/agent/plan */
   mode?: import('@/shared/types/workMode').WorkMode
-  /** Thread origin: user-created or plan-task worker */
-  origin?: 'user' | 'plan-task'
+  /** Thread origin controls how the task center classifies this execution node. */
+  origin?: 'user' | 'plan-task' | 'sub-agent' | 'handoff'
   /** Associated plan ID (if origin is plan-task) */
   planId?: string
   /** Associated task ID (if origin is plan-task) */
   taskId?: string
+  /** Parent execution node for sub-agents and handoff continuations. */
+  parentThreadId?: string
+  /** Stable top-level task lineage, even after several handoffs. */
+  rootThreadId?: string
 }
 
 export interface PersistedChatThread {
@@ -196,9 +200,11 @@ export interface PersistedChatThread {
   pendingSteps?: string[]
   lastActiveServer?: LastActiveServer
   mode?: import('@/shared/types/workMode').WorkMode
-  origin?: 'user' | 'plan-task'
+  origin?: 'user' | 'plan-task' | 'sub-agent' | 'handoff'
   planId?: string
   taskId?: string
+  parentThreadId?: string
+  rootThreadId?: string
 }
 
 export function materializeThreadMessages(
@@ -261,6 +267,8 @@ export function toPersistedChatThread(thread: ChatThread): PersistedChatThread {
     origin: thread.origin,
     planId: thread.planId,
     taskId: thread.taskId,
+    parentThreadId: thread.parentThreadId,
+    rootThreadId: thread.rootThreadId,
   }
 }
 

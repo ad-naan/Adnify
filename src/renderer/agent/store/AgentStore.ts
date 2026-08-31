@@ -323,7 +323,15 @@ export const useAgentStore = create<AgentStore>()(
                         },
                     })
 
-                    const newThreadId = threadSlice.createThread({ activate: false })
+                    const newThreadId = threadSlice.createThread({
+                        activate: false,
+                        mode: sourceThread.mode,
+                        origin: 'handoff',
+                        planId: sourceThread.planId,
+                        taskId: sourceThread.taskId,
+                        parentThreadId: sourceThreadId,
+                        rootThreadId: sourceThread.rootThreadId || sourceThreadId,
+                    })
 
                     // 构建 handoff 上下文
                     const handoffContext = buildHandoffContext(handoff)

@@ -4,7 +4,7 @@ import { memo, useState, useRef, useEffect, useCallback, useMemo, forwardRef, ty
 import { Virtuoso } from 'react-virtuoso'
 import {
   AlertTriangle,
-  History,
+  ListTree,
   Plus,
   Trash2,
   Upload,
@@ -42,7 +42,7 @@ import { ChatMessagesSkeleton } from '../ui/Loading'
 import { Button } from '../ui'
 import { globalConfirm } from '../common/ConfirmDialog'
 import { useToast } from '@/renderer/components/common/ToastProvider'
-import ConversationSidebar from './ConversationSidebar'
+import TaskCommandCenter from './TaskCommandCenter'
 import { BranchSelector } from './BranchControls'
 import { composerService } from '@/renderer/agent/services/composerService'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
@@ -60,6 +60,7 @@ import { findMostRecentThreadForMode, isTopLevelThreadForMode } from '@/renderer
 import type { WorkMode } from '@/shared/types/workMode'
 import { findThreadIdForMessage } from '@/renderer/agent/utils/interactiveResponse'
 import { supportsTaskApproval } from './ToolCallGroup'
+import { deriveThreadTaskStatus, isAgentTaskThread } from './taskCenterProjection'
 
 interface RenderableMessageItem {
   message: ChatMessageType
@@ -138,6 +139,11 @@ export default function ChatPanel() {
     if (thread.hydrationFailed) return true
     return thread.messagesHydrated !== false
   })
+  const taskAttentionCount = useAgentStore(state => Object.values(state.threads).filter(thread => {
+    if (!isAgentTaskThread(thread)) return false
+    const status = deriveThreadTaskStatus(thread)
+    return status === 'running' || status === 'waiting' || status === 'handoff' || status === 'failed'
+  }).length)
 
   const chatMode = useModeStore(s => s.currentMode)
   const setChatMode = useModeStore(s => s.setMode)
@@ -306,6 +312,10 @@ export default function ChatPanel() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarTab, setSidebarTab] = useState<'history' | 'branches'>('history')
 
+  useEffect(() => {
+    if (chatMode === 'plan') setSidebarOpen(false)
+  }, [chatMode])
+
   const [showFileMention, setShowFileMention] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionPosition, setMentionPosition] = useState({ x: 0, y: 0 })
@@ -353,21 +363,11 @@ export default function ChatPanel() {
       }
     }
 
-    // Plan mode hides the ChatPanel header, which is where the only triggers for
-    // ConversationSidebar live. The workbench raises this event so plan-mode
-    // users can still reach session history (and thread deletion).
-    const handleOpenSessions = () => {
-      setSidebarTab('history')
-      setSidebarOpen(true)
-    }
-
     window.addEventListener('chat-send-message', handleOptionSelect as EventListener)
     window.addEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
-    window.addEventListener('chat-open-sessions', handleOpenSessions)
     return () => {
       window.removeEventListener('chat-send-message', handleOptionSelect as EventListener)
       window.removeEventListener('chat-update-interactive', handleUpdateInteractive as EventListener)
-      window.removeEventListener('chat-open-sessions', handleOpenSessions)
     }
   }, [sendMessage])
 
@@ -1372,10 +1372,11 @@ export default function ChatPanel() {
                 setSidebarTab('history')
                 setSidebarOpen(true)
               }}
-              title={language === 'zh' ? '历史记录' : 'Chat history'}
-              className="hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
+              title={language === 'zh' ? 'Agent 任务' : 'Agent tasks'}
+              className="relative hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             >
-              <History className="w-4 h-4" />
+              <ListTree className="w-4 h-4" />
+              {taskAttentionCount > 0 && <span className="absolute right-0.5 top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-accent px-0.5 text-[7px] font-semibold leading-none text-white">{taskAttentionCount > 9 ? '9+' : taskAttentionCount}</span>}
             </Button>
             <Button
               variant="ghost"
@@ -1399,7 +1400,7 @@ export default function ChatPanel() {
           </div>
         </div>}
 
-        <ConversationSidebar
+        <TaskCommandCenter
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
           initialTab={sidebarTab}

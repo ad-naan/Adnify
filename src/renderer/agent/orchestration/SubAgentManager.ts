@@ -115,7 +115,14 @@ class SubAgentManagerClass {
 
     // 1. 创建隐藏线程（不激活，不影响主 UI）
     const store = useAgentStore.getState()
-    const threadId = store.createThread({ activate: false })
+    const parentThread = parentThreadId ? store.threads[parentThreadId] : undefined
+    const threadId = store.createThread({
+      activate: false,
+      mode: chatMode,
+      origin: 'sub-agent',
+      parentThreadId: parentThreadId || undefined,
+      rootThreadId: parentThread?.rootThreadId || parentThreadId || undefined,
+    })
     const requestId = crypto.randomUUID()
     const abortController = new AbortController()
 
