@@ -260,14 +260,6 @@ export default function StatusBar() {
     () => currentThreadId ? toolCallLogs.filter(log => log.threadId === currentThreadId).length : 0,
     [currentThreadId, toolCallLogs]
   )
-  const loadPlansFromStorage = useAgentStore(state => state.loadPlansFromStorage)
-
-  useEffect(() => {
-    if (workspacePath) {
-      loadPlansFromStorage()
-    }
-  }, [workspacePath, loadPlansFromStorage])
-
   const layerColorClass =
     compressionStats?.memoryHealth?.risk === 'high' ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
       compressionStats?.memoryHealth?.risk === 'medium' ? 'text-yellow-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.4)]' :

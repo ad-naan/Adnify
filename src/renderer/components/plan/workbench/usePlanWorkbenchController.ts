@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '@/renderer/store'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { projectPlanWorkbench } from '@/renderer/agent/plan/planWorkbenchProjection'
@@ -11,6 +11,7 @@ import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
 
 export function usePlanWorkbenchController() {
   const language = useStore(state => state.language)
+  const workspacePath = useStore(state => state.workspacePath)
   const plan = useAgentStore(state => state.plans.find(item => item.id === state.activePlanId))
   const plans = useAgentStore(state => state.plans)
   const currentThreadId = useAgentStore(state => state.currentThreadId)
@@ -21,7 +22,12 @@ export function usePlanWorkbenchController() {
   const deletePlan = useAgentStore(state => state.deletePlan)
   const deleteThread = useAgentStore(state => state.deleteThread)
   const updatePlan = useAgentStore(state => state.updatePlan)
+  const loadPlansFromStorage = useAgentStore(state => state.loadPlansFromStorage)
   const [starting, setStarting] = useState(false)
+
+  useEffect(() => {
+    if (workspacePath) void loadPlansFromStorage()
+  }, [loadPlansFromStorage, workspacePath])
 
   const model = useMemo(() => projectPlanWorkbench({ plan, currentThreadId, threads }), [currentThreadId, plan, threads])
   const history = useMemo(() => projectPlanHistory(plans, threads), [plans, threads])
