@@ -1,4 +1,4 @@
-import { type Language } from '@renderer/i18n'
+import { type Language, t, asLanguage } from '@renderer/i18n'
 import { WorkPosterData } from './types'
 
 interface PosterCopy {
@@ -71,11 +71,9 @@ export function buildWorkPosterData({
     language,
     timeRange,
     selectedDate,
-    title: language === 'zh' ? '今日工坊记录' : 'Today Work Log',
+    title: t('workPosterData.todayWorkLog', asLanguage(language)),
     date: selectedDate.replace(/-/g, '.'),
-    quote: overviewCopy.body || (language === 'zh'
-      ? '今天也把混乱，整理成了一点点秩序。'
-      : 'Today, a little more chaos became order.'),
+    quote: overviewCopy.body || (t('workPosterData.todayALittleMore', asLanguage(language))),
     signature: 'adnaan',
     score,
     peak,

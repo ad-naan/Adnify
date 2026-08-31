@@ -6,7 +6,7 @@ import { PROVIDERS } from '@/shared/config/providers'
 import stableStringify from 'fast-json-stable-stringify'
 import { getEditorConfig } from '@renderer/settings'
 import { captureActiveProviderConfig } from '@renderer/settings/providerConfigPersistence'
-import { t, type Language } from '@renderer/i18n'
+import { t, type Language, asLanguage } from '@renderer/i18n'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Modal, Select } from '@components/ui'
@@ -95,7 +95,7 @@ function SettingsTabFallback({ language }: { language: Language }) {
         <div className="min-h-[320px] flex items-center justify-center rounded-2xl border border-border/40 bg-surface/70">
             <div className="flex items-center gap-3 text-sm text-text-muted">
                 <div className="w-4 h-4 border-2 border-accent/60 border-t-transparent rounded-full animate-spin" />
-                <span>{language === 'zh' ? '正在加载设置项...' : 'Loading settings...'}</span>
+                <span>{t('settingsModal.loadingSettings', asLanguage(language))}</span>
             </div>
         </div>
     )
@@ -416,11 +416,9 @@ export default function SettingsModal() {
         try {
             if (isDirty) {
                 const confirmed = await globalConfirm({
-                    title: language === 'zh' ? '打开文件' : 'Open file',
-                    message: language === 'zh'
-                        ? '当前设置有未保存的更改。放弃这些更改并在编辑器中打开文件吗？'
-                        : 'There are unsaved settings. Discard them and open the file in the editor?',
-                    confirmText: language === 'zh' ? '放弃并打开' : 'Discard and open',
+                    title: t('git.openFile', asLanguage(language)),
+                    message: t('settingsModal.thereAreUnsavedSettings', asLanguage(language)),
+                    confirmText: t('settingsModal.discardAndOpen', asLanguage(language)),
                     cancelText: t('cancel', language as Language),
                     variant: 'warning',
                 })
@@ -430,8 +428,8 @@ export default function SettingsModal() {
             const authorized = await api.file.authorizeSettingsEdit(filePath, options?.initialContent)
             if (!authorized) {
                 toast.error(
-                    language === 'zh' ? '无法编辑此配置文件' : 'Cannot edit this configuration file',
-                    language === 'zh' ? '仅支持当前工作区或 Adnify 管理的配置文件。' : 'Only workspace files and configuration managed by Adnify can be edited here.',
+                    t('settingsModal.cannotEditThisConfiguration', asLanguage(language)),
+                    t('settingsModal.onlyWorkspaceFilesAnd', asLanguage(language)),
                 )
                 return false
             }
@@ -459,25 +457,25 @@ export default function SettingsModal() {
         [localConfig.provider, providers])
 
     const tabs = useMemo(() => [
-        { id: 'provider', group: 'ai', label: language === 'zh' ? '模型与提供商' : 'Models & Providers', description: language === 'zh' ? '连接模型、密钥、路由与请求参数' : 'Connections, credentials, routing, and requests', icon: <Cpu className="w-4 h-4" /> },
-        { id: 'agent', group: 'ai', label: language === 'zh' ? 'Agent 行为' : 'Agent Behavior', description: language === 'zh' ? '自动化、上下文、检索与执行策略' : 'Automation, context, retrieval, and execution', icon: <Settings2 className="w-4 h-4" /> },
-        { id: 'rules', group: 'ai', label: language === 'zh' ? '指令与记忆' : 'Instructions & Memory', description: language === 'zh' ? '项目规则、长期记忆与行为约束' : 'Project rules, durable memory, and guidance', icon: <Brain className="w-4 h-4" /> },
-        { id: 'editor', group: 'workspace', label: language === 'zh' ? '外观与编辑器' : 'Appearance & Editor', description: language === 'zh' ? '主题、动画、排版、编辑和终端体验' : 'Theme, motion, typography, editing, and terminal', icon: <Code className="w-4 h-4" /> },
-        { id: 'keybindings', group: 'workspace', label: language === 'zh' ? '快捷键' : 'Keyboard Shortcuts', description: language === 'zh' ? '查看和修改操作快捷键' : 'View and customize keyboard actions', icon: <Keyboard className="w-4 h-4" /> },
-        { id: 'snippets', group: 'workspace', label: language === 'zh' ? '代码片段' : 'Code Snippets', description: language === 'zh' ? '管理可复用的代码模板' : 'Manage reusable code templates', icon: <FileCode className="w-4 h-4" /> },
-        { id: 'lsp', group: 'workspace', label: language === 'zh' ? '语言服务' : 'Language Services', description: language === 'zh' ? '安装并管理语言服务器' : 'Install and manage language servers', icon: <Braces className="w-4 h-4" /> },
-        { id: 'indexing', group: 'workspace', label: language === 'zh' ? '代码索引' : 'Code Indexing', description: language === 'zh' ? '语义索引、嵌入模型与索引状态' : 'Semantic index, embeddings, and status', icon: <Database className="w-4 h-4" /> },
-        { id: 'skills', group: 'extensions', label: 'Skills', description: language === 'zh' ? '管理 Agent 可调用的专业能力' : 'Manage specialized agent capabilities', icon: <Zap className="w-4 h-4" /> },
-        { id: 'mcp', group: 'extensions', label: 'MCP', description: language === 'zh' ? '连接和管理外部工具服务器' : 'Connect and manage external tool servers', icon: <Plug className="w-4 h-4" /> },
-        { id: 'security', group: 'app', label: language === 'zh' ? '安全与审批' : 'Security & Approvals', description: language === 'zh' ? '审批策略、工作区边界与可信范围' : 'Approval policy, workspace boundaries, and trust', icon: <Shield className="w-4 h-4" /> },
-        { id: 'system', group: 'app', label: language === 'zh' ? '应用与数据' : 'App & Data', description: language === 'zh' ? '网络、存储、日志、备份与维护' : 'Network, storage, logs, backup, and maintenance', icon: <Monitor className="w-4 h-4" /> },
+        { id: 'provider', group: 'ai', label: t('settingsModal.modelsProviders', asLanguage(language)), description: t('settingsModal.connectionsCredentialsRoutingAnd', asLanguage(language)), icon: <Cpu className="w-4 h-4" /> },
+        { id: 'agent', group: 'ai', label: t('settingsModal.agentBehavior', asLanguage(language)), description: t('settingsModal.automationContextRetrievalAnd', asLanguage(language)), icon: <Settings2 className="w-4 h-4" /> },
+        { id: 'rules', group: 'ai', label: t('settingsModal.instructionsMemory', asLanguage(language)), description: t('settingsModal.projectRulesDurableMemory', asLanguage(language)), icon: <Brain className="w-4 h-4" /> },
+        { id: 'editor', group: 'workspace', label: t('settingsModal.appearanceEditor', asLanguage(language)), description: t('settingsModal.themeMotionTypographyEditing', asLanguage(language)), icon: <Code className="w-4 h-4" /> },
+        { id: 'keybindings', group: 'workspace', label: t('settingsModal.keyboardShortcuts', asLanguage(language)), description: t('settingsModal.viewAndCustomizeKeyboard', asLanguage(language)), icon: <Keyboard className="w-4 h-4" /> },
+        { id: 'snippets', group: 'workspace', label: t('settingsModal.codeSnippets', asLanguage(language)), description: t('settingsModal.manageReusableCodeTemplates', asLanguage(language)), icon: <FileCode className="w-4 h-4" /> },
+        { id: 'lsp', group: 'workspace', label: t('settingsModal.languageServices', asLanguage(language)), description: t('settingsModal.installAndManageLanguage', asLanguage(language)), icon: <Braces className="w-4 h-4" /> },
+        { id: 'indexing', group: 'workspace', label: t('settingsModal.codeIndexing', asLanguage(language)), description: t('settingsModal.semanticIndexEmbeddingsAnd', asLanguage(language)), icon: <Database className="w-4 h-4" /> },
+        { id: 'skills', group: 'extensions', label: 'Skills', description: t('settingsModal.manageSpecializedAgentCapabilities', asLanguage(language)), icon: <Zap className="w-4 h-4" /> },
+        { id: 'mcp', group: 'extensions', label: 'MCP', description: t('settingsModal.connectAndManageExternal', asLanguage(language)), icon: <Plug className="w-4 h-4" /> },
+        { id: 'security', group: 'app', label: t('settingsModal.securityApprovals', asLanguage(language)), description: t('settingsModal.approvalPolicyWorkspaceBoundaries', asLanguage(language)), icon: <Shield className="w-4 h-4" /> },
+        { id: 'system', group: 'app', label: t('settingsModal.appData', asLanguage(language)), description: t('settingsModal.networkStorageLogsBackup', asLanguage(language)), icon: <Monitor className="w-4 h-4" /> },
     ] as const, [language])
 
     const tabGroups = useMemo(() => [
-        { id: 'ai', label: language === 'zh' ? 'AI 与工作流' : 'AI & Workflow' },
-        { id: 'workspace', label: language === 'zh' ? '工作区体验' : 'Workspace' },
-        { id: 'extensions', label: language === 'zh' ? '扩展能力' : 'Extensions' },
-        { id: 'app', label: language === 'zh' ? '应用管理' : 'Application' },
+        { id: 'ai', label: t('settingsModal.aiWorkflow', asLanguage(language)) },
+        { id: 'workspace', label: t('settingsModal.workspace', asLanguage(language)) },
+        { id: 'extensions', label: t('settingsModal.extensions', asLanguage(language)) },
+        { id: 'app', label: t('settingsModal.application', asLanguage(language)) },
     ] as const, [language])
 
     // 搜索逻辑：按关键词筛选设置项，按 Tab 分组
@@ -603,7 +601,7 @@ export default function SettingsModal() {
                             <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">
                                 <Settings2 className="w-5 h-5 text-accent" />
                             </div>
-                            {language === 'zh' ? '设置' : 'Settings'}
+                            {t('welcome.settings', asLanguage(language))}
                         </h2>
                     </div>
 
@@ -617,7 +615,7 @@ export default function SettingsModal() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyDown={handleSearchKeyDown}
-                                placeholder={language === 'zh' ? '搜索设置...' : 'Search settings...'}
+                                placeholder={t('settingsModal.searchSettings', asLanguage(language))}
                                 className="w-full h-8 pl-9 pr-8 text-xs rounded-lg bg-background/50 border border-border/50 text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/10 transition-all"
                             />
                             {searchQuery && (
@@ -656,7 +654,7 @@ export default function SettingsModal() {
                             <div className="flex flex-col items-center justify-center py-8 text-center">
                                 <Search className="w-8 h-8 text-text-muted/30 mb-3" />
                                 <p className="text-xs text-text-muted">
-                                    {language === 'zh' ? '未找到匹配的设置项' : 'No matching settings found'}
+                                    {t('settingsModal.noMatchingSettingsFound', asLanguage(language))}
                                 </p>
                             </div>
                         ) : (
@@ -689,7 +687,7 @@ export default function SettingsModal() {
                     <div className="mt-auto px-4 pt-4 border-t border-border/50 space-y-2">
                         <div className="flex items-center gap-2 px-1 text-text-muted opacity-80">
                             <Globe className="w-3.5 h-3.5" />
-                            <span className="text-xs font-bold uppercase tracking-widest">{language === 'zh' ? '语言' : 'Language'}</span>
+                            <span className="text-xs font-bold uppercase tracking-widest">{t('language', asLanguage(language))}</span>
                         </div>
                         <Select
                             value={localLanguage}

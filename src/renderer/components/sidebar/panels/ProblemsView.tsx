@@ -10,6 +10,7 @@ import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getFileName } from '@shared/utils/pathUtils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
+import { t, asLanguage } from '@renderer/i18n'
 
 export function ProblemsView() {
   const language = useStore(state => state.language)
@@ -79,7 +80,7 @@ export function ProblemsView() {
     <div className="flex flex-col h-full bg-transparent">
       <div className="h-11 px-4 flex items-center justify-between border-b border-border/30 bg-transparent sticky top-0 z-10">
         <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
-          {language === 'zh' ? '问题面板' : 'PROBLEMS'}
+          {t('problemsView.problems', asLanguage(language))}
         </span>
         <div className="flex items-center gap-2 text-[10px]">
           {errorCount > 0 && (
@@ -106,16 +107,10 @@ export function ProblemsView() {
             }`}
           >
             {f === 'all'
-              ? language === 'zh'
-                ? '全部'
-                : 'All'
+              ? t('common.all', asLanguage(language))
               : f === 'errors'
-                ? language === 'zh'
-                  ? '错误'
-                  : 'Errors'
-                : language === 'zh'
-                  ? '警告'
-                  : 'Warnings'}
+                ? t('problemsView.errors', asLanguage(language))
+                : t('problemsView.warnings', asLanguage(language))}
           </button>
         ))}
       </div>
@@ -128,10 +123,10 @@ export function ProblemsView() {
               <OtterAsset asset="success" className="relative h-12 w-12 object-contain" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
-              {language === 'zh' ? '未发现任何问题' : 'No problems detected'}
+              {t('problemsView.noProblemsDetected', asLanguage(language))}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {language === 'zh' ? '工作区代码表现完美，未检测到任何错误或警告！' : 'No compilation issues or warnings found in active files.'}
+              {t('problemsView.noCompilationIssuesOr', asLanguage(language))}
             </p>
           </div>
         ) : (

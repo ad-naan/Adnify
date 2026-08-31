@@ -16,6 +16,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import type { InteractiveContent } from '@/renderer/agent/types'
 import { useStore } from '@store'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface InteractiveCardProps {
     content: InteractiveContent
@@ -258,7 +259,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                         : 'border-border/60 text-text-muted hover:border-accent/35 hover:text-text-secondary'
                                     }`}
                                 >
-                                    {language === 'zh' ? '自定义回答' : 'Custom response'}
+                                    {t('common.customResponse', asLanguage(language))}
                                 </button>
                             )}
 
@@ -283,7 +284,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                                         handleCustomSubmit()
                                                     }
                                                 }}
-                                                placeholder={language === 'zh' ? '请输入自定义内容...' : 'Type your custom response...'}
+                                                placeholder={t('interactiveCard.typeYourCustomResponse', asLanguage(language))}
                                                 rows={2}
                                                 className="w-full px-3 py-2 pr-10 text-[12px] text-text-primary bg-surface/60 border border-border/50 rounded-lg resize-none focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 placeholder:text-text-muted/40 transition-all custom-scrollbar"
                                             />
@@ -294,7 +295,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                                     ? 'text-accent hover:bg-accent/10 active:scale-90'
                                                     : 'text-text-muted/30 cursor-not-allowed'
                                                     }`}
-                                                title={language === 'zh' ? '发送' : 'Send'}
+                                                title={t('interactiveCard.send', asLanguage(language))}
                                             >
                                                 <Send className="w-3.5 h-3.5" />
                                             </button>
@@ -317,7 +318,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                             }
                                         `}
                                     >
-                                        <span>{language === 'zh' ? `确认 (${selected.size})` : `Confirm (${selected.size})`}</span>
+                                        <span>{t('interactiveCard.confirm', asLanguage(language), { size: selected.size })}</span>
                                         <ArrowRight className="w-3 h-3" />
                                     </button>
                                 </div>
@@ -337,7 +338,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                             }
                                         `}
                                     >
-                                        <span>{language === 'zh' ? `确认 (${selected.size})` : `Confirm (${selected.size})`}</span>
+                                        <span>{t('interactiveCard.confirm', asLanguage(language), { size: selected.size })}</span>
                                         <ArrowRight className="w-3 h-3" />
                                     </button>
                                 </div>

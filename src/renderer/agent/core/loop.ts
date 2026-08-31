@@ -36,6 +36,7 @@ import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 import type { ThreadBoundStore } from '../store/AgentStore'
 import type { LLMMessage } from '@shared/types'
 import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
+import { t, asLanguage } from '@renderer/i18n'
 
 export { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 
@@ -636,23 +637,7 @@ export async function runLoop(
 
         requestMessages.push({
           role: 'user',
-          content: language === 'zh'
-            ? `工具调用出错: ${result.error}
-
-请修正后重试，并确保：
-1. 已提供所有必填参数
-2. 参数类型正确
-3. 参数名完全匹配
-
-请基于修正后的工具调用继续。`
-            : `Tool call error: ${result.error}
-
-Please fix the tool call and try again. Make sure:
-1. All required parameters are provided
-2. Parameter types are correct
-3. Parameter names match exactly
-
-Try again with the corrected tool call.`,
+          content: t('loop.toolCallErrorPlease', asLanguage(language), { error: result.error }),
         })
 
         shouldContinue = true

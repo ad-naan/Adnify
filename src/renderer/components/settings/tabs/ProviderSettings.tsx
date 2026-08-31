@@ -25,6 +25,7 @@ import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 import { ProgressiveReveal } from '../ProgressiveReveal'
+import { t, asLanguage } from '@renderer/i18n'
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
@@ -117,46 +118,34 @@ function getReasoningEffortDescription(
   language: 'en' | 'zh',
 ): string {
   if (provider === 'anthropic' || protocol === 'anthropic') {
-    return language === 'zh'
-      ? 'Anthropic 使用 low / medium / high / xhigh / max effort；具体支持范围取决于模型'
-      : 'Anthropic uses low / medium / high / xhigh / max effort; exact support depends on the model'
+    return t('providerSettings.anthropicUsesLowMedium', asLanguage(language))
   }
 
   if (provider === 'gemini' || protocol === 'google') {
-    return language === 'zh'
-      ? 'Gemini 3 使用 thinking level；Gemini 2.5 主要看下方 thinking budget'
-      : 'Gemini 3 uses thinking level; Gemini 2.5 mainly relies on the thinking budget below'
+    return t('providerSettings.gemini3UsesThinking', asLanguage(language))
   }
 
   if (isOpenAIStyleProtocol(protocol) && openAICompatibilityProfile === 'compatible') {
     if (supportsExtendedCompatibleEffort) {
-      return language === 'zh'
-        ? '兼容端点已启用扩展档位，将原样发送 xhigh / max；具体支持范围取决于上游模型'
-        : 'Extended compatible tiers are enabled; xhigh / max are sent unchanged when supported upstream'
+      return t('providerSettings.extendedCompatibleTiersAre', asLanguage(language))
     }
-    return language === 'zh'
-      ? '第三方 OpenAI Compatible 接口通常只兼容 minimal / low / medium / high'
-      : 'Compatible mode only sends the safer OpenAI subset for broader third-party gateway support'
+    return t('providerSettings.compatibleModeOnlySends', asLanguage(language))
   }
 
   if (isOpenAIStyleProtocol(protocol)) {
-    return language === 'zh'
-      ? '完整 OpenAI 会启用更完整的 reasoning、并行工具和结构化输出能力'
-      : 'Full OpenAI enables richer reasoning, parallel tool, and structured output support'
+    return t('providerSettings.fullOpenaiEnablesRicher', asLanguage(language))
   }
 
-  return language === 'zh'
-    ? 'OpenAI 协议使用 reasoning effort；不同模型支持范围可能不同'
-    : 'OpenAI-style protocols use reasoning effort; exact support depends on the model'
+  return t('providerSettings.openaiStyleProtocolsUse', asLanguage(language))
 }
 
 function getHeaderSelectOptions(language: 'en' | 'zh') {
   return [
     ...PREDEFINED_HEADER_OPTIONS.map(option => ({
       value: option.value,
-      label: option.value ? option.label : language === 'zh' ? '选择请求头' : 'Select header',
+      label: option.value ? option.label : t('providerSettings.selectHeader', asLanguage(language)),
     })),
-    { value: 'X-Custom-Header', label: language === 'zh' ? '自定义...' : 'Custom...' },
+    { value: 'X-Custom-Header', label: t('providerSettings.custom', asLanguage(language)) },
   ]
 }
 
@@ -220,26 +209,26 @@ function formatUsageWindow(minutes: number | undefined, language: 'en' | 'zh'): 
   if (!minutes) return ''
   if (minutes % (60 * 24) === 0) {
     const days = minutes / (60 * 24)
-    return language === 'zh' ? `${days} 天` : `${days}d`
+    return t('providerSettings.d', asLanguage(language), { days })
   }
   if (minutes % 60 === 0) {
     const hours = minutes / 60
-    return language === 'zh' ? `${hours} 小时` : `${hours}h`
+    return t('providerSettings.h', asLanguage(language), { hours })
   }
-  return language === 'zh' ? `${minutes} 分钟` : `${minutes}m`
+  return t('providerSettings.m', asLanguage(language), { minutes })
 }
 
 /** Relative time until a reset instant given as epoch seconds. */
 function formatResetIn(resetAt: number | undefined, language: 'en' | 'zh'): string {
   if (!resetAt) return ''
   const seconds = resetAt - Math.floor(Date.now() / 1000)
-  if (seconds <= 0) return language === 'zh' ? '即将重置' : 'resetting soon'
+  if (seconds <= 0) return t('providerSettings.resettingSoon', asLanguage(language))
   const days = Math.floor(seconds / 86400)
-  if (days >= 1) return language === 'zh' ? `${days} 天后重置` : `resets in ${days}d`
+  if (days >= 1) return t('providerSettings.resetsInD', asLanguage(language), { days })
   const hours = Math.floor(seconds / 3600)
-  if (hours >= 1) return language === 'zh' ? `${hours} 小时后重置` : `resets in ${hours}h`
+  if (hours >= 1) return t('providerSettings.resetsInH', asLanguage(language), { hours })
   const mins = Math.max(1, Math.floor(seconds / 60))
-  return language === 'zh' ? `${mins} 分钟后重置` : `resets in ${mins}m`
+  return t('providerSettings.resetsInM', asLanguage(language), { mins })
 }
 
 const UsageBar = memo(function UsageBar({
@@ -265,7 +254,7 @@ const UsageBar = memo(function UsageBar({
           {windowLabel ? <span className="opacity-60"> · {windowLabel}</span> : null}
         </span>
         <span className={used >= 100 ? 'font-medium text-red-400' : 'text-text-secondary'}>
-          {language === 'zh' ? `已用 ${used}%` : `${used}% used`}
+          {t('providerSettings.used', asLanguage(language), { used })}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
@@ -295,7 +284,7 @@ const UsagePanel = memo(function UsagePanel({
     <div className="space-y-2 rounded-md border border-white/10 bg-white/[0.02] p-2.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
-          {language === 'zh' ? '套餐用量' : 'Usage'}
+          {t('providerSettings.usage', asLanguage(language))}
         </span>
         <button
           type="button"
@@ -304,8 +293,8 @@ const UsagePanel = memo(function UsagePanel({
           className="cursor-pointer text-[10px] text-text-secondary underline-offset-2 hover:underline disabled:opacity-50"
         >
           {busy
-            ? (language === 'zh' ? '刷新中…' : 'Refreshing…')
-            : (language === 'zh' ? '刷新' : 'Refresh')}
+            ? (t('providerSettings.refreshing', asLanguage(language)))
+            : (t('refresh', asLanguage(language)))}
         </button>
       </div>
 
@@ -313,7 +302,7 @@ const UsagePanel = memo(function UsagePanel({
         <div className="space-y-2.5">
           {usage?.primary ? (
             <UsageBar
-              label={language === 'zh' ? '主额度' : 'Primary'}
+              label={t('providerSettings.primary', asLanguage(language))}
               window={usage.primary}
               language={language}
             />
@@ -321,34 +310,30 @@ const UsagePanel = memo(function UsagePanel({
           {/* A zero-length secondary window means the plan has no burst quota. */}
           {usage?.secondary && usage.secondary.windowMinutes ? (
             <UsageBar
-              label={language === 'zh' ? '次级额度' : 'Secondary'}
+              label={t('providerSettings.secondary', asLanguage(language))}
               window={usage.secondary}
               language={language}
             />
           ) : null}
           {usage?.credits?.unlimited ? (
             <div className="text-[10px] text-emerald-400">
-              {language === 'zh' ? '积分：无限' : 'Credits: unlimited'}
+              {t('providerSettings.creditsUnlimited', asLanguage(language))}
             </div>
           ) : usage?.credits?.hasCredits ? (
             <div className="text-[10px] text-text-secondary">
-              {language === 'zh' ? '额外积分' : 'Credits'}
+              {t('providerSettings.credits', asLanguage(language))}
               {typeof usage.credits.balance === 'number' ? `: ${usage.credits.balance}` : ''}
             </div>
           ) : null}
         </div>
       ) : (
         <div className="text-[11px] text-text-secondary opacity-70">
-          {language === 'zh'
-            ? '暂无用量数据，发起一次对话或点击刷新后显示。'
-            : 'No usage data yet — send a message or hit refresh.'}
+          {t('providerSettings.noUsageDataYet', asLanguage(language))}
         </div>
       )}
 
       <div className="text-[10px] text-text-secondary opacity-50">
-        {language === 'zh'
-          ? 'ChatGPT 未提供额度查询接口，数据取自请求响应头，可能存在延迟。'
-          : 'ChatGPT exposes no quota API; these values come from response headers and may lag.'}
+        {t('providerSettings.chatgptExposesNoQuota', asLanguage(language))}
       </div>
     </div>
   )
@@ -406,13 +391,13 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
     try {
       const result = await window.electronAPI.credentialsOAuthLogin()
       if (result.success) {
-        toast.success(language === 'zh' ? 'ChatGPT 登录成功' : 'Signed in to ChatGPT')
+        toast.success(t('providerSettings.signedInToChatgpt', asLanguage(language)))
         await refresh()
       } else {
-        toast.error(result.error || (language === 'zh' ? '登录失败' : 'Sign-in failed'))
+        toast.error(result.error || (t('providerSettings.signInFailed', asLanguage(language))))
       }
     } catch (err: any) {
-      toast.error(err?.message || (language === 'zh' ? '登录失败' : 'Sign-in failed'))
+      toast.error(err?.message || (t('providerSettings.signInFailed', asLanguage(language))))
     } finally {
       setBusy(false)
     }
@@ -422,7 +407,7 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
     setBusy(true)
     try {
       await window.electronAPI.credentialsOAuthLogout()
-      toast.success(language === 'zh' ? '已退出登录' : 'Signed out')
+      toast.success(t('providerSettings.signedOut', asLanguage(language)))
       await refresh()
     } finally {
       setBusy(false)
@@ -432,32 +417,32 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
   return (
     <div className="space-y-2">
       <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-        {language === 'zh' ? 'ChatGPT 账号' : 'ChatGPT Account'}
+        {t('providerSettings.chatgptAccount', asLanguage(language))}
       </label>
       {status?.loggedIn ? (
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
-              {language === 'zh' ? '已登录' : 'Signed in'}
+              {t('providerSettings.signed', asLanguage(language))}
               {status.planType ? ` · ${status.planType.toUpperCase()}` : ''}
             </span>
             <Button variant="secondary" size="sm" onClick={handleLogout} disabled={busy} className="h-9 px-3 text-xs font-medium">
-              {language === 'zh' ? '退出登录' : 'Sign out'}
+              {t('providerSettings.signOut', asLanguage(language))}
             </Button>
           </div>
           <div className="space-y-0.5 px-0.5 text-[11px] text-text-secondary">
             {status.email ? (
-              <div>{language === 'zh' ? '邮箱' : 'Email'}: {status.email}</div>
+              <div>{t('email', asLanguage(language))}: {status.email}</div>
             ) : null}
             {status.accountID ? (
-              <div>{language === 'zh' ? '账号 ID' : 'Account ID'}: {status.accountID}</div>
+              <div>{t('providerSettings.accountId', asLanguage(language))}: {status.accountID}</div>
             ) : null}
             {status.expiresAt ? (
               <div>
-                {language === 'zh' ? '凭证有效期至' : 'Token expires'}:{' '}
+                {t('providerSettings.tokenExpires', asLanguage(language))}:{' '}
                 {new Date(status.expiresAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                 <span className="opacity-60">
-                  {language === 'zh' ? '（到期自动刷新）' : ' (auto-refreshed)'}
+                  {t('providerSettings.autoRefreshed', asLanguage(language))}
                 </span>
               </div>
             ) : null}
@@ -475,16 +460,14 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
             {busy ? (
               <span className="flex items-center gap-2">
                 <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                {language === 'zh' ? '等待浏览器授权...' : 'Waiting for browser...'}
+                {t('common.waitingForBrowser', asLanguage(language))}
               </span>
             ) : (
-              language === 'zh' ? '使用 ChatGPT 登录' : 'Sign in with ChatGPT'
+              t('providerSettings.signInWithChatgpt', asLanguage(language))
             )}
           </Button>
           <p className="text-[10px] text-text-muted px-0.5">
-            {language === 'zh'
-              ? '使用 ChatGPT Pro/Plus 订阅，无需 API Key。会在浏览器中完成授权。'
-              : 'Uses your ChatGPT Pro/Plus subscription — no API key needed. Opens your browser.'}
+            {t('providerSettings.usesYourChatgptPro', asLanguage(language))}
           </p>
         </div>
       )}
@@ -501,7 +484,7 @@ const TestConnectionButton = memo(function TestConnectionButton({ localConfig, l
     const usesOAuth = PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
     if (!localConfig.apiKey && !usesOAuth && localConfig.provider !== 'ollama') {
       setStatus('error')
-      setErrorMsg(language === 'zh' ? '请先输入 API Key' : 'Please enter API Key first')
+      setErrorMsg(t('providerSettings.pleaseEnterApiKey', asLanguage(language)))
       return
     }
     setTesting(true)
@@ -512,7 +495,7 @@ const TestConnectionButton = memo(function TestConnectionButton({ localConfig, l
       const result = await checkProviderHealth(localConfig.provider, localConfig.apiKey, localConfig.baseUrl, localConfig.protocol)
       if (result.status === 'healthy') {
         setStatus('success')
-        toast.success(language === 'zh' ? `连接成功！延迟: ${result.latency}ms` : `Connected! Latency: ${result.latency}ms`)
+        toast.success(t('providerSettings.connectedLatencyMs', asLanguage(language), { latency: result.latency }))
       } else {
         setStatus('error')
         setErrorMsg(result.error || 'Connection failed')
@@ -530,16 +513,16 @@ const TestConnectionButton = memo(function TestConnectionButton({ localConfig, l
         {testing ? (
           <span className="flex items-center gap-2">
             <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            {language === 'zh' ? '测试中...' : 'Testing...'}
+            {t('providerSettings.testing', asLanguage(language))}
           </span>
         ) : (
-          language === 'zh' ? '测试连接' : 'Test Connection'
+          t('providerSettings.testConnection', asLanguage(language))
         )}
       </Button>
       {status === 'success' && (
         <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
           <Check className="w-3 h-3" />
-          {language === 'zh' ? '连接成功' : 'Connected'}
+          {t('providerSettings.connected', asLanguage(language))}
         </span>
       )}
       {status === 'error' && (
@@ -558,11 +541,11 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
   const handleTest = async () => {
     const usesOAuth = PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
     if (!localConfig.apiKey && !usesOAuth && localConfig.provider !== 'ollama') {
-      toast.error(language === 'zh' ? '请先输入 API Key' : 'Please enter API Key first')
+      toast.error(t('providerSettings.pleaseEnterApiKey', asLanguage(language)))
       return
     }
     if (!localConfig.model) {
-      toast.error(language === 'zh' ? '请先选择或输入模型' : 'Please select or enter a model first')
+      toast.error(t('providerSettings.pleaseSelectOrEnter', asLanguage(language)))
       return
     }
 
@@ -572,13 +555,11 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
       const result = await testModelCall(localConfig)
 
       if (result.success) {
-        const message = language === 'zh'
-          ? `调用成功！延时: ${result.latency}ms, 结果: ${result.content}`
-          : `Call success! Latency: ${result.latency}ms, Result: ${result.content}`
+        const message = t('providerSettings.callSuccessLatencyMs', asLanguage(language), { latency: result.latency, content: result.content })
         toast.success(message)
       } else {
         const errorMsg = result.error || 'Test failed'
-        toast.error(language === 'zh' ? `调用失败: ${errorMsg}` : `Call failed: ${errorMsg}`)
+        toast.error(t('providerSettings.callFailed', asLanguage(language), { errorMsg }))
       }
     } catch (err: any) {
       toast.error(err.message || 'Test failed')
@@ -592,10 +573,10 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
       {testing ? (
         <span className="flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          {language === 'zh' ? '调用中...' : 'Calling...'}
+          {t('providerSettings.calling', asLanguage(language))}
         </span>
       ) : (
-        language === 'zh' ? '测试模型调用' : 'Test Model Call'
+        t('providerSettings.testModelCall', asLanguage(language))
       )}
     </Button>
   )
@@ -634,7 +615,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
     // OAuth providers have no API key — the main process resolves their token.
     const usesOAuth = PROVIDERS[provider]?.auth.type === 'oauth'
     if (!apiKey && !usesOAuth && provider !== 'ollama') {
-      toast.error(language === 'zh' ? '请先输入 API Key' : 'Please enter API Key first')
+      toast.error(t('providerSettings.pleaseEnterApiKey', asLanguage(language)))
       return
     }
 
@@ -657,10 +638,10 @@ const FetchModelsButton = memo(function FetchModelsButton({
         setFetchedModels(result.models)
         setShowList(true)
         if (result.models.length === 0) {
-          toast.info(language === 'zh' ? '未找到可用模型' : 'No models found')
+          toast.info(t('providerSettings.noModelsFound', asLanguage(language)))
         }
       } else {
-        toast.error(language === 'zh' ? `获取失败: ${result.error}` : `Fetch failed: ${result.error}`)
+        toast.error(t('providerSettings.fetchFailed', asLanguage(language), { error: result.error }))
       }
     } catch (err: any) {
       toast.error(err.message || 'Fetch failed')
@@ -727,15 +708,15 @@ const FetchModelsButton = memo(function FetchModelsButton({
           type="text"
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          placeholder={language === 'zh' ? '搜索模型...' : 'Search models...'}
+          placeholder={t('providerSettings.searchModels', asLanguage(language))}
           className="w-full px-2.5 py-1.5 text-xs bg-surface/50 border border-border rounded-lg outline-none focus:border-accent/50 transition-colors text-text-primary placeholder:text-text-muted"
           autoFocus
         />
         <div className="flex items-center justify-between px-1">
           <span className="text-[9px] font-bold text-text-muted uppercase tracking-wider">
             {searchQuery
-              ? (language === 'zh' ? `匹配 ${filteredModels.length}/${fetchedModels.length}` : `${filteredModels.length}/${fetchedModels.length} matched`)
-              : (language === 'zh' ? `共 ${fetchedModels.length} 个模型` : `${fetchedModels.length} models`)
+              ? (t('providerSettings.matched', asLanguage(language), { length: filteredModels.length, length2: fetchedModels.length }))
+              : (t('providerSettings.models', asLanguage(language), { length: fetchedModels.length }))
             }
           </span>
           <div className="flex items-center gap-1">
@@ -746,7 +727,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
               }}
               className="text-[9px] text-accent hover:text-accent-hover px-1.5 py-0.5 rounded hover:bg-accent/10 transition-colors"
             >
-              {language === 'zh' ? '全选' : 'All'}
+              {t('providerSettings.all', asLanguage(language))}
             </button>
             <button
               onClick={() => {
@@ -755,7 +736,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
               }}
               className="text-[9px] text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded hover:bg-red-400/10 transition-colors"
             >
-              {language === 'zh' ? '全取消' : 'None'}
+              {t('providerSettings.none', asLanguage(language))}
             </button>
           </div>
         </div>
@@ -800,7 +781,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
           className="flex-1 py-1.5 text-[10px] font-bold text-text-muted hover:text-red-400 hover:bg-red-400/5 rounded-lg transition-colors uppercase flex items-center justify-center gap-1.5 border border-transparent hover:border-red-400/20"
         >
           <Trash className="w-3 h-3" />
-          {language === 'zh' ? '全部清空' : 'Clear All'}
+          {t('providerSettings.clearAll', asLanguage(language))}
         </button>
         <button
           onClick={() => {
@@ -813,7 +794,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
           className="flex-1 py-1.5 text-[10px] font-bold bg-accent text-white hover:bg-accent-hover rounded-lg transition-colors uppercase flex items-center justify-center gap-1.5 shadow-lg shadow-accent/20"
         >
           <Check className="w-3 h-3" />
-          {language === 'zh' ? '全部添加' : 'Add All'}
+          {t('providerSettings.addAll', asLanguage(language))}
         </button>
       </div>
     </div>,
@@ -829,10 +810,10 @@ const FetchModelsButton = memo(function FetchModelsButton({
         onClick={handleFetch}
         disabled={fetching}
         className="h-8 px-2.5 flex items-center gap-1.5"
-        title={language === 'zh' ? '从 API 获取模型列表' : 'Fetch models from API'}
+        title={t('providerSettings.fetchModelsFromApi', asLanguage(language))}
       >
         <RefreshCw className={`w-3 h-3 ${fetching ? 'animate-spin' : ''}`} />
-        <span className="text-[10px] font-semibold">{language === 'zh' ? '获取模型' : 'Fetch Models'}</span>
+        <span className="text-[10px] font-semibold">{t('providerSettings.fetchModels', asLanguage(language))}</span>
       </Button>
 
       {dropdownMenu}
@@ -859,7 +840,7 @@ function InlineCustomProviderForm({
 
   const handleSubmit = () => {
     if (!displayName.trim() || !baseUrl.trim()) {
-      toast.error(language === 'zh' ? '请填写名称和 API 端点' : 'Please enter name and API endpoint')
+      toast.error(t('providerSettings.pleaseEnterNameAnd', asLanguage(language)))
       return
     }
     onSave({
@@ -879,7 +860,7 @@ function InlineCustomProviderForm({
       if (!model && newModels.length > 0) {
         setModel(newModels[0])
       }
-      toast.success(language === 'zh' ? `已获取并添加 ${newModels.length} 个模型` : `Fetched and added ${newModels.length} models`)
+      toast.success(t('providerSettings.fetchedAndAddedModels', asLanguage(language), { length: newModels.length }))
     }
   }
 
@@ -889,7 +870,7 @@ function InlineCustomProviderForm({
     if (models.includes(model)) {
       setModel(remaining[0] || '')
     }
-    toast.success(language === 'zh' ? `已清空 ${models.length} 个模型` : `Cleared ${models.length} models`)
+    toast.success(t('providerSettings.clearedModels', asLanguage(language), { length: models.length }))
   }
 
   return (
@@ -897,18 +878,18 @@ function InlineCustomProviderForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">
-            {language === 'zh' ? '显示名称' : 'Display Name'}
+            {t('common.displayName', asLanguage(language))}
           </label>
           <Input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder={language === 'zh' ? '例如: 智谱 GLM' : 'e.g. My Provider'}
+            placeholder={t('providerSettings.eGMyProvider', asLanguage(language))}
             className="bg-background/50 border-border text-sm"
           />
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">
-            {language === 'zh' ? '协议类型' : 'Protocol'}
+            {t('providerSettings.protocol', asLanguage(language))}
           </label>
           <Select
             value={protocol}
@@ -921,7 +902,7 @@ function InlineCustomProviderForm({
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-text-secondary">
-          {language === 'zh' ? 'API 端点' : 'API Endpoint'}
+          {t('providerSettings.apiEndpoint', asLanguage(language))}
         </label>
         <Input
           value={baseUrl}
@@ -945,7 +926,7 @@ function InlineCustomProviderForm({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-text-secondary">
-              {language === 'zh' ? '默认模型' : 'Default Model'}
+              {t('providerSettings.defaultModel', asLanguage(language))}
             </label>
             <FetchModelsButton
               provider="custom"
@@ -962,7 +943,7 @@ function InlineCustomProviderForm({
           <Input
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder={language === 'zh' ? '例如: gpt-4 (支持逗号分隔)' : 'e.g. gpt-4 (Supports comma)'}
+            placeholder={t('providerSettings.eGGpt4', asLanguage(language))}
             className="bg-background/50 border-border text-xs"
           />
         </div>
@@ -971,7 +952,7 @@ function InlineCustomProviderForm({
       {customModels.length > 0 && (
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">
-            {language === 'zh' ? `已添加模型 (${customModels.length})` : `Added Models (${customModels.length})`}
+            {t('providerSettings.addedModels', asLanguage(language), { length: customModels.length })}
           </label>
           <div className="flex flex-wrap gap-2 rounded-xl border border-border/50 bg-background/30 p-2">
             {customModels.map(m => (
@@ -991,10 +972,10 @@ function InlineCustomProviderForm({
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          {language === 'zh' ? '取消' : 'Cancel'}
+          {t('cancel', asLanguage(language))}
         </Button>
         <Button variant="primary" size="sm" onClick={handleSubmit}>
-          {language === 'zh' ? '添加' : 'Add'}
+          {t('git.add', asLanguage(language))}
         </Button>
       </div>
     </div>
@@ -1241,7 +1222,7 @@ export function ProviderSettings({
     setLocalProviderConfigs(updatedConfigs)
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
 
-    toast.success(language === 'zh' ? `已添加 ${newModels.length} 个模型` : `Added ${newModels.length} models`)
+    toast.success(t('providerSettings.addedModels2', asLanguage(language), { length: newModels.length }))
   }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
 
   const providerHasApiKey = useCallback((providerId: string) => {
@@ -1365,9 +1346,9 @@ export function ProviderSettings({
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
 
     if (models.length === 1) {
-      toast.success(language === 'zh' ? `已删除模型: ${models[0]}` : `Removed model: ${models[0]}`)
+      toast.success(t('providerSettings.removedModel', asLanguage(language), { value: models[0] }))
     } else {
-      toast.success(language === 'zh' ? `已清空 ${models.length} 个模型` : `Cleared ${models.length} models`)
+      toast.success(t('providerSettings.clearedModels', asLanguage(language), { length: models.length }))
     }
   }, [collectProviderModels, language, localConfig.provider, localModelRouting.multimodal?.model, localModelRouting.multimodal?.provider, localProviderConfigs, setLocalProviderConfigs, setProvider, updateMultimodalSelection])
 
@@ -1467,7 +1448,7 @@ export function ProviderSettings({
       [id]: newConfig
     })
 
-    toast.success(language === 'zh' ? `已添加 ${config.displayName}` : `Added ${config.displayName}`)
+    toast.success(t('providerSettings.added', asLanguage(language), { displayName: config.displayName }))
     setIsAddingCustom(false)
 
     // 自动选择新添加的 Provider
@@ -1490,8 +1471,8 @@ export function ProviderSettings({
   const handleDeleteCustomProvider = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '删除提供商' : 'Delete Provider',
-      message: language === 'zh' ? `删除 ${name}？` : `Delete ${name}?`,
+      title: t('providerSettings.deleteProvider', asLanguage(language)),
+      message: t('providerSettings.delete', asLanguage(language), { name }),
       variant: 'danger',
     })
     if (confirmed) {
@@ -1545,7 +1526,7 @@ export function ProviderSettings({
   const multimodalProviderOptions = useMemo(() => [
     {
       value: '',
-      label: language === 'zh' ? '未配置（使用主模型）' : 'Not configured (use primary model)',
+      label: t('providerSettings.notConfiguredUsePrimary', asLanguage(language)),
     },
     ...allProviderOptions
       .filter(provider => providerHasApiKey(provider.id))
@@ -1571,11 +1552,11 @@ export function ProviderSettings({
           <div className="flex items-center gap-2 mb-1.5">
             <Box className="w-4 h-4 text-accent" />
             <h4 className="text-sm font-semibold text-text-primary">
-              {language === 'zh' ? '选择提供商' : 'Select Provider'}
+              {t('providerSettings.selectProvider', asLanguage(language))}
             </h4>
           </div>
           <p className="text-[11px] text-text-muted">
-            {language === 'zh' ? '选择您要使用的模型服务提供商' : 'Select the model service provider you want to use'}
+            {t('providerSettings.selectTheModelService', asLanguage(language))}
           </p>
         </div>
 
@@ -1656,7 +1637,7 @@ export function ProviderSettings({
                       startEditingCustomProvider(id, displayName)
                     }}
                     className="absolute -top-2 -left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-accent/30 hover:text-accent"
-                    title={language === 'zh' ? '重命名' : 'Rename'}
+                    title={t('rename', asLanguage(language))}
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
@@ -1664,7 +1645,7 @@ export function ProviderSettings({
                 <button
                   onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
                   className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-red-500/30 hover:text-red-500"
-                  title={language === 'zh' ? '删除' : 'Delete'}
+                  title={t('delete', asLanguage(language))}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1681,7 +1662,7 @@ export function ProviderSettings({
               }`}
           >
             <Plus className="mb-1 w-5 h-5" />
-            <span className="text-xs font-medium">{language === 'zh' ? '添加自定义' : 'Add Custom'}</span>
+            <span className="text-xs font-medium">{t('providerSettings.addCustom', asLanguage(language))}</span>
           </button>
         </div>
 
@@ -1690,7 +1671,7 @@ export function ProviderSettings({
           <div className="mt-6 rounded-xl border border-border bg-surface/25 p-6 animate-slide-down">
             <div className="flex justify-between items-center mb-4">
               <h5 className="text-sm font-medium text-text-primary">
-                {language === 'zh' ? '添加新提供商' : 'Add New Provider'}
+                {t('providerSettings.addNewProvider', asLanguage(language))}
               </h5>
               <Button variant="ghost" size="sm" onClick={() => setIsAddingCustom(false)}>
                 <X className="w-4 h-4" />
@@ -1714,7 +1695,7 @@ export function ProviderSettings({
                 <div className="flex items-center gap-2">
                   <Box className="w-4 h-4 text-accent" />
                   <h5 className="text-sm font-medium text-text-primary">
-                    {language === 'zh' ? '模型配置' : 'Model Configuration'}
+                    {t('providerSettings.modelConfiguration', asLanguage(language))}
                   </h5>
                 </div>
                 <FetchModelsButton
@@ -1735,10 +1716,10 @@ export function ProviderSettings({
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="sr-only text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '选择模型' : 'Select Model'}
+                    {t('providerSettings.selectModel', asLanguage(language))}
                   </label>
                   <label className="text-xs font-medium text-text-secondary">
-                    {language === 'zh' ? '选择模型' : 'Select Model'}
+                    {t('providerSettings.selectModel', asLanguage(language))}
                   </label>
                   <Select
                     value={localConfig.model}
@@ -1753,7 +1734,7 @@ export function ProviderSettings({
                     <Input
                       value={newModelName}
                       onChange={(e) => setNewModelName(e.target.value)}
-                      placeholder={language === 'zh' ? '输入模型名称 (支持逗号分隔)...' : 'Enter model names (Supports comma)...'}
+                      placeholder={t('providerSettings.enterModelNamesSupports', asLanguage(language))}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
                       className="flex-1 h-9 text-xs bg-background/50 border-border"
                     />
@@ -1795,10 +1776,10 @@ export function ProviderSettings({
                   </div>
                   <div>
                     <h5 className="text-sm font-semibold text-text-primary">
-                      {language === 'zh' ? '认证 & 网络配置' : 'Authentication & Network'}
+                      {t('providerSettings.authenticationNetwork', asLanguage(language))}
                     </h5>
                     <p className="text-[10px] text-text-muted mt-0.5">
-                      {language === 'zh' ? '配置 API 访问密钥和服务器连接参数' : 'Configure API keys and server connection parameters'}
+                      {t('providerSettings.configureApiKeysAnd', asLanguage(language))}
                     </p>
                   </div>
                 </div>
@@ -1833,7 +1814,7 @@ export function ProviderSettings({
                 )}
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                    {language === 'zh' ? 'API 端点' : 'API Endpoint'}
+                    {t('providerSettings.apiEndpoint', asLanguage(language))}
                   </label>
                   <Input
                     value={localConfig.baseUrl || ''}
@@ -1851,12 +1832,10 @@ export function ProviderSettings({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h5 className="text-sm font-semibold text-text-primary">
-                    {language === 'zh' ? '多模态路由' : 'Multimodal Routing'}
+                    {t('providerSettings.multimodalRouting', asLanguage(language))}
                   </h5>
                   <p className="mt-1 text-[11px] text-text-muted">
-                    {language === 'zh'
-                      ? '启用后，图片消息将先由多模态模型分析，再将结果交给主模型处理。关闭时图片直接发送给主模型。'
-                      : 'When enabled, image messages are first analyzed by the multimodal model, then handed off to the primary model. When disabled, images are sent directly to the primary model.'}
+                    {t('providerSettings.whenEnabledImageMessages', asLanguage(language))}
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -1874,7 +1853,7 @@ export function ProviderSettings({
                 <>
                   <div className="rounded-lg border border-border/60 bg-background/30 px-3 py-2">
                     <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                      {language === 'zh' ? '当前主模型' : 'Primary Model'}
+                      {t('providerSettings.primaryModel', asLanguage(language))}
                     </div>
                     <div className="mt-1 text-xs font-medium text-text-primary">
                       {selectedProvider?.name ?? localProviderConfigs[localConfig.provider]?.displayName ?? localConfig.provider}/{localConfig.model}
@@ -1884,7 +1863,7 @@ export function ProviderSettings({
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-text-secondary">
-                        {language === 'zh' ? '多模态提供商' : 'Multimodal Provider'}
+                        {t('providerSettings.multimodalProvider', asLanguage(language))}
                       </label>
                       <Select
                         value={selectedMultimodalProviderId}
@@ -1896,13 +1875,13 @@ export function ProviderSettings({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-text-secondary">
-                        {language === 'zh' ? '多模态模型' : 'Multimodal Model'}
+                        {t('providerSettings.multimodalModel', asLanguage(language))}
                       </label>
                       <Select
                         value={localModelRouting.multimodal?.model || ''}
                         onChange={(value) => updateMultimodalSelection(selectedMultimodalProviderId, value)}
                         options={multimodalModelOptions}
-                        placeholder={language === 'zh' ? '先选择提供商' : 'Select provider first'}
+                        placeholder={t('providerSettings.selectProviderFirst', asLanguage(language))}
                         disabled={!selectedMultimodalProviderId || multimodalModelOptions.length === 0}
                         className="w-full bg-background/50 border-border"
                       />
@@ -1916,7 +1895,7 @@ export function ProviderSettings({
           <ProgressiveReveal
             language={language}
             collapsedHeight={520}
-            expandLabel={language === 'zh' ? '展开全部生成参数' : 'Show all generation parameters'}
+            expandLabel={t('providerSettings.showAllGenerationParameters', asLanguage(language))}
           >
           <section className="relative overflow-hidden rounded-xl border border-border/70 bg-surface/25">
 
@@ -1927,10 +1906,10 @@ export function ProviderSettings({
                 </div>
                 <div className="text-left">
                   <h5 className="text-sm font-semibold text-text-primary">
-                    {language === 'zh' ? '生成参数' : 'Generation Parameters'}
+                    {t('providerSettings.generationParameters', asLanguage(language))}
                   </h5>
                   <p className="text-[10px] text-text-muted mt-0.5">
-                    {language === 'zh' ? '调整温度、Top P、最大 Token 等高级配置' : 'Adjust temperature, top P, max tokens, and other advanced settings'}
+                    {t('providerSettings.adjustTemperatureTopP', asLanguage(language))}
                   </p>
                 </div>
               </div>
@@ -1945,7 +1924,7 @@ export function ProviderSettings({
                     {/* Max Tokens */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs text-text-secondary">{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
+                        <label className="text-xs text-text-secondary">{t('common.maxTokens', asLanguage(language))}</label>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                           {localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
                         </span>
@@ -1968,7 +1947,7 @@ export function ProviderSettings({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <label className="text-xs text-text-secondary">
-                          {language === 'zh' ? '随机性 (Temperature)' : 'Temperature'}
+                          {t('providerSettings.temperature', asLanguage(language))}
                         </label>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                           {(localConfig.temperature ?? LLM_DEFAULTS.temperature).toFixed(1)}
@@ -1987,8 +1966,8 @@ export function ProviderSettings({
                         className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
                       />
                       <div className="flex justify-between text-[10px] text-text-muted px-1">
-                        <span>{language === 'zh' ? '精确' : 'Precise'}</span>
-                        <span>{language === 'zh' ? '创意' : 'Creative'}</span>
+                        <span>{t('providerSettings.precise', asLanguage(language))}</span>
+                        <span>{t('providerSettings.creative', asLanguage(language))}</span>
                       </div>
                     </div>
 
@@ -1998,9 +1977,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Top P</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '核采样：仅考虑累积概率达到 P 的 Token 集合'
-                              : 'Nucleus sampling: considers tokens with top_p probability mass'}
+                            {t('providerSettings.nucleusSamplingConsidersTokens', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2027,9 +2004,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Top K</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '仅从概率最高的 K 个 Token 中采样'
-                              : 'Limits selection to the top K tokens'}
+                            {t('providerSettings.limitsSelectionToThe', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2054,12 +2029,10 @@ export function ProviderSettings({
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5 flex-1">
                           <label className="text-xs font-medium text-text-secondary">
-                            {language === 'zh' ? '深度思考模式' : 'Extended Thinking'}
+                            {t('providerSettings.extendedThinking', asLanguage(language))}
                           </label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '启用后，模型会进行更深入的推理（如 Claude thinking, OpenAI o1/o3）'
-                              : 'Enable deeper reasoning (e.g., Claude thinking, OpenAI o1/o3)'}
+                            {t('providerSettings.enableDeeperReasoningE', asLanguage(language))}
                           </p>
                         </div>
                         <Switch
@@ -2076,7 +2049,7 @@ export function ProviderSettings({
                           <div className="space-y-2">
                             <div className="space-y-0.5">
                               <label className="text-xs text-text-secondary">
-                                {language === 'zh' ? '推理深度' : 'Reasoning Effort'}
+                                {t('providerSettings.reasoningEffort', asLanguage(language))}
                               </label>
                               <p className="text-[10px] text-text-muted">
                                 {reasoningEffortDescription}
@@ -2094,12 +2067,10 @@ export function ProviderSettings({
                             <div className="flex items-center justify-between">
                               <div className="space-y-0.5">
                                 <label className="text-xs text-text-secondary">
-                                  {language === 'zh' ? '思考 Token 预算' : 'Thinking Budget'}
+                                  {t('providerSettings.thinkingBudget', asLanguage(language))}
                                 </label>
                                 <p className="text-[10px] text-text-muted">
-                                  {language === 'zh'
-                                    ? 'Anthropic / Gemini 2.5 使用此参数控制思考 token 上限'
-                                    : 'Max thinking tokens for Anthropic / Gemini 2.5'}
+                                  {t('providerSettings.maxThinkingTokensFor', asLanguage(language))}
                                 </p>
                               </div>
                               <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2130,30 +2101,26 @@ export function ProviderSettings({
                     <div className="space-y-4 pt-3 border-t border-border/50">
                       <div className="space-y-0.5">
                         <label className="sr-only text-xs font-medium text-text-secondary">
-                          {language === 'zh' ? '请求行为' : 'Request Behavior'}
+                          {t('providerSettings.requestBehavior', asLanguage(language))}
                         </label>
                         <label className="text-xs font-medium text-text-secondary">
-                          {language === 'zh' ? '请求行为' : 'Request Behavior'}
+                          {t('providerSettings.requestBehavior', asLanguage(language))}
                         </label>
                         <p className="sr-only text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '控制重试、工具调用策略和并行工具执行方式'
-                            : 'Controls retries, tool policy, and parallel tool execution'}
+                          {t('providerSettings.controlsRetriesToolPolicy', asLanguage(language))}
                         </p>
                         <p className="text-[10px] text-text-muted">
-                          {language === 'zh'
-                            ? '控制重试、工具调用策略和并行工具执行方式'
-                            : 'Controls retries, tool policy, and parallel tool execution'}
+                          {t('providerSettings.controlsRetriesToolPolicy', asLanguage(language))}
                         </p>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div className="space-y-1.5">
                           <label className="sr-only text-xs text-text-secondary">
-                            {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                            {t('providerSettings.toolChoice', asLanguage(language))}
                           </label>
                           <label className="text-xs text-text-secondary">
-                            {language === 'zh' ? '工具调用策略' : 'Tool Choice'}
+                            {t('providerSettings.toolChoice', asLanguage(language))}
                           </label>
                           <Select
                             value={typeof localConfig.toolChoice === 'string' ? localConfig.toolChoice : 'required'}
@@ -2162,19 +2129,19 @@ export function ProviderSettings({
                               toolChoice: value as 'auto' | 'none' | 'required',
                             })}
                             options={[
-                              { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
-                              { value: 'required', label: language === 'zh' ? '需要工具' : 'Required' },
-                              { value: 'none', label: language === 'zh' ? '禁用工具' : 'None' },
+                              { value: 'auto', label: t('common.auto', asLanguage(language)) },
+                              { value: 'required', label: t('providerSettings.required', asLanguage(language)) },
+                              { value: 'none', label: t('providerSettings.none2', asLanguage(language)) },
                             ]}
                           />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="sr-only text-xs text-text-secondary">
-                            {language === 'zh' ? '最大重试次数' : 'Max Retries'}
+                            {t('providerSettings.maxRetries', asLanguage(language))}
                           </label>
                           <label className="text-xs text-text-secondary">
-                            {language === 'zh' ? '最大重试次数' : 'Max Retries'}
+                            {t('providerSettings.maxRetries', asLanguage(language))}
                           </label>
                           <Input
                             type="number"
@@ -2193,20 +2160,16 @@ export function ProviderSettings({
                       <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2.5">
                         <div className="space-y-0.5 pr-4">
                           <label className="sr-only text-xs text-text-secondary">
-                            {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                            {t('providerSettings.parallelToolCalls', asLanguage(language))}
                           </label>
                           <label className="text-xs text-text-secondary">
-                            {language === 'zh' ? '并行工具调用' : 'Parallel Tool Calls'}
+                            {t('providerSettings.parallelToolCalls', asLanguage(language))}
                           </label>
                           <p className="sr-only text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '允许模型在一次回复中同时规划多个工具调用'
-                              : 'Allows the model to plan multiple tool calls in one response'}
+                            {t('providerSettings.allowsTheModelTo', asLanguage(language))}
                           </p>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '允许模型在一次回复中同时规划多个工具调用'
-                              : 'Allows the model to plan multiple tool calls in one response'}
+                            {t('providerSettings.allowsTheModelTo', asLanguage(language))}
                           </p>
                         </div>
                         <Switch
@@ -2222,19 +2185,17 @@ export function ProviderSettings({
                       <div className="rounded-xl border border-border/60 bg-background/20 p-4 space-y-4">
                         <div className="space-y-1">
                           <label className="text-xs font-medium text-text-secondary">
-                            {language === 'zh' ? '协议与传输' : 'Protocol & Transport'}
+                            {t('providerSettings.protocolTransport', asLanguage(language))}
                           </label>
                           <p className="text-[10px] text-text-muted leading-relaxed">
-                            {language === 'zh'
-                              ? '通过官方协议和 AI SDK 原生参数映射来控制请求成形，默认尽量少做手动覆盖。'
-                              : 'Control request shaping through the official protocol and AI SDK native mapping with minimal manual overrides.'}
+                            {t('providerSettings.controlRequestShapingThrough', asLanguage(language))}
                           </p>
                         </div>
 
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <div className="space-y-1.5">
                             <label className="text-xs text-text-secondary">
-                              {language === 'zh' ? 'API 协议' : 'API Protocol'}
+                              {t('providerSettings.apiProtocol', asLanguage(language))}
                             </label>
                             <Select
                               value={currentProtocol || 'openai'}
@@ -2254,16 +2215,14 @@ export function ProviderSettings({
                               className="bg-background/40 border-border/60 h-9 text-xs"
                             />
                             <p className="text-[10px] text-text-muted leading-relaxed">
-                              {language === 'zh'
-                                ? '协议决定请求与响应的官方结构，不再根据模型名做推断。'
-                                : 'The protocol decides the official request and response shape without guessing from the model name.'}
+                              {t('providerSettings.theProtocolDecidesThe', asLanguage(language))}
                             </p>
                           </div>
 
                           {isCustomSelected && isOpenAIStyleProtocol(currentProtocol) && currentOpenAICompatibilityProfile && (
                             <div className="space-y-1.5">
                               <label className="text-xs text-text-secondary">
-                                {language === 'zh' ? 'OpenAI 兼容档位' : 'OpenAI Compatibility'}
+                                {t('providerSettings.openaiCompatibility', asLanguage(language))}
                               </label>
                               <Select
                                 value={currentOpenAICompatibilityProfile}
@@ -2275,9 +2234,7 @@ export function ProviderSettings({
                                 className="bg-background/40 border-border/60 h-9 text-xs"
                               />
                               <p className="text-[10px] text-text-muted leading-relaxed">
-                                {language === 'zh'
-                                  ? '仅当上游网关会改写 OpenAI 协议字段、或会裁剪参数时，再调整这个兼容档位。'
-                                  : 'Only adjust this when an upstream gateway rewrites OpenAI fields or strips parameters.'}
+                                {t('providerSettings.onlyAdjustThisWhen', asLanguage(language))}
                               </p>
                             </div>
                           )}
@@ -2287,12 +2244,10 @@ export function ProviderSettings({
                           <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
                             <div className="pr-4">
                               <div className="text-xs text-text-secondary">
-                                {language === 'zh' ? '兼容模式：扩展推理档位' : 'Compatible Mode: Extended Reasoning'}
+                                {t('providerSettings.compatibleModeExtendedReasoning', asLanguage(language))}
                               </div>
                               <p className="text-[10px] text-text-muted mt-0.5">
-                                {language === 'zh'
-                                  ? '仅当上游模型明确支持时启用；启用后会原样发送 xhigh 和 max。'
-                                  : 'Enable only when the upstream model supports it; xhigh and max will be sent unchanged.'}
+                                {t('providerSettings.enableOnlyWhenThe', asLanguage(language))}
                               </p>
                             </div>
                             <Switch
@@ -2313,12 +2268,10 @@ export function ProviderSettings({
                           <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
                             <div className="pr-4">
                               <div className="text-xs text-text-secondary">
-                                {language === 'zh' ? '兼容模式：max_output_tokens' : 'Compatible Mode: `max_output_tokens`'}
+                                {t('providerSettings.compatibleModeMaxOutput', asLanguage(language))}
                               </div>
                               <p className="text-[10px] text-text-muted mt-0.5">
-                                {language === 'zh'
-                                  ? '标准 Responses 协议默认会发送 `max_output_tokens`。只有当上游兼容层不完整，并且你明确知道它不接受这个官方字段时，才在兼容模式下关闭。'
-                                  : 'Standard Responses requests send `max_output_tokens` by default. Only turn this off in compatible mode when an incomplete gateway does not accept the official field.'}
+                                {t('providerSettings.standardResponsesRequestsSend', asLanguage(language))}
                               </p>
                             </div>
                             <Switch
@@ -2339,24 +2292,20 @@ export function ProviderSettings({
                           <div className="rounded-xl border border-accent/20 bg-accent/5 p-3 space-y-3">
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-text-secondary">
-                                {language === 'zh' ? 'OpenAI Responses 新能力' : 'OpenAI Responses Capabilities'}
+                                {t('providerSettings.openaiResponsesCapabilities', asLanguage(language))}
                               </div>
                               <p className="text-[10px] text-text-muted leading-relaxed">
-                                {language === 'zh'
-                                  ? '仅对完整 OpenAI Responses 请求生效。保持“跟随提供商默认”时不会发送额外字段。'
-                                  : 'Only applies to full OpenAI Responses requests. Provider default sends no extra field.'}
+                                {t('providerSettings.onlyAppliesToFull', asLanguage(language))}
                               </p>
                             </div>
 
                             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
                               <div className="pr-4">
                                 <div className="text-xs text-text-secondary">
-                                  {language === 'zh' ? 'Pro 推理模式' : 'Pro Reasoning Mode'}
+                                  {t('providerSettings.proReasoningMode', asLanguage(language))}
                                 </div>
                                 <p className="text-[10px] text-text-muted mt-0.5">
-                                  {language === 'zh'
-                                    ? '为支持的模型请求更深入的推理；可能增加延迟和费用。'
-                                    : 'Requests deeper reasoning on supported models; may increase latency and cost.'}
+                                  {t('providerSettings.requestsDeeperReasoningOn', asLanguage(language))}
                                 </p>
                               </div>
                               <Switch
@@ -2372,7 +2321,7 @@ export function ProviderSettings({
                             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {language === 'zh' ? '推理上下文' : 'Reasoning Context'}
+                                  {t('providerSettings.reasoningContext', asLanguage(language))}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.reasoningContext === 'string'
@@ -2380,10 +2329,10 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('reasoningContext', value || undefined)}
                                   options={[
-                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
-                                    { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
-                                    { value: 'current_turn', label: language === 'zh' ? '仅当前轮' : 'Current turn' },
-                                    { value: 'all_turns', label: language === 'zh' ? '全部轮次' : 'All turns' },
+                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
+                                    { value: 'auto', label: t('common.auto', asLanguage(language)) },
+                                    { value: 'current_turn', label: t('providerSettings.currentTurn', asLanguage(language)) },
+                                    { value: 'all_turns', label: t('providerSettings.allTurns', asLanguage(language)) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2391,7 +2340,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {language === 'zh' ? '回答详略' : 'Text Verbosity'}
+                                  {t('providerSettings.textVerbosity', asLanguage(language))}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.textVerbosity === 'string'
@@ -2399,10 +2348,10 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('textVerbosity', value || undefined)}
                                   options={[
-                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
-                                    { value: 'low', label: language === 'zh' ? '简洁' : 'Low' },
-                                    { value: 'medium', label: language === 'zh' ? '适中' : 'Medium' },
-                                    { value: 'high', label: language === 'zh' ? '详细' : 'High' },
+                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
+                                    { value: 'low', label: t('providerSettings.low', asLanguage(language)) },
+                                    { value: 'medium', label: t('providerSettings.medium', asLanguage(language)) },
+                                    { value: 'high', label: t('providerSettings.high', asLanguage(language)) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2410,7 +2359,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {language === 'zh' ? '提示缓存模式' : 'Prompt Cache Mode'}
+                                  {t('providerSettings.promptCacheMode', asLanguage(language))}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.promptCacheOptions === 'object'
@@ -2423,9 +2372,9 @@ export function ProviderSettings({
                                     value ? { mode: value, ...(value === 'explicit' ? { ttl: '30m' } : {}) } : undefined,
                                   )}
                                   options={[
-                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
-                                    { value: 'implicit', label: language === 'zh' ? '隐式缓存（Agent 推荐）' : 'Implicit (recommended for Agent)' },
-                                    { value: 'explicit', label: language === 'zh' ? '显式缓存（30 分钟）' : 'Explicit (30 min)' },
+                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
+                                    { value: 'implicit', label: t('providerSettings.implicitRecommendedForAgent', asLanguage(language)) },
+                                    { value: 'explicit', label: t('providerSettings.explicit30Min', asLanguage(language)) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2433,7 +2382,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {language === 'zh' ? '旧模型缓存保留' : 'Legacy Cache Retention'}
+                                  {t('providerSettings.legacyCacheRetention', asLanguage(language))}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.promptCacheRetention === 'string'
@@ -2441,9 +2390,9 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('promptCacheRetention', value || undefined)}
                                   options={[
-                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
-                                    { value: 'in_memory', label: language === 'zh' ? '仅内存' : 'In memory' },
-                                    { value: '24h', label: language === 'zh' ? '保留 24 小时' : '24 hours' },
+                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
+                                    { value: 'in_memory', label: t('providerSettings.inMemory', asLanguage(language)) },
+                                    { value: '24h', label: t('providerSettings.24Hours', asLanguage(language)) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2451,7 +2400,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5 md:col-span-2">
                                 <label className="text-xs text-text-secondary">
-                                  {language === 'zh' ? '服务层级' : 'Service Tier'}
+                                  {t('providerSettings.serviceTier', asLanguage(language))}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.serviceTier === 'string'
@@ -2459,19 +2408,17 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('serviceTier', value || undefined)}
                                   options={[
-                                    { value: '', label: language === 'zh' ? '跟随提供商默认' : 'Provider default' },
-                                    { value: 'auto', label: language === 'zh' ? '自动' : 'Auto' },
-                                    { value: 'default', label: language === 'zh' ? '标准' : 'Default' },
+                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
+                                    { value: 'auto', label: t('common.auto', asLanguage(language)) },
+                                    { value: 'default', label: t('providerSettings.default', asLanguage(language)) },
                                     { value: 'flex', label: 'Flex' },
-                                    { value: 'priority', label: language === 'zh' ? '优先' : 'Priority' },
-                                    { value: 'fast', label: language === 'zh' ? '快速' : 'Fast' },
+                                    { value: 'priority', label: t('providerSettings.priority', asLanguage(language)) },
+                                    { value: 'fast', label: t('providerSettings.fast', asLanguage(language)) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
                                 <p className="text-[10px] text-text-muted leading-relaxed">
-                                  {language === 'zh'
-                                    ? '非默认层级可能需要账号权限，并可能采用不同计费。'
-                                    : 'Non-default tiers may require account access and use different pricing.'}
+                                  {t('providerSettings.nonDefaultTiersMay', asLanguage(language))}
                                 </p>
                               </div>
                             </div>
@@ -2480,7 +2427,7 @@ export function ProviderSettings({
 
                         <div className="space-y-1.5">
                           <label className="text-xs text-text-secondary">
-                            {language === 'zh' ? '请求超时（秒）' : 'Timeout (s)'}
+                            {t('providerSettings.timeoutS', asLanguage(language))}
                           </label>
                           <Input
                             type="number"
@@ -2490,9 +2437,7 @@ export function ProviderSettings({
                             className="bg-background/40 border-border/60 text-xs h-9"
                           />
                           <p className="text-[10px] text-text-muted leading-relaxed">
-                            {language === 'zh'
-                              ? '超时属于传输层高级配置，通常保持默认即可。'
-                              : 'Timeout is an advanced transport setting and usually works best at its default value.'}
+                            {t('providerSettings.timeoutIsAnAdvanced', asLanguage(language))}
                           </p>
                         </div>
                       </div>
@@ -2504,9 +2449,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Frequency Penalty</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '根据 Token 出现频率降低其重复概率'
-                              : 'Penalizes tokens based on their frequency in the text'}
+                            {t('providerSettings.penalizesTokensBasedOn', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2533,9 +2476,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Presence Penalty</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '根据 Token 是否出现过降低其重复概率'
-                              : 'Penalizes tokens based on their presence in the text'}
+                            {t('providerSettings.penalizesTokensBasedOn2', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2562,9 +2503,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Seed</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '固定随机种子以获得可重现的结果'
-                              : 'Fixed seed for reproducible outputs'}
+                            {t('providerSettings.fixedSeedForReproducible', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2589,9 +2528,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Stop Sequences</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '遇到这些字符时停止生成'
-                              : 'Stop generation when these sequences are encountered'}
+                            {t('providerSettings.stopGenerationWhenThese', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
@@ -2619,9 +2556,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '调整特定 Token 出现的概率 (-100 到 100)'
-                              : 'Modify likelihood of specific tokens (-100 to 100)'}
+                            {t('providerSettings.modifyLikelihoodOfSpecific', asLanguage(language))}
                           </p>
                         </div>
                         <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
@@ -2655,12 +2590,10 @@ export function ProviderSettings({
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">
-                            {language === 'zh' ? '自定义请求头' : 'Custom Headers'}
+                            {t('providerSettings.customHeaders', asLanguage(language))}
                           </label>
                           <p className="text-[10px] text-text-muted">
-                            {language === 'zh'
-                              ? '添加额外的 HTTP 请求头（如组织 ID、项目 ID 等）'
-                              : 'Add extra HTTP headers (e.g., organization ID, project ID, etc.)'}
+                            {t('providerSettings.addExtraHttpHeaders', asLanguage(language))}
                           </p>
                         </div>
                         <button
@@ -2670,7 +2603,7 @@ export function ProviderSettings({
                           className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 flex-shrink-0"
                         >
                           <Plus className="w-3 h-3" />
-                          {language === 'zh' ? '添加' : 'Add'}
+                          {t('git.add', asLanguage(language))}
                         </button>
                       </div>
 
@@ -2681,7 +2614,7 @@ export function ProviderSettings({
                         return defaultKeys.length > 0 && (
                           <div className="space-y-2">
                             <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                              {language === 'zh' ? '默认请求头（可修改）' : 'Default Headers (Editable)'}
+                              {t('providerSettings.defaultHeadersEditable', asLanguage(language))}
                             </div>
                             {defaultKeys.map((key) => {
                               const defaultValue = defaultHeaders[key]
@@ -2708,7 +2641,7 @@ export function ProviderSettings({
                                       className="flex-1 bg-background/50 border-border text-xs font-mono h-8"
                                     />
                                     <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20 flex-shrink-0 ml-2">
-                                      {language === 'zh' ? '默认' : 'Default'}
+                                      {t('providerSettings.default2', asLanguage(language))}
                                     </span>
                                   </div>
                                   <Input
@@ -2725,9 +2658,7 @@ export function ProviderSettings({
                                     className="bg-background/50 border-border text-xs font-mono h-8"
                                   />
                                   <p className="text-[10px] text-text-muted">
-                                    {language === 'zh'
-                                      ? '使用 {{apiKey}} 作为 API Key 的占位符'
-                                      : 'Use {{apiKey}} as placeholder for API Key'}
+                                    {t('providerSettings.useAsPlaceholderFor', asLanguage(language))}
                                   </p>
                                 </div>
                               )
@@ -2741,7 +2672,7 @@ export function ProviderSettings({
                         <div className="space-y-2">
                           {Object.keys(defaultHeaders).length > 0 && (
                             <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                              {language === 'zh' ? '额外请求头' : 'Additional Headers'}
+                              {t('providerSettings.additionalHeaders', asLanguage(language))}
                             </div>
                           )}
                           {customHeaders.map((header, index) => (
@@ -2773,7 +2704,7 @@ export function ProviderSettings({
                                         newHeaders[index].key = e.target.value
                                         syncCustomHeaders(newHeaders)
                                       }}
-                                      placeholder={language === 'zh' ? '请求头名称' : 'Header name'}
+                                      placeholder={t('providerSettings.headerName', asLanguage(language))}
                                       className="bg-surface-active border-border text-xs font-mono h-8"
                                     />
                                   )}
@@ -2785,7 +2716,7 @@ export function ProviderSettings({
                                       newHeaders[index].value = e.target.value
                                       syncCustomHeaders(newHeaders)
                                     }}
-                                    placeholder={language === 'zh' ? '值' : 'Value'}
+                                    placeholder={t('providerSettings.value', asLanguage(language))}
                                     className="bg-surface-active border-border text-xs font-mono h-8"
                                   />
                                 </div>
@@ -2806,9 +2737,7 @@ export function ProviderSettings({
 
                       {customHeaders.length === 0 && Object.keys(defaultHeaders).length === 0 && (
                         <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
-                          {language === 'zh'
-                            ? '点击"添加"按钮添加自定义请求头'
-                            : 'Click "Add" to add custom headers'}
+                          {t('providerSettings.clickAddToAdd', asLanguage(language))}
                         </div>
                       )}
                     </div>

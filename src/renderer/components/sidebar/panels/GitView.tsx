@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t, type TranslationKey } from '@renderer/i18n'
+import { t, type TranslationKey, asLanguage } from '@renderer/i18n'
 import { gitService, GitStatus, GitCommit, GitBranch as GitBranchType, GitStashEntry, type GitRepository, type GitFileChange } from '@renderer/services/gitService'
 import { workspaceManager } from '@renderer/services/WorkspaceManager'
 import { getEditorConfig } from '@renderer/settings'
@@ -1811,7 +1811,7 @@ Commit message:`
     const repoSelectOptions = useMemo(() => repoRoots.map(repo => ({
         value: repo.root,
         label: repo.isWorkspaceRoot
-            ? `${repo.name} (${language === 'zh' ? '当前仓库' : 'Current Repository'})`
+            ? `${repo.name} (${t('gitView.currentRepository', asLanguage(language))})`
             : repo.relativePath === '.'
                 ? repo.name
                 : repo.relativePath,
@@ -2159,14 +2159,14 @@ Commit message:`
                             <div className="flex items-center bg-surface-hover/80 rounded-md p-0.5 mr-1 ring-1 ring-border-subtle/50">
                                 <button
                                     onClick={() => setRepoDisplayMode('list')}
-                                    title={language === 'zh' ? '列表模式' : 'List Mode'}
+                                    title={t('gitView.listMode', asLanguage(language))}
                                     className={`p-1 rounded-[4px] transition-all ${repoDisplayMode === 'list' ? 'bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
                                 >
                                     <List className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                     onClick={() => setRepoDisplayMode('select')}
-                                    title={language === 'zh' ? '单仓库模式' : 'Single Repo Mode'}
+                                    title={t('gitView.singleRepoMode', asLanguage(language))}
                                     className={`p-1 rounded-[4px] transition-all ${repoDisplayMode === 'select' ? 'bg-surface text-accent shadow-sm' : 'text-text-muted hover:text-text-primary'}`}
                                 >
                                     <Maximize className="w-3.5 h-3.5" />

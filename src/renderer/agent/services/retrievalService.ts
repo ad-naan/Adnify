@@ -4,6 +4,7 @@ import { useStore } from '@store'
 import { useAgentStore } from '../store/AgentStore'
 import { z } from 'zod'
 import { getLLMConfigForTask } from './llmConfigService'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 export interface RetrievalResult {
     relativePath: string
@@ -105,7 +106,7 @@ Rules:
             const threadBoundStore = useAgentStore.getState().forThread(threadId)
             searchPartId = threadBoundStore.addSearchPart(assistantId)
 
-            const initText = language === 'zh' ? '正在分析搜索意图...' : 'Analyzing search intent...'
+            const initText = translate('retrievalService.analyzingSearchIntent', asLanguage(language))
             threadBoundStore.updateSearchPart(assistantId, searchPartId, initText, true)
 
             // 让出线程，确保 "分析意图" 的状态块能立刻在 UI 展现
@@ -121,9 +122,7 @@ Rules:
             // 更新 UI，告知用户系统实际上在搜什么
             if (assistantId && threadId && searchPartId) {
                 const queryDisplay = optimized.keywords.join(', ') || optimized.semanticQuery
-                const searchingText = language === 'zh'
-                    ? `正在根据关键词 "${queryDisplay}" 检索代码...`
-                    : `Retrieving code for "${queryDisplay}"...`
+                const searchingText = translate('retrievalService.retrievingCode', asLanguage(language), { queryDisplay })
                 useAgentStore.getState().forThread(threadId).updateSearchPart(assistantId, searchPartId, searchingText, true)
             }
 
@@ -180,20 +179,18 @@ Rules:
 
         switch (type) {
             case 'success':
-                const foundHeader = language === 'zh' ? `已找到 ${data.count} 个相关文件：\n` : `Found ${data.count} relevant files:\n`
+                const foundHeader = translate('retrievalService.foundRelevantFiles', asLanguage(language), { count: data.count })
                 const filesList = data.results.map((r: any) => `- ${r.relativePath}`).join('\n')
                 message = foundHeader + filesList
                 break
             case 'no_results':
-                message = language === 'zh' ? '未找到相关文件。' : 'No relevant files found.'
+                message = translate('retrievalService.noRelevantFilesFound', asLanguage(language))
                 break
             case 'low_score':
-                message = language === 'zh'
-                    ? `未找到足够相关的代码（最高相关度: ${data.bestScore}，阈值: ${data.threshold}）。`
-                    : `No highly relevant code found (Best score: ${data.bestScore}, Threshold: ${data.threshold}).`
+                message = translate('retrievalService.noHighlyRelevantCode', asLanguage(language), { bestScore: data.bestScore, threshold: data.threshold })
                 break
             case 'error':
-                message = language === 'zh' ? '搜索过程中发生错误。' : 'An error occurred during search.'
+                message = translate('retrievalService.anErrorOccurredDuring', asLanguage(language))
                 break
         }
 

@@ -1,6 +1,7 @@
 import { CheckCircle2, Circle, LoaderCircle, Sparkles } from 'lucide-react'
 import type { PlanActivityItem, PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import type { PlanPlanningState } from '@/renderer/agent/plan/planWorkflowGuard'
+import { t, asLanguage } from '@renderer/i18n'
 
 const phaseCopy: Record<PlanPlanningState, { zh: string, en: string, zhDetail: string, enDetail: string }> = {
   needs_clarification: { zh: '正在梳理需求与项目上下文', en: 'Reviewing requirements and project context', zhDetail: '正在识别目标、约束和需要确认的关键决策', enDetail: 'Identifying goals, constraints, and decisions that need confirmation' },
@@ -53,13 +54,13 @@ export function PlanWorkbenchProcessing({ planningState, stage, activities, elap
     </div>}
 
     <div className="border-t border-border/40 px-4 py-3.5">
-      <div className="mb-2.5 text-[11px] font-medium text-text-muted">{language === 'zh' ? '实时过程' : 'Live process'}</div>
+      <div className="mb-2.5 text-[11px] font-medium text-text-muted">{t('planWorkbenchProcessing.liveProcess', asLanguage(language))}</div>
       {recent.length > 0 ? <div className="space-y-2.5">
         {recent.map(activity => <div key={activity.id} className="grid grid-cols-[16px_minmax(0,1fr)] gap-2.5">
           <span className="mt-0.5">{activityIcon(activity.status)}</span>
           <div className="min-w-0"><div className="truncate text-[10px] font-medium text-text-secondary">{activity.title}</div>{activity.detail && <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-text-muted">{activity.detail}</div>}</div>
         </div>)}
-      </div> : waiting ? <div className="flex items-center gap-2 text-[11px] text-text-muted"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />{language === 'zh' ? '等待输入后继续' : 'Waiting for input'}</div> : <div className="space-y-2.5" aria-label={language === 'zh' ? '正在处理' : 'Processing'}>
+      </div> : waiting ? <div className="flex items-center gap-2 text-[11px] text-text-muted"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />{t('planWorkbenchProcessing.waitingForInput', asLanguage(language))}</div> : <div className="space-y-2.5" aria-label={t('planWorkbenchProcessing.processing', asLanguage(language))}>
         {[0, 1, 2].map(index => <div key={index} className="flex items-center gap-2.5"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent/60" style={{ animationDelay: `${index * 160}ms` }} /><span className="h-2.5 animate-pulse rounded bg-text-primary/[0.055]" style={{ width: `${72 - index * 13}%`, animationDelay: `${index * 160}ms` }} /></div>)}
       </div>}
     </div>

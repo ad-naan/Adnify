@@ -7,7 +7,7 @@ import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import { useAgentChangeState } from '@hooks/useAgent'
 import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
@@ -454,9 +454,9 @@ export default function Editor() {
         const model = editorRef.current.getModel()
         const versionId = model?.getAlternativeVersionId()
         markFileSaved(activeFile.path, versionId)
-        toast.success(language === 'zh' ? '文件已保存' : 'File Saved', getFileName(activeFile.path))
+        toast.success(t('common.fileSaved', asLanguage(language)), getFileName(activeFile.path))
       } else {
-        toast.error(language === 'zh' ? '保存失败' : 'Save Failed', language === 'zh' ? '无法写入文件' : 'Could not write to file')
+        toast.error(t('common.saveFailed', asLanguage(language)), t('editor.couldNotWriteTo', asLanguage(language)))
       }
     }
   }, [activeFile, isPlanBoardDocument, markFileSaved, language])
@@ -588,13 +588,13 @@ export default function Editor() {
           </Suspense>
         ) : activeFile?.contentState === 'error' ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-text-muted">
-            <span>{language === 'zh' ? '无法重新加载文件内容' : 'Could not reload file content'}</span>
+            <span>{t('editor.couldNotReloadFile', asLanguage(language))}</span>
             <button
               type="button"
               className="rounded-md border border-border px-3 py-1.5 text-text-secondary hover:bg-surface"
               onClick={() => setFileContentState(activeFile.path, 'unloaded')}
             >
-              {language === 'zh' ? '重试' : 'Retry'}
+              {t('preview.tab.retry', asLanguage(language))}
             </button>
           </div>
         ) : activeFile && activeFile.contentState !== 'loaded' ? (

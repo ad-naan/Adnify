@@ -1,14 +1,15 @@
 import { Fragment } from 'react'
 import type { PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { Check } from 'lucide-react'
+import { t, asLanguage } from '@renderer/i18n'
 
 const STAGES: PlanWorkbenchStage[] = ['requirements', 'plan', 'execution', 'validation']
 
 const label = (stage: PlanWorkbenchStage, language: string) => ({
-  requirements: language === 'zh' ? '需求' : 'Brief',
-  plan: language === 'zh' ? '计划' : 'Plan',
-  execution: language === 'zh' ? '执行' : 'Run',
-  validation: language === 'zh' ? '验收' : 'Validate',
+  requirements: t('common.brief', asLanguage(language)),
+  plan: t('planStageTrace.plan', asLanguage(language)),
+  execution: t('planStageTrace.run', asLanguage(language)),
+  validation: t('planStageTrace.validate', asLanguage(language)),
 })[stage]
 
 interface PlanStageTraceProps {
@@ -24,7 +25,7 @@ interface PlanStageTraceProps {
 export function PlanStageTrace({ stage, selectedStage = stage, language, compact = false, onStageChange }: PlanStageTraceProps) {
   const activeIndex = STAGES.indexOf(stage)
 
-  return <nav className={`flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`} aria-label={language === 'zh' ? '计划阶段' : 'Plan stages'}>
+  return <nav className={`flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`} aria-label={t('planStageTrace.planStages', asLanguage(language))}>
     {STAGES.map((item, index) => {
       const completed = index < activeIndex
       const current = index === activeIndex

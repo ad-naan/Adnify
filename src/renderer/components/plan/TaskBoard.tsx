@@ -45,14 +45,14 @@ function deriveStage(status: string): PlanWorkbenchStage {
 }
 
 function statusMeta(task: PlanTask, waitingApproval: boolean, language: string) {
-  if (waitingApproval) return { label: copy(language, '等待批准', 'Needs approval'), tone: 'text-amber-400', bg: 'bg-amber-400/10', icon: ShieldAlert }
+  if (waitingApproval) return { label: t('taskBoard.needsApproval', asLanguage(language)), tone: 'text-amber-400', bg: 'bg-amber-400/10', icon: ShieldAlert }
   switch (task.status) {
-    case 'completed': return { label: copy(language, '已完成', 'Completed'), tone: 'text-emerald-400', bg: 'bg-emerald-400/10', icon: CheckCircle2 }
-    case 'running': return { label: copy(language, '执行中', 'Running'), tone: 'text-accent', bg: 'bg-accent/10', icon: LoaderCircle }
-    case 'failed': return { label: copy(language, '失败', 'Failed'), tone: 'text-red-400', bg: 'bg-red-400/10', icon: AlertTriangle }
-    case 'skipped': return { label: copy(language, '已跳过', 'Skipped'), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: Circle }
-    case 'cancelled': return { label: copy(language, '已取消', 'Cancelled'), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: X }
-    default: return { label: copy(language, '待执行', 'Queued'), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: Circle }
+    case 'completed': return { label: t('common.completed', asLanguage(language)), tone: 'text-emerald-400', bg: 'bg-emerald-400/10', icon: CheckCircle2 }
+    case 'running': return { label: t('common.running', asLanguage(language)), tone: 'text-accent', bg: 'bg-accent/10', icon: LoaderCircle }
+    case 'failed': return { label: t('common.failed', asLanguage(language)), tone: 'text-red-400', bg: 'bg-red-400/10', icon: AlertTriangle }
+    case 'skipped': return { label: t('common.skipped', asLanguage(language)), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: Circle }
+    case 'cancelled': return { label: t('taskBoard.cancelled', asLanguage(language)), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: X }
+    default: return { label: t('taskBoard.queued', asLanguage(language)), tone: 'text-text-muted', bg: 'bg-text-primary/5', icon: Circle }
   }
 }
 
@@ -66,18 +66,18 @@ function ProofMatrix({ tasks, language }: { tasks: PlanTask[]; language: string 
   const evidenceById = new Map(tasks.flatMap(task => task.evidence || []).map(item => [item.id, item]))
   const summary = summarizeProofGraph(tasks)
   return <section>
-    <div className="mb-3 flex items-end justify-between gap-4"><div><h3 className="text-[13px] font-semibold text-text-primary">{copy(language, '验收矩阵', 'Acceptance matrix')}</h3><p className="mt-1 text-[11px] leading-5 text-text-muted">{copy(language, '每条结论都应能回溯到测试、诊断、产物、差异或审查证据。', 'Every conclusion should trace back to test, diagnostic, artifact, diff, or review evidence.')}</p></div><span className="text-[11px] tabular-nums text-text-muted">{summary.proven}/{summary.total} {copy(language, '已证明', 'proven')}</span></div>
+    <div className="mb-3 flex items-end justify-between gap-4"><div><h3 className="text-[13px] font-semibold text-text-primary">{t('taskBoard.acceptanceMatrix', asLanguage(language))}</h3><p className="mt-1 text-[11px] leading-5 text-text-muted">{t('taskBoard.everyConclusionShouldTrace', asLanguage(language))}</p></div><span className="text-[11px] tabular-nums text-text-muted">{summary.proven}/{summary.total} {t('taskBoard.proven', asLanguage(language))}</span></div>
     <div className="overflow-hidden rounded-xl border border-border/50">
       {tasks.flatMap(task => (task.acceptanceCriteria || []).map(criterion => ({ task, criterion }))).map(({ task, criterion }) => {
         const evidence = criterion.evidenceIds.map(id => evidenceById.get(id)).filter(Boolean)
         const tone = criterion.status === 'proven' ? 'text-emerald-500' : criterion.status === 'failed' ? 'text-red-400' : 'text-amber-500'
         return <div key={`${task.id}:${criterion.id}`} className="grid grid-cols-[minmax(180px,.8fr)_minmax(260px,1.4fr)_100px] gap-4 border-b border-border/35 px-4 py-3 last:border-0 max-md:grid-cols-1">
           <div><div className="text-[11px] text-text-muted">{task.title}</div><div className="mt-1 text-[12px] font-medium leading-5 text-text-primary">{criterion.text}</div></div>
-          <div className="space-y-1.5">{evidence.length ? evidence.map(item => <div key={item!.id} className="flex items-start gap-2 text-[11px] leading-5 text-text-secondary"><span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${item!.status === 'passed' ? 'bg-emerald-500' : item!.status === 'failed' ? 'bg-red-400' : 'bg-text-muted'}`} /><span><strong className="font-medium">{item!.label}</strong>{item!.summary ? ` · ${item!.summary}` : ''}</span></div>) : <span className="text-[11px] text-text-muted">{copy(language, '尚未收集证据', 'No evidence collected')}</span>}</div>
-          <span className={`text-[11px] font-semibold ${tone}`}>{criterion.status === 'proven' ? copy(language, '已证明', 'Proven') : criterion.status === 'failed' ? copy(language, '未通过', 'Failed') : copy(language, '待证明', 'Pending')}</span>
+          <div className="space-y-1.5">{evidence.length ? evidence.map(item => <div key={item!.id} className="flex items-start gap-2 text-[11px] leading-5 text-text-secondary"><span className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${item!.status === 'passed' ? 'bg-emerald-500' : item!.status === 'failed' ? 'bg-red-400' : 'bg-text-muted'}`} /><span><strong className="font-medium">{item!.label}</strong>{item!.summary ? ` · ${item!.summary}` : ''}</span></div>) : <span className="text-[11px] text-text-muted">{t('taskBoard.noEvidenceCollected', asLanguage(language))}</span>}</div>
+          <span className={`text-[11px] font-semibold ${tone}`}>{criterion.status === 'proven' ? t('taskBoard.proven2', asLanguage(language)) : criterion.status === 'failed' ? t('taskBoard.failed', asLanguage(language)) : t('taskBoard.pending', asLanguage(language))}</span>
         </div>
       })}
-      {summary.total === 0 && <div className="px-4 py-8 text-center text-[12px] text-text-muted">{copy(language, '计划尚未声明验收条件。请返回计划阶段补充可验证条件。', 'No acceptance criteria are declared. Return to the plan stage and add observable conditions.')}</div>}
+      {summary.total === 0 && <div className="px-4 py-8 text-center text-[12px] text-text-muted">{t('taskBoard.noAcceptanceCriteriaAre', asLanguage(language))}</div>}
     </div>
   </section>
 }
@@ -95,7 +95,7 @@ function parseRequirementDocument(content: string, fallbackTitle: string, langua
 
   const ensureSection = () => {
     if (!current) {
-      current = { title: language === 'zh' ? '已确认范围' : 'Confirmed scope', items: [] }
+      current = { title: t('common.confirmedScope', asLanguage(language)), items: [] }
       sections.push(current)
     }
     return current
@@ -154,8 +154,8 @@ const ModeToggle = memo(function ModeToggle({ mode, disabled, onChange, language
 }) {
   return <div className="inline-flex rounded-md border border-border/60 bg-background/55 p-0.5">
     {([
-      ['sequential', Rows3, copy(language, '顺序', 'Serial')],
-      ['parallel', GitBranch, copy(language, '并行', 'Parallel')],
+      ['sequential', Rows3, t('taskBoard.serial', asLanguage(language))],
+      ['parallel', GitBranch, t('taskBoard.parallel', asLanguage(language))],
     ] as const).map(([value, Icon, label]) => <button key={value} type="button" disabled={disabled} onClick={() => onChange(value)} className={`flex h-6 items-center gap-1.5 rounded px-2 text-[11px] font-medium disabled:opacity-50 ${mode === value ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'}`}><Icon className="h-3 w-3" />{label}</button>)}
   </div>
 })
@@ -330,7 +330,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
     if (!plan) return
     const { startPlanExecution } = await import('@/renderer/agent/plan/planExecutor')
     const result = await startPlanExecution(plan.id)
-    if (!result.success) toast.error(copy(language, '启动执行失败', 'Failed to start'), result.message)
+    if (!result.success) toast.error(t('common.failedToStart', asLanguage(language)), result.message)
   }, [language, plan])
   const pause = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).pausePlanExecution(planId), [planId])
   const stop = useCallback(async () => (await import('@/renderer/agent/plan/planExecutor')).stopPlanExecution(planId), [planId])
@@ -338,10 +338,10 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
   const requestChanges = useCallback(() => {
     const result = beginPlanRevision(planId, 'validation', language)
     if (result.success) toast.info(result.message)
-    else toast.error(copy(language, '无法继续调整', 'Unable to revise'), result.message)
+    else toast.error(t('common.unableToRevise', asLanguage(language)), result.message)
   }, [language, planId])
 
-  if (!plan) return <div className="flex h-full items-center justify-center text-sm text-text-muted">{copy(language, '计划不存在', 'Plan not found')}</div>
+  if (!plan) return <div className="flex h-full items-center justify-center text-sm text-text-muted">{t('taskBoard.planNotFound', asLanguage(language))}</div>
 
   const promptOptions = getPromptTemplateSummary().map(item => ({ value: item.id, label: item.nameZh || item.name }))
 
@@ -349,7 +349,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
     <header className="shrink-0 border-b border-border/50 px-5 pb-3.5 pt-3">
       <div className="flex h-8 items-center gap-3 border-b border-border/35 pb-3">
         <History className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-        <span className="shrink-0 text-[10px] text-text-muted">{copy(language, '计划历史', 'Plan history')}</span>
+        <span className="shrink-0 text-[10px] text-text-muted">{t('common.planHistory', asLanguage(language))}</span>
         {planOptions.length > 0 && onPlanChange
           ? <Select className="w-[290px] border-0 bg-transparent font-semibold" options={planOptions} value={plan.id} onChange={onPlanChange} />
           : <h1 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-text-primary">{plan.name}</h1>}
@@ -358,8 +358,8 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
         <div className="w-full max-w-[520px]"><PlanStageTrace stage={actualStage} selectedStage={stage} language={language} onStageChange={nextStage => selectViewStage(plan.id, nextStage)} /></div>
         <div className="flex shrink-0 items-center gap-2">
           <ModeToggle language={language} mode={plan.executionMode} disabled={isLive || isPaused} onChange={mode => updatePlan(plan.id, { executionMode: mode })} />
-          <Button variant="ghost" size="sm" onClick={() => setShowRequirements(true)} leftIcon={<FileText className="h-3.5 w-3.5" />}>{copy(language, '需求', 'Brief')}</Button>
-          {isLive ? <><Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-3.5 w-3.5" />}>{copy(language, '暂停计划', 'Pause')}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{copy(language, '停止', 'Stop')}</Button></> : isPaused ? <><Button size="sm" onClick={resume} leftIcon={<Play className="h-3.5 w-3.5" />}>{copy(language, '继续', 'Resume')}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{copy(language, '停止', 'Stop')}</Button></> : canStart ? <Button size="sm" onClick={start} leftIcon={<Play className="h-3.5 w-3.5" />}>{copy(language, '批准并执行', 'Approve and run')}</Button> : null}
+          <Button variant="ghost" size="sm" onClick={() => setShowRequirements(true)} leftIcon={<FileText className="h-3.5 w-3.5" />}>{t('common.brief', asLanguage(language))}</Button>
+          {isLive ? <><Button variant="secondary" size="sm" onClick={pause} disabled={plan.status !== 'executing'} leftIcon={<Pause className="h-3.5 w-3.5" />}>{t('taskBoard.pause', asLanguage(language))}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{t('common.stop', asLanguage(language))}</Button></> : isPaused ? <><Button size="sm" onClick={resume} leftIcon={<Play className="h-3.5 w-3.5" />}>{t('taskBoard.resume', asLanguage(language))}</Button><Button variant="danger" size="sm" onClick={stop} leftIcon={<Square className="h-3 w-3" />}>{t('common.stop', asLanguage(language))}</Button></> : canStart ? <Button size="sm" onClick={start} leftIcon={<Play className="h-3.5 w-3.5" />}>{t('common.approveAndRun', asLanguage(language))}</Button> : null}
         </div>
       </div>
       {(isLive || isPaused || actualStage === 'validation') && <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-text-primary/[0.05]"><div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${stats.percent}%` }} /></div>}
@@ -368,40 +368,40 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
     {stage === 'requirements' ? <main className="min-h-0 flex-1 overflow-y-auto bg-background custom-scrollbar">
       <div className="mx-auto min-h-full max-w-5xl px-6 py-5">
         <div className="border-b border-border/45 pb-4">
-          <h2 className="text-[16px] font-semibold text-text-primary">{copy(language, '需求澄清简报', 'Requirement brief')}</h2>
-          <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{copy(language, '以下信息来自已确认的真实需求文档，可随时返回审阅；调整会产生新的计划修订。', 'This review is generated from the confirmed source brief. Revisions create an updated plan version.')}</p>
+          <h2 className="text-[16px] font-semibold text-text-primary">{t('taskBoard.requirementBrief', asLanguage(language))}</h2>
+          <p className="mt-1.5 text-[10px] leading-5 text-text-muted">{t('taskBoard.thisReviewIsGenerated', asLanguage(language))}</p>
         </div>
         <div className="mt-5"><PlanStageContentView content={requirementStageContent} hideHeader /></div>
         <section className="hidden mt-5 overflow-hidden rounded-xl border border-border/50 bg-surface/[0.06]">
           <div className="flex items-center gap-3 border-b border-border/40 px-4 py-3.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/[0.07] text-accent"><FileText className="h-4 w-4" /></span>
-            <div className="min-w-0"><div className="text-[11px] font-medium text-text-muted">{copy(language, '本次目标', 'Objective')}</div><h3 className="mt-0.5 truncate text-[12px] font-semibold text-text-primary">{requirementDocument.title}</h3></div>
+            <div className="min-w-0"><div className="text-[11px] font-medium text-text-muted">{t('common.objective', asLanguage(language))}</div><h3 className="mt-0.5 truncate text-[12px] font-semibold text-text-primary">{requirementDocument.title}</h3></div>
           </div>
           {requirementDocument.sections.length > 0 ? <div className="divide-y divide-border/40">
             {requirementDocument.sections.map((section, sectionIndex) => <div key={`${section.title}:${sectionIndex}`} className="grid grid-cols-[150px_minmax(0,1fr)] gap-5 px-4 py-3.5 max-md:grid-cols-1 max-md:gap-2">
               <div className="flex items-start gap-2 text-[10px] font-semibold text-text-secondary"><span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-emerald-400/10 text-emerald-500"><Check className="h-2.5 w-2.5" /></span><span>{section.title}</span></div>
               <div className="space-y-2">{section.items.map((item, itemIndex) => <div key={`${item}:${itemIndex}`} className="flex items-start gap-2 text-[10px] leading-5 text-text-secondary"><span className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-text-muted/55" /><span>{item}</span></div>)}</div>
             </div>)}
-          </div> : <div className="flex min-h-48 items-center justify-center text-[10px] text-text-muted">{copy(language, '需求文档正在整理', 'The brief is being prepared')}</div>}
+          </div> : <div className="flex min-h-48 items-center justify-center text-[10px] text-text-muted">{t('taskBoard.theBriefIsBeing', asLanguage(language))}</div>}
         </section>
         <div className="mt-4 flex items-center justify-between rounded-lg border border-emerald-400/20 bg-emerald-400/[0.035] px-4 py-3">
-          <div className="flex items-center gap-2 text-[10px] font-medium text-emerald-500"><CheckCircle2 className="h-4 w-4" />{copy(language, '需求已确认并生成结构化计划', 'Requirements confirmed and structured')}</div>
-          <button type="button" onClick={requestChanges} className="text-[11px] font-medium text-text-muted hover:text-accent">{copy(language, '提出调整', 'Request revision')}</button>
+          <div className="flex items-center gap-2 text-[10px] font-medium text-emerald-500"><CheckCircle2 className="h-4 w-4" />{t('taskBoard.requirementsConfirmedAndStructured', asLanguage(language))}</div>
+          <button type="button" onClick={requestChanges} className="text-[11px] font-medium text-text-muted hover:text-accent">{t('taskBoard.requestRevision', asLanguage(language))}</button>
         </div>
       </div>
     </main> : stage === 'validation' && actualStage !== 'validation' ? <main className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
-      <div className="max-w-sm"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/[0.04] text-text-muted"><CheckCircle2 className="h-5 w-5" /></span><h2 className="mt-3 text-[12px] font-semibold text-text-primary">{copy(language, '尚未进入验收阶段', 'Validation has not started')}</h2><p className="mt-1.5 text-[11px] leading-4 text-text-muted">{copy(language, '任务执行完成后，交付结果、失败项和变更文件会显示在这里。', 'Delivery results, failures, and changed files will appear here after execution.')}</p></div>
+      <div className="max-w-sm"><span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/[0.04] text-text-muted"><CheckCircle2 className="h-5 w-5" /></span><h2 className="mt-3 text-[12px] font-semibold text-text-primary">{t('taskBoard.validationHasNotStarted', asLanguage(language))}</h2><p className="mt-1.5 text-[11px] leading-4 text-text-muted">{t('taskBoard.deliveryResultsFailuresAnd', asLanguage(language))}</p></div>
     </main> : stage === 'validation' ? <main className="min-h-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
       <div className="mx-auto max-w-5xl">
         <section className="border-b border-border/45 pb-5">
-          <div className="flex items-start justify-between gap-5"><div className="flex items-start gap-3"><CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${stats.failed ? 'text-amber-400' : 'text-emerald-400'}`} /><div><h2 className="text-[15px] font-semibold text-text-primary">{plan.validation?.status === 'accepted' ? copy(language, '结果已经验收', 'Results accepted') : stats.failed ? copy(language, '执行结束，存在失败任务', 'Execution finished with failures') : copy(language, '计划已完成，等待验收', 'Plan complete and ready for validation')}</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">{stats.completed}/{stats.total} {copy(language, '项任务完成', 'tasks completed')} · {stats.files.length} {copy(language, '个计划资源', 'planned resources')} · {formatDuration(stats.duration)}</p></div></div>
-            {plan.validation?.status === 'accepted' ? <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-emerald-400/25 bg-emerald-400/[0.04] px-3 text-[11px] font-medium text-emerald-500"><CheckCircle2 className="h-3.5 w-3.5" />{copy(language, '已确认完成', 'Accepted')}</span> : <div className="flex shrink-0 gap-2"><Button variant="secondary" size="sm" onClick={requestChanges} leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}>{copy(language, '继续调整', 'Request changes')}</Button><Button size="sm" disabled={stats.failed > 0 || (proofSummary.total > 0 && (proofSummary.pending > 0 || proofSummary.failed > 0))} onClick={() => updatePlan(plan.id, { validation: { status: 'accepted', reviewedAt: Date.now() } })} leftIcon={<Check className="h-3.5 w-3.5" />}>{copy(language, '确认完成', 'Accept')}</Button></div>}
+          <div className="flex items-start justify-between gap-5"><div className="flex items-start gap-3"><CheckCircle2 className={`mt-0.5 h-5 w-5 shrink-0 ${stats.failed ? 'text-amber-400' : 'text-emerald-400'}`} /><div><h2 className="text-[15px] font-semibold text-text-primary">{plan.validation?.status === 'accepted' ? t('taskBoard.resultsAccepted', asLanguage(language)) : stats.failed ? t('taskBoard.executionFinishedWithFailures', asLanguage(language)) : t('taskBoard.planCompleteAndReady', asLanguage(language))}</h2><p className="mt-1 text-[10px] leading-5 text-text-muted">{stats.completed}/{stats.total} {t('common.tasksCompleted', asLanguage(language))} · {stats.files.length} {t('taskBoard.plannedResources', asLanguage(language))} · {formatDuration(stats.duration)}</p></div></div>
+            {plan.validation?.status === 'accepted' ? <span className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-emerald-400/25 bg-emerald-400/[0.04] px-3 text-[11px] font-medium text-emerald-500"><CheckCircle2 className="h-3.5 w-3.5" />{t('taskBoard.accepted', asLanguage(language))}</span> : <div className="flex shrink-0 gap-2"><Button variant="secondary" size="sm" onClick={requestChanges} leftIcon={<MessageSquareText className="h-3.5 w-3.5" />}>{t('common.requestChanges', asLanguage(language))}</Button><Button size="sm" disabled={stats.failed > 0 || (proofSummary.total > 0 && (proofSummary.pending > 0 || proofSummary.failed > 0))} onClick={() => updatePlan(plan.id, { validation: { status: 'accepted', reviewedAt: Date.now() } })} leftIcon={<Check className="h-3.5 w-3.5" />}>{t('taskBoard.accept', asLanguage(language))}</Button></div>}
           </div>
         </section>
         <div className="mt-5"><ProofMatrix tasks={plan.tasks} language={language} /></div>
         <div className="mt-5 grid grid-cols-[minmax(0,1.25fr)_minmax(280px,.75fr)] gap-6 max-lg:grid-cols-1">
-          <section><div className="mb-2 text-[10px] font-medium text-text-muted">{copy(language, '验收结果', 'Validation results')}</div><div className="divide-y divide-border/40 border-y border-border/40">{plan.tasks.map(task => <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-start gap-3 py-3 text-left hover:bg-surface/[0.12]"><span className="mt-0.5">{task.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-red-400" />}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-secondary">{task.title}</strong><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-muted">{task.error || task.output || task.description}</span></span><time className="text-[10px] tabular-nums text-text-muted">{task.startedAt ? formatDuration((task.completedAt || now) - task.startedAt) : '—'}</time></button>)}</div></section>
-          <aside><div className="mb-2 text-[10px] font-medium text-text-muted">{copy(language, '交付资源', 'Delivered resources')}</div>{stats.files.length ? <div className="divide-y divide-border/35 border-y border-border/35">{stats.files.map(file => <div key={file} className="flex items-center gap-2 py-2.5 text-[11px] text-text-secondary"><FileCode2 className="h-3.5 w-3.5 text-text-muted" /><span className="min-w-0 flex-1 truncate">{file}</span></div>)}</div> : <p className="border-y border-border/35 py-3 text-[11px] leading-4 text-text-muted">{copy(language, '计划未声明产出文件，请根据各任务结果完成验收。', 'No output files were declared; review task results instead.')}</p>}</aside>
+          <section><div className="mb-2 text-[10px] font-medium text-text-muted">{t('taskBoard.validationResults', asLanguage(language))}</div><div className="divide-y divide-border/40 border-y border-border/40">{plan.tasks.map(task => <button key={task.id} onClick={() => setSelectedTaskId(task.id)} className="flex w-full items-start gap-3 py-3 text-left hover:bg-surface/[0.12]"><span className="mt-0.5">{task.status === 'completed' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : <AlertTriangle className="h-4 w-4 text-red-400" />}</span><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-secondary">{task.title}</strong><span className="mt-1 block line-clamp-2 text-[11px] leading-4 text-text-muted">{task.error || task.output || task.description}</span></span><time className="text-[10px] tabular-nums text-text-muted">{task.startedAt ? formatDuration((task.completedAt || now) - task.startedAt) : '—'}</time></button>)}</div></section>
+          <aside><div className="mb-2 text-[10px] font-medium text-text-muted">{t('taskBoard.deliveredResources', asLanguage(language))}</div>{stats.files.length ? <div className="divide-y divide-border/35 border-y border-border/35">{stats.files.map(file => <div key={file} className="flex items-center gap-2 py-2.5 text-[11px] text-text-secondary"><FileCode2 className="h-3.5 w-3.5 text-text-muted" /><span className="min-w-0 flex-1 truncate">{file}</span></div>)}</div> : <p className="border-y border-border/35 py-3 text-[11px] leading-4 text-text-muted">{t('taskBoard.noOutputFilesWere', asLanguage(language))}</p>}</aside>
         </div>
       </div>
     </main> : stage === 'plan' ? <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -413,23 +413,23 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
             </span>
             <div className="min-w-0">
               <h2 className="text-[12px] font-semibold text-text-primary">{graphStats.hasCycle || graphStats.missingDependencies
-                ? copy(language, '计划依赖需要调整', 'Plan dependencies need attention')
-                : copy(language, '计划已就绪，等待审阅', 'Plan is ready for review')}</h2>
-              <p className="mt-1 text-[11px] leading-4 text-text-muted">{copy(language, '任务节点与连线由真实依赖自动生成；审阅任务配置后即可批准执行。', 'Nodes and edges are generated from real dependencies. Review task setup before execution.')}</p>
+                ? t('taskBoard.planDependenciesNeedAttention', asLanguage(language))
+                : t('taskBoard.planIsReadyFor', asLanguage(language))}</h2>
+              <p className="mt-1 text-[11px] leading-4 text-text-muted">{t('taskBoard.nodesAndEdgesAre', asLanguage(language))}</p>
             </div>
           </div>
           <div className="grid shrink-0 grid-cols-4 divide-x divide-border/50 text-center">
-            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{plan.tasks.length}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{copy(language, '任务', 'Tasks')}</span></div>
-            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.maxParallelism}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{copy(language, '最大并行', 'Max parallel')}</span></div>
-            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.roles}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{copy(language, '角色', 'Roles')}</span></div>
-            <div className="min-w-[84px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.estimatedTokens ? graphStats.estimatedTokens.toLocaleString() : '—'}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{copy(language, '预算 Tokens', 'Token budget')}</span></div>
+            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{plan.tasks.length}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('common.tasks', asLanguage(language))}</span></div>
+            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.maxParallelism}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('common.maxParallel', asLanguage(language))}</span></div>
+            <div className="min-w-[70px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.roles}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('taskBoard.roles', asLanguage(language))}</span></div>
+            <div className="min-w-[84px] px-3"><strong className="block text-[12px] font-semibold tabular-nums text-text-primary">{graphStats.estimatedTokens ? graphStats.estimatedTokens.toLocaleString() : '—'}</strong><span className="mt-0.5 block text-[10px] text-text-muted">{t('taskBoard.tokenBudget', asLanguage(language))}</span></div>
           </div>
         </div>
       </section>
       <div className="mx-5 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/50 bg-background">
         <div className="flex h-9 shrink-0 items-center justify-between border-b border-border/45 px-3.5 text-[11px] text-text-muted">
-          <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{copy(language, '任务依赖图', 'Task dependency graph')}</span>
-          <div className="flex items-center gap-3"><span>{graphStats.models} {copy(language, '个模型配置', 'model configurations')} · {plan.executionMode === 'parallel' ? copy(language, '并行调度', 'Parallel scheduling') : copy(language, '顺序调度', 'Sequential scheduling')}</span>{!inspectorOpen && selectedTask && <button type="button" onClick={() => setInspectorOpen(true)} className="inline-flex h-6 items-center gap-1 rounded-md border border-border/55 px-2 text-[10px] text-text-secondary hover:border-accent/30 hover:text-accent"><Settings2 className="h-3 w-3" />{copy(language, '配置任务', 'Configure')}</button>}</div>
+          <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" />{t('taskBoard.taskDependencyGraph', asLanguage(language))}</span>
+          <div className="flex items-center gap-3"><span>{graphStats.models} {t('taskBoard.modelConfigurations', asLanguage(language))} · {plan.executionMode === 'parallel' ? t('taskBoard.parallelScheduling', asLanguage(language)) : t('taskBoard.sequentialScheduling', asLanguage(language))}</span>{!inspectorOpen && selectedTask && <button type="button" onClick={() => setInspectorOpen(true)} className="inline-flex h-6 items-center gap-1 rounded-md border border-border/55 px-2 text-[10px] text-text-secondary hover:border-accent/30 hover:text-accent"><Settings2 className="h-3 w-3" />{t('taskBoard.configure', asLanguage(language))}</button>}</div>
         </div>
         <div className="relative flex min-h-0 flex-1">
           <PlanDependencyGraph
@@ -445,7 +445,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
       <div className="h-4 shrink-0" />
     </main> : <div className="flex min-h-0 flex-1">
       <aside className="w-[310px] shrink-0 overflow-y-auto border-r border-border/55 bg-surface/[0.08] px-3 py-3 custom-scrollbar max-lg:w-[275px]">
-        <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-medium text-text-muted"><span>{copy(language, '任务调度', 'Task orchestration')}</span><span>{plan.executionMode === 'parallel' ? copy(language, '并行', 'Parallel') : copy(language, '顺序', 'Serial')}</span></div>
+        <div className="mb-2 flex items-center justify-between px-1 text-[11px] font-medium text-text-muted"><span>{t('common.taskOrchestration', asLanguage(language))}</span><span>{plan.executionMode === 'parallel' ? t('taskBoard.parallel', asLanguage(language)) : t('taskBoard.serial', asLanguage(language))}</span></div>
         <div className="space-y-1">
           {plan.tasks.map((task, index) => {
             const runtime = runtimeByTask.get(task.id)
@@ -456,7 +456,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
             return <div key={task.id} className="relative" style={{ paddingLeft: `${depth * 14}px` }}>
               {depth > 0 && <span className="absolute left-[3px] top-0 h-1/2 w-[10px] rounded-bl border-b border-l border-border/70" style={{ transform: `translateX(${(depth - 1) * 14}px)` }} />}
               <button onClick={() => setSelectedTaskId(task.id)} className={`relative z-[1] w-full rounded-lg border px-2.5 py-2.5 text-left transition-colors ${active ? 'border-accent/35 bg-accent/[0.065]' : 'border-transparent hover:border-border/60 hover:bg-surface/35'}`}>
-                <div className="flex items-start gap-2.5"><div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${meta.bg} ${meta.tone}`}>{task.status === 'pending' && !runtime?.waitingApproval ? <span className="text-[11px] font-semibold tabular-nums">{index + 1}</span> : <Icon className={`h-3.5 w-3.5 ${task.status === 'running' && !runtime?.waitingApproval ? 'animate-spin' : ''}`} />}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-medium text-text-primary">{task.title}</span><span className={`shrink-0 text-[10px] ${meta.tone}`}>{meta.label}</span></div><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-muted">{runtime?.currentTool?.name || runtime?.statusText || task.description}</p>{task.dependencies.length > 0 && <div className="mt-1.5 truncate text-[10px] text-text-muted/55">{copy(language, '依赖', 'Depends on')} · {task.dependencies.map(id => plan.tasks.find(item => item.id === id)?.title || id).join('、')}</div>}</div></div>
+                <div className="flex items-start gap-2.5"><div className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${meta.bg} ${meta.tone}`}>{task.status === 'pending' && !runtime?.waitingApproval ? <span className="text-[11px] font-semibold tabular-nums">{index + 1}</span> : <Icon className={`h-3.5 w-3.5 ${task.status === 'running' && !runtime?.waitingApproval ? 'animate-spin' : ''}`} />}</div><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><span className="truncate text-[10px] font-medium text-text-primary">{task.title}</span><span className={`shrink-0 text-[10px] ${meta.tone}`}>{meta.label}</span></div><p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-muted">{runtime?.currentTool?.name || runtime?.statusText || task.description}</p>{task.dependencies.length > 0 && <div className="mt-1.5 truncate text-[10px] text-text-muted/55">{t('common.depends', asLanguage(language))} · {task.dependencies.map(id => plan.tasks.find(item => item.id === id)?.title || id).join('、')}</div>}</div></div>
               </button>
             </div>
           })}
@@ -466,8 +466,8 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
       <main className="min-w-0 flex-1 overflow-y-auto p-5 custom-scrollbar">
         {selectedTask && <div className="mx-auto max-w-4xl">
           <section className="border-b border-border/45 pb-5">
-            <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="mb-2 flex items-center gap-2">{(() => { const meta = statusMeta(selectedTask, Boolean(selectedRuntime?.waitingApproval), language); const Icon = meta.icon; return <><Icon className={`h-3.5 w-3.5 ${meta.tone} ${selectedTask.status === 'running' && !selectedRuntime?.waitingApproval ? 'animate-spin' : ''}`} /><span className={`text-[11px] font-medium ${meta.tone}`}>{meta.label}</span>{selectedTask.startedAt && <span className="text-[10px] tabular-nums text-text-muted">{formatDuration((selectedTask.completedAt || now) - selectedTask.startedAt)}</span>}</> })()}</div><h2 className="text-[18px] font-semibold text-text-primary">{selectedTask.title}</h2><p className="mt-2 max-w-3xl text-[11px] leading-5 text-text-secondary">{selectedTask.description}</p></div>{selectedTask.threadId && <Button variant="ghost" size="sm" onClick={() => switchThread(selectedTask.threadId!)} leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>{copy(language, '完整记录', 'Full log')}</Button>}</div>
-            <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{getPlanProviderDisplayName(selectedTask.provider)} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}{selectedTask.modelRecommendation && <span className="rounded bg-accent/[0.08] px-2 py-1 text-accent">{copy(language, '历史推荐', 'History pick')} · {Math.round(selectedTask.modelRecommendation.successRate * 100)}% · n={selectedTask.modelRecommendation.sampleSize}</span>}{selectedTask.worktreeLane && <span className={`rounded px-2 py-1 ${selectedTask.worktreeLane.status === 'merged' ? 'bg-emerald-400/[0.08] text-emerald-500' : selectedTask.worktreeLane.status === 'discarded' ? 'bg-surface/60' : selectedTask.worktreeLane.status === 'conflict' || selectedTask.worktreeLane.status === 'failed' ? 'bg-red-400/[0.08] text-red-400' : 'bg-amber-400/[0.08] text-amber-500'}`}>{t('worktreeLane.chipLabel', asLanguage(language))} · {t(`worktreeLane.status.${selectedTask.worktreeLane.status}`, asLanguage(language))}</span>}</div>
+            <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="mb-2 flex items-center gap-2">{(() => { const meta = statusMeta(selectedTask, Boolean(selectedRuntime?.waitingApproval), language); const Icon = meta.icon; return <><Icon className={`h-3.5 w-3.5 ${meta.tone} ${selectedTask.status === 'running' && !selectedRuntime?.waitingApproval ? 'animate-spin' : ''}`} /><span className={`text-[11px] font-medium ${meta.tone}`}>{meta.label}</span>{selectedTask.startedAt && <span className="text-[10px] tabular-nums text-text-muted">{formatDuration((selectedTask.completedAt || now) - selectedTask.startedAt)}</span>}</> })()}</div><h2 className="text-[18px] font-semibold text-text-primary">{selectedTask.title}</h2><p className="mt-2 max-w-3xl text-[11px] leading-5 text-text-secondary">{selectedTask.description}</p></div>{selectedTask.threadId && <Button variant="ghost" size="sm" onClick={() => switchThread(selectedTask.threadId!)} leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>{t('taskBoard.fullLog', asLanguage(language))}</Button>}</div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[10px] text-text-muted"><span className="rounded bg-surface/60 px-2 py-1">{selectedTask.role}</span><span className="rounded bg-surface/60 px-2 py-1">{getPlanProviderDisplayName(selectedTask.provider)} · {selectedTask.model}</span>{selectedTask.executionClass && <span className="rounded bg-surface/60 px-2 py-1">{selectedTask.executionClass}</span>}{selectedTask.modelRecommendation && <span className="rounded bg-accent/[0.08] px-2 py-1 text-accent">{t('taskBoard.historyPick', asLanguage(language))} · {Math.round(selectedTask.modelRecommendation.successRate * 100)}% · n={selectedTask.modelRecommendation.sampleSize}</span>}{selectedTask.worktreeLane && <span className={`rounded px-2 py-1 ${selectedTask.worktreeLane.status === 'merged' ? 'bg-emerald-400/[0.08] text-emerald-500' : selectedTask.worktreeLane.status === 'discarded' ? 'bg-surface/60' : selectedTask.worktreeLane.status === 'conflict' || selectedTask.worktreeLane.status === 'failed' ? 'bg-red-400/[0.08] text-red-400' : 'bg-amber-400/[0.08] text-amber-500'}`}>{t('worktreeLane.chipLabel', asLanguage(language))} · {t(`worktreeLane.status.${selectedTask.worktreeLane.status}`, asLanguage(language))}</span>}</div>
             {selectedTask.worktreeLane && <WorktreeLanePanel
               lane={selectedTask.worktreeLane}
               workspacePath={workspacePath}
@@ -484,34 +484,34 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
 
           {(selectedTask.producesFiles?.length || selectedRuntime?.events.length) && <div className="grid grid-cols-2 gap-4 border-b border-border/45 py-5 max-xl:grid-cols-1">
             <section>
-              <div className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"><FileOutput className="h-3.5 w-3.5 text-text-muted" />{copy(language, '产出物', 'Artifacts')}</div>
+              <div className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"><FileOutput className="h-3.5 w-3.5 text-text-muted" />{t('taskBoard.artifacts', asLanguage(language))}</div>
               <div className="overflow-hidden rounded-xl border border-border/50">
                 {(selectedTask.producesFiles || []).map(file => <div key={file} className="flex items-center gap-2 border-b border-border/35 px-3 py-2.5 last:border-0"><FileCode2 className="h-3.5 w-3.5 text-text-muted" /><span className="min-w-0 flex-1 truncate text-[10px] text-text-secondary">{file}</span>{selectedTask.status === 'running' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" /> : selectedTask.status === 'completed' ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Circle className="h-3.5 w-3.5 text-text-muted/45" />}</div>)}
-                {!selectedTask.producesFiles?.length && <div className="px-3 py-5 text-center text-[11px] text-text-muted">{copy(language, '此任务未声明文件产出', 'No declared file artifacts')}</div>}
+                {!selectedTask.producesFiles?.length && <div className="px-3 py-5 text-center text-[11px] text-text-muted">{t('taskBoard.noDeclaredFileArtifacts', asLanguage(language))}</div>}
               </div>
             </section>
             <section>
-              <div className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"><TerminalSquare className="h-3.5 w-3.5 text-text-muted" />{copy(language, '执行日志', 'Execution log')}</div>
+              <div className="mb-2.5 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"><TerminalSquare className="h-3.5 w-3.5 text-text-muted" />{t('taskBoard.executionLog', asLanguage(language))}</div>
               <div className="max-h-60 overflow-auto rounded-xl border border-border/50 bg-surface/[0.05] px-3 py-2 custom-scrollbar">
-                {selectedRuntime?.events.map(event => <div key={event.id} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-border/30 py-2 last:border-0"><span className="truncate font-mono text-[11px] text-text-secondary">{event.name}</span><span className="truncate text-[11px] text-text-muted">{event.detail || copy(language, '已调用', 'Invoked')}</span></div>)}
-                {!selectedRuntime?.events.length && <div className="py-3 text-center text-[11px] text-text-muted">{selectedTask.status === 'pending' ? copy(language, '任务开始后将在这里显示实时动作', 'Live actions appear when the task starts') : copy(language, '暂无工具动作', 'No tool activity yet')}</div>}
+                {selectedRuntime?.events.map(event => <div key={event.id} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 border-b border-border/30 py-2 last:border-0"><span className="truncate font-mono text-[11px] text-text-secondary">{event.name}</span><span className="truncate text-[11px] text-text-muted">{event.detail || t('taskBoard.invoked', asLanguage(language))}</span></div>)}
+                {!selectedRuntime?.events.length && <div className="py-3 text-center text-[11px] text-text-muted">{selectedTask.status === 'pending' ? t('taskBoard.liveActionsAppearWhen', asLanguage(language)) : t('taskBoard.noToolActivityYet', asLanguage(language))}</div>}
               </div>
             </section>
           </div>}
 
           <section className="border-b border-border/45 py-4">
-            <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-[11px] font-medium text-text-muted"><Settings2 className="h-3.5 w-3.5" />{copy(language, '执行配置', 'Execution setup')}</div>{(isLive || isPaused) && <span className="text-[10px] text-text-muted/60">{copy(language, '执行期间不可修改', 'Locked while running')}</span>}</div>
+            <div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-[11px] font-medium text-text-muted"><Settings2 className="h-3.5 w-3.5" />{t('taskBoard.executionSetup', asLanguage(language))}</div>{(isLive || isPaused) && <span className="text-[10px] text-text-muted/60">{t('taskBoard.lockedWhileRunning', asLanguage(language))}</span>}</div>
             <PlanModelSelector provider={selectedTask.provider} model={selectedTask.model} disabled={isLive || isPaused} onChange={(provider, model) => updateTask(plan.id, selectedTask.id, { provider, model, modelSelection: 'manual' })} />
             <div className="mt-2"><Select className="w-full" options={promptOptions} value={selectedTask.role} disabled={isLive || isPaused} onChange={role => updateTask(plan.id, selectedTask.id, { role })} /></div>
           </section>
 
           {selectedRuntime?.waitingApproval && selectedRuntime.tool && <section className="my-4 overflow-hidden rounded-lg border border-amber-400/25 bg-amber-400/[0.045]">
-            <div className="flex items-start gap-3 p-4"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div className="min-w-0 flex-1"><div className="text-[11px] font-semibold text-text-primary">{copy(language, '需要批准才能继续', 'Approval required')}</div><p className="mt-1 text-[11px] leading-4 text-text-muted">{copy(language, '当前任务暂停等待，其他无依赖任务仍可继续调度。', 'This task is paused while independent work continues.')}</p><div className="mt-3 rounded-md bg-background/55 p-2.5"><div className="flex items-center gap-2 text-[11px] font-medium text-text-primary"><TerminalSquare className="h-3.5 w-3.5 text-text-muted" />{selectedRuntime.tool.name}</div><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-4 text-text-muted">{JSON.stringify(selectedRuntime.tool.arguments, null, 2)}</pre></div></div></div>
-            <div className="flex justify-end gap-2 border-t border-amber-400/15 px-3 py-2"><Button variant="danger" size="sm" onClick={() => Agent.reject(selectedTask.requestId || selectedRuntime.thread?.streamState?.requestId)} leftIcon={<X className="h-3.5 w-3.5" />}>{copy(language, '拒绝', 'Reject')}</Button><Button variant="success" size="sm" onClick={() => Agent.approve(selectedTask.requestId || selectedRuntime.thread?.streamState?.requestId)} leftIcon={<Check className="h-3.5 w-3.5" />}>{copy(language, '批准并继续', 'Approve')}</Button></div>
+            <div className="flex items-start gap-3 p-4"><ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div className="min-w-0 flex-1"><div className="text-[11px] font-semibold text-text-primary">{t('taskBoard.approvalRequired', asLanguage(language))}</div><p className="mt-1 text-[11px] leading-4 text-text-muted">{t('taskBoard.thisTaskIsPaused', asLanguage(language))}</p><div className="mt-3 rounded-md bg-background/55 p-2.5"><div className="flex items-center gap-2 text-[11px] font-medium text-text-primary"><TerminalSquare className="h-3.5 w-3.5 text-text-muted" />{selectedRuntime.tool.name}</div><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-4 text-text-muted">{JSON.stringify(selectedRuntime.tool.arguments, null, 2)}</pre></div></div></div>
+            <div className="flex justify-end gap-2 border-t border-amber-400/15 px-3 py-2"><Button variant="danger" size="sm" onClick={() => Agent.reject(selectedTask.requestId || selectedRuntime.thread?.streamState?.requestId)} leftIcon={<X className="h-3.5 w-3.5" />}>{t('toolReject', asLanguage(language))}</Button><Button variant="success" size="sm" onClick={() => Agent.approve(selectedTask.requestId || selectedRuntime.thread?.streamState?.requestId)} leftIcon={<Check className="h-3.5 w-3.5" />}>{t('common.approve', asLanguage(language))}</Button></div>
           </section>}
 
           {(selectedRuntime?.currentTool || selectedRuntime?.statusText || selectedRuntime?.latestText || selectedTask.output || selectedTask.error) && <section className="py-4">
-            <div className="mb-2 text-[11px] font-medium text-text-muted">{selectedTask.error ? copy(language, '错误', 'Error') : copy(language, selectedTask.status === 'running' ? '实时动作' : '任务结果', selectedTask.status === 'running' ? 'Live activity' : 'Task result')}</div>
+            <div className="mb-2 text-[11px] font-medium text-text-muted">{selectedTask.error ? t('toolError', asLanguage(language)) : copy(language, selectedTask.status === 'running' ? '实时动作' : '任务结果', selectedTask.status === 'running' ? 'Live activity' : 'Task result')}</div>
             {selectedRuntime?.currentTool && <div className="mb-2 flex items-center gap-2 border-y border-border/35 py-2 text-[11px] text-text-secondary"><LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" /><span className="font-medium">{selectedRuntime.currentTool.name}</span><span className="truncate text-text-muted">{selectedRuntime.statusText}</span></div>}
             <div className={`whitespace-pre-wrap break-words text-[10px] leading-5 ${selectedTask.error ? 'text-red-400' : 'text-text-secondary'}`}>{selectedTask.error || selectedRuntime?.latestText || selectedTask.output || selectedRuntime?.statusText}</div>
           </section>}
@@ -519,7 +519,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
       </main>
     </div>}
 
-    {showRequirements && <div className="absolute inset-0 z-40 flex justify-end bg-black/20 backdrop-blur-[1px]" onPointerDown={() => setShowRequirements(false)}><section className="flex h-full w-[min(700px,72vw)] flex-col border-l border-border bg-background shadow-2xl" onPointerDown={event => event.stopPropagation()}><div className="flex h-12 shrink-0 items-center justify-between border-b border-border/55 px-4"><div className="flex items-center gap-2 text-[11px] font-semibold text-text-primary"><FileText className="h-3.5 w-3.5 text-text-muted" />{copy(language, '需求文档', 'Plan brief')}</div><button onClick={() => setShowRequirements(false)} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3.5 w-3.5" /></button></div><div className="relative min-h-0 flex-1 overflow-auto">{requirementsContent ? <MarkdownPreview content={requirementsContent} fontSize={13} sourcePath={workspacePath ? `${workspacePath}/.adnify/plan/${plan.requirementsDoc}` : undefined} /> : <div className="flex h-full items-center justify-center text-[10px] text-text-muted">{copy(language, '暂无需求内容', 'No brief content')}</div>}</div></section></div>}
+    {showRequirements && <div className="absolute inset-0 z-40 flex justify-end bg-black/20 backdrop-blur-[1px]" onPointerDown={() => setShowRequirements(false)}><section className="flex h-full w-[min(700px,72vw)] flex-col border-l border-border bg-background shadow-2xl" onPointerDown={event => event.stopPropagation()}><div className="flex h-12 shrink-0 items-center justify-between border-b border-border/55 px-4"><div className="flex items-center gap-2 text-[11px] font-semibold text-text-primary"><FileText className="h-3.5 w-3.5 text-text-muted" />{t('taskBoard.planBrief', asLanguage(language))}</div><button onClick={() => setShowRequirements(false)} className="rounded-md p-1.5 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3.5 w-3.5" /></button></div><div className="relative min-h-0 flex-1 overflow-auto">{requirementsContent ? <MarkdownPreview content={requirementsContent} fontSize={13} sourcePath={workspacePath ? `${workspacePath}/.adnify/plan/${plan.requirementsDoc}` : undefined} /> : <div className="flex h-full items-center justify-center text-[10px] text-text-muted">{t('taskBoard.noBriefContent', asLanguage(language))}</div>}</div></section></div>}
   </div>
 })
 

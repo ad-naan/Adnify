@@ -21,6 +21,7 @@ import { toast } from '@components/common/ToastProvider'
 import { Button, Modal } from '@components/ui'
 import { PromptPreviewModalProps } from '../types'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 type PreviewView = 'layers' | 'raw'
 
@@ -71,7 +72,6 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
     const [activeSection, setActiveSection] = useState<string | null>(null)
     const [view, setView] = useState<PreviewView>('layers')
     const [copiedTarget, setCopiedTarget] = useState<string | null>(null)
-    const t = (zh: string, en: string) => language === 'zh' ? zh : en
 
     useEffect(() => {
         let cancelled = false
@@ -86,7 +86,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
             })
             .catch(() => {
                 if (!cancelled) {
-                    toast.error(t('加载提示词预览失败', 'Failed to load prompt preview'))
+                    toast.error(translate('promptPreviewModal.failedToLoadPrompt', asLanguage(language)))
                 }
             })
             .finally(() => {
@@ -116,11 +116,11 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
     const handleCopy = async (content: string, target: string) => {
         const success = await writeClipboardText(content)
         if (!success) {
-            toast.error(t('复制失败', 'Copy failed'))
+            toast.error(translate('promptPreviewModal.copyFailed', asLanguage(language)))
             return
         }
         setCopiedTarget(target)
-        toast.success(t('已复制到剪贴板', 'Copied to clipboard'))
+        toast.success(translate('changelog.copied', asLanguage(language)))
         window.setTimeout(() => setCopiedTarget(current => current === target ? null : current), 1800)
     }
 
@@ -132,7 +132,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
     if (!template) return null
 
     return (
-        <Modal isOpen onClose={onClose} title={t('系统提示词', 'System prompt')} size="5xl" noPadding>
+        <Modal isOpen onClose={onClose} title={translate('promptPreviewModal.systemPrompt', asLanguage(language))} size="5xl" noPadding>
             <div className="flex h-[min(760px,82vh)] min-h-[560px] flex-col bg-background">
                 <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface/20 px-5 py-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -143,16 +143,16 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                             <div className="flex items-center gap-2">
                                 <span className="truncate text-sm font-medium text-text-primary">{language === 'zh' ? template.nameZh : template.name}</span>
                                 <span className="rounded border border-border-subtle bg-background/50 px-1.5 py-0.5 text-[10px] text-text-muted">
-                                    {preview?.sections.length ?? 0} {t('层', 'layers')}
+                                    {preview?.sections.length ?? 0} {translate('promptPreviewModal.layers', asLanguage(language))}
                                 </span>
                             </div>
                             <p className="mt-0.5 text-[11px] text-text-muted">
-                                {t('这里展示最终系统提示词的组成；工具 Schema 由模型接口单独发送。', 'This shows the final system prompt composition. Tool schemas are sent separately.')}
+                                {translate('promptPreviewModal.thisShowsTheFinal', asLanguage(language))}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex rounded-lg border border-border-subtle bg-background/50 p-0.5" role="tablist" aria-label={t('预览方式', 'Preview mode')}>
+                    <div className="flex rounded-lg border border-border-subtle bg-background/50 p-0.5" role="tablist" aria-label={translate('promptPreviewModal.previewMode', asLanguage(language))}>
                         {(['layers', 'raw'] as const).map(item => (
                             <button
                                 key={item}
@@ -166,7 +166,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                     }`}
                             >
                                 {item === 'layers' ? <Layers3 className="h-3.5 w-3.5" /> : <Braces className="h-3.5 w-3.5" />}
-                                {item === 'layers' ? t('分层', 'Layers') : t('最终原文', 'Raw')}
+                                {item === 'layers' ? translate('promptPreviewModal.layers2', asLanguage(language)) : translate('promptPreviewModal.raw', asLanguage(language))}
                             </button>
                         ))}
                     </div>
@@ -181,13 +181,13 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                     type="search"
                                     value={searchQuery}
                                     onChange={event => setSearchQuery(event.target.value)}
-                                    placeholder={t('搜索内容或层级', 'Search content or layer')}
+                                    placeholder={translate('promptPreviewModal.searchContentOrLayer', asLanguage(language))}
                                     className="h-8 w-full rounded-md border border-border-subtle bg-background/60 pl-8 pr-2 text-xs text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/50"
                                 />
                             </div>
                         </div>
 
-                        <nav className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar" aria-label={t('提示词层级', 'Prompt layers')}>
+                        <nav className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar" aria-label={translate('promptPreviewModal.promptLayers', asLanguage(language))}>
                             {visibleSections.map((section, index) => {
                                 const label = SECTION_LABELS[section.id]
                                 const previousGroup = visibleSections[index - 1]?.group
@@ -217,28 +217,28 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                 )
                             })}
                             {!isLoading && visibleSections.length === 0 && (
-                                <p className="px-3 py-8 text-center text-xs leading-5 text-text-muted">{t('没有匹配的层级', 'No matching layers')}</p>
+                                <p className="px-3 py-8 text-center text-xs leading-5 text-text-muted">{translate('promptPreviewModal.noMatchingLayers', asLanguage(language))}</p>
                             )}
                         </nav>
 
                         <div className="space-y-2 border-t border-border-subtle p-3 text-[10px] text-text-muted">
-                            <div className="flex items-center justify-between"><span>{t('估算 Token', 'Estimated tokens')}</span><span className="font-mono text-text-secondary">≈{promptTokens.toLocaleString()}</span></div>
-                            <div className="flex items-center justify-between"><span>{t('稳定部分', 'Stable sections')}</span><span className="font-mono text-text-secondary">{stableTokens.toLocaleString()}</span></div>
+                            <div className="flex items-center justify-between"><span>{translate('promptPreviewModal.estimatedTokens', asLanguage(language))}</span><span className="font-mono text-text-secondary">≈{promptTokens.toLocaleString()}</span></div>
+                            <div className="flex items-center justify-between"><span>{translate('promptPreviewModal.stableSections', asLanguage(language))}</span><span className="font-mono text-text-secondary">{stableTokens.toLocaleString()}</span></div>
                             <div className="flex items-center gap-3 pt-1">
-                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{t('稳定', 'Stable')}</span>
-                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-amber-400" />{t('动态', 'Dynamic')}</span>
+                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{translate('promptPreviewModal.stable', asLanguage(language))}</span>
+                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-amber-400" />{translate('promptPreviewModal.dynamic', asLanguage(language))}</span>
                             </div>
                         </div>
                     </aside>
 
                     <main className="min-h-0 overflow-y-auto bg-gradient-to-b from-transparent to-surface/5 p-5 custom-scrollbar">
                         {isLoading ? (
-                            <div className="flex h-full items-center justify-center text-sm text-text-muted">{t('正在生成预览…', 'Generating preview…')}</div>
+                            <div className="flex h-full items-center justify-center text-sm text-text-muted">{translate('promptPreviewModal.generatingPreview', asLanguage(language))}</div>
                         ) : view === 'raw' ? (
                             <section className="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border-subtle bg-surface/20">
                                 <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
-                                    <div className="flex items-center gap-2 text-xs text-text-secondary"><Braces className="h-3.5 w-3.5" />{t('模型收到的系统提示词', 'System prompt received by the model')}</div>
-                                    <CopyButton copied={copiedTarget === 'full'} onClick={() => preview && handleCopy(preview.content, 'full')} label={t('复制全文', 'Copy all')} copiedLabel={t('已复制', 'Copied')} />
+                                    <div className="flex items-center gap-2 text-xs text-text-secondary"><Braces className="h-3.5 w-3.5" />{translate('promptPreviewModal.systemPromptReceivedBy', asLanguage(language))}</div>
+                                    <CopyButton copied={copiedTarget === 'full'} onClick={() => preview && handleCopy(preview.content, 'full')} label={translate('promptPreviewModal.copyAll', asLanguage(language))} copiedLabel={translate('promptPreviewModal.copied', asLanguage(language))} />
                                 </div>
                                 <pre className="overflow-x-auto whitespace-pre-wrap break-words p-5 font-mono text-xs leading-6 text-text-secondary">{preview ? highlightText(preview.content, searchQuery) : null}</pre>
                             </section>
@@ -246,7 +246,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                             <div className="mx-auto max-w-4xl space-y-3">
                                 <div className="mb-4 flex items-start gap-2 rounded-lg border border-border-subtle bg-surface/20 px-3 py-2.5 text-xs leading-5 text-text-muted">
                                     <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                                    <span>{t('绿色层构成可缓存的稳定行为契约；黄色层会随项目和窗口状态变化。预览中的方括号内容是运行时占位符。', 'Green layers form the cache-friendly stable contract. Amber layers change with project and window state. Bracketed values are runtime placeholders.')}</span>
+                                    <span>{translate('promptPreviewModal.greenLayersFormThe', asLanguage(language))}</span>
                                 </div>
                                 {visibleSections.map(section => (
                                     <PromptSectionCard
@@ -259,7 +259,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                     />
                                 ))}
                                 {visibleSections.length === 0 && (
-                                    <div className="py-20 text-center text-sm text-text-muted">{t('没有找到匹配内容', 'No matching content found')}</div>
+                                    <div className="py-20 text-center text-sm text-text-muted">{translate('promptPreviewModal.noMatchingContentFound', asLanguage(language))}</div>
                                 )}
                             </div>
                         )}
@@ -269,13 +269,13 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                 <footer className="flex items-center justify-between border-t border-border-subtle bg-surface/20 px-5 py-3">
                     <div className="flex items-center gap-2 text-[11px] text-text-muted">
                         <Database className="h-3.5 w-3.5" />
-                        {t('此处使用模拟项目数据；实际会话会注入当前窗口的真实上下文。', 'Preview data is simulated; real sessions inject context from the active window.')}
+                        {translate('promptPreviewModal.previewDataIsSimulated', asLanguage(language))}
                     </div>
                     <div className="flex items-center gap-2">
                         <Button variant="secondary" size="sm" onClick={() => preview && handleCopy(preview.content, 'full')} leftIcon={copiedTarget === 'full' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}>
-                            {copiedTarget === 'full' ? t('已复制', 'Copied') : t('复制全文', 'Copy all')}
+                            {copiedTarget === 'full' ? translate('promptPreviewModal.copied', asLanguage(language)) : translate('promptPreviewModal.copyAll', asLanguage(language))}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={onClose}>{t('关闭', 'Close')}</Button>
+                        <Button variant="ghost" size="sm" onClick={onClose}>{translate('closeTerminal', asLanguage(language))}</Button>
                     </div>
                 </footer>
             </div>
@@ -306,7 +306,7 @@ function PromptSectionCard({
                     <h3 className="text-xs font-medium text-text-primary">{title}</h3>
                     <code className="text-[10px] text-text-muted">{`<${section.id.replaceAll('-', '_')}>`}</code>
                 </div>
-                <CopyButton copied={copied} onClick={onCopy} label={language === 'zh' ? '复制此层' : 'Copy layer'} copiedLabel={language === 'zh' ? '已复制' : 'Copied'} />
+                <CopyButton copied={copied} onClick={onCopy} label={translate('promptPreviewModal.copyLayer', asLanguage(language))} copiedLabel={translate('promptPreviewModal.copied', asLanguage(language))} />
             </header>
             <pre className="overflow-x-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-6 text-text-secondary">{highlightText(section.content, query)}</pre>
         </section>

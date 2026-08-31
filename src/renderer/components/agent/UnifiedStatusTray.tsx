@@ -43,6 +43,7 @@ import { deriveTerminalCommandRule, formatTerminalCommandRule, terminalCommandRu
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { supportsTaskApproval } from './ToolCallGroup'
 import type { Language } from '@renderer/i18n'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
@@ -166,7 +167,7 @@ function UnifiedStatusTray({
                   <TabButton
                     active={currentTab === 'approvals'}
                     onClick={() => setActiveTab('approvals')}
-                    title={language === 'zh' ? '待审批' : 'Approvals'}
+                    title={translate('unifiedStatusTray.approvals', asLanguage(language))}
                     badge={pendingToolCalls.length}
                   >
                     <ShieldCheck className="w-3 h-3" />
@@ -208,10 +209,10 @@ function UnifiedStatusTray({
             {/* 单 tab 时显示标签文字 */}
             {availableTabs.length === 1 && (
               <span className="text-[11px] font-medium text-text-muted/70">
-                {currentTab === 'approvals' && (language === 'zh' ? `${pendingToolCalls.length} 项待审批` : `${pendingToolCalls.length} approvals`)}
+                {currentTab === 'approvals' && (translate('unifiedStatusTray.approvals2', asLanguage(language), { length: pendingToolCalls.length }))}
                 {currentTab === 'files' && `${pendingChanges.length} file${pendingChanges.length > 1 ? 's' : ''} changed`}
                 {currentTab === 'tasks' && `${todos.filter(t => t.status === 'completed').length}/${todos.length} Tasks`}
-                {currentTab === 'queue' && `${queue.length} ${language === 'zh' ? '条待发送' : 'queued'}`}
+                {currentTab === 'queue' && `${queue.length} ${translate('unifiedStatusTray.queued', asLanguage(language))}`}
               </span>
             )}
           </div>
@@ -266,7 +267,7 @@ function UnifiedStatusTray({
               <button
                 onClick={clearQueue}
                 className="p-1 rounded-md text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                title={language === 'zh' ? '清空队列' : 'Clear queue'}
+                title={translate('common.clearQueue', asLanguage(language))}
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -404,7 +405,7 @@ function ApprovalQueueContent({
       await useStore.getState().save()
     }
     toast.success(
-      language === 'zh' ? '已始终允许相似命令' : 'Similar commands are now always allowed',
+      translate('unifiedStatusTray.similarCommandsAreNow', asLanguage(language)),
       `${formatTerminalCommandRule(rule)} *`,
     )
     decideOnce(toolCall.id, onApprove)
@@ -435,7 +436,7 @@ function ApprovalQueueContent({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-medium text-text-primary">{toolCall.name}</span>
-                {isCurrent && <span className="text-[9px] text-amber-400">{language === 'zh' ? '当前' : 'Current'}</span>}
+                {isCurrent && <span className="text-[9px] text-amber-400">{translate('checkpoint.current', asLanguage(language))}</span>}
               </div>
               <code className="block truncate font-mono text-[10px] text-text-muted" title={getApprovalSummary(toolCall)}>
                 {getApprovalSummary(toolCall)}
@@ -446,10 +447,10 @@ function ApprovalQueueContent({
                 type="button"
                 onClick={() => void approveAlways(toolCall)}
                 className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
-                title={`${language === 'zh' ? '始终允许相似命令' : 'Always allow similar commands'}: ${formatTerminalCommandRule(persistentRule)} *`}
+                title={`${translate('common.alwaysAllowSimilarCommands', asLanguage(language))}: ${formatTerminalCommandRule(persistentRule)} *`}
               >
                 <ShieldCheck className="h-3 w-3" />
-                <span>{language === 'zh' ? '始终' : 'Always'}</span>
+                <span>{translate('unifiedStatusTray.always', asLanguage(language))}</span>
               </button>
             )}
             <ToolApprovalActions
@@ -742,16 +743,16 @@ function QueueItemRow({
             <div className="flex items-center gap-1">
               <button onClick={confirmEdit} className="px-2 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded-md hover:bg-accent/20 transition-colors">
                 <Check className="w-3 h-3 inline mr-0.5" />
-                {language === 'zh' ? '确认' : 'Save'}
+                {translate('common.save', asLanguage(language))}
               </button>
               <button onClick={() => setIsEditing(false)} className="px-2 py-0.5 text-[10px] font-medium text-text-muted rounded-md hover:bg-surface-hover transition-colors">
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {translate('cancel', asLanguage(language))}
               </button>
             </div>
           </div>
         ) : (
           <p className="text-xs text-text-secondary leading-relaxed line-clamp-2 break-all">
-            {displayText || (language === 'zh' ? '(多模态消息)' : '(multimodal)')}
+            {displayText || (translate('common.multimodal', asLanguage(language)))}
           </p>
         )}
       </div>

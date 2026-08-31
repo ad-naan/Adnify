@@ -1,4 +1,5 @@
 import type { StructuredSummary } from '@/renderer/agent/domains/context/types'
+import { t, asLanguage } from '@renderer/i18n'
 
 const THREAD_LINK_PREFIX = 'adnify://agent/thread/'
 
@@ -27,7 +28,7 @@ export function parseThreadDeepLink(value: string | undefined): string | null {
 }
 
 export function createThreadLinkMarkdown(threadId: string, title: string, language = 'zh'): string {
-  return `[${language === 'zh' ? `会话：${title}` : `Thread: ${title}`}](${createThreadDeepLink(threadId)})`
+  return `[${t('threadReference.thread', asLanguage(language), { title })}](${createThreadDeepLink(threadId)})`
 }
 
 function addList(lines: string[], title: string, items: string[], limit = 8): void {

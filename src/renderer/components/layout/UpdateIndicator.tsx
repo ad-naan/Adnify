@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { updaterService, type UpdateStatus } from '@services/updaterService'
 import { useStore } from '@store'
 import { api } from '@/renderer/services/electronAPI'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 export default function UpdateIndicator() {
   const language = useStore(state => state.language)
@@ -58,26 +59,22 @@ export default function UpdateIndicator() {
   const isError = status?.status === 'error'
 
   const t = {
-    title: language === 'zh' ? '系统更新' : 'System Update',
-    checking: language === 'zh' ? '正在检查新版本...' : 'Checking for updates...',
-    available: language === 'zh' ? '发现新版本' : 'New Version Available',
-    downloaded: language === 'zh' ? '更新已就绪' : 'Update Ready',
-    downloading: language === 'zh' ? '正在下载更新' : 'Downloading Update',
-    notAvailable: language === 'zh' ? '已经是最新版本' : 'You are up to date',
-    error: language === 'zh' ? '检查失败' : 'Update Failed',
-    download: language === 'zh' ? '立即更新' : 'Update Now',
-    install: language === 'zh' ? '重启生效' : 'Restart to Apply',
-    openPage: language === 'zh' ? '前往下载页' : 'Open Download Page',
-    checkNow: language === 'zh' ? '检查更新' : 'Check for Updates',
+    title: translate('updateIndicator.systemUpdate', asLanguage(language)),
+    checking: translate('updateIndicator.checkingForUpdates', asLanguage(language)),
+    available: translate('updateIndicator.newVersionAvailable', asLanguage(language)),
+    downloaded: translate('updateIndicator.updateReady', asLanguage(language)),
+    downloading: translate('updateIndicator.downloadingUpdate', asLanguage(language)),
+    notAvailable: translate('updateIndicator.youAreUpTo', asLanguage(language)),
+    error: translate('updateIndicator.updateFailed', asLanguage(language)),
+    download: translate('updateIndicator.updateNow', asLanguage(language)),
+    install: translate('updateIndicator.restartToApply', asLanguage(language)),
+    openPage: translate('updateIndicator.openDownloadPage', asLanguage(language)),
+    checkNow: translate('updateIndicator.checkForUpdates', asLanguage(language)),
     manualHint:
-      language === 'zh'
-        ? '当前是便携版 / 非标准安装，无法在应用内自动安装。请下载对应安装包后手动覆盖或重新安装。下载链接已尽量走加速镜像。'
-        : 'This is a portable or non-standard install, so in-app auto-install is unavailable. Download the matching package and replace/reinstall manually. Download links use an acceleration mirror when available.',
+      translate('updateIndicator.thisIsAPortable', asLanguage(language)),
     mirrorHint:
-      language === 'zh'
-        ? '已启用 GitHub 下载加速，可显著改善国内网络下的更新速度。'
-        : 'GitHub download acceleration is enabled to improve update speed on restricted networks.',
-    current: language === 'zh' ? '当前版本' : 'Current',
+      translate('updateIndicator.githubDownloadAccelerationIs', asLanguage(language)),
+    current: translate('updateIndicator.current', asLanguage(language)),
   }
 
   return (
@@ -254,7 +251,7 @@ export default function UpdateIndicator() {
                   className="w-full py-1 text-[12px] text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  <span>{language === 'zh' ? '查看更新日志' : 'View Changelog'}</span>
+                  <span>{translate('common.viewChangelog', asLanguage(language))}</span>
                 </button>
               </div>
             </div>

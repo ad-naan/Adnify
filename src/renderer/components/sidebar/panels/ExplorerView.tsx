@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { FolderOpen, Plus, RefreshCw, FolderPlus, FilePlus, ExternalLink, Crosshair, Terminal, Clipboard } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import { getDirPath, joinPath, pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 import { gitService } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
@@ -409,7 +409,7 @@ export function ExplorerView() {
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">{t('noFolderOpened', language)}</p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto mb-6 opacity-70">
-              {language === 'zh' ? '在 Adnify 中打开一个工作区目录以开始浏览和编辑代码。' : 'Open a folder or workspace catalog to start browsing and editing code.'}
+              {t('explorerView.openAFolderOr', asLanguage(language))}
             </p>
             <Button
               onClick={handleOpenFolder}

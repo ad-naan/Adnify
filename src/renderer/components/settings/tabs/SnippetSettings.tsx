@@ -9,7 +9,7 @@ import { Button, Input, Select } from '@components/ui'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { snippetService, type CodeSnippet } from '@services/snippetService'
-import { Language } from '@renderer/i18n'
+import { Language, t, asLanguage } from '@renderer/i18n'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
 
@@ -82,7 +82,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
   const handleEdit = (snippet: CodeSnippet) => {
     if (snippetService.isDefaultSnippet(snippet.id)) {
-      toast.warning(language === 'zh' ? '默认片段不可编辑' : 'Default snippets cannot be edited')
+      toast.warning(t('snippetSettings.defaultSnippetsCannotBe', asLanguage(language)))
       return
     }
     setEditingId(snippet.id)
@@ -98,43 +98,43 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
   const handleDelete = async (id: string) => {
     if (snippetService.isDefaultSnippet(id)) {
-      toast.warning(language === 'zh' ? '默认片段不可删除' : 'Default snippets cannot be deleted')
+      toast.warning(t('snippetSettings.defaultSnippetsCannotBe2', asLanguage(language)))
       return
     }
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '删除片段' : 'Delete Snippet',
-      message: language === 'zh' ? '确定删除此片段？' : 'Delete this snippet?',
+      title: t('snippetSettings.deleteSnippet', asLanguage(language)),
+      message: t('snippetSettings.deleteThisSnippet', asLanguage(language)),
       variant: 'danger',
     })
     if (!confirmed) return
     
     const success = await snippetService.delete(id)
     if (success) {
-      toast.success(language === 'zh' ? '已删除' : 'Deleted')
+      toast.success(t('common.deleted', asLanguage(language)))
       loadSnippets()
     }
   }
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.body.trim()) {
-      toast.error(language === 'zh' ? '请填写必填字段' : 'Please fill required fields')
+      toast.error(t('snippetSettings.pleaseFillRequiredFields', asLanguage(language)))
       return
     }
 
     try {
       if (editingId) {
         await snippetService.update(editingId, formData)
-        toast.success(language === 'zh' ? '已更新' : 'Updated')
+        toast.success(t('snippetSettings.updated', asLanguage(language)))
       } else {
         await snippetService.add(formData)
-        toast.success(language === 'zh' ? '已创建' : 'Created')
+        toast.success(t('snippetSettings.created', asLanguage(language)))
       }
       setShowForm(false)
       setFormData(defaultFormData)
       setEditingId(null)
       loadSnippets()
     } catch (error) {
-      toast.error(language === 'zh' ? '保存失败' : 'Save failed')
+      toast.error(t('common.saveFailed2', asLanguage(language)))
     }
   }
 
@@ -147,7 +147,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
     a.download = 'snippets.json'
     a.click()
     URL.revokeObjectURL(url)
-    toast.success(language === 'zh' ? '已导出' : 'Exported')
+    toast.success(t('snippetSettings.exported', asLanguage(language)))
   }
 
   const handleImport = () => {
@@ -162,13 +162,11 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
       const text = await file.text()
       const result = await snippetService.importSnippets(text)
       toast.success(
-        language === 'zh' 
-          ? `导入成功 ${result.success} 个，失败 ${result.failed} 个`
-          : `Imported ${result.success}, failed ${result.failed}`
+        t('snippetSettings.importedFailed', asLanguage(language), { success: result.success, failed: result.failed })
       )
       loadSnippets()
     } catch {
-      toast.error(language === 'zh' ? '导入失败' : 'Import failed')
+      toast.error(t('common.importFailed', asLanguage(language)))
     }
     e.target.value = ''
   }
@@ -192,7 +190,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder={language === 'zh' ? '搜索片段...' : 'Search snippets...'}
+              placeholder={t('snippetSettings.searchSnippets', asLanguage(language))}
               className="pl-9 h-9 bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
             />
           </div>
@@ -206,15 +204,15 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={handleImport}>
             <Upload className="w-4 h-4 mr-1" />
-            {language === 'zh' ? '导入' : 'Import'}
+            {t('common.import2', asLanguage(language))}
           </Button>
           <Button variant="ghost" size="sm" onClick={handleExport}>
             <Download className="w-4 h-4 mr-1" />
-            {language === 'zh' ? '导出' : 'Export'}
+            {t('exportSession', asLanguage(language))}
           </Button>
           <Button variant="primary" size="sm" onClick={handleCreate}>
             <Plus className="w-4 h-4 mr-1" />
-            {language === 'zh' ? '新建' : 'New'}
+            {t('newSession', asLanguage(language))}
           </Button>
         </div>
         <input
@@ -231,17 +229,17 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
         <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-bold text-text-primary">
-              {editingId ? (language === 'zh' ? '编辑片段' : 'Edit Snippet') : (language === 'zh' ? '新建片段' : 'New Snippet')}
+              {editingId ? (t('snippetSettings.editSnippet', asLanguage(language))) : (t('snippetSettings.newSnippet', asLanguage(language)))}
             </h4>
             <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>
-              {language === 'zh' ? '取消' : 'Cancel'}
+              {t('cancel', asLanguage(language))}
             </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-text-muted mb-1.5">
-                {language === 'zh' ? '名称 *' : 'Name *'}
+                {t('snippetSettings.name', asLanguage(language))}
               </label>
               <Input
                 value={formData.name}
@@ -252,7 +250,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1.5">
-                {language === 'zh' ? '触发前缀 *' : 'Trigger Prefix *'}
+                {t('snippetSettings.triggerPrefix', asLanguage(language))}
               </label>
               <Input
                 value={formData.prefix}
@@ -265,21 +263,21 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">
-              {language === 'zh' ? '描述' : 'Description'}
+              {t('snippetSettings.description', asLanguage(language))}
             </label>
             <Input
               value={formData.description}
               onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder={language === 'zh' ? '片段描述...' : 'Snippet description...'}
+              placeholder={t('snippetSettings.snippetDescription', asLanguage(language))}
               className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
             />
           </div>
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">
-              {language === 'zh' ? '代码模板 *' : 'Code Template *'}
+              {t('snippetSettings.codeTemplate', asLanguage(language))}
               <span className="ml-2 text-text-muted/60">
-                {language === 'zh' ? '支持 $1, ${1:placeholder} 占位符' : 'Supports $1, ${1:placeholder} placeholders'}
+                {t('snippetSettings.supports11Placeholder', asLanguage(language))}
               </span>
             </label>
             <textarea
@@ -292,7 +290,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
           <div>
             <label className="block text-xs text-text-muted mb-2">
-              {language === 'zh' ? '适用语言（留空表示所有语言）' : 'Languages (empty for all)'}
+              {t('snippetSettings.languagesEmptyForAll', asLanguage(language))}
             </label>
             <div className="flex flex-wrap gap-2">
               {COMMON_LANGUAGES.slice(1).map(lang => (
@@ -313,7 +311,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
           <div className="flex justify-end pt-2">
             <Button variant="primary" onClick={handleSave}>
-              {language === 'zh' ? '保存' : 'Save'}
+              {t('saveSession', asLanguage(language))}
             </Button>
           </div>
         </section>
@@ -324,7 +322,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
         {filteredSnippets.length === 0 ? (
           <div className="col-span-full text-center py-16 text-text-muted border border-dashed border-border/50 rounded-xl bg-surface/5">
             <OtterAsset asset="snippets" className="w-16 h-16 mx-auto mb-3 object-contain opacity-75" />
-            <p className="text-sm font-medium opacity-60">{language === 'zh' ? '没有找到片段' : 'No snippets found'}</p>
+            <p className="text-sm font-medium opacity-60">{t('snippetSettings.noSnippetsFound', asLanguage(language))}</p>
           </div>
         ) : (
           filteredSnippets.map(snippet => {
@@ -364,7 +362,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
                 <ProgressiveReveal
                   language={language}
                   collapsedHeight={170}
-                  expandLabel={language === 'zh' ? '展开完整代码' : 'Show full code'}
+                  expandLabel={t('snippetSettings.showFullCode', asLanguage(language))}
                   className="flex-1 bg-black/5 transition-colors group-hover:bg-black/10"
                 >
                   <pre className="p-4 text-[11px] font-mono text-text-secondary leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity whitespace-pre-wrap break-words">

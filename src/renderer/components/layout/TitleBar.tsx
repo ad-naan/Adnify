@@ -8,6 +8,7 @@ import UpdateIndicator from './UpdateIndicator'
 import { MascotIP } from '../mascot/MascotIP'
 import SkinPanel from './SkinPanel'
 import AdministratorModeTitleBadge from './AdministratorModeTitleBadge'
+import { t, asLanguage } from '@renderer/i18n'
 
 // 检测是否为 Mac 平台
 const isMac = typeof navigator !== 'undefined' && (
@@ -63,7 +64,7 @@ export default function TitleBar() {
         >
           <Search className="w-3.5 h-3.5 text-text-muted opacity-80 group-hover:text-accent transition-colors" />
           <span className="text-xs text-text-muted opacity-80 group-hover:text-text-primary transition-colors truncate">
-            {language === 'zh' ? '搜索文件,命令...' : 'Search files, commands...'}
+            {t('titleBar.searchFilesCommands', asLanguage(language))}
           </span>
           <div className="flex items-center gap-1 ml-auto shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
             <kbd className="hidden sm:inline-flex items-center justify-center min-w-[20px] h-5 bg-text-inverted/[0.1] border border-text-primary/5 rounded px-1.5 text-[10px] text-text-muted font-mono font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">

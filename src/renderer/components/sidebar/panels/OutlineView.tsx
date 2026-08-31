@@ -11,6 +11,7 @@ import { getFileName } from '@shared/utils/pathUtils'
 import { logger } from '@utils/Logger'
 import { getDocumentSymbols } from '@services/lspService'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { t, asLanguage } from '@renderer/i18n'
 
 export function OutlineView() {
   const { activeFilePath, language, isLspReady } = useStore(useShallow(s => ({ activeFilePath: s.activeFilePath, language: s.language, isLspReady: s.isLspReady })))
@@ -137,7 +138,7 @@ export function OutlineView() {
     <div className="flex flex-col h-full bg-transparent">
       <div className="h-11 px-4 flex items-center justify-between border-b border-border/30 bg-transparent sticky top-0 z-10">
         <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
-          {language === 'zh' ? '大纲视图' : 'OUTLINE'}
+          {t('outlineView.outline', asLanguage(language))}
         </span>
         {isLoading && <Loader2 className="w-3.5 h-3.5 text-accent animate-spin" />}
       </div>
@@ -148,7 +149,7 @@ export function OutlineView() {
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder={language === 'zh' ? '过滤符号...' : 'Filter symbols...'}
+          placeholder={t('outlineView.filterSymbols', asLanguage(language))}
           className="w-full bg-surface border border-border-subtle rounded-lg px-2.5 py-1.5 text-xs text-text-primary focus:border-accent/50 focus:ring-1 focus:ring-accent/20 focus:outline-none transition-all placeholder:text-text-muted/50"
         />
       </div>
@@ -171,10 +172,10 @@ export function OutlineView() {
               <OtterAsset asset="outline" className="w-9 h-9 object-contain relative opacity-80" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
-              {language === 'zh' ? '无活动编辑器' : 'No active file'}
+              {t('outlineView.noActiveFile', asLanguage(language))}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {language === 'zh' ? '请在编辑器中打开一个代码文件以查看大纲符号结构。' : 'Open a document to display its structured outline view.'}
+              {t('outlineView.openADocumentTo', asLanguage(language))}
             </p>
           </div>
         ) : symbols.length === 0 && !isLoading ? (
@@ -184,10 +185,10 @@ export function OutlineView() {
               <OtterAsset asset="searchEmpty" className="w-9 h-9 object-contain relative opacity-80" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
-              {language === 'zh' ? '没有找到任何符号' : 'No symbols found'}
+              {t('outlineView.noSymbolsFound', asLanguage(language))}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {language === 'zh' ? '此文件不包含大纲结构，或者分析引擎尚未就绪。' : 'No methods, classes or variables were found in this file.'}
+              {t('outlineView.noMethodsClassesOr', asLanguage(language))}
             </p>
           </div>
         ) : (

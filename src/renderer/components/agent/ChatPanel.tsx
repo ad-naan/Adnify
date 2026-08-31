@@ -17,7 +17,7 @@ import { useAgentActions, useAgentCommands, useAgentViewState } from '@/renderer
 import { useChatScrollController } from '@/renderer/hooks'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
-import { t } from '@/renderer/i18n'
+import { t, asLanguage } from '@/renderer/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { getBuiltinProvider } from '@shared/config/providers'
 import {
@@ -488,16 +488,16 @@ export default function ChatPanel() {
       if (!finish()) return
       const result = optimizedPrompt.trim()
       if (!result) {
-        toast.error(language === 'zh' ? '提示词优化失败' : 'Could not improve prompt', language === 'zh' ? '模型没有返回内容' : 'The model returned no content')
+        toast.error(t('chatPanel.couldNotImprovePrompt', asLanguage(language)), t('chatPanel.theModelReturnedNo', asLanguage(language)))
         return
       }
       setInput(result)
       requestAnimationFrame(() => textareaRef.current?.focus())
-      toast.success(language === 'zh' ? '提示词已优化' : 'Prompt improved')
+      toast.success(t('chatPanel.promptImproved', asLanguage(language)))
     })
     unsubscribeError = api.llm.onError(requestId, error => {
       if (!finish()) return
-      toast.error(language === 'zh' ? '提示词优化失败' : 'Could not improve prompt', error.message)
+      toast.error(t('chatPanel.couldNotImprovePrompt', asLanguage(language)), error.message)
     })
     optimizeRequestRef.current = { requestId, cleanup }
 
@@ -505,16 +505,14 @@ export default function ChatPanel() {
       await api.llm.send({
         config: llmConfig,
         messages: [{ role: 'user', content: draft }],
-        systemPrompt: language === 'zh'
-          ? '你是提示词编辑器。将用户草稿改写为清晰、具体、可执行的提示词；保留原意、语言、上下文和约束，不要虚构需求，不要回答草稿中的问题。只输出改写后的提示词，不要解释，不要添加引号或外层 Markdown 代码块。'
-          : 'You are a prompt editor. Rewrite the user draft into a clear, specific, actionable prompt. Preserve its intent, language, context, and constraints. Do not invent requirements or answer the draft. Output only the rewritten prompt, without explanations, quotes, or an outer Markdown fence.',
+        systemPrompt: t('chatPanel.youAreAPrompt', asLanguage(language)),
         requestId,
       })
     } catch (error) {
       if (!finish()) return
       const message = error instanceof Error ? error.message : String(error)
       logger.ui.error('[ChatPanel] Prompt optimization failed:', error)
-      toast.error(language === 'zh' ? '提示词优化失败' : 'Could not improve prompt', message)
+      toast.error(t('chatPanel.couldNotImprovePrompt', asLanguage(language)), message)
     }
   }, [input, isOptimizingPrompt, isStreaming, language, llmConfig, setInput, textareaRef, toast])
 
@@ -946,7 +944,7 @@ export default function ChatPanel() {
         chatMode: effectiveMode,
         targetThreadId,
       })
-      toast.info(language === 'zh' ? '已加入发送队列' : 'Added to send queue')
+      toast.info(t('chatPanel.addedToSendQueue', asLanguage(language)))
       return
     }
 
@@ -973,7 +971,7 @@ export default function ChatPanel() {
 
     if (result) {
       // 成功创建分支，发送消息重新生成
-      toast.success(language === 'zh' ? '已创建新分支' : 'Branch created')
+      toast.success(t('chatPanel.branchCreated', asLanguage(language)))
       await sendMessage(result.messageContent)
     } else {
       // 回退到原来的逻辑（直接删除并重新发送）
@@ -1076,9 +1074,9 @@ export default function ChatPanel() {
       : ''
 
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '恢复检查点' : 'Restore Checkpoint',
+      title: t('chatPanel.restoreCheckpoint', asLanguage(language)),
       message: t('confirmRestoreCheckpoint', language),
-      confirmText: language === 'zh' ? '恢复' : 'Restore',
+      confirmText: t('chatPanel.restore', asLanguage(language)),
       variant: 'warning',
     })
     if (!confirmed) return
@@ -1173,15 +1171,11 @@ export default function ChatPanel() {
 
   // 渲染消息
   const renderArchiveItem = useCallback((item: TimelineArchiveItem) => {
-    const label = language === 'zh' ? '显示更多历史消息' : 'Show more history'
-    const hiddenLabel = language === 'zh'
-      ? `已归档 ${item.hiddenCount} 条历史消息`
-      : `${item.hiddenCount} older messages archived`
-    const revealLabel = language === 'zh'
-      ? `展开前 ${item.revealCount} 条`
-      : `Reveal ${item.revealCount} more`
+    const label = t('chatPanel.showMoreHistory', asLanguage(language))
+    const hiddenLabel = t('chatPanel.olderMessagesArchived', asLanguage(language), { hiddenCount: item.hiddenCount })
+    const revealLabel = t('chatPanel.revealMore', asLanguage(language), { revealCount: item.revealCount })
     const remainingLabel = item.remainingCount > 0
-      ? (language === 'zh' ? `剩余 ${item.remainingCount} 条` : `${item.remainingCount} remaining`)
+      ? (t('chatPanel.remaining', asLanguage(language), { remainingCount: item.remainingCount }))
       : undefined
 
     return (
@@ -1365,7 +1359,7 @@ export default function ChatPanel() {
                     variant="ghost"
                     size="icon"
                     onClick={() => scrollToBottom('smooth')}
-                    title={language === 'zh' ? '触底滚动' : 'Scroll to bottom'}
+                    title={t('chatPanel.scrollToBottom', asLanguage(language))}
                     className="hover:bg-accent/10 text-accent transition-colors"
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -1391,7 +1385,7 @@ export default function ChatPanel() {
               variant="ghost"
               size="icon"
               onClick={() => createThread({ mode: chatMode, origin: 'user' })}
-              title={language === 'zh' ? '新对话' : 'New chat'}
+              title={t('chatPanel.newChat', asLanguage(language))}
               className="hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -1402,7 +1396,7 @@ export default function ChatPanel() {
               size="icon"
               onClick={clearMessages}
               className="hover:bg-red-500/10 hover:text-red-500 text-text-muted transition-colors"
-              title={language === 'zh' ? '清空对话' : 'Clear chat'}
+              title={t('clearChat', asLanguage(language))}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -1434,8 +1428,8 @@ export default function ChatPanel() {
                   <Upload className="w-10 h-10 text-accent relative z-10" />
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-medium text-text-primary mb-1">{language === 'zh' ? '释放以添加文件' : 'Drop files to add context'}</p>
-                  <p className="text-sm text-text-muted">{language === 'zh' ? '支持代码和图片' : 'Supports code and images'}</p>
+                  <p className="text-lg font-medium text-text-primary mb-1">{t('chatPanel.dropFilesToAdd', asLanguage(language))}</p>
+                  <p className="text-sm text-text-muted">{t('chatPanel.supportsCodeAndImages', asLanguage(language))}</p>
                 </div>
               </motion.div>
             </motion.div>

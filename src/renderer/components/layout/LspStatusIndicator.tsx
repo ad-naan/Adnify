@@ -12,6 +12,7 @@ import { getLanguageId, isLanguageSupported } from '@/renderer/services/lspServi
 import BottomBarPopover from '../ui/BottomBarPopover'
 import { logger } from '@shared/utils/Logger'
 import { toast } from '../common/ToastProvider'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface LspServerStatus {
   installed: boolean
@@ -127,12 +128,12 @@ export default function LspStatusIndicator() {
       } else {
         logger.lsp.error('Install failed:', result.error)
         const message = result.error || 'Installation failed'
-        toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
+        toast.error(t('common.languageServerInstallationFailed', asLanguage(language)), message)
       }
     } catch (error) {
       logger.lsp.error('Install error:', error)
       const message = error instanceof Error ? error.message : String(error)
-      toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
+      toast.error(t('common.languageServerInstallationFailed', asLanguage(language)), message)
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete(serverType); return next })
     }
@@ -228,10 +229,10 @@ export default function LspStatusIndicator() {
       }
       tooltip={
         isInstalled
-          ? (language === 'zh' ? 'LSP 已启用' : 'LSP Enabled')
-          : (language === 'zh' ? 'LSP 未安装，点击安装' : 'LSP not installed, click to install')
+          ? (t('lspStatusIndicator.lspEnabled', asLanguage(language)))
+          : (t('lspStatusIndicator.lspNotInstalledClick', asLanguage(language)))
       }
-      title={language === 'zh' ? 'LSP 语言服务器' : 'LSP Language Server'}
+      title={t('lspStatusIndicator.lspLanguageServer', asLanguage(language))}
       width={320}
       height={200}
       language={language as 'en' | 'zh'}
@@ -244,19 +245,19 @@ export default function LspStatusIndicator() {
               {SERVER_NAMES[currentServerType] || currentServerType}
             </div>
             <div className="mt-0.5 truncate text-xs text-text-muted">
-              {language === 'zh' ? '当前文件语言' : 'Current file language'}: {currentLanguageId}
+              {t('lspStatusIndicator.currentFileLanguage', asLanguage(language))}: {currentLanguageId}
             </div>
           </div>
           <div className={`flex shrink-0 items-center gap-1.5 ${isInstalled ? 'text-green-400' : 'text-yellow-400'}`}>
             {isInstalled ? (
               <>
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span className="text-xs">{language === 'zh' ? '已安装' : 'Installed'}</span>
+                <span className="text-xs">{t('common.installed', asLanguage(language))}</span>
               </>
             ) : (
               <>
                 <ZapOff className="h-4 w-4 shrink-0" />
-                <span className="text-xs">{language === 'zh' ? '未安装' : 'Not installed'}</span>
+                <span className="text-xs">{t('lspStatusIndicator.notInstalled', asLanguage(language))}</span>
               </>
             )}
           </div>
@@ -277,18 +278,18 @@ export default function LspStatusIndicator() {
                 {installing.has(currentServerType) ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{language === 'zh' ? '安装中...' : 'Installing...'}</span>
+                    <span>{t('lspStatusIndicator.installing', asLanguage(language))}</span>
                   </>
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    <span>{language === 'zh' ? '安装语言服务器' : 'Install Language Server'}</span>
+                    <span>{t('lspStatusIndicator.installLanguageServer', asLanguage(language))}</span>
                   </>
                 )}
               </button>
             ) : (
               <div className="text-xs text-orange-400 bg-orange-400/10 px-3 py-2 rounded-md">
-                {language === 'zh' ? '需要手动安装' : 'Manual installation required'}
+                {t('lspStatusIndicator.manualInstallationRequired', asLanguage(language))}
               </div>
             )}
           </div>
@@ -299,7 +300,7 @@ export default function LspStatusIndicator() {
           <div className="space-y-2">
             {installInfo?.builtin && (
               <div className="text-xs text-blue-400">
-                {language === 'zh' ? '内置语言服务器' : 'Built-in Language Server'}
+                {t('lspStatusIndicator.builtInLanguageServer', asLanguage(language))}
               </div>
             )}
             {currentStatus?.path && (
@@ -313,23 +314,23 @@ export default function LspStatusIndicator() {
               <div className="pt-2 border-t border-border/30 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-text-muted">
-                    {language === 'zh' ? '运行时环境' : 'Runtime'}
+                    {t('lspStatusIndicator.runtime', asLanguage(language))}
                   </span>
                   <button
                     onClick={handleResetRuntime}
                     className="text-[10px] text-text-muted hover:text-text-primary transition-colors"
                   >
-                    {language === 'zh' ? '自动检测' : 'Auto-detect'}
+                    {t('lspStatusIndicator.autoDetect', asLanguage(language))}
                   </button>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5">
                   <div className="min-w-0 flex-1 truncate rounded bg-background-tertiary px-2 py-1.5 font-mono text-xs text-text-primary" title={runtimePath || ''}>
-                    {runtimePath || (language === 'zh' ? '未检测到' : 'Not detected')}
+                    {runtimePath || (t('lspStatusIndicator.notDetected', asLanguage(language)))}
                   </div>
                   <button
                     onClick={handleSelectRuntime}
                     className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors shrink-0"
-                    title={language === 'zh' ? '选择路径' : 'Browse'}
+                    title={t('lspStatusIndicator.browse', asLanguage(language))}
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
                   </button>

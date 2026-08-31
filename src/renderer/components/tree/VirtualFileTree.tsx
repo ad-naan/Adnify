@@ -22,7 +22,7 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import { getDirPath, joinPath, pathEquals, normalizePath, pathStartsWith } from '@shared/utils/pathUtils'
 import { formatShortcut, keybindingService } from '@services/keybindingService'
 import { toast } from '../common/ToastProvider'
@@ -144,12 +144,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         target,
       )
       const verb = action === 'add'
-        ? (language === 'zh' ? '添加' : 'Added')
-        : (language === 'zh' ? '移除' : 'Removed')
+        ? (t('virtualFileTree.added', asLanguage(language)))
+        : (t('virtualFileTree.removed', asLanguage(language)))
       toast.success(
         result.changed
-          ? (language === 'zh' ? `已${verb}到 ${targetLabel}` : `${verb} ${targetLabel}`)
-          : (language === 'zh' ? '无需更改' : 'No changes needed'),
+          ? (t('virtualFileTree.text', asLanguage(language), { verb, targetLabel }))
+          : (t('virtualFileTree.noChangesNeeded', asLanguage(language))),
         result.pattern,
       )
       setContextMenu(current => current && current.node === node
@@ -163,7 +163,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         : current)
     } catch (error) {
       toast.error(
-        language === 'zh' ? `更新 ${targetLabel} 失败` : `Failed to update ${targetLabel}`,
+        t('virtualFileTree.failedToUpdate', asLanguage(language), { targetLabel }),
         error instanceof Error ? error.message : String(error),
       )
     }
@@ -616,7 +616,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleDelete = useCallback(async (node: FlattenedNode) => {
     const success = await api.file.delete(node.item.path)
     if (!success) {
-      toast.error(language === 'zh' ? '删除失败' : 'Delete failed')
+      toast.error(t('virtualFileTree.deleteFailed', asLanguage(language)))
       return
     }
     directoryCacheService.invalidate(getDirPath(node.item.path))
@@ -676,8 +676,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       copiedAt: Date.now(),
     })
     toast.success(node.item.isDirectory
-      ? (language === 'zh' ? '目录已复制' : 'Folder copied')
-      : (language === 'zh' ? '文件已复制' : 'File copied'))
+      ? (t('virtualFileTree.folderCopied', asLanguage(language)))
+      : (t('virtualFileTree.fileCopied', asLanguage(language))))
   }, [language])
 
   const getCopyDestinationPath = useCallback(async (targetDirectoryPath: string, item: ExplorerClipboardItem) => {
@@ -707,14 +707,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     if (!normalizedSourcePath || !normalizedTargetDirectoryPath) return
 
     if (item.isDirectory && normalizedTargetDirectoryPath.startsWith(`${normalizedSourcePath}/`)) {
-      toast.error(language === 'zh' ? '不能将目录粘贴到自身内部' : 'Cannot paste a folder inside itself')
+      toast.error(t('virtualFileTree.cannotPasteAFolder', asLanguage(language)))
       return
     }
 
     const destinationPath = await getCopyDestinationPath(targetDirectoryPath, item)
     const success = await api.file.copy(item.path, destinationPath)
     if (!success) {
-      toast.error(language === 'zh' ? '粘贴失败' : 'Paste failed')
+      toast.error(t('virtualFileTree.pasteFailed', asLanguage(language)))
       return
     }
 
@@ -724,8 +724,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       refreshRoot: pathEquals(targetDirectoryPath, workspacePath || ''),
     })
     toast.success(item.isDirectory
-      ? (language === 'zh' ? '目录已粘贴' : 'Folder pasted')
-      : (language === 'zh' ? '文件已粘贴' : 'File pasted'))
+      ? (t('virtualFileTree.folderPasted', asLanguage(language)))
+      : (t('virtualFileTree.filePasted', asLanguage(language))))
   }, [getCopyDestinationPath, language, onRefresh, workspacePath])
 
   const handlePasteForNode = useCallback((node: FlattenedNode) => {

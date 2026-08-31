@@ -15,13 +15,13 @@ import {
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 interface RulesMemorySettingsProps {
   language: string
 }
 
 export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
-  const t = (zh: string, en: string) => language === 'zh' ? zh : en
 
   // Rules state
   const [rulesContent, setRulesContent] = useState('')
@@ -126,7 +126,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-accent" />
               <h5 className="text-sm font-medium text-text-primary">
-                {t('项目规则', 'Project Rules')}
+                {translate('rulesMemorySettings.projectRules', asLanguage(language))}
               </h5>
             </div>
             <div className="flex items-center gap-2">
@@ -138,7 +138,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
               <button
                 onClick={loadRules}
                 className="p-1.5 text-text-muted hover:text-accent transition-colors"
-                title={t('刷新', 'Refresh')}
+                title={translate('refresh', asLanguage(language))}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
@@ -146,10 +146,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           </div>
 
           <p className="text-xs text-text-muted">
-            {t(
-              '定义项目级 AI 行为规则，支持 .adnify/rules.md、.cursorrules 等格式',
-              'Define project-level AI behavior rules. Supports .adnify/rules.md, .cursorrules, etc.'
-            )}
+            {translate('rulesMemorySettings.defineProjectLevelAi', asLanguage(language))}
           </p>
 
           {rulesLoading ? (
@@ -165,14 +162,14 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                   setRulesModified(true)
                 }}
                 className="w-full h-64 p-3 bg-black/20 rounded-lg border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all resize-none text-xs font-mono custom-scrollbar text-text-primary placeholder-text-muted/50"
-                placeholder={t('# 项目规则\n\n在此编写 AI 行为规则...', '# Project Rules\n\nWrite AI behavior rules here...')}
+                placeholder={translate('rulesMemorySettings.projectRulesWriteAi', asLanguage(language))}
               />
 
               <div className="flex items-center justify-between">
                 {rulesModified && (
                   <div className="flex items-center gap-1.5 text-amber-400 text-xs">
                     <AlertCircle className="w-3.5 h-3.5" />
-                    <span>{t('有未保存的更改', 'Unsaved changes')}</span>
+                    <span>{translate('settings.unsavedChanges', asLanguage(language))}</span>
                   </div>
                 )}
                 <div className="flex-1" />
@@ -183,7 +180,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                   disabled={!rulesModified || rulesSaving}
                   className="text-xs"
                 >
-                  {rulesSaving ? t('保存中...', 'Saving...') : t('保存规则', 'Save Rules')}
+                  {rulesSaving ? translate('saving', asLanguage(language)) : translate('rulesMemorySettings.saveRules', asLanguage(language))}
                 </Button>
               </div>
             </>
@@ -196,7 +193,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 text-accent" />
               <h5 className="text-sm font-medium text-text-primary">
-                {t('项目记忆', 'Project Memory')}
+                {translate('rulesMemorySettings.projectMemory', asLanguage(language))}
               </h5>
             </div>
             <span className="text-[10px] text-text-muted px-2 py-0.5 bg-black/20 rounded">
@@ -205,10 +202,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           </div>
 
           <p className="text-xs text-text-muted">
-            {t(
-              '添加项目相关的重要信息，AI 会在每次对话中记住这些内容',
-              'Add important project information. AI will remember these in every conversation.'
-            )}
+            {translate('rulesMemorySettings.addImportantProjectInformation', asLanguage(language))}
           </p>
 
           {/* Add new memory */}
@@ -216,7 +210,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             <Input
               value={newMemory}
               onChange={(e) => setNewMemory(e.target.value)}
-              placeholder={t('添加新记忆...', 'Add new memory...')}
+              placeholder={translate('rulesMemorySettings.addNewMemory', asLanguage(language))}
               className="flex-1 bg-black/20 border-border text-xs"
               onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
             />
@@ -234,7 +228,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           <ProgressiveReveal
             language={language}
             collapsedHeight={260}
-            expandLabel={t('查看全部项目记忆', 'Show all project memories')}
+            expandLabel={translate('rulesMemorySettings.showAllProjectMemories', asLanguage(language))}
           >
           <div className="space-y-2">
             {memoryLoading ? (
@@ -244,7 +238,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             ) : memories.length === 0 ? (
               <div className="h-24 flex flex-col items-center justify-center gap-1.5 text-text-muted text-xs">
                 <OtterAsset asset="relaxed" className="h-12 w-12 object-contain opacity-75" />
-                <span>{t('暂无记忆', 'No memories yet')}</span>
+                <span>{translate('rulesMemorySettings.noMemoriesYet', asLanguage(language))}</span>
               </div>
             ) : (
               memories.map((item) => (
@@ -286,7 +280,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                         onClick={() => handleToggleMemory(item.id, item.enabled)}
                         className={`p-0.5 transition-colors ${item.enabled ? 'text-accent' : 'text-text-muted'
                           }`}
-                        title={item.enabled ? t('禁用', 'Disable') : t('启用', 'Enable')}
+                        title={item.enabled ? translate('common.disable', asLanguage(language)) : translate('common.enable', asLanguage(language))}
                       >
                         {item.enabled ? (
                           <ToggleRight className="w-4 h-4" />
@@ -323,12 +317,12 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">
             <p className="font-medium text-accent/80 flex items-center gap-1.5">
               <OtterAsset asset="question" className="h-5 w-5 object-contain" />
-              {t('使用提示', 'Tips')}
+              {translate('common.tips', asLanguage(language))}
             </p>
             <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-              <li>{t('记忆会全量注入到 AI 上下文中', 'Memories are fully injected into AI context')}</li>
-              <li>{t('建议保持简洁，避免过多记忆影响性能', 'Keep it concise to avoid performance impact')}</li>
-              <li>{t('可以禁用暂时不需要的记忆', 'You can disable memories temporarily')}</li>
+              <li>{translate('rulesMemorySettings.memoriesAreFullyInjected', asLanguage(language))}</li>
+              <li>{translate('rulesMemorySettings.keepItConciseTo', asLanguage(language))}</li>
+              <li>{translate('rulesMemorySettings.youCanDisableMemories', asLanguage(language))}</li>
             </ul>
           </div>
         </section>

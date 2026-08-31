@@ -1,6 +1,7 @@
 import { Trash2, Bell, CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react'
 import { useInlineToast } from '../common/InlineToast'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 interface NotificationCenterContentProps {
   language?: 'en' | 'zh'
@@ -9,7 +10,6 @@ interface NotificationCenterContentProps {
 export default function NotificationCenterContent({ language = 'zh' }: NotificationCenterContentProps) {
   const { toasts, removeToast } = useInlineToast()
 
-  const t = (zh: string, en: string) => (language === 'zh' ? zh : en)
   
   const getIcon = (type: string) => {
     switch (type) {
@@ -24,9 +24,9 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
   const formatTime = (ts: number) => {
     const diff = Date.now() - ts
     const mins = Math.floor(diff / 60000)
-    if (mins < 1) return t('刚刚', 'Just now')
-    if (mins < 60) return `${mins}${t('分钟前', 'm ago')}`
-    return `${Math.floor(mins / 60)}${t('小时前', 'h ago')}`
+    if (mins < 1) return translate('justNow', asLanguage(language))
+    if (mins < 60) return `${mins}${translate('notificationCenterContent.mAgo', asLanguage(language))}`
+    return `${Math.floor(mins / 60)}${translate('notificationCenterContent.hAgo', asLanguage(language))}`
   }
 
   return (
@@ -36,14 +36,14 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
         <div className="flex items-center gap-2">
           <Bell className="w-3.5 h-3.5 text-text-muted" />
           <span className="text-[11px] font-bold tracking-wider uppercase text-text-muted">
-            {t('消息记录', 'Notifications')}
+            {translate('notificationCenterContent.notifications', asLanguage(language))}
           </span>
         </div>
 
         <button 
           onClick={() => toasts.forEach(t => removeToast(t.id))}
           className="flex items-center justify-center p-1.5 rounded-md text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors" 
-          title={t('清空', 'Clear')}
+          title={translate('clearTerminal', asLanguage(language))}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -56,7 +56,7 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03]">
               <OtterAsset asset="rest" className="h-16 w-16 object-contain" />
             </div>
-            <span className="text-[11px] font-medium tracking-wide">{t('暂无消息', 'No records')}</span>
+            <span className="text-[11px] font-medium tracking-wide">{translate('notificationCenterContent.noRecords', asLanguage(language))}</span>
           </div>
         ) : (
           <div className="space-y-1.5">

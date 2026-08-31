@@ -5,6 +5,7 @@ import type {
   PlanStageKey,
   PlanStageSectionKind,
 } from './types'
+import { t, asLanguage } from '@renderer/i18n'
 
 const STAGES: PlanStageKey[] = ['requirements', 'plan', 'execution', 'validation']
 const KINDS = new Set<PlanStageSectionKind>(['overview', 'list', 'checklist', 'decisions', 'risks', 'deliverables', 'metrics'])
@@ -105,10 +106,10 @@ export function legacyRequirementsToStageContent(content: string, fallbackTitle:
   }
   return {
     title,
-    summary: language === 'zh' ? '由旧版需求文档迁移生成的兼容视图' : 'Compatibility view migrated from a legacy requirements document',
+    summary: t('planStageContent.compatibilityViewMigratedFrom', asLanguage(language)),
     sections: [{
       id: 'legacy-confirmed-scope',
-      title: language === 'zh' ? '已确认范围' : 'Confirmed scope',
+      title: t('common.confirmedScope', asLanguage(language)),
       kind: 'checklist',
       items,
     }],

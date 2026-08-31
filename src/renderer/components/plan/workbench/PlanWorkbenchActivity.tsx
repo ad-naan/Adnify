@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { PlanActivityItem } from '@/renderer/agent/plan/planWorkbenchProjection'
+import { t, asLanguage } from '@renderer/i18n'
 
 const stageLabel = (stage: PlanActivityItem['stage'], language: string) => {
   const labels = {
@@ -29,7 +30,7 @@ export function PlanWorkbenchActivity({ activities, language }: { activities: Pl
   if (!visibleEvents.length && !completedTools.length) return null
 
   return <section className="mt-5">
-    <div className="mb-2.5 flex items-center justify-between px-0.5"><span className="text-[10px] font-medium text-text-muted">{language === 'zh' ? '过程' : 'Activity'}</span>{completedTools.length > 0 && <button onClick={() => setToolsOpen(value => !value)} className="inline-flex items-center gap-1 text-[10px] text-text-muted/70 hover:text-text-secondary"><span>{completedTools.length} {language === 'zh' ? '个工具动作' : 'tool actions'}</span><ChevronDown className={`h-3 w-3 transition-transform ${toolsOpen ? 'rotate-180' : ''}`} /></button>}</div>
+    <div className="mb-2.5 flex items-center justify-between px-0.5"><span className="text-[10px] font-medium text-text-muted">{t('planWorkbenchActivity.activity', asLanguage(language))}</span>{completedTools.length > 0 && <button onClick={() => setToolsOpen(value => !value)} className="inline-flex items-center gap-1 text-[10px] text-text-muted/70 hover:text-text-secondary"><span>{completedTools.length} {t('planWorkbenchActivity.toolActions', asLanguage(language))}</span><ChevronDown className={`h-3 w-3 transition-transform ${toolsOpen ? 'rotate-180' : ''}`} /></button>}</div>
     {visibleEvents.length > 0 && <div className="relative ml-1 border-l border-border/45 pl-4">
       {visibleEvents.reverse().map(activity => <article key={activity.id} className="relative pb-3.5 last:pb-0">
         <span className={`absolute -left-[18.5px] top-[6px] h-[7px] w-[7px] rounded-full ring-4 ring-background ${dotTone(activity.status)} ${activity.status === 'active' ? 'animate-pulse' : ''}`} />

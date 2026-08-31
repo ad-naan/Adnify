@@ -18,7 +18,7 @@ import {
 } from '@services/largeFileService'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '../components/common/ConfirmDialog'
-import { t } from '../i18n'
+import { t, asLanguage } from '../i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { detectEolFromContent } from '@services/fileFormatService'
 
@@ -111,9 +111,7 @@ export async function safeOpenFile(
 
   // 1. 检查二进制文件
   if (isBinaryFile(filePath)) {
-    const msg = language === 'zh'
-      ? '无法打开二进制文件'
-      : 'Cannot open binary file'
+    const msg = t('fileUtils.cannotOpenBinaryFile', asLanguage(language))
     if (showWarning) {
       toast.warning(msg, getFileName(filePath))
     }
@@ -132,7 +130,7 @@ export async function safeOpenFile(
     if (byteSize > FILE_CONFIG.maxFileSize) {
       const chunk = await api.file.readTextChunk(filePath, 0, LARGE_FILE_PAGE_BYTES)
       if (!chunk) {
-        const msg = language === 'zh' ? '无法读取超大文件' : 'Could not read very large file'
+        const msg = t('fileUtils.couldNotReadVery', asLanguage(language))
         if (showWarning) toast.error(msg, filePath)
         return { success: false, error: msg, isLargeFile: true }
       }
@@ -160,7 +158,7 @@ export async function safeOpenFile(
       setActiveFile(filePath)
       if (showWarning) {
         toast.warning(
-          language === 'zh' ? '已使用超大文件查看器' : 'Opened in very large file viewer',
+          t('fileUtils.openedInVeryLarge', asLanguage(language)),
           `${(byteSize / 1024 / 1024).toFixed(1)} MB`,
         )
       }
@@ -172,9 +170,9 @@ export async function safeOpenFile(
       const size = (byteSize / 1024 / 1024).toFixed(1)
 
       const confirmed = await globalConfirm({
-        title: language === 'zh' ? '大文件警告' : 'Large File Warning',
+        title: t('fileUtils.largeFileWarning', asLanguage(language)),
         message: t('confirmLargeFile', language, { size }),
-        confirmText: language === 'zh' ? '继续' : 'Continue',
+        confirmText: t('git.continue', asLanguage(language)),
         variant: 'warning',
       })
 
@@ -188,7 +186,7 @@ export async function safeOpenFile(
     const content = await api.file.readFull(filePath)
 
     if (content === null) {
-      const msg = language === 'zh' ? '文件不存在' : 'File not found'
+      const msg = t('fileUtils.fileNotFound', asLanguage(language))
       if (showWarning) {
         toast.error(msg, filePath)
       }
@@ -201,7 +199,7 @@ export async function safeOpenFile(
     // 6. 显示大文件警告
     if (showWarning && largeFileInfo?.warning) {
       toast.warning(
-        language === 'zh' ? '大文件' : 'Large File',
+        t('fileUtils.largeFile', asLanguage(language)),
         largeFileInfo.warning
       )
     }
@@ -226,7 +224,7 @@ export async function safeOpenFile(
     const msg = error instanceof Error ? error.message : 'Unknown error'
     if (showWarning) {
       toast.error(
-        language === 'zh' ? '打开文件失败' : 'Failed to open file',
+        t('git.openFileFailed', asLanguage(language)),
         msg
       )
     }
@@ -245,9 +243,7 @@ export async function safeOpenFiles(
   const language = options.language || 'en'
 
   if (filePaths.length > maxFiles) {
-    const msg = language === 'zh'
-      ? `最多同时打开 ${maxFiles} 个文件`
-      : `Can only open ${maxFiles} files at once`
+    const msg = t('fileUtils.canOnlyOpenFiles', asLanguage(language), { maxFiles })
     toast.warning(msg)
     filePaths = filePaths.slice(0, maxFiles)
   }
@@ -271,7 +267,7 @@ export async function safeOpenFiles(
 
   if (failed > 0) {
     toast.warning(
-      language === 'zh' ? '部分文件打开失败' : 'Some files failed to open',
+      t('fileUtils.someFilesFailedTo', asLanguage(language)),
       `${opened}/${filePaths.length}`
     )
   }

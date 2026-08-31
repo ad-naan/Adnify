@@ -7,6 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
 import { buildRemoteEditorPath } from '../services/remoteEditorService'
 import type { RemoteFileEntry, RemoteServerConfig } from '../types'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface RemoteFileBrowserProps {
   server: RemoteServerConfig
@@ -116,7 +117,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
       setSelectedFileContent(content || '')
       setDirty(false)
     } catch (readError) {
-      toast.error(language === 'zh' ? '远程文件打开失败' : 'Failed to open remote file', readError instanceof Error ? readError.message : String(readError))
+      toast.error(t('remoteFileBrowser.failedToOpenRemote', asLanguage(language)), readError instanceof Error ? readError.message : String(readError))
     }
   }, [language, server])
 
@@ -124,7 +125,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
     try {
       const content = await api.remoteShell.readText(server, filePath)
       if (!server.username) {
-        throw new Error(language === 'zh' ? '缺少远程用户名' : 'Missing remote username')
+        throw new Error(t('remoteFileBrowser.missingRemoteUsername', asLanguage(language)))
       }
       openEditorFile(buildRemoteEditorPath(server, filePath), content || '', undefined, {
         remote: {
@@ -140,7 +141,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
         },
       })
     } catch (readError) {
-      toast.error(language === 'zh' ? '远程文件打开失败' : 'Failed to open remote file', readError instanceof Error ? readError.message : String(readError))
+      toast.error(t('remoteFileBrowser.failedToOpenRemote', asLanguage(language)), readError instanceof Error ? readError.message : String(readError))
     }
   }, [language, openEditorFile, server])
 
@@ -150,10 +151,10 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
     try {
       await api.remoteShell.writeText(server, selectedFilePath, selectedFileContent)
       setDirty(false)
-      toast.success(language === 'zh' ? '远程文件已保存' : 'Remote file saved')
+      toast.success(t('remoteFileBrowser.remoteFileSaved', asLanguage(language)))
       await loadEntries(currentPath)
     } catch (saveError) {
-      toast.error(language === 'zh' ? '远程文件保存失败' : 'Failed to save remote file', saveError instanceof Error ? saveError.message : String(saveError))
+      toast.error(t('remoteFileBrowser.failedToSaveRemote', asLanguage(language)), saveError instanceof Error ? saveError.message : String(saveError))
     } finally {
       setSaving(false)
     }
@@ -197,19 +198,19 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
     } catch (dialogError) {
       const fallbackMessage =
         nameDialog.mode === 'create-folder'
-          ? language === 'zh' ? '创建目录失败' : 'Failed to create folder'
+          ? t('remoteFileBrowser.failedToCreateFolder', asLanguage(language))
           : nameDialog.mode === 'create-file'
-            ? language === 'zh' ? '创建文件失败' : 'Failed to create file'
-            : language === 'zh' ? '重命名失败' : 'Failed to rename'
+            ? t('remoteFileBrowser.failedToCreateFile', asLanguage(language))
+            : t('remoteFileBrowser.failedToRename', asLanguage(language))
       toast.error(fallbackMessage, dialogError instanceof Error ? dialogError.message : String(dialogError))
     }
   }, [currentPath, language, loadEntries, nameDialog, openEmbeddedFile, selectedFilePath, server])
 
   const handleDelete = useCallback(async (entry: RemoteFileEntry) => {
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '删除远程文件' : 'Delete Remote File',
-      message: language === 'zh' ? `确认删除 ${entry.name} 吗？` : `Delete ${entry.name}?`,
-      confirmText: language === 'zh' ? '删除' : 'Delete',
+      title: t('remoteFileBrowser.deleteRemoteFile', asLanguage(language)),
+      message: t('remoteFileBrowser.delete', asLanguage(language), { name: entry.name }),
+      confirmText: t('delete', asLanguage(language)),
       variant: 'danger',
     })
     if (!confirmed) return
@@ -222,7 +223,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
       }
       await loadEntries(currentPath)
     } catch (deleteError) {
-      toast.error(language === 'zh' ? '删除失败' : 'Failed to delete', deleteError instanceof Error ? deleteError.message : String(deleteError))
+      toast.error(t('remoteFileBrowser.failedToDelete', asLanguage(language)), deleteError instanceof Error ? deleteError.message : String(deleteError))
     }
   }, [currentPath, language, loadEntries, selectedFilePath, server])
 
@@ -230,8 +231,8 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
     setTesting(true)
     try {
       const result = await api.remoteShell.testConnection(server)
-      if (result.success) toast.success(language === 'zh' ? '远程连接正常' : 'Remote connection succeeded')
-      else toast.error(language === 'zh' ? '远程连接失败' : 'Remote connection failed', result.error)
+      if (result.success) toast.success(t('remoteFileBrowser.remoteConnectionSucceeded', asLanguage(language)))
+      else toast.error(t('remoteFileBrowser.remoteConnectionFailed', asLanguage(language)), result.error)
     } finally {
       setTesting(false)
     }
@@ -249,17 +250,15 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           ? (language === 'zh'
             ? `已上传 ${count} 个文件到 ${result.uploaded[0] || currentPath}${result.skippedSymlinks ? `（跳过 ${result.skippedSymlinks} 个符号链接）` : ''}`
             : `Uploaded ${count} file(s) to ${result.uploaded[0] || currentPath}${result.skippedSymlinks ? ` (${result.skippedSymlinks} symlink(s) skipped)` : ''}`)
-          : (language === 'zh'
-            ? `已上传 ${count} 个文件到当前目录`
-            : `${count} file(s) uploaded to the current directory`)
+          : (t('remoteFileBrowser.fileSUploadedTo', asLanguage(language), { count }))
         toast.success(
-          language === 'zh' ? '上传成功' : 'Upload completed',
+          t('remoteFileBrowser.uploadCompleted', asLanguage(language)),
           detail,
         )
         await loadEntries(currentPath)
       }
     } catch (uploadError) {
-      toast.error(language === 'zh' ? '上传失败' : 'Upload failed', uploadError instanceof Error ? uploadError.message : String(uploadError))
+      toast.error(t('remoteFileBrowser.uploadFailed', asLanguage(language)), uploadError instanceof Error ? uploadError.message : String(uploadError))
     } finally {
       setUploading(false)
     }
@@ -277,11 +276,11 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           : `Downloaded ${result.downloadedCount ?? 0} file(s) to ${result.localPath || ''}${result.skippedSymlinks ? ` (${result.skippedSymlinks} symlink(s) skipped)` : ''}`)
         : result.localPath || undefined
       toast.success(
-        language === 'zh' ? '下载完成' : 'Download completed',
+        t('remoteFileBrowser.downloadCompleted', asLanguage(language)),
         detail,
       )
     } catch (downloadError) {
-      toast.error(language === 'zh' ? '下载失败' : 'Download failed', downloadError instanceof Error ? downloadError.message : String(downloadError))
+      toast.error(t('remoteFileBrowser.downloadFailed', asLanguage(language)), downloadError instanceof Error ? downloadError.message : String(downloadError))
     } finally {
       setDownloading(false)
     }
@@ -304,7 +303,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
   }, [currentPath])
 
   if (!server.host.trim()) {
-    return <div className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-text-muted">{language === 'zh' ? '请先完善远程服务器 Host。' : 'Set a remote host to browse files.'}</div>
+    return <div className="rounded-2xl border border-border bg-surface/40 p-4 text-sm text-text-muted">{t('remoteFileBrowser.setARemoteHost', asLanguage(language))}</div>
   }
 
   return (
@@ -315,11 +314,11 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           <div className="mt-1 text-sm text-text-primary break-all">{server.username ? `${server.username}@` : ''}{server.host}:{server.port || 22}</div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={handleTestConnection} disabled={testing} title={language === 'zh' ? '测试连接' : 'Test connection'}>
+          <Button variant="ghost" size="icon" onClick={handleTestConnection} disabled={testing} title={t('remoteFileBrowser.testConnection', asLanguage(language))}>
             <Wifi className="h-4 w-4" />
           </Button>
           {onClose && (
-            <Button variant="ghost" size="icon" onClick={onClose} title={language === 'zh' ? '关闭 SFTP 面板' : 'Close SFTP panel'}>
+            <Button variant="ghost" size="icon" onClick={onClose} title={t('remoteFileBrowser.closeSftpPanel', asLanguage(language))}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -336,16 +335,16 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" onClick={() => loadEntries(currentPath)} leftIcon={<RefreshCw className="h-4 w-4" />}>{language === 'zh' ? '刷新' : 'Refresh'}</Button>
-          <Button variant="ghost" size="sm" onClick={() => loadEntries(getParentPath(currentPath))}>{language === 'zh' ? '上级目录' : 'Up'}</Button>
-          <Button variant="ghost" size="sm" disabled={uploading || downloading} onClick={() => handleUpload('files')} leftIcon={<Upload className="h-4 w-4" />}>{uploading ? (language === 'zh' ? '上传中…' : 'Uploading…') : (language === 'zh' ? '上传文件' : 'Upload files')}</Button>
-          <Button variant="ghost" size="sm" disabled={uploading || downloading} onClick={() => handleUpload('directory')} leftIcon={<FolderUp className="h-4 w-4" />}>{language === 'zh' ? '上传目录' : 'Upload folder'}</Button>
-          <Button variant="ghost" size="sm" onClick={handleCreateFolder} leftIcon={<FolderPlus className="h-4 w-4" />}>{language === 'zh' ? '新建目录' : 'New folder'}</Button>
-          <Button variant="ghost" size="sm" onClick={handleCreateFile} leftIcon={<FileText className="h-4 w-4" />}>{language === 'zh' ? '新建文件' : 'New file'}</Button>
+          <Button variant="ghost" size="sm" onClick={() => loadEntries(currentPath)} leftIcon={<RefreshCw className="h-4 w-4" />}>{t('refresh', asLanguage(language))}</Button>
+          <Button variant="ghost" size="sm" onClick={() => loadEntries(getParentPath(currentPath))}>{t('remoteFileBrowser.up', asLanguage(language))}</Button>
+          <Button variant="ghost" size="sm" disabled={uploading || downloading} onClick={() => handleUpload('files')} leftIcon={<Upload className="h-4 w-4" />}>{uploading ? (t('remoteFileBrowser.uploading', asLanguage(language))) : (t('remoteFileBrowser.uploadFiles', asLanguage(language)))}</Button>
+          <Button variant="ghost" size="sm" disabled={uploading || downloading} onClick={() => handleUpload('directory')} leftIcon={<FolderUp className="h-4 w-4" />}>{t('remoteFileBrowser.uploadFolder', asLanguage(language))}</Button>
+          <Button variant="ghost" size="sm" onClick={handleCreateFolder} leftIcon={<FolderPlus className="h-4 w-4" />}>{t('remoteFileBrowser.newFolder', asLanguage(language))}</Button>
+          <Button variant="ghost" size="sm" onClick={handleCreateFile} leftIcon={<FileText className="h-4 w-4" />}>{t('remoteFileBrowser.newFile', asLanguage(language))}</Button>
         </div>
         {error && <div className="rounded-lg border border-status-error/40 bg-status-error/10 px-3 py-2 text-xs text-status-error">{error}</div>}
         <div className="max-h-72 overflow-y-auto space-y-2">
-          {loading ? <div className="px-2 py-3 text-sm text-text-muted">{language === 'zh' ? '正在读取远程目录…' : 'Loading remote directory…'}</div> : entries.length === 0 ? <div className="px-2 py-3 text-sm text-text-muted">{language === 'zh' ? '当前目录为空' : 'Directory is empty'}</div> : entries.map((entry) => (
+          {loading ? <div className="px-2 py-3 text-sm text-text-muted">{t('remoteFileBrowser.loadingRemoteDirectory', asLanguage(language))}</div> : entries.length === 0 ? <div className="px-2 py-3 text-sm text-text-muted">{t('remoteFileBrowser.directoryIsEmpty', asLanguage(language))}</div> : entries.map((entry) => (
             <div key={entry.path} className={`rounded-xl border px-3 py-2 ${selectedFilePath === entry.path ? 'border-accent/50 bg-accent/10' : 'border-border bg-background/50'}`}>
               <div className="flex items-center gap-2">
                 <button
@@ -356,7 +355,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
                   {entry.isDirectory ? <Folder className="h-4 w-4 text-accent" /> : <FileText className="h-4 w-4 text-text-muted" />}
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm text-text-primary">{entry.name}</div>
-                    <div className="truncate text-xs text-text-muted">{entry.isDirectory ? (language === 'zh' ? '目录' : 'Directory') : formatSize(entry.size)}</div>
+                    <div className="truncate text-xs text-text-muted">{entry.isDirectory ? (t('common.directory', asLanguage(language))) : formatSize(entry.size)}</div>
                   </div>
                 </button>
                 <Button
@@ -366,7 +365,7 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
                   onClick={() => handleDownload(entry)}
                   title={
                     downloading
-                      ? (language === 'zh' ? '正在下载…' : 'Downloading…')
+                      ? (t('remoteFileBrowser.downloading', asLanguage(language)))
                       : language === 'zh'
                         ? (entry.isDirectory ? '下载目录' : '下载文件')
                         : (entry.isDirectory ? 'Download folder' : 'Download file')
@@ -376,13 +375,13 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
                     </Button>
                 {!entry.isDirectory && (
                   <>
-                    <Button variant="ghost" size="icon" onClick={() => void openInEditor(entry.path)} title={language === 'zh' ? '在编辑器打开' : 'Open in editor'}>
+                    <Button variant="ghost" size="icon" onClick={() => void openInEditor(entry.path)} title={t('remoteFileBrowser.openInEditor', asLanguage(language))}>
                       <SquareArrowOutUpRight className="h-3.5 w-3.5" />
                     </Button>
                   </>
                 )}
-                <Button variant="ghost" size="icon" onClick={() => handleRename(entry)} title={language === 'zh' ? '重命名' : 'Rename'}><Pencil className="h-3.5 w-3.5" /></Button>
-                <Button variant="ghost" size="icon" onClick={() => handleDelete(entry)} title={language === 'zh' ? '删除' : 'Delete'}><Trash2 className="h-3.5 w-3.5" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => handleRename(entry)} title={t('rename', asLanguage(language))}><Pencil className="h-3.5 w-3.5" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => handleDelete(entry)} title={t('delete', asLanguage(language))}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             </div>
           ))}
@@ -394,9 +393,9 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           <div className="flex items-center justify-between gap-2">
             <Input value={selectedFilePath} readOnly className="text-xs" />
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" disabled={downloading || uploading} onClick={() => handleDownload({ name: selectedFilePath.split('/').pop() || selectedFilePath, path: selectedFilePath, isDirectory: false, size: selectedFileContent.length })} leftIcon={<Download className="h-4 w-4" />}>{downloading ? (language === 'zh' ? '下载中…' : 'Downloading…') : (language === 'zh' ? '下载' : 'Download')}</Button>
-              <Button variant="ghost" size="sm" onClick={() => void openInEditor(selectedFilePath)} leftIcon={<SquareArrowOutUpRight className="h-4 w-4" />}>{language === 'zh' ? '打开到编辑器' : 'Open in editor'}</Button>
-              <Button variant="primary" size="sm" onClick={saveFile} disabled={saving || !dirty} leftIcon={<Save className="h-4 w-4" />}>{saving ? (language === 'zh' ? '保存中…' : 'Saving…') : (language === 'zh' ? '保存' : 'Save')}</Button>
+              <Button variant="ghost" size="sm" disabled={downloading || uploading} onClick={() => handleDownload({ name: selectedFilePath.split('/').pop() || selectedFilePath, path: selectedFilePath, isDirectory: false, size: selectedFileContent.length })} leftIcon={<Download className="h-4 w-4" />}>{downloading ? (t('remoteFileBrowser.downloading2', asLanguage(language))) : (t('remoteFileBrowser.download', asLanguage(language)))}</Button>
+              <Button variant="ghost" size="sm" onClick={() => void openInEditor(selectedFilePath)} leftIcon={<SquareArrowOutUpRight className="h-4 w-4" />}>{t('remoteFileBrowser.openInEditor2', asLanguage(language))}</Button>
+              <Button variant="primary" size="sm" onClick={saveFile} disabled={saving || !dirty} leftIcon={<Save className="h-4 w-4" />}>{saving ? (t('remoteFileBrowser.saving', asLanguage(language))) : (t('saveSession', asLanguage(language)))}</Button>
             </div>
           </div>
           <textarea
@@ -418,10 +417,10 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           !nameDialog
             ? ''
             : nameDialog.mode === 'create-folder'
-              ? language === 'zh' ? '新建目录' : 'Create folder'
+              ? t('remoteFileBrowser.createFolder', asLanguage(language))
               : nameDialog.mode === 'create-file'
-                ? language === 'zh' ? '新建文件' : 'Create file'
-                : language === 'zh' ? '重命名' : 'Rename'
+                ? t('remoteFileBrowser.createFile', asLanguage(language))
+                : t('rename', asLanguage(language))
         }
         size="sm"
       >
@@ -431,10 +430,10 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
             onChange={(event) => setNameDialog((prev) => (prev ? { ...prev, value: event.target.value } : prev))}
             placeholder={
               nameDialog?.mode === 'create-folder'
-                ? language === 'zh' ? '输入目录名' : 'Enter folder name'
+                ? t('remoteFileBrowser.enterFolderName', asLanguage(language))
                 : nameDialog?.mode === 'create-file'
-                  ? language === 'zh' ? '输入文件名' : 'Enter file name'
-                  : language === 'zh' ? '输入新名称' : 'Enter new name'
+                  ? t('remoteFileBrowser.enterFileName', asLanguage(language))
+                  : t('remoteFileBrowser.enterNewName', asLanguage(language))
             }
             autoFocus
             onKeyDown={(event) => {
@@ -443,10 +442,10 @@ export function RemoteFileBrowser({ server, language, onClose }: RemoteFileBrows
           />
           <div className="flex items-center justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setNameDialog(null)}>
-              {language === 'zh' ? '取消' : 'Cancel'}
+              {t('cancel', asLanguage(language))}
             </Button>
             <Button variant="primary" size="sm" onClick={() => void handleNameDialogConfirm()} disabled={!nameDialog?.value.trim()}>
-              {language === 'zh' ? '确认' : 'Confirm'}
+              {t('remoteFileBrowser.confirm', asLanguage(language))}
             </Button>
           </div>
         </div>

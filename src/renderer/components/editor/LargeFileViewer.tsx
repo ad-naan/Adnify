@@ -7,6 +7,7 @@ import type { TextFileChunk } from '@shared/types/fileChunk'
 import { api } from '@renderer/services/electronAPI'
 import { defineMonacoTheme } from './utils/monacoTheme'
 import { LargeFilePageCache } from './largeFilePageCache'
+import { t, asLanguage } from '@renderer/i18n'
 
 const PAGE_CACHE_SIZE = 5
 const SEEK_STEPS = 1_000
@@ -154,16 +155,16 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 text-xs text-text-muted">
         <Lock className="h-3.5 w-3.5 shrink-0" />
         <span className="shrink-0">
-          {language === 'zh' ? '超大文件虚拟只读模式' : 'Virtualized large file · read only'}
+          {t('largeFileViewer.virtualizedLargeFileRead', asLanguage(language))}
         </span>
         <span className="hidden shrink-0 text-text-muted/70 xl:inline">
-          {language === 'zh' ? '滚轮可连续跨页' : 'Scroll across windows continuously'}
+          {t('largeFileViewer.scrollAcrossWindowsContinuously', asLanguage(language))}
         </span>
         <span className="ml-auto shrink-0 tabular-nums">
           {percentage.toFixed(1)}% · {formatBytes(chunk.startOffset)}–{formatBytes(pageEnd)} / {formatBytes(chunk.totalSize)}
         </span>
         <input
-          aria-label={language === 'zh' ? '跳转到文件位置' : 'Seek through file'}
+          aria-label={t('largeFileViewer.seekThroughFile', asLanguage(language))}
           type="range"
           min={0}
           max={SEEK_STEPS}
@@ -183,7 +184,7 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
           disabled={loading || chunk.startOffset <= 0}
           className="rounded p-1 hover:bg-surface disabled:opacity-30"
           onClick={() => loadPrevious()}
-          title={language === 'zh' ? '上一窗口' : 'Previous window'}
+          title={t('largeFileViewer.previousWindow', asLanguage(language))}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -192,7 +193,7 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
           disabled={loading || chunk.eof}
           className="rounded p-1 hover:bg-surface disabled:opacity-30"
           onClick={loadNext}
-          title={language === 'zh' ? '下一窗口' : 'Next window'}
+          title={t('largeFileViewer.nextWindow', asLanguage(language))}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -200,7 +201,7 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
       </div>
       {error && (
         <div className="border-b border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-          {language === 'zh' ? '读取当前位置失败，请重试。' : 'Could not read this position. Please retry.'}
+          {t('largeFileViewer.couldNotReadThis', asLanguage(language))}
         </div>
       )}
       <div className="min-h-0 flex-1">

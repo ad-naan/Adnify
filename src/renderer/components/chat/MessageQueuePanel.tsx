@@ -18,6 +18,7 @@ import {
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useStore } from '@store'
 import type { QueuedMessage } from '@/renderer/agent/types/queue'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface MessageQueuePanelProps {
   onSendNow: (id: string) => void
@@ -54,7 +55,7 @@ export default memo(function MessageQueuePanel({ onSendNow }: MessageQueuePanelP
               <Layers className="w-3 h-3 text-accent" />
             </div>
             <span className="text-xs font-medium text-text-secondary">
-              {language === 'zh' ? '发送队列' : 'Send Queue'}
+              {t('messageQueuePanel.sendQueue', asLanguage(language))}
             </span>
             <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-accent/15 text-accent rounded-full min-w-[18px] text-center">
               {queue.length}
@@ -64,7 +65,7 @@ export default memo(function MessageQueuePanel({ onSendNow }: MessageQueuePanelP
             <button
               onClick={(e) => { e.stopPropagation(); clearQueue() }}
               className="p-1 rounded-md text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-              title={language === 'zh' ? '清空队列' : 'Clear queue'}
+              title={t('common.clearQueue', asLanguage(language))}
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -205,19 +206,19 @@ function QueueItem({
                 className="px-2 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded-md hover:bg-accent/20 transition-colors"
               >
                 <Check className="w-3 h-3 inline mr-0.5" />
-                {language === 'zh' ? '确认' : 'Save'}
+                {t('common.save', asLanguage(language))}
               </button>
               <button
                 onClick={cancelEdit}
                 className="px-2 py-0.5 text-[10px] font-medium text-text-muted rounded-md hover:bg-surface-hover transition-colors"
               >
-                {language === 'zh' ? '取消' : 'Cancel'}
+                {t('cancel', asLanguage(language))}
               </button>
             </div>
           </div>
         ) : (
           <p className="text-xs text-text-secondary leading-relaxed line-clamp-2 break-all">
-            {displayText || (language === 'zh' ? '(多模态消息)' : '(multimodal)')}
+            {displayText || (t('common.multimodal', asLanguage(language)))}
           </p>
         )}
 
@@ -225,7 +226,7 @@ function QueueItem({
         {!isEditing && item.contextItems.length > 0 && (
           <div className="flex items-center gap-1 mt-1">
             <span className="text-[10px] text-text-muted/60">
-              +{item.contextItems.length} {language === 'zh' ? '上下文' : 'context'}
+              +{item.contextItems.length} {t('messageQueuePanel.context', asLanguage(language))}
             </span>
           </div>
         )}
@@ -239,7 +240,7 @@ function QueueItem({
             <button
               onClick={() => onReorder(index, index - 1)}
               className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-active transition-colors"
-              title={language === 'zh' ? '上移' : 'Move up'}
+              title={t('messageQueuePanel.moveUp', asLanguage(language))}
             >
               <ChevronUp className="w-3 h-3" />
             </button>
@@ -249,7 +250,7 @@ function QueueItem({
             <button
               onClick={() => onReorder(index, index + 1)}
               className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-active transition-colors"
-              title={language === 'zh' ? '下移' : 'Move down'}
+              title={t('messageQueuePanel.moveDown', asLanguage(language))}
             >
               <ChevronDown className="w-3 h-3" />
             </button>
@@ -258,7 +259,7 @@ function QueueItem({
           <button
             onClick={startEdit}
             className="p-1 rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
-            title={language === 'zh' ? '编辑' : 'Edit'}
+            title={t('editor.edit', asLanguage(language))}
           >
             <Pencil className="w-3 h-3" />
           </button>
@@ -266,7 +267,7 @@ function QueueItem({
           <button
             onClick={() => onSendNow(item.id)}
             className="p-1 rounded text-text-muted hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-            title={language === 'zh' ? '立即发送' : 'Send now'}
+            title={t('messageQueuePanel.sendNow', asLanguage(language))}
           >
             <Play className="w-3 h-3" />
           </button>
@@ -274,7 +275,7 @@ function QueueItem({
           <button
             onClick={() => onRemove(item.id)}
             className="p-1 rounded text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-            title={language === 'zh' ? '移除' : 'Remove'}
+            title={t('messageQueuePanel.remove', asLanguage(language))}
           >
             <X className="w-3 h-3" />
           </button>

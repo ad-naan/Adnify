@@ -9,7 +9,7 @@ import { Eye, EyeOff, AlertTriangle, Database, Settings2, Zap, Brain } from 'luc
 import { useStore } from '@store'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Input, Select } from '@components/ui'
-import { Language } from '@renderer/i18n'
+import { Language, t, asLanguage } from '@renderer/i18n'
 import { loadIndexPreference, saveIndexPreference } from '@/renderer/settings/indexPreference'
 import type { EmbeddingConfigInput, IndexStatus } from '@renderer/types/electron'
 
@@ -42,21 +42,21 @@ export function IndexSettings({ language }: IndexSettingsProps) {
   const [indexStatus, setIndexStatus] = useState<IndexStatus | null>(null)
 
   const EMBEDDING_PROVIDERS = [
-    { id: 'jina', name: 'Jina AI', description: language === 'zh' ? '免费 100万 tokens/月' : 'Free 100M tokens/month' },
-    { id: 'voyage', name: 'Voyage AI', description: language === 'zh' ? '免费 5000万 tokens' : 'Free 50M tokens' },
-    { id: 'cohere', name: 'Cohere', description: language === 'zh' ? '免费 100次/分钟' : 'Free 100 calls/min' },
-    { id: 'ollama', name: 'Ollama', description: language === 'zh' ? '本地运行' : 'Local' },
-    { id: 'transformers', name: 'Transformers.js', description: language === 'zh' ? '本地原生 (无需 Ollama)' : 'Local Native (No Ollama)' },
-    { id: 'openai', name: 'OpenAI', description: language === 'zh' ? '付费' : 'Paid' },
-    { id: 'custom', name: language === 'zh' ? '自定义' : 'Custom', description: 'OpenAI API compatible' },
+    { id: 'jina', name: 'Jina AI', description: t('indexSettings.free100mTokensMonth', asLanguage(language)) },
+    { id: 'voyage', name: 'Voyage AI', description: t('indexSettings.free50mTokens', asLanguage(language)) },
+    { id: 'cohere', name: 'Cohere', description: t('indexSettings.free100CallsMin', asLanguage(language)) },
+    { id: 'ollama', name: 'Ollama', description: t('indexSettings.local', asLanguage(language)) },
+    { id: 'transformers', name: 'Transformers.js', description: t('indexSettings.localNativeNoOllama', asLanguage(language)) },
+    { id: 'openai', name: 'OpenAI', description: t('indexSettings.paid', asLanguage(language)) },
+    { id: 'custom', name: t('indexSettings.custom', asLanguage(language)), description: 'OpenAI API compatible' },
   ]
 
   const TRANSFORMERS_MODELS = [
-    { id: 'Xenova/multilingual-e5-small', name: 'Multilingual E5 Small', description: language === 'zh' ? '推荐：最平衡的中英双语模型，精度高速度快' : 'Best balance, optimized for EN/CN' },
-    { id: 'Xenova/bge-small-zh-v1.5', name: 'BGE Small ZH', description: language === 'zh' ? '中文强化：最适合纯中文项目' : 'Best for pure Chinese projects' },
-    { id: 'Xenova/all-MiniLM-L6-v2', name: 'MiniLM L6 (English)', description: language === 'zh' ? '速度最快：适合纯英文项目，中文支持弱' : 'Fastest, mostly for English' },
-    { id: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', name: 'MiniLM L12 Multilingual', description: language === 'zh' ? '通用方案：老牌稳定的多语言模型' : 'Stable and general multilingual' },
-    { id: 'custom', name: language === 'zh' ? '自定义模型...' : 'Custom model...', description: '' },
+    { id: 'Xenova/multilingual-e5-small', name: 'Multilingual E5 Small', description: t('indexSettings.bestBalanceOptimizedFor', asLanguage(language)) },
+    { id: 'Xenova/bge-small-zh-v1.5', name: 'BGE Small ZH', description: t('indexSettings.bestForPureChinese', asLanguage(language)) },
+    { id: 'Xenova/all-MiniLM-L6-v2', name: 'MiniLM L6 (English)', description: t('indexSettings.fastestMostlyForEnglish', asLanguage(language)) },
+    { id: 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', name: 'MiniLM L12 Multilingual', description: t('indexSettings.stableAndGeneralMultilingual', asLanguage(language)) },
+    { id: 'custom', name: t('indexSettings.customModel', asLanguage(language)), description: '' },
   ]
 
   // 加载配置
@@ -109,7 +109,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
   // 保存 Embedding 配置
   const handleSaveEmbeddingConfig = async () => {
     if (embeddingConfig.provider === 'custom' && !embeddingConfig.baseUrl) {
-      toast.error(language === 'zh' ? '自定义服务必须填写 API 地址' : 'Custom service requires API URL')
+      toast.error(t('indexSettings.customServiceRequiresApi', asLanguage(language)))
       return
     }
 
@@ -128,17 +128,17 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       if (workspacePath) {
         await api.index.updateEmbeddingConfig(workspacePath, configToSave)
       }
-      toast.success(language === 'zh' ? '配置已保存' : 'Configuration saved')
+      toast.success(t('indexSettings.configurationSaved', asLanguage(language)))
     } catch (error) {
       logger.settings.error('[IndexSettings] Save failed:', error)
-      toast.error(language === 'zh' ? '保存失败' : 'Save failed')
+      toast.error(t('common.saveFailed2', asLanguage(language)))
     }
   }
 
   // 开始索引
   const handleStartIndexing = async () => {
     if (!workspacePath) {
-      toast.error(language === 'zh' ? '请先打开工作区' : 'Please open a workspace first')
+      toast.error(t('indexSettings.pleaseOpenAWorkspace', asLanguage(language)))
       return
     }
 
@@ -149,10 +149,10 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       }
       const result = await api.index.start(workspacePath)
       if (!result.success) throw new Error(result.error)
-      toast.success(language === 'zh' ? '索引已完成' : 'Indexing completed')
+      toast.success(t('indexSettings.indexingCompleted', asLanguage(language)))
     } catch (error) {
       logger.settings.error('[IndexSettings] Start indexing failed:', error)
-      toast.error(language === 'zh' ? '索引失败' : 'Indexing failed')
+      toast.error(t('indexSettings.indexingFailed', asLanguage(language)))
       setIsIndexing(false)
     }
   }
@@ -162,10 +162,10 @@ export function IndexSettings({ language }: IndexSettingsProps) {
     if (!workspacePath) return
     try {
       await api.index.clear(workspacePath)
-      toast.success(language === 'zh' ? '索引已清除' : 'Index cleared')
+      toast.success(t('indexSettings.indexCleared', asLanguage(language)))
       setIndexStatus(null)
     } catch {
-      toast.error(language === 'zh' ? '清除失败' : 'Failed to clear')
+      toast.error(t('indexSettings.failedToClear', asLanguage(language)))
     }
   }
 
@@ -174,7 +174,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       {/* 索引模式选择 */}
       <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-          {language === 'zh' ? '索引模式' : 'Index Mode'}
+          {t('indexSettings.indexMode', asLanguage(language))}
         </h4>
         <div className="grid grid-cols-2 gap-3">
           <button
@@ -186,15 +186,13 @@ export function IndexSettings({ language }: IndexSettingsProps) {
           >
             <div className="flex items-center gap-2 mb-2">
               <Zap className={`w-4 h-4 ${indexMode === 'structural' ? 'text-accent' : 'text-text-muted'}`} />
-              <span className="font-medium text-sm">{language === 'zh' ? '结构化索引' : 'Structural'}</span>
+              <span className="font-medium text-sm">{t('indexSettings.structural', asLanguage(language))}</span>
               <span className="text-xs px-1.5 py-0.5 rounded bg-success/20 text-success">
-                {language === 'zh' ? '推荐' : 'Recommended'}
+                {t('indexSettings.recommended', asLanguage(language))}
               </span>
             </div>
             <p className="text-xs text-text-muted">
-              {language === 'zh'
-                ? '零配置，本地运行，基于代码结构分析'
-                : 'Zero config, local, based on code structure'}
+              {t('indexSettings.zeroConfigLocalBased', asLanguage(language))}
             </p>
           </button>
 
@@ -207,12 +205,10 @@ export function IndexSettings({ language }: IndexSettingsProps) {
           >
             <div className="flex items-center gap-2 mb-2">
               <Brain className={`w-4 h-4 ${indexMode === 'semantic' ? 'text-accent' : 'text-text-muted'}`} />
-              <span className="font-medium text-sm">{language === 'zh' ? '语义索引' : 'Semantic'}</span>
+              <span className="font-medium text-sm">{t('indexSettings.semantic', asLanguage(language))}</span>
             </div>
             <p className="text-xs text-text-muted">
-              {language === 'zh'
-                ? '需要 Embedding API，更好的语义理解'
-                : 'Requires Embedding API, better semantic understanding'}
+              {t('indexSettings.requiresEmbeddingApiBetter', asLanguage(language))}
             </p>
           </button>
         </div>
@@ -222,12 +218,12 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       {indexMode === 'semantic' && (
         <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5 animate-fade-in">
           <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-            {language === 'zh' ? 'Embedding 配置' : 'Embedding Configuration'}
+            {t('indexSettings.embeddingConfiguration', asLanguage(language))}
           </h4>
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium text-text-primary block mb-2">
-                {language === 'zh' ? '提供商' : 'Provider'}
+                {t('indexSettings.provider', asLanguage(language))}
               </label>
               <Select
                 value={embeddingConfig.provider}
@@ -258,7 +254,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
                     type={showApiKey ? 'text' : 'password'}
                     value={embeddingConfig.apiKey}
                     onChange={(e) => setEmbeddingConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                    placeholder={language === 'zh' ? '输入 API Key' : 'Enter API Key'}
+                    placeholder={t('indexSettings.enterApiKey', asLanguage(language))}
                   />
                   <button
                     type="button"
@@ -274,11 +270,11 @@ export function IndexSettings({ language }: IndexSettingsProps) {
             <div className="space-y-3 border-t border-border/50 pt-4">
               <div className="flex items-center gap-2">
                 <Settings2 className="w-3.5 h-3.5 text-accent" />
-                <span className="text-xs font-medium text-text-secondary">{language === 'zh' ? '模型配置' : 'Model configuration'}</span>
+                <span className="text-xs font-medium text-text-secondary">{t('indexSettings.modelConfiguration', asLanguage(language))}</span>
               </div>
                 <div>
                   <label className="text-xs text-text-muted block mb-1">
-                    {language === 'zh' ? '模型名称' : 'Model Name'}
+                    {t('indexSettings.modelName', asLanguage(language))}
                   </label>
                   {embeddingConfig.provider === 'transformers' ? (
                     <div className="space-y-2">
@@ -305,7 +301,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
                             placeholder="e.g. Xenova/multilingual-e5-small"
                           />
                           <p className="text-[10px] text-text-muted mt-1">
-                            {language === 'zh' ? '输入 HuggingFace 上的模型标识符' : 'Enter model identifier from HuggingFace'}
+                            {t('indexSettings.enterModelIdentifierFrom', asLanguage(language))}
                           </p>
                         </div>
                       )}
@@ -322,7 +318,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
               </div>
 
             <Button variant="secondary" size="sm" onClick={handleSaveEmbeddingConfig}>
-              {language === 'zh' ? '保存配置' : 'Save Configuration'}
+              {t('indexSettings.saveConfiguration', asLanguage(language))}
             </Button>
           </div>
         </section>
@@ -331,7 +327,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       {/* 索引状态和操作 */}
       <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-          {language === 'zh' ? '索引状态' : 'Index Status'}
+          {t('indexSettings.indexStatus', asLanguage(language))}
         </h4>
 
         {indexStatus && (
@@ -339,20 +335,20 @@ export function IndexSettings({ language }: IndexSettingsProps) {
             <div className="flex items-center justify-between mb-2">
               <span className={`text-sm ${indexStatus.error ? 'text-error' : 'text-text-primary'}`}>
                 {indexStatus.error || indexStatus.message || (indexStatus.isIndexing
-                  ? (language === 'zh' ? '索引中...' : 'Indexing...')
-                  : (language === 'zh' ? '就绪' : 'Ready'))}
+                  ? (t('indexSettings.indexing', asLanguage(language)))
+                  : (t('indexSettings.ready', asLanguage(language))))}
               </span>
               <span className="text-xs px-2 py-0.5 rounded bg-surface border border-border-subtle">
                 {indexStatus.mode === 'structural'
-                  ? (language === 'zh' ? '结构化' : 'Structural')
-                  : (language === 'zh' ? '语义' : 'Semantic')}
+                  ? (t('indexSettings.structural2', asLanguage(language)))
+                  : (t('indexSettings.semantic2', asLanguage(language)))}
               </span>
             </div>
             <div className="text-xs text-text-muted space-y-1">
-              <div>{language === 'zh' ? '文件' : 'Files'}: {indexStatus.indexedFiles} / {indexStatus.totalFiles}</div>
-              <div>{language === 'zh' ? '代码块' : 'Chunks'}: {indexStatus.totalChunks}</div>
+              <div>{t('indexSettings.files', asLanguage(language))}: {indexStatus.indexedFiles} / {indexStatus.totalFiles}</div>
+              <div>{t('indexSettings.chunks', asLanguage(language))}: {indexStatus.totalChunks}</div>
               {indexStatus.lastIndexedAt && (
-                <div>{language === 'zh' ? '上次索引' : 'Last indexed'}: {new Date(indexStatus.lastIndexedAt).toLocaleString()}</div>
+                <div>{t('indexSettings.lastIndexed', asLanguage(language))}: {new Date(indexStatus.lastIndexedAt).toLocaleString()}</div>
               )}
             </div>
             {indexStatus.isIndexing && (
@@ -374,18 +370,18 @@ export function IndexSettings({ language }: IndexSettingsProps) {
             leftIcon={<Database className="w-4 h-4" />}
           >
             {isIndexing
-              ? (language === 'zh' ? '索引中...' : 'Indexing...')
-              : (language === 'zh' ? '开始索引' : 'Start Indexing')}
+              ? (t('indexSettings.indexing', asLanguage(language)))
+              : (t('indexSettings.startIndexing', asLanguage(language)))}
           </Button>
           <Button variant="secondary" onClick={handleClearIndex} disabled={!workspacePath}>
-            {language === 'zh' ? '清除索引' : 'Clear Index'}
+            {t('indexSettings.clearIndex', asLanguage(language))}
           </Button>
         </div>
 
         {!workspacePath && (
           <div className="flex items-center gap-2 text-xs text-warning mt-3">
             <AlertTriangle className="w-4 h-4" />
-            {language === 'zh' ? '请先打开工作区' : 'Please open a workspace first'}
+            {t('indexSettings.pleaseOpenAWorkspace', asLanguage(language))}
           </div>
         )}
       </section>

@@ -25,6 +25,7 @@ import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { projectThreadsForMode } from '@/renderer/agent/threads/threadModeProjection'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
+import { t, asLanguage } from '@renderer/i18n'
 
 type Tab = 'history' | 'branches'
 
@@ -71,8 +72,8 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/30 select-none">
               <h2 className="text-base font-semibold text-text-primary tracking-tight">
                 {currentMode === 'plan'
-                  ? (language === 'zh' ? '计划记录' : 'Plan history')
-                  : (language === 'zh' ? 'Agent 任务' : 'Agent tasks')}
+                  ? (t('conversationSidebar.planHistory', asLanguage(language)))
+                  : (t('common.agentTasks', asLanguage(language)))}
               </h2>
               <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full hover:bg-surface/80 text-text-muted hover:text-text-primary transition-colors">
                 <X className="w-4 h-4" />
@@ -96,7 +97,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                     />
                   )}
                   <History className="w-3.5 h-3.5" />
-                  {language === 'zh' ? '历史记录' : 'History'}
+                  {t('checkpoint.title', asLanguage(language))}
                 </button>
                 <button
                   onClick={() => setActiveTab('branches')}
@@ -113,7 +114,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                     />
                   )}
                   <GitBranch className="w-3.5 h-3.5" />
-                  {language === 'zh' ? '分支' : 'Branches'}
+                  {t('git.branches', asLanguage(language))}
                 </button>
               </div>
             </div>}
@@ -123,7 +124,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted/70 group-focus-within:text-accent transition-colors" />
                 <input
                   type="text"
-                  placeholder={language === 'zh' ? '搜索...' : 'Search...'}
+                  placeholder={t('conversationSidebar.search', asLanguage(language))}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-8 text-xs bg-surface/30 border border-border/30 rounded-lg focus:outline-none focus:border-accent/30 focus:bg-surface/50 transition-all placeholder:text-text-muted/40"
@@ -168,8 +169,8 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                 >
                   <Plus className="w-4 h-4" />
                   {currentMode === 'plan'
-                    ? (language === 'zh' ? '新建计划任务' : 'New plan task')
-                    : (language === 'zh' ? '新建 Agent 任务' : 'New Agent task')}
+                    ? (t('conversationSidebar.newPlanTask', asLanguage(language)))
+                    : (t('common.newAgentTask', asLanguage(language)))}
                 </Button>
               </div>
             )}
@@ -211,7 +212,7 @@ function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: st
   }, [allThreads, mode, searchQuery])
 
   if (filteredThreads.length === 0) {
-    return <EmptyState asset="sitThreeQuarter" text={language === 'zh' ? '无历史记录' : 'No history found'} />
+    return <EmptyState asset="sitThreeQuarter" text={t('conversationSidebar.noHistoryFound', asLanguage(language))} />
   }
 
   return (
@@ -402,12 +403,12 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
             <div className="flex items-center justify-between">
               <span className={`text-sm font-semibold tracking-tight ${!isOnBranch ? 'text-accent' : 'text-text-primary'
                 }`}>
-                {language === 'zh' ? '主线对话' : 'Main Thread'}
+                {t('conversationSidebar.mainThread', asLanguage(language))}
               </span>
               {!isOnBranch && <Check className="w-3.5 h-3.5 text-accent" />}
             </div>
             <p className="text-[11px] text-text-muted/80 mt-0.5 truncate">
-              {language === 'zh' ? '原始对话流' : 'Original conversation flow'}
+              {t('conversationSidebar.originalConversationFlow', asLanguage(language))}
             </p>
           </div>
         </div>
@@ -417,7 +418,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
         {filteredBranches.length > 0 && (
           <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 opacity-70 flex items-center gap-2">
             <GitBranch className="w-3 h-3" />
-            {language === 'zh' ? '分支列表' : 'Your Branches'} ({filteredBranches.length})
+            {t('conversationSidebar.yourBranches', asLanguage(language))} ({filteredBranches.length})
           </p>
         )}
 
@@ -521,8 +522,8 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
         {filteredBranches.length === 0 && (
           <EmptyState
             asset="waveStand"
-            text={language === 'zh' ? '暂无分支' : 'No branches found'}
-            subText={language === 'zh' ? '在消息上点击“重新生成”可创建分支' : 'Click "Regenerate" on messages to create branches'}
+            text={t('conversationSidebar.noBranchesFound', asLanguage(language))}
+            subText={t('conversationSidebar.clickRegenerateOnMessages', asLanguage(language))}
           />
         )}
       </div>

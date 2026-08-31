@@ -27,7 +27,7 @@ import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
 import { motion, AnimatePresence } from 'framer-motion'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
 import ReasoningParticleSlider from './ReasoningParticleSlider'
@@ -175,13 +175,13 @@ const ChatInput = memo(function ChatInput({
   const isSendable = input.trim().length > 0 || images.length > 0
   const reasoningOptions = useMemo(() => {
     const labels = {
-      none: language === 'zh' ? '关闭' : 'Off',
-      minimal: language === 'zh' ? '极低' : 'Minimal',
-      low: language === 'zh' ? '低' : 'Low',
-      medium: language === 'zh' ? '中' : 'Medium',
-      high: language === 'zh' ? '高' : 'High',
-      xhigh: language === 'zh' ? '极高' : 'X-High',
-      max: language === 'zh' ? '最高' : 'Max',
+      none: t('chatInput.off', asLanguage(language)),
+      minimal: t('chatInput.minimal', asLanguage(language)),
+      low: t('emotion.sensitivityLow', asLanguage(language)),
+      medium: t('emotion.sensitivityMedium', asLanguage(language)),
+      high: t('emotion.sensitivityHigh', asLanguage(language)),
+      xhigh: t('chatInput.xHigh', asLanguage(language)),
+      max: t('chatInput.max', asLanguage(language)),
     } as const
     const protocol = llmConfig.protocol
     const supported = llmConfig.provider === 'anthropic' || protocol === 'anthropic'
@@ -351,11 +351,11 @@ const ChatInput = memo(function ChatInput({
                 onClick={() => setIsInputExpanded(prev => !prev)}
                 className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-text-muted/55 transition-colors hover:bg-text-primary/[0.04] hover:text-text-secondary"
                 title={isInputExpanded
-                  ? (language === 'zh' ? '收起输入内容' : 'Collapse input')
-                  : (language === 'zh' ? '展开输入内容' : 'Expand input')}
+                  ? (t('chatInput.collapseInput', asLanguage(language)))
+                  : (t('chatInput.expandInput', asLanguage(language)))}
               >
                 {isInputExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-                <span>{isInputExpanded ? (language === 'zh' ? '收起' : 'Collapse') : (language === 'zh' ? '展开' : 'Expand')}</span>
+                <span>{isInputExpanded ? (t('toolCollapse', asLanguage(language))) : (t('chatInput.expand', asLanguage(language)))}</span>
               </button>
             </div>
           )}
@@ -406,8 +406,8 @@ const ChatInput = memo(function ChatInput({
                 size="icon"
                 onClick={onOptimizePrompt}
                 disabled={!hasApiKey || !input.trim() || isOptimizingPrompt || isStreaming}
-                title={language === 'zh' ? '调用当前模型优化输入框中的提示词' : 'Improve the prompt using the current model'}
-                aria-label={language === 'zh' ? '优化提示词' : 'Improve prompt'}
+                title={t('chatInput.improveThePromptUsing', asLanguage(language))}
+                aria-label={t('chatInput.improvePrompt', asLanguage(language))}
                 className="h-8 w-8 rounded-lg text-text-muted hover:bg-accent/10 hover:text-accent disabled:opacity-35"
               >
                 {isOptimizingPrompt
@@ -423,7 +423,7 @@ const ChatInput = memo(function ChatInput({
                     <button
                       onClick={onSubmit}
                       disabled={!hasApiKey || hasPendingToolCall}
-                      title={language === 'zh' ? '加入队列 (⏎)' : 'Queue message (⏎)'}
+                      title={t('chatInput.queueMessage', asLanguage(language))}
                       className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 bg-accent/80 text-white shadow-sm shadow-accent/10 hover:bg-accent hover:shadow-accent/30 hover:-translate-y-0.5 active:translate-y-0 border border-transparent"
                     >
                       <ListOrdered className="w-4 h-4 stroke-[2.5]" />

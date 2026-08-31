@@ -48,6 +48,7 @@ import FileFormatControls from './FileFormatControls'
 import { gitService, type GitBranch as GitBranchInfo } from '@renderer/services/gitService'
 import { toast } from '../common/ToastProvider'
 import AdministratorModeIndicator from './AdministratorModeIndicator'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 export default function StatusBar() {
   const {
@@ -171,11 +172,11 @@ export default function StatusBar() {
       await refreshGitState()
       setBranchQuery('')
       toast.success(
-        language === 'zh' ? '已切换分支' : 'Branch switched',
+        translate('statusBar.branchSwitched', asLanguage(language)),
         'branch' in result && typeof result.branch === 'string' ? result.branch : branch.name,
       )
     } else {
-      toast.error(language === 'zh' ? '无法切换分支' : 'Could not switch branch', result.error)
+      toast.error(translate('statusBar.couldNotSwitchBranch', asLanguage(language)), result.error)
     }
     setSwitchingBranch(null)
   }, [language, refreshGitState, switchingBranch, workspacePath])
@@ -268,10 +269,10 @@ export default function StatusBar() {
             'text-text-muted group-hover:text-text-primary'
 
   const contextIndicatorCopy = useMemo(() => ({
-    compressing: language === 'zh' ? '压缩中' : 'Compressing',
-    handoffReady: language === 'zh' ? '已生成交接包' : 'Handoff Ready',
-    switching: language === 'zh' ? '切换中' : 'Switching',
-    switched: language === 'zh' ? '已切换' : 'Switched',
+    compressing: translate('statusBar.compressing', asLanguage(language)),
+    handoffReady: translate('statusBar.handoffReady', asLanguage(language)),
+    switching: translate('statusBar.switching', asLanguage(language)),
+    switched: translate('statusBar.switched', asLanguage(language)),
   }), [language])
   const currentContextUsage = compressionStats?.ratio ?? null
 
@@ -282,8 +283,8 @@ export default function StatusBar() {
 
         {isGitRepo && gitStatus && (
           <BottomBarPopover
-            tooltip={language === 'zh' ? '切换 Git 分支' : 'Switch Git branch'}
-            title={language === 'zh' ? 'Git 分支' : 'Git branches'}
+            tooltip={translate('statusBar.switchGitBranch', asLanguage(language))}
+            title={translate('statusBar.gitBranches', asLanguage(language))}
             width={320}
             height={360}
             onOpenChange={open => {
@@ -309,15 +310,15 @@ export default function StatusBar() {
                         if (target) void handleSwitchBranch(target)
                       }
                     }}
-                    placeholder={language === 'zh' ? '搜索分支…' : 'Search branches…'}
+                    placeholder={translate('statusBar.searchBranches', asLanguage(language))}
                     className="h-8 min-w-0 flex-1 bg-transparent text-[11px] text-text-primary outline-none placeholder:text-text-muted/60"
-                    aria-label={language === 'zh' ? '搜索 Git 分支' : 'Search Git branches'}
+                    aria-label={translate('statusBar.searchGitBranches', asLanguage(language))}
                   />
                 </div>
                 <button
                   onClick={() => void refreshGitState()}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                  title={language === 'zh' ? '刷新分支' : 'Refresh branches'}
+                  title={translate('statusBar.refreshBranches', asLanguage(language))}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
@@ -343,15 +344,15 @@ export default function StatusBar() {
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{branch.name}</span>
                     <span className="shrink-0 text-[9px] uppercase tracking-wider text-text-muted/70">
                       {branch.current
-                        ? (language === 'zh' ? '当前' : 'current')
+                        ? (translate('statusBar.current', asLanguage(language)))
                         : branch.remote
-                          ? (language === 'zh' ? '远程' : 'remote')
+                          ? (translate('statusBar.remote', asLanguage(language)))
                           : ''}
                     </span>
                   </button>
                 )) : (
                   <div className="flex h-24 items-center justify-center text-[11px] text-text-muted">
-                    {language === 'zh' ? '没有匹配的分支' : 'No matching branches'}
+                    {translate('statusBar.noMatchingBranches', asLanguage(language))}
                   </div>
                 )}
               </div>
@@ -360,7 +361,7 @@ export default function StatusBar() {
                 onClick={() => setActiveSidePanel('git')}
                 className="flex h-10 shrink-0 items-center justify-between border-t border-border/40 px-3 text-[10px] font-medium text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
               >
-                <span>{language === 'zh' ? '打开完整 Git 面板' : 'Open full Git panel'}</span>
+                <span>{translate('statusBar.openFullGitPanel', asLanguage(language))}</span>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -533,7 +534,7 @@ export default function StatusBar() {
           {messageCount > 0 && (
             <div
               className="flex items-center justify-center w-7 h-7 rounded-md cursor-default group hover:bg-white/5 transition-colors"
-              title={language === 'zh' ? `${messageCount} 条消息` : `${messageCount} messages`}
+              title={translate('statusBar.messages', asLanguage(language), { messageCount })}
             >
               <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
                 <MessageSquare className="w-3 h-3 text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.5)] transition-colors" />

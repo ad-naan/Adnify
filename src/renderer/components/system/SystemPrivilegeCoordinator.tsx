@@ -4,6 +4,7 @@ import { api } from '@renderer/services/electronAPI'
 import { useToast } from '../common/ToastProvider'
 import type { PrivilegeCapability } from '@shared/types/systemPrivilege'
 import { getSystemPrivilegeStatus } from '@renderer/services/systemPrivilegeService'
+import { t, asLanguage } from '@renderer/i18n'
 
 const CAPABILITY_MESSAGE: Record<PrivilegeCapability, { zh: string; en: string }> = {
   'lsp.install': {
@@ -34,36 +35,32 @@ export default function SystemPrivilegeCoordinator() {
       showCard({
         type: 'warning',
         title: alreadyElevated
-          ? (language === 'zh' ? '系统仍拒绝此操作' : 'The system still denied this operation')
-          : (language === 'zh' ? '需要管理员权限' : 'Administrator permission required'),
+          ? (t('systemPrivilegeCoordinator.theSystemStillDenied', asLanguage(language)))
+          : (t('systemPrivilegeCoordinator.administratorPermissionRequired', asLanguage(language))),
         message: alreadyElevated
-          ? (language === 'zh'
-              ? '应用已经处于管理员模式；请检查文件所有权、只读属性或是否被其他程序占用。'
-              : 'The app is already elevated. Check file ownership, read-only attributes, or whether another program is using it.')
+          ? (t('systemPrivilegeCoordinator.theAppIsAlready', asLanguage(language)))
           : canElevate
             ? copy[language]
-            : (language === 'zh'
-                ? '当前系统不支持自动提权重启，请调整目标目录权限或使用系统提供的方式重新启动应用。'
-                : 'Automatic elevation is not available on this system. Adjust the target permissions or restart the app using your system tools.'),
+            : (t('systemPrivilegeCoordinator.automaticElevationIsNot', asLanguage(language))),
         duration: 0,
-        source: language === 'zh' ? '系统权限' : 'System privilege',
+        source: t('systemPrivilegeCoordinator.systemPrivilege', asLanguage(language)),
         dedupeKey: `system-privilege-${capability}`,
         actions: alreadyElevated || !canElevate ? [] : [{
           id: 'restart-elevated',
-          label: language === 'zh' ? '以管理员身份重启' : 'Restart as administrator',
+          label: t('systemPrivilegeCoordinator.restartAsAdministrator', asLanguage(language)),
           style: 'primary',
           onClick: () => {
             void api.systemPrivilege.requestElevation({ capability, language })
               .then(result => {
                 if (!result.success && !result.canceled) {
                   showError(
-                    language === 'zh' ? '无法申请管理员权限' : 'Could not request administrator permission',
+                    t('systemPrivilegeCoordinator.couldNotRequestAdministrator', asLanguage(language)),
                     result.error,
                   )
                 }
               })
               .catch(error => showError(
-                language === 'zh' ? '无法申请管理员权限' : 'Could not request administrator permission',
+                t('systemPrivilegeCoordinator.couldNotRequestAdministrator', asLanguage(language)),
                 error instanceof Error ? error.message : String(error),
               ))
           },

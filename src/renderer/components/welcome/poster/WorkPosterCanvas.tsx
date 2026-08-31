@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { WorkPosterData } from './types'
 import { WORK_POSTER_CANVAS_ID, WORK_POSTER_HEIGHT, WORK_POSTER_WIDTH } from './workPosterAssets'
 import { renderWorkPoster } from './workPosterRenderer'
+import { t, asLanguage } from '@renderer/i18n'
 
 export function WorkPosterCanvas({
   poster,
@@ -35,8 +36,8 @@ export function WorkPosterCanvas({
       {status !== 'ready' && (
         <div className="report-poster-status">
           {status === 'error'
-            ? (poster.language === 'zh' ? '海报素材加载失败' : 'Poster assets failed to load')
-            : (poster.language === 'zh' ? '生成中...' : 'Rendering...')}
+            ? (t('workPosterCanvas.posterAssetsFailedTo', asLanguage(poster.language)))
+            : (t('workPosterCanvas.rendering', asLanguage(poster.language)))}
         </div>
       )}
       <canvas

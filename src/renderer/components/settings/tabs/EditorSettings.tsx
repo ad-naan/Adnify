@@ -17,6 +17,7 @@ import {
     subscribeEmotionPanelSettings,
     updateEmotionPanelSettings,
 } from '@/renderer/agent/emotion/panelSettings'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 const CUSTOM_FONT_VALUE = '__custom__'
 
@@ -61,7 +62,7 @@ function FontFamilyPicker({
                 }}
                 options={[
                     ...CODE_FONT_PRESETS.map(preset => ({ value: preset.value, label: preset.label })),
-                    { value: CUSTOM_FONT_VALUE, label: language === 'zh' ? '自定义…' : 'Custom…' },
+                    { value: CUSTOM_FONT_VALUE, label: translate('editorSettings.custom', asLanguage(language)) },
                 ]}
                 className={`w-full ${inputClass}`}
             />
@@ -140,7 +141,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <Layout className="w-4 h-4 text-accent" />
                     </div>
                     <h4 className="text-sm font-bold text-text-primary tracking-tight">
-                        {language === 'zh' ? '外观主题' : 'Appearance Theme'}
+                        {translate('editorSettings.appearanceTheme', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -176,13 +177,11 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <div className="flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-bold text-text-primary">
-                                {language === 'zh' ? '装饰性动画' : 'Decorative Animations'}
+                                {translate('editorSettings.decorativeAnimations', asLanguage(language))}
                             </h5>
                         </div>
                         <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                            {language === 'zh'
-                                ? '控制呼吸光晕、漂浮粒子和脉冲指示点等循环装饰动效；加载与流式输出等状态动画不受影响。'
-                                : 'Controls looping effects such as breathing glows, floating particles, and pulsing dots. Loading and streaming indicators are unaffected.'}
+                            {translate('editorSettings.controlsLoopingEffectsSuch', asLanguage(language))}
                         </p>
                     </div>
                     <Switch
@@ -193,9 +192,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                 <div className="flex items-start gap-2 border-t border-border/50 pt-4 text-[10px] leading-relaxed text-text-muted">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>
-                        {language === 'zh'
-                            ? '系统启用“减少动态效果”时也会自动停用这些动画。'
-                            : 'These animations also stop automatically when your system enables reduced motion.'}
+                        {translate('editorSettings.theseAnimationsAlsoStop', asLanguage(language))}
                     </span>
                 </div>
             </section>
@@ -207,12 +204,12 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Type className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? '排版与布局' : 'Typography & Layout'}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.typographyLayout', asLanguage(language))}</h5>
                         </div>
 
                         <div className="grid grid-cols-2 gap-5">
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? '字体大小' : 'Font Size'}</label>
+                                <label className={labelClass}>{translate('editorSettings.fontSize', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={settings.fontSize}
@@ -223,7 +220,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? 'Tab 大小' : 'Tab Size'}</label>
+                                <label className={labelClass}>{translate('editorSettings.tabSize', asLanguage(language))}</label>
                                 <Select
                                     value={settings.tabSize.toString()}
                                     onChange={(value) => setSettings({ ...settings, tabSize: parseInt(value) })}
@@ -232,7 +229,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? '自动换行' : 'Word Wrap'}</label>
+                                <label className={labelClass}>{translate('editorSettings.wordWrap', asLanguage(language))}</label>
                                 <Select
                                     value={settings.wordWrap}
                                     onChange={(value) => setSettings({ ...settings, wordWrap: value as 'on' | 'off' | 'wordWrapColumn' })}
@@ -241,7 +238,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? '行高' : 'Line Height'}</label>
+                                <label className={labelClass}>{translate('editorSettings.lineHeight', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={advancedConfig.lineHeight}
@@ -253,7 +250,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? '行号' : 'Line Numbers'}</label>
+                                <label className={labelClass}>{translate('editorSettings.lineNumbers', asLanguage(language))}</label>
                                 <Select
                                     value={settings.lineNumbers}
                                     onChange={(value) => setSettings({ ...settings, lineNumbers: value as 'on' | 'off' | 'relative' })}
@@ -264,7 +261,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         </div>
 
                         <FontFamilyPicker
-                            label={language === 'zh' ? '代码字体' : 'Code Font'}
+                            label={translate('editorSettings.codeFont', asLanguage(language))}
                             value={advancedConfig.fontFamily}
                             onChange={(fontFamily) => setAdvancedConfig({ ...advancedConfig, fontFamily })}
                             language={language}
@@ -276,10 +273,10 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Type className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? 'Agent 聊天区域' : 'Agent Chat Area'}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.agentChatArea', asLanguage(language))}</h5>
                         </div>
                         <div>
-                            <label className={labelClass}>{language === 'zh' ? '字体大小' : 'Font Size'}</label>
+                            <label className={labelClass}>{translate('editorSettings.fontSize', asLanguage(language))}</label>
                             <Input
                                 type="number"
                                 value={settings.chatFontSize}
@@ -295,11 +292,11 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Terminal className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? '终端配置' : 'Terminal'}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.terminal', asLanguage(language))}</h5>
                         </div>
                         <div className="grid grid-cols-2 gap-5">
                             <div className="col-span-2">
-                                <label className={labelClass}>{language === 'zh' ? 'Node.js 包管理器' : 'Node.js Package Manager'}</label>
+                                <label className={labelClass}>{translate('editorSettings.nodeJsPackageManager', asLanguage(language))}</label>
                                 <Select
                                     value={advancedConfig.terminal.nodePackageManager}
                                     onChange={(value) => setAdvancedConfig({
@@ -310,7 +307,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                         },
                                     })}
                                     options={[
-                                        { value: 'auto', label: language === 'zh' ? '自动检测（推荐）' : 'Auto Detect (Recommended)' },
+                                        { value: 'auto', label: translate('editorSettings.autoDetectRecommended', asLanguage(language)) },
                                         { value: 'npm', label: 'npm' },
                                         { value: 'pnpm', label: 'pnpm' },
                                         { value: 'yarn', label: 'Yarn' },
@@ -319,30 +316,28 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     className={`w-full ${inputClass}`}
                                 />
                                 <p className="mt-2 text-[10px] leading-4 text-text-muted">
-                                    {language === 'zh'
-                                        ? '自动模式优先读取 package.json 的 packageManager，然后识别 pnpm-lock.yaml、yarn.lock、bun.lock 或 package-lock.json。'
-                                        : 'Auto mode reads packageManager first, then detects pnpm, Yarn, Bun, or npm lockfiles.'}
+                                    {translate('editorSettings.autoModeReadsPackagemanager', asLanguage(language))}
                                 </p>
                             </div>
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? '字体大小' : 'Font Size'}</label>
+                                <label className={labelClass}>{translate('editorSettings.fontSize', asLanguage(language))}</label>
                                 <Input type="number" value={advancedConfig.terminal.fontSize} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, fontSize: parseInt(e.target.value) || 13 } })} min={10} max={24} className={inputClass} />
                             </div>
                             <div>
-                                <label className={labelClass}>{language === 'zh' ? '行高' : 'Line Height'}</label>
+                                <label className={labelClass}>{translate('editorSettings.lineHeight', asLanguage(language))}</label>
                                 <Input type="number" value={advancedConfig.terminal.lineHeight} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, lineHeight: parseFloat(e.target.value) || 1.2 } })} min={1} max={2} step={0.1} className={inputClass} />
                             </div>
                             <div className="col-span-2">
-                                <label className={labelClass}>{language === 'zh' ? '滚动缓冲行数' : 'Scrollback Lines'}</label>
+                                <label className={labelClass}>{translate('editorSettings.scrollbackLines', asLanguage(language))}</label>
                                 <Input type="number" value={settings.terminalScrollback} onChange={(e) => setSettings({ ...settings, terminalScrollback: parseInt(e.target.value) || 1000 })} min={100} max={10000} step={100} className={inputClass} />
                             </div>
                         </div>
                         <div className="pt-2">
-                            <Switch label={language === 'zh' ? '光标闪烁' : 'Cursor Blink'} checked={advancedConfig.terminal.cursorBlink} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, cursorBlink: e.target.checked } })} />
+                            <Switch label={translate('editorSettings.cursorBlink', asLanguage(language))} checked={advancedConfig.terminal.cursorBlink} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, cursorBlink: e.target.checked } })} />
                         </div>
 
                         <FontFamilyPicker
-                            label={language === 'zh' ? '终端字体' : 'Terminal Font'}
+                            label={translate('editorSettings.terminalFont', asLanguage(language))}
                             value={advancedConfig.terminal.fontFamily}
                             onChange={(fontFamily) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, fontFamily } })}
                             language={language}
@@ -355,34 +350,32 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Settings2 className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? '功能特性' : 'Features'}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.features', asLanguage(language))}</h5>
                         </div>
                         <div className="space-y-4 px-1">
-                            <Switch label={language === 'zh' ? '显示小地图' : 'Show Minimap'} checked={settings.minimap} onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })} />
-                            <Switch label={language === 'zh' ? '括号配对着色' : 'Bracket Pair Colorization'} checked={settings.bracketPairColorization} onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })} />
+                            <Switch label={translate('editorSettings.showMinimap', asLanguage(language))} checked={settings.minimap} onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })} />
+                            <Switch label={translate('editorSettings.bracketPairColorization', asLanguage(language))} checked={settings.bracketPairColorization} onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })} />
                             <div className="space-y-1.5">
-                                <Switch label={language === 'zh' ? '保存时格式化' : 'Format on Save'} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
+                                <Switch label={translate('editorSettings.formatOnSave', asLanguage(language))} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
                                 <p className="pl-1 text-[10px] leading-4 text-text-muted">
-                                    {language === 'zh'
-                                        ? '按当前语言选择格式化工具：优先项目的 Biome、Prettier 或语言原生 formatter，未检测到时回退语言服务。'
-                                        : 'Chooses by language: project Biome, Prettier, or a native formatter first, then falls back to the language server.'}
+                                    {translate('editorSettings.choosesByLanguageProject', asLanguage(language))}
                                 </p>
                             </div>
                         </div>
 
                         <div className="pt-4 border-t border-border/50">
                             <div className="flex items-center justify-between mb-4">
-                                <label className={labelClass.replace('mb-2', 'mb-0')}>{language === 'zh' ? '自动保存' : 'Auto Save'}</label>
+                                <label className={labelClass.replace('mb-2', 'mb-0')}>{translate('editorSettings.autoSave', asLanguage(language))}</label>
                                 <Select
                                     value={settings.autoSave}
                                     onChange={(value) => setSettings({ ...settings, autoSave: value as 'off' | 'afterDelay' | 'onFocusChange' })}
-                                    options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: language === 'zh' ? '延迟后' : 'After Delay' }, { value: 'onFocusChange', label: language === 'zh' ? '失去焦点时' : 'On Focus Change' }]}
+                                    options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: translate('editorSettings.afterDelay', asLanguage(language)) }, { value: 'onFocusChange', label: translate('editorSettings.onFocusChange', asLanguage(language)) }]}
                                     className={`w-40 ${inputClass}`}
                                 />
                             </div>
                             {settings.autoSave === 'afterDelay' && (
                                 <div className="flex items-center justify-between animate-scale-in pl-1">
-                                    <label className="text-xs text-text-secondary">{language === 'zh' ? '延迟时间 (ms)' : 'Delay (ms)'}</label>
+                                    <label className="text-xs text-text-secondary">{translate('editorSettings.delayMs', asLanguage(language))}</label>
                                     <Input
                                         type="number"
                                         value={settings.autoSaveDelay}
@@ -405,7 +398,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-accent" />
-                                <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? 'AI 代码补全' : 'AI Completion'}</h5>
+                                <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.aiCompletion', asLanguage(language))}</h5>
                             </div>
                             <Switch checked={settings.completionEnabled} onChange={(e) => setSettings({ ...settings, completionEnabled: e.target.checked })} />
                         </div>
@@ -414,7 +407,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             <div className="space-y-5 pt-2 animate-scale-in">
                                 <div className="grid grid-cols-2 gap-5">
                                     <div>
-                                        <label className={labelClass}>{language === 'zh' ? '触发延迟 (ms)' : 'Trigger Delay'}</label>
+                                        <label className={labelClass}>{translate('editorSettings.triggerDelay', asLanguage(language))}</label>
                                         <Input
                                             type="number"
                                             value={settings.completionDebounceMs}
@@ -426,7 +419,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                         />
                                     </div>
                                     <div>
-                                        <label className={labelClass}>{language === 'zh' ? '最大 Token' : 'Max Tokens'}</label>
+                                        <label className={labelClass}>{translate('common.maxTokens', asLanguage(language))}</label>
                                         <Input
                                             type="number"
                                             value={settings.completionMaxTokens}
@@ -439,7 +432,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     </div>
                                 </div>
                                 <div>
-                                    <label className={labelClass}>{language === 'zh' ? '触发字符' : 'Trigger Characters'}</label>
+                                    <label className={labelClass}>{translate('editorSettings.triggerCharacters', asLanguage(language))}</label>
                                     <div className="flex flex-wrap gap-2 p-3 bg-background/50 rounded-xl border border-border/50">
                                         {TRIGGER_CHAR_OPTIONS.map(({ char, label }) => {
                                             const isSelected = settings.completionTriggerChars.includes(char)
@@ -460,7 +453,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                         })}
                                     </div>
                                     <p className="text-[10px] text-text-muted mt-2 ml-1">
-                                        {language === 'zh' ? '点击选择触发自动补全的特殊字符' : 'Select characters that trigger AI suggestions'}
+                                        {translate('editorSettings.selectCharactersThatTrigger', asLanguage(language))}
                                     </p>
                                 </div>
                             </div>
@@ -475,20 +468,18 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         </div>
                         <div className="space-y-4 px-1">
                             <Switch
-                                label={language === 'zh' ? '自动刷新 Git 状态' : 'Auto Refresh Git Status'}
+                                label={translate('editorSettings.autoRefreshGitStatus', asLanguage(language))}
                                 checked={advancedConfig.git?.autoRefresh ?? true}
                                 onChange={(e) => setAdvancedConfig({ ...advancedConfig, git: { ...advancedConfig.git, autoRefresh: e.target.checked } })}
                             />
                             <p className="text-[10px] text-text-muted opacity-80 leading-relaxed">
-                                {language === 'zh'
-                                    ? '检测到文件变化时自动更新侧边栏状态。'
-                                    : 'Automatically refresh git indicators when file changes are detected.'}
+                                {translate('editorSettings.automaticallyRefreshGitIndicators', asLanguage(language))}
                             </p>
 
                             <div className="pt-3 border-t border-border/50 space-y-2">
                                 <div className="flex items-center justify-between">
                                     <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block">
-                                        {language === 'zh' ? '使用 AI 生成提交信息的提示词' : 'AI Commit Message Prompt'}
+                                        {translate('editorSettings.aiCommitMessagePrompt', asLanguage(language))}
                                     </label>
                                     {(advancedConfig.git?.commitPrompt !== undefined && advancedConfig.git.commitPrompt !== '' && advancedConfig.git.commitPrompt !== DEFAULT_GIT_COMMIT_PROMPT) && (
                                         <button
@@ -498,10 +489,10 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                                 git: { ...advancedConfig.git, commitPrompt: DEFAULT_GIT_COMMIT_PROMPT },
                                             })}
                                             className="inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-accent transition-colors"
-                                            title={language === 'zh' ? '恢复默认提示词' : 'Reset to default prompt'}
+                                            title={translate('editorSettings.resetToDefaultPrompt', asLanguage(language))}
                                         >
                                             <RotateCcw className="w-3 h-3" />
-                                            <span>{language === 'zh' ? '恢复默认' : 'Reset'}</span>
+                                            <span>{translate('common.reset', asLanguage(language))}</span>
                                         </button>
                                     )}
                                 </div>
@@ -516,9 +507,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     className="w-full rounded-lg border border-border/50 bg-background/50 p-3 text-xs leading-relaxed text-text-primary placeholder:text-text-muted/40 focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all resize-y custom-scrollbar"
                                 />
                                 <p className="text-[10px] text-text-muted opacity-80 leading-relaxed">
-                                    {language === 'zh'
-                                        ? '可直接在上方编辑提示词规范。支持使用 {diff} 占位符指定代码变更位置，未包含占位符时将自动附加在提示词后。'
-                                        : 'Edit the prompt rules above. Supports {diff} placeholder for changes position, otherwise diffs are appended automatically.'}
+                                    {translate('editorSettings.editThePromptRules', asLanguage(language))}
                                 </p>
                             </div>
                         </div>
@@ -528,31 +517,31 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Zap className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{language === 'zh' ? '性能与限制' : 'Performance'}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.performance', asLanguage(language))}</h5>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '大文件警告 (MB)' : 'Large File Warning (MB)'}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.largeFileWarningMb', asLanguage(language))}</label>
                                 <Input type="number" value={settings.largeFileWarningThresholdMB} onChange={(e) => setSettings({ ...settings, largeFileWarningThresholdMB: parseFloat(e.target.value) || 5 })} min={1} max={50} step={1} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '大文件行数阈值' : 'Large File Line Count'}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.largeFileLineCount', asLanguage(language))}</label>
                                 <Input type="number" value={settings.largeFileLineCount} onChange={(e) => setSettings({ ...settings, largeFileLineCount: parseInt(e.target.value) || 10000 })} min={1000} max={100000} step={1000} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '命令超时 (秒)' : 'Command Timeout (s)'}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.commandTimeoutS', asLanguage(language))}</label>
                                 <Input type="number" value={settings.commandTimeoutMs / 1000} onChange={(e) => setSettings({ ...settings, commandTimeoutMs: (parseInt(e.target.value) || 30) * 1000 })} min={10} max={300} step={10} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '最大扫描文件数' : 'Max Project Files'}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.maxProjectFiles', asLanguage(language))}</label>
                                 <Input type="number" value={settings.maxProjectFiles} onChange={(e) => setSettings({ ...settings, maxProjectFiles: parseInt(e.target.value) || 500 })} min={100} max={2000} step={100} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '文件树最大深度' : 'File Tree Max Depth'}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.fileTreeMaxDepth', asLanguage(language))}</label>
                                 <Input type="number" value={settings.maxFileTreeDepth} onChange={(e) => setSettings({ ...settings, maxFileTreeDepth: parseInt(e.target.value) || 5 })} min={2} max={15} step={1} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{language === 'zh' ? '最大搜索结果数' : 'Max Search Results'}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.maxSearchResults', asLanguage(language))}</label>
                                 <Input type="number" value={settings.maxSearchResults} onChange={(e) => setSettings({ ...settings, maxSearchResults: parseInt(e.target.value) || 1000 })} min={100} max={5000} step={100} className={inputClass} />
                             </div>
                         </div>

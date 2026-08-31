@@ -7,7 +7,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search, Crosshair } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 import { globalConfirm } from '../../common/ConfirmDialog'
@@ -253,12 +253,10 @@ export function SearchView() {
     const matchCount = searchResults.length
 
     // 确认对话框
-    const confirmMessage = language === 'zh'
-      ? `确定要在 ${fileCount} 个文件中替换 ${matchCount} 处匹配吗？`
-      : `Replace ${matchCount} matches in ${fileCount} files?`
+    const confirmMessage = t('searchView.replaceMatchesInFiles', asLanguage(language), { fileCount, matchCount })
 
     const confirmed = await globalConfirm({
-      title: language === 'zh' ? '替换确认' : 'Replace Confirmation',
+      title: t('searchView.replaceConfirmation', asLanguage(language)),
       message: confirmMessage,
       variant: 'warning',
     })
@@ -296,9 +294,7 @@ export function SearchView() {
     }
 
     // 显示替换结果
-    const resultMessage = language === 'zh'
-      ? `已在 ${replacedCount} 个文件中完成替换`
-      : `Replaced in ${replacedCount} files`
+    const resultMessage = t('searchView.replacedInFiles', asLanguage(language), { replacedCount })
     toast.success(resultMessage)
 
     handleSearch()
@@ -392,7 +388,7 @@ export function SearchView() {
             {showReplace && (
               <button
                 onClick={() => setReplaceInSelection(!replaceInSelection)}
-                title={language === 'zh' ? '仅在选中区域替换' : 'Replace in selection only'}
+                title={t('searchView.replaceInSelection', asLanguage(language))}
                 className={`p-1 rounded transition-colors ${replaceInSelection ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-surface-active hover:text-text-primary'}`}
               >
                 <span className="text-[10px] font-bold px-1 border border-current rounded-[2px]">Sel</span>
@@ -471,9 +467,7 @@ export function SearchView() {
             {visibleCount < searchResults.length && (
               <div className="px-3 py-1 text-[10px] text-accent cursor-pointer hover:underline text-center"
                 onClick={() => setVisibleCount(prev => Math.min(prev + 500, searchResults.length))}>
-                {language === 'zh'
-                  ? `显示了 ${visibleCount} / ${searchResults.length} 条，点击或滚动加载更多`
-                  : `Showing ${visibleCount} / ${searchResults.length}, click or scroll to load more`}
+                {t('searchView.showingClickOrScroll', asLanguage(language), { visibleCount, length: searchResults.length })}
               </div>
             )}
 
@@ -502,7 +496,7 @@ export function SearchView() {
                         }}
                         disabled={!replaceQuery}
                         className="p-0.5 rounded hover:bg-surface-active text-text-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-30"
-                        title={language === 'zh' ? '替换此文件中的匹配' : 'Replace in this file'}
+                        title={t('searchView.replaceInThisFile', asLanguage(language))}
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
@@ -524,7 +518,7 @@ export function SearchView() {
                         })
                       }}
                       className="p-0.5 rounded hover:bg-surface-active text-text-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100"
-                      title={language === 'zh' ? '在侧边栏中定位' : 'Reveal in Sidebar'}
+                      title={t('cmd.explorer.revealInSidebar', asLanguage(language))}
                     >
                       <Crosshair className="w-3 h-3" />
                     </button>
@@ -578,10 +572,10 @@ export function SearchView() {
               <Search className="w-6 h-6 text-text-muted relative opacity-70" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
-              {language === 'zh' ? '全局搜索' : 'Search across files'}
+              {t('searchView.searchAcrossFiles', asLanguage(language))}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {language === 'zh' ? '输入关键字在工作区的所有文件中进行流式查找。' : 'Type a keyword or regular expression to search files in the workspace.'}
+              {t('searchView.typeAKeywordOr', asLanguage(language))}
             </p>
           </div>
         )}

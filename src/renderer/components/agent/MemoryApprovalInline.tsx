@@ -3,6 +3,7 @@ import { CheckCircle2, ChevronDown, Brain } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
 import { normalizeMemoryContentInput } from '@/renderer/agent/services/memoryService'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface MemoryApprovalInlineProps {
     content: unknown
@@ -30,8 +31,8 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
     }, [isSuccess])
 
     const statusText = isSuccess
-        ? (language === 'zh' ? '已存入项目记忆' : 'Project Memory Stored')
-        : (language === 'zh' ? '记忆提议' : 'Memory Proposal')
+        ? (t('memoryApprovalInline.projectMemoryStored', asLanguage(language)))
+        : (t('memoryApprovalInline.memoryProposal', asLanguage(language)))
 
     const isRunning = !isSuccess && !isAwaitingApproval
 
@@ -91,7 +92,7 @@ export const MemoryApprovalInline: React.FC<MemoryApprovalInlineProps> = ({
 
                             <div className="relative z-10 mt-1">
                                 <div className="text-[11px] text-text-secondary/80 leading-relaxed font-sans whitespace-pre-wrap border-l-2 border-border/30 pl-2 ml-1">
-                                    {safeContent || (language === 'zh' ? '（空记忆内容）' : '(empty memory content)')}
+                                    {safeContent || (t('memoryApprovalInline.emptyMemoryContent', asLanguage(language)))}
                                 </div>
                             </div>
                         </div>

@@ -11,6 +11,7 @@ import { AgentSettingsProps } from '../types'
 import { PromptPreviewModal } from './PromptPreviewModal'
 import { Bot, FileText, Zap, BrainCircuit, Terminal, Search, Eye, EyeOff, RefreshCw, Pencil, X } from 'lucide-react'
 import { ProgressiveReveal } from '../ProgressiveReveal'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 export function AgentSettings({
     aiInstructions, setAiInstructions,
@@ -45,8 +46,6 @@ export function AgentSettings({
         setAgentConfig({ ...agentConfig, ignoredDirectories: defaultIgnoredDirs })
     }
 
-    const t = (zh: string, en: string) => language === 'zh' ? zh : en
-
     return (
         <div className="space-y-6 animate-fade-in pb-10">
             <div className="flex flex-col gap-5">
@@ -56,25 +55,25 @@ export function AgentSettings({
                     <section className="order-1 space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <Zap className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('自动化权限', 'Automation Permissions')}</h5>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.automationPermissions', asLanguage(language))}</h5>
                         </div>
-                        <p className="text-xs leading-5 text-text-muted">{t('控制 Agent 完成一次回答时的主动行为，不会改变工具审批规则。', 'Controls proactive behavior while the agent completes a response. Tool approval rules are unchanged.')}</p>
+                        <p className="text-xs leading-5 text-text-muted">{translate('agentSettings.controlsProactiveBehaviorWhile', asLanguage(language))}</p>
                         <div className="divide-y divide-border/40">
                             <SettingToggle
-                                label={t('自动检查并尝试修复', 'Check and attempt fixes automatically')}
-                                description={t('工具执行失败或代码检查发现问题时，允许 Agent 在同一任务中分析原因并尝试修复。关闭后会直接报告结果。', 'When a tool or code check fails, let the agent diagnose and attempt a fix in the same task. When off, it reports the result instead.')}
+                                label={translate('agentSettings.checkAndAttemptFixes', asLanguage(language))}
+                                description={translate('agentSettings.whenAToolOr', asLanguage(language))}
                                 checked={agentConfig.enableAutoFix}
                                 onChange={(checked) => setAgentConfig({ ...agentConfig, enableAutoFix: checked })}
                             />
                             <SettingToggle
-                                label={t('默认展开执行过程', 'Expand execution details by default')}
-                                description={t('聊天中默认展开思考、工具调用和上下文块。只影响显示密度，不影响 Agent 能力。', 'Expands reasoning, tool calls, and context blocks in chat. This changes presentation only, not agent capabilities.')}
+                                label={translate('agentSettings.expandExecutionDetailsBy', asLanguage(language))}
+                                description={translate('agentSettings.expandsReasoningToolCalls', asLanguage(language))}
                                 checked={agentConfig.expandAgentBlocksByDefault ?? false}
                                 onChange={(checked) => setAgentConfig({ ...agentConfig, expandAgentBlocksByDefault: checked })}
                             />
                             <SettingToggle
-                                label={t('记录工具调用日志', 'Record tool call logs')}
-                                description={t('保存工具请求、响应、耗时和错误，供底部日志面板查看。默认关闭以减少内存和序列化开销。', 'Keeps tool requests, responses, timing, and errors for the bottom log panel. Off by default to reduce memory and serialization overhead.')}
+                                label={translate('common.recordToolCallLogs', asLanguage(language))}
+                                description={translate('agentSettings.keepsToolRequestsResponses', asLanguage(language))}
                                 checked={agentConfig.enableToolCallLogging ?? false}
                                 onChange={(checked) => setAgentConfig({ ...agentConfig, enableToolCallLogging: checked })}
                             />
@@ -85,12 +84,12 @@ export function AgentSettings({
                     <section className="order-5 space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <Bot className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('Prompt 模板', 'Prompt Template')}</h5>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.promptTemplate', asLanguage(language))}</h5>
                         </div>
-                        <p className="text-xs leading-5 text-text-muted">{t('选择 Agent 的基础工作方式。自定义指令会在模板之上继续生效；不确定时保留默认模板即可。', 'Choose the Agent’s baseline working style. Custom instructions are applied in addition to this template; keep the default if you are unsure.')}</p>
+                        <p className="text-xs leading-5 text-text-muted">{translate('agentSettings.chooseTheAgentS', asLanguage(language))}</p>
                         <div className="space-y-3">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('选择模板', 'Select Template')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.selectTemplate', asLanguage(language))}</label>
                                 <Select
                                     value={promptTemplateId}
                                     onChange={(value) => setPromptTemplateId(value)}
@@ -127,7 +126,7 @@ export function AgentSettings({
                                     onClick={() => handlePreviewTemplate(promptTemplateId)}
                                     className="w-full text-xs h-7 mt-2"
                                 >
-                                    {t('预览完整提示词', 'Preview Full Prompt')}
+                                    {translate('agentSettings.previewFullPrompt', asLanguage(language))}
                                 </Button>
                             </div>
                         </div>
@@ -137,16 +136,13 @@ export function AgentSettings({
                     <section className="order-6 space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <Terminal className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('自定义系统指令', 'Custom Instructions')}</h5>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.customInstructions', asLanguage(language))}</h5>
                         </div>
-                        <p className="text-xs leading-5 text-text-muted">{t('为所有工作区补充长期偏好，例如回复语言、代码风格和沟通方式。它不会绕过安全审批，也不应填写密码或密钥。', 'Adds persistent preferences across workspaces, such as response language, code style, and communication. It cannot bypass security approvals; do not put passwords or keys here.')}</p>
+                        <p className="text-xs leading-5 text-text-muted">{translate('agentSettings.addsPersistentPreferencesAcross', asLanguage(language))}</p>
                         <textarea
                             value={aiInstructions}
                             onChange={(e) => setAiInstructions(e.target.value)}
-                            placeholder={t(
-                                '在此输入全局系统指令，例如："总是使用中文回答"、"代码风格偏好..."',
-                                'Enter global system instructions here...'
-                            )}
+                            placeholder={translate('agentSettings.enterGlobalSystemInstructions', asLanguage(language))}
                             className="h-32 w-full resize-none rounded-lg border border-border bg-background/50 p-3 font-mono text-xs text-text-primary outline-none transition-colors placeholder-text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/20"
                         />
                     </section>
@@ -155,13 +151,10 @@ export function AgentSettings({
                     <section className="order-7 space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <Search className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('网络搜索', 'Web Search')}</h5>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.webSearch', asLanguage(language))}</h5>
                         </div>
                         <p className="text-xs text-text-muted">
-                            {t(
-                                '配置 Google Programmable Search Engine 以获得更好的搜索结果。未配置时将使用 DuckDuckGo 作为备选。',
-                                'Configure Google Programmable Search Engine for better search results. Falls back to DuckDuckGo when not configured.'
-                            )}
+                            {translate('agentSettings.configureGoogleProgrammableSearch', asLanguage(language))}
                         </p>
                         <div className="space-y-3">
                             <div className="space-y-1.5">
@@ -171,7 +164,7 @@ export function AgentSettings({
                                         type={showGoogleApiKey ? 'text' : 'password'}
                                         value={webSearchConfig.googleApiKey || ''}
                                         onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleApiKey: e.target.value })}
-                                        placeholder={t('输入 Google API Key', 'Enter Google API Key')}
+                                        placeholder={translate('agentSettings.enterGoogleApiKey', asLanguage(language))}
                                         className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs pr-10"
                                     />
                                     <button
@@ -184,12 +177,12 @@ export function AgentSettings({
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('搜索引擎 ID (CX)', 'Search Engine ID (CX)')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.searchEngineIdCx', asLanguage(language))}</label>
                                 <Input
                                     type="text"
                                     value={webSearchConfig.googleCx || ''}
                                     onChange={(e) => setWebSearchConfig({ ...webSearchConfig, googleCx: e.target.value })}
-                                    placeholder={t('输入搜索引擎 ID', 'Enter Search Engine ID')}
+                                    placeholder={translate('agentSettings.enterSearchEngineId', asLanguage(language))}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
                             </div>
@@ -197,10 +190,7 @@ export function AgentSettings({
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs">
                             <Search className="w-4 h-4 shrink-0 mt-0.5" />
                             <p>
-                                {t(
-                                    '免费额度：每天 100 次搜索。获取密钥：console.cloud.google.com',
-                                    'Free tier: 100 searches/day. Get keys at: console.cloud.google.com'
-                                )}
+                                {translate('agentSettings.freeTier100Searches', asLanguage(language))}
                             </p>
                         </div>
                     </section>
@@ -212,12 +202,12 @@ export function AgentSettings({
                     <section className="order-2 space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <BrainCircuit className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('基础配置', 'Basic Configuration')}</h5>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.basicConfiguration', asLanguage(language))}</h5>
                         </div>
-                        <p className="text-xs leading-5 text-text-muted">{t('限制一次任务可使用的工具轮数和带入模型的历史消息量。数值越大，复杂任务更不容易中断，但耗时和 Token 消耗也会增加。', 'Limits tool iterations per task and historical messages sent to the model. Higher values help complex tasks continue, but increase time and token use.')}</p>
+                        <p className="text-xs leading-5 text-text-muted">{translate('agentSettings.limitsToolIterationsPer', asLanguage(language))}</p>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('最大循环', 'Max Loops')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.maxLoops', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxToolLoops}
@@ -226,10 +216,10 @@ export function AgentSettings({
                                     max={100}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('一次任务最多连续调用工具的轮数。达到上限后 Agent 会停止并说明当前结果。', 'Maximum consecutive tool rounds in one task. The agent stops and reports progress at the limit.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.maximumConsecutiveToolRounds', asLanguage(language))}</FieldHint>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('最大历史消息', 'Max History')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.maxHistory', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxHistoryMessages}
@@ -238,7 +228,7 @@ export function AgentSettings({
                                     max={200}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('发送给模型的最近对话消息上限；更早内容可能被压缩为摘要。', 'Maximum recent conversation messages sent to the model; older content may be summarized.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.maximumRecentConversationMessages', asLanguage(language))}</FieldHint>
                             </div>
                         </div>
                     </section>
@@ -247,13 +237,13 @@ export function AgentSettings({
                     <section className="order-3 space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div className="flex items-center gap-2 mb-1">
                             <FileText className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-medium text-text-primary">{t('上下文限制', 'Context Limits')}</h5>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.contextLimits', asLanguage(language))}</h5>
                         </div>
-                        <p className="text-xs leading-5 text-text-muted">{t('控制一次请求中可带入模型的内容量。一般保持默认；调低可节省 Token，调高可保留更多代码和工具输出。', 'Controls how much content may be sent in one request. Defaults suit most users; lower values save tokens, higher values retain more code and tool output.')}</p>
+                        <p className="text-xs leading-5 text-text-muted">{translate('agentSettings.controlsHowMuchContent', asLanguage(language))}</p>
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('工具结果限制', 'Tool Result Limit')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.toolResultLimit', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxToolResultChars}
@@ -261,10 +251,10 @@ export function AgentSettings({
                                     step={5000}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('单次工具结果保留的最大字符数，超出部分会截断。', 'Maximum characters retained from one tool result; extra output is truncated.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.maximumCharactersRetainedFrom', asLanguage(language))}</FieldHint>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('上下文 Token 限制', 'Context Token Limit')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.contextTokenLimit', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxContextTokens ?? 128000}
@@ -272,10 +262,10 @@ export function AgentSettings({
                                     step={10000}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('整个模型上下文的 Token 预算，应不超过所选模型的上下文窗口。', 'Total model context token budget. Keep it within the selected model context window.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.totalModelContextToken', asLanguage(language))}</FieldHint>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('单文件内容限制', 'File Content Limit')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.fileContentLimit', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxFileContentChars ?? 15000}
@@ -283,10 +273,10 @@ export function AgentSettings({
                                     step={5000}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('单个文件自动加入上下文时最多读取的字符数。', 'Maximum characters automatically included from any one file.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.maximumCharactersAutomaticallyIncluded', asLanguage(language))}</FieldHint>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('最大文件数', 'Max Files')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.maxFiles', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxContextFiles ?? 6}
@@ -295,10 +285,10 @@ export function AgentSettings({
                                     max={20}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('一次自动收集上下文最多加入多少个文件。', 'Maximum files included during automatic context collection.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.maximumFilesIncludedDuring', asLanguage(language))}</FieldHint>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('语义搜索结果数', 'Semantic Results')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.semanticResults', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxSemanticResults ?? 5}
@@ -307,10 +297,10 @@ export function AgentSettings({
                                     max={20}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('语义检索返回并注入上下文的代码片段数量。', 'Number of semantic search results injected into context.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.numberOfSemanticSearch', asLanguage(language))}</FieldHint>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-xs font-medium text-text-secondary">{t('终端输出限制', 'Terminal Limit')}</label>
+                                <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.terminalLimit', asLanguage(language))}</label>
                                 <Input
                                     type="number"
                                     value={agentConfig.maxTerminalChars ?? 3000}
@@ -318,22 +308,22 @@ export function AgentSettings({
                                     step={1000}
                                     className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                 />
-                                <FieldHint>{t('终端输出写入对话上下文时保留的最大字符数。', 'Maximum terminal-output characters retained in conversation context.')}</FieldHint>
+                                <FieldHint>{translate('agentSettings.maximumTerminalOutputCharacters', asLanguage(language))}</FieldHint>
                             </div>
                         </div>
                     </section>
 
-                    <ProgressiveReveal language={language} collapsedHeight={430} expandLabel={t('展开可靠性与上下文高级设置', 'Show reliability and context settings')} className="order-4">
+                    <ProgressiveReveal language={language} collapsedHeight={430} expandLabel={translate('agentSettings.showReliabilityAndContext', asLanguage(language))} className="order-4">
                     <section className="space-y-5 rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
-                            <h5 className="text-sm font-medium text-text-primary">{t('执行与上下文', 'Execution & Context')}</h5>
-                            <p className="mt-1 text-xs leading-5 text-text-muted">{t('重试、超时、上下文压缩、循环检测和忽略目录。', 'Retries, timeouts, context compression, loop detection, and ignored directories.')}</p>
+                            <h5 className="text-sm font-medium text-text-primary">{translate('agentSettings.executionContext', asLanguage(language))}</h5>
+                            <p className="mt-1 text-xs leading-5 text-text-muted">{translate('agentSettings.retriesTimeoutsContextCompression', asLanguage(language))}</p>
                         </div>
                             <div className="space-y-4">
                                 {/* 重试 & 超时 */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('最大重试', 'Max Retries')}</label>
+                                        <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.maxRetries', asLanguage(language))}</label>
                                         <Input
                                             type="number"
                                             value={agentConfig.maxRetries ?? 3}
@@ -342,10 +332,10 @@ export function AgentSettings({
                                             max={10}
                                             className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                         />
-                                        <FieldHint>{t('工具失败后最多自动重试几次；设为 0 表示不重试。', 'Maximum automatic retries after a tool fails. Set to 0 to disable retries.')}</FieldHint>
+                                        <FieldHint>{translate('agentSettings.maximumAutomaticRetriesAfter', asLanguage(language))}</FieldHint>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('重试延迟 (ms)', 'Retry Delay')}</label>
+                                        <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.retryDelay', asLanguage(language))}</label>
                                         <Input
                                             type="number"
                                             value={agentConfig.retryDelayMs ?? 1000}
@@ -353,10 +343,10 @@ export function AgentSettings({
                                             step={500}
                                             className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                         />
-                                        <FieldHint>{t('两次重试之间等待的毫秒数，避免立即重复触发暂时性错误。', 'Milliseconds to wait between retries, avoiding immediate repetition of transient failures.')}</FieldHint>
+                                        <FieldHint>{translate('agentSettings.millisecondsToWaitBetween', asLanguage(language))}</FieldHint>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-xs font-medium text-text-secondary">{t('工具超时 (ms)', 'Tool Timeout')}</label>
+                                        <label className="text-xs font-medium text-text-secondary">{translate('agentSettings.toolTimeout', asLanguage(language))}</label>
                                         <Input
                                             type="number"
                                             value={agentConfig.toolTimeoutMs ?? 60000}
@@ -364,7 +354,7 @@ export function AgentSettings({
                                             step={5000}
                                             className="bg-background/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all rounded-lg border-border text-xs"
                                         />
-                                        <FieldHint>{t('单次工具执行最长等待时间，超时后会返回失败结果供 Agent 重新规划。', 'Maximum wait for one tool execution. A timeout returns a failure so the agent can re-plan.')}</FieldHint>
+                                        <FieldHint>{translate('agentSettings.maximumWaitForOne', asLanguage(language))}</FieldHint>
                                     </div>
                                 </div>
 
@@ -372,13 +362,13 @@ export function AgentSettings({
                                 <div className="p-4 bg-background/30 rounded-xl border border-border/50 space-y-4">
                                     <div className="flex items-center gap-2 mb-1">
                                         <div className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                        <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{t('上下文压缩', 'Context Compression')}</label>
+                                        <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{translate('agentSettings.contextCompression', asLanguage(language))}</label>
                                     </div>
-                                    <p className="text-[11px] leading-4 text-text-muted">{t('对话接近模型上下文上限时，保留近期细节并压缩较早内容，避免任务因上下文过长中断。', 'When a conversation nears the model limit, recent details stay intact while older content is compressed to keep the task running.')}</p>
+                                    <p className="text-[11px] leading-4 text-text-muted">{translate('agentSettings.whenAConversationNears', asLanguage(language))}</p>
 
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('保留最近轮次', 'Keep Recent Turns')}</label>
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{translate('agentSettings.keepRecentTurns', asLanguage(language))}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.keepRecentTurns ?? 5}
@@ -387,10 +377,10 @@ export function AgentSettings({
                                                 max={20}
                                                 className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
-                                            <FieldHint>{t('始终原样保留的最近对话轮数。', 'Recent turns always kept verbatim.')}</FieldHint>
+                                            <FieldHint>{translate('agentSettings.recentTurnsAlwaysKept', asLanguage(language))}</FieldHint>
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('深度压缩轮次', 'Deep Compression')}</label>
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{translate('agentSettings.deepCompression', asLanguage(language))}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.deepCompressionTurns ?? 2}
@@ -399,10 +389,10 @@ export function AgentSettings({
                                                 max={5}
                                                 className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
-                                            <FieldHint>{t('压缩时额外保留完整细节的轮数。', 'Additional turns kept in detail during deep compression.')}</FieldHint>
+                                            <FieldHint>{translate('agentSettings.additionalTurnsKeptIn', asLanguage(language))}</FieldHint>
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('重要旧轮次', 'Important Old')}</label>
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{translate('agentSettings.importantOld', asLanguage(language))}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.maxImportantOldTurns ?? 3}
@@ -411,14 +401,14 @@ export function AgentSettings({
                                                 max={10}
                                                 className="bg-background/40 border-border/60 focus:border-accent/50 h-9 text-xs"
                                             />
-                                            <FieldHint>{t('从较早对话中保留的重要轮数上限。', 'Maximum important turns retained from older conversation.')}</FieldHint>
+                                            <FieldHint>{translate('agentSettings.maximumImportantTurnsRetained', asLanguage(language))}</FieldHint>
                                         </div>
                                     </div>
 
                                     <div className="divide-y divide-border/30 border-t border-border/30 pt-1">
-                                        <SettingToggle label={t('使用模型生成摘要', 'Use model-generated summaries')} description={t('压缩旧对话时让模型提炼决策、进度和未完成事项；会产生少量额外 Token 消耗。', 'Uses the model to preserve decisions, progress, and pending work when compressing old messages; adds a small token cost.')} checked={agentConfig.enableLLMSummary ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, enableLLMSummary: checked })} />
-                                        <SettingToggle label={t('上下文不足时自动交接', 'Handoff automatically when context is low')} description={t('当前对话难以继续容纳任务时，生成结构化交接摘要并在新上下文中继续。', 'Creates a structured handoff and continues in fresh context when the current conversation is nearly full.')} checked={agentConfig.autoHandoff ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, autoHandoff: checked })} />
-                                        <SettingToggle label={t('自动检索相关代码', 'Retrieve relevant code automatically')} description={t('回答前根据问题从代码索引中查找相关片段。需要代码索引可用，可能略微增加响应时间。', 'Searches the code index for relevant snippets before answering. Requires an index and may add slight latency.')} checked={agentConfig.enableAutoContext ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, enableAutoContext: checked })} />
+                                        <SettingToggle label={translate('agentSettings.useModelGeneratedSummaries', asLanguage(language))} description={translate('agentSettings.usesTheModelTo', asLanguage(language))} checked={agentConfig.enableLLMSummary ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, enableLLMSummary: checked })} />
+                                        <SettingToggle label={translate('agentSettings.handoffAutomaticallyWhenContext', asLanguage(language))} description={translate('agentSettings.createsAStructuredHandoff', asLanguage(language))} checked={agentConfig.autoHandoff ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, autoHandoff: checked })} />
+                                        <SettingToggle label={translate('agentSettings.retrieveRelevantCodeAutomatically', asLanguage(language))} description={translate('agentSettings.searchesTheCodeIndex', asLanguage(language))} checked={agentConfig.enableAutoContext ?? true} onChange={(checked) => setAgentConfig({ ...agentConfig, enableAutoContext: checked })} />
                                     </div>
                                 </div>
 
@@ -427,15 +417,15 @@ export function AgentSettings({
                                     <div className="flex items-center justify-between mb-1">
                                         <div className="flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                            <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{t('循环检测', 'Loop Detection')}</label>
+                                            <label className="text-xs font-bold text-text-primary uppercase tracking-wider">{translate('agentSettings.loopDetection', asLanguage(language))}</label>
                                         </div>
-                                        <span className="text-[9px] text-text-muted bg-surface/50 px-2 py-0.5 rounded-full border border-border/30">{t('仅警告，不中断', 'Warning only')}</span>
+                                        <span className="text-[9px] text-text-muted bg-surface/50 px-2 py-0.5 rounded-full border border-border/30">{translate('agentSettings.warning', asLanguage(language))}</span>
                                     </div>
 
-                                    <p className="text-[11px] leading-4 text-text-muted">{t('检测 Agent 是否在重复相同命令或反复编辑同一目标。目前只提示风险，不会自动终止任务。', 'Detects repeated commands or edits to the same target. It currently warns about the pattern without stopping the task.')}</p>
+                                    <p className="text-[11px] leading-4 text-text-muted">{translate('agentSettings.detectsRepeatedCommandsOr', asLanguage(language))}</p>
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('历史记录', 'History')}</label>
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{translate('checkpoint.title', asLanguage(language))}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.loopDetection?.maxHistory ?? 50}
@@ -452,7 +442,7 @@ export function AgentSettings({
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('重复阈值', 'Exact Repeats')}</label>
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{translate('agentSettings.exactRepeats', asLanguage(language))}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.loopDetection?.maxExactRepeats ?? 5}
@@ -469,7 +459,7 @@ export function AgentSettings({
                                             />
                                         </div>
                                         <div className="space-y-1.5">
-                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{t('编辑阈值', 'File Edits')}</label>
+                                            <label className="text-[10px] font-medium text-text-muted px-0.5">{translate('agentSettings.fileEdits', asLanguage(language))}</label>
                                             <Input
                                                 type="number"
                                                 value={agentConfig.loopDetection?.maxSameTargetRepeats ?? 8}
@@ -494,25 +484,25 @@ export function AgentSettings({
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                                <span className="text-xs font-semibold text-text-primary">{t('上下文排除目录', 'Context exclusions')}</span>
+                                                <span className="text-xs font-semibold text-text-primary">{translate('agentSettings.contextExclusions', asLanguage(language))}</span>
                                             </div>
-                                            <p className="mt-1.5 text-[11px] leading-4 text-text-muted">{t('Agent 自动收集项目上下文和建立索引时跳过这些目录；手动指定文件时仍可读取。', 'Skipped during automatic context collection and indexing. Files you explicitly request can still be read.')}</p>
+                                            <p className="mt-1.5 text-[11px] leading-4 text-text-muted">{translate('agentSettings.skippedDuringAutomaticContext', asLanguage(language))}</p>
                                         </div>
                                         <div className="ml-4 flex shrink-0 items-center gap-1">
                                             <button type="button" onClick={() => setEditingIgnoredDirs(value => !value)} className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-lg px-2 text-[11px] text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50">
                                                 {editingIgnoredDirs ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
-                                                {editingIgnoredDirs ? t('完成', 'Done') : t('编辑', 'Edit')}
+                                                {editingIgnoredDirs ? translate('agentSettings.done', asLanguage(language)) : translate('editor.edit', asLanguage(language))}
                                             </button>
                                             <button type="button" onClick={resetIgnoredDirs} className="inline-flex min-h-8 cursor-pointer items-center gap-1 rounded-lg px-2 text-[11px] text-text-muted transition-colors hover:bg-surface-hover hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50">
                                                 <RefreshCw className="h-3.5 w-3.5" />
-                                                {t('恢复默认', 'Reset')}
+                                                {translate('common.reset', asLanguage(language))}
                                             </button>
                                         </div>
                                     </div>
                                     {editingIgnoredDirs ? (
                                         <div>
-                                            <textarea value={ignoredDirsInput} onChange={(e) => handleIgnoredDirsChange(e.target.value)} className="h-40 w-full resize-y rounded-lg border border-border/60 bg-background/50 p-3 font-mono text-xs leading-5 text-text-secondary outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20" placeholder={t('每行填写一个目录，例如：\nnode_modules\ndist\n.cache', 'One directory per line, for example:\nnode_modules\ndist\n.cache')} />
-                                            <p className="mt-1.5 text-[10px] text-text-muted">{t('每行一个目录，也兼容逗号分隔。修改会随设置一起保存。', 'Use one directory per line; comma-separated values also work. Changes are saved with settings.')}</p>
+                                            <textarea value={ignoredDirsInput} onChange={(e) => handleIgnoredDirsChange(e.target.value)} className="h-40 w-full resize-y rounded-lg border border-border/60 bg-background/50 p-3 font-mono text-xs leading-5 text-text-secondary outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20" placeholder={translate('agentSettings.oneDirectoryPerLine', asLanguage(language))} />
+                                            <p className="mt-1.5 text-[10px] text-text-muted">{translate('agentSettings.useOneDirectoryPer', asLanguage(language))}</p>
                                         </div>
                                     ) : (
                                         <div className="flex flex-wrap gap-2">

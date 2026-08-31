@@ -18,7 +18,7 @@ import { terminalManager, TerminalManagerState } from '@/renderer/services/Termi
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
 import { readClipboardText, writeClipboardText } from '@/renderer/services/clipboardService'
 import { useClickOutside } from '@renderer/hooks/usePerformance'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import { formatShortcut } from '@services/keybindingService'
 import { discoverProjectTasks, type ProjectFileSnapshot, type ProjectTask } from '@shared/utils/projectTasks'
 
@@ -497,7 +497,7 @@ const TerminalPanel = memo(function TerminalPanel() {
                                             </span>
                                             <span className="text-[10px] text-text-muted truncate max-w-[260px] opacity-70 font-mono">{task.command}</span>
                                         </button>
-                                    )) : <div className="px-3 py-2 text-xs text-text-muted italic">{language === 'zh' ? '未发现可运行任务' : 'No runnable tasks found'}</div>}
+                                    )) : <div className="px-3 py-2 text-xs text-text-muted italic">{t('terminalPanel.noRunnableTasksFound', asLanguage(language))}</div>}
                                 </div>
                             )}
                         </div>

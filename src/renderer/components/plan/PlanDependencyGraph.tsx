@@ -6,6 +6,7 @@ import {
 import type { PlanTask } from '@/renderer/agent/plan/types'
 import { layoutPlanGraph } from '@/renderer/agent/plan/planGraphLayout'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
+import { t, asLanguage } from '@renderer/i18n'
 
 export interface PlanDependencyGraphProps {
   tasks: PlanTask[]
@@ -15,15 +16,13 @@ export interface PlanDependencyGraphProps {
   onSelectTask: (taskId: string) => void
 }
 
-const copy = (language: string, zh: string, en: string) => language === 'zh' ? zh : en
-
 function taskState(task: PlanTask, waitingApproval: boolean, language: string) {
-  if (waitingApproval) return { label: copy(language, '等待审批', 'Approval required'), icon: ShieldAlert, tone: 'text-amber-500', ring: 'border-amber-400/45' }
-  if (task.status === 'completed') return { label: copy(language, '已完成', 'Completed'), icon: CheckCircle2, tone: 'text-emerald-500', ring: 'border-emerald-400/35' }
-  if (task.status === 'running') return { label: copy(language, '执行中', 'Running'), icon: LoaderCircle, tone: 'text-accent', ring: 'border-accent/45' }
-  if (task.status === 'failed') return { label: copy(language, '执行失败', 'Failed'), icon: AlertTriangle, tone: 'text-red-400', ring: 'border-red-400/40' }
-  if (task.status === 'skipped' || task.status === 'cancelled') return { label: copy(language, '已跳过', 'Skipped'), icon: XCircle, tone: 'text-text-muted', ring: 'border-border/70' }
-  return { label: copy(language, '等待执行', 'Queued'), icon: Circle, tone: 'text-text-muted', ring: 'border-border/70' }
+  if (waitingApproval) return { label: t('planDependencyGraph.approvalRequired', asLanguage(language)), icon: ShieldAlert, tone: 'text-amber-500', ring: 'border-amber-400/45' }
+  if (task.status === 'completed') return { label: t('common.completed', asLanguage(language)), icon: CheckCircle2, tone: 'text-emerald-500', ring: 'border-emerald-400/35' }
+  if (task.status === 'running') return { label: t('common.running', asLanguage(language)), icon: LoaderCircle, tone: 'text-accent', ring: 'border-accent/45' }
+  if (task.status === 'failed') return { label: t('planDependencyGraph.failed', asLanguage(language)), icon: AlertTriangle, tone: 'text-red-400', ring: 'border-red-400/40' }
+  if (task.status === 'skipped' || task.status === 'cancelled') return { label: t('common.skipped', asLanguage(language)), icon: XCircle, tone: 'text-text-muted', ring: 'border-border/70' }
+  return { label: t('planDependencyGraph.queued', asLanguage(language)), icon: Circle, tone: 'text-text-muted', ring: 'border-border/70' }
 }
 
 function formatDuration(task: PlanTask): string | null {
@@ -48,15 +47,15 @@ export const PlanDependencyGraph = memo(function PlanDependencyGraph({
 
   if (!tasks.length) return <div className="flex min-h-[320px] flex-col items-center justify-center text-[11px] text-text-muted">
     <OtterAsset asset="idlePaws" className="mb-3 h-16 w-16 object-contain opacity-80" />
-    {copy(language, '计划中还没有任务', 'No tasks in this plan yet')}
+    {t('planDependencyGraph.noTasksInThis', asLanguage(language))}
   </div>
 
   return <div className="relative min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_1px_1px,rgb(var(--color-border)/0.22)_1px,transparent_0)] bg-[size:20px_20px] custom-scrollbar">
     {(layout.hasCycle || layout.missingDependencies.length > 0) && <div className="sticky left-4 top-3 z-30 mx-4 flex w-fit max-w-[640px] items-center gap-2 rounded-md border border-amber-400/30 bg-background/95 px-3 py-2 text-[11px] text-amber-500 shadow-sm backdrop-blur">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
       <span>{layout.hasCycle
-        ? copy(language, '计划依赖中存在循环，相关任务已放入诊断层，请先调整依赖。', 'The plan contains a dependency cycle. Affected tasks are placed in a diagnostic rank.')
-        : copy(language, `有 ${layout.missingDependencies.length} 个依赖指向不存在的任务。`, `${layout.missingDependencies.length} dependencies reference missing tasks.`)}</span>
+        ? t('planDependencyGraph.thePlanContainsA', asLanguage(language))
+        : t('planDependencyGraph.dependenciesReferenceMissingTasks', asLanguage(language), { length: layout.missingDependencies.length })}</span>
     </div>}
     <div className="relative" style={{ width: layout.width, height: layout.height }}>
       <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
@@ -96,10 +95,10 @@ export const PlanDependencyGraph = memo(function PlanDependencyGraph({
             </div>
 
             <div className="mt-auto grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-border/45 pt-2.5 text-[10px]">
-              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><UserRoundCog className="h-3 w-3 shrink-0" /><span className="truncate">{task.role || copy(language, '默认角色', 'Default role')}</span></span>
-              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><Clock3 className="h-3 w-3 shrink-0" /><span className="truncate">{duration || (task.estimatedTokens ? `${task.estimatedTokens.toLocaleString()} tokens` : copy(language, '未估算', 'Not estimated'))}</span></span>
-              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><FileCode2 className="h-3 w-3 shrink-0" /><span className="truncate">{task.producesFiles?.length ? task.producesFiles.join('、') : copy(language, '未声明产物', 'No declared artifact')}</span></span>
-              <span className="truncate text-text-muted" title={dependencyTitles.join('、')}>{task.dependencies.length ? `${copy(language, '依赖', 'Depends on')} ${dependencyTitles.join('、')}` : copy(language, '起始任务', 'Starting task')}</span>
+              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><UserRoundCog className="h-3 w-3 shrink-0" /><span className="truncate">{task.role || t('planDependencyGraph.defaultRole', asLanguage(language))}</span></span>
+              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><Clock3 className="h-3 w-3 shrink-0" /><span className="truncate">{duration || (task.estimatedTokens ? `${task.estimatedTokens.toLocaleString()} tokens` : t('planDependencyGraph.notEstimated', asLanguage(language)))}</span></span>
+              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><FileCode2 className="h-3 w-3 shrink-0" /><span className="truncate">{task.producesFiles?.length ? task.producesFiles.join('、') : t('planDependencyGraph.noDeclaredArtifact', asLanguage(language))}</span></span>
+              <span className="truncate text-text-muted" title={dependencyTitles.join('、')}>{task.dependencies.length ? `${t('common.depends', asLanguage(language))} ${dependencyTitles.join('、')}` : t('planDependencyGraph.startingTask', asLanguage(language))}</span>
             </div>
           </div>
         </button>

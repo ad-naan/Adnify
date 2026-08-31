@@ -9,7 +9,7 @@ import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Glo
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
-import { Language } from '@renderer/i18n'
+import { Language, t, asLanguage } from '@renderer/i18n'
 import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { importUserPreferences, resetUserPreferences } from '@/renderer/services/preferenceService'
@@ -123,10 +123,10 @@ export function SystemSettings({
     const handleExport = async () => {
         try {
             await downloadSettings(getCurrentSettings(), includeApiKeys)
-            toast.success(language === 'zh' ? '配置已导出' : 'Settings exported')
+            toast.success(t('systemSettings.settingsExported', asLanguage(language)))
         } catch (error) {
             logger.settings.error('Failed to export settings:', error)
-            toast.error(language === 'zh' ? '导出失败' : 'Export failed')
+            toast.error(t('systemSettings.exportFailed', asLanguage(language)))
         }
     }
 
@@ -143,7 +143,7 @@ export function SystemSettings({
             const result = importSettings(text)
 
             if (!result.success || !result.settings) {
-                toast.error(result.error || (language === 'zh' ? '导入失败' : 'Import failed'))
+                toast.error(result.error || (t('common.importFailed', asLanguage(language))))
                 return
             }
 
@@ -191,10 +191,10 @@ export function SystemSettings({
             // 保存设置到持久化存储
             await getStore().save()
 
-            toast.success(language === 'zh' ? '配置已导入' : 'Settings imported')
+            toast.success(t('systemSettings.settingsImported', asLanguage(language)))
         } catch (error) {
             logger.settings.error('Failed to import settings:', error)
-            toast.error(language === 'zh' ? '导入失败' : 'Import failed')
+            toast.error(t('common.importFailed', asLanguage(language)))
         }
 
         // 清空 input
@@ -216,10 +216,10 @@ export function SystemSettings({
             Agent.clearSession()
             memoryService.clearCache()
 
-            toast.success(language === 'zh' ? '缓存已清除' : 'Cache cleared')
+            toast.success(t('systemSettings.cacheCleared', asLanguage(language)))
         } catch (error) {
             logger.settings.error('Failed to clear cache:', error)
-            toast.error(language === 'zh' ? '清除缓存失败' : 'Failed to clear cache')
+            toast.error(t('systemSettings.failedToClearCache', asLanguage(language)))
         } finally {
             setIsClearing(false)
         }
@@ -229,10 +229,10 @@ export function SystemSettings({
         setIsClearing(true)
         try {
             await api.settings.deepCleanCache()
-            toast.success(language === 'zh' ? '深度缓存已清除' : 'Deep cache cleared')
+            toast.success(t('systemSettings.deepCacheCleared', asLanguage(language)))
         } catch (error) {
             logger.settings.error('Failed to deep clear cache:', error)
-            toast.error(language === 'zh' ? '深度清理失败' : 'Deep clear failed')
+            toast.error(t('systemSettings.deepClearFailed', asLanguage(language)))
         } finally {
             setIsClearing(false)
         }
@@ -240,8 +240,8 @@ export function SystemSettings({
 
     const handleReset = async () => {
         const confirmed = await globalConfirm({
-            title: language === 'zh' ? '重置设置' : 'Reset Settings',
-            message: language === 'zh' ? '确定要重置所有设置吗？这将丢失所有自定义配置。' : 'Are you sure you want to reset all settings? This will lose all custom configurations.',
+            title: t('systemSettings.resetSettings', asLanguage(language)),
+            message: t('systemSettings.areYouSureYou', asLanguage(language)),
             variant: 'danger',
         })
         if (confirmed) {
@@ -260,7 +260,7 @@ export function SystemSettings({
     const handleOpenLogFile = async () => {
         if (!logPath) return
         const shown = await api.file.showInFolder(logPath)
-        if (!shown) toast.error(language === 'zh' ? '无法定位日志文件' : 'Could not locate the log file')
+        if (!shown) toast.error(t('systemSettings.couldNotLocateThe', asLanguage(language)))
     }
 
     const handleExportLogs = async () => {
@@ -274,13 +274,13 @@ export function SystemSettings({
                 a.download = `adnify-logs-${new Date().toISOString().slice(0, 10)}.log`
                 a.click()
                 URL.revokeObjectURL(url)
-                toast.success(language === 'zh' ? '日志已导出' : 'Logs exported')
+                toast.success(t('systemSettings.logsExported', asLanguage(language)))
             } else {
-                toast.error(language === 'zh' ? '没有可导出的日志' : 'No logs to export')
+                toast.error(t('systemSettings.noLogsToExport', asLanguage(language)))
             }
         } catch (err) {
             logger.settings.error('Failed to export logs:', err)
-            toast.error(language === 'zh' ? '导出日志失败' : 'Failed to export logs')
+            toast.error(t('systemSettings.failedToExportLogs', asLanguage(language)))
         }
     }
 
@@ -290,7 +290,7 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <ExternalLink className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {language === 'zh' ? 'GitHub 集成' : 'GitHub Integration'}
+                        {t('systemSettings.githubIntegration', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="space-y-4">
@@ -300,9 +300,7 @@ export function SystemSettings({
                                 {language === 'zh' ? 'GitHub Token' : 'GitHub Token'}
                             </div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">
-                                {language === 'zh'
-                                    ? '用于 GitHub Releases 请求，减少速率限制，供 LSP 安装和更新检查复用'
-                                    : 'Used for GitHub Releases requests to reduce rate limiting across LSP installs and update checks'}
+                                {t('systemSettings.usedForGithubReleases', asLanguage(language))}
                             </div>
                         </div>
 
@@ -310,7 +308,7 @@ export function SystemSettings({
                             type="password"
                             value={githubToken}
                             onChange={(e) => setGithubToken(e.target.value)}
-                            placeholder={language === 'zh' ? '输入 GitHub Personal Access Token' : 'Enter GitHub Personal Access Token'}
+                            placeholder={t('systemSettings.enterGithubPersonalAccess', asLanguage(language))}
                             className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                             autoComplete="off"
                             spellCheck={false}
@@ -319,9 +317,7 @@ export function SystemSettings({
                         <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
                             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                             <div>
-                                {language === 'zh'
-                                    ? 'Token 会保存在本地设置中，不会自动导出；只有在手动勾选“包含 API 密钥”时才会进入导出文件。'
-                                    : 'The token is stored locally and is excluded from exports unless you explicitly include API keys.'}
+                                {t('systemSettings.theTokenIsStored', asLanguage(language))}
                             </div>
                         </div>
                     </div>
@@ -332,7 +328,7 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <Globe className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {language === 'zh' ? '网络代理' : 'Network Proxy'}
+                        {t('systemSettings.networkProxy', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="space-y-4">
@@ -340,12 +336,10 @@ export function SystemSettings({
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">
-                                    {language === 'zh' ? '启用代理' : 'Enable Proxy'}
+                                    {t('systemSettings.enableProxy', asLanguage(language))}
                                 </div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh'
-                                        ? '启用全局网络代理，用于 AI 模型、网页检索、网页抓取等所有网络连接'
-                                        : 'Enable global network proxy for AI models, web searches, web reads, etc.'}
+                                    {t('systemSettings.enableGlobalNetworkProxy', asLanguage(language))}
                                 </div>
                             </div>
                             <Switch
@@ -358,41 +352,37 @@ export function SystemSettings({
                             <div className="space-y-5 border-t border-border/40 pt-5 animate-fade-in">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-text-secondary">
-                                        {language === 'zh' ? '代理服务器规则' : 'Proxy Server Rules'}
+                                        {t('systemSettings.proxyServerRules', asLanguage(language))}
                                     </label>
                                     <input
                                         type="text"
                                         value={proxySettings.rules}
                                         onChange={(e) => handleProxyRulesChange(e.target.value)}
-                                        placeholder={language === 'zh' ? '例如: http://127.0.0.1:7890 或 socks5://127.0.0.1:1080' : 'e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:1080'}
+                                        placeholder={t('systemSettings.eGHttp127', asLanguage(language))}
                                         className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                                         autoComplete="off"
                                         spellCheck={false}
                                     />
                                     <div className="text-[10px] text-text-muted opacity-75">
-                                        {language === 'zh'
-                                            ? '指定代理服务器的 URL，支持 http、https 和 socks5 协议。'
-                                            : 'Specify proxy server URL, supporting http, https, and socks5 protocols.'}
+                                        {t('systemSettings.specifyProxyServerUrl', asLanguage(language))}
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-text-secondary">
-                                        {language === 'zh' ? '不代理的地址 (Bypass Rules)' : 'Bypass Proxy Rules'}
+                                        {t('systemSettings.bypassProxyRules', asLanguage(language))}
                                     </label>
                                     <input
                                         type="text"
                                         value={proxySettings.bypassRules}
                                         onChange={(e) => handleProxyBypassChange(e.target.value)}
-                                        placeholder={language === 'zh' ? '例如: localhost, 127.0.0.1, <local>' : 'e.g. localhost, 127.0.0.1, <local>'}
+                                        placeholder={t('systemSettings.eGLocalhost127', asLanguage(language))}
                                         className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                                         autoComplete="off"
                                         spellCheck={false}
                                     />
                                     <div className="text-[10px] text-text-muted opacity-75">
-                                        {language === 'zh'
-                                            ? '逗号分隔的规则列表。如果 URL 匹配任一规则，将直连而不走代理。'
-                                            : 'Comma-separated list of rules. If a URL matches any rule, it will bypass the proxy.'}
+                                        {t('systemSettings.commaSeparatedListOf', asLanguage(language))}
                                     </div>
                                 </div>
                             </div>
@@ -405,18 +395,16 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <HardDrive className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {language === 'zh' ? '存储与缓存' : 'Storage & Cache'}
+                        {t('systemSettings.storageCache', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="space-y-4">
                     <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '配置存储路径' : 'Config Storage Path'}</div>
+                                <div className="text-sm font-bold text-text-primary">{t('systemSettings.configStoragePath', asLanguage(language))}</div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh'
-                                        ? '所有配置文件（config.json、mcp.json 等）的存储位置'
-                                        : 'Storage location for all config files (config.json, mcp.json, etc.)'}
+                                    {t('systemSettings.storageLocationForAll', asLanguage(language))}
                                 </div>
                             </div>
                             <Button variant="secondary" size="sm" className="rounded-xl px-4" onClick={async () => {
@@ -424,16 +412,16 @@ export function SystemSettings({
                                 if (newPath) {
                                     const result = await api.settings.setConfigPathDetailed(newPath)
                                     if (result.success) {
-                                        toast.success(language === 'zh' ? '路径已更新，重启后生效' : 'Path updated, restart required to take effect')
+                                        toast.success(t('systemSettings.pathUpdatedRestartRequired', asLanguage(language)))
                                     } else {
                                         toast.error(
-                                            language === 'zh' ? '更新路径失败' : 'Failed to update path',
+                                            t('systemSettings.failedToUpdatePath', asLanguage(language)),
                                             result.error.message,
                                         )
                                     }
                                 }
                             }}>
-                                {language === 'zh' ? '更改路径' : 'Change Path'}
+                                {t('systemSettings.changePath', asLanguage(language))}
                             </Button>
                         </div>
 
@@ -448,32 +436,32 @@ export function SystemSettings({
 
                         <div className="flex items-center gap-2 text-[10px] font-medium text-yellow-500 bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20">
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            {language === 'zh' ? '更改路径后需要手动重启应用以应用所有变更' : 'Restart application manually after changing path to apply all changes'}
+                            {t('systemSettings.restartApplicationManuallyAfter', asLanguage(language))}
                         </div>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
-                            <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '清除缓存' : 'Clear Cache'}</div>
-                            <div className="text-xs text-text-muted mt-1 opacity-70">{language === 'zh' ? '清除业务缓存、索引数据和临时文件' : 'Clear app caches, index data, and temporary files'}</div>
+                            <div className="text-sm font-bold text-text-primary">{t('systemSettings.clearCache', asLanguage(language))}</div>
+                            <div className="text-xs text-text-muted mt-1 opacity-70">{t('systemSettings.clearAppCachesIndex', asLanguage(language))}</div>
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" size="sm" onClick={handleClearCache} disabled={isClearing} className="rounded-xl px-6">
-                                {isClearing ? (language === 'zh' ? '清除中...' : 'Clearing...') : (language === 'zh' ? '清除' : 'Clear')}
+                                {isClearing ? (t('systemSettings.clearing', asLanguage(language))) : (t('common.clear', asLanguage(language)))}
                             </Button>
                             <Button variant="danger" size="sm" onClick={handleDeepClearCache} disabled={isClearing} className="rounded-xl px-6">
-                                {language === 'zh' ? '深度清理' : 'Deep Clean'}
+                                {t('systemSettings.deepClean', asLanguage(language))}
                             </Button>
                         </div>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/[0.07] p-5">
                         <div>
-                            <div className="text-sm font-bold text-red-400">{language === 'zh' ? '重置所有设置' : 'Reset All Settings'}</div>
-                            <div className="text-xs text-red-400/70 mt-1">{language === 'zh' ? '恢复出厂设置，不可撤销' : 'Restore factory settings, irreversible'}</div>
+                            <div className="text-sm font-bold text-red-400">{t('systemSettings.resetAllSettings', asLanguage(language))}</div>
+                            <div className="text-xs text-red-400/70 mt-1">{t('systemSettings.restoreFactorySettingsIrreversible', asLanguage(language))}</div>
                         </div>
                         <Button variant="danger" size="sm" onClick={handleReset} className="rounded-xl px-6">
-                            {language === 'zh' ? '重置' : 'Reset'}
+                            {t('common.reset2', asLanguage(language))}
                         </Button>
                     </div>
                 </div>
@@ -484,7 +472,7 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <FileText className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {language === 'zh' ? '日志管理' : 'Log Management'}
+                        {t('systemSettings.logManagement', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="space-y-4">
@@ -492,12 +480,10 @@ export function SystemSettings({
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">
-                                    {language === 'zh' ? '启用文件日志' : 'Enable File Logging'}
+                                    {t('systemSettings.enableFileLogging', asLanguage(language))}
                                 </div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh'
-                                        ? '将应用日志保存到文件，用于调试和问题排查'
-                                        : 'Save application logs to file for debugging and troubleshooting'}
+                                    {t('systemSettings.saveApplicationLogsTo', asLanguage(language))}
                                 </div>
                             </div>
                             <Switch
@@ -510,7 +496,7 @@ export function SystemSettings({
                             <>
                                 <div>
                                     <div className="text-sm font-bold text-text-primary mb-3">
-                                        {language === 'zh' ? '日志文件位置' : 'Log File Location'}
+                                        {t('systemSettings.logFileLocation', asLanguage(language))}
                                     </div>
                                     {logPath && (
                                         <div className="flex items-center gap-3 p-4 bg-background/50 rounded-xl border border-border shadow-inner">
@@ -533,7 +519,7 @@ export function SystemSettings({
                                         className="rounded-xl px-4 flex-1"
                                     >
                                         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                                        {language === 'zh' ? '在资源管理器中显示' : 'Reveal in Explorer'}
+                                        {t('revealInExplorer', asLanguage(language))}
                                     </Button>
                                     <Button
                                         variant="secondary"
@@ -542,16 +528,14 @@ export function SystemSettings({
                                         className="rounded-xl px-4 flex-1"
                                     >
                                         <Download className="w-3.5 h-3.5 mr-1.5" />
-                                        {language === 'zh' ? '导出日志' : 'Export Logs'}
+                                        {t('systemSettings.exportLogs', asLanguage(language))}
                                     </Button>
                                 </div>
 
                                 <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
                                     <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                     <div>
-                                        {language === 'zh'
-                                            ? '日志文件会自动轮转，最多保留 5 个文件（每个最大 10MB）。生产环境默认只记录警告和错误。'
-                                            : 'Log files rotate automatically, keeping up to 5 files (10MB each). Production mode logs warnings and errors only.'}
+                                        {t('systemSettings.logFilesRotateAutomatically', asLanguage(language))}
                                     </div>
                                 </div>
                             </>
@@ -561,9 +545,7 @@ export function SystemSettings({
                             <div className="flex items-start gap-2 text-[10px] font-medium text-text-muted bg-white/5 px-3 py-2 rounded-lg border border-border">
                                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                 <div>
-                                    {language === 'zh'
-                                        ? '文件日志已禁用。启用后可以查看详细的应用运行日志，包括 LSP 安装、错误信息等。'
-                                        : 'File logging is disabled. Enable it to view detailed application logs including LSP installation, errors, etc.'}
+                                    {t('systemSettings.fileLoggingIsDisabled', asLanguage(language))}
                                 </div>
                             </div>
                         )}
@@ -576,29 +558,27 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <Download className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {language === 'zh' ? '配置备份' : 'Settings Backup'}
+                        {t('systemSettings.settingsBackup', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="space-y-4">
                     <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导出配置' : 'Export Settings'}</div>
+                                <div className="text-sm font-bold text-text-primary">{t('systemSettings.exportSettings', asLanguage(language))}</div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {language === 'zh'
-                                        ? '将当前配置导出为 JSON 文件，方便备份或迁移'
-                                        : 'Export current settings to JSON file for backup or migration'}
+                                    {t('systemSettings.exportCurrentSettingsTo', asLanguage(language))}
                                 </div>
                             </div>
                             <Button variant="secondary" size="sm" onClick={handleExport} className="rounded-xl px-4">
                                 <Download className="w-3.5 h-3.5 mr-1.5" />
-                                {language === 'zh' ? '导出' : 'Export'}
+                                {t('exportSession', asLanguage(language))}
                             </Button>
                         </div>
 
                         <div className="flex items-center justify-between py-2">
                             <div className="text-xs text-text-muted">
-                                {language === 'zh' ? '包含 API 密钥（不推荐）' : 'Include API keys (not recommended)'}
+                                {t('systemSettings.includeApiKeysNot', asLanguage(language))}
                             </div>
                             <Switch
                                 checked={includeApiKeys}
@@ -609,21 +589,21 @@ export function SystemSettings({
                         {includeApiKeys && (
                             <div className="flex items-center gap-2 text-[10px] font-medium text-yellow-500 bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20">
                                 <AlertTriangle className="w-3.5 h-3.5" />
-                                {language === 'zh' ? '导出文件将包含敏感的 API 密钥，请妥善保管' : 'Exported file will contain sensitive API keys, keep it safe'}
+                                {t('systemSettings.exportedFileWillContain', asLanguage(language))}
                             </div>
                         )}
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
-                            <div className="text-sm font-bold text-text-primary">{language === 'zh' ? '导入配置' : 'Import Settings'}</div>
+                            <div className="text-sm font-bold text-text-primary">{t('systemSettings.importSettings', asLanguage(language))}</div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">
-                                {language === 'zh' ? '从 JSON 文件导入配置' : 'Import settings from JSON file'}
+                                {t('systemSettings.importSettingsFromJson', asLanguage(language))}
                             </div>
                         </div>
                         <Button variant="secondary" size="sm" onClick={handleImport} className="rounded-xl px-4">
                             <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            {language === 'zh' ? '导入' : 'Import'}
+                            {t('common.import2', asLanguage(language))}
                         </Button>
                         <input
                             ref={fileInputRef}
@@ -641,18 +621,16 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <BookOpen className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {language === 'zh' ? '版本记录' : 'Version History'}
+                        {t('systemSettings.versionHistory', asLanguage(language))}
                     </h4>
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                     <div>
                         <div className="text-sm font-bold text-text-primary">
-                            {language === 'zh' ? '软件更新日志' : 'Release Notes & Changelog'}
+                            {t('systemSettings.releaseNotesChangelog', asLanguage(language))}
                         </div>
                         <div className="text-xs text-text-muted mt-1 opacity-70">
-                            {language === 'zh'
-                                ? '查看所有历史版本更新明细与新功能特性'
-                                : 'Explore complete release history and new features across all versions'}
+                            {t('systemSettings.exploreCompleteReleaseHistory', asLanguage(language))}
                         </div>
                     </div>
                     <Button
@@ -662,7 +640,7 @@ export function SystemSettings({
                         className="rounded-xl px-4 !bg-accent/15 !border-accent/30 !text-accent hover:!bg-accent/25"
                     >
                         <BookOpen className="w-3.5 h-3.5 mr-1.5" />
-                        {language === 'zh' ? '查看更新日志' : 'View Changelog'}
+                        {t('common.viewChangelog', asLanguage(language))}
                     </Button>
                 </div>
             </section>

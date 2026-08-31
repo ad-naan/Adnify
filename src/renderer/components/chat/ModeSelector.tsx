@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface ModeSelectorProps {
   mode: WorkMode
@@ -232,7 +233,7 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
     <div
       className={`relative h-9 w-[136px] overflow-hidden rounded-xl border border-border/25 bg-text-primary/[0.035] p-[3px] shadow-inner ${className}`}
       role="radiogroup"
-      aria-label={language === 'zh' ? '工作模式' : 'Work mode'}
+      aria-label={t('modeSelector.workMode', asLanguage(language))}
       onKeyDown={handleKeyDown}
     >
       <span
@@ -244,8 +245,8 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
         {MODE_OPTIONS.map(option => {
           const selected = option.id === mode
           const description = option.id === 'agent'
-            ? (language === 'zh' ? '直接执行任务' : 'Execute directly')
-            : (language === 'zh' ? '先规划再执行' : 'Plan before execution')
+            ? (t('modeSelector.executeDirectly', asLanguage(language)))
+            : (t('modeSelector.planBeforeExecution', asLanguage(language)))
 
           return (
             <button

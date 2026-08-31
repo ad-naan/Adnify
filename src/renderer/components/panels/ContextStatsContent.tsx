@@ -21,6 +21,7 @@ import { createManualHandoffSession } from '@/renderer/agent/services/handoffSes
 import type { CompressionLevel } from '@/renderer/agent/domains/context/types'
 import type { TokenUsage } from '@renderer/agent/types'
 import { toast } from '../common/ToastProvider'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 interface ContextStatsContentProps {
   totalUsage: TokenUsage
@@ -66,92 +67,82 @@ export default function ContextStatsContent({
   const staleTurns = memoryHealth?.staleTurns ?? 0
 
   const t = useMemo(() => ({
-    contextControl: language === 'zh' ? '上下文管理' : 'Context Control',
-    contextLoad: language === 'zh' ? '上下文负载' : 'Context Load',
-    threadPeakUsage: language === 'zh' ? '线程峰值占用' : 'Thread peak usage',
-    memoryState: language === 'zh' ? '工作记忆' : 'Working Memory',
-    compressionLevel: language === 'zh' ? '压缩等级' : 'Compression Level',
-    windowUsage: language === 'zh' ? '本轮输入窗口占用' : 'Per-request input window usage',
-    loadStatus: language === 'zh' ? '当前状态' : 'Current state',
-    input: language === 'zh' ? '输入' : 'Input',
-    inputUse: language === 'zh' ? '输入占用' : 'Input Use',
-    strategy: language === 'zh' ? '策略' : 'Strategy',
-    summaryTiming: language === 'zh' ? '总结触发时机' : 'When summary starts',
-    handoffTiming: language === 'zh' ? '切线程触发时机' : 'When new thread starts',
-    summaryTimingValue: language === 'zh' ? 'L3，约 85% 以上' : 'L3, around 85%+',
-    handoffTimingValue: language === 'zh' ? 'L4，约 95% 以上' : 'L4, around 95%+',
-    summaryHint: language === 'zh'
-      ? '系统会在上下文进入高水位时生成摘要，用于后续压缩和续接。'
-      : 'A summary is generated once context usage is high enough to support compression and resume continuity.',
-    handoffHint: language === 'zh'
-      ? '当单次请求接近上下文上限时，系统会准备续接包，并建议或自动切到新线程继续。'
-      : 'When a request is close to the context limit, the app prepares a handoff packet and suggests or auto-starts a new thread.',
-    memoryScore: language === 'zh' ? '连续性分数' : 'Continuity score',
-    snapshotStatus: language === 'zh' ? '摘要状态' : 'Snapshot status',
-    snapshotReady: language === 'zh' ? '已生成' : 'Ready',
-    snapshotMissing: language === 'zh' ? '未生成' : 'Not ready',
-    freshness: language === 'zh' ? '新鲜度' : 'Freshness',
-    freshnessFresh: language === 'zh' ? '最新' : 'Fresh',
-    freshnessStale: language === 'zh' ? `落后 ${staleTurns} 轮` : `${staleTurns} turns behind`,
-    scoreHint: language === 'zh'
-      ? '它衡量的是摘要对目标、待办、已完成项、用户要求和文件改动的覆盖度，以及是否过期。'
-      : 'This score measures how well the summary covers the objective, pending work, completed work, user instructions, and file changes, plus how stale it is.',
-    memoryEmptyHint: language === 'zh'
-      ? '当前还没有结构化工作记忆。通常要在进入 L3 后才会自动生成。'
-      : 'No structured working memory exists yet. It is usually generated automatically once the thread reaches L3.',
-    lowRisk: language === 'zh' ? '低风险' : 'Low Risk',
-    mediumRisk: language === 'zh' ? '中风险' : 'Medium Risk',
-    highRisk: language === 'zh' ? '高风险' : 'High Risk',
-    staleTurnsLabel: language === 'zh' ? '距摘要后的新增轮次' : 'Turns since last summary',
-    manualHandoff: language === 'zh' ? '压缩并切到新线程' : 'Compress to New Thread',
-    manualHandoffBusy: language === 'zh' ? '正在切换' : 'Switching',
-    noThread: language === 'zh' ? '无法压缩' : 'Cannot compress',
-    noThreadBody: language === 'zh' ? '当前对话还没有可压缩的内容。' : 'There is no conversation content to compress yet.',
-    switched: language === 'zh' ? '已切到新线程' : 'Switched to new thread',
-    switchedBody: language === 'zh' ? '已基于最新上下文快照创建续接线程。' : 'Created a new thread from the latest context snapshot.',
-    compressFailed: language === 'zh' ? '压缩失败' : 'Compression failed',
-    compressFallback: language === 'zh' ? '未能生成上下文续接快照。' : 'Could not generate a handoff snapshot.',
-    currentTask: language === 'zh' ? '当前任务' : 'Current Task',
-    handoffSnapshot: language === 'zh' ? '续接快照' : 'Handoff Snapshot',
-    compressionSnapshot: language === 'zh' ? '压缩快照' : 'Compression Snapshot',
-    noSnapshot: language === 'zh' ? '暂无上下文快照' : 'No context snapshot yet',
-    next: language === 'zh' ? '下一步：' : 'Next:',
-    strategyGuide: language === 'zh' ? '压缩与续接策略' : 'Compression and Handoff Strategy',
-    contextFull: language === 'zh' ? '上下文接近上限' : 'Context near limit',
-    contextFullHint: language === 'zh'
-      ? '建议尽快生成续接线程，避免下一轮请求丢失历史。'
-      : 'Consider creating a new thread soon to avoid losing useful history on the next request.',
-    totalTokens: language === 'zh' ? '总消耗' : 'Total Tokens',
-    totalIn: language === 'zh' ? '累计输入' : 'Total In',
-    totalOut: language === 'zh' ? '累计输出' : 'Total Out',
-    cacheRead: language === 'zh' ? '缓存命中' : 'Cache Read',
-    cacheWrite: language === 'zh' ? '缓存写入' : 'Cache Write',
-    lastRequest: language === 'zh' ? '最近一次' : 'Last request',
-    lastCache: language === 'zh' ? '最近缓存' : 'Last cache',
-    source: language === 'zh' ? '来源' : 'Source',
-    providerReported: language === 'zh' ? '服务商返回' : 'Provider reported',
-    locallyEstimated: language === 'zh' ? '本地估算' : 'Locally estimated',
-    readProvider: language === 'zh' ? '读: 服务商' : 'Read: provider',
-    writeProvider: language === 'zh' ? '写: 服务商' : 'Write: provider',
-    writeEstimated: language === 'zh' ? '写: 估算' : 'Write: estimated',
+    contextControl: translate('contextStatsContent.contextControl', asLanguage(language)),
+    contextLoad: translate('contextStatsContent.contextLoad', asLanguage(language)),
+    threadPeakUsage: translate('contextStatsContent.threadPeakUsage', asLanguage(language)),
+    memoryState: translate('contextStatsContent.workingMemory', asLanguage(language)),
+    compressionLevel: translate('contextStatsContent.compressionLevel', asLanguage(language)),
+    windowUsage: translate('contextStatsContent.perRequestInputWindow', asLanguage(language)),
+    loadStatus: translate('contextStatsContent.currentState', asLanguage(language)),
+    input: translate('contextStatsContent.input', asLanguage(language)),
+    inputUse: translate('contextStatsContent.inputUse', asLanguage(language)),
+    strategy: translate('contextStatsContent.strategy', asLanguage(language)),
+    summaryTiming: translate('contextStatsContent.whenSummaryStarts', asLanguage(language)),
+    handoffTiming: translate('contextStatsContent.whenNewThreadStarts', asLanguage(language)),
+    summaryTimingValue: translate('contextStatsContent.l3Around85', asLanguage(language)),
+    handoffTimingValue: translate('contextStatsContent.l4Around95', asLanguage(language)),
+    summaryHint: translate('contextStatsContent.aSummaryIsGenerated', asLanguage(language)),
+    handoffHint: translate('contextStatsContent.whenARequestIs', asLanguage(language)),
+    memoryScore: translate('contextStatsContent.continuityScore', asLanguage(language)),
+    snapshotStatus: translate('contextStatsContent.snapshotStatus', asLanguage(language)),
+    snapshotReady: translate('contextStatsContent.ready', asLanguage(language)),
+    snapshotMissing: translate('contextStatsContent.notReady', asLanguage(language)),
+    freshness: translate('contextStatsContent.freshness', asLanguage(language)),
+    freshnessFresh: translate('contextStatsContent.fresh', asLanguage(language)),
+    freshnessStale: translate('contextStatsContent.turnsBehind', asLanguage(language), { staleTurns }),
+    scoreHint: translate('contextStatsContent.thisScoreMeasuresHow', asLanguage(language)),
+    memoryEmptyHint: translate('contextStatsContent.noStructuredWorkingMemory', asLanguage(language)),
+    lowRisk: translate('contextStatsContent.lowRisk', asLanguage(language)),
+    mediumRisk: translate('contextStatsContent.mediumRisk', asLanguage(language)),
+    highRisk: translate('contextStatsContent.highRisk', asLanguage(language)),
+    staleTurnsLabel: translate('contextStatsContent.turnsSinceLastSummary', asLanguage(language)),
+    manualHandoff: translate('contextStatsContent.compressToNewThread', asLanguage(language)),
+    manualHandoffBusy: translate('contextStatsContent.switching', asLanguage(language)),
+    noThread: translate('contextStatsContent.cannotCompress', asLanguage(language)),
+    noThreadBody: translate('contextStatsContent.thereIsNoConversation', asLanguage(language)),
+    switched: translate('contextStatsContent.switchedToNewThread', asLanguage(language)),
+    switchedBody: translate('contextStatsContent.createdANewThread', asLanguage(language)),
+    compressFailed: translate('contextStatsContent.compressionFailed', asLanguage(language)),
+    compressFallback: translate('contextStatsContent.couldNotGenerateA', asLanguage(language)),
+    currentTask: translate('contextStatsContent.currentTask', asLanguage(language)),
+    handoffSnapshot: translate('contextStatsContent.handoffSnapshot', asLanguage(language)),
+    compressionSnapshot: translate('contextStatsContent.compressionSnapshot', asLanguage(language)),
+    noSnapshot: translate('contextStatsContent.noContextSnapshotYet', asLanguage(language)),
+    next: translate('contextStatsContent.next', asLanguage(language)),
+    strategyGuide: translate('contextStatsContent.compressionAndHandoffStrategy', asLanguage(language)),
+    contextFull: translate('contextStatsContent.contextNearLimit', asLanguage(language)),
+    contextFullHint: translate('contextStatsContent.considerCreatingANew', asLanguage(language)),
+    totalTokens: translate('contextStatsContent.totalTokens', asLanguage(language)),
+    totalIn: translate('contextStatsContent.total', asLanguage(language)),
+    totalOut: translate('contextStatsContent.totalOut', asLanguage(language)),
+    cacheRead: translate('contextStatsContent.cacheRead', asLanguage(language)),
+    cacheWrite: translate('contextStatsContent.cacheWrite', asLanguage(language)),
+    lastRequest: translate('contextStatsContent.lastRequest', asLanguage(language)),
+    lastCache: translate('contextStatsContent.lastCache', asLanguage(language)),
+    source: translate('contextStatsContent.source', asLanguage(language)),
+    providerReported: translate('contextStatsContent.providerReported', asLanguage(language)),
+    locallyEstimated: translate('contextStatsContent.locallyEstimated', asLanguage(language)),
+    readProvider: translate('contextStatsContent.readProvider', asLanguage(language)),
+    writeProvider: translate('contextStatsContent.writeProvider', asLanguage(language)),
+    writeEstimated: translate('contextStatsContent.writeEstimated', asLanguage(language)),
     notAvailable: language === 'zh' ? '-' : '-',
-    levelLabel: language === 'zh' ? '当前策略级别' : 'Current strategy level',
+    levelLabel: translate('contextStatsContent.currentStrategyLevel', asLanguage(language)),
   }), [language, staleTurns])
 
   const levelNames: Record<CompressionLevel, string> = {
-    0: language === 'zh' ? '完整保留' : 'Full Context',
-    1: language === 'zh' ? '截断参数' : 'Truncate Args',
-    2: language === 'zh' ? '清理旧结果' : 'Clear Old Results',
-    3: language === 'zh' ? '深度压缩' : 'Deep Compress',
-    4: language === 'zh' ? '续接切换' : 'Session Handoff',
+    0: translate('contextStatsContent.fullContext', asLanguage(language)),
+    1: translate('contextStatsContent.truncateArgs', asLanguage(language)),
+    2: translate('contextStatsContent.clearOldResults', asLanguage(language)),
+    3: translate('contextStatsContent.deepCompress', asLanguage(language)),
+    4: translate('contextStatsContent.sessionHandoff', asLanguage(language)),
   }
 
   const levelDescriptions: Record<CompressionLevel, string> = {
-    0: language === 'zh' ? '保留完整消息历史。' : 'Keep full message history.',
-    1: language === 'zh' ? '开始截断较长的工具参数。' : 'Start truncating long tool arguments.',
-    2: language === 'zh' ? '清理较早的工具执行结果。' : 'Clear older tool results.',
-    3: language === 'zh' ? '深度压缩历史，并生成工作摘要。' : 'Deep-compress history and generate a working summary.',
-    4: language === 'zh' ? '准备续接包，建议切到新线程继续。' : 'Prepare a handoff packet and continue in a new thread.',
+    0: translate('contextStatsContent.keepFullMessageHistory', asLanguage(language)),
+    1: translate('contextStatsContent.startTruncatingLongTool', asLanguage(language)),
+    2: translate('contextStatsContent.clearOlderToolResults', asLanguage(language)),
+    3: translate('contextStatsContent.deepCompressHistoryAnd', asLanguage(language)),
+    4: translate('contextStatsContent.prepareAHandoffPacket', asLanguage(language)),
   }
 
   const formatK = (n: number | undefined) => {
@@ -412,9 +403,7 @@ export default function ContextStatsContent({
                 {t.manualHandoff}
               </div>
               <div className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                {language === 'zh'
-                  ? '手动生成一份最新续接快照，并切到新的线程继续当前任务。'
-                  : 'Generate a fresh handoff snapshot and continue the current task in a new thread.'}
+                {translate('contextStatsContent.generateAFreshHandoff', asLanguage(language))}
               </div>
             </div>
             <button

@@ -44,7 +44,7 @@ import { Tooltip } from '../ui/Tooltip'
 import { LazyImage } from '../common/LazyImage'
 import { SystemAlert, parseSystemAlert } from './SystemAlert'
 import { CompressionDigestCard } from './CompressionDigestCard'
-import { t } from '../../i18n'
+import { t, asLanguage } from '../../i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
@@ -316,13 +316,13 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
         )}
 
         <span className={`text-[12px] shrink-0 whitespace-nowrap ${isStreaming ? 'text-text-primary' : 'text-text-secondary group-hover:text-text-primary transition-colors'}`}>
-          {language === 'zh' ? '上下文' : 'Context'}
+          {t('chatMessage.context', asLanguage(language))}
         </span>
 
         {/* 折叠时低噪极简摘要 */}
         {!isExpanded && (
           <span className="text-[11px] text-text-muted/40 truncate min-w-0 flex-1 ml-1 font-mono whitespace-nowrap">
-            {hasSkills ? `— ${skillNames}` : (hasSearch ? (language === 'zh' ? '— 文件检索' : '— File search') : '')}
+            {hasSkills ? `— ${skillNames}` : (hasSearch ? (t('chatMessage.fileSearch', asLanguage(language))) : '')}
           </span>
         )}
       </div>
@@ -348,7 +348,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
               {hasSkills && (
                 <div className="space-y-1">
                   <div className="text-[11px] text-text-muted/60 select-none whitespace-nowrap">
-                    {language === 'zh' ? '引用技能' : 'Skill Referenced'}
+                    {t('chatMessage.skillReferenced', asLanguage(language))}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {allSkills.map((item: any, i: number) => (
@@ -356,7 +356,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
                         key={item.skillId || i}
                         onClick={(e) => handleOpenSkill(e, item.skillId)}
                         className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface/70 hover:bg-surface-hover text-text-muted hover:text-text-primary font-mono text-[11px] border border-border/40 hover:border-border/70 transition-colors cursor-pointer select-none whitespace-nowrap focus:outline-none"
-                        title={language === 'zh' ? `查看技能: ${item.skillId}` : `View skill: ${item.skillId}`}
+                        title={t('chatMessage.viewSkill', asLanguage(language), { skillId: item.skillId })}
                       >
                         @{item.skillId}
                       </button>
@@ -369,7 +369,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
               {hasSearch && (
                 <div className="space-y-1">
                   <div className="text-[11px] text-text-muted/60 select-none whitespace-nowrap">
-                    {language === 'zh' ? '相关文件' : 'File Referenced'}
+                    {t('chatMessage.fileReferenced', asLanguage(language))}
                   </div>
                   {searchContent ? (
                     <div className="text-[11px] text-text-muted/70 leading-relaxed font-mono whitespace-pre-wrap break-words max-h-32 overflow-auto custom-scrollbar">
@@ -377,7 +377,7 @@ const MessageMetaGroup = React.memo(({ autoSkills, manualSkills, searchContent, 
                     </div>
                   ) : (
                     <div className="text-text-muted/40 italic text-[11px]">
-                      {language === 'zh' ? '正在检索相关文件...' : 'Searching files...'}
+                      {t('chatMessage.searchingFiles', asLanguage(language))}
                     </div>
                   )}
                 </div>
@@ -401,31 +401,31 @@ function buildProcessSummaryText(summary: AssistantProcessSummary, language: 'zh
   }
 
   if (summary.hasReasoning) {
-    items.push(language === 'zh' ? '思考' : 'Thinking')
+    items.push(t('chatMessage.thinking', asLanguage(language)))
   }
 
   if (summary.hasSearch) {
-    items.push(language === 'zh' ? '搜索' : 'Search')
+    items.push(t('searchPlaceholder', asLanguage(language)))
   }
 
   if (summary.hasContext) {
-    items.push(language === 'zh' ? '上下文' : 'Context')
+    items.push(t('chatMessage.context', asLanguage(language)))
   }
 
   if (summary.hasSources) {
-    items.push(language === 'zh' ? '来源' : 'Sources')
+    items.push(t('chatMessage.sources', asLanguage(language)))
   }
 
   if (summary.hasLintCheck) {
-    items.push(language === 'zh' ? '检查' : 'Checks')
+    items.push(t('chatMessage.checks', asLanguage(language)))
   }
 
   if (summary.hasSystemAlert) {
-    items.push(language === 'zh' ? '提示' : 'Alerts')
+    items.push(t('chatMessage.alerts', asLanguage(language)))
   }
 
   if (summary.hasProcessText) {
-    items.push(language === 'zh' ? '说明' : 'Notes')
+    items.push(t('chatMessage.notes', asLanguage(language)))
   }
 
   return items.join(' · ')
@@ -453,10 +453,10 @@ ProcessFoldDivider.displayName = 'ProcessFoldDivider'
 const ProcessFold = React.memo(({ children, language, summary }: ProcessFoldProps) => {
   const [isExpanded, setIsExpanded] = useState(false)
   const summaryText = buildProcessSummaryText(summary, language)
-  const titleText = summaryText || (language === 'zh' ? '过程' : 'Process')
+  const titleText = summaryText || (t('chatMessage.process', asLanguage(language)))
   const detailLabel = isExpanded
-    ? (language === 'zh' ? '收起过程' : 'Hide details')
-    : (language === 'zh' ? '查看过程' : 'View process')
+    ? (t('chatMessage.hideDetails', asLanguage(language)))
+    : (t('chatMessage.viewProcess', asLanguage(language)))
 
   return (
     <div className="my-3 w-full">
@@ -1088,11 +1088,11 @@ const ChatMessage = React.memo(({
   }
 
   const tt = {
-    copy: language === 'zh' ? '复制内容' : 'Copy Content',
-    edit: language === 'zh' ? '编辑消息' : 'Edit Message',
-    restore: language === 'zh' ? '恢复到此检查点' : 'Restore checkpoint',
-    save: language === 'zh' ? '保存并重发' : 'Save & Resend',
-    cancel: language === 'zh' ? '取消' : 'Cancel',
+    copy: t('chatMessage.copyContent', asLanguage(language)),
+    edit: t('chatMessage.editMessage', asLanguage(language)),
+    restore: t('chatMessage.restoreCheckpoint', asLanguage(language)),
+    save: t('saveAndResend', asLanguage(language)),
+    cancel: t('cancel', asLanguage(language)),
   }
 
   const [typingIndex, setTypingIndex] = useState(0)
@@ -1340,7 +1340,7 @@ const ChatMessage = React.memo(({
             </div>
 
             {/* Right Avatar Area */}
-            <Tooltip content={language === 'zh' ? '点击定制我的头像与昵称' : 'Click to customize my avatar & name'}>
+            <Tooltip content={t('chatMessage.clickToCustomizeMy', asLanguage(language))}>
               <div
                 onClick={() => setShowAvatarDialog(true)}
                 className="w-9 h-9 rounded-xl overflow-hidden border border-border shadow-[0_4px_12px_-2px_rgba(0,0,0,0.1)] bg-surface/50 backdrop-blur-md relative flex-shrink-0 cursor-pointer hover:scale-105 active:scale-95 hover:border-accent/50 transition-all duration-200 group/avatar mt-0.5"

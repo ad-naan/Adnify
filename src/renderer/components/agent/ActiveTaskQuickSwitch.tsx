@@ -7,6 +7,7 @@ import {
   projectTaskCenter,
   type TaskCenterGroup,
 } from './taskCenterProjection'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface ActiveTaskQuickSwitchProps {
   language: string
@@ -38,7 +39,7 @@ export default function ActiveTaskQuickSwitch({ language, onOpenTaskCenter }: Ac
   const visible = activeGroups.slice(0, 3)
   const hiddenCount = activeGroups.length - visible.length
 
-  return <div className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-hidden" aria-label={language === 'zh' ? '正在执行的任务' : 'Active tasks'}>
+  return <div className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-hidden" aria-label={t('activeTaskQuickSwitch.activeTasks', asLanguage(language))}>
     {visible.map(group => {
       const threadId = targetThreadId(group)
       const current = Boolean(threadId && threadId === currentThreadId)
@@ -47,7 +48,7 @@ export default function ActiveTaskQuickSwitch({ language, onOpenTaskCenter }: Ac
         type="button"
         disabled={!threadId}
         onClick={() => threadId && switchThread(threadId)}
-        title={`${group.title} · ${group.status === 'waiting' ? (language === 'zh' ? '需要处理' : 'Needs input') : group.status === 'handoff' ? (language === 'zh' ? '交接中' : 'Handing off') : (language === 'zh' ? '执行中' : 'Running')}`}
+        title={`${group.title} · ${group.status === 'waiting' ? (t('activeTaskQuickSwitch.needsInput', asLanguage(language))) : group.status === 'handoff' ? (t('activeTaskQuickSwitch.handingOff', asLanguage(language))) : (t('common.running', asLanguage(language)))}`}
         className={`flex h-7 min-w-0 max-w-32 items-center gap-1.5 rounded-lg px-2 text-[9px] transition-colors focus-visible:ring-2 focus-visible:ring-accent/45 ${current ? 'bg-accent/[0.1] text-accent' : group.status === 'waiting' ? 'bg-amber-400/[0.07] text-amber-500 hover:bg-amber-400/[0.11]' : 'bg-surface/35 text-text-secondary hover:bg-surface-hover'}`}
       >
         {group.status === 'waiting'
@@ -58,6 +59,6 @@ export default function ActiveTaskQuickSwitch({ language, onOpenTaskCenter }: Ac
         <span className="truncate">{group.title}</span>
       </button>
     })}
-    {hiddenCount > 0 && <button type="button" onClick={onOpenTaskCenter} title={language === 'zh' ? `查看另外 ${hiddenCount} 个任务` : `View ${hiddenCount} more tasks`} className="flex h-7 shrink-0 items-center rounded-lg bg-surface/35 px-2 text-[9px] tabular-nums text-text-muted hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45">+{hiddenCount}</button>}
+    {hiddenCount > 0 && <button type="button" onClick={onOpenTaskCenter} title={t('activeTaskQuickSwitch.viewMoreTasks', asLanguage(language), { hiddenCount })} className="flex h-7 shrink-0 items-center rounded-lg bg-surface/35 px-2 text-[9px] tabular-nums text-text-muted hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45">+{hiddenCount}</button>}
   </div>
 }

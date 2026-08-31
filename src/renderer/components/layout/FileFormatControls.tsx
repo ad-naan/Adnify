@@ -4,7 +4,7 @@ import BottomBarPopover from '../ui/BottomBarPopover'
 import { applyFileEol } from '@services/fileFormatService'
 import { toast } from '../common/ToastProvider'
 import { globalConfirm } from '../common/ConfirmDialog'
-import { t, type Language } from '@renderer/i18n'
+import { t, type Language, asLanguage } from '@renderer/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { api } from '@renderer/services/electronAPI'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
@@ -65,7 +65,7 @@ export default function FileFormatControls() {
     const changed = applyFileEol(activeFile.path, nextEol)
     if (changed) {
       toast.success(
-        language === 'zh' ? '换行符已切换' : 'Line ending updated',
+        t('fileFormatControls.lineEndingUpdated', asLanguage(language)),
         nextEol,
       )
     }
@@ -80,7 +80,7 @@ export default function FileFormatControls() {
       const confirmed = await globalConfirm({
         title: getFileName(activeFile.path),
         message: t('file.reencodeDiscardChanges', language as Language, { name: getFileName(activeFile.path) }),
-        confirmText: language === 'zh' ? '继续' : 'Continue',
+        confirmText: t('git.continue', asLanguage(language)),
         cancelText: t('cancel', language as Language),
         variant: 'warning',
       })
@@ -90,7 +90,7 @@ export default function FileFormatControls() {
     const nextContent = await api.file.readFull(activeFile.path, nextEncoding)
     if (nextContent === null) {
       toast.error(
-        language === 'zh' ? '切换编码失败' : 'Failed to switch encoding',
+        t('fileFormatControls.failedToSwitchEncoding', asLanguage(language)),
         nextEncoding.toUpperCase(),
       )
       return
@@ -99,7 +99,7 @@ export default function FileFormatControls() {
     applySavedEditorBufferContent(activeFile.path, nextContent)
     setFileEncoding(activeFile.path, nextEncoding)
     toast.success(
-      language === 'zh' ? '文件编码已更新' : 'File encoding updated',
+      t('fileFormatControls.fileEncodingUpdated', asLanguage(language)),
       nextEncoding.toUpperCase(),
     )
   }
@@ -108,8 +108,8 @@ export default function FileFormatControls() {
     <div className="flex items-center gap-1">
       <BottomBarPopover
         icon={<span className="px-1 text-[10px] font-semibold">{currentEol}</span>}
-        tooltip={language === 'zh' ? '换行符' : 'Line Ending'}
-        title={language === 'zh' ? '换行符' : 'Line Ending'}
+        tooltip={t('fileFormatControls.lineEnding', asLanguage(language))}
+        title={t('fileFormatControls.lineEnding', asLanguage(language))}
         width={196}
         scrollable={false}
       >
@@ -133,8 +133,8 @@ export default function FileFormatControls() {
             <span className="text-[10px] font-semibold uppercase">{currentEncoding}</span>
           </div>
         }
-        tooltip={language === 'zh' ? '文件编码' : 'File Encoding'}
-        title={language === 'zh' ? '文件编码' : 'File Encoding'}
+        tooltip={t('fileFormatControls.fileEncoding', asLanguage(language))}
+        title={t('fileFormatControls.fileEncoding', asLanguage(language))}
         width={220}
         scrollable={false}
       >

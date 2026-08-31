@@ -1,4 +1,5 @@
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
+import { t, asLanguage } from '@renderer/i18n'
 
 export type PlanRevisionSource = 'review' | 'validation'
 
@@ -27,19 +28,19 @@ export function beginPlanRevision(
   if (!plan) {
     return {
       success: false,
-      message: language === 'zh' ? '计划不存在或已被删除' : 'The plan no longer exists',
+      message: t('planRevisionService.thePlanNoLonger', asLanguage(language)),
     }
   }
   if (isRunningStatus(plan.status)) {
     return {
       success: false,
-      message: language === 'zh' ? '请先暂停或停止当前计划，再进行调整' : 'Pause or stop the running plan before revising it',
+      message: t('planRevisionService.pauseOrStopThe', asLanguage(language)),
     }
   }
   if (!plan.originThreadId || !store.threads[plan.originThreadId]) {
     return {
       success: false,
-      message: language === 'zh' ? '找不到该计划的规划对话，无法进入调整状态' : 'The planning conversation for this plan is unavailable',
+      message: t('planRevisionService.thePlanningConversationFor', asLanguage(language)),
     }
   }
 
@@ -53,12 +54,8 @@ export function beginPlanRevision(
   store.switchThread(plan.originThreadId)
 
   const prompt = source === 'validation'
-    ? (language === 'zh'
-        ? `请继续调整计划「${plan.name}」的执行结果：`
-        : `Please revise the execution result of plan "${plan.name}": `)
-    : (language === 'zh'
-        ? `请调整计划「${plan.name}」：`
-        : `Please revise plan "${plan.name}": `)
+    ? (t('planRevisionService.pleaseReviseTheExecution', asLanguage(language), { name: plan.name }))
+    : (t('planRevisionService.pleaseRevisePlan', asLanguage(language), { name: plan.name }))
   store.setInputPrompt(prompt)
 
   if (typeof window !== 'undefined') {
@@ -67,7 +64,7 @@ export function beginPlanRevision(
 
   return {
     success: true,
-    message: language === 'zh' ? '已进入计划调整，请描述需要修改的内容' : 'Revision mode is ready; describe the changes you need',
+    message: t('planRevisionService.revisionModeIsReady', asLanguage(language)),
   }
 }
 

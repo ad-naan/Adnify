@@ -3,8 +3,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { TaskBoard } from './TaskBoard'
-
-const copy = (language: string, zh: string, en: string) => language === 'zh' ? zh : en
+import { t, asLanguage } from '@renderer/i18n'
 
 function planStatusLabel(status: string, language: string): string {
   const labels: Record<string, [string, string]> = {
@@ -32,8 +31,8 @@ export const PlanWorkspace = memo(function PlanWorkspace() {
     <div className="min-h-0 flex-1">
       {activePlan ? <TaskBoard planId={activePlan.id} planOptions={options} onPlanChange={setActivePlan} /> : <div className="flex h-full flex-col items-center justify-center px-8 pb-16 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/45 bg-surface/[0.12]"><OtterAsset asset="plans" className="h-11 w-11 object-contain" alt="" /></div>
-        <h2 className="text-sm font-semibold text-text-primary">{copy(language, '正在等待计划', 'Waiting for a plan')}</h2>
-        <p className="mt-2 max-w-md text-xs leading-5 text-text-muted">{copy(language, '请在右侧描述需求。完成必要的澄清后，计划会自动创建并显示在这里。', 'Describe the request on the right. After clarification, the plan will be created and shown here automatically.')}</p>
+        <h2 className="text-sm font-semibold text-text-primary">{t('planWorkspace.waitingForAPlan', asLanguage(language))}</h2>
+        <p className="mt-2 max-w-md text-xs leading-5 text-text-muted">{t('planWorkspace.describeTheRequestOn', asLanguage(language))}</p>
       </div>}
     </div>
   </div>

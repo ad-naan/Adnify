@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
+import { t as translate, asLanguage } from '@renderer/i18n'
 
 interface SkillSettingsProps {
     language: string
@@ -104,8 +105,8 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
         showMessage(
             imported === selectedImports.size ? 'success' : 'error',
             imported === selectedImports.size
-                ? t(`已导入 ${imported} 个 Skill`, `Imported ${imported} Skill(s)`)
-                : t(`已导入 ${imported} 个，部分项目因同名或文件权限被跳过`, `Imported ${imported}; some items were skipped due to conflicts or permissions`)
+                ? translate('skillSettings.importedSkillS', asLanguage(language), { imported })
+                : translate('skillSettings.importedSomeItemsWere', asLanguage(language), { imported })
         )
     }
 
@@ -131,12 +132,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
         setInstalling(packageId)
         const result = await skillService.installFromMarketplace(packageId)
         if (result.success) {
-            showMessage('success', t('安装成功', 'Installed successfully'))
+            showMessage('success', translate('skillSettings.installedSuccessfully', asLanguage(language)))
             loadSkills()
             setSearchResults([])
             setSearchQuery('')
         } else {
-            showMessage('error', result.error || t('安装失败', 'Install failed'))
+            showMessage('error', result.error || translate('skillSettings.installFailed', asLanguage(language)))
         }
         setInstalling(null)
     }
@@ -147,12 +148,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
         setGithubInstalling(true)
         const result = await skillService.installFromGitHub(githubUrl)
         if (result.success) {
-            showMessage('success', t('安装成功', 'Installed successfully'))
+            showMessage('success', translate('skillSettings.installedSuccessfully', asLanguage(language)))
             loadSkills()
             setGithubUrl('')
             setInstallMode(null)
         } else {
-            showMessage('error', result.error || t('安装失败', 'Install failed'))
+            showMessage('error', result.error || translate('skillSettings.installFailed', asLanguage(language)))
         }
         setGithubInstalling(false)
     }
@@ -163,7 +164,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
         setCreating(true)
         const result = await skillService.createSkill(newSkillName.trim(), '', createLevel)
         if (result.success) {
-            showMessage('success', t('创建成功', 'Created successfully'))
+            showMessage('success', translate('skillSettings.createdSuccessfully', asLanguage(language)))
             loadSkills()
             setNewSkillName('')
             setInstallMode(null)
@@ -171,7 +172,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                 await onOpenFile(result.filePath)
             }
         } else {
-            showMessage('error', result.error || t('创建失败', 'Create failed'))
+            showMessage('error', result.error || translate('skillSettings.createFailed', asLanguage(language)))
         }
         setCreating(false)
     }
@@ -182,10 +183,10 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
         setDeleteConfirm(null)
         const success = await skillService.deleteSkill(skill)
         if (success) {
-            showMessage('success', t('已删除', 'Deleted'))
+            showMessage('success', translate('common.deleted', asLanguage(language)))
             loadSkills()
         } else {
-            showMessage('error', t(`删除失败：${skill.filePath}`, `Failed to delete: ${skill.filePath}`))
+            showMessage('error', translate('skillSettings.failedToDelete', asLanguage(language), { filePath: skill.filePath }))
         }
     }
 
@@ -198,7 +199,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
     const handleOpenSkillsDir = async (source: SkillSource) => {
         const dir = source === 'project' ? projectSkillsDir : globalSkillsDir || await api.skills.getGlobalDir()
         if (!dir) {
-            showMessage('error', t('无法定位 Skills 目录', 'Failed to resolve Skills directory'))
+            showMessage('error', translate('skillSettings.failedToResolveSkills', asLanguage(language)))
             return
         }
 
@@ -207,7 +208,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
             await api.file.ensureDir(dir)
             await api.file.showInFolder(dir)
         } catch {
-            showMessage('error', t('打开 Skills 目录失败', 'Failed to open Skills directory'))
+            showMessage('error', translate('skillSettings.failedToOpenSkills', asLanguage(language)))
         } finally {
             setOpeningDir(null)
             if (source === 'global') {
@@ -217,14 +218,8 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
     }
 
     const createLocationHint = createLevel === 'project'
-        ? t(
-            '将在 .adnify/skills/ 下创建目录和 SKILL.md 模板',
-            'Creates a directory and SKILL.md template under .adnify/skills/'
-        )
-        : t(
-            '将在全局 skills 目录下创建目录和 SKILL.md 模板',
-            'Creates a directory and SKILL.md template under the global skills directory'
-        )
+        ? translate('skillSettings.createsADirectoryAnd', asLanguage(language))
+        : translate('skillSettings.createsADirectoryAnd2', asLanguage(language))
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
@@ -234,7 +229,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                     <div className="flex items-center gap-2">
                         <Zap className="w-4 h-4 text-accent" />
                         <h5 className="text-sm font-medium text-text-primary">
-                            {t('已安装 Skills', 'Installed Skills')}
+                            {translate('skillSettings.installedSkills', asLanguage(language))}
                         </h5>
                         <span className="text-[10px] text-text-muted px-2 py-0.5 bg-surface-hover rounded">
                             {skills.filter(s => s.enabled).length}/{skills.length}
@@ -243,12 +238,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                     <div className="flex items-center gap-2">
                         <Button variant="secondary" size="sm" onClick={handleOpenImport}>
                             <Import className="mr-1.5 h-3.5 w-3.5" />
-                            {t('从其他 Agent 导入', 'Import from Agent')}
+                            {translate('common.importFromAgent', asLanguage(language))}
                         </Button>
                         <button
                             onClick={loadSkills}
                             className="p-1.5 text-text-muted hover:text-accent transition-colors"
-                            title={t('刷新', 'Refresh')}
+                            title={translate('refresh', asLanguage(language))}
                         >
                             <RefreshCw className="w-3.5 h-3.5" />
                         </button>
@@ -256,10 +251,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                 </div>
 
                 <p className="text-xs text-text-muted">
-                    {t(
-                        'Skills 是基于 agentskills.io 标准的指令包，让 AI 在特定领域拥有专业能力。支持全局和项目两级存储。',
-                        'Skills are instruction packages based on the agentskills.io standard. Supports global and project-level storage.'
-                    )}
+                    {translate('skillSettings.skillsAreInstructionPackages', asLanguage(language))}
                 </p>
 
                 {/* Message */}
@@ -276,7 +268,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                 <ProgressiveReveal
                     language={language}
                     collapsedHeight={280}
-                    expandLabel={t('查看全部已安装 Skills', 'Show all installed skills')}
+                    expandLabel={translate('skillSettings.showAllInstalledSkills', asLanguage(language))}
                 >
                 <div className="space-y-2">
                     {loading ? (
@@ -285,12 +277,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                         </div>
                     ) : !workspacePath ? (
                         <div className="h-20 flex items-center justify-center text-text-muted text-xs">
-                            {t('请先打开一个项目', 'Please open a project first')}
+                            {translate('skillSettings.pleaseOpenAProject', asLanguage(language))}
                         </div>
                     ) : skills.length === 0 ? (
                         <div className="h-24 flex flex-col items-center justify-center gap-1.5 text-text-muted text-xs">
                             <OtterAsset asset="creative" className="h-12 w-12 object-contain opacity-75" />
-                            <span>{t('暂无 Skills，点击下方按钮安装或创建', 'No skills yet. Use the buttons below to install or create one.')}</span>
+                            <span>{translate('skillSettings.noSkillsYetUse', asLanguage(language))}</span>
                         </div>
                     ) : (
                         skills.map((skill) => (
@@ -304,7 +296,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                 <button
                                     onClick={() => handleToggle(skill.name, skill.enabled)}
                                     className={`p-0.5 mt-0.5 transition-colors ${skill.enabled ? 'text-accent' : 'text-text-muted'}`}
-                                    title={skill.enabled ? t('禁用', 'Disable') : t('启用', 'Enable')}
+                                    title={skill.enabled ? translate('common.disable', asLanguage(language)) : translate('common.enable', asLanguage(language))}
                                 >
                                     {skill.enabled ? (
                                         <ToggleRight className="w-4 h-4" />
@@ -321,10 +313,10 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                                 : 'Adnify'}
                                         </span>
                                         <span className={`text-[9px] px-1.5 py-0.5 rounded ${skill.source === 'global' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                                            {skill.source === 'global' ? t('全局', 'Global') : t('项目', 'Project')}
+                                            {skill.source === 'global' ? translate('common.global', asLanguage(language)) : translate('common.project', asLanguage(language))}
                                         </span>
                                         <div className="flex items-center rounded-md border border-border overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                            {([['auto', t('自动', 'Auto')], ['manual', t('手动', 'Manual')]] as [SkillTriggerType, string][]).map(([val, label]) => (
+                                            {([['auto', translate('common.auto', asLanguage(language))], ['manual', translate('skillSettings.manual', asLanguage(language))]] as [SkillTriggerType, string][]).map(([val, label]) => (
                                                 <button
                                                     key={val}
                                                     onClick={async () => {
@@ -345,12 +337,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                     <p className="mt-1 truncate font-mono text-[9px] text-text-muted/70" title={skill.filePath}>{skill.filePath}</p>
                                     {skill.importedFrom && (
                                         <p className="mt-0.5 truncate font-mono text-[9px] text-accent/65" title={skill.importedFrom.path}>
-                                            {t('最初导入自：', 'Originally imported from: ')}{skill.importedFrom.path}
+                                            {translate('common.originallyImported', asLanguage(language))}{skill.importedFrom.path}
                                         </p>
                                     )}
                                     {!!skill.shadowedOrigins?.length && (
                                         <p className="mt-1 text-[9px] text-amber-400/80">
-                                            {t(`另有 ${skill.shadowedOrigins.length} 个同名来源被覆盖，删除后可能显示下一项`, `${skill.shadowedOrigins.length} same-name source(s) are overridden and may appear after deletion`)}
+                                            {translate('skillSettings.sameNameSourceS', asLanguage(language), { length: skill.shadowedOrigins.length })}
                                         </p>
                                     )}
                                     {deleteConfirm === skill.filePath && (
@@ -360,7 +352,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                             </p>
                                             <p className="mt-1 break-all font-mono text-[9px] text-red-200/70">{skill.filePath}</p>
                                             <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
-                                                {t('将删除包含 SKILL.md 的整个目录，不影响来源软件中的其他 Skills。', 'The entire directory containing SKILL.md will be removed. Other Skills from this provider are not affected.')}
+                                                {translate('skillSettings.theEntireDirectoryContaining', asLanguage(language))}
                                             </p>
                                             <div className="mt-2 flex justify-end gap-2">
                                                 <button
@@ -368,14 +360,14 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                                     onClick={() => setDeleteConfirm(null)}
                                                     className="rounded px-2 py-1 text-[10px] text-text-muted hover:bg-white/5 hover:text-text-primary"
                                                 >
-                                                    {t('取消', 'Cancel')}
+                                                    {translate('cancel', asLanguage(language))}
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => void handleDelete(skill)}
                                                     className="rounded bg-red-500 px-2 py-1 text-[10px] font-medium text-white hover:bg-red-600"
                                                 >
-                                                    {t('确认删除', 'Delete')}
+                                                    {translate('skillSettings.delete', asLanguage(language))}
                                                 </button>
                                             </div>
                                         </div>
@@ -385,14 +377,14 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                     <button
                                         onClick={() => void onOpenFile(skill.filePath)}
                                         className="p-1 text-text-muted hover:text-accent hover:bg-accent/10 rounded transition-colors"
-                                        title={t('编辑', 'Edit')}
+                                        title={translate('editor.edit', asLanguage(language))}
                                     >
                                         <FolderOpen className="w-3 h-3" />
                                     </button>
                                     <button
                                         onClick={() => setDeleteConfirm(skill.filePath)}
                                         className={`p-1 rounded transition-colors ${deleteConfirm === skill.filePath ? 'text-red-400 bg-red-500/20' : 'text-text-muted hover:text-red-400 hover:bg-red-500/10'}`}
-                                        title={t('删除', 'Delete')}
+                                        title={translate('delete', asLanguage(language))}
                                     >
                                         <Trash2 className="w-3 h-3" />
                                     </button>
@@ -409,7 +401,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                 <div className="flex items-center gap-2">
                     <Download className="w-4 h-4 text-accent" />
                     <h5 className="text-sm font-medium text-text-primary">
-                        {t('安装 Skill', 'Install Skill')}
+                        {translate('skillSettings.installSkill', asLanguage(language))}
                     </h5>
                 </div>
 
@@ -422,7 +414,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                         className="text-xs"
                     >
                         <Search className="w-3.5 h-3.5 mr-1.5" />
-                        {t('搜索市场', 'Search Market')}
+                        {translate('skillSettings.searchMarket', asLanguage(language))}
                     </Button>
                     <Button
                         variant={installMode === 'github' ? 'primary' : 'secondary'}
@@ -440,7 +432,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                         className="text-xs"
                     >
                         <Plus className="w-3.5 h-3.5 mr-1.5" />
-                        {t('手动创建', 'Create New')}
+                        {translate('skillSettings.createNew', asLanguage(language))}
                     </Button>
                 </div>
 
@@ -451,7 +443,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             <Input
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder={t('搜索 skills.sh 市场...', 'Search skills.sh marketplace...')}
+                                placeholder={translate('skillSettings.searchSkillsShMarketplace', asLanguage(language))}
                                 className="flex-1 bg-surface border-border text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                             />
@@ -468,7 +460,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                         <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
                             <ExternalLink className="w-3 h-3" />
                             <a href="https://skills.sh" className="hover:text-accent transition-colors">
-                                {t('浏览 skills.sh 市场', 'Browse skills.sh marketplace')}
+                                {translate('skillSettings.browseSkillsShMarketplace', asLanguage(language))}
                             </a>
                         </div>
 
@@ -476,7 +468,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             <ProgressiveReveal
                                 language={language}
                                 collapsedHeight={220}
-                                expandLabel={t('查看全部搜索结果', 'Show all search results')}
+                                expandLabel={translate('skillSettings.showAllSearchResults', asLanguage(language))}
                             >
                             <div className="space-y-2">
                                 {searchResults.map((result) => (
@@ -500,7 +492,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                             {installing === result.package ? (
                                                 <RefreshCw className="w-3 h-3 animate-spin" />
                                             ) : (
-                                                <>{t('安装', 'Install')}</>
+                                                <>{translate('skillSettings.install', asLanguage(language))}</>
                                             )}
                                         </Button>
                                     </div>
@@ -529,11 +521,11 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                 disabled={githubInstalling || !githubUrl.trim()}
                                 className="text-xs shrink-0"
                             >
-                                {githubInstalling ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : t('克隆安装', 'Clone')}
+                                {githubInstalling ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : translate('skillSettings.clone', asLanguage(language))}
                             </Button>
                         </div>
                         <p className="text-[11px] text-text-muted">
-                            {t('输入包含 SKILL.md 的 GitHub 仓库地址', 'Enter a GitHub repo URL containing a SKILL.md file')}
+                            {translate('skillSettings.enterAGithubRepo', asLanguage(language))}
                         </p>
                     </div>
                 )}
@@ -545,7 +537,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             <Input
                                 value={newSkillName}
                                 onChange={(e) => setNewSkillName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                                placeholder={t('skill-name（小写字母和连字符）', 'skill-name (lowercase and hyphens)')}
+                                placeholder={translate('skillSettings.skillNameLowercaseAnd', asLanguage(language))}
                                 className="flex-1 bg-surface border-border text-xs"
                                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                             />
@@ -556,13 +548,13 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                 disabled={creating || !newSkillName.trim()}
                                 className="text-xs shrink-0"
                             >
-                                {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : t('创建', 'Create')}
+                                {creating ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : translate('create', asLanguage(language))}
                             </Button>
                         </div>
                         <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-text-muted">{t('保存到：', 'Save to:')}</span>
+                            <span className="text-[11px] text-text-muted">{translate('common.save2', asLanguage(language))}</span>
                             <div className="flex items-center rounded-md border border-border overflow-hidden">
-                                {([['project', t('项目', 'Project')], ['global', t('全局', 'Global')]] as [SkillSource, string][]).map(([val, label]) => (
+                                {([['project', translate('common.project', asLanguage(language))], ['global', translate('common.global', asLanguage(language))]] as [SkillSource, string][]).map(([val, label]) => (
                                     <button
                                         key={val}
                                         onClick={() => setCreateLevel(val)}
@@ -587,12 +579,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
             <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">
                 <p className="font-medium text-accent/80 flex items-center gap-1.5">
                     <OtterAsset asset="question" className="h-5 w-5 object-contain" />
-                    {t('使用提示', 'Tips')}
+                    {translate('common.tips', asLanguage(language))}
                 </p>
                 <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-                    <li>{t('自动模式：Skill 名称和描述对 AI 可见，AI 判断相关时自动加载完整内容（零额外延迟）', 'Auto mode: Skill name & description visible to AI, full content loaded on-demand when relevant (zero extra latency)')}</li>
-                    <li>{t('手动模式：需要在聊天中 @skill-name 引用才生效', 'Manual mode: Requires @skill-name mention in chat to activate')}</li>
-                    <li>{t('项目级 Skill 会覆盖同名的全局 Skill', 'Project-level skills override global skills with the same name')}</li>
+                    <li>{translate('skillSettings.autoModeSkillName', asLanguage(language))}</li>
+                    <li>{translate('skillSettings.manualModeRequiresSkill', asLanguage(language))}</li>
+                    <li>{translate('skillSettings.projectLevelSkillsOverride', asLanguage(language))}</li>
                 </ul>
             </div>
 
@@ -601,26 +593,23 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                 <div className="flex items-center gap-2">
                     <FolderOpen className="w-4 h-4 text-accent" />
                     <h5 className="text-sm font-medium text-text-primary">
-                        {t('本地 Skills 目录', 'Local Skills Directories')}
+                        {translate('skillSettings.localSkillsDirectories', asLanguage(language))}
                     </h5>
                 </div>
 
                 <p className="text-xs text-text-muted">
-                    {t(
-                        '已有 Skill 可直接放入项目或全局 Skills 目录中。放入后返回此页刷新列表即可被 Adnify 识别。',
-                        'Existing skills can be placed directly in the project or global Skills directories. Return here and refresh the list after copying them in.'
-                    )}
+                    {translate('skillSettings.existingSkillsCanBe', asLanguage(language))}
                 </p>
 
                 <div className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-lg border border-border bg-surface p-3 space-y-3">
                         <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-text-primary">{t('项目 Skills 目录', 'Project Skills Directory')}</span>
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{t('项目', 'Project')}</span>
+                                <span className="text-xs font-medium text-text-primary">{translate('skillSettings.projectSkillsDirectory', asLanguage(language))}</span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{translate('common.project', asLanguage(language))}</span>
                             </div>
                             <p className="text-[11px] text-text-muted break-all font-mono">
-                                {projectSkillsDir || t('请先打开一个项目', 'Open a project to see this path')}
+                                {projectSkillsDir || translate('skillSettings.openAProjectTo', asLanguage(language))}
                             </p>
                         </div>
 
@@ -634,12 +623,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             {openingDir === 'project'
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <FolderOpen className="w-3.5 h-3.5 mr-1.5" />}
-                            {t('在资源管理器中显示项目目录', 'Reveal project folder in Explorer')}
+                            {translate('skillSettings.revealProjectFolderIn', asLanguage(language))}
                         </Button>
 
                         {!workspacePath && (
                             <p className="text-[11px] text-text-muted">
-                                {t('请先打开一个项目后再使用项目级 Skills 目录。', 'Open a project before using the project Skills directory.')}
+                                {translate('skillSettings.openAProjectBefore', asLanguage(language))}
                             </p>
                         )}
                     </div>
@@ -647,11 +636,11 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                     <div className="rounded-lg border border-border bg-surface p-3 space-y-3">
                         <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-text-primary">{t('全局 Skills 目录', 'Global Skills Directory')}</span>
-                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">{t('全局', 'Global')}</span>
+                                <span className="text-xs font-medium text-text-primary">{translate('skillSettings.globalSkillsDirectory', asLanguage(language))}</span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">{translate('common.global', asLanguage(language))}</span>
                             </div>
                             <p className="text-[11px] text-text-muted break-all font-mono">
-                                {globalSkillsDir || t('正在加载全局目录...', 'Loading global directory...')}
+                                {globalSkillsDir || translate('skillSettings.loadingGlobalDirectory', asLanguage(language))}
                             </p>
                         </div>
 
@@ -665,32 +654,26 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             {openingDir === 'global'
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <FolderOpen className="w-3.5 h-3.5 mr-1.5" />}
-                            {t('在资源管理器中显示全局目录', 'Reveal global folder in Explorer')}
+                            {translate('skillSettings.revealGlobalFolderIn', asLanguage(language))}
                         </Button>
                     </div>
                 </div>
 
                 <div className="rounded-lg border border-border bg-background/50 p-3 space-y-3">
                     <div className="space-y-1">
-                        <p className="text-xs font-medium text-text-primary">{t('可识别的 Skill 文件夹格式', 'Recognized Skill folder structure')}</p>
+                        <p className="text-xs font-medium text-text-primary">{translate('skillSettings.recognizedSkillFolderStructure', asLanguage(language))}</p>
                         <p className="text-[11px] text-text-muted">
-                            {t(
-                                'Adnify 会扫描 Skills 根目录下的独立子目录，并读取其中的 SKILL.md。每个 Skill 使用独立子目录，目录内包含 SKILL.md，且可附带 scripts/、templates/、data/ 等辅助文件。',
-                                'Adnify scans standalone subdirectories inside a Skills root and reads the SKILL.md file in each one. Each skill uses its own subdirectory, includes SKILL.md, and can bundle supporting files such as scripts/, templates/, or data/.'
-                            )}
+                            {translate('skillSettings.adnifyScansStandaloneSubdirectories', asLanguage(language))}
                         </p>
                         <p className="text-[11px] text-text-muted">
-                            {t(
-                                'SKILL.md 使用 frontmatter，并至少包含 name 和 description。',
-                                'SKILL.md uses frontmatter and includes at least name and description.'
-                            )}
+                            {translate('skillSettings.skillMdUsesFrontmatter', asLanguage(language))}
                         </p>
                     </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1 text-[11px] text-text-muted">
-                            <p>{t('将已有 Skill 文件夹放入上述目录后，返回此页面并刷新列表即可使用。', 'After placing an existing skill folder into one of the directories above, return here and refresh the list to use it.')}</p>
-                            <p>{t('项目级 Skill 会覆盖同名全局 Skill。', 'Project-level skills override global skills with the same name.')}</p>
+                            <p>{translate('skillSettings.afterPlacingAnExisting', asLanguage(language))}</p>
+                            <p>{translate('skillSettings.projectLevelSkillsOverride2', asLanguage(language))}</p>
                         </div>
                         <Button
                             variant="secondary"
@@ -699,7 +682,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             className="text-xs shrink-0"
                         >
                             <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                            {t('刷新 Skills 列表', 'Refresh Skills List')}
+                            {translate('skillSettings.refreshSkillsList', asLanguage(language))}
                         </Button>
                     </div>
                 </div>
@@ -708,15 +691,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
             <Modal
                 isOpen={showImportModal}
                 onClose={() => !importLoading && setShowImportModal(false)}
-                title={t('从其他 Agent 导入 Skills', 'Import Skills from another Agent')}
+                title={translate('skillSettings.importSkillsFromAnother', asLanguage(language))}
                 size="3xl"
             >
                 <div className="space-y-5">
                     <div className="rounded-xl border border-accent/20 bg-accent/[0.05] p-4 text-xs leading-relaxed text-text-secondary">
-                        {t(
-                            '这里只临时扫描 Cursor、Codex、Claude 等目录。导入会复制完整 Skill 文件夹到 Adnify，之后不会跟随来源自动变化。',
-                            'This temporarily scans Cursor, Codex, Claude, and other directories. Import copies the complete Skill folder into Adnify without ongoing sync.'
-                        )}
+                        {translate('skillSettings.thisTemporarilyScansCursor', asLanguage(language))}
                     </div>
                     <div className="flex gap-2">
                         {(['global', 'project'] as const).map(level => (
@@ -727,7 +707,7 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                 onClick={() => setImportLevel(level)}
                                 className={`rounded-lg border px-3 py-2 text-xs transition-colors ${importLevel === level ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-text-muted hover:bg-white/5'} disabled:opacity-40`}
                             >
-                                {level === 'global' ? t('保存到全局', 'Save globally') : t('保存到当前项目', 'Save to project')}
+                                {level === 'global' ? translate('common.saveGlobally', asLanguage(language)) : translate('common.saveToProject', asLanguage(language))}
                             </button>
                         ))}
                     </div>
@@ -736,12 +716,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                             <div className="flex h-36 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-accent" /></div>
                         ) : externalSkills.length === 0 ? (
                             <div className="flex h-36 items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
-                                {t('没有发现可导入的第三方 Skills', 'No external Skills found')}
+                                {translate('skillSettings.noExternalSkillsFound', asLanguage(language))}
                             </div>
                         ) : externalSkills.map(skill => {
                             const exists = skills.some(item => item.name === skill.name)
                             const selected = selectedImports.has(skill.filePath)
-                            const provider = { adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: t('其他 Agent', 'Other Agent') }[skill.provider]
+                            const provider = { adnify: 'Adnify', codex: 'Codex', claude: 'Claude', cursor: 'Cursor', generic: translate('skillSettings.otherAgent', asLanguage(language)) }[skill.provider]
                             return (
                                 <button
                                     key={skill.filePath}
@@ -761,8 +741,8 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                                         <span className="flex flex-wrap items-center gap-2">
                                             <span className="text-sm font-semibold text-text-primary">{skill.name}</span>
                                             <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted">{provider}</span>
-                                            <span className="text-[10px] text-text-muted">{skill.source === 'global' ? t('全局来源', 'Global source') : t('项目来源', 'Project source')}</span>
-                                            {exists && <span className="text-[10px] text-amber-400">{t('Adnify 已存在同名 Skill', 'Already exists in Adnify')}</span>}
+                                            <span className="text-[10px] text-text-muted">{skill.source === 'global' ? translate('skillSettings.globalSource', asLanguage(language)) : translate('skillSettings.projectSource', asLanguage(language))}</span>
+                                            {exists && <span className="text-[10px] text-amber-400">{translate('skillSettings.alreadyExistsInAdnify', asLanguage(language))}</span>}
                                         </span>
                                         <span className="mt-1 block line-clamp-2 text-[11px] text-text-muted">{skill.description}</span>
                                         <span className="mt-1 block truncate font-mono text-[9px] text-text-muted/70" title={skill.filePath}>{skill.filePath}</span>
@@ -772,12 +752,12 @@ export function SkillSettings({ language, onOpenFile }: SkillSettingsProps) {
                         })}
                     </div>
                     <div className="flex items-center justify-between border-t border-border pt-4">
-                        <span className="text-xs text-text-muted">{t(`已选择 ${selectedImports.size} 项`, `${selectedImports.size} selected`)}</span>
+                        <span className="text-xs text-text-muted">{translate('common.selected', asLanguage(language), { size: selectedImports.size })}</span>
                         <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{t('取消', 'Cancel')}</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{translate('cancel', asLanguage(language))}</Button>
                             <Button variant="primary" size="sm" onClick={handleImportSelected} disabled={selectedImports.size === 0 || importLoading}>
                                 {importLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                {t(`导入 ${selectedImports.size} 项`, `Import ${selectedImports.size}`)}
+                                {translate('common.import', asLanguage(language), { size: selectedImports.size })}
                             </Button>
                         </div>
                     </div>

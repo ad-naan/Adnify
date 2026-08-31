@@ -17,7 +17,7 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react'
-import { Language } from '@renderer/i18n'
+import { Language, t, asLanguage } from '@renderer/i18n'
 import { api } from '@/renderer/services/electronAPI'
 import { Button, Input } from '@components/ui'
 import { LSP_SERVER_DEFINITIONS } from '@shared/languages'
@@ -125,16 +125,16 @@ export function LspSettings({ language }: LspSettingsProps) {
           return next
         })
         const serverName = LSP_SERVER_DEFINITIONS.find(server => server.id === serverId)?.name || serverId
-        toast.success(language === 'zh' ? '语言服务器安装成功' : 'Language server installed', serverName)
+        toast.success(t('lspSettings.languageServerInstalled', asLanguage(language)), serverName)
       } else {
         const message = result.error || 'Installation failed'
         setError(message)
-        toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
+        toast.error(t('common.languageServerInstallationFailed', asLanguage(language)), message)
       }
     } catch (err: any) {
       const message = err?.message || String(err)
       setError(message)
-      toast.error(language === 'zh' ? '语言服务器安装失败' : 'Language server installation failed', message)
+      toast.error(t('common.languageServerInstallationFailed', asLanguage(language)), message)
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete(serverId); return next })
     }
@@ -149,16 +149,16 @@ export function LspSettings({ language }: LspSettingsProps) {
         // 基础服务器包含 typescript + html/css/json，局部更新它们的状态
         const freshStatus = await api.lsp.getServerStatus()
         setServerStatus(freshStatus)
-        toast.success(language === 'zh' ? '基础语言服务器安装成功' : 'Basic language servers installed')
+        toast.success(t('lspSettings.basicLanguageServersInstalled', asLanguage(language)))
       } else {
         const message = result.error || 'Installation failed'
         setError(message)
-        toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
+        toast.error(t('lspSettings.basicLanguageServerInstallation', asLanguage(language)), message)
       }
     } catch (err: any) {
       const message = err?.message || String(err)
       setError(message)
-      toast.error(language === 'zh' ? '基础语言服务器安装失败' : 'Basic language server installation failed', message)
+      toast.error(t('lspSettings.basicLanguageServerInstallation', asLanguage(language)), message)
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete('all'); return next })
     }
@@ -334,7 +334,7 @@ export function LspSettings({ language }: LspSettingsProps) {
                     <span className="font-medium text-text-primary">{server.name}</span>
                     {isBuiltin && (
                       <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
-                        {language === 'zh' ? '内置' : 'Built-in'}
+                        {t('lspSettings.built', asLanguage(language))}
                       </span>
                     )}
                     {isInstalled ? (
@@ -382,7 +382,7 @@ export function LspSettings({ language }: LspSettingsProps) {
                     ) : isInstalled ? (
                       <>
                         <RefreshCw className="w-4 h-4 mr-1" />
-                        {language === 'zh' ? '重装' : 'Reinstall'}
+                        {t('lspSettings.reinstall', asLanguage(language))}
                       </>
                     ) : (
                       <>
@@ -395,7 +395,7 @@ export function LspSettings({ language }: LspSettingsProps) {
                   // 不可安装的服务器显示外部链接提示
                   <span className="text-xs text-text-muted flex items-center gap-1 ml-4">
                     <ExternalLink className="w-3 h-3" />
-                    {language === 'zh' ? '需手动安装' : 'Manual install'}
+                    {t('lspSettings.manualInstall', asLanguage(language))}
                   </span>
                 )}
               </div>

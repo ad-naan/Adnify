@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore } from '@store'
-import { t } from '@renderer/i18n'
+import { t, asLanguage } from '@renderer/i18n'
 import type { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { useToolCardExpansion } from '@renderer/hooks'
@@ -952,7 +952,7 @@ function ToolPreview({
                 <div className="flex min-w-0 items-center gap-1.5 text-text-muted">
                     <FileCode className="h-3 w-3 shrink-0" />
                     <span className="min-w-0 truncate">
-                        {scopeLabel ? <TextWithFileLinks text={scopeLabel} /> : (language === 'zh' ? '工作区符号' : 'Workspace symbols')}
+                        {scopeLabel ? <TextWithFileLinks text={scopeLabel} /> : (t('toolCallCard.workspaceSymbols', asLanguage(language)))}
                     </span>
                     {symbols.length > 0 && <span className="shrink-0 text-text-muted/60">· {symbols.length}</span>}
                 </div>
@@ -1095,7 +1095,7 @@ const ToolCallCard = memo(function ToolCallCard({
             await useStore.getState().save()
         }
         toast.success(
-            language === 'zh' ? '已允许相似命令' : 'Similar commands allowed',
+            t('toolCallCard.similarCommandsAllowed', asLanguage(language)),
             formatTerminalCommandRule(approvalRule),
         )
         onApprove?.()
@@ -1219,7 +1219,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     {showApproveRule && approvalRule && (
                         <div className="mb-2.5 rounded-lg border border-accent/25 bg-background/75 p-2.5">
                             <div className="mb-1 text-[11px] font-medium text-text-primary">
-                                {language === 'zh' ? '始终允许相似命令' : 'Always allow similar commands'}
+                                {t('common.alwaysAllowSimilarCommands', asLanguage(language))}
                             </div>
                             <div className="flex items-center gap-2 rounded-md border border-border/70 bg-surface/60 p-2">
                                 <div className="min-w-0 flex-1">
@@ -1227,13 +1227,11 @@ const ToolCallCard = memo(function ToolCallCard({
                                     {approvalRule.description && <p className="mt-1 text-[10px] leading-4 text-text-muted">{approvalRule.description}</p>}
                                 </div>
                                 <button onClick={() => void handleApproveAlways()} className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hover">
-                                    {language === 'zh' ? '保存并运行' : 'Save & run'}
+                                    {t('toolCallCard.saveRun', asLanguage(language))}
                                 </button>
                             </div>
                             <p className="mt-1.5 text-[10px] leading-4 text-text-muted">
-                                {language === 'zh'
-                                    ? '仅保存程序和固定参数前缀；范围由本地安全层校验，危险参数仍会再次审批。'
-                                    : 'Only the executable and literal argument prefix are stored. The local security layer still checks risky arguments.'}
+                                {t('toolCallCard.onlyTheExecutableAnd', asLanguage(language))}
                             </p>
                         </div>
                     )}

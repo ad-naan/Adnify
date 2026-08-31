@@ -36,6 +36,7 @@ import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
+import { t, asLanguage } from '@renderer/i18n'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
@@ -156,7 +157,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
     if (imported > 0) await mcpService.reloadConfig()
     setImportLoading(false)
     setShowImportModal(false)
-    setActionError(imported === selectedImports.size ? null : (language === 'zh' ? '部分配置导入失败，请检查目标配置文件。' : 'Some configs could not be imported. Check the target config file.'))
+    setActionError(imported === selectedImports.size ? null : (t('mcpSettings.someConfigsCouldNot', asLanguage(language))))
   }
 
   const handleDeleteServer = async (server: McpServerState) => {
@@ -168,13 +169,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
         await mcpService.reloadConfig()
         setDeleteConfirm(null)
       } else {
-        setActionError(language === 'zh'
-          ? `删除失败：未能从来源配置中找到或移除 ${server.id}。请检查文件权限。`
-          : `Delete failed: ${server.id} could not be removed from its source config. Check file permissions.`)
+        setActionError(t('mcpSettings.deleteFailedCouldNot', asLanguage(language), { id: server.id }))
       }
     } catch (err) {
       logger.settings.error('Failed to delete server:', err)
-      setActionError(language === 'zh' ? '删除失败，请检查来源配置文件是否只读。' : 'Delete failed. The source config may be read-only.')
+      setActionError(t('mcpSettings.deleteFailedTheSource', asLanguage(language)))
     }
     setActionLoading(null)
   }
@@ -187,13 +186,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       if (success) {
         await mcpService.reloadConfig()
       } else {
-        setActionError(language === 'zh'
-          ? `更新失败：${server.id} 的来源配置可能已移动或不可写。`
-          : `Update failed: the source config for ${server.id} may have moved or be read-only.`)
+        setActionError(t('mcpSettings.updateFailedTheSource', asLanguage(language), { id: server.id }))
       }
     } catch (err) {
       logger.settings.error('Failed to toggle server:', err)
-      setActionError(language === 'zh' ? '更新失败，请检查来源配置文件权限。' : 'Update failed. Check the source config permissions.')
+      setActionError(t('mcpSettings.updateFailedCheckThe', asLanguage(language)))
     }
     setActionLoading(null)
   }
@@ -206,9 +203,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       codex: 'Codex',
       cursor: 'Cursor',
       vscode: 'VS Code',
-      generic: language === 'zh' ? '通用配置' : 'Generic',
+      generic: t('mcpSettings.generic', asLanguage(language)),
     }
-    return provider ? labels[provider] : (language === 'zh' ? '未知来源' : 'Unknown')
+    return provider ? labels[provider] : (t('mcpSettings.unknown', asLanguage(language)))
   }
 
   const getStatusIcon = (status: McpServerStatus) => {
@@ -230,12 +227,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
 
   const getStatusText = (status: McpServerStatus) => {
     const texts: Record<McpServerStatus, string> = {
-      connected: language === 'zh' ? '已连接' : 'Connected',
-      connecting: language === 'zh' ? '连接中' : 'Connecting',
-      error: language === 'zh' ? '错误' : 'Error',
-      disconnected: language === 'zh' ? '未连接' : 'Disconnected',
-      needs_auth: language === 'zh' ? '需要认证' : 'Auth Required',
-      needs_registration: language === 'zh' ? '需要注册' : 'Registration Required',
+      connected: t('mcpSettings.connected', asLanguage(language)),
+      connecting: t('mcpSettings.connecting', asLanguage(language)),
+      error: t('toolError', asLanguage(language)),
+      disconnected: t('mcpSettings.disconnected', asLanguage(language)),
+      needs_auth: t('mcpSettings.authRequired', asLanguage(language)),
+      needs_registration: t('mcpSettings.registrationRequired', asLanguage(language)),
     }
     return texts[status]
   }
@@ -312,7 +309,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="flex items-center gap-2.5">
                 <h4 className="text-base font-bold text-text-primary tracking-tight">{server.config.name}</h4>
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded border bg-accent/10 text-accent border-accent/20 tracking-tight">
-                  {server.config.importedFrom ? (language === 'zh' ? `来自 ${providerLabel}` : `From ${providerLabel}`) : 'Adnify'}
+                  {server.config.importedFrom ? (t('mcpSettings.from', asLanguage(language), { providerLabel })) : 'Adnify'}
                 </span>
                 {server.config.source && (
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase tracking-tight ${
@@ -320,7 +317,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                       ? 'bg-green-500/10 text-green-400 border-green-500/20'
                       : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                   }`}>
-                    {server.config.source === 'workspace' ? (language === 'zh' ? '项目' : 'Project') : (language === 'zh' ? '全局' : 'Global')}
+                    {server.config.source === 'workspace' ? (t('common.project', asLanguage(language))) : (t('common.global', asLanguage(language)))}
                   </span>
                 )}
                 {isRemote && (
@@ -340,7 +337,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   className="mt-2 max-w-[520px] truncate text-[11px] text-text-muted/80 font-mono"
                   title={server.config.sourcePath}
                 >
-                  {language === 'zh' ? '来源：' : 'Source: '}{server.config.sourcePath}
+                  {t('mcpSettings.source', asLanguage(language))}{server.config.sourcePath}
                 </div>
               )}
               {server.config.importedFrom && (
@@ -348,7 +345,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   className="mt-1 max-w-[520px] truncate text-[10px] text-accent/70 font-mono"
                   title={server.config.importedFrom.path}
                 >
-                  {language === 'zh' ? '最初导入自：' : 'Originally imported from: '}{server.config.importedFrom.path}
+                  {t('common.originallyImported', asLanguage(language))}{server.config.importedFrom.path}
                 </div>
               )}
             </div>
@@ -371,16 +368,16 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />
                   <span className="text-xs text-orange-400">
-                    {language === 'zh' ? '等待浏览器授权...' : 'Waiting for browser...'}
+                    {t('common.waitingForBrowser', asLanguage(language))}
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => handleCancelOAuth(server.id)}
-                    title={language === 'zh' ? '取消' : 'Cancel'}
+                    title={t('cancel', asLanguage(language))}
                     className="text-text-muted hover:text-red-400 text-xs"
                   >
-                    {language === 'zh' ? '取消' : 'Cancel'}
+                    {t('cancel', asLanguage(language))}
                   </Button>
                 </div>
               )}
@@ -392,10 +389,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   size="sm"
                   onClick={() => handleStartOAuth(server.id)}
                   disabled={isLoading}
-                  title={language === 'zh' ? '开始认证' : 'Start Authentication'}
+                  title={t('mcpSettings.startAuthentication', asLanguage(language))}
                 >
                   <Key className="w-4 h-4 mr-1" />
-                  {language === 'zh' ? '认证' : 'Auth'}
+                  {t('mcpSettings.auth', asLanguage(language))}
                 </Button>
               )}
 
@@ -406,7 +403,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     size="sm"
                     onClick={() => handleRefreshCapabilities(server.id)}
                     disabled={isLoading}
-                    title={language === 'zh' ? '刷新能力' : 'Refresh capabilities'}
+                    title={t('mcpSettings.refreshCapabilities', asLanguage(language))}
                   >
                     <RefreshCw className={`w-4 h-4 ${actionLoading === `refresh-${server.id}` ? 'animate-spin' : ''}`} />
                   </Button>
@@ -415,7 +412,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     size="sm"
                     onClick={() => handleDisconnectServer(server.id)}
                     disabled={isLoading}
-                    title={language === 'zh' ? '断开连接' : 'Disconnect'}
+                    title={t('mcpSettings.disconnect', asLanguage(language))}
                   >
                     <PowerOff className="w-4 h-4" />
                   </Button>
@@ -430,7 +427,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   size="sm"
                   onClick={() => handleConnectServer(server.id)}
                   disabled={isLoading}
-                  title={language === 'zh' ? '连接' : 'Connect'}
+                  title={t('mcpSettings.connect', asLanguage(language))}
                 >
                   <Power className="w-4 h-4" />
                 </Button>
@@ -443,8 +440,8 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 onClick={() => handleToggleServer(server, !server.config.disabled)}
                 disabled={isLoading}
                 title={server.config.disabled 
-                  ? (language === 'zh' ? '启用' : 'Enable')
-                  : (language === 'zh' ? '禁用' : 'Disable')
+                  ? (t('common.enable', asLanguage(language)))
+                  : (t('common.disable', asLanguage(language)))
                 }
               >
                 {server.config.disabled ? (
@@ -460,7 +457,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 size="sm"
                 onClick={() => setDeleteConfirm(server.id)}
                 disabled={isLoading}
-                title={language === 'zh' ? '删除' : 'Delete'}
+                title={t('delete', asLanguage(language))}
                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
               >
                 <Trash2 className="w-4 h-4" />
@@ -475,7 +472,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             <div className="flex flex-col gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 space-y-1.5">
                 <div className="text-sm font-semibold text-red-300">
-                  {language === 'zh' ? '删除 Adnify 中的配置？' : 'Delete the Adnify config?'}
+                  {t('mcpSettings.deleteTheAdnifyConfig', asLanguage(language))}
                 </div>
                 <p className="text-xs leading-relaxed text-text-secondary">
                   {language === 'zh'
@@ -483,7 +480,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     : `Only the Adnify copy is removed${server.config.importedFrom ? `; the original ${providerLabel} config is untouched` : ''}. The file below will be modified.`}
                 </p>
                 <div className="break-all rounded-lg border border-red-500/15 bg-black/20 px-2.5 py-2 font-mono text-[11px] text-red-200/80">
-                  {server.config.sourcePath || (language === 'zh' ? '来源路径不可用' : 'Source path unavailable')}
+                  {server.config.sourcePath || (t('mcpSettings.sourcePathUnavailable', asLanguage(language)))}
                 </div>
               </div>
               <div className="flex shrink-0 justify-end gap-2">
@@ -492,7 +489,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   size="sm"
                   onClick={() => setDeleteConfirm(null)}
                 >
-                  {language === 'zh' ? '取消' : 'Cancel'}
+                  {t('cancel', asLanguage(language))}
                 </Button>
                 <Button
                   variant="primary"
@@ -504,7 +501,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   {isDeleting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    language === 'zh' ? '删除' : 'Delete'
+                    t('delete', asLanguage(language))
                   )}
                 </Button>
               </div>
@@ -513,7 +510,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
         )}
 
         {!showDeleteConfirm && (
-          <ProgressiveReveal language={language} collapsedHeight={420} expandLabel={language === 'zh' ? '展开服务器全部详情' : 'Show all server details'}>
+          <ProgressiveReveal language={language} collapsedHeight={420} expandLabel={t('mcpSettings.showAllServerDetails', asLanguage(language))}>
           <div className="space-y-6 border-t border-border/50 p-5">
             {/* OAuth Pending Banner */}
             {isOAuthPending && (
@@ -521,12 +518,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 <Loader2 className="w-4 h-4 mt-0.5 flex-shrink-0 animate-spin" />
                 <div>
                   <div className="font-bold mb-1">
-                    {language === 'zh' ? '正在等待浏览器授权...' : 'Waiting for browser authorization...'}
+                    {t('mcpSettings.waitingForBrowserAuthorization', asLanguage(language))}
                   </div>
                   <div className="opacity-80">
-                    {language === 'zh'
-                      ? '请在打开的浏览器窗口中完成授权，完成后将自动连接。'
-                      : 'Please complete authorization in the opened browser window. The server will connect automatically.'}
+                    {t('mcpSettings.pleaseCompleteAuthorizationIn', asLanguage(language))}
                   </div>
                 </div>
               </div>
@@ -551,9 +546,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               }`}>
                 <Key className="w-4 h-4" />
                 <span>
-                  {server.authStatus === 'authenticated' && (language === 'zh' ? '已认证' : 'Authenticated')}
-                  {server.authStatus === 'expired' && (language === 'zh' ? '认证已过期' : 'Authentication Expired')}
-                  {server.authStatus === 'not_authenticated' && (language === 'zh' ? '未认证' : 'Not Authenticated')}
+                  {server.authStatus === 'authenticated' && (t('mcpSettings.authenticated', asLanguage(language)))}
+                  {server.authStatus === 'expired' && (t('mcpSettings.authenticationExpired', asLanguage(language)))}
+                  {server.authStatus === 'not_authenticated' && (t('mcpSettings.notAuthenticated', asLanguage(language)))}
                 </span>
               </div>
             )}
@@ -561,7 +556,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             {/* Config Details */}
             <div className="space-y-2">
               <h5 className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
-                {language === 'zh' ? '配置详情' : 'Configuration'}
+                {t('mcpSettings.configuration', asLanguage(language))}
               </h5>
               <div className="text-xs text-text-secondary space-y-1.5 font-mono bg-black/20 p-4 rounded-xl border border-border shadow-inner">
                 <div className="flex"><span className="text-text-muted w-20 shrink-0">id:</span> <span className="select-all">{server.id}</span></div>
@@ -597,7 +592,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-3">
                 <h5 className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-2 ml-1">
                   <Wrench className="w-3.5 h-3.5" />
-                  {language === 'zh' ? '工具列表' : 'Tools'} <span className="bg-white/10 px-1.5 rounded-md text-[10px]">{server.tools.length}</span>
+                  {t('mcpSettings.tools', asLanguage(language))} <span className="bg-white/10 px-1.5 rounded-md text-[10px]">{server.tools.length}</span>
                 </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {server.tools.map((tool) => (
@@ -621,7 +616,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  {language === 'zh' ? '资源' : 'Resources'} ({server.resources.length})
+                  {t('mcpSettings.resources', asLanguage(language))} ({server.resources.length})
                 </h5>
                 <div className="space-y-1">
                   {server.resources.map((resource) => (
@@ -643,7 +638,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
-                  {language === 'zh' ? '提示模板' : 'Prompts'} ({server.prompts.length})
+                  {t('mcpSettings.prompts', asLanguage(language))} ({server.prompts.length})
                 </h5>
                 <div className="space-y-1">
                   {server.prompts.map((prompt) => (
@@ -666,7 +661,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             {server.config.autoApprove && server.config.autoApprove.length > 0 && (
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary">
-                  {language === 'zh' ? '自动批准的工具' : 'Auto-approved Tools'}
+                  {t('common.autoApprovedTools', asLanguage(language))}
                 </h5>
                 <div className="flex flex-wrap gap-1">
                   {server.config.autoApprove.map((tool) => (
@@ -686,7 +681,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
                   <Lightbulb className="w-4 h-4 text-yellow-500" />
-                  {language === 'zh' ? '使用示例' : 'Usage Examples'}
+                  {t('mcpSettings.usageExamples', asLanguage(language))}
                 </h5>
                 <div className="space-y-1.5">
                   {usageExamples.map((example) => (
@@ -700,9 +695,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   ))}
                 </div>
                 <p className="text-xs text-text-muted">
-                  {language === 'zh' 
-                    ? '在聊天中输入类似的内容即可触发此工具' 
-                    : 'Type similar prompts in chat to trigger this tool'}
+                  {t('mcpSettings.typeSimilarPromptsIn', asLanguage(language))}
                 </p>
               </div>
             )}
@@ -726,12 +719,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             </div>
             <div>
               <h4 className="text-sm font-medium text-text-primary">
-                {language === 'zh' ? '启动时自动连接' : 'Auto-connect on Startup'}
+                {t('mcpSettings.autoConnectOnStartup', asLanguage(language))}
               </h4>
               <p className="text-xs text-text-muted mt-0.5">
-                {language === 'zh'
-                  ? '应用启动时自动连接所有已启用的 MCP 服务器'
-                  : 'Automatically connect all enabled MCP servers when the app starts'}
+                {t('mcpSettings.automaticallyConnectAllEnabled', asLanguage(language))}
               </p>
             </div>
           </div>
@@ -746,15 +737,13 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-text-muted">
-            {language === 'zh'
-              ? '配置和管理 MCP (Model Context Protocol) 服务器，扩展 AI 助手的能力。'
-              : 'Configure and manage MCP (Model Context Protocol) servers to extend AI assistant capabilities.'}
+            {t('mcpSettings.configureAndManageMcp', asLanguage(language))}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={handleOpenImport}>
             <Import className="w-4 h-4 mr-2" />
-            {language === 'zh' ? '从其他 Agent 导入' : 'Import from Agent'}
+            {t('common.importFromAgent', asLanguage(language))}
           </Button>
           <Button
             variant="secondary"
@@ -763,7 +752,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             disabled={actionLoading === 'reload'}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${actionLoading === 'reload' ? 'animate-spin' : ''}`} />
-            {language === 'zh' ? '刷新' : 'Refresh'}
+            {t('refresh', asLanguage(language))}
           </Button>
           <Button
             variant="primary"
@@ -771,7 +760,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             onClick={() => setShowAddModal(true)}
           >
             <Plus className="w-4 h-4 mr-2" />
-            {language === 'zh' ? '添加服务器' : 'Add Server'}
+            {t('common.addServer', asLanguage(language))}
           </Button>
         </div>
       </div>
@@ -791,7 +780,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             <span>{actionError}</span>
           </div>
           <button type="button" className="shrink-0 text-xs text-red-300 hover:text-red-200" onClick={() => setActionError(null)}>
-            {language === 'zh' ? '关闭' : 'Dismiss'}
+            {t('mcpSettings.dismiss', asLanguage(language))}
           </button>
         </div>
       )}
@@ -800,7 +789,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium text-text-secondary">
-            {language === 'zh' ? 'MCP 服务器' : 'MCP Servers'} ({mcpServers.length})
+            {t('mcpSettings.mcpServers', asLanguage(language))} ({mcpServers.length})
           </h4>
         </div>
         
@@ -812,18 +801,14 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           <div className="text-center py-12 text-text-muted border border-dashed border-border rounded-lg">
             <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p className="text-sm font-medium">
-              {language === 'zh'
-                ? '暂无配置的 MCP 服务器'
-                : 'No MCP servers configured'}
+              {t('mcpSettings.noMcpServersConfigured', asLanguage(language))}
             </p>
             <p className="text-xs mt-1 mb-4">
-              {language === 'zh'
-                ? '添加 MCP 服务器来扩展 AI 助手的能力'
-                : 'Add MCP servers to extend AI assistant capabilities'}
+              {t('mcpSettings.addMcpServersTo', asLanguage(language))}
             </p>
             <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              {language === 'zh' ? '添加服务器' : 'Add Server'}
+              {t('common.addServer', asLanguage(language))}
             </Button>
           </div>
         ) : (
@@ -837,23 +822,17 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <aside className="space-y-2 rounded-xl border border-accent/20 bg-accent/[0.04] p-4 text-xs text-text-muted">
         <p className="font-bold text-sm text-accent/90 flex items-center gap-1.5">
           <OtterAsset asset="question" className="h-6 w-6 object-contain" />
-          {language === 'zh' ? '使用提示' : 'Tips'}
+          {t('common.tips', asLanguage(language))}
         </p>
         <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed pl-1">
           <li>
-            {language === 'zh'
-              ? '工具自动接入：启用的 MCP 服务器在连接成功后，其工具将自动接入 AI 助手，在聊天或任务执行时可直接调用。'
-              : 'Auto-connection: Tools of enabled MCP servers will automatically be registered to the AI assistant once successfully connected.'}
+            {t('mcpSettings.autoConnectionToolsOf', asLanguage(language))}
           </li>
           <li>
-            {language === 'zh'
-              ? '快速状态排查：卡片左侧指示灯代表当前状态，服务器详情与 stderr 日志始终显示在卡片下方。'
-              : 'Status monitoring: The left dot indicates connection status. Server details and stderr logs stay visible below.'}
+            {t('mcpSettings.statusMonitoringTheLeft', asLanguage(language))}
           </li>
           <li>
-            {language === 'zh'
-              ? '配置合并生效：用户级（全局）与项目级（工作区）服务器配置将合并生效。若有同名冲突，以项目级配置为先。'
-              : 'Config merging: Global and workspace server configs are merged. Workspace configs take precedence in case of duplicate names.'}
+            {t('mcpSettings.configMergingGlobalAnd', asLanguage(language))}
           </li>
         </ul>
       </aside>
@@ -864,14 +843,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           <div className="flex items-center gap-2">
             <FolderOpen className="w-4 h-4 text-accent" />
             <h5 className="text-sm font-medium text-text-primary">
-              {language === 'zh' ? '本地 MCP 配置文件' : 'Local MCP Configuration Files'}
+              {t('mcpSettings.localMcpConfigurationFiles', asLanguage(language))}
             </h5>
           </div>
 
           <p className="text-xs text-text-muted leading-relaxed">
-            {language === 'zh'
-              ? 'MCP 配置存储在本地 JSON 文件中。文件尚未生成时会自动创建；打开成功后设置面板会关闭。'
-              : 'MCP configuration is stored in local JSON files. Missing files are created automatically; Settings closes after the file opens.'}
+            {t('mcpSettings.mcpConfigurationIsStored', asLanguage(language))}
           </p>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -880,10 +857,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-text-primary">
-                    {language === 'zh' ? '用户配置文件' : 'User Configuration File'}
+                    {t('mcpSettings.userConfigurationFile', asLanguage(language))}
                   </span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">
-                    {language === 'zh' ? '全局' : 'GLOBAL'}
+                    {t('mcpSettings.global', asLanguage(language))}
                   </span>
                 </div>
                 <p className="text-[11px] text-text-muted break-all font-mono opacity-80 leading-relaxed bg-black/10 p-2 rounded border border-border/30">
@@ -898,7 +875,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 className="w-full text-xs justify-center gap-1.5"
               >
                 <FileText className="w-3.5 h-3.5" />
-                {language === 'zh' ? '在编辑器中打开' : 'Open in editor'}
+                {t('mcpSettings.openInEditor', asLanguage(language))}
               </Button>
             </div>
 
@@ -909,10 +886,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-text-primary">
-                        {language === 'zh' ? `项目配置文件 ${index + 1}` : `Project Config File ${index + 1}`}
+                        {t('mcpSettings.projectConfigFile', asLanguage(language), { index1: index + 1 })}
                       </span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">
-                        {language === 'zh' ? '项目' : 'PROJECT'}
+                        {t('mcpSettings.project', asLanguage(language))}
                       </span>
                     </div>
                     <p className="text-[11px] text-text-muted break-all font-mono opacity-80 leading-relaxed bg-black/10 p-2 rounded border border-border/30">
@@ -927,7 +904,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     className="w-full text-xs justify-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    {language === 'zh' ? '在编辑器中打开' : 'Open in editor'}
+                    {t('mcpSettings.openInEditor', asLanguage(language))}
                   </Button>
                 </div>
               ))
@@ -935,12 +912,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="rounded-lg border border-dashed border-border bg-surface/10 p-4 flex flex-col items-center justify-center text-center space-y-2 min-h-[140px]">
                 <OtterAsset asset="standFront" className="w-12 h-12 object-contain opacity-70" />
                 <div className="text-xs font-medium text-text-muted">
-                  {language === 'zh' ? '暂未检测到项目级 MCP 配置' : 'No workspace MCP config detected'}
+                  {t('mcpSettings.noWorkspaceMcpConfig', asLanguage(language))}
                 </div>
                 <p className="text-[10px] text-text-muted max-w-[200px] leading-relaxed">
-                  {language === 'zh'
-                    ? '在项目根目录下创建 .adnify/settings/mcp.json 可启用项目级配置。'
-                    : 'Create .adnify/settings/mcp.json in your workspace root to enable project-level config.'}
+                  {t('mcpSettings.createAdnifySettingsMcp', asLanguage(language))}
                 </p>
               </div>
             )}
@@ -950,26 +925,20 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           <div className="rounded-lg border border-border bg-background/50 p-4 space-y-3">
             <div className="space-y-1">
               <p className="text-xs font-semibold text-text-primary">
-                {language === 'zh' ? '可识别的 MCP 服务器类型与协议规范' : 'Recognized MCP Server Types & Spec'}
+                {t('mcpSettings.recognizedMcpServerTypes', asLanguage(language))}
               </p>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                {language === 'zh'
-                  ? 'Model Context Protocol (MCP) 是 Anthropic 推出的一项全新开放标准，旨在使 AI 助手通过安全、统一的协议与本地开发环境、专有数据源及第三方 API 进行无缝的数据和工具交互。'
-                  : 'Model Context Protocol (MCP) is an open standard proposed by Anthropic that enables AI assistants to seamlessly interface with local development environments, proprietary data sources, and third-party APIs via a unified protocol.'}
+                {t('mcpSettings.modelContextProtocolMcp', asLanguage(language))}
               </p>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                {language === 'zh'
-                  ? 'Adnify 完全兼容 MCP 规范，既支持通过 stdio 执行本地服务器指令（支持 Node/Python 运行环境与环境变量 env 注入），也支持基于 SSE (Server-Sent Events) 的远程 HTTP 连接，并具备自动 OAuth2 授权接入能力。'
-                  : 'Adnify is fully compliant with the MCP spec. It supports running local command-based servers via stdio (with Node/Python env & env var injections) as well as remote SSE (Server-Sent Events) connections equipped with automated OAuth2 authentication flows.'}
+                {t('mcpSettings.adnifyIsFullyCompliant', asLanguage(language))}
               </p>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-border/30">
               <div className="space-y-1 text-[11px] text-text-muted">
                 <p>
-                  {language === 'zh'
-                    ? '如果你添加或修改了本地配置文件中的内容，点击右侧的“重新加载”即可立即同步。'
-                    : 'If you modified configuration files manually, click "Reload Config" to immediately sync your changes.'}
+                  {t('mcpSettings.ifYouModifiedConfiguration', asLanguage(language))}
                 </p>
               </div>
               <Button
@@ -980,7 +949,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 className="text-xs shrink-0 gap-1.5"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${actionLoading === 'reload' ? 'animate-spin' : ''}`} />
-                {language === 'zh' ? '重新加载并同步' : 'Reload & Sync'}
+                {t('mcpSettings.reloadSync', asLanguage(language))}
               </Button>
             </div>
           </div>
@@ -991,14 +960,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <Modal
         isOpen={showImportModal}
         onClose={() => !importLoading && setShowImportModal(false)}
-        title={language === 'zh' ? '从其他 Agent 导入 MCP' : 'Import MCP from another Agent'}
+        title={t('mcpSettings.importMcpFromAnother', asLanguage(language))}
         size="3xl"
       >
         <div className="space-y-5">
           <div className="rounded-xl border border-accent/20 bg-accent/[0.05] p-4 text-xs leading-relaxed text-text-secondary">
-            {language === 'zh'
-              ? '这里只临时扫描第三方配置。导入后会写入 Adnify 自己的配置，之后的启用、修改和删除都不会影响来源软件。'
-              : 'External configs are scanned only here. Imported items are copied into Adnify and no longer depend on the source app.'}
+            {t('mcpSettings.externalConfigsAreScanned', asLanguage(language))}
           </div>
           <div className="flex gap-2">
             {(['user', 'workspace'] as const).map(level => (
@@ -1009,7 +976,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 onClick={() => setImportLevel(level)}
                 className={`rounded-lg border px-3 py-2 text-xs transition-colors ${importLevel === level ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-text-muted hover:bg-white/5'} disabled:opacity-40`}
               >
-                {level === 'user' ? (language === 'zh' ? '保存到全局' : 'Save globally') : (language === 'zh' ? '保存到当前项目' : 'Save to project')}
+                {level === 'user' ? (t('common.saveGlobally', asLanguage(language))) : (t('common.saveToProject', asLanguage(language)))}
               </button>
             ))}
           </div>
@@ -1018,7 +985,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="flex h-36 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-accent" /></div>
             ) : externalConfigs.length === 0 ? (
               <div className="flex h-36 flex-col items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
-                {language === 'zh' ? '没有发现可导入的第三方 MCP 配置' : 'No external MCP configs found'}
+                {t('mcpSettings.noExternalMcpConfigs', asLanguage(language))}
               </div>
             ) : externalConfigs.map(config => {
               const key = externalKey(config)
@@ -1043,7 +1010,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold text-text-primary">{config.name || config.id}</span>
                       <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted">{getProviderLabel(config.sourceProvider)}</span>
-                      {exists && <span className="text-[10px] text-amber-400">{language === 'zh' ? 'Adnify 已存在同名配置' : 'Already exists in Adnify'}</span>}
+                      {exists && <span className="text-[10px] text-amber-400">{t('mcpSettings.alreadyExistsInAdnify', asLanguage(language))}</span>}
                     </span>
                     <span className="mt-1 block truncate font-mono text-[10px] text-text-muted" title={config.sourcePath}>{config.sourcePath}</span>
                   </span>
@@ -1052,12 +1019,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             })}
           </div>
           <div className="flex items-center justify-between border-t border-border pt-4">
-            <span className="text-xs text-text-muted">{language === 'zh' ? `已选择 ${selectedImports.size} 项` : `${selectedImports.size} selected`}</span>
+            <span className="text-xs text-text-muted">{t('common.selected', asLanguage(language), { size: selectedImports.size })}</span>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{language === 'zh' ? '取消' : 'Cancel'}</Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{t('cancel', asLanguage(language))}</Button>
               <Button variant="primary" size="sm" onClick={handleImportSelected} disabled={selectedImports.size === 0 || importLoading}>
                 {importLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {language === 'zh' ? `导入 ${selectedImports.size} 项` : `Import ${selectedImports.size}`}
+                {t('common.import', asLanguage(language), { size: selectedImports.size })}
               </Button>
             </div>
           </div>

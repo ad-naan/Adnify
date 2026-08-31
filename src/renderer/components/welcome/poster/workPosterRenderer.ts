@@ -6,6 +6,7 @@ import {
   WORK_POSTER_SPRITES,
   WORK_POSTER_WIDTH,
 } from './workPosterAssets'
+import { t, asLanguage } from '@renderer/i18n'
 
 type Rect = { x: number; y: number; w: number; h: number }
 type SpriteId = keyof typeof WORK_POSTER_SPRITES
@@ -350,7 +351,7 @@ function drawFooter(ctx: CanvasRenderingContext2D, poster: WorkPosterData, x: nu
   const signX = x + 500
   ctx.fillStyle = '#333'
   ctx.font = '700 22px "Microsoft YaHei", sans-serif'
-  ctx.fillText(poster.language === 'zh' ? '签名:' : 'Sign:', signX, y + 31)
+  ctx.fillText(t('workPosterRenderer.sign', asLanguage(poster.language)), signX, y + 31)
   ctx.strokeStyle = '#222'
   ctx.lineWidth = 2
   ctx.beginPath()
