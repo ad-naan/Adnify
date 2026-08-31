@@ -72,6 +72,12 @@ export interface GitRepository {
     isWorkspaceRoot: boolean
 }
 
+export interface GitDiscardResult {
+    success: boolean
+    error?: string
+    partial?: boolean
+}
+
 interface GitExecResult {
     stdout: string
     stderr: string
@@ -625,14 +631,38 @@ class GitService {
         return result.exitCode === 0
     }
 
-    async discardChanges(filePath: string, rootPath?: string): Promise<boolean> {
-        const result = await this.exec(['checkout', '--', filePath], rootPath)
-        return result.exitCode === 0
+    async discardChanges(filePath: string, rootPath?: string, options: { untracked?: boolean } = {}): Promise<GitDiscardResult> {
+        const result = options.untracked
+            ? await this.exec(['clean', '-fd', '--', filePath], rootPath)
+            : await this.exec(['checkout', '--', filePath], rootPath)
+        return {
+            success: result.exitCode === 0,
+            error: result.exitCode === 0 ? undefined : (result.stderr || result.stdout || 'Git discard failed').trim(),
+        }
     }
 
-    async discardAllChanges(rootPath?: string): Promise<boolean> {
-        const result = await this.exec(['checkout', '--', '.'], rootPath)
-        return result.exitCode === 0
+    async discardAllChanges(rootPath?: string, options: { tracked: boolean; untracked: boolean } = { tracked: true, untracked: true }): Promise<GitDiscardResult> {
+        if (options.tracked) {
+            const checkout = await this.exec(['checkout', '--', '.'], rootPath)
+            if (checkout.exitCode !== 0) {
+                return { success: false, error: (checkout.stderr || checkout.stdout || 'Git discard failed').trim() }
+            }
+        }
+
+        if (options.untracked) {
+            // One clean command removes the complete untracked set after the UI's
+            // single confirmation, instead of triggering one secure deletion per file.
+            const clean = await this.exec(['clean', '-fd', '--', '.'], rootPath)
+            if (clean.exitCode !== 0) {
+                return {
+                    success: false,
+                    partial: options.tracked,
+                    error: (clean.stderr || clean.stdout || 'Git clean failed').trim(),
+                }
+            }
+        }
+
+        return { success: true }
     }
 
     async commit(message: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {

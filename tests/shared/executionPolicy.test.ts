@@ -32,6 +32,8 @@ describe('execution security policy', () => {
   it('never auto-runs dangerous commands even when their executable is trusted', () => {
     expect(assessShellCommand('rm -rf build', [...shell, 'rm'])).toMatchObject({ kind: 'ask', risk: 'dangerous' })
     expect(assessGitCommand(['reset', '--hard', 'HEAD~1'], git)).toMatchObject({ kind: 'ask', risk: 'dangerous' })
+    expect(assessGitCommand(['checkout', '--', '.'], [...git, 'checkout'])).toMatchObject({ kind: 'ask', risk: 'dangerous' })
+    expect(assessGitCommand(['clean', '-fd', '--', '.'], [...git, 'clean'])).toMatchObject({ kind: 'ask', risk: 'dangerous' })
   })
 
   it('requires explicit approval instead of silently rejecting catastrophic commands', () => {

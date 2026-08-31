@@ -1123,17 +1123,44 @@ Commit message:`
         await refreshAfterRepoMutation(rootPath)
     }
 
-    const handleDiscard = async (path: string, rootPath?: string) => {
+    const handleDiscard = async (path: string, rootPath?: string, untracked = false) => {
         const confirmed = await globalConfirm({
             title: tt('git.discard'),
-            message: t('git.discardConfirm', language, { name: getFileName(path) }),
+            message: t(untracked ? 'git.discardUntrackedConfirm' : 'git.discardConfirm', language, { name: getFileName(path) }),
             confirmText: tt('git.discard'),
             variant: 'danger',
         })
-        if (confirmed) {
-            await gitService.discardChanges(path, rootPath)
-            await refreshAfterRepoMutation(rootPath)
+        if (!confirmed) return
+
+        const result = await gitService.discardChanges(path, rootPath, { untracked })
+        await refreshAfterRepoMutation(rootPath)
+        if (result.success) {
             toast.success(tt('git.discarded'))
+        } else {
+            toast.error(tt('git.discardFailed'), result.error)
+        }
+    }
+
+    const handleDiscardAll = async (targetStatus: GitStatus, rootPath?: string) => {
+        const tracked = targetStatus.unstaged.length > 0
+        const untracked = targetStatus.untracked.length > 0
+        const count = targetStatus.unstaged.length + targetStatus.untracked.length
+        if (count === 0) return
+
+        const confirmed = await globalConfirm({
+            title: tt('git.discardAll'),
+            message: t('git.discardAllConfirm', language, { count }),
+            confirmText: tt('git.discardAll'),
+            variant: 'danger',
+        })
+        if (!confirmed) return
+
+        const result = await gitService.discardAllChanges(rootPath, { tracked, untracked })
+        await refreshAfterRepoMutation(rootPath)
+        if (result.success) {
+            toast.success(tt('git.discarded'))
+        } else {
+            toast.error(result.partial ? tt('git.discardPartial') : tt('git.discardAllFailed'), result.error)
         }
     }
 
@@ -1956,6 +1983,13 @@ Commit message:`
                                     <span className="flex-1">{tt('git.unstaged')}</span>
                                     <span className="bg-yellow-500/20 text-yellow-400 px-1.5 rounded-full text-[10px]">{repoStats.unstaged + repoStats.untracked}</span>
                                     <button
+                                        onClick={(e) => { e.stopPropagation(); if (repoStatus) void handleDiscardAll(repoStatus, repo.root) }}
+                                        className="p-0.5 hover:bg-surface-active rounded"
+                                        title={tt('git.discardAll')}
+                                    >
+                                        <Undo2 className="w-3 h-3 text-text-muted hover:text-red-400" />
+                                    </button>
+                                    <button
                                         onClick={(e) => { e.stopPropagation(); void handleStageAll(repo.root) }}
                                         className="p-0.5 hover:bg-surface-active rounded"
                                         title={tt('git.stageAll')}
@@ -1983,7 +2017,7 @@ Commit message:`
                                                 status="untracked"
                                                 staged={false}
                                                 onStage={() => handleStage(path, repo.root)}
-                                                onDiscard={() => handleDiscard(path, repo.root)}
+                                                onDiscard={() => handleDiscard(path, repo.root, true)}
                                                 onClick={() => handleFileClick(path, 'added', false, repo.root)}
                                             />
                                         ))}
@@ -2002,7 +2036,7 @@ Commit message:`
                 )}
             </div>
         )
-    }, [getRepoExpandedSections, handleCommit, handleDiscard, handleFetch, handleFileClick, handleGenerateCommitMessage, handlePull, handlePush, handleStage, handleStageAll, handleUnstage, handleUnstageAll, refreshRepoSnapshot, repoCommitMessages, repoIsCommitting, repoIsGeneratingMessages, selectedRepoRoot, tt, toggleRepoSection, updateRepoCommitMessage])
+    }, [getRepoExpandedSections, handleCommit, handleDiscard, handleDiscardAll, handleFetch, handleFileClick, handleGenerateCommitMessage, handlePull, handlePush, handleStage, handleStageAll, handleUnstage, handleUnstageAll, refreshRepoSnapshot, repoCommitMessages, repoIsCommitting, repoIsGeneratingMessages, selectedRepoRoot, tt, toggleRepoSection, updateRepoCommitMessage])
 
     // ==================== 渲染 ====================
 
@@ -2408,6 +2442,13 @@ Commit message:`
                                     <span className="flex-1">{tt('git.unstaged')}</span>
                                     <span className="bg-yellow-500/20 text-yellow-400 px-1.5 rounded-full text-[10px]">{stats.unstaged + stats.untracked}</span>
                                     <button
+                                        onClick={(e) => { e.stopPropagation(); void handleDiscardAll(status) }}
+                                        className="p-0.5 hover:bg-surface-active rounded"
+                                        title={tt('git.discardAll')}
+                                    >
+                                        <Undo2 className="w-3 h-3 text-text-muted hover:text-red-400" />
+                                    </button>
+                                    <button
                                         onClick={(e) => { e.stopPropagation(); handleStageAll() }}
                                         className="p-0.5 hover:bg-surface-active rounded"
                                         title={tt('git.stageAll')}
@@ -2435,7 +2476,7 @@ Commit message:`
                                                 status="untracked"
                                                 staged={false}
                                                 onStage={() => handleStage(path)}
-                                                onDiscard={() => handleDiscard(path)}
+                                                onDiscard={() => handleDiscard(path, undefined, true)}
                                                 onClick={() => handleFileClick(path, 'added', false)}
                                             />
                                         ))}
