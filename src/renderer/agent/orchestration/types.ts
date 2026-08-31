@@ -49,7 +49,17 @@ export interface SubAgentResult {
   assistantId?: string
   /** 实际运行时长（毫秒） */
   durationMs?: number
-  worktree?: { path: string; branch: string; commit?: string; merged?: boolean; conflicts?: string[] }
+  worktree?: {
+    path: string
+    branch: string
+    commit?: string
+    merged?: boolean
+    conflicts?: string[]
+    /** 车道终态：合并 / 归档保留 / 无产出丢弃 / 出错 */
+    outcome?: 'merged' | 'retained' | 'discarded' | 'failed'
+    /** worktree 目录已回收，分支与提交仍可恢复 */
+    archived?: boolean
+  }
 }
 
 export interface SubAgentStartedInfo {

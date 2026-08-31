@@ -377,6 +377,15 @@ export interface ElectronAPI {
     error?: string
   }>
 
+  /** 车道专用 Git 通道：只接受限定在 .adnify/worktrees 之内的 worktree 操作，免审批 */
+  gitWorktreeLane: (args: string[], cwd: string) => Promise<{
+    success: boolean
+    stdout?: string
+    stderr?: string
+    exitCode?: number
+    error?: string
+  }>
+
   // File watcher
   onFileChanged: (callback: (event: { event: 'create' | 'update' | 'delete'; path: string }) => void) => () => void
 
@@ -751,6 +760,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('shell:executeSecure', request),
 
   gitExecSecure: (args: string[], cwd: string) => ipcRenderer.invoke('git:execSecure', args, cwd),
+  gitWorktreeLane: (args: string[], cwd: string) => ipcRenderer.invoke('git:worktreeLane', args, cwd),
 
   requestExternalFileAccess: (filePath: string, access: 'read' | 'write' | 'manage' = 'read', approval?: import('@shared/security/executionPolicy').AgentApprovalProof) =>
     ipcRenderer.invoke('security:requestExternalFileAccess', filePath, access, approval) as Promise<{

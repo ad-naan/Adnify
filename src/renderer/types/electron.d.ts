@@ -566,6 +566,10 @@ export interface ElectronAPI {
   gitExecSecure: (args: string[], cwd: string) => Promise<{
     success: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string
   }>
+  /** 车道专用 Git 通道：只接受被 worktreeLanePolicy 限定形状的 worktree 命令，免审批 */
+  gitWorktreeLane: (args: string[], cwd: string) => Promise<{
+    success: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string
+  }>
 
   // Security
   requestExternalFileAccess: (filePath: string, access?: 'read' | 'write' | 'manage', approval?: import('@shared/security/executionPolicy').AgentApprovalProof) => Promise<{

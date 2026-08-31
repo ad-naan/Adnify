@@ -28,6 +28,7 @@ import {
   type AgentApprovalProof,
   type ExecutionDecision,
 } from '@shared/security/executionPolicy'
+import { assessWorktreeLaneCommand } from './worktreeLanePolicy'
 import { randomUUID } from 'node:crypto'
 
 
@@ -192,6 +193,91 @@ function createUnixShellIntegrationRc(
 // dugite 在开发环境或部分系统可能缺失嵌入式二进制包
 // 记录 dugite 可用性状态（null: 未探测, true: 可用, false: 不可用），避免每次重复报错与异常捕获开销
 let dugiteAvailable: boolean | null = null
+
+interface GitCommandOutcome {
+  success: boolean
+  stdout?: string
+  stderr?: string
+  exitCode?: number
+  error?: string
+}
+
+/**
+ * 真正执行 Git 的那一段（dugite 优先，失败回退到安全 spawn）。
+ *
+ * 抽出来是因为现在有两条准入路径 —— 通用的 `git:execSecure` 和车道专用的
+ * `git:worktreeLane` —— 但执行、审计、非零退出码的日志分级必须是同一份。
+ */
+async function runGitCommand(args: string[], cwd: string): Promise<GitCommandOutcome> {
+  const fullCommand = args.join(' ')
+
+  if (dugiteAvailable !== false) {
+    try {
+      const result = await gitExec(args, cwd)
+      dugiteAvailable = true
+
+      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
+        exitCode: result.exitCode,
+      })
+
+      if (result.exitCode !== 0) {
+        // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
+        if (isExpectedGitQueryMiss(args, result.stderr || '', result.stdout || '')) {
+          logger.security.debug('[Git] dugite query returned non-zero:', args)
+        } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
+          logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
+        } else {
+          logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
+        }
+      }
+
+      return {
+        success: result.exitCode === 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+      }
+    } catch (error) {
+      dugiteAvailable = false
+      const msg = error instanceof Error ? error.message : String(error)
+      logger.security.info(`[Git] dugite 嵌入式包不可用 (${msg})，已自动切换为系统安全 spawn 模式`)
+    }
+  }
+
+  try {
+    // 安全回退：使用系统的 spawn 执行 git
+    const result = await SecureCommandParser.executeSecureCommand('git', args, cwd, 120000)
+
+    securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
+      exitCode: result.exitCode,
+    })
+
+    if (result.exitCode !== 0) {
+      if (isExpectedGitQueryMiss(args, result.stderr || '', result.stdout || '')) {
+        logger.security.debug('[Git] spawn query returned non-zero:', args)
+      } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
+        logger.security.warn('[Git] spawn returned expected non-zero result:', args, result.stderr || result.stdout)
+      } else {
+        logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
+      }
+    }
+
+    return {
+      success: result.exitCode === 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    }
+  } catch (err) {
+    securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
+      error: toAppError(err).message,
+    })
+    return {
+      success: false,
+      error: `Git执行失败: ${toAppError(err).message}`,
+    }
+  }
+}
 
 /**
  * 可靠地终止 PTY 进程树
@@ -553,74 +639,44 @@ export function registerSecureTerminalHandlers(
     }
 
     // 5. 执行 Git 命令（优先 dugite，若已探测不可用则直接使用系统安全的 spawn）
-    if (dugiteAvailable !== false) {
-      try {
-        const result = await gitExec(args, cwd)
-        dugiteAvailable = true
+    return await runGitCommand(args, cwd)
+  })
 
-        securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
-          exitCode: result.exitCode,
-        })
+  /**
+   * 车道专用 Git 通道：只放开被 worktreeLanePolicy 严格限定的 worktree 操作。
+   *
+   * 通用通道会把 `worktree` 当作不可信子命令而弹审批，但车道是后台执行节点在
+   * 创建/回收，弹框只会打断用户；把 `worktree` 放进全局白名单又会顺带允许把检出
+   * 写到工作区外面。这条通道两头都不选：形状固定、目标限定在
+   * `<工作区根>/.adnify/worktrees/` 之内，越界一律拒绝。
+   */
+  safeIpcHandle('git:worktreeLane', async (
+    event,
+    args: string[],
+    cwd: string
+  ): Promise<{
+    success: boolean
+    stdout?: string
+    stderr?: string
+    exitCode?: number
+    error?: string
+  }> => {
+    const windowId = event.sender.id
+    const windowRoots = getWindowWorkspace?.(windowId)
+    const workspace = windowRoots ? { roots: windowRoots } : getWorkspace()
+    const roots = workspace?.roots || []
 
-        if (result.exitCode !== 0) {
-          // 查询型命令（rev-parse --verify, status 等）exitCode 非零是正常的，不应记为 error
-          const isQueryCommand = isExpectedGitQueryMiss(args, result.stderr || '', result.stdout || '')
-          if (isQueryCommand) {
-            logger.security.debug('[Git] dugite query returned non-zero:', args)
-          } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
-            logger.security.warn('[Git] dugite returned expected non-zero result:', args, result.stderr || result.stdout)
-          } else {
-            logger.security.error('[Git] dugite exec failed:', args, result.stderr || result.stdout)
-          }
-        }
-
-        return {
-          success: result.exitCode === 0,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        }
-      } catch (error) {
-        dugiteAvailable = false
-        const msg = error instanceof Error ? error.message : String(error)
-        logger.security.info(`[Git] dugite 嵌入式包不可用 (${msg})，已自动切换为系统安全 spawn 模式`)
-      }
+    const decision = assessWorktreeLaneCommand(args, cwd, roots)
+    if (!decision.allowed) {
+      securityManager.logOperation(OperationType.GIT_EXEC, `git ${args.join(' ')}`, false, {
+        reason: decision.reason,
+        code: 'git.worktree-lane',
+      })
+      return { success: false, error: decision.reason }
     }
 
-    try {
-      // 6. 安全回退：使用系统的 spawn 执行 git
-      const result = await SecureCommandParser.executeSecureCommand('git', args, cwd, 120000)
-
-      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, true, {
-        exitCode: result.exitCode,
-      })
-
-      if (result.exitCode !== 0) {
-        const isQueryCommand = isExpectedGitQueryMiss(args, result.stderr || '', result.stdout || '')
-        if (isQueryCommand) {
-          logger.security.debug('[Git] spawn query returned non-zero:', args)
-        } else if (shouldLogGitNonZeroAsWarning(args, result.stderr || '', result.stdout || '')) {
-          logger.security.warn('[Git] spawn returned expected non-zero result:', args, result.stderr || result.stdout)
-        } else {
-          logger.security.error('[Git] spawn exec failed:', args, result.stderr || result.stdout)
-        }
-      }
-
-      return {
-        success: result.exitCode === 0,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-      }
-    } catch (err) {
-      securityManager.logOperation(OperationType.GIT_EXEC, fullCommand, false, {
-        error: toAppError(err).message,
-      })
-      return {
-        success: false,
-        error: `Git执行失败: ${toAppError(err).message}`,
-      }
-    }
+    // 中文路径在 worktree list --porcelain 里会被转义，统一关掉 quotePath。
+    return await runGitCommand(['--no-optional-locks', '-c', 'core.quotePath=false', ...args], cwd)
   })
 
   // ============ Interactive Terminal with node-pty ============

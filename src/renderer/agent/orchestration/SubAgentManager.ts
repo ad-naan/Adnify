@@ -192,7 +192,7 @@ class SubAgentManagerClass {
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       logger.agent.error(`[SubAgent] Failed to dispatch sub-agent ${id}:`, error)
-      this.settle(id, {
+      this.settleWithLaneRelease(handle, 'sub-agent failed to start', {
         success: false,
         error: `Failed to start sub-agent: ${errorMsg}`,
         subAgentId: id,
@@ -323,7 +323,7 @@ class SubAgentManagerClass {
         handle.completedAt = Date.now()
 
         if (isAborted) {
-          this.settle(handle.id, {
+          this.settleWithLaneRelease(handle, 'sub-agent aborted', {
             success: false,
             error: 'Sub-agent was aborted',
             subAgentId: handle.id,
@@ -340,25 +340,34 @@ class SubAgentManagerClass {
         }
         unsubscribe()
 
-        void (async () => {
-          let laneResult: WorktreeLaneCompletion | undefined
-          if (succeeded && handle.laneAssignment?.isolated) {
-            laneResult = await ExecutionLaneCoordinator.complete(handle.laneAssignment, `Adnify agent task: ${handle.description}`) || undefined
-          }
-          const laneSucceeded = !laneResult || laneResult.success
-          this.settle(handle.id, {
-            success: succeeded && laneSucceeded,
-            output: succeeded && laneSucceeded ? output || 'Sub-agent completed with no output.' : undefined,
-            error: !succeeded ? `Sub-agent did not finish (${event.reason})` : laneResult?.error,
+        // 没成功的子代理也必须归还车道：否则 worktree 目录和分支会一直留在仓库里，
+        // 并且残留会弄脏基准工作区，后续并行子代理全都建不出车道。
+        if (!succeeded) {
+          this.settleWithLaneRelease(handle, `sub-agent did not finish (${event.reason})`, {
+            success: false,
+            error: `Sub-agent did not finish (${event.reason})`,
             subAgentId: handle.id,
             threadId: handle.threadId,
             assistantId: handle.assistantId,
             durationMs: Date.now() - handle.startedAt,
-            worktree: laneResult
-              ? { path: laneResult.path, branch: laneResult.branch, commit: laneResult.commit, merged: laneResult.merged, conflicts: laneResult.conflicts }
-              : handle.laneAssignment?.lane
-                ? { path: handle.laneAssignment.lane.path, branch: handle.laneAssignment.lane.branch }
-                : undefined,
+          })
+          return
+        }
+
+        void (async () => {
+          const laneResult = handle.laneAssignment?.isolated
+            ? await ExecutionLaneCoordinator.complete(handle.laneAssignment, `Adnify agent task: ${handle.description}`) || undefined
+            : undefined
+          const laneSucceeded = !laneResult || laneResult.success
+          this.settle(handle.id, {
+            success: laneSucceeded,
+            output: laneSucceeded ? output || 'Sub-agent completed with no output.' : undefined,
+            error: laneResult?.error,
+            subAgentId: handle.id,
+            threadId: handle.threadId,
+            assistantId: handle.assistantId,
+            durationMs: Date.now() - handle.startedAt,
+            worktree: this.laneProjection(handle, laneResult),
           })
         })()
       })
@@ -367,7 +376,7 @@ class SubAgentManagerClass {
         if (settled) return
         logger.agent.warn(`[SubAgent] Sub-agent ${handle.id} timed out after ${timeoutMs}ms`)
         Agent.abort(handle.threadId)
-        this.settle(handle.id, {
+        this.settleWithLaneRelease(handle, `sub-agent timed out after ${timeoutMs}ms`, {
           success: false,
           error: `Sub-agent timed out after ${timeoutMs}ms`,
           subAgentId: handle.id,
@@ -375,6 +384,38 @@ class SubAgentManagerClass {
         })
       }, timeoutMs)
     })
+  }
+
+  /**
+   * 归还车道后再回传结果。
+   *
+   * 车道回收是异步的（提交 WIP → 删目录），但 settle 是同步的；把两者串起来，
+   * 保证调用方拿到的 worktree 投影已经是终态，而不是一个还在的临时目录。
+   */
+  private settleWithLaneRelease(handle: SubAgentHandle, reason: string, result: SubAgentResult): void {
+    void (async () => {
+      const released = handle.laneAssignment?.isolated
+        ? await ExecutionLaneCoordinator.release(handle.laneAssignment, reason) || undefined
+        : undefined
+      this.settle(handle.id, { ...result, worktree: this.laneProjection(handle, released) })
+    })()
+  }
+
+  /** 把车道终态投影成回传给主 agent 的 worktree 元信息 */
+  private laneProjection(handle: SubAgentHandle, completion?: WorktreeLaneCompletion) {
+    if (completion) {
+      return {
+        path: completion.path || handle.laneAssignment?.lane?.path || '',
+        branch: completion.branch || handle.laneAssignment?.lane?.branch || '',
+        commit: completion.commit,
+        merged: completion.merged,
+        conflicts: completion.conflicts,
+        outcome: completion.outcome,
+        archived: completion.archived,
+      }
+    }
+    const lane = handle.laneAssignment?.lane
+    return lane ? { path: lane.path, branch: lane.branch } : undefined
   }
 
   /**

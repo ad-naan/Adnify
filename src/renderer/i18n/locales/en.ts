@@ -831,4 +831,16 @@ export const en = {
   'changelog.fixes': 'Bug Fixes',
   'changelog.security': 'Security & Stability',
   'changelog.newVersionNotice': "New version features available! Click to see what's new",
+
+  // Worktree execution lanes
+  'worktreeLane.fallbackTitle': 'Running in the shared workspace',
+  'worktreeLane.retainedTitle': 'Worktree lane kept for recovery',
+  'worktreeLane.chipLabel': 'Worktree',
+  'worktreeLane.retainedLanes': 'Retained lanes',
+  'worktreeLane.retry': 'Merge again',
+  'worktreeLane.drop': 'Discard lane',
+  'worktreeLane.dropConfirm': 'Discard lane {branch}? Its commits cannot be recovered.',
+  'worktreeLane.aheadCommits': '{count} commit(s) ahead',
+  'worktreeLane.archived': 'archived (branch only)',
+  'worktreeLane.running': 'running',
 } as const

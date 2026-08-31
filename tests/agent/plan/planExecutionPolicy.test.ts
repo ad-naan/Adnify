@@ -10,7 +10,13 @@ describe('planTaskMayWrite', () => {
     expect(planTaskMayWrite(task({ producesFiles: ['src/a.ts'] }))).toBe(true)
   })
 
-  it('lets an explicit read-heavy classification override role heuristics', () => {
+  it('fails safe toward isolation for unclassified tasks', () => {
+    expect(planTaskMayWrite(task({ role: 'reviewer' }))).toBe(true)
+    expect(planTaskMayWrite(task({ role: 'default', executionClass: 'general' }))).toBe(true)
+    expect(planTaskMayWrite(task({ role: 'approver', executionClass: 'approval-heavy' }))).toBe(true)
+  })
+
+  it('lets an explicit read-heavy classification opt out of isolation', () => {
     expect(planTaskMayWrite(task({ role: 'coder', executionClass: 'analysis-read-heavy' }))).toBe(false)
   })
 })

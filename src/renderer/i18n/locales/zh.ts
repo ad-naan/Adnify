@@ -832,4 +832,16 @@ export const zh = {
   'changelog.fixes': '问题修复',
   'changelog.security': '安全与稳定性',
   'changelog.newVersionNotice': '发现新版本特性！点击查看更新内容',
+
+  // Worktree 执行车道
+  'worktreeLane.fallbackTitle': '本次运行使用共享工作区',
+  'worktreeLane.retainedTitle': '已保留 worktree 车道以便恢复',
+  'worktreeLane.chipLabel': '车道',
+  'worktreeLane.retainedLanes': '保留的车道',
+  'worktreeLane.retry': '重新合并',
+  'worktreeLane.drop': '丢弃车道',
+  'worktreeLane.dropConfirm': '确定丢弃车道 {branch}？其提交将无法恢复。',
+  'worktreeLane.aheadCommits': '领先 {count} 个提交',
+  'worktreeLane.archived': '已归档（仅剩分支）',
+  'worktreeLane.running': '运行中',
 } as const

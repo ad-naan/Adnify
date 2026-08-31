@@ -32,7 +32,15 @@ export interface CheckpointActions {
     messageId: string,
     description: string,
     images?: CheckpointImage[],
-    contextItems?: ContextItem[]
+    contextItems?: ContextItem[],
+    /**
+     * 检查点归属的线程。省略时退回"当前线程"。
+     *
+     * 并行执行时必须显式传：后台执行节点（第二条顶层 Agent 运行、Plan 任务、
+     * 子 agent）创建检查点的那一刻，用户很可能正看着别的线程，落到当前线程上
+     * 会把撤销点挂到一段毫不相关的对话上。
+     */
+    threadId?: string
   ) => Promise<string>
   addSnapshotToCheckpoint: (checkpointId: string, filePath: string, content: string | null) => void
   restoreToCheckpoint: (
@@ -88,6 +96,14 @@ function updateThreadCheckpoints(
 
 function getCurrentThreadId(state: ThreadSlice): string | null {
   return state.currentThreadId
+}
+
+/** 找出持有该检查点的线程（并行执行时不能假定它属于当前线程） */
+function findThreadIdForCheckpoint(state: ThreadSlice, checkpointId: string): string | null {
+  for (const [threadId, thread] of Object.entries(state.threads)) {
+    if (getThreadCheckpoints(thread).some(checkpoint => checkpoint.id === checkpointId)) return threadId
+  }
+  return null
 }
 
 export const createCheckpointSlice: StateCreator<
@@ -199,8 +215,8 @@ export const createCheckpointSlice: StateCreator<
 
   getPendingChanges: () => get().pendingChanges,
 
-  createMessageCheckpoint: async (messageId, description, images, contextItems) => {
-    const threadId = getCurrentThreadId(get())
+  createMessageCheckpoint: async (messageId, description, images, contextItems, targetThreadId) => {
+    const threadId = targetThreadId || getCurrentThreadId(get())
     if (!threadId) return ''
 
     // Only snapshots collected for the current message should belong to this
@@ -255,7 +271,10 @@ export const createCheckpointSlice: StateCreator<
       content?.length ?? 'null'
     )
 
-    const threadId = getCurrentThreadId(get())
+    // 按 checkpointId 找出归属线程，而不是假定它属于当前线程：后台执行节点
+    // （并行的顶层运行、Plan 任务、子 agent）写文件时用户往往看着别的线程，
+    // 落到当前线程只会让快照被丢掉，之后撤销就恢复不出这些文件。
+    const threadId = findThreadIdForCheckpoint(get(), checkpointId) || getCurrentThreadId(get())
     if (!threadId) return
 
     set(state => {

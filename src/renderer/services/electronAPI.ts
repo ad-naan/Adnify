@@ -226,6 +226,7 @@ function createGroupedAPI() {
     // Git
     git: {
       execSecure: (args: string[], cwd: string) => raw.gitExecSecure(args, cwd),
+      worktreeLane: (args: string[], cwd: string) => raw.gitWorktreeLane(args, cwd),
     },
 
     // 安全管理

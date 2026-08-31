@@ -89,8 +89,18 @@ export interface GitWorktreeLaneResult {
     path?: string
     branch?: string
     commit?: string
+    /** commitWorktree 专用：false 表示车道内没有任何改动，HEAD 未前进 */
+    committed?: boolean
     conflicts?: string[]
     error?: string
+}
+
+/** `git worktree list --porcelain` 的一条记录 */
+export interface GitWorktreeEntry {
+    path: string
+    head?: string
+    /** 短名（已去掉 refs/heads/ 前缀）；detached 时为 undefined */
+    branch?: string
 }
 
 class GitService {
@@ -326,6 +336,38 @@ class GitService {
         } catch {
             return null
         }
+    }
+
+    /**
+     * 是否位于 Git 工作树内。
+     *
+     * 不要用 getCurrentBranch 的真假来代替这个判断：detached HEAD 和刚 init 还没有
+     * 提交的仓库都会让 `branch --show-current` 输出空字符串，那是「没有分支」，
+     * 不是「不是仓库」。
+     */
+    async isInsideWorkTree(rootPath?: string): Promise<boolean> {
+        const result = await this.exec(['rev-parse', '--is-inside-work-tree'], rootPath)
+        return result.exitCode === 0 && result.stdout.trim() === 'true'
+    }
+
+    /** HEAD 是否已经指向一个提交（worktree add <path> HEAD 需要它存在） */
+    async hasCommits(rootPath?: string): Promise<boolean> {
+        const result = await this.exec(['rev-parse', '--verify', 'HEAD'], rootPath)
+        return result.exitCode === 0 && result.stdout.trim().length > 0
+    }
+
+    /** 解析引用为完整提交哈希 */
+    async resolveCommit(ref: string, rootPath?: string): Promise<string | null> {
+        const result = await this.exec(['rev-parse', ref], rootPath)
+        return result.exitCode === 0 ? (result.stdout.trim() || null) : null
+    }
+
+    /** `<from>..<to>` 区间的提交数；无法解析时返回 null */
+    async countCommitsBetween(from: string, to: string, rootPath?: string): Promise<number | null> {
+        const result = await this.exec(['rev-list', '--count', `${from}..${to}`], rootPath)
+        if (result.exitCode !== 0) return null
+        const count = Number.parseInt(result.stdout.trim(), 10)
+        return Number.isFinite(count) ? count : null
     }
 
     async isWorkingTreeClean(rootPath?: string): Promise<boolean> {
@@ -948,25 +990,50 @@ class GitService {
         }
     }
 
+    /**
+     * 车道 worktree 操作走专用通道（详见 main/security/worktreeLanePolicy）。
+     *
+     * `worktree` 不在用户可信子命令列表里，走 execSecure 会对每条车道弹审批；
+     * 而车道是后台执行节点创建的，弹框既打断用户又给不出可判断的信息。
+     */
+    private async execLane(args: string[], rootPath?: string): Promise<GitExecResult> {
+        const targetPath = rootPath || this.primaryWorkspacePath
+        if (!targetPath) return { stdout: '', stderr: 'No workspace', exitCode: 1 }
+
+        try {
+            const result = await api.git.worktreeLane(args, normalizePath(targetPath))
+            const exitCode = result.success === false ? (result.exitCode ?? 1) : (result.exitCode || 0)
+            return { stdout: result.stdout || '', stderr: result.stderr || result.error || '', exitCode }
+        } catch (err) {
+            return { stdout: '', stderr: handleGitError(err), exitCode: 1 }
+        }
+    }
+
     async createWorktree(path: string, branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
-        const result = await this.exec(['worktree', 'add', '-b', branch, path, 'HEAD'], rootPath)
+        const result = await this.execLane(['worktree', 'add', '-b', branch, path, 'HEAD'], rootPath)
         return result.exitCode === 0
             ? { success: true, path, branch }
             : { success: false, error: (result.stderr || result.stdout || 'Unable to create worktree').trim() }
     }
 
+    /**
+     * 提交车道内的全部改动。
+     *
+     * `.adnify` 已经由车道服务写进 `.git/info/exclude`，所以 `add -A` 不会把
+     * 机器本地状态（plan 文档、agent-temp、索引缓存）带进合并提交。
+     */
     async commitWorktree(message: string, rootPath: string): Promise<GitWorktreeLaneResult> {
         const add = await this.exec(['add', '-A'], rootPath)
         if (add.exitCode !== 0) return { success: false, error: add.stderr.trim() || 'Unable to stage worktree changes' }
         const diff = await this.exec(['diff', '--cached', '--quiet'], rootPath)
         if (diff.exitCode === 0) {
             const head = await this.exec(['rev-parse', 'HEAD'], rootPath)
-            return { success: true, commit: head.stdout.trim() }
+            return { success: true, commit: head.stdout.trim(), committed: false }
         }
         const commit = await this.exec(['commit', '-m', message], rootPath)
         if (commit.exitCode !== 0) return { success: false, error: (commit.stderr || commit.stdout || 'Unable to commit worktree changes').trim() }
         const head = await this.exec(['rev-parse', 'HEAD'], rootPath)
-        return { success: true, commit: head.stdout.trim() }
+        return { success: true, commit: head.stdout.trim(), committed: true }
     }
 
     async mergeWorktreeBranch(branch: string, rootPath?: string): Promise<GitWorktreeLaneResult> {
@@ -980,9 +1047,58 @@ class GitService {
         return { success: false, branch, conflicts, error: (result.stderr || result.stdout || 'Worktree merge failed').trim() }
     }
 
-    async removeWorktree(path: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
-        const result = await this.exec(['worktree', 'remove', path], rootPath)
+    async removeWorktree(path: string, rootPath?: string, force = false): Promise<{ success: boolean; error?: string }> {
+        const args = force ? ['worktree', 'remove', '--force', path] : ['worktree', 'remove', path]
+        const result = await this.execLane(args, rootPath)
         return { success: result.exitCode === 0, error: result.exitCode === 0 ? undefined : (result.stderr || result.stdout).trim() }
+    }
+
+    /**
+     * 清掉 `.git/worktrees` 里已经没有对应目录的登记信息。
+     *
+     * 目录被手工删掉、或 remove 失败后目录被外部清理，都会留下这种孤立元数据，
+     * 之后同名车道会以 "already registered" 失败。
+     */
+    async pruneWorktrees(rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        const result = await this.execLane(['worktree', 'prune'], rootPath)
+        return { success: result.exitCode === 0, error: result.exitCode === 0 ? undefined : (result.stderr || result.stdout).trim() }
+    }
+
+    /** 列出全部 worktree（含主工作树），用于车道回收与归档展示 */
+    async listWorktrees(rootPath?: string): Promise<GitWorktreeEntry[]> {
+        const result = await this.execLane(['worktree', 'list', '--porcelain'], rootPath)
+        if (result.exitCode !== 0) return []
+
+        const entries: GitWorktreeEntry[] = []
+        let current: Partial<GitWorktreeEntry> = {}
+        const flush = () => {
+            if (current.path) entries.push({ path: current.path, head: current.head, branch: current.branch })
+            current = {}
+        }
+        for (const rawLine of result.stdout.split('\n')) {
+            const line = rawLine.trim()
+            if (!line) {
+                flush()
+                continue
+            }
+            if (line.startsWith('worktree ')) {
+                flush()
+                current.path = normalizePath(line.slice('worktree '.length).trim())
+            } else if (line.startsWith('HEAD ')) {
+                current.head = line.slice('HEAD '.length).trim()
+            } else if (line.startsWith('branch ')) {
+                current.branch = line.slice('branch '.length).trim().replace(/^refs\/heads\//, '')
+            }
+        }
+        flush()
+        return entries
+    }
+
+    /** 按前缀列出本地分支（用于找出已归档但尚未合并的车道分支） */
+    async listBranchesWithPrefix(prefix: string, rootPath?: string): Promise<string[]> {
+        const result = await this.exec(['branch', '--list', `${prefix}*`, '--format=%(refname:short)'], rootPath)
+        if (result.exitCode !== 0) return []
+        return result.stdout.split('\n').map(line => line.trim()).filter(Boolean)
     }
 
     /**

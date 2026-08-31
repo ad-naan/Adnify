@@ -32,6 +32,19 @@ export const WINDOW_DEFAULTS = {
 } as const
 
 // ==========================================
+// 执行车道常量（Git worktree 隔离）
+// ==========================================
+
+/** 项目内机器本地状态目录（相对工作区根） */
+export const ADNIFY_INTERNAL_DIR = '.adnify'
+
+/** 并行写执行车道的 worktree 根目录（相对工作区根） */
+export const WORKTREE_LANE_DIR = `${ADNIFY_INTERNAL_DIR}/worktrees`
+
+/** 车道分支前缀。只有匹配该前缀的分支才允许走车道专用 Git 通道。 */
+export const WORKTREE_LANE_BRANCH_PREFIX = 'adnify/lane-'
+
+// ==========================================
 // 安全相关常量（不可配置）
 // ==========================================
 

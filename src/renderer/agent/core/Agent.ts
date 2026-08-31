@@ -159,8 +159,14 @@ export class AgentClass {
       laneAssignment = await ExecutionLaneCoordinator.acquire({
         kind: 'agent-session', workspacePath, label: preparedThread?.title || `agent-${threadId.slice(0, 8)}`,
         mayWrite: isTopLevelAgent, concurrent: isTopLevelAgent && this.runningTasks.size > 1,
+        // 用户连发两条消息不等于申明了并行写任务：拿不到隔离就退回共享工作区并提示，
+        // 而不是把一次正常对话变成报错。
+        allowSharedFallback: true,
       })
       executionWorkspacePath = laneAssignment.workspacePath
+      if (laneAssignment.fallbackReason) {
+        this.showLaneNotice('warning', translateAgentText('worktreeLane.fallbackTitle'), laneAssignment.fallbackReason, assistantId, threadId)
+      }
 
       // 【核心优化】立即让出主线程，确保用户消息和助手气泡瞬间在 UI 渲染
       await new Promise(resolve => setTimeout(resolve, 0))
@@ -197,7 +203,7 @@ export class AgentClass {
       const messageText = typeof userMessage === 'string' ? userMessage.slice(0, 50) : 'User message'
       const userMessageId = useAgentStore.getState().threads[threadId]?.messages.filter(m => m.role === 'user').at(-1)?.id
       const checkpointId = userMessageId
-        ? await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems)
+        ? await store.createMessageCheckpoint(userMessageId, messageText, checkpointImages, contextItems, threadId)
         : undefined
 
       // 6. 使用 AgentExecutor 准备执行
@@ -241,19 +247,43 @@ export class AgentClass {
       await runLoop(config, preparation.messages, executionContext, assistantId, preparation.budgetController)
 
       if (laneAssignment.isolated) {
+        // 被中止的运行不该自动合并：用户按下停止时车道里往往是半完成的编辑。
+        // 归还车道会把已有改动提交到车道分支上再归档，之后仍然可以手工合并。
+        if (abortController.signal.aborted) {
+          const released = await ExecutionLaneCoordinator.release(laneAssignment, 'aborted by user')
+          if (released?.outcome === 'retained') {
+            this.showLaneNotice('info', translateAgentText('worktreeLane.retainedTitle'), released.error || `Lane ${released.branch} kept for recovery.`, assistantId, threadId)
+          }
+          return { threadId, assistantId, requestId }
+        }
+
         const laneResult = await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify agent task: ${preparedThread?.title || threadId}`)
-        if (!laneResult) throw new Error('Isolated Agent execution lost its worktree lane')
-        if (!laneResult.success) {
-          throw new Error(`${laneResult.error || 'Unable to merge Agent worktree lane'}${laneResult.conflicts?.length ? ` Conflicts: ${laneResult.conflicts.join(', ')}` : ''}`)
+        // 车道没能合并不代表这次运行失败了：工作已经安全地留在车道分支上。抛错会把
+        // 整条助手消息标成错误、还会触发上层重试，所以这里降级成一条可见的提示。
+        if (laneResult && !laneResult.success) {
+          const conflicts = laneResult.conflicts?.length ? ` Conflicts: ${laneResult.conflicts.join(', ')}` : ''
+          this.showLaneNotice(
+            laneResult.outcome === 'retained' ? 'warning' : 'error',
+            translateAgentText('worktreeLane.retainedTitle'),
+            `${laneResult.error || 'Unable to merge the Agent worktree lane.'}${conflicts}`,
+            assistantId,
+            threadId,
+          )
         }
       }
 
       return { threadId, assistantId, requestId }
     } catch (error) {
-      // 统一错误处理
-      const laneNote = laneAssignment?.lane
-        ? ` Worktree lane retained at ${laneAssignment.lane.path} (${laneAssignment.lane.branch}).`
-        : ''
+      // 统一错误处理。失败路径必须归还车道，否则 worktree 目录和分支会永久残留，
+      // 而且残留会弄脏基准工作区，让后续所有并行执行都建不出车道。
+      const released = laneAssignment?.lane
+        ? await ExecutionLaneCoordinator.release(laneAssignment, error instanceof Error ? error.message : 'execution failed')
+        : null
+      const laneNote = released?.outcome === 'retained'
+        ? ` Worktree lane kept for recovery on branch ${released.branch}.`
+        : released?.outcome === 'discarded'
+          ? ` Worktree lane ${released.branch} had no commits and was removed.`
+          : ''
       const effectiveError = laneNote
         ? new Error(`${error instanceof Error ? error.message : String(error)}${laneNote}`)
         : error
@@ -524,6 +554,24 @@ export class AgentClass {
       message,
     }, threadId)
     store.finalizeAssistant(id, threadId)
+  }
+
+  /**
+   * 车道相关的提示。
+   *
+   * 和 showError 的区别：不 finalize 助手消息 —— 车道提示可能在运行开始时就发出
+   * （退回共享工作区），此时这条消息还要继续流式输出。
+   */
+  private showLaneNotice(
+    alertType: 'warning' | 'error' | 'info',
+    title: string,
+    message: string,
+    assistantId?: string,
+    threadId?: string,
+  ): void {
+    const store = useAgentStore.getState()
+    const id = assistantId || store.addAssistantMessage('', threadId)
+    store.addSystemAlertPart(id, { alertType, title, message }, threadId)
   }
 
   /**

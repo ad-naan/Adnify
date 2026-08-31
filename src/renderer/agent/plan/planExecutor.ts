@@ -34,9 +34,37 @@ import {
 } from './types'
 import { buildReviewProof, parseProofGraph, stripProofGraph } from './proofGraph'
 import { ExecutionLaneCoordinator } from '../orchestration/ExecutionLaneCoordinator'
+import type { WorktreeLaneCompletion, WorktreeLaneHandle } from '../orchestration/WorktreeLaneService'
+import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 import { recommendModelForTask } from './modelOutcomeLedger'
 import { getConfiguredPlanProviders } from './planProviderCatalog'
 import { planTaskMayWrite } from './planExecutionPolicy'
+
+/**
+ * 把车道终态投影到任务卡片上。
+ *
+ * `ready` 表示"已归档、等人工处理"：目录被回收了，但提交还在车道分支上，
+ * 任务面板可以据此给出重新合并 / 丢弃的入口。
+ */
+function projectLane(lane: WorktreeLaneHandle, completion: WorktreeLaneCompletion): ExecutionLaneProjection {
+    const status: ExecutionLaneProjection['status'] = completion.outcome === 'merged'
+        ? 'merged'
+        : completion.outcome === 'discarded'
+            ? 'discarded'
+            : completion.outcome === 'retained'
+                ? (completion.conflicts?.length ? 'conflict' : 'ready')
+                : 'failed'
+    return {
+        status,
+        path: lane.path,
+        branch: lane.branch,
+        baseBranch: lane.baseBranch,
+        commit: completion.commit,
+        conflicts: completion.conflicts,
+        error: status === 'merged' || status === 'discarded' ? undefined : completion.error,
+        archived: completion.archived,
+    }
+}
 
 const sessions = new Map<string, ExecutionSession>()
 const planToSessionId = new Map<string, string>()
@@ -497,24 +525,17 @@ async function executeTask(
         }
 
         let result = await runTaskWithAgent(session, existingTask, store.getPlan(plan.id) || plan, threadId, requestId, laneAssignment.workspacePath || undefined)
-        if (result.success && laneAssignment.lane) {
-            const lane = laneAssignment.lane
-            const laneResult = await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify plan: ${existingTask.title}`)
-            if (!laneResult) throw new Error('Isolated Plan task lost its worktree lane')
-            store.updateTask(plan.id, existingTask.id, {
-                worktreeLane: laneResult.success
-                    ? { status: 'merged', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch, commit: laneResult.commit }
-                    : { status: laneResult.conflicts?.length ? 'conflict' : 'failed', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch, commit: laneResult.commit, conflicts: laneResult.conflicts, error: laneResult.error },
-            })
-            if (!laneResult.success) result = { ...result, success: false, error: laneResult.error || 'Worktree lane merge failed' }
-        }
-        if (!result.success && laneAssignment.lane) {
-            const lane = laneAssignment.lane
-            const latestLane = store.getPlan(plan.id)?.tasks.find(item => item.id === existingTask.id)?.worktreeLane
-            if (!latestLane || latestLane.status === 'active') {
-                store.updateTask(plan.id, existingTask.id, {
-                    worktreeLane: { status: 'failed', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch, error: result.error || 'Task failed; lane retained for recovery' },
-                })
+        if (laneAssignment.lane) {
+            // 车道必须在这里收尾（合并或归还）：漏掉任何一条路径都会留下 worktree
+            // 目录和分支，而残留会让基准工作区变脏，后续并行任务全都拿不到车道。
+            const completion = result.success
+                ? await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify plan: ${existingTask.title}`)
+                : await ExecutionLaneCoordinator.release(laneAssignment, result.error || 'task failed')
+            if (completion) {
+                store.updateTask(plan.id, existingTask.id, { worktreeLane: projectLane(laneAssignment.lane, completion) })
+                if (result.success && !completion.success) {
+                    result = { ...result, success: false, error: completion.error || 'Worktree lane merge failed' }
+                }
             }
         }
 
