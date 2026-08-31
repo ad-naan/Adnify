@@ -14,7 +14,6 @@ import {
   Maximize2,
   MessageSquare,
   Bug,
-  ListTodo,
   Bell,
   Volume2,
   Search,
@@ -29,7 +28,6 @@ import { indexWorkerService, type IndexProgress } from '@services/indexWorkerSer
 import BottomBarPopover from '../ui/BottomBarPopover'
 import ToolCallLogContent from '../panels/ToolCallLogContent'
 import ContextStatsContent from '../panels/ContextStatsContent'
-import PlanListContent from '../panels/PlanListContent'
 import NotificationCenterContent from '../panels/NotificationCenterContent'
 import { useInlineToast } from '../common/InlineToast'
 import { useHasElevatedToastLayer } from '../common/toastLayerStore'
@@ -262,7 +260,6 @@ export default function StatusBar() {
     () => currentThreadId ? toolCallLogs.filter(log => log.threadId === currentThreadId).length : 0,
     [currentThreadId, toolCallLogs]
   )
-  const plans = useAgentStore(state => state.plans)
   const loadPlansFromStorage = useAgentStore(state => state.loadPlansFromStorage)
 
   useEffect(() => {
@@ -270,10 +267,6 @@ export default function StatusBar() {
       loadPlansFromStorage()
     }
   }, [workspacePath, loadPlansFromStorage])
-
-  const executingPlansCount = plans.filter(plan =>
-    plan.status === 'executing' || plan.status === 'pausing' || plan.status === 'stopping'
-  ).length
 
   const layerColorClass =
     compressionStats?.memoryHealth?.risk === 'high' ? 'text-red-400 drop-shadow-[0_0_6px_rgba(248,113,113,0.4)]' :
@@ -558,28 +551,6 @@ export default function StatusBar() {
                 <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-blue-400 shadow-[0_0_6px_currentColor] rounded-full" />
               </div>
             </div>
-          )}
-
-          {plans.length > 0 && (
-            <BottomBarPopover
-              icon={
-                <div className="group flex items-center justify-center w-6 h-6 rounded-md hover:bg-white/5 transition-colors">
-                  <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
-                    <ListTodo className={`w-3 h-3 transition-colors ${executingPlansCount > 0 ? 'text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]' : 'text-text-muted group-hover:text-text-primary'}`} />
-                    {executingPlansCount > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse shadow-[0_0_4px_rgba(251,191,36,0.5)] border border-background-secondary" />
-                    )}
-                  </div>
-                </div>
-              }
-              tooltip={language === 'zh' ? '任务计划' : 'Task Plans'}
-              title={language === 'zh' ? '任务计划' : 'Task Plans'}
-              width={340}
-              height={360}
-              language={language as 'en' | 'zh'}
-            >
-              <PlanListContent language={language as 'en' | 'zh'} />
-            </BottomBarPopover>
           )}
 
           <BottomBarPopover
