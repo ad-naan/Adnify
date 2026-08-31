@@ -75,6 +75,7 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       try {
         const status = await api.index.status(workspacePath)
         setIndexStatus(status)
+        setIsIndexing(status.isIndexing)
         if (status.mode) setIndexMode(status.mode)
       } catch (e) {
         logger.ui.warn('[IndexSettings] Failed to load index status:', e)
@@ -146,11 +147,12 @@ export function IndexSettings({ language }: IndexSettingsProps) {
       if (indexMode === 'semantic') {
         await handleSaveEmbeddingConfig()
       }
-      await api.index.start(workspacePath)
-      toast.success(language === 'zh' ? '索引已开始' : 'Indexing started')
+      const result = await api.index.start(workspacePath)
+      if (!result.success) throw new Error(result.error)
+      toast.success(language === 'zh' ? '索引已完成' : 'Indexing completed')
     } catch (error) {
       logger.settings.error('[IndexSettings] Start indexing failed:', error)
-      toast.error(language === 'zh' ? '启动索引失败' : 'Failed to start indexing')
+      toast.error(language === 'zh' ? '索引失败' : 'Indexing failed')
       setIsIndexing(false)
     }
   }
@@ -335,8 +337,8 @@ export function IndexSettings({ language }: IndexSettingsProps) {
         {indexStatus && (
           <div className="p-4 bg-surface/30 rounded-xl border border-border-subtle mb-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-text-primary">
-                {indexStatus.message || (indexStatus.isIndexing
+              <span className={`text-sm ${indexStatus.error ? 'text-error' : 'text-text-primary'}`}>
+                {indexStatus.error || indexStatus.message || (indexStatus.isIndexing
                   ? (language === 'zh' ? '索引中...' : 'Indexing...')
                   : (language === 'zh' ? '就绪' : 'Ready'))}
               </span>

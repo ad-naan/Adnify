@@ -126,6 +126,16 @@ export class CodebaseIndexService {
     return path.join(this.workspaceCachePath, 'structural-index.json')
   }
 
+  private get legacyWorkspaceIndexPaths(): string[] {
+    const legacyRoot = path.join(this.workspacePath, '.adnify')
+    return [
+      path.join(legacyRoot, 'structural-index.json'),
+      path.join(legacyRoot, 'project-summary.json'),
+      path.join(legacyRoot, 'index'),
+      this.legacyStructuralIndexPath,
+    ]
+  }
+
   private get indexStatusPath(): string {
     return path.join(this.workspaceCachePath, 'index-status.json')
   }
@@ -159,6 +169,8 @@ export class CodebaseIndexService {
   }
 
   private async performInitialize(): Promise<void> {
+    await this.clearLegacyWorkspaceIndexCaches()
+
     // 加载缓存的项目摘要
     this.projectSummary = await this.summaryGenerator.loadCache()
 
@@ -179,10 +191,6 @@ export class CodebaseIndexService {
   /** 加载结构化索引缓存 */
   private async loadStructuralIndex(): Promise<void> {
     try {
-      const discardedLegacyCache = fs.existsSync(this.legacyStructuralIndexPath)
-      if (discardedLegacyCache) {
-        await fs.promises.rm(this.legacyStructuralIndexPath, { force: true })
-      }
       this.bm25Index.clear()
       this.symbolIndex.clear()
       this.structuralBuildLanguages = {}
@@ -195,10 +203,6 @@ export class CodebaseIndexService {
         this.status.totalChunks = 0
         this.status.indexedFiles = 0
         this.status.totalFiles = 0
-        if (discardedLegacyCache) {
-          this.projectSummary = null
-          await this.summaryGenerator.clearCache()
-        }
         return
       }
 
@@ -206,6 +210,7 @@ export class CodebaseIndexService {
       this.status.indexedFiles = this.bm25Index.fileCount
       this.status.totalFiles = metadata.totalFiles
       this.status.lastIndexedAt = metadata.savedAt
+      this.status.error = undefined
       logger.index.info(`[IndexService] Loaded structural index: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
     } catch (e) {
       this.bm25Index.clear()
@@ -213,10 +218,26 @@ export class CodebaseIndexService {
       this.status.totalChunks = 0
       this.status.indexedFiles = 0
       this.status.totalFiles = 0
+      this.status.error = e instanceof Error ? e.message : String(e)
       logger.index.warn('[IndexService] Failed to load structural index:', e)
     } finally {
       this.structuralBuildLanguages = null
       this.structuralBuildFileSymbols = null
+    }
+  }
+
+  /** 删除旧版本写进项目 `.adnify` 或旧缓存格式的可重建索引。 */
+  private async clearLegacyWorkspaceIndexCaches(): Promise<void> {
+    const existing = this.legacyWorkspaceIndexPaths.filter(target => fs.existsSync(target))
+    if (existing.length === 0) return
+    const discardedStructuralIndex = existing.some(target => path.basename(target) === 'structural-index.json')
+
+    try {
+      await Promise.all(existing.map(target => fs.promises.rm(target, { recursive: true, force: true })))
+      if (discardedStructuralIndex) await this.summaryGenerator.clearCache()
+      logger.index.info(`[IndexService] Removed ${existing.length} legacy workspace index cache(s)`)
+    } catch (error) {
+      logger.index.warn('[IndexService] Failed to remove legacy workspace index caches:', error)
     }
   }
 
@@ -239,7 +260,7 @@ export class CodebaseIndexService {
         const content = await fs.promises.readFile(this.indexStatusPath, 'utf-8')
         const status = JSON.parse(content)
         // 恢复状态，除了 isIndexing
-        this.status = { ...this.status, ...status, isIndexing: false, error: undefined, message: undefined }
+        this.status = { ...this.status, ...status, isIndexing: false, message: undefined }
         logger.index.info('[IndexService] Loaded index status')
       }
 
@@ -254,6 +275,7 @@ export class CodebaseIndexService {
         // }
       }
     } catch (e) {
+      this.status.error = e instanceof Error ? e.message : String(e)
       logger.index.warn('[IndexService] Failed to load index status:', e)
     }
   }
@@ -262,7 +284,6 @@ export class CodebaseIndexService {
   private async clearStructuralIndexCache(): Promise<void> {
     try {
       await this.structuralStore.request({ type: 'clear', databasePath: this.structuralIndexPath })
-      await fs.promises.rm(this.legacyStructuralIndexPath, { force: true })
     } catch (e) {
       logger.index.warn('[IndexService] Failed to clear structural index cache:', e)
     }
@@ -330,7 +351,15 @@ export class CodebaseIndexService {
   }
 
   private async performWorkspaceIndex(): Promise<void> {
-    this.status = { ...this.status, isIndexing: true, totalFiles: 0, indexedFiles: 0, totalChunks: 0 }
+    this.status = {
+      ...this.status,
+      isIndexing: true,
+      totalFiles: 0,
+      indexedFiles: 0,
+      totalChunks: 0,
+      error: undefined,
+      message: undefined,
+    }
     this.emitProgress()
 
     try {
@@ -343,15 +372,20 @@ export class CodebaseIndexService {
 
       this.status.isIndexing = false
       this.status.lastIndexedAt = Date.now()
+      this.status.error = undefined
       this.status.message = undefined
       await this.saveIndex()
       this.emitProgress(true)
     } catch (e) {
       if (this.destroyed) return
-      logger.index.error('[IndexService] Indexing failed:', e)
-      this.status.error = e instanceof Error ? e.message : String(e)
+      const error = e instanceof Error ? e : new Error(String(e))
+      logger.index.error('[IndexService] Indexing failed:', error)
+      this.status.error = error.message
       this.status.isIndexing = false
+      this.status.message = undefined
+      await this.saveIndex()
       this.emitProgress(true)
+      throw error
     }
   }
 

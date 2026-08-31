@@ -90,9 +90,9 @@ describe('plan workbench components', () => {
     expect(problems).toEqual([])
   })
 
-  it('PlanHistoryDrawer imports the History icon it renders in its empty state', () => {
+  it('PlanHistoryDrawer renders the branded empty state asset', () => {
     const text = readFileSync(join(WORKBENCH_DIR, 'PlanHistoryDrawer.tsx'), 'utf8')
-    expect(text).toMatch(/<History\b/)
-    expect(importedNames(text).has('History')).toBe(true)
+    expect(text).toMatch(/<OtterAsset\b[^>]*\basset="sleepyFace"/)
+    expect(importedNames(text).has('OtterAsset')).toBe(true)
   })
 })

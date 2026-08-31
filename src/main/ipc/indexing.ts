@@ -53,7 +53,7 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
       const mainWindow = getMainWindow()
       if (mainWindow) indexService.setMainWindow(mainWindow)
       await indexService.initialize()
-      indexService.indexWorkspace().catch(e => logger.ipc.error('[Index] Indexing failed:', e))
+      await indexService.indexWorkspace()
       return ok(undefined)
     } catch (e) {
       logger.ipc.error('[Index] Start failed:', e)

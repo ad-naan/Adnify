@@ -277,7 +277,8 @@ describe('CodebaseIndexService scheduling', () => {
     await vi.waitFor(() => expect(workerState.instances).toHaveLength(1))
     workerState.instances[0].emit('exit', 1)
 
-    await indexing
+    await expect(indexing).rejects.toThrow('Index worker exited unexpectedly with code 1')
+    expect(internals.saveIndex).toHaveBeenCalled()
     expect(service.getStatus()).toMatchObject({
       isIndexing: false,
       error: 'Index worker exited unexpectedly with code 1',
