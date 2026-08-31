@@ -45,14 +45,63 @@ export const CHANGELOG_DATA: ReleaseNote[] = [
   {
     "version": "1.7.64",
     "rawVersion": "1.7.64",
-    "date": "2026-08-29",
-    "title": "文件保存防截断、聊天记录一致性、代码索引可靠性与凭据存储加固",
-    "titleEn": "Save-Path Truncation Guards, Chat History Consistency, Codebase Index Reliability & Credential Hardening",
-    "highlight": "修复大文件只读预览误入保存流程导致文件被截断的问题；修正聊天界面、本地数据库与模型上下文三者不一致（隐藏内容被存档、工具结果丢失、回滚后卡在“正在生成”）；修复结构化索引因重复符号在构建首批即整体失败，以及清空索引后残留标记长出“假完整”索引的问题；收紧凭据文件权限并移除渲染进程可触达的凭据通道；恢复长上下文的提示缓存命中与主进程内存预警。",
-    "highlightEn": "Fixed large-file read-only previews entering the save path and truncating files on disk; resolved divergence between the visible transcript, the local database, and the model context (hidden content persisted, tool results lost, threads stuck in a streaming state after rollback); fixed structural indexing aborting on duplicate symbols and stale markers producing a falsely complete index after a reset; tightened credential file permissions and removed credential surfaces reachable from the renderer; restored prompt-cache hits for long contexts and out-of-memory warnings in the main process.",
+    "date": "2026-08-31",
+    "title": "多任务会话中心、文件保存防截断、聊天一致性、代码索引与凭据安全",
+    "titleEn": "Multi-Task Session Center, Save-Path Truncation Guards, Chat Consistency, Codebase Indexing & Credential Security",
+    "highlight": "新增面向多 Agent 并行执行的任务中心，将交接续跑、子 Agent 与会话分支归入清晰的任务层级，并提供运行任务快捷切换和可带入新对话的压缩会话引用；修复大文件只读预览误入保存流程导致文件被截断，以及聊天界面、本地数据库与模型上下文不一致的问题；提升结构化索引可靠性，收紧凭据存储权限，并恢复长上下文提示缓存与主进程内存预警。",
+    "highlightEn": "Added a task center for parallel multi-agent work, organizing handoff continuations, sub-agents, and conversation branches into clear task lineages, with quick switching for active work and compressed thread references that can be carried into a new chat; fixed large-file read-only previews entering the save path and truncating files, plus divergence between the visible transcript, local database, and model context; improved structural index reliability, tightened credential storage, and restored prompt caching and main-process memory warnings.",
     "tag": "latest",
     "isLatest": true,
     "categories": [
+      {
+        "type": "feature",
+        "label": "多任务与会话工作流 / Multi-Task & Session Workflow",
+        "labelEn": "Multi-Task & Session Workflow",
+        "items": [
+          {
+            "title": "Agent 任务中心与执行关系归类",
+            "titleEn": "Agent Task Center and Execution Lineage",
+            "details": [
+              "将原有平铺会话记录升级为按用户目标归类的任务中心，集中展示需要处理、执行中、交接中、失败与最近任务",
+              "交接后的续跑会话与子 Agent 会话会归入原任务，并通过执行节点层级展示，不再散落成无法辨认的独立记录",
+              "任务分支与单个会话内部的对话分支分开展示；Agent 任务中心与 Plan 工作台保持模式隔离，互不混入内部执行线程"
+            ],
+            "detailsEn": [
+              "Replaced the flat conversation history with a task center grouped by user objective, surfacing work that needs attention, is running, is handing off, has failed, or was recently active",
+              "Handoff continuations and sub-agent threads now stay under their originating task as execution nodes instead of appearing as unrelated records",
+              "Task lineage is separated from message-level conversation branches, while the Agent task center and Plan workbench remain isolated from each other's internal worker threads"
+            ]
+          },
+          {
+            "title": "运行任务快捷切换与聚合状态",
+            "titleEn": "Active Task Quick Switcher and Aggregated Status",
+            "details": [
+              "聊天顶部最多展示三个正在执行、交接中或等待处理的任务，可一键切换；更多任务可直接进入任务中心查看",
+              "任务组会聚合所有子会话状态，任一子任务等待批准或执行失败时，顶层任务会立即进入对应的关注状态",
+              "任务中心沿用无边框界面语言，通过背景层级、留白、缩进与状态图标表达选中状态和父子关系"
+            ],
+            "detailsEn": [
+              "The chat header now shows up to three running, handing-off, or input-blocked tasks for one-click switching, with additional work available from the task center",
+              "Each task group aggregates the state of its child threads, so an approval request or failure in a sub-task immediately raises the parent task into the matching attention state",
+              "The task center follows the app's borderless visual language, using surface tone, spacing, indentation, and status icons for selection and hierarchy"
+            ]
+          },
+          {
+            "title": "可复用的会话引用与子会话管理",
+            "titleEn": "Reusable Thread References and Sub-Thread Management",
+            "details": [
+              "“复制会话引用”会同时生成可回溯的应用内链接和模型可读取的压缩上下文摘要，粘贴到其他对话后既能继续工作也能返回来源",
+              "“新对话引用”可直接创建顶层 Agent 任务并预填来源摘要，内容由用户确认后再发送，不会因误触自动调用模型",
+              "父任务与每个子会话都提供紧凑操作入口；删除子会话时会同步清理其下属续跑和交接节点，避免留下孤立记录"
+            ],
+            "detailsEn": [
+              "Copy Thread Reference now combines an in-app backlink with a model-readable compressed context summary, so pasted references can both continue the work and return to the source",
+              "Reference in New Chat creates a top-level Agent task and pre-fills the source summary for review instead of sending it automatically",
+              "Both parent tasks and individual sub-threads expose compact actions, and deleting a sub-thread also removes its descendant continuation and handoff nodes to prevent orphaned records"
+            ]
+          }
+        ]
+      },
       {
         "type": "fix",
         "label": "核心修复 / Bug Fixes",
