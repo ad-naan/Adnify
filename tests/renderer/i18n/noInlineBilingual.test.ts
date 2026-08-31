@@ -32,8 +32,6 @@ const BUDGET: Record<string, number> = {
   'components/mascot/MascotIP.tsx': 1,
   'components/panels/ContextStatsContent.tsx': 1,
   'components/panels/ToolCallLogContent.tsx': 1,
-  'components/plan/PlanWorkspace.tsx': 1,
-  'components/plan/TaskBoard.tsx': 1,
   'components/plan/workbench/PlanHistoryDrawer.tsx': 1,
   'components/plan/workbench/PlanWorkbench.tsx': 2,
   'components/plan/workbench/PlanWorkbenchActivity.tsx': 1,

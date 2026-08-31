@@ -1693,6 +1693,12 @@ export const zh = {
 
   // planWorkspace
   'planWorkspace.describeTheRequestOn': '请在右侧描述需求。完成必要的澄清后，计划会自动创建并显示在这里。',
+  'planWorkspace.statusDraft': '待审核',
+  'planWorkspace.statusPaused': '已暂停',
+  'planWorkspace.statusPausing': '暂停中',
+  'planWorkspace.statusReady': '待执行',
+  'planWorkspace.statusStopped': '已停止',
+  'planWorkspace.statusStopping': '停止中',
   'planWorkspace.waitingForAPlan': '正在等待计划',
 
   // problemsView
@@ -2318,6 +2324,7 @@ export const zh = {
   'taskBoard.historyPick': '历史推荐',
   'taskBoard.invoked': '已调用',
   'taskBoard.liveActionsAppearWhen': '任务开始后将在这里显示实时动作',
+  'taskBoard.liveActivity': '实时动作',
   'taskBoard.lockedWhileRunning': '执行期间不可修改',
   'taskBoard.modelConfigurations': '个模型配置',
   'taskBoard.needsApproval': '等待批准',
@@ -2350,6 +2357,7 @@ export const zh = {
   'taskBoard.sequentialScheduling': '顺序调度',
   'taskBoard.serial': '顺序',
   'taskBoard.taskDependencyGraph': '任务依赖图',
+  'taskBoard.taskResult': '任务结果',
   'taskBoard.theBriefIsBeing': '需求文档正在整理',
   'taskBoard.thisReviewIsGenerated': '以下信息来自已确认的真实需求文档，可随时返回审阅；调整会产生新的计划修订。',
   'taskBoard.thisTaskIsPaused': '当前任务暂停等待，其他无依赖任务仍可继续调度。',

@@ -30,6 +30,7 @@ export function useChatScrollController({
   const pendingBottomSnapRef = useRef(true)
   const lastScrollTopRef = useRef(0)
   const stickyFrameRef = useRef<number | null>(null)
+  const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
   const getBottomMetrics = useCallback(() => {
@@ -127,7 +128,13 @@ export function useChatScrollController({
   }, [])
 
   const attachScrollerNode = useCallback((node: HTMLDivElement | null) => {
+    if (scrollerRef.current === node) return
     scrollerRef.current = node
+    // The listener effect below has to follow the real DOM node, not just the
+    // ref. Switching threads remounts Virtuoso and replaces the scroller, so a
+    // ref-only update would leave the scroll listener and ResizeObserver bound
+    // to the detached node and the new list would never hear about scrolling.
+    setScrollerElement(node)
     if (!node) return
 
     requestAnimationFrame(() => {
@@ -137,6 +144,13 @@ export function useChatScrollController({
 
   useEffect(() => {
     pendingBottomSnapRef.current = true
+    // A new thread's list mounts pinned to its last row, so bottom is the
+    // correct starting assumption. Carrying the previous thread's scrolled-up
+    // state over would flash the jump-to-bottom button and make followOutput
+    // refuse to follow until Virtuoso republishes its own bottom state.
+    atBottomRef.current = true
+    lastScrollTopRef.current = 0
+    setShowScrollButton(false)
   }, [threadId])
 
   useEffect(() => {
@@ -146,17 +160,26 @@ export function useChatScrollController({
     pendingBottomSnapRef.current = false
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        // The list now mounts with initialTopMostItemIndex pinned to the last
+        // row, so the common case is already at the bottom. Re-running
+        // scrollToIndex there would only buy another measurement pass over the
+        // variable-height rows, so it stays a fallback for the cases where the
+        // first frame did not land at the bottom.
+        if (getBottomMetrics().bottom) {
+          syncBottomStateFromScroller()
+          return
+        }
         scrollToBottom('auto')
       })
     })
-  }, [isSwitchingThread, isHydratingActiveThread, messageCount, scrollToBottom])
+  }, [getBottomMetrics, isSwitchingThread, isHydratingActiveThread, messageCount, scrollToBottom, syncBottomStateFromScroller])
 
   useEffect(() => {
     syncBottomStateFromScroller()
   }, [messageCount, syncBottomStateFromScroller])
 
   useEffect(() => {
-    const scroller = scrollerRef.current
+    const scroller = scrollerElement
     if (!scroller) return
 
     const handleScroll = () => {
@@ -201,7 +224,7 @@ export function useChatScrollController({
       scroller.removeEventListener('scroll', handleScroll)
       resizeObserver.disconnect()
     }
-  }, [getBottomMetrics, isStreaming, scheduleStickToBottom, syncBottomState, syncBottomStateFromScroller])
+  }, [getBottomMetrics, isStreaming, scheduleStickToBottom, scrollerElement, syncBottomState, syncBottomStateFromScroller])
 
   useEffect(() => {
     return () => {

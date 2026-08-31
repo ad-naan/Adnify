@@ -1,7 +1,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { logger } from '@utils/Logger'
 import { memo, useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
-import { Virtuoso } from 'react-virtuoso'
+import { Virtuoso, type FlatIndexLocationWithAlign } from 'react-virtuoso'
 import {
   AlertTriangle,
   ListTree,
@@ -75,6 +75,14 @@ const CHAT_TIMELINE_STYLE = {
   overflowX: 'hidden',
   overflowY: 'auto',
 } as const
+// 列表挂载时就把首帧定位在最后一条上，而不是先画到顶部再补一次
+// scrollToIndex。变高行（Markdown / 工具卡）从顶部跳到末尾是「猜偏移 → 挂载 →
+// 量高 → 修正」的迭代过程，既卡又会被后到的行高变化打断停在半路。
+// 必须是模块级常量：每次渲染都传新对象的话，Virtuoso 会把它当成新的初始位置。
+const CHAT_TIMELINE_INITIAL_LOCATION: FlatIndexLocationWithAlign = {
+  align: 'end',
+  index: 'LAST',
+}
 
 function computeTimelineItemKey(
   _index: number,
@@ -274,13 +282,6 @@ export default function ChatPanel() {
   const prevThreadIdRef = useRef(currentThreadId)
   const pendingRevealAnchorKeyRef = useRef<string | null>(null)
   const visibleRangeRef = useRef<{ startIndex: number; endIndex: number } | null>(null)
-  // Virtuoso 初始滚动位置：只在线程切换时重新指向底部，普通追加消息不重算
-  // 避免每次消息列表变化都重新传入新的 initialTopMostItemIndex
-  // 导致 Virtuoso 强制跳回该位置（即滚动条回顶的根因）
-  const initialIndexRef = useRef(Math.max(0, timelineItems.length - 1))
-  // 让上面的切换 effect 能读到最新条目数，而不必把它列为依赖。
-  const timelineItemCountRef = useRef(timelineItems.length)
-  timelineItemCountRef.current = timelineItems.length
 
   // Effect 1：只监听 currentThreadId 变化，控制骨架屏的显示/隐藏
   //
@@ -295,9 +296,6 @@ export default function ChatPanel() {
     prevThreadIdRef.current = currentThreadId
 
     if (!threadChanged) return
-
-    // 线程切换时同步更新初始位置索引，指向新线程的底部
-    initialIndexRef.current = Math.max(0, timelineItemCountRef.current - 1)
 
     // 线程切换：已加载线程只保留一帧过渡，未加载线程继续由 hydration 骨架接管
     setIsSwitchingThread(true)
@@ -1259,20 +1257,21 @@ export default function ChatPanel() {
   }, [handleVisibleRangeChanged])
 
   const virtuosoComponents = useMemo(() => ({
-    Scroller: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>((props, ref) => (
-        <div
-        {...props}
-        ref={node => {
-          attachScrollerNode(node)
+    // ref 回调必须 useCallback 住。内联箭头函数每次 Scroller 渲染都是新引用，
+    // React 会先用 null 解绑再重新绑定，白白让下游把滚动监听拆装一轮。
+    Scroller: forwardRef<HTMLDivElement, ComponentPropsWithoutRef<'div'>>((props, ref) => {
+      const setScrollerNode = useCallback((node: HTMLDivElement | null) => {
+        attachScrollerNode(node)
 
-          if (typeof ref === 'function') {
-            ref(node)
-          } else if (ref) {
-            ref.current = node
-          }
-        }}
-      />
-    )),
+        if (typeof ref === 'function') {
+          ref(node)
+        } else if (ref) {
+          ref.current = node
+        }
+      }, [ref])
+
+      return <div {...props} ref={setScrollerNode} />
+    }),
     EmptyPlaceholder: () => (
       <div className="flex flex-col h-full w-full bg-background/40 backdrop-blur-3xl relative overflow-hidden">
         {/* Background Ambience — translate/opacity only.
@@ -1465,24 +1464,34 @@ export default function ChatPanel() {
               )}
             </AnimatePresence>
 
-            {chatMode === 'plan' ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} /> : <MemoizedVirtuoso
-                key={currentThreadId ?? 'no-thread'}
-                ref={virtuosoRef}
-                data={timelineItems}
-                computeItemKey={computeTimelineItemKey}
-                atBottomStateChange={handleBottomStateChange}
-                rangeChanged={handleTimelineRangeChanged}
-                initialTopMostItemIndex={initialIndexRef.current}
-                followOutput={followOutput}
-                itemContent={renderTimelineItemContent}
-                className="flex-1 custom-scrollbar w-full h-full"
-                style={CHAT_TIMELINE_STYLE}
-                overscan={12}
-                atBottomThreshold={atBottomThreshold}
-                totalListHeightChanged={handleTotalListHeightChanged}
-                skipAnimationFrameInResizeObserver
-                components={virtuosoComponents}
-              />}
+            {/* hydration 没结束前不挂载列表。switchThread 是先同步换
+                currentThreadId、再异步补消息的，此时挂载会让 Virtuoso 拿着空数组
+                初始化，initialTopMostItemIndex 被 clamp 成 0；等消息到位时列表已经
+                挂载完毕，初始位置不再二次生效，于是从第 0 条开始画（滚动条回顶），
+                只能靠事后的 scrollToIndex 一路补救。这段等待期本来就被上面的骨架屏
+                盖住，等数据齐了再挂载，首帧就直接落在底部。 */}
+            {chatMode === 'plan'
+              ? <PlanWorkbench onOverlayChange={setPlanOverlayOpen} />
+              : isHydratingActiveThread
+                ? null
+                : <MemoizedVirtuoso
+                  key={currentThreadId ?? 'no-thread'}
+                  ref={virtuosoRef}
+                  data={timelineItems}
+                  computeItemKey={computeTimelineItemKey}
+                  atBottomStateChange={handleBottomStateChange}
+                  rangeChanged={handleTimelineRangeChanged}
+                  initialTopMostItemIndex={CHAT_TIMELINE_INITIAL_LOCATION}
+                  followOutput={followOutput}
+                  itemContent={renderTimelineItemContent}
+                  className="flex-1 custom-scrollbar w-full h-full"
+                  style={CHAT_TIMELINE_STYLE}
+                  overscan={12}
+                  atBottomThreshold={atBottomThreshold}
+                  totalListHeightChanged={handleTotalListHeightChanged}
+                  skipAnimationFrameInResizeObserver
+                  components={virtuosoComponents}
+                />}
           </div>
 
           {/* File Mention Popup */}

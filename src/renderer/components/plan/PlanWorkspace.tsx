@@ -3,15 +3,30 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { TaskBoard } from './TaskBoard'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, asLanguage, type TranslationKey } from '@renderer/i18n'
+
+/**
+ * 计划状态 → 文案 key。
+ *
+ * 以前这里是 `[中文, 英文]` 二元组加一个按语言算出来的下标，加第三种语言要改数据结构。
+ * `satisfies` 让写错 key 直接编译不过。
+ */
+const PLAN_STATUS_KEYS = {
+  draft: 'planWorkspace.statusDraft',
+  approved: 'planWorkspace.statusReady',
+  executing: 'common.running',
+  pausing: 'planWorkspace.statusPausing',
+  paused: 'planWorkspace.statusPaused',
+  stopping: 'planWorkspace.statusStopping',
+  stopped: 'planWorkspace.statusStopped',
+  completed: 'common.completed',
+  failed: 'common.failed',
+} satisfies Record<string, TranslationKey>
 
 function planStatusLabel(status: string, language: string): string {
-  const labels: Record<string, [string, string]> = {
-    draft: ['待审核', 'Draft'], approved: ['待执行', 'Ready'], executing: ['执行中', 'Running'],
-    pausing: ['暂停中', 'Pausing'], paused: ['已暂停', 'Paused'], stopping: ['停止中', 'Stopping'],
-    stopped: ['已停止', 'Stopped'], completed: ['已完成', 'Completed'], failed: ['失败', 'Failed'],
-  }
-  return labels[status]?.[language === 'zh' ? 0 : 1] || status
+  const key = PLAN_STATUS_KEYS[status as keyof typeof PLAN_STATUS_KEYS]
+  // 未知状态原样显示，而不是空白 —— 后端加了新状态时至少看得出是哪个
+  return key ? t(key, asLanguage(language)) : status
 }
 
 export const PlanWorkspace = memo(function PlanWorkspace() {

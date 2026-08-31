@@ -36,8 +36,6 @@ interface TaskBoardProps {
   onPlanChange?: (planId: string) => void
 }
 
-const copy = (language: string, zh: string, en: string) => language === 'zh' ? zh : en
-
 function deriveStage(status: string): PlanWorkbenchStage {
   if (status === 'completed') return 'validation'
   if (['executing', 'pausing', 'paused', 'stopping'].includes(status)) return 'execution'
@@ -511,7 +509,7 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
           </section>}
 
           {(selectedRuntime?.currentTool || selectedRuntime?.statusText || selectedRuntime?.latestText || selectedTask.output || selectedTask.error) && <section className="py-4">
-            <div className="mb-2 text-[11px] font-medium text-text-muted">{selectedTask.error ? t('toolError', asLanguage(language)) : copy(language, selectedTask.status === 'running' ? '实时动作' : '任务结果', selectedTask.status === 'running' ? 'Live activity' : 'Task result')}</div>
+            <div className="mb-2 text-[11px] font-medium text-text-muted">{selectedTask.error ? t('toolError', asLanguage(language)) : t(selectedTask.status === 'running' ? 'taskBoard.liveActivity' : 'taskBoard.taskResult', asLanguage(language))}</div>
             {selectedRuntime?.currentTool && <div className="mb-2 flex items-center gap-2 border-y border-border/35 py-2 text-[11px] text-text-secondary"><LoaderCircle className="h-3.5 w-3.5 animate-spin text-accent" /><span className="font-medium">{selectedRuntime.currentTool.name}</span><span className="truncate text-text-muted">{selectedRuntime.statusText}</span></div>}
             <div className={`whitespace-pre-wrap break-words text-[10px] leading-5 ${selectedTask.error ? 'text-red-400' : 'text-text-secondary'}`}>{selectedTask.error || selectedRuntime?.latestText || selectedTask.output || selectedRuntime?.statusText}</div>
           </section>}

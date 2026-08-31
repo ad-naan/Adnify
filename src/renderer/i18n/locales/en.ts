@@ -1692,6 +1692,12 @@ export const en = {
 
   // planWorkspace
   'planWorkspace.describeTheRequestOn': 'Describe the request on the right. After clarification, the plan will be created and shown here automatically.',
+  'planWorkspace.statusDraft': 'Draft',
+  'planWorkspace.statusPaused': 'Paused',
+  'planWorkspace.statusPausing': 'Pausing',
+  'planWorkspace.statusReady': 'Ready',
+  'planWorkspace.statusStopped': 'Stopped',
+  'planWorkspace.statusStopping': 'Stopping',
   'planWorkspace.waitingForAPlan': 'Waiting for a plan',
 
   // problemsView
@@ -2317,6 +2323,7 @@ export const en = {
   'taskBoard.historyPick': 'History pick',
   'taskBoard.invoked': 'Invoked',
   'taskBoard.liveActionsAppearWhen': 'Live actions appear when the task starts',
+  'taskBoard.liveActivity': 'Live activity',
   'taskBoard.lockedWhileRunning': 'Locked while running',
   'taskBoard.modelConfigurations': 'model configurations',
   'taskBoard.needsApproval': 'Needs approval',
@@ -2349,6 +2356,7 @@ export const en = {
   'taskBoard.sequentialScheduling': 'Sequential scheduling',
   'taskBoard.serial': 'Serial',
   'taskBoard.taskDependencyGraph': 'Task dependency graph',
+  'taskBoard.taskResult': 'Task result',
   'taskBoard.theBriefIsBeing': 'The brief is being prepared',
   'taskBoard.thisReviewIsGenerated': 'This review is generated from the confirmed source brief. Revisions create an updated plan version.',
   'taskBoard.thisTaskIsPaused': 'This task is paused while independent work continues.',
