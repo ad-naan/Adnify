@@ -1,9 +1,10 @@
-import type { CodeChunk } from './types'
+import type { CodeChunk, ProjectSummary } from './types'
 
 export interface StructuralIndexMetadata {
   totalFiles: number
   totalChunks: number
   savedAt: number
+  projectSummary?: ProjectSummary
 }
 
 export interface StructuralIndexCursor {

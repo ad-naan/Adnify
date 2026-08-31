@@ -19,6 +19,12 @@ function chunk(filePath: string, id: string): IndexedChunk {
 }
 
 describe('VectorStoreService batch updates', () => {
+  it('uses an explicit LanceDB directory name', () => {
+    const store = new VectorStoreService('C:/workspace-cache')
+    expect((store as unknown as { indexPath: string }).indexPath.replace(/\\/g, '/'))
+      .toBe('C:/workspace-cache/semantic-index.lancedb')
+  })
+
   it('replaces several files with one delete and one add', async () => {
     const table = { delete: vi.fn(async (_filter: string) => {}), add: vi.fn(async (_data: unknown[]) => {}) }
     const store = new VectorStoreService('C:/workspace-cache')

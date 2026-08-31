@@ -7,7 +7,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import type { BrowserWindow } from 'electron'
 import { Worker } from 'worker_threads'
 import { logger, normalizePath } from '@shared/utils'
@@ -17,9 +17,9 @@ import { BM25Index, SymbolIndex, rerankCandidates } from './search'
 import { ProjectSummaryGenerator } from './summary'
 import { StructuralIndexStore } from './structuralIndexStore'
 import {
-  IndexConfig, IndexStatus, IndexMode, SearchResult,
+  IndexConfig, IndexStatus, IndexMode, IndexManifest, SearchResult,
   EmbeddingConfig, ProjectSummary, SymbolInfo, CodeChunk, IndexedChunk,
-  DEFAULT_INDEX_CONFIG,
+  DEFAULT_EMBEDDING_MODELS, DEFAULT_INDEX_CONFIG,
 } from './types'
 import { getUserConfigDir, getWorkspaceCacheDir } from '../services/configPath'
 
@@ -63,10 +63,13 @@ export class CodebaseIndexService {
   private symbolIndex: SymbolIndex
   private summaryGenerator: ProjectSummaryGenerator
   private projectSummary: ProjectSummary | null = null
+  private legacyProjectSummary: ProjectSummary | null = null
 
   // 语义索引组件（按需初始化）
   private embedder: EmbeddingService | null = null
   private vectorStore: VectorStoreService | null = null
+  private semanticManifestValid = false
+  private semanticVectorDimension: number | undefined
   private worker: Worker | null = null
   private pendingIndexResolve: (() => void) | null = null
   private pendingIndexReject: ((err: Error) => void) | null = null
@@ -105,10 +108,7 @@ export class CodebaseIndexService {
     // 初始化结构化索引组件
     this.bm25Index = new BM25Index()
     this.symbolIndex = new SymbolIndex()
-    this.summaryGenerator = new ProjectSummaryGenerator(
-      workspacePath,
-      path.join(this.workspaceCachePath, 'project-summary.json'),
-    )
+    this.summaryGenerator = new ProjectSummaryGenerator(workspacePath)
     this.structuralStore = new StructuralIndexStore(this.structuralIndexPath)
   }
 
@@ -132,12 +132,15 @@ export class CodebaseIndexService {
       path.join(legacyRoot, 'structural-index.json'),
       path.join(legacyRoot, 'project-summary.json'),
       path.join(legacyRoot, 'index'),
+      path.join(this.workspaceCachePath, 'project-summary.json'),
+      path.join(this.workspaceCachePath, 'index-status.json'),
+      path.join(this.workspaceCachePath, 'index'),
       this.legacyStructuralIndexPath,
     ]
   }
 
-  private get indexStatusPath(): string {
-    return path.join(this.workspaceCachePath, 'index-status.json')
+  private get indexManifestPath(): string {
+    return path.join(this.workspaceCachePath, 'index-manifest.json')
   }
 
   private initialized = false
@@ -171,9 +174,6 @@ export class CodebaseIndexService {
   private async performInitialize(): Promise<void> {
     await this.clearLegacyWorkspaceIndexCaches()
 
-    // 加载缓存的项目摘要
-    this.projectSummary = await this.summaryGenerator.loadCache()
-
     // 加载索引状态和结构化索引。走 mutationQueue 是为了和构建 / 增量更新串行：
     // 两边都会 clear 内存索引并改写 status，交错就会互相覆盖。
     await this.enqueueMutation(() => this.loadIndex())
@@ -182,6 +182,7 @@ export class CodebaseIndexService {
     // 语义模式：初始化向量存储
     if (this.config.mode === 'semantic') {
       await this.initSemanticComponents()
+      await this.validateSemanticIndex()
     }
 
     this.initialized = true
@@ -203,6 +204,8 @@ export class CodebaseIndexService {
         this.status.totalChunks = 0
         this.status.indexedFiles = 0
         this.status.totalFiles = 0
+        this.status.lastIndexedAt = undefined
+        this.projectSummary = null
         return
       }
 
@@ -210,6 +213,16 @@ export class CodebaseIndexService {
       this.status.indexedFiles = this.bm25Index.fileCount
       this.status.totalFiles = metadata.totalFiles
       this.status.lastIndexedAt = metadata.savedAt
+      this.projectSummary = metadata.projectSummary ?? this.legacyProjectSummary
+      if (!metadata.projectSummary && this.projectSummary) {
+        await this.structuralStore.request({
+          type: 'applyFiles',
+          databasePath: this.structuralIndexPath,
+          files: [],
+          metadata: { ...metadata, projectSummary: this.projectSummary },
+        })
+      }
+      this.legacyProjectSummary = null
       this.status.error = undefined
       logger.index.info(`[IndexService] Loaded structural index: ${this.bm25Index.size} chunks, ${this.symbolIndex.size} symbols`)
     } catch (e) {
@@ -230,11 +243,20 @@ export class CodebaseIndexService {
   private async clearLegacyWorkspaceIndexCaches(): Promise<void> {
     const existing = this.legacyWorkspaceIndexPaths.filter(target => fs.existsSync(target))
     if (existing.length === 0) return
-    const discardedStructuralIndex = existing.some(target => path.basename(target) === 'structural-index.json')
-
+    const legacySummaryPath = existing
+      .filter(target => path.basename(target) === 'project-summary.json')
+      .at(-1)
+    if (legacySummaryPath) {
+      try {
+        this.legacyProjectSummary = JSON.parse(
+          await fs.promises.readFile(legacySummaryPath, 'utf-8'),
+        ) as ProjectSummary
+      } catch (error) {
+        logger.index.warn('[IndexService] Failed to read legacy project summary:', error)
+      }
+    }
     try {
       await Promise.all(existing.map(target => fs.promises.rm(target, { recursive: true, force: true })))
-      if (discardedStructuralIndex) await this.summaryGenerator.clearCache()
       logger.index.info(`[IndexService] Removed ${existing.length} legacy workspace index cache(s)`)
     } catch (error) {
       logger.index.warn('[IndexService] Failed to remove legacy workspace index caches:', error)
@@ -242,42 +264,99 @@ export class CodebaseIndexService {
   }
 
   private async saveIndex(): Promise<void> {
+    // Structural completion metadata and the project summary are authoritative in SQLite.
+    if (this.config.mode !== 'semantic') return
     try {
-      // 保存通用状态
-      const dir = path.dirname(this.indexStatusPath)
+      const dir = path.dirname(this.indexManifestPath)
       if (!fs.existsSync(dir)) {
         await fs.promises.mkdir(dir, { recursive: true })
       }
-      await fs.promises.writeFile(this.indexStatusPath, JSON.stringify(this.status, null, 2))
+      const manifest: IndexManifest = {
+        schemaVersion: 1,
+        mode: this.config.mode,
+        completedAt: this.status.lastIndexedAt ?? Date.now(),
+        totalFiles: this.status.totalFiles,
+        totalChunks: this.status.totalChunks,
+        ...(this.config.mode === 'semantic' ? {
+          embedding: {
+            fingerprint: this.embeddingFingerprint,
+            provider: this.config.embedding.provider,
+            model: this.effectiveEmbeddingModel,
+            ...(this.semanticVectorDimension ? { vectorDimension: this.semanticVectorDimension } : {}),
+          },
+        } : {}),
+      }
+      await fs.promises.writeFile(this.indexManifestPath, JSON.stringify(manifest, null, 2))
     } catch (e) {
-      logger.index.warn('[IndexService] Failed to save index status:', e)
+      logger.index.warn('[IndexService] Failed to save index manifest:', e)
     }
   }
 
   private async loadIndex(): Promise<void> {
     try {
-      if (fs.existsSync(this.indexStatusPath)) {
-        const content = await fs.promises.readFile(this.indexStatusPath, 'utf-8')
-        const status = JSON.parse(content)
-        // 恢复状态，除了 isIndexing
-        this.status = { ...this.status, ...status, isIndexing: false, message: undefined }
-        logger.index.info('[IndexService] Loaded index status')
-      }
-
       if (this.config.mode === 'structural') {
         await this.loadStructuralIndex()
       } else if (this.config.mode === 'semantic') {
-        // 语义模式下，chunks 数量可能需要从 vectorStore 获取？
-        // 暂时相信保存的状态。
-        // 也可以调用 vectorStore.count() 验证
-        // if (this.vectorStore) { 
-        //   this.status.totalChunks = await this.vectorStore.count()
-        // }
+        await this.loadSemanticManifest()
       }
     } catch (e) {
       this.status.error = e instanceof Error ? e.message : String(e)
-      logger.index.warn('[IndexService] Failed to load index status:', e)
+      logger.index.warn('[IndexService] Failed to load index:', e)
     }
+  }
+
+  private get effectiveEmbeddingModel(): string {
+    return this.config.embedding.model || DEFAULT_EMBEDDING_MODELS[this.config.embedding.provider]
+  }
+
+  private get embeddingFingerprint(): string {
+    return createHash('sha256').update(JSON.stringify({
+      provider: this.config.embedding.provider,
+      model: this.effectiveEmbeddingModel,
+      baseUrl: this.config.embedding.baseUrl || '',
+    })).digest('hex').slice(0, 24)
+  }
+
+  private async loadSemanticManifest(): Promise<void> {
+    this.semanticManifestValid = false
+    if (!fs.existsSync(this.indexManifestPath)) return
+    const manifest = JSON.parse(await fs.promises.readFile(this.indexManifestPath, 'utf-8')) as IndexManifest
+    if (
+      manifest.schemaVersion !== 1 ||
+      manifest.mode !== 'semantic' ||
+      manifest.embedding?.fingerprint !== this.embeddingFingerprint
+    ) return
+
+    this.semanticManifestValid = true
+    this.semanticVectorDimension = manifest.embedding.vectorDimension
+    this.status.totalFiles = manifest.totalFiles
+    this.status.indexedFiles = manifest.totalFiles
+    this.status.totalChunks = manifest.totalChunks
+    this.status.lastIndexedAt = manifest.completedAt
+    this.status.error = undefined
+  }
+
+  private async validateSemanticIndex(): Promise<void> {
+    if (!this.vectorStore) return
+    if (!this.semanticManifestValid) {
+      await this.vectorStore.clear()
+      await fs.promises.rm(this.indexManifestPath, { force: true })
+      this.status.totalFiles = 0
+      this.status.indexedFiles = 0
+      this.status.totalChunks = 0
+      this.status.lastIndexedAt = undefined
+      return
+    }
+
+    const stats = await this.vectorStore.getStats()
+    const fileCount = (await this.vectorStore.getFileHashes()).size
+    if (stats.chunkCount === 0) {
+      this.semanticManifestValid = false
+      this.status.lastIndexedAt = undefined
+    }
+    this.status.totalFiles = fileCount
+    this.status.indexedFiles = fileCount
+    this.status.totalChunks = stats.chunkCount
   }
 
   /** 清除结构化索引缓存 */
@@ -318,7 +397,11 @@ export class CodebaseIndexService {
     this.status.mode = mode
 
     if (mode === 'semantic') {
+      await this.loadSemanticManifest()
       await this.initSemanticComponents()
+      await this.validateSemanticIndex()
+    } else {
+      await this.loadStructuralIndex()
     }
 
     logger.index.info(`[IndexService] Switched to ${mode} mode`)
@@ -326,15 +409,10 @@ export class CodebaseIndexService {
 
   /** 检查是否有索引 */
   async hasIndex(): Promise<boolean> {
-    // 检查内存中的索引
-    if (this.bm25Index.size > 0) return true
-    // 检查缓存的摘要
-    if (this.projectSummary) return true
-    // 语义模式检查向量存储
-    if (this.config.mode === 'semantic') {
-      return this.vectorStore?.hasIndex() ?? false
+    if (this.config.mode === 'structural') {
+      return this.bm25Index.size > 0 || this.projectSummary !== null
     }
-    return false
+    return this.semanticManifestValid && (this.vectorStore?.hasIndex() ?? false)
   }
 
   /** 全量索引 */
@@ -374,6 +452,10 @@ export class CodebaseIndexService {
       this.status.lastIndexedAt = Date.now()
       this.status.error = undefined
       this.status.message = undefined
+      if (this.config.mode === 'semantic') {
+        this.semanticVectorDimension = await this.vectorStore?.getVectorDimension()
+        this.semanticManifestValid = true
+      }
       await this.saveIndex()
       this.emitProgress(true)
     } catch (e) {
@@ -383,7 +465,11 @@ export class CodebaseIndexService {
       this.status.error = error.message
       this.status.isIndexing = false
       this.status.message = undefined
-      await this.saveIndex()
+      if (this.config.mode === 'semantic') {
+        this.semanticManifestValid = false
+        this.status.lastIndexedAt = undefined
+        await fs.promises.rm(this.indexManifestPath, { force: true }).catch(() => {})
+      }
       this.emitProgress(true)
       throw error
     }
@@ -393,6 +479,10 @@ export class CodebaseIndexService {
   async search(query: string, topK: number = 10): Promise<SearchResult[]> {
     if (this.config.mode === 'structural') {
       return this.bm25Index.search(query, topK)
+    }
+
+    if (!this.semanticManifestValid) {
+      throw new Error('Semantic index does not match the current embedding configuration; rebuild it first')
     }
 
     if (!this.vectorStore?.isInitialized() || !this.embedder) {
@@ -481,16 +571,17 @@ export class CodebaseIndexService {
       await this.vectorStore.clear()
     }
 
-    // 删除缓存文件
-    await this.summaryGenerator.clearCache()
+    // 删除索引主体和完成清单
     await this.clearStructuralIndexCache()
+    await fs.promises.rm(this.indexManifestPath, { force: true })
+    this.semanticManifestValid = false
+    this.semanticVectorDimension = undefined
 
-    // lastIndexedAt 必须一起清掉，并且必须落盘。
+    // lastIndexedAt 必须一起清掉。
     // updateFiles / deleteFileIndex 都用 `lastIndexedAt === undefined` 判断
     // 「还没有过一次完整索引」，清空后留着它，随后任意一次文件保存都会被当成
     // 增量更新放行，于是 SQLite 里长出一个只含那一个文件、却自称完整的索引：
     // hasIndex() 返回 true，而检索只能看见那一个文件。
-    // 不 saveIndex 的话这个陈旧标记还会跨重启存活（loadIndex 会把它读回来）。
     this.status = {
       ...this.status,
       totalFiles: 0,
@@ -500,7 +591,6 @@ export class CodebaseIndexService {
       error: undefined,
       message: undefined,
     }
-    await this.saveIndex()
     logger.index.info('[IndexService] Index cleared')
   }
 
@@ -579,8 +669,10 @@ export class CodebaseIndexService {
           totalFiles: this.status.totalFiles,
           totalChunks: this.status.totalChunks,
           savedAt: Date.now(),
+          ...(this.projectSummary ? { projectSummary: this.projectSummary } : {}),
         },
       })
+      await this.saveIndex()
       logger.index.info(`[IndexService] Deleted structural index for: ${relativePath} `)
       return
     }
@@ -588,13 +680,19 @@ export class CodebaseIndexService {
     // 语义模式：从向量存储删除
     if (this.config.mode === 'semantic' && this.vectorStore) {
       await this.vectorStore.deleteFile(filePath)
+      await this.refreshSemanticManifestStats()
       logger.index.info(`[IndexService] Deleted semantic index for: ${relativePath} `)
     }
   }
 
   /** 更新 Embedding 配置 */
   updateEmbeddingConfig(config: Partial<EmbeddingConfig>): void {
+    const previousFingerprint = this.embeddingFingerprint
     this.config.embedding = { ...this.config.embedding, ...config }
+    if (this.embeddingFingerprint !== previousFingerprint) {
+      this.semanticManifestValid = false
+      this.status.lastIndexedAt = undefined
+    }
     if (this.embedder) {
       this.embedder.updateConfig(this.config.embedding)
     }
@@ -646,10 +744,11 @@ export class CodebaseIndexService {
       if (this.destroyed) return
 
       this.status.indexedFiles = this.bm25Index.fileCount
-      this.projectSummary = this.summaryGenerator.generate(
+      const projectSummary = this.summaryGenerator.generate(
         this.structuralBuildFileSymbols,
         this.structuralBuildLanguages,
       )
+      this.projectSummary = projectSummary
       await this.structuralStore.request({
         type: 'commitReplace',
         databasePath: this.structuralIndexPath,
@@ -658,6 +757,7 @@ export class CodebaseIndexService {
           totalFiles: this.status.totalFiles,
           totalChunks: this.bm25Index.size,
           savedAt: Date.now(),
+          projectSummary,
         },
       })
     } catch (error) {
@@ -697,10 +797,29 @@ export class CodebaseIndexService {
   private async buildSemanticIndex(): Promise<void> {
     await this.initSemanticComponents()
 
+    if (!this.semanticManifestValid) {
+      await this.vectorStore!.clear()
+      await fs.promises.rm(this.indexManifestPath, { force: true })
+    }
+
     const existingHashesMap = await this.vectorStore!.getFileHashes()
     const existingHashes: Record<string, string> = Object.fromEntries(existingHashesMap)
 
     return this.startWorkerIndex(existingHashes)
+  }
+
+  private async refreshSemanticManifestStats(): Promise<void> {
+    if (!this.vectorStore) return
+    const stats = await this.vectorStore.getStats()
+    const fileCount = (await this.vectorStore.getFileHashes()).size
+    this.semanticVectorDimension = await this.vectorStore.getVectorDimension()
+    this.status.totalFiles = fileCount
+    this.status.indexedFiles = fileCount
+    this.status.totalChunks = stats.chunkCount
+    this.status.lastIndexedAt = Date.now()
+    this.semanticManifestValid = stats.chunkCount > 0
+    if (this.semanticManifestValid) await this.saveIndex()
+    else await fs.promises.rm(this.indexManifestPath, { force: true })
   }
 
   private startWorkerIndex(existingHashes?: Record<string, string>): Promise<void> {
@@ -800,8 +919,10 @@ export class CodebaseIndexService {
                       totalFiles: this.status.totalFiles,
                       totalChunks: this.status.totalChunks,
                       savedAt: Date.now(),
+                      ...(this.projectSummary ? { projectSummary: this.projectSummary } : {}),
                     },
                   })
+                  await this.saveIndex()
                 }
                 logger.index.info(`[IndexService] Updated ${persistedFiles.length} files in structural index`)
               } else {
@@ -809,6 +930,7 @@ export class CodebaseIndexService {
                   filePath: result.filePath,
                   chunks: result.deleted ? [] : result.chunks,
                 })))
+                await this.refreshSemanticManifestStats()
               }
               this.emitProgress()
               this.pendingWorkerUpdates.get(message.requestId)?.resolve()

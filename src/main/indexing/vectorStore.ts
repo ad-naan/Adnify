@@ -82,7 +82,7 @@ export class VectorStoreService {
   private tableName = 'code_chunks'
 
   constructor(workspaceCachePath: string) {
-    this.indexPath = path.join(workspaceCachePath, 'index')
+    this.indexPath = path.join(workspaceCachePath, 'semantic-index.lancedb')
   }
 
   /**
@@ -176,6 +176,16 @@ export class VectorStoreService {
 
     const count = await this.table.countRows()
     return { chunkCount: count, fileCount: Math.ceil(count / 5) }
+  }
+
+  async getVectorDimension(): Promise<number | undefined> {
+    await this.ensureTableOpen()
+    if (!this.table) return undefined
+    const rows = await this.table.query().select(['vector']).limit(1).toArray()
+    const vector = (rows[0] as { vector?: unknown } | undefined)?.vector
+    if (Array.isArray(vector)) return vector.length
+    if (ArrayBuffer.isView(vector)) return (vector as unknown as { length?: number }).length
+    return undefined
   }
 
   /**

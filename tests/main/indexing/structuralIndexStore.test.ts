@@ -6,6 +6,16 @@ import { DatabaseSync } from 'node:sqlite'
 import { executeStructuralIndexStoreOperation } from '@main/indexing/structuralIndexStore.worker'
 import type { CodeChunk } from '@main/indexing/types'
 
+const projectSummary = {
+  name: 'workspace',
+  structure: [],
+  keyFiles: [],
+  totalFiles: 1025,
+  totalSymbols: 1025,
+  languages: { typescript: 1025 },
+  generatedAt: 10,
+}
+
 function chunk(id: string, relativePath: string, content = `function ${id}() {}`): CodeChunk {
   return {
     id,
@@ -45,7 +55,7 @@ describe('structural index SQLite store', () => {
     do {
       const result = executeStructuralIndexStoreOperation({ type: 'loadPage', databasePath, cursor })
       if (result.type !== 'loadedPage') throw new Error('Unexpected load result')
-      metadata = result.metadata
+      if (metadata === null) metadata = result.metadata
       chunks.push(...result.chunks)
       if (result.chunks.length > 0) batchSizes.push(result.chunks.length)
       cursor = result.nextCursor || undefined
@@ -67,12 +77,12 @@ describe('structural index SQLite store', () => {
       type: 'commitReplace',
       databasePath,
       generation: 'one',
-      metadata: { totalFiles: 1025, totalChunks: 1025, savedAt: 10 },
+      metadata: { totalFiles: 1025, totalChunks: 1025, savedAt: 10, projectSummary },
     })
 
     const loaded = load()
     expect(loaded.chunks).toHaveLength(1025)
-    expect(loaded.metadata).toEqual({ totalFiles: 1025, totalChunks: 1025, savedAt: 10 })
+    expect(loaded.metadata).toEqual({ totalFiles: 1025, totalChunks: 1025, savedAt: 10, projectSummary })
     expect(loaded.batchSizes).toEqual([512, 512, 1])
   })
 
@@ -208,6 +218,63 @@ describe('structural index SQLite store', () => {
     }
   })
 
+  it('migrates schema v2 in place without deleting a committed index', () => {
+    const legacy = new DatabaseSync(databasePath)
+    legacy.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE index_state (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        active_generation TEXT NOT NULL,
+        total_files INTEGER NOT NULL,
+        total_chunks INTEGER NOT NULL,
+        saved_at INTEGER NOT NULL
+      ) STRICT;
+      CREATE TABLE files (
+        generation TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_hash TEXT NOT NULL,
+        PRIMARY KEY (generation, relative_path)
+      ) WITHOUT ROWID, STRICT;
+      CREATE TABLE chunks (
+        generation TEXT NOT NULL,
+        relative_path TEXT NOT NULL,
+        id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        start_line INTEGER NOT NULL,
+        end_line INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        language TEXT NOT NULL,
+        symbols_json TEXT NOT NULL,
+        PRIMARY KEY (generation, relative_path, id),
+        FOREIGN KEY (generation, relative_path)
+          REFERENCES files(generation, relative_path) ON DELETE CASCADE
+      ) WITHOUT ROWID, STRICT;
+      INSERT INTO index_state VALUES (1, 'stable', 1, 1, 10);
+      INSERT INTO files VALUES ('stable', 'a.ts', 'C:/workspace/a.ts', 'hash-a');
+      INSERT INTO chunks VALUES (
+        'stable', 'a.ts', 'a', 'function a() {}', 1, 1,
+        'function', 'typescript', '["a"]'
+      );
+      PRAGMA user_version = 2;
+    `)
+    legacy.close()
+
+    const loaded = load()
+    expect(loaded.chunks.map(item => item.id)).toEqual(['a'])
+    expect(loaded.metadata).toEqual({ totalFiles: 1, totalChunks: 1, savedAt: 10 })
+
+    const migrated = new DatabaseSync(databasePath, { readOnly: true })
+    try {
+      const version = migrated.prepare('PRAGMA user_version').get() as { user_version: number }
+      const columns = migrated.prepare("PRAGMA table_info('index_state')").all() as Array<{ name: string }>
+      expect(Number(version.user_version)).toBe(3)
+      expect(columns.map(column => column.name)).toContain('project_summary_json')
+    } finally {
+      migrated.close()
+    }
+  })
+
   it('discards an incompatible cache schema instead of retaining legacy keys', () => {
     const legacy = new DatabaseSync(databasePath)
     legacy.exec(`
@@ -221,7 +288,7 @@ describe('structural index SQLite store', () => {
     const rebuilt = new DatabaseSync(databasePath, { readOnly: true })
     try {
       const version = rebuilt.prepare('PRAGMA user_version').get() as { user_version: number }
-      expect(Number(version.user_version)).toBe(2)
+      expect(Number(version.user_version)).toBe(3)
     } finally {
       rebuilt.close()
     }

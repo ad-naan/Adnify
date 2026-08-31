@@ -58,8 +58,6 @@ vi.mock('@main/indexing/structuralIndexStore', () => ({
 
 vi.mock('@main/indexing/summary', () => ({
   ProjectSummaryGenerator: class {
-    loadCache = vi.fn(async () => null)
-    clearCache = vi.fn(async () => {})
     generate = vi.fn(() => ({
       name: 'workspace',
       structure: [],
@@ -140,6 +138,20 @@ describe('CodebaseIndexService scheduling', () => {
     active.resolve()
     await Promise.all([first, second])
     expect(perform).toHaveBeenCalledTimes(1)
+  })
+
+  it('fingerprints semantic data by provider, model and endpoint but not API key', () => {
+    const internals = service as unknown as { embeddingFingerprint: string; semanticManifestValid: boolean }
+    const initial = internals.embeddingFingerprint
+    internals.semanticManifestValid = true
+
+    service.updateEmbeddingConfig({ apiKey: 'rotated-secret' })
+    expect(internals.embeddingFingerprint).toBe(initial)
+    expect(internals.semanticManifestValid).toBe(true)
+
+    service.updateEmbeddingConfig({ model: 'different-model' })
+    expect(internals.embeddingFingerprint).not.toBe(initial)
+    expect(internals.semanticManifestValid).toBe(false)
   })
 
   it('builds the structural index from worker batches', async () => {
@@ -278,7 +290,7 @@ describe('CodebaseIndexService scheduling', () => {
     workerState.instances[0].emit('exit', 1)
 
     await expect(indexing).rejects.toThrow('Index worker exited unexpectedly with code 1')
-    expect(internals.saveIndex).toHaveBeenCalled()
+    expect(internals.saveIndex).not.toHaveBeenCalled()
     expect(service.getStatus()).toMatchObject({
       isIndexing: false,
       error: 'Index worker exited unexpectedly with code 1',
@@ -311,7 +323,7 @@ describe('CodebaseIndexService scheduling', () => {
 
   // 清空之后 lastIndexedAt 若还留着，updateFiles 会把随后任意一次文件保存
   // 当成增量更新放行，于是长出一个只含那一个文件、却自称完整的索引。
-  it('clears the completed-index marker and persists the cleared status', async () => {
+  it('clears the completed-index marker without publishing an empty manifest', async () => {
     const internals = service as unknown as { saveIndex(): Promise<void> }
     const saveIndex = vi.fn(async () => {})
     internals.saveIndex = saveIndex
@@ -336,7 +348,7 @@ describe('CodebaseIndexService scheduling', () => {
 
     expect(service.getStatus()).toMatchObject({ totalFiles: 0, indexedFiles: 0, totalChunks: 0 })
     expect(service.getStatus().lastIndexedAt).toBeUndefined()
-    expect(saveIndex).toHaveBeenCalled()
+    expect(saveIndex).not.toHaveBeenCalled()
     await expect(service.hasIndex()).resolves.toBe(false)
 
     await service.updateFiles(['C:/workspace/src/a.ts'])

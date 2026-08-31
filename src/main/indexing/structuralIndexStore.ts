@@ -36,7 +36,7 @@ export class StructuralIndexStore {
         cursor,
       })
       if (result.type !== 'loadedPage') throw new Error('Invalid structural index load response')
-      metadata = result.metadata
+      if (!metadata) metadata = result.metadata
       if (!metadata) return null
       if (result.chunks.length > 0) {
         onBatch(result.chunks)

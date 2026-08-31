@@ -17,7 +17,7 @@ const databases = new Map<string, DatabaseSync>()
 // payloads for the main process. The old size of 50 made a 1M-chunk cache
 // require 20,000 request/response turns during startup.
 const LOAD_BATCH_SIZE = 512
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 interface StoredChunkRow {
   id: string
@@ -62,7 +62,8 @@ function createSchema(database: DatabaseSync): void {
       active_generation TEXT NOT NULL,
       total_files INTEGER NOT NULL CHECK (total_files >= 0),
       total_chunks INTEGER NOT NULL CHECK (total_chunks >= 0),
-      saved_at INTEGER NOT NULL
+      saved_at INTEGER NOT NULL,
+      project_summary_json TEXT
     ) STRICT;
 
     CREATE TABLE files (
@@ -101,7 +102,12 @@ function openDatabase(databasePath: string): DatabaseSync {
   const version = Number(
     (database.prepare('PRAGMA user_version').get() as { user_version: number }).user_version,
   )
-  if (version !== SCHEMA_VERSION && (version !== 0 || hasTables(database))) {
+  if (version === 2 && hasTables(database)) {
+    database.exec(`
+      ALTER TABLE index_state ADD COLUMN project_summary_json TEXT;
+      PRAGMA user_version = ${SCHEMA_VERSION};
+    `)
+  } else if (version !== SCHEMA_VERSION && (version !== 0 || hasTables(database))) {
     database.close()
     removeDatabaseFiles(databasePath)
     database = new DatabaseSync(databasePath)
@@ -196,21 +202,28 @@ function insertChunks(
   }
 }
 
-function readMetadata(database: DatabaseSync): (StructuralIndexMetadata & { generation: string }) | null {
+function readMetadata(
+  database: DatabaseSync,
+  includeProjectSummary = true,
+): (StructuralIndexMetadata & { generation: string }) | null {
   const row = database.prepare(`
-    SELECT active_generation, total_files, total_chunks, saved_at
+    SELECT active_generation, total_files, total_chunks, saved_at, project_summary_json
     FROM index_state WHERE singleton = 1
   `).get() as {
     active_generation: string
     total_files: number
     total_chunks: number
     saved_at: number
+    project_summary_json: string | null
   } | undefined
   return row ? {
     generation: row.active_generation,
     totalFiles: row.total_files,
     totalChunks: row.total_chunks,
     savedAt: row.saved_at,
+    ...(includeProjectSummary && row.project_summary_json
+      ? { projectSummary: JSON.parse(row.project_summary_json) as StructuralIndexMetadata['projectSummary'] }
+      : {}),
   } : null
 }
 
@@ -218,7 +231,7 @@ function loadPage(
   database: DatabaseSync,
   cursor?: StructuralIndexCursor,
 ): StructuralIndexStoreResult {
-  const metadata = readMetadata(database)
+  const metadata = readMetadata(database, !cursor)
   if (!metadata) {
     return { type: 'loadedPage', metadata: null, chunks: [], nextCursor: null }
   }
@@ -296,18 +309,21 @@ export function executeStructuralIndexStoreOperation(
       }
       inTransaction(database, () => {
         database.prepare(`
-          INSERT INTO index_state(singleton, active_generation, total_files, total_chunks, saved_at)
-          VALUES (1, ?, ?, ?, ?)
+          INSERT INTO index_state(
+            singleton, active_generation, total_files, total_chunks, saved_at, project_summary_json
+          ) VALUES (1, ?, ?, ?, ?, ?)
           ON CONFLICT(singleton) DO UPDATE SET
             active_generation = excluded.active_generation,
             total_files = excluded.total_files,
             total_chunks = excluded.total_chunks,
-            saved_at = excluded.saved_at
+            saved_at = excluded.saved_at,
+            project_summary_json = excluded.project_summary_json
         `).run(
           operation.generation,
           operation.metadata.totalFiles,
           operation.metadata.totalChunks,
           operation.metadata.savedAt,
+          operation.metadata.projectSummary ? JSON.stringify(operation.metadata.projectSummary) : null,
         )
         database.prepare('DELETE FROM files WHERE generation <> ?').run(operation.generation)
       })
@@ -337,17 +353,20 @@ export function executeStructuralIndexStoreOperation(
           )
         }
         database.prepare(`
-          INSERT INTO index_state(singleton, active_generation, total_files, total_chunks, saved_at)
-          VALUES (1, ?, ?, ?, ?)
+          INSERT INTO index_state(
+            singleton, active_generation, total_files, total_chunks, saved_at, project_summary_json
+          ) VALUES (1, ?, ?, ?, ?, ?)
           ON CONFLICT(singleton) DO UPDATE SET
             total_files = excluded.total_files,
             total_chunks = excluded.total_chunks,
-            saved_at = excluded.saved_at
+            saved_at = excluded.saved_at,
+            project_summary_json = excluded.project_summary_json
         `).run(
           generation,
           operation.metadata.totalFiles,
           operation.metadata.totalChunks,
           operation.metadata.savedAt,
+          operation.metadata.projectSummary ? JSON.stringify(operation.metadata.projectSummary) : null,
         )
       })
       return { type: 'ok' }

@@ -5,7 +5,6 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { logger } from '@shared/utils/Logger'
 import { ProjectSummary, DirectorySummary, FileSummary, SymbolInfo } from '../types'
 
 // 常见目录描述
@@ -84,11 +83,9 @@ interface ProjectType {
 
 export class ProjectSummaryGenerator {
   private workspacePath: string
-  private cachePath: string
 
-  constructor(workspacePath: string, cachePath: string) {
+  constructor(workspacePath: string) {
     this.workspacePath = workspacePath
-    this.cachePath = cachePath
   }
 
   /** 检测项目类型 */
@@ -192,9 +189,6 @@ export class ProjectSummaryGenerator {
       generatedAt: Date.now(),
     }
 
-    // 异步保存缓存
-    this.saveCache(summary)
-
     return summary
   }
 
@@ -243,44 +237,6 @@ export class ProjectSummaryGenerator {
     }
 
     return lines.join('\n')
-  }
-
-  /** 加载缓存 */
-  async loadCache(): Promise<ProjectSummary | null> {
-    try {
-      if (fs.existsSync(this.cachePath)) {
-        const content = await fs.promises.readFile(this.cachePath, 'utf-8')
-        return JSON.parse(content)
-      }
-    } catch (e) {
-      logger.index.warn('[ProjectSummary] Failed to load cache:', e)
-    }
-    return null
-  }
-
-  /** 清除缓存 */
-  async clearCache(): Promise<void> {
-    try {
-      if (fs.existsSync(this.cachePath)) {
-        await fs.promises.unlink(this.cachePath)
-        logger.index.info('[ProjectSummary] Cache cleared')
-      }
-    } catch (e) {
-      logger.index.warn('[ProjectSummary] Failed to clear cache:', e)
-    }
-  }
-
-  /** 保存缓存 */
-  private async saveCache(summary: ProjectSummary): Promise<void> {
-    try {
-      const dir = path.dirname(this.cachePath)
-      if (!fs.existsSync(dir)) {
-        await fs.promises.mkdir(dir, { recursive: true })
-      }
-      await fs.promises.writeFile(this.cachePath, JSON.stringify(summary, null, 2))
-    } catch (e) {
-      logger.index.warn('[ProjectSummary] Failed to save cache:', e)
-    }
   }
 
   /** 推断目录描述 */

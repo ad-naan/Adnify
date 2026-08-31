@@ -69,6 +69,21 @@ export interface IndexStatus {
   message?: string
 }
 
+/** 已完成索引的轻量持久化清单；运行进度和错误只保留在内存。 */
+export interface IndexManifest {
+  schemaVersion: 1
+  mode: IndexMode
+  completedAt: number
+  totalFiles: number
+  totalChunks: number
+  embedding?: {
+    fingerprint: string
+    provider: EmbeddingProvider
+    model: string
+    vectorDimension?: number
+  }
+}
+
 // ==================== 项目摘要 ====================
 
 /** 目录摘要 */

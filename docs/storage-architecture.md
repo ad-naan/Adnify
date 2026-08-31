@@ -58,6 +58,28 @@ and message-to-blob references. Blob liveness is determined by indexed foreign
 key relationships; commits never scan or parse the complete message history.
 The structural cache normalizes file metadata away from chunks and uses
 `(generation, relative_path, id)` as its storage and pagination order.
+Its `index_state` row also owns the derived project summary, so there is no
+second `project-summary.json` authority to keep synchronized.
+
+## Workspace index cache layout
+
+Each workspace uses one hashed directory below the active user configuration
+directory (including a configured custom directory):
+
+```text
+cache/workspaces/<workspace-hash>/
+├── structural-index.sqlite
+├── semantic-index.lancedb/
+└── index-manifest.json
+```
+
+`index-manifest.json` is the semantic index's small completion record, not an
+index database. It contains the mode, completion time, counts, embedding
+provider/model, vector dimension and a configuration fingerprint. Runtime
+progress and errors stay in memory. Structural chunks, completion metadata and
+their project summary live only in SQLite; semantic vectors live in LanceDB. A
+changed semantic fingerprint invalidates the disposable LanceDB cache before it
+can be queried.
 
 ## I/O budget
 
