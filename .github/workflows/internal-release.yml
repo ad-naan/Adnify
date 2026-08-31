@@ -90,12 +90,6 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
-      - name: Configure pnpm for target platform
-        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: |
-          pnpm config set supportedArchitectures.os win32
-          pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
-
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
         run: pnpm install
@@ -169,12 +163,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
-
-      - name: Configure pnpm for target platform
-        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: |
-          pnpm config set supportedArchitectures.os darwin
-          pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
@@ -259,12 +247,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
-
-      - name: Configure pnpm for target platform
-        if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}
-        run: |
-          pnpm config set supportedArchitectures.os linux
-          pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
       - name: Install dependencies
         if: ${{ inputs.architecture == 'all' || inputs.architecture == matrix.arch }}

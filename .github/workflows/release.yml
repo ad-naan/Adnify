@@ -46,11 +46,6 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
-      - name: Configure pnpm for target platform
-        run: |
-          pnpm config set supportedArchitectures.os win32
-          pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
-
       - name: Install dependencies
         run: pnpm install
         env:
@@ -127,11 +122,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
-
-      - name: Configure pnpm for target platform
-        run: |
-          pnpm config set supportedArchitectures.os darwin
-          pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
       - name: Install dependencies
         run: pnpm install
@@ -216,11 +206,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
-
-      - name: Configure pnpm for target platform
-        run: |
-          pnpm config set supportedArchitectures.os linux
-          pnpm config set supportedArchitectures.cpu ${{ matrix.arch }}
 
       - name: Install dependencies
         run: pnpm install
