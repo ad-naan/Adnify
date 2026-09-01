@@ -2,6 +2,8 @@
  * 情绪感知环境类型定义
  */
 
+import type { TranslationKey } from '@shared/i18n'
+
 /** 检测到的开发者情绪状态 */
 export type EmotionState = 
   | 'focused'      // 专注 - 高效编码中
@@ -25,7 +27,13 @@ export interface EmotionDetection {
   duration: number    // 该状态持续时长(ms)
   factors: EmotionFactor[]
   context?: CodeContext  // 检测时的代码上下文
-  suggestions?: string[]  // 基于当前状态的建议
+  /**
+   * 基于当前状态的建议，存 locale 键而不是句子。
+   *
+   * 检测跑在渲染进程的服务层，那里没有 `language`；早先直接 push 中文句子，
+   * 英文界面的状态栏气泡里就露出一句中文。翻译在 `EmotionStatusIndicator` 做。
+   */
+  suggestions?: TranslationKey[]
   similarPatterns?: {  // 相似的历史模式
     timestamp: number
     state: EmotionState
@@ -111,8 +119,10 @@ export interface EmotionFeedbackPayload {
   type: EmotionFeedbackType
   priority: number
   emotionState: EmotionState
-  message: string
-  shortMessage?: string
+  /** 正文的 locale 键。适配器是纯逻辑层，拿不到 `language`，句子由消费它的组件渲染。 */
+  messageKey: TranslationKey
+  /** 状态栏那种窄槽位用的短文案键，缺省就退回 `messageKey`。 */
+  shortMessageKey?: TranslationKey
   actions?: EmotionFeedbackAction[]
   createdAt: number
   expiresAt?: number

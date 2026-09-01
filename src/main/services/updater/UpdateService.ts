@@ -35,6 +35,11 @@ export interface UpdateStatus {
   releaseDate?: string
   downloadUrl?: string
   progress?: number
+  /**
+   * Diagnostic detail, always English — the UI renders its own translated
+   * "update failed" copy and only logs this. Do not put user-facing sentences
+   * here: this service runs in the main process and never sees `language`.
+   */
   error?: string
   requiresManualDownload: boolean
   isPortable: boolean
@@ -189,7 +194,7 @@ class UpdateService {
 
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
-          reject(new Error('更新检查超时，请检查网络连接'))
+          reject(new Error('Update check timed out'))
         }, 30 * 1000)
       })
 
@@ -251,7 +256,7 @@ class UpdateService {
       if (this.status.status === 'checking') {
         this.updateStatus({
           status: 'error',
-          error: error.message || '更新检查失败',
+          error: error.message || 'Update check failed',
         })
       }
     }
@@ -298,7 +303,7 @@ class UpdateService {
       } catch (err) {
         clearTimeout(timeoutId)
         if (toAppError(err).name === 'AbortError') {
-          throw new Error('更新检查超时，请检查网络连接')
+          throw new Error('Update check timed out')
         }
         throw err
       }
@@ -312,7 +317,7 @@ class UpdateService {
 
       this.updateStatus({
         status: 'error',
-        error: error.message || '更新检查失败',
+        error: error.message || 'Update check failed',
       })
     }
 
@@ -321,7 +326,7 @@ class UpdateService {
 
   async downloadUpdate(): Promise<void> {
     if (this.status.requiresManualDownload) {
-      throw new Error('当前安装方式不支持应用内自动更新。请点击「前往下载页」获取对应安装包（已尽量使用加速链接）。')
+      throw new Error('In-app download is not supported by this installation; use the download page instead')
     }
 
     if (this.status.status !== 'available' && !(this.status.status === 'error' && this.status.version)) {
@@ -362,7 +367,7 @@ class UpdateService {
 
   quitAndInstall(): void {
     if (this.status.requiresManualDownload) {
-      throw new Error('当前安装方式不支持应用内自动安装。请使用下载页中的安装包完成升级。')
+      throw new Error('In-app install is not supported by this installation; use the download page instead')
     }
 
     if (this.status.status !== 'downloaded') {

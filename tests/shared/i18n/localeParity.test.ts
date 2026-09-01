@@ -5,6 +5,8 @@
  * 会静默退回英文，界面变成中英混排，而且没有任何测试会红。这条测试就是那道闸门。
  */
 import { describe, expect, it } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 import { en } from '@shared/i18n/locales/en'
 import { zh } from '@shared/i18n/locales/zh'
 import { asLanguage, t } from '@shared/i18n'
@@ -47,5 +49,20 @@ describe('i18n locale parity', () => {
   it('substitutes parameters instead of leaking the placeholder', () => {
     expect(t('worktreeLane.dropConfirm', 'zh', { branch: 'adnify/lane-x' })).toContain('adnify/lane-x')
     expect(t('worktreeLane.dropConfirm', 'en', { branch: 'adnify/lane-x' })).not.toContain('{branch}')
+  })
+
+  /**
+   * 闪屏首帧的文案只能写在 index.html 里 —— 它在 bundle 加载之前就绘制了，拿不到
+   * locale 表。所以那两句是唯一允许存在的重复，代价是可能和 locale 表漂移：这条测试
+   * 把 `data-splash-key` 对应的英文（标签内容）和中文（`data-splash-zh`）都钉到表上。
+   */
+  it('keeps the splash first frame in sync with the locale table', () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../../../index.html'), 'utf8')
+    const spans = [...html.matchAll(/<span data-splash-key="([^"]+)" data-splash-zh="([^"]+)">([^<]+)<\/span>/g)]
+    expect(spans.length).toBe(2)
+    for (const [, key, chinese, english] of spans) {
+      expect(en[key as keyof typeof en]).toBe(english)
+      expect(zh[key as keyof typeof zh]).toBe(chinese)
+    }
   })
 })

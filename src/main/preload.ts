@@ -174,13 +174,6 @@ interface IndexSearchResult {
   language: string
 }
 
-interface EmbeddingProvider {
-  id: string
-  name: string
-  description: string
-  free: boolean
-}
-
 interface RemoteShellEntry {
   name: string
   path: string
@@ -399,7 +392,6 @@ export interface ElectronAPI {
   indexClear: (workspacePath: string) => Promise<{ success: boolean; error?: string }>
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
-  indexGetProviders: () => Promise<EmbeddingProvider[]>
   indexParseCallGraph: (filePath: string, content: string) => Promise<import('@shared/types').CodeGraphNode[]>
   onIndexProgress: (callback: (status: IndexStatusData) => void) => () => void
 
@@ -797,7 +789,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   indexClear: (workspacePath: string) => ipcRenderer.invoke('index:clear', workspacePath),
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => ipcRenderer.invoke('index:updateEmbeddingConfig', workspacePath, config),
   indexTestConnection: (workspacePath: string) => ipcRenderer.invoke('index:testConnection', workspacePath),
-  indexGetProviders: () => ipcRenderer.invoke('index:getProviders'),
   indexParseCallGraph: (filePath: string, content: string) => ipcRenderer.invoke('index:parseCallGraph', filePath, content),
   onIndexProgress: (callback: (status: IndexStatusData) => void) => {
     const handler = (_: IpcRendererEvent, status: IndexStatusData) => callback(status)

@@ -2,6 +2,7 @@ import type { AssistantMessage, ChatMessage, ChatThread, InteractiveContent } fr
 import { getMessageText, isAssistantMessage } from '@/renderer/agent/types'
 import type { PlanTask, TaskPlan } from './types'
 import { PLAN_ACTIVITY_STAGES, PLAN_ACTIVITY_STATUSES, type PlanActivityStage, type PlanActivityStatus } from '@/shared/types/planActivity'
+import { t, toLocaleTag, type Language, type TranslationKey } from '@shared/i18n'
 
 export type { PlanActivityStatus } from '@/shared/types/planActivity'
 import { derivePlanPlanningState, type PlanPlanningState } from './planWorkflowGuard'
@@ -89,13 +90,29 @@ export interface PlanRoleAllocation {
   taskCount: number
 }
 
+/**
+ * 计划评审风险。
+ *
+ * 带的是原因码 + 参数，不是文案：这份投影是数据层，语言在渲染层才知道。原来每条风险
+ * 自带 `title`/`detail`/`titleZh`/`detailZh` 四个字段，视图再按语言挑一对 —— 加一种
+ * 语言等于给结构体再加两个字段，并且投影层被迫拼用户可见的句子。
+ */
 export interface PlanReviewRisk {
   id: string
   severity: 'warning' | 'error'
-  title: string
-  detail: string
-  titleZh: string
-  detailZh: string
+  code: PlanReviewRiskCode
+  /** 文案参数里的标量（数量、文件名） */
+  params?: Record<string, string | number>
+  /** 自由文本列表（任务标题），由渲染层按语言连接 */
+  tasks?: string[]
+}
+
+export type PlanReviewRiskCode = 'dependencyCycle' | 'missingDependency' | 'parallelWriteConflict'
+
+/** 风险文案的插值：标量原样带过去，自由文本列表按语言连接 */
+export function planReviewRiskParams(risk: PlanReviewRisk, language: Language): Record<string, string | number> {
+  if (!risk.tasks) return risk.params || {}
+  return { ...risk.params, tasks: new Intl.ListFormat(toLocaleTag(language)).format(risk.tasks) }
 }
 
 export interface PlanReviewProjection {
@@ -226,25 +243,33 @@ function toActivity(args: Record<string, unknown>, id: string, timestamp: number
   }
 }
 
-const TOOL_TITLES: Record<string, string> = {
-  ask_user: '确认需求',
-  create_task_plan: '生成结构化计划',
-  read_file: '读取文件',
-  read_files: '读取文件',
-  search_files: '搜索项目',
-  list_directory: '浏览目录',
-  run_command: '运行命令',
-  task: '调度子任务',
+/** 工具名 → 活动流里显示的标题；表里没有的工具退回到把下划线换成空格的工具名 */
+const TOOL_TITLE_KEYS: Record<string, TranslationKey> = {
+  ask_user: 'planWorkbench.tool.askUser',
+  create_task_plan: 'planWorkbench.tool.createTaskPlan',
+  read_file: 'planWorkbench.tool.readFile',
+  read_files: 'planWorkbench.tool.readFile',
+  search_files: 'planWorkbench.tool.searchFiles',
+  list_directory: 'planWorkbench.tool.listDirectory',
+  run_command: 'planWorkbench.tool.runCommand',
+  task: 'planWorkbench.tool.task',
 }
 
-function toolDetail(args: Record<string, unknown>): string | undefined {
+function toolDetail(args: Record<string, unknown>, language: Language): string | undefined {
   for (const key of ['description', 'question', 'path', 'filePath', 'command', 'prompt']) {
     const value = args[key]
     if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 180)
   }
   for (const key of ['paths', 'files']) {
     const value = args[key]
-    if (Array.isArray(value)) return value.filter(item => typeof item === 'string').slice(0, 4).join('、')
+    if (Array.isArray(value)) {
+      // Intl.ListFormat 而不是写死的 '、'：中英文的列表连接符不一样，而这里连的是
+      // 文件路径，顿号出现在英文界面里就是一眼乱码。用 narrow 是因为这是枚举而不是
+      // 句子，不需要 “和 / and” 那个连词。
+      return new Intl.ListFormat(toLocaleTag(language), { style: 'narrow' }).format(
+        value.filter((item): item is string => typeof item === 'string').slice(0, 4),
+      )
+    }
   }
   return undefined
 }
@@ -333,8 +358,15 @@ export function projectPlanReview(plan: TaskPlan): PlanReviewProjection {
   }
 
   const risks: PlanReviewRisk[] = []
-  if (graph.hasCycle) risks.push({ id: 'dependency-cycle', severity: 'error', title: 'Dependency cycle', detail: 'At least one task is part of a circular dependency and cannot be scheduled safely.', titleZh: '存在循环依赖', detailZh: '至少一个任务处于循环依赖中，调度器无法安全执行该计划。' })
-  if (graph.missingDependencies.length) risks.push({ id: 'missing-dependency', severity: 'error', title: 'Missing dependency', detail: `${graph.missingDependencies.length} dependency references do not match a task in this plan.`, titleZh: '依赖任务缺失', detailZh: `${graph.missingDependencies.length} 个依赖引用未匹配到当前计划中的任务。` })
+  if (graph.hasCycle) risks.push({ id: 'dependency-cycle', severity: 'error', code: 'dependencyCycle' })
+  if (graph.missingDependencies.length) {
+    risks.push({
+      id: 'missing-dependency',
+      severity: 'error',
+      code: 'missingDependency',
+      params: { count: graph.missingDependencies.length },
+    })
+  }
 
   if (plan.executionMode === 'parallel') {
     const nodesByRank = new Map<number, PlanTask[]>()
@@ -344,7 +376,13 @@ export function projectPlanReview(plan: TaskPlan): PlanReviewProjection {
       for (const task of rankedTasks) for (const file of task.producesFiles || []) writers.set(file, [...(writers.get(file) || []), task.title])
       for (const [file, taskTitles] of writers) {
         if (taskTitles.length < 2) continue
-        risks.push({ id: `write-conflict:${rank}:${file}`, severity: 'warning', title: 'Parallel write conflict', detail: `${taskTitles.join(', ')} may write ${file} in the same scheduling layer.`, titleZh: '并行写入冲突', detailZh: `${taskTitles.join('、')} 可能在同一调度层写入 ${file}。` })
+        risks.push({
+          id: `write-conflict:${rank}:${file}`,
+          severity: 'warning',
+          code: 'parallelWriteConflict',
+          params: { file },
+          tasks: taskTitles,
+        })
       }
     }
   }
@@ -363,8 +401,9 @@ export function projectPlanWorkbench(input: {
   plan?: TaskPlan
   currentThreadId: string | null
   threads: Record<string, ChatThread>
+  language: Language
 }): PlanWorkbenchProjection {
-  const { plan, currentThreadId, threads } = input
+  const { plan, currentThreadId, threads, language } = input
   const planningThread = getPlanningThread(plan, currentThreadId, threads)
   const planningMessages = planningThread?.messages || []
   const planningState = derivePlanPlanningState(planningMessages)
@@ -431,8 +470,8 @@ export function projectPlanWorkbench(input: {
     return scanThread(thread).tools.map(entry => ({
       id: entry.id,
       stage,
-      title: TOOL_TITLES[entry.name] || entry.name.replaceAll('_', ' '),
-      detail: toolDetail(entry.args),
+      title: TOOL_TITLE_KEYS[entry.name] ? t(TOOL_TITLE_KEYS[entry.name], language) : entry.name.replaceAll('_', ' '),
+      detail: toolDetail(entry.args, language),
       status: toolStatus(entry.status),
       taskId,
       timestamp: entry.timestamp,

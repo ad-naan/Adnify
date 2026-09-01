@@ -8,7 +8,7 @@ import { projectPlanHistory, type PlanHistoryEntry } from '@/renderer/agent/plan
 import { beginPlanRevision } from '@/renderer/agent/plan/planRevisionService'
 import { buildInteractiveResponse } from '@/renderer/agent/utils/interactiveResponse'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
-import { t } from '@shared/i18n'
+import { t, asLanguage } from '@shared/i18n'
 
 export function usePlanWorkbenchController() {
   const language = useStore(state => state.language)
@@ -30,7 +30,10 @@ export function usePlanWorkbenchController() {
     if (workspacePath) void loadPlansFromStorage()
   }, [loadPlansFromStorage, workspacePath])
 
-  const model = useMemo(() => projectPlanWorkbench({ plan, currentThreadId, threads }), [currentThreadId, plan, threads])
+  const model = useMemo(
+    () => projectPlanWorkbench({ plan, currentThreadId, threads, language: asLanguage(language) }),
+    [currentThreadId, language, plan, threads],
+  )
   const history = useMemo(() => projectPlanHistory(plans, threads), [plans, threads])
 
   const startPlan = useCallback(async () => {

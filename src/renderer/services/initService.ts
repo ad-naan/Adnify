@@ -33,6 +33,15 @@ export interface InitResult {
   error?: string
 }
 
+/**
+ * 启动阶段。
+ *
+ * 报的是阶段码而不是句子：闪屏文案要按 `language` 翻译，而这里既不知道用户的语言
+ * （第一个阶段跑在设置加载之前），也不该在服务层拼界面文字。旧代码报英文句子、
+ * 由 `useAppInit` 逐句 if 比较再换成中文，加一个阶段就要改两处字符串。
+ */
+export type AppInitPhase = 'initializing' | 'settings' | 'workspace' | 'ready'
+
 function scheduleIdleTask(task: () => void | Promise<void>, timeout = 2000): void {
   if ('requestIdleCallback' in window) {
     requestIdleCallback(() => { task() }, { timeout })
@@ -154,15 +163,15 @@ async function restoreWorkspace(): Promise<boolean> {
 }
 
 export async function initializeApp(
-  updateStatus: (status: string) => void
+  updateStatus: (phase: AppInitPhase) => void
 ): Promise<InitResult> {
   try {
     startupMetrics.start('init-total')
 
-    updateStatus('Initializing...')
+    updateStatus('initializing')
     await initCoreModules()
 
-    updateStatus('Loading settings...')
+    updateStatus('settings')
     const params = new URLSearchParams(window.location.search)
     const isEmptyWindow = params.get('empty') === '1'
     const savedTheme = await loadUserSettings(isEmptyWindow)
@@ -174,11 +183,11 @@ export async function initializeApp(
     const { onboardingCompleted, hasExistingConfig } = useStore.getState()
 
     if (!isEmptyWindow) {
-      updateStatus('Restoring workspace...')
+      updateStatus('workspace')
       await restoreWorkspace()
     }
 
-    updateStatus('Ready!')
+    updateStatus('ready')
     startupMetrics.end('init-total')
 
     if (import.meta.env.DEV) {

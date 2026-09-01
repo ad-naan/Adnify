@@ -3,8 +3,11 @@
  */
 import { useEffect, useRef, useCallback } from 'react'
 import { api } from '@renderer/services/electronAPI'
-import { initializeApp, registerSettingsSync, registerAppErrorListener } from '@renderer/services/initService'
+import { initializeApp, registerSettingsSync, registerAppErrorListener, type AppInitPhase } from '@renderer/services/initService'
 import { initWorkspaceStateSync } from '@renderer/services/workspaceStateService'
+import { useStore } from '@renderer/store'
+import { asLanguage, t, type TranslationKey } from '@shared/i18n'
+import { cacheStartupLanguage, readStartupLanguage } from '@renderer/i18n/startupLanguage'
 
 interface InitResult {
   shouldShowOnboarding: boolean
@@ -14,29 +17,35 @@ interface UseAppInitOptions {
   onInitialized?: (result: InitResult) => void
 }
 
+/** 阶段 → 闪屏的两行文案。`beforeSettings` 标出跑在设置加载完成之前的阶段。 */
+const PHASES: Record<AppInitPhase, { status: TranslationKey; sub: TranslationKey; beforeSettings?: true }> = {
+  initializing: { status: 'splash.initializing', sub: 'splash.initializingSub', beforeSettings: true },
+  settings: { status: 'splash.settings', sub: 'splash.settingsSub', beforeSettings: true },
+  workspace: { status: 'splash.workspace', sub: 'splash.workspaceSub' },
+  ready: { status: 'splash.ready', sub: 'splash.readySub' },
+}
+
 export function useAppInit(options: UseAppInitOptions = {}) {
   const initRef = useRef(false)
   const optionsRef = useRef(options)
   optionsRef.current = options
+  const language = useStore(state => state.language)
 
-  const updateLoaderStatus = useCallback((status: string) => {
+  // 语言变了就更新启动缓存：闪屏首帧只能同步读到 localStorage，权威值仍在设置里。
+  useEffect(() => { cacheStartupLanguage(language) }, [language])
+
+  const updateLoaderStatus = useCallback((phase: AppInitPhase) => {
     const statusEl = document.querySelector('#initial-loader .loader-status span')
     const subStatusEl = document.querySelector('#initial-loader .loader-status-sub span')
+    if (!statusEl && !subStatusEl) return
 
-    if (statusEl) {
-      if (status === 'Initializing...') statusEl.textContent = '正在初始化 AI 引擎...'
-      else if (status === 'Loading settings...') statusEl.textContent = '正在加载配置信息...'
-      else if (status === 'Restoring workspace...') statusEl.textContent = '正在构建工作区...'
-      else if (status === 'Ready!') statusEl.textContent = '加载完成'
-      else statusEl.textContent = status
-    }
+    const { status, sub, beforeSettings } = PHASES[phase]
+    // 前两个阶段跑在设置加载之前，store 里还是默认值 —— 用上次启动缓存下来的语言，
+    // 和 index.html 首帧保持一致；之后的阶段读真实取值。
+    const lang = beforeSettings ? readStartupLanguage() : asLanguage(useStore.getState().language)
 
-    if (subStatusEl) {
-      if (status === 'Initializing...') subStatusEl.textContent = '正在启动核心服务与通信通道'
-      else if (status === 'Loading settings...') subStatusEl.textContent = '正在读取偏好设置与插件配置'
-      else if (status === 'Restoring workspace...') subStatusEl.textContent = '正在准备项目上下文、模型能力与最近会话'
-      else if (status === 'Ready!') subStatusEl.textContent = '即将进入 Adnify'
-    }
+    if (statusEl) statusEl.textContent = t(status, lang)
+    if (subStatusEl) subStatusEl.textContent = t(sub, lang)
   }, [])
 
   const removeInitialLoader = useCallback(() => {

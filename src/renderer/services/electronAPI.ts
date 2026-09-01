@@ -254,7 +254,6 @@ function createGroupedAPI() {
       updateEmbeddingConfig: (workspacePath: string, config: Parameters<typeof raw.indexUpdateEmbeddingConfig>[1]) =>
         raw.indexUpdateEmbeddingConfig(workspacePath, config),
       testConnection: (workspacePath: string) => raw.indexTestConnection(workspacePath),
-      getProviders: () => raw.indexGetProviders(),
       parseCallGraph: (filePath: string, content: string) => raw.indexParseCallGraph(filePath, content),
       onProgress: (callback: Parameters<typeof raw.onIndexProgress>[0]) => raw.onIndexProgress(callback),
     },

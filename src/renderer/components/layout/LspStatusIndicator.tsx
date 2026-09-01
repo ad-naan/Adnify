@@ -12,7 +12,7 @@ import { getLanguageId, isLanguageSupported } from '@/renderer/services/lspServi
 import BottomBarPopover from '../ui/BottomBarPopover'
 import { logger } from '@shared/utils/Logger'
 import { toast } from '../common/ToastProvider'
-import { t } from '@shared/i18n'
+import { t, type TranslationKey } from '@shared/i18n'
 
 interface LspServerStatus {
   installed: boolean
@@ -56,19 +56,24 @@ const SERVER_NAMES: Record<string, string> = {
   php: 'Intelephense (PHP)',
 }
 
-// 安装说明
-const INSTALL_HINTS: Record<string, { auto: boolean; hint: string; builtin?: boolean }> = {
-  typescript: { auto: true, hint: '可自动安装' },
-  html: { auto: true, hint: '可自动安装' },
-  css: { auto: true, hint: '可自动安装' },
-  json: { auto: true, hint: '可自动安装' },
-  python: { auto: true, hint: '可自动安装 Pyright' },
-  go: { auto: true, hint: '需要系统已安装 Go' },
-  rust: { auto: false, hint: '请运行: rustup component add rust-analyzer' },
-  jdtls: { auto: true, hint: '可自动安装，需要 JDK 21+' },
-  clangd: { auto: false, hint: '请安装 LLVM/Clang' },
-  vue: { auto: true, hint: '可自动安装' },
-  php: { auto: true, hint: '可自动安装 Intelephense' },
+/**
+ * 安装说明。
+ *
+ * 存的是 locale 键 + 插值参数，不是句子：这张表是模块级常量，求值时还没有 `language`，
+ * 早先写死中文的版本让英文用户在弹层里看到一行中文提示。
+ */
+const INSTALL_HINTS: Record<string, { auto: boolean; hint: TranslationKey; hintParams?: Record<string, string>; builtin?: boolean }> = {
+  typescript: { auto: true, hint: 'lspStatusIndicator.hint.auto' },
+  html: { auto: true, hint: 'lspStatusIndicator.hint.auto' },
+  css: { auto: true, hint: 'lspStatusIndicator.hint.auto' },
+  json: { auto: true, hint: 'lspStatusIndicator.hint.auto' },
+  python: { auto: true, hint: 'lspStatusIndicator.hint.autoNamed', hintParams: { server: 'Pyright' } },
+  go: { auto: true, hint: 'lspStatusIndicator.hint.needsGo' },
+  rust: { auto: false, hint: 'lspStatusIndicator.hint.runRustup' },
+  jdtls: { auto: true, hint: 'lspStatusIndicator.hint.autoNeedsJdk' },
+  clangd: { auto: false, hint: 'lspStatusIndicator.hint.installLlvm' },
+  vue: { auto: true, hint: 'lspStatusIndicator.hint.auto' },
+  php: { auto: true, hint: 'lspStatusIndicator.hint.autoNamed', hintParams: { server: 'Intelephense' } },
 }
 
 // 需要运行时环境选择的语言（有解释器/SDK 路径概念的语言）
@@ -266,7 +271,7 @@ export default function LspStatusIndicator() {
         {!isInstalled && installInfo && (
           <div className="space-y-2">
             <div className="text-xs text-text-muted">
-              {installInfo.hint}
+              {t(installInfo.hint, language, installInfo.hintParams)}
             </div>
             {installInfo.auto ? (
               <button

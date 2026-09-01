@@ -201,18 +201,6 @@ export function registerIndexingHandlers(getMainWindow: () => BrowserWindow | nu
     }
   })
 
-  // 获取支持的 Embedding 提供商
-  ipcMain.handle('index:getProviders', () => {
-    return [
-      { id: 'jina', name: 'Jina AI', description: '免费 100万 tokens/月', free: true },
-      { id: 'voyage', name: 'Voyage AI', description: '免费 5000万 tokens', free: true },
-      { id: 'cohere', name: 'Cohere', description: '免费 100次/分钟', free: true },
-      { id: 'huggingface', name: 'HuggingFace', description: '免费，有速率限制', free: true },
-      { id: 'ollama', name: 'Ollama', description: '本地运行，完全免费', free: true },
-      { id: 'openai', name: 'OpenAI', description: '付费，质量最高', free: false },
-    ]
-  })
-
   // 更新单个文件索引（用于文件监听）
   ipcMain.handle('index:updateFile', async (_, workspacePath: string, filePath: string): Promise<Result<void>> => {
     try {

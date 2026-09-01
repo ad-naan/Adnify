@@ -31,39 +31,6 @@ export function LspSettings({ language }: LspSettingsProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const tt = useCallback(
-    (key: string) => {
-      const translations: Record<string, Record<string, string>> = {
-        lspServers: { en: 'Language Servers', zh: '语言服务器' },
-        installPath: { en: 'Installation Path', zh: '安装路径' },
-        currentPath: { en: 'Current Path', zh: '当前路径' },
-        defaultPath: { en: 'Default Path', zh: '默认路径' },
-        customPath: { en: 'Custom Path', zh: '自定义路径' },
-        browse: { en: 'Browse', zh: '浏览' },
-        apply: { en: 'Apply', zh: '应用' },
-        reset: { en: 'Reset to Default', zh: '恢复默认' },
-        installed: { en: 'Installed', zh: '已安装' },
-        notInstalled: { en: 'Not Installed', zh: '未安装' },
-        install: { en: 'Install', zh: '安装' },
-        installing: { en: 'Installing...', zh: '安装中...' },
-        installAll: { en: 'Install All Basic', zh: '安装基础服务' },
-        refresh: { en: 'Refresh', zh: '刷新' },
-        supportedLanguages: { en: 'Supported Languages', zh: '支持的语言' },
-        pathNote: {
-          en: 'Change the installation path to avoid filling up your system drive. Existing servers will not be moved automatically.',
-          zh: '更改安装路径可避免占用系统盘空间。已安装的服务器不会自动迁移。',
-        },
-        installNote: {
-          en: 'Language servers provide code intelligence features like auto-completion, go to definition, and diagnostics.',
-          zh: '语言服务器提供代码智能功能，如自动补全、跳转定义和诊断。',
-        },
-        requiresGo: { en: 'Requires Go installed', zh: '需要已安装 Go' },
-      }
-      return translations[key]?.[language] || key
-    },
-    [language]
-  )
-
   // 加载状态
   const loadStatus = useCallback(async () => {
     // 首次加载显示 loading spinner，后续刷新静默更新避免闪烁
@@ -221,15 +188,15 @@ export function LspSettings({ language }: LspSettingsProps) {
       <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
         <div className="flex items-center gap-2">
           <HardDrive className="w-5 h-5 text-accent" />
-          <h3 className="text-sm font-medium text-text-primary">{tt('installPath')}</h3>
+          <h3 className="text-sm font-medium text-text-primary">{t('lspSettings.installPath', language)}</h3>
         </div>
 
-        <p className="text-xs leading-5 text-text-muted">{tt('pathNote')}</p>
+        <p className="text-xs leading-5 text-text-muted">{t('lspSettings.pathNote', language)}</p>
 
         <div className="space-y-3 rounded-lg border border-border/60 bg-background/25 p-4">
           {/* 当前路径 */}
           <div className="space-y-1">
-            <label className="text-xs text-text-muted uppercase tracking-wider">{tt('currentPath')}</label>
+            <label className="text-xs text-text-muted uppercase tracking-wider">{t('lspSettings.currentPath', language)}</label>
             <div className="flex items-center gap-2 p-2 bg-background/50 border border-border/50 rounded text-sm text-text-secondary font-mono">
               <FolderOpen className="w-4 h-4 text-accent flex-shrink-0" />
               <span className="truncate">{binDir}</span>
@@ -238,7 +205,7 @@ export function LspSettings({ language }: LspSettingsProps) {
 
           {/* 自定义路径输入 */}
           <div className="space-y-1">
-            <label className="text-xs text-text-muted uppercase tracking-wider">{tt('customPath')}</label>
+            <label className="text-xs text-text-muted uppercase tracking-wider">{t('lspSettings.customPath', language)}</label>
             <div className="flex gap-2">
               <Input
                 value={customBinDir}
@@ -260,7 +227,7 @@ export function LspSettings({ language }: LspSettingsProps) {
               onClick={handleApplyCustomPath}
               disabled={!customBinDir || customBinDir === binDir}
             >
-              {tt('apply')}
+              {t('lspSettings.apply', language)}
             </Button>
             <Button
               variant="ghost"
@@ -269,7 +236,7 @@ export function LspSettings({ language }: LspSettingsProps) {
               disabled={binDir === defaultBinDir}
             >
               <Trash2 className="w-4 h-4 mr-1" />
-              {tt('reset')}
+              {t('lspSettings.resetToDefault', language)}
             </Button>
           </div>
         </div>
@@ -280,12 +247,12 @@ export function LspSettings({ language }: LspSettingsProps) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Server className="w-5 h-5 text-accent" />
-            <h3 className="text-sm font-medium text-text-primary">{tt('lspServers')}</h3>
+            <h3 className="text-sm font-medium text-text-primary">{t('lspSettings.languageServers', language)}</h3>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={loadStatus} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
-              {tt('refresh')}
+              {t('lspSettings.refresh', language)}
             </Button>
             <Button
               variant="secondary"
@@ -298,12 +265,12 @@ export function LspSettings({ language }: LspSettingsProps) {
               ) : (
                 <Download className="w-4 h-4 mr-1" />
               )}
-              {tt('installAll')}
+              {t('lspSettings.installAllBasic', language)}
             </Button>
           </div>
         </div>
 
-        <p className="text-xs leading-5 text-text-muted">{tt('installNote')}</p>
+        <p className="text-xs leading-5 text-text-muted">{t('lspSettings.installNote', language)}</p>
 
         <div className="space-y-2">
           {LSP_SERVER_DEFINITIONS.map((server) => {
@@ -312,6 +279,8 @@ export function LspSettings({ language }: LspSettingsProps) {
             const isInstalling = installing.has(server.id)
             const isBuiltin = server.builtin
             const canInstall = server.installable
+            // 定义表是 `as const`，没有备注的条目上根本没有这个属性，不能直接点出来
+            const note = 'note' in server ? server.note : undefined
 
             return (
               <div
@@ -329,18 +298,18 @@ export function LspSettings({ language }: LspSettingsProps) {
                     {isInstalled ? (
                       <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
                         <Check className="w-3 h-3" />
-                        {tt('installed')}
+                        {t('common.installed', language)}
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 text-xs text-text-muted bg-white/5 px-2 py-0.5 rounded-full">
                         <X className="w-3 h-3" />
-                        {tt('notInstalled')}
+                        {t('lspSettings.notInstalled', language)}
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-text-muted mt-0.5">{server.description}</p>
+                  <p className="text-sm text-text-muted mt-0.5">{server.description}{note ? ` (${t(note, language)})` : ''}</p>
                   <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs text-text-muted">{tt('supportedLanguages')}:</span>
+                    <span className="text-xs text-text-muted">{t('lspSettings.supportedLanguages', language)}:</span>
                     <div className="flex gap-1">
                       {server.displayLanguages.map((lang) => (
                         <span
@@ -366,7 +335,7 @@ export function LspSettings({ language }: LspSettingsProps) {
                     {isInstalling ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        {tt('installing')}
+                        {t('lspSettings.installing', language)}
                       </>
                     ) : isInstalled ? (
                       <>
@@ -376,7 +345,7 @@ export function LspSettings({ language }: LspSettingsProps) {
                     ) : (
                       <>
                         <Download className="w-4 h-4 mr-1" />
-                        {tt('install')}
+                        {t('lspSettings.install', language)}
                       </>
                     )}
                   </Button>

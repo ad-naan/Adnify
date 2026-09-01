@@ -1,3 +1,5 @@
+import type { TranslationKey } from './i18n'
+
 /**
  * 语言配置
  * 统一管理文件扩展名到语言 ID 的映射，避免重复定义
@@ -151,7 +153,15 @@ export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
 export interface LspServerDefinition {
     id: string
     name: string
+    /** 实现方的包名/可执行文件名，不翻译 */
     description: string
+    /**
+     * 安装/依赖备注的 locale 键。
+     *
+     * 备注和包名分开存：这张表是模块级常量，求值时还没有 `language`，而备注（“需要 JDK 21+”）
+     * 是要给用户看的句子。早先两者拼在 `description` 一个字符串里，英文界面里就露出一段中文。
+     */
+    note?: TranslationKey
     languages: readonly LanguageId[] // 支持的语言 ID
     displayLanguages: string[] // UI 显示的语言名称
     builtin: boolean           // 是否随应用包交付
@@ -220,7 +230,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'go',
         name: 'Go',
-        description: 'gopls (需要已安装 Go)',
+        description: 'gopls',
+        note: 'lspServer.note.needsGo',
         languages: ['go'],
         displayLanguages: ['Go'],
         builtin: false,
@@ -229,7 +240,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'rust',
         name: 'Rust',
-        description: 'rust-analyzer (需要已安装)',
+        description: 'rust-analyzer',
+        note: 'lspServer.note.preinstalled',
         languages: ['rust'],
         displayLanguages: ['Rust'],
         builtin: false,
@@ -238,7 +250,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'jdtls',
         name: 'Java',
-        description: 'Eclipse JDT Language Server (需要 JDK 21+)',
+        description: 'Eclipse JDT Language Server',
+        note: 'lspServer.note.needsJdk21',
         languages: ['java'],
         displayLanguages: ['Java'],
         builtin: false,
@@ -247,7 +260,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'clangd',
         name: 'C / C++',
-        description: 'clangd (自动下载)',
+        description: 'clangd',
+        note: 'lspServer.note.autoDownload',
         languages: ['c', 'cpp'],
         displayLanguages: ['C', 'C++'],
         builtin: false,
@@ -256,7 +270,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'zig',
         name: 'Zig',
-        description: 'zls (自动下载，需要已安装 Zig)',
+        description: 'zls',
+        note: 'lspServer.note.autoDownloadNeedsZig',
         languages: ['zig'],
         displayLanguages: ['Zig'],
         builtin: false,
@@ -265,7 +280,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'csharp',
         name: 'C#',
-        description: 'csharp-ls (需要 .NET SDK)',
+        description: 'csharp-ls',
+        note: 'lspServer.note.needsDotnetSdk',
         languages: ['csharp'],
         displayLanguages: ['C#'],
         builtin: false,
@@ -274,7 +290,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'deno',
         name: 'Deno',
-        description: 'Deno LSP (需要已安装 Deno，仅用于 Deno 项目)',
+        description: 'Deno LSP',
+        note: 'lspServer.note.denoProjectsOnly',
         languages: [], // 不注册为默认服务器，通过项目检测动态选择
         displayLanguages: ['Deno'],
         builtin: false,
@@ -283,7 +300,8 @@ export const LSP_SERVER_DEFINITIONS = [
     {
         id: 'php',
         name: 'PHP',
-        description: 'Intelephense (通过 npm 安装)',
+        description: 'Intelephense',
+        note: 'lspServer.note.viaNpm',
         languages: ['php'],
         displayLanguages: ['PHP'],
         builtin: false,

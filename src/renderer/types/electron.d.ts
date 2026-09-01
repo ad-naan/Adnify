@@ -14,7 +14,6 @@ export type {
   IndexMode,
   SymbolInfo,
   ProjectSummary,
-  EmbeddingProvider,
   LspPosition,
   LspRange,
   LspLocation,
@@ -600,7 +599,6 @@ export interface ElectronAPI {
   indexClear: (workspacePath: string) => Promise<{ success: boolean; error?: string }>
   indexUpdateEmbeddingConfig: (workspacePath: string, config: EmbeddingConfigInput) => Promise<{ success: boolean; error?: string }>
   indexTestConnection: (workspacePath: string) => Promise<{ success: boolean; error?: string; latency?: number }>
-  indexGetProviders: () => Promise<EmbeddingProvider[]>
   indexParseCallGraph: (filePath: string, content: string) => Promise<any[]>
   onIndexProgress: (callback: (status: IndexStatus) => void) => () => void
 

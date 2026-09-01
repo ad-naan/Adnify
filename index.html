@@ -516,18 +516,38 @@
           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
         </svg>
-        <span>正在初始化 AI 引擎...</span>
+        <span data-splash-key="splash.initializing" data-splash-zh="正在初始化 AI 引擎...">Starting the AI engine...</span>
       </div>
       <div class="loader-status-sub">
         <svg class="loader-icon-diamond" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L22 12L12 22L2 12L12 2Z"></path>
         </svg>
-        <span>正在准备项目上下文、模型能力与最近会话</span>
+        <span data-splash-key="splash.initializingSub" data-splash-zh="正在启动核心服务与通信通道">Bringing up core services and IPC channels</span>
       </div>
     </div>
   </div>
 
   <div id="root"></div>
+
+  <script>
+    // 首帧闪屏文案。
+    //
+    // 真正的语言设置在 electron-store 里，只能异步读到，而这一屏在那之前就已经渲染了。
+    // 默认语言是 en，所以标签里写的是英文；上次启动缓存到 localStorage 的语言是 zh 时，
+    // 在首次绘制前把这两句换成中文。之后每个阶段的文案都由 useAppInit 走 locale 表更新，
+    // `data-splash-key` 让 i18n 测试能校验这里的兜底文案和 locale 表没有走样。
+    (function () {
+      try {
+        if (localStorage.getItem('adnify-language') !== 'zh') return;
+        var nodes = document.querySelectorAll('#initial-loader [data-splash-zh]');
+        for (var i = 0; i < nodes.length; i++) {
+          nodes[i].textContent = nodes[i].getAttribute('data-splash-zh');
+        }
+      } catch (e) {
+        // localStorage 不可用：留着英文默认值，别让闪屏挡住启动
+      }
+    })();
+  </script>
 
   <script>
     // 模拟真实的进度条加载动效
