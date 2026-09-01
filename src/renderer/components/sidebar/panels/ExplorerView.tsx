@@ -317,29 +317,29 @@ export function ExplorerView() {
   }, [clipboardItem, workspacePath])
 
   const rootMenuItems: ContextMenuItem[] = [
-    { id: 'newFile', label: t('newFile', 'zh'), icon: FilePlus, onClick: () => handleRootCreate('file') },
-    { id: 'newFolder', label: t('newFolder', 'zh'), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
+    { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleRootCreate('file') },
+    { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleRootCreate('folder') },
     { id: 'sep1', label: '', separator: true },
     {
       id: 'openTerminal',
-      label: t('openIntegratedTerminalHere', 'zh') || '在此处打开集成终端',
+      label: t('openIntegratedTerminalHere', language),
       icon: Terminal,
       onClick: () => workspacePath && openTerminalAtPath(workspacePath),
     },
     { id: 'sep2', label: '', separator: true },
     {
       id: 'paste',
-      label: t('paste', 'zh') || '粘贴',
+      label: t('paste', language),
       icon: Clipboard,
       shortcut: formatShortcut('Ctrl+V'),
       disabled: !clipboardItem,
       onClick: handlePasteToWorkspaceRoot,
     },
     { id: 'sepPaste', label: '', separator: true },
-    { id: 'refresh', label: t('refresh', 'zh'), icon: RefreshCw, onClick: () => refreshFiles({ refreshRoot: true }) },
+    { id: 'refresh', label: t('refresh', language), icon: RefreshCw, onClick: () => refreshFiles({ refreshRoot: true }) },
     {
       id: 'reveal',
-      label: '在资源管理器中显示',
+      label: t('revealInExplorer', language),
       icon: ExternalLink,
       onClick: () => workspacePath && api.file.showInFolder(workspacePath),
     },

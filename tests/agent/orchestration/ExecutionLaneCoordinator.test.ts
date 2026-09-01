@@ -94,10 +94,16 @@ describe('ExecutionLaneCoordinator', () => {
     expect(released).toMatchObject({ outcome: 'retained' })
   })
 
-  it('survives a failing release instead of masking the original error', async () => {
+  it('surfaces a failing release instead of masking it as a no-op', async () => {
     lanes.discard.mockRejectedValue(new Error('worktree remove failed'))
     const assignment = await ExecutionLaneCoordinator.acquire({ kind: 'sub-agent', workspacePath: 'D:/repo', label: 'task', mayWrite: true, concurrent: true })
-    await expect(ExecutionLaneCoordinator.release(assignment, 'failed')).resolves.toBeNull()
+    // null 是"本来就没有车道"的返回值；归还失败必须给出可展示的 completion，
+    // 否则仓库里留下的目录/分支没有任何一层会告诉用户。
+    const released = await ExecutionLaneCoordinator.release(assignment, 'failed')
+    expect(released).not.toBeNull()
+    expect(released).toMatchObject({ success: false, outcome: 'failed' })
+    expect(released?.notice?.code).toBe('cleanupFailed')
+    expect(released?.error).toContain('worktree remove failed')
   })
 
   it('is a no-op when releasing a shared assignment', async () => {

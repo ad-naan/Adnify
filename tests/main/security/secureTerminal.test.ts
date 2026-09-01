@@ -81,7 +81,10 @@ vi.mock('@main/security/securityModule', () => ({
   },
 }))
 
-describe('secureTerminal', () => {
+// 每个用例都要 `await import('@main/security/secureTerminal')`，冷启动导入在整套
+// 测试并发跑满时会超过默认的 5s（实测 5.4s），单独跑却只要 0.7s —— 这是导入耗时而不是
+// 被测逻辑慢，所以给这个文件放宽超时，而不是去改 9 个用例。
+describe('secureTerminal', { timeout: 30_000 }, () => {
   beforeEach(() => {
     handlers.clear()
     childSpawnMock.mockReset()

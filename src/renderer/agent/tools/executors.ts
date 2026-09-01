@@ -4107,11 +4107,18 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
             ctx.threadId,
             { onStarted: bindSubAgent },
         )
+        // 车道保留下来时任务本身是成功的（success=true），但改动还在分支上没合并。
+        // 这件事必须写进 result 文本里：meta 模型读不到，不说它就会以为文件已经落地。
+        const pendingLane = result.success && result.worktree?.outcome === 'retained'
+            ? `\n\nNote: these changes were made on branch ${result.worktree.branch} and could NOT be merged automatically${
+                result.worktree.conflicts?.length ? ` (conflicting files: ${result.worktree.conflicts.join(', ')})` : ''
+            }. They are not present in the working tree; the user must resolve the merge from the task panel.`
+            : ''
         return {
             success: result.success,
-            result: result.success
+            result: (result.success
                 ? result.output ?? 'Sub-agent completed with no output.'
-                : result.error ?? 'Sub-agent failed.',
+                : result.error ?? 'Sub-agent failed.') + pendingLane,
             meta: {
                 subAgentId: result.subAgentId,
                 subAgentThreadId: result.threadId,

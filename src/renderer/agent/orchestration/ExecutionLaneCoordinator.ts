@@ -100,8 +100,18 @@ class ExecutionLaneCoordinatorClass {
     try {
       return await WorktreeLaneService.discard(assignment.lane, reason)
     } catch (error) {
-      logger.agent.warn(`[ExecutionLane] Unable to release lane ${assignment.lane.branch}: ${error instanceof Error ? error.message : String(error)}`)
-      return null
+      // 不能返回 null —— 那和"本来就没有车道"是同一个值，调用方会当成无事发生。
+      // 归还失败意味着仓库里留下了目录或分支，必须让它顺着 completion 走到 UI。
+      const detail = error instanceof Error ? error.message : String(error)
+      logger.agent.warn(`[ExecutionLane] Unable to release lane ${assignment.lane.branch}: ${detail}`)
+      return {
+        ...assignment.lane,
+        success: false,
+        outcome: 'failed',
+        archived: false,
+        notice: { code: 'cleanupFailed', params: { branch: assignment.lane.branch } },
+        error: detail,
+      }
     }
   }
 }

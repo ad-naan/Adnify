@@ -27,6 +27,7 @@ export type ExecutionLaneNoticeCode =
   | 'conflicts'
   | 'mergeFailed'
   | 'commitFailed'
+  | 'cleanupFailed'
   | 'keptForRecovery'
   | 'emptyDiscarded'
   | 'notLaneBranch'

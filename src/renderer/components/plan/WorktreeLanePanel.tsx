@@ -21,7 +21,7 @@ interface WorktreeLanePanelProps {
   lane: ExecutionLaneProjection
   workspacePath: string | null
   language: Language
-  onResolved: (status: ExecutionLaneProjection['status']) => void
+  onResolved: (status: ExecutionLaneProjection['status'], diagnosis?: Pick<ExecutionLaneProjection, 'notice' | 'error' | 'conflicts'>) => void
 }
 
 export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }: WorktreeLanePanelProps) {
@@ -42,7 +42,13 @@ export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }:
         return
       }
       toast.error(laneNoticeText(result.notice, language, result.error))
-      onResolved(result.conflicts?.length ? 'conflict' : lane.status)
+      // 把这次失败的诊断一起交回去：冲突文件列表正是用户下一步要看的东西，
+      // 只回传 status 会让面板重新渲染成一段没有原因的空文案。
+      onResolved(result.conflicts?.length ? 'conflict' : lane.status, {
+        notice: result.notice,
+        error: result.error,
+        conflicts: result.conflicts,
+      })
     } finally {
       setBusy(null)
     }
@@ -75,6 +81,13 @@ export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }:
         <p className="mt-1 text-[10px] leading-4 text-text-muted">
           {[laneNoticeText(lane.notice, language), lanePlacementText(lane, language)].filter(Boolean).join(' ')}
         </p>
+        {lane.conflicts?.length ? <div className="mt-1.5 text-[10px] leading-4 text-text-muted">
+          <div className="text-amber-500/80">{t('worktreeLane.conflictFiles', language, { count: lane.conflicts.length })}</div>
+          <ul className="mt-0.5 space-y-0.5">
+            {lane.conflicts.slice(0, 8).map(file => <li key={file} className="truncate font-mono text-[9px]">{file}</li>)}
+          </ul>
+          {lane.conflicts.length > 8 && <div className="mt-0.5">…</div>}
+        </div> : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <Button size="sm" variant="secondary" disabled={busy !== null} onClick={retry} leftIcon={<GitMerge className="h-3.5 w-3.5" />}>

@@ -12,8 +12,8 @@ import { zh } from '@/renderer/i18n/locales/zh'
 
 const CODES: ExecutionLaneNoticeCode[] = [
   'noRepository', 'noCommits', 'dirtyBase', 'createFailed', 'dirtyBaseMerge', 'baseBranchChanged',
-  'conflicts', 'mergeFailed', 'commitFailed', 'keptForRecovery', 'emptyDiscarded', 'notLaneBranch',
-  'laneStillRunning',
+  'conflicts', 'mergeFailed', 'commitFailed', 'cleanupFailed', 'keptForRecovery', 'emptyDiscarded',
+  'notLaneBranch', 'laneStillRunning',
 ]
 
 describe('laneNoticeText', () => {
@@ -54,5 +54,22 @@ describe('laneNoticeText', () => {
       notice: { code: 'dirtyBaseMerge' },
     }, 'en')
     expect(text).toBe('The base workspace has uncommitted changes, so this lane was not merged. The worktree folder was reclaimed; the commits are still on branch adnify/lane-a.')
+  })
+
+  it('keeps the Git detail alongside the translated cause', () => {
+    // "Merge failed." 分不出真冲突和 index.lock 被占，而原文我们本来就有。
+    const text = laneOutcomeText({
+      branch: 'adnify/lane-a',
+      archived: true,
+      notice: { code: 'mergeFailed' },
+      error: 'fatal: Unable to create .git/index.lock: File exists',
+    }, 'en')
+    expect(text).toContain('Merge failed.')
+    expect(text).toContain('index.lock')
+  })
+
+  it('does not repeat the detail when it was already used as the fallback', () => {
+    const text = laneOutcomeText({ branch: 'adnify/lane-a', error: 'fatal: boom' }, 'en')
+    expect(text.match(/fatal: boom/g)).toHaveLength(1)
   })
 })

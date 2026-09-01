@@ -45,9 +45,16 @@ export function lanePlacementText(lane: LaneTextSource, language: Language): str
   return lane.path ? t('worktreeLane.placement.onDisk', language, { path: lane.path }) : ''
 }
 
-/** 完整的一句：为什么没合并 + 车道现在在哪 */
+/**
+ * 完整的一句：为什么没合并 + 车道现在在哪。
+ *
+ * 带上 Git 原文：`mergeFailed` 这类原因码只说"合并失败"，而失败原因可能是真冲突、
+ * 也可能是 `index.lock` 被占或 fast-forward 被拒 —— 只给译文的话用户没有任何线索
+ * 能区分，而这条信息我们本来就有。
+ */
 export function laneOutcomeText(lane: LaneTextSource, language: Language): string {
-  return [laneNoticeText(lane.notice, language, lane.error), lanePlacementText(lane, language)]
-    .filter(Boolean)
-    .join(' ')
+  const parts = [laneNoticeText(lane.notice, language, lane.error), lanePlacementText(lane, language)]
+  // notice 已经把 error 当兜底用掉时不要重复
+  if (lane.error && lane.notice) parts.push(t('worktreeLane.detail', language, { detail: lane.error }))
+  return parts.filter(Boolean).join(' ')
 }

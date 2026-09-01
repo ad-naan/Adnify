@@ -358,10 +358,13 @@ class SubAgentManagerClass {
           const laneResult = handle.laneAssignment?.isolated
             ? await ExecutionLaneCoordinator.complete(handle.laneAssignment, `Adnify agent task: ${handle.description}`) || undefined
             : undefined
-          const laneSucceeded = !laneResult || laneResult.success
+          // `retained` 不是失败：agent 干完了活，只是改动没能自动合并，提交仍在分支上
+          // 等人工处理。把它当失败会连 output 一起丢掉 —— 那才是任务的真正答案。
+          // 保留下来的车道通过 worktree 投影告诉调用方还需要合并。
+          const laneFailed = Boolean(laneResult) && !laneResult!.success && laneResult!.outcome !== 'retained'
           this.settle(handle.id, {
-            success: laneSucceeded,
-            output: laneSucceeded ? output || 'Sub-agent completed with no output.' : undefined,
+            success: !laneFailed,
+            output: laneFailed ? undefined : output || 'Sub-agent completed with no output.',
             error: laneResult?.error,
             subAgentId: handle.id,
             threadId: handle.threadId,

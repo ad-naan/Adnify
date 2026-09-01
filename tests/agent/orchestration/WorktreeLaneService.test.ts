@@ -114,7 +114,9 @@ describe('WorktreeLaneService', () => {
     expect(result).toMatchObject({ success: true, outcome: 'discarded' })
     expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
     expect(git.removeWorktree).toHaveBeenCalledWith(lane.path, 'D:/repo')
-    expect(git.deleteBranch).toHaveBeenCalledWith(lane.branch, true, 'D:/repo')
+    // -d 而不是 -D：空车道的分支相对基点没有自己的提交，普通删除就够；`-D` 命中
+    // 危险模式会给后台清理弹一次审批框。
+    expect(git.deleteBranch).toHaveBeenCalledWith(lane.branch, false, 'D:/repo')
   })
 
   it('merges a lane whose agent committed on its own even when nothing is left to stage', async () => {
@@ -166,7 +168,33 @@ describe('WorktreeLaneService', () => {
       const lane = await service.create('D:/repo', 'write task')
       const result = await service.discard(lane, 'timed out')
       expect(result).toMatchObject({ success: true, outcome: 'discarded' })
-      expect(git.deleteBranch).toHaveBeenCalledWith(lane.branch, true, 'D:/repo')
+      expect(git.deleteBranch).toHaveBeenCalledWith(lane.branch, false, 'D:/repo')
+    })
+
+    it('never force-deletes work when the WIP commit fails', async () => {
+      // add -A / commit 失败意味着改动只在工作目录里。这时 archive 的 --force 重试
+      // 会连未提交的改动一起删掉，而旧代码返回的却是"已保留到分支上"。
+      git.commitWorktree.mockResolvedValue({ success: false, error: 'fatal: Unable to create index.lock' })
+      const lane = await service.create('D:/repo', 'write task')
+      const result = await service.discard(lane, 'timed out')
+
+      expect(git.removeWorktree).not.toHaveBeenCalled()
+      expect(git.deleteBranch).not.toHaveBeenCalled()
+      expect(result).toMatchObject({ success: false, outcome: 'failed', archived: false })
+      expect(result.notice?.code).toBe('commitFailed')
+    })
+
+    it('reports a failed cleanup instead of calling it discarded', async () => {
+      git.commitWorktree.mockResolvedValue({ success: true, commit: 'base000', committed: false })
+      git.countCommitsBetween.mockResolvedValue(0)
+      git.removeWorktree.mockResolvedValue({ success: false, error: 'permission denied' })
+      const lane = await service.create('D:/repo', 'write task')
+      const result = await service.discard(lane, 'timed out')
+
+      expect(result.success).toBe(false)
+      expect(result.outcome).toBe('failed')
+      expect(result.notice?.code).toBe('cleanupFailed')
+      expect(result.error).toBeTruthy()
     })
 
     it('force-removes a worktree Git refuses to release, then prunes the registration', async () => {
@@ -212,6 +240,32 @@ describe('WorktreeLaneService', () => {
       await service.create('D:/repo', 'another task')
       expect(git.listWorktrees).toHaveBeenCalledTimes(1)
 
+      const result = await service.sweep('D:/repo')
+      expect(result).toEqual({ archived: [], kept: [] })
+      expect(git.removeWorktree).not.toHaveBeenCalled()
+    })
+
+    // 这一组钉住 Windows：`git worktree list` 报的大小写来自 worktree add 时记下的
+    // 路径，工作区路径来自用户的文件夹选择 / 最近项目，两者经常只差大小写。
+    it('recognizes a lane root that differs only in case', async () => {
+      git.listWorktrees.mockResolvedValue([
+        { path: 'd:/repo/.adnify/worktrees/stale-1234abcd', branch: 'adnify/lane-stale-1234abcd' },
+      ])
+      const result = await service.sweep('D:/Repo')
+      expect(result.archived).toEqual(['d:/repo/.adnify/worktrees/stale-1234abcd'])
+    })
+
+    it('still skips a live lane when Git reports its path in a different case', async () => {
+      const lane = await service.create('D:/repo', 'write task')
+      // 同一条车道，Git 用另一种大小写报出来 —— 绝不能当成残留删掉。
+      git.listWorktrees.mockResolvedValue([{ path: lane.path.toUpperCase(), branch: lane.branch }])
+      const result = await service.sweep('D:/repo')
+      expect(result).toEqual({ archived: [], kept: [] })
+      expect(git.removeWorktree).not.toHaveBeenCalled()
+    })
+
+    it('does not mistake the lane root itself for a lane', async () => {
+      git.listWorktrees.mockResolvedValue([{ path: 'D:/repo/.adnify/worktrees', branch: 'main' }])
       const result = await service.sweep('D:/repo')
       expect(result).toEqual({ archived: [], kept: [] })
       expect(git.removeWorktree).not.toHaveBeenCalled()

@@ -252,7 +252,7 @@ export default function InlineEdit({
 				{state === 'preview' && (
 					<>
 						<span className="text-[12px] text-text-secondary pr-2 border-r border-border/50">
-							{t('apply' as any, language) || 'Accept'} (Enter) / {t('cancel' as any, language) || 'Reject'} (Esc)
+							{t('applyCode', language)} (Enter) / {t('cancel', language)} (Esc)
 						</span>
 						<button
 							onClick={handleAccept}

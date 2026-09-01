@@ -470,8 +470,11 @@ export const TaskBoard = memo(function TaskBoard({ planId, planOptions = [], onP
               lane={selectedTask.worktreeLane}
               workspacePath={workspacePath}
               language={asLanguage(language)}
-              onResolved={status => updateTask(plan.id, selectedTask.id, {
-                worktreeLane: { ...selectedTask.worktreeLane!, status, notice: undefined, error: undefined, conflicts: undefined },
+              onResolved={(status, diagnosis) => updateTask(plan.id, selectedTask.id, {
+                worktreeLane: {
+                  ...selectedTask.worktreeLane!, status,
+                  notice: diagnosis?.notice, error: diagnosis?.error, conflicts: diagnosis?.conflicts,
+                },
               })}
             />}
           </section>

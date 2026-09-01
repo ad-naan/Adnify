@@ -16,6 +16,7 @@ import { gitService } from '@/renderer/services/gitService'
 import { logger } from '@utils/Logger'
 import { gitExcludeService } from '@/renderer/services/gitExcludeService'
 import { ADNIFY_INTERNAL_DIR, WORKTREE_LANE_BRANCH_PREFIX, WORKTREE_LANE_DIR } from '@shared/constants'
+import { normalizePath, pathEquals, pathStartsWith } from '@shared/utils/pathUtils'
 import type { ExecutionLaneNotice, ExecutionLaneNoticeCode } from '@shared/types/executionLane'
 
 export interface WorktreeLaneHandle {
@@ -97,10 +98,22 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 class WorktreeLaneServiceClass {
   private createQueue: Promise<unknown> = Promise.resolve()
   private mergeQueue: Promise<unknown> = Promise.resolve()
-  /** 本会话仍在运行的车道，按 worktree 路径索引（回收时要跳过它们） */
+  /**
+   * 本会话仍在运行的车道，按 worktree 路径索引（回收时要跳过它们）。
+   *
+   * key 必须过 `laneKey`：注册时用的是我们自己拼出来的路径，查找时用的是
+   * `git worktree list` 报出来的路径，两者在 Windows 上大小写常常不一致
+   * （用户从最近项目里打开的是 `d:/repo`，Git 记的是 `D:/Repo`）。直接用原始
+   * 字符串做 key，回收逻辑会把正在写入的车道当成残留删掉。
+   */
   private readonly activeLanes = new Map<string, WorktreeLaneHandle>()
-  /** 每个工作区只做一次残留回收 */
+  /** 每个工作区只做一次残留回收（同样按归一化路径索引） */
   private readonly sweptWorkspaces = new Set<string>()
+
+  /** 路径 → Map/Set 的 key：统一分隔符与大小写 */
+  private laneKey(path: string): string {
+    return normalizePath(path).toLowerCase()
+  }
 
   async create(workspacePath: string, label: string): Promise<WorktreeLaneHandle> {
     const run = this.createQueue.then(() => this.createNow(workspacePath, label))
@@ -110,6 +123,11 @@ class WorktreeLaneServiceClass {
 
   private async createNow(workspacePath: string, label: string): Promise<WorktreeLaneHandle> {
     await this.sweepOnce(workspacePath)
+
+    // 排除必须在洁净度检查之前：应用自己往 `.adnify/` 里写 plan 文档和 agent 临时
+    // 文件，仓库没把它加进 .gitignore 时这些未跟踪文件会让检查永远失败 —— 而本该
+    // 让检查通过的那条 exclude 却排在检查后面，于是每次重试都同样失败。
+    await this.ensureExcluded(workspacePath)
 
     if (!await gitService.isWorkingTreeClean(workspacePath)) {
       throw new LaneUnavailableError(
@@ -124,18 +142,17 @@ class WorktreeLaneServiceClass {
     const baseBranch = await gitService.getCurrentBranch(workspacePath) || undefined
     const baseCommit = await gitService.resolveCommit('HEAD', workspacePath) || undefined
 
-    await this.ensureExcluded(workspacePath)
     const result = await gitService.createWorktree(path, branch, workspacePath)
     if (!result.success) throw new LaneUnavailableError(result.error || 'Unable to create worktree lane', notice('createFailed'))
 
     const handle: WorktreeLaneHandle = { id, workspacePath, path, branch, baseBranch, baseCommit }
-    this.activeLanes.set(path, handle)
+    this.activeLanes.set(this.laneKey(path), handle)
     logger.agent.info(`[WorktreeLane] Created ${branch} at ${path}`)
     return handle
   }
 
   private laneRoot(workspacePath: string): string {
-    return `${workspacePath.replace(/\\/g, '/').replace(/\/$/, '')}/${WORKTREE_LANE_DIR}`
+    return `${normalizePath(workspacePath).replace(/\/$/, '')}/${WORKTREE_LANE_DIR}`
   }
 
   /**
@@ -147,7 +164,7 @@ class WorktreeLaneServiceClass {
    * 而车道里的 `add -A` 又会把这些本地状态提交进合并结果。
    */
   private async ensureExcluded(workspacePath: string): Promise<void> {
-    const internalDir = `${workspacePath.replace(/\\/g, '/').replace(/\/$/, '')}/${ADNIFY_INTERNAL_DIR}`
+    const internalDir = `${normalizePath(workspacePath).replace(/\/$/, '')}/${ADNIFY_INTERNAL_DIR}`
     try {
       await gitExcludeService.update(workspacePath, internalDir, true, 'add', 'exclude')
     } catch (error) {
@@ -158,19 +175,25 @@ class WorktreeLaneServiceClass {
   async complete(handle: WorktreeLaneHandle, message: string): Promise<WorktreeLaneCompletion> {
     const commit = await gitService.commitWorktree(message, handle.path)
     if (!commit.success) {
-      this.activeLanes.delete(handle.path)
-      return { ...handle, success: false, outcome: 'failed', notice: notice('commitFailed'), error: commit.error }
+      this.activeLanes.delete(this.laneKey(handle.path))
+      // 目录和分支都留着：改动还没进提交，删掉就找不回来了。sweep 会因为工作树
+      // 是脏的而跳过它，所以这份残留只能由用户处理 —— 日志里给出绝对路径。
+      logger.agent.error(
+        `[WorktreeLane] Lane ${handle.branch} could not be committed; leaving ${handle.path} on disk with uncommitted work: ${commit.error}`,
+      )
+      return { ...handle, success: false, outcome: 'failed', archived: false, notice: notice('commitFailed'), error: commit.error }
     }
 
     // 车道里一行都没改：没有值得保留的提交，目录和分支一起收掉。
     if (commit.committed === false && !await this.hasOwnCommits(handle)) {
       const dropped = await this.drop(handle)
+      // 清理失败时不能说成功：目录或分支还在仓库里，用户需要知道。
       return {
         ...handle,
-        success: true,
-        outcome: 'discarded',
+        success: !dropped,
+        outcome: dropped ? 'failed' : 'discarded',
         commit: commit.commit,
-        notice: notice('emptyDiscarded', { branch: handle.branch }),
+        notice: dropped ? notice('cleanupFailed', { branch: handle.branch }) : notice('emptyDiscarded', { branch: handle.branch }),
         error: dropped,
       }
     }
@@ -179,7 +202,14 @@ class WorktreeLaneServiceClass {
       this.mergeQueue = this.mergeQueue.then(async () => {
         resolve(await this.mergeNow(handle, commit.commit))
       }).catch(async error => {
-        const archived = await this.archive(handle)
+        // archive 自己不抛（gitService 都返回结果对象），但万一抛了，resolve 就永远
+        // 不会被调用，complete() 挂死且没有超时 —— 所以兜一层。
+        let archived = false
+        try {
+          archived = await this.archive(handle)
+        } catch (archiveError) {
+          logger.agent.warn(`[WorktreeLane] Archive failed while handling a merge-queue error: ${errorMessage(archiveError)}`)
+        }
         resolve({
           ...handle,
           success: false,
@@ -248,19 +278,37 @@ class WorktreeLaneServiceClass {
    */
   async discard(handle: WorktreeLaneHandle, reason: string): Promise<WorktreeLaneCompletion> {
     const commit = await gitService.commitWorktree(`Adnify lane WIP (${reason})`, handle.path)
-    const hasWork = commit.success
-      ? (commit.committed !== false || await this.hasOwnCommits(handle))
-      : true
+
+    // 提交失败（index.lock 被占、文件被杀软锁住、磁盘满）意味着改动还只存在于工作
+    // 目录里。这时绝不能走 archive —— 它在 remove 被拒后会 --force，连带把这些没
+    // 提交的改动一起删掉，而返回的却是"已保留到分支上"。目录原样留着，让用户能自己
+    // 捞回来；分支也留着，sweep 会因为工作树是脏的而跳过它。
+    if (!commit.success) {
+      this.activeLanes.delete(this.laneKey(handle.path))
+      logger.agent.error(
+        `[WorktreeLane] Lane ${handle.branch} could not be committed (${reason}); leaving ${handle.path} on disk with uncommitted work: ${commit.error}`,
+      )
+      return {
+        ...handle,
+        success: false,
+        outcome: 'failed',
+        archived: false,
+        notice: notice('commitFailed'),
+        error: commit.error,
+      }
+    }
+
+    const hasWork = commit.committed !== false || await this.hasOwnCommits(handle)
 
     if (!hasWork) {
       const dropped = await this.drop(handle)
       logger.agent.info(`[WorktreeLane] Discarded empty lane ${handle.branch} (${reason})`)
       return {
         ...handle,
-        success: true,
-        outcome: 'discarded',
+        success: !dropped,
+        outcome: dropped ? 'failed' : 'discarded',
         commit: commit.commit,
-        notice: notice('emptyDiscarded', { branch: handle.branch }),
+        notice: dropped ? notice('cleanupFailed', { branch: handle.branch }) : notice('emptyDiscarded', { branch: handle.branch }),
         error: dropped,
       }
     }
@@ -286,23 +334,34 @@ class WorktreeLaneServiceClass {
 
   /** 只回收 worktree 目录，保留分支与提交 */
   private async archive(handle: WorktreeLaneHandle): Promise<boolean> {
-    this.activeLanes.delete(handle.path)
     let removed = await gitService.removeWorktree(handle.path, handle.workspacePath)
     if (!removed.success) removed = await gitService.removeWorktree(handle.path, handle.workspacePath, true)
     if (!removed.success) {
+      // 注销要放在成功之后：删不掉的目录仍然是一个已登记的 worktree，如果这里先把
+      // 它从 activeLanes 里摘掉，sweep 既不认它是本会话的车道、又因为它是脏的而不
+      // 回收，于是永远没人管。留在表里至少能让 sweep 继续跳过它。
       logger.agent.warn(`[WorktreeLane] Unable to remove worktree ${handle.path}: ${removed.error}`)
       return false
     }
+    this.activeLanes.delete(this.laneKey(handle.path))
     // remove 之后必须 prune：否则 .git/worktrees 里的残留登记会让同名车道再也建不起来。
     await gitService.pruneWorktrees(handle.workspacePath)
     return true
   }
 
-  /** 目录和分支一起删掉；返回错误信息（成功则 undefined） */
+  /**
+   * 目录和分支一起删掉；返回错误信息（成功则 undefined）。
+   *
+   * 用 `branch -d`（非强制）而不是 `-D`：`drop` 只在车道相对基点没有任何自己的提交
+   * 时才会被调用，这种分支对 Git 来说已经是"完全合并"的，`-d` 足够删掉它。而 `-D`
+   * 命中 DANGEROUS_GIT_PATTERNS（`branch … -D`），会走审批通道弹一次模态框 —— 后台
+   * 并行跑 6 个空车道就是 6 次弹框，用户完全不知道自己在批准什么；被拒绝时错误还会
+   * 被塞进一个 success:true 的结果里，于是分支留下来、提示却说已经删掉了。
+   */
   private async drop(handle: WorktreeLaneHandle): Promise<string | undefined> {
     const archived = await this.archive(handle)
     if (!archived) return `Unable to remove worktree ${handle.path}`
-    const deleted = await gitService.deleteBranch(handle.branch, true, handle.workspacePath)
+    const deleted = await gitService.deleteBranch(handle.branch, false, handle.workspacePath)
     if (!deleted.success) {
       logger.agent.warn(`[WorktreeLane] Unable to delete lane branch ${handle.branch}: ${deleted.error}`)
       return deleted.error
@@ -322,8 +381,8 @@ class WorktreeLaneServiceClass {
 
     const lanes = new Map<string, RetainedLaneInfo>()
     for (const entry of worktrees) {
-      if (!entry.path.startsWith(`${laneRoot}/`) || !entry.branch) continue
-      lanes.set(entry.branch, { branch: entry.branch, path: entry.path, ahead: null, active: this.activeLanes.has(entry.path) })
+      if (!pathStartsWith(entry.path, laneRoot) || pathEquals(entry.path, laneRoot) || !entry.branch) continue
+      lanes.set(entry.branch, { branch: entry.branch, path: entry.path, ahead: null, active: this.activeLanes.has(this.laneKey(entry.path)) })
     }
     for (const branch of branches) {
       if (!lanes.has(branch)) lanes.set(branch, { branch, ahead: null, active: false })
@@ -377,7 +436,7 @@ class WorktreeLaneServiceClass {
     if (!lane.branch.startsWith(WORKTREE_LANE_BRANCH_PREFIX)) {
       return { success: false, notice: notice('notLaneBranch', { branch: lane.branch }) }
     }
-    if (lane.path && this.activeLanes.has(lane.path)) return { success: false, notice: notice('laneStillRunning') }
+    if (lane.path && this.activeLanes.has(this.laneKey(lane.path))) return { success: false, notice: notice('laneStillRunning') }
 
     if (lane.path) {
       let removed = await gitService.removeWorktree(lane.path, workspacePath)
@@ -397,8 +456,9 @@ class WorktreeLaneServiceClass {
    * `listLanes` 里由用户决定，比我们替他删掉安全。
    */
   private async sweepOnce(workspacePath: string): Promise<void> {
-    if (this.sweptWorkspaces.has(workspacePath)) return
-    this.sweptWorkspaces.add(workspacePath)
+    const key = this.laneKey(workspacePath)
+    if (this.sweptWorkspaces.has(key)) return
+    this.sweptWorkspaces.add(key)
     try {
       await this.sweep(workspacePath)
     } catch (error) {
@@ -414,8 +474,8 @@ class WorktreeLaneServiceClass {
     const kept: string[] = []
 
     for (const entry of worktrees) {
-      if (!entry.path.startsWith(`${laneRoot}/`)) continue
-      if (this.activeLanes.has(entry.path)) continue
+      if (!pathStartsWith(entry.path, laneRoot) || pathEquals(entry.path, laneRoot)) continue
+      if (this.activeLanes.has(this.laneKey(entry.path))) continue
       if (!await gitService.isWorkingTreeClean(entry.path)) {
         kept.push(entry.path)
         continue
