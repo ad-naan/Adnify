@@ -42,6 +42,8 @@ import { getAgentLanguage, translateAgentText } from '../utils/agentText'
 import { getBuiltinProvider } from '@shared/config/providers'
 import { ExecutionLaneCoordinator, type ExecutionLaneAssignment } from '../orchestration/ExecutionLaneCoordinator'
 import { laneNoticeText, laneOutcomeText } from '../orchestration/laneNoticeText'
+import { laneNeedsRecovery, projectLane } from '../orchestration/laneProjection'
+import type { ExecutionLaneProjection } from '@shared/types/executionLane'
 
 // 动态导入 runLoop 避免循环依赖
 const importRunLoop = () => import('./loop').then(m => m.runLoop)
@@ -253,7 +255,8 @@ export class AgentClass {
         if (abortController.signal.aborted) {
           const released = await ExecutionLaneCoordinator.release(laneAssignment, 'aborted by user')
           if (released?.outcome === 'retained') {
-            this.showLaneNotice('info', translateAgentText('worktreeLane.retainedTitle'), laneOutcomeText(released, getAgentLanguage()), assistantId, threadId)
+            this.showLaneNotice('info', translateAgentText('worktreeLane.retainedTitle'), laneOutcomeText(released, getAgentLanguage()), assistantId, threadId,
+              { projection: projectLane(released), workspacePath })
           }
           return { threadId, assistantId, requestId }
         }
@@ -268,6 +271,7 @@ export class AgentClass {
             laneOutcomeText(laneResult, getAgentLanguage()),
             assistantId,
             threadId,
+            { projection: projectLane(laneResult), workspacePath },
           )
         }
       }
@@ -279,15 +283,28 @@ export class AgentClass {
       const released = laneAssignment?.lane
         ? await ExecutionLaneCoordinator.release(laneAssignment, error instanceof Error ? error.message : 'execution failed')
         : null
-      // 车道的去向对用户是关键信息（提交还在不在？），所以拼进这条错误里 ——
-      // 文案取自原因码，service 层不需要知道当前语言。
-      const laneNote = released?.notice ? ` ${laneNoticeText(released.notice, getAgentLanguage())}` : ''
+      const laneProjection = released ? projectLane(released) : undefined
+      const needsRecovery = Boolean(laneProjection && laneNeedsRecovery(laneProjection))
+      // 车道的去向对用户是关键信息（提交还在不在？）。还需要人工处理的车道会紧接着
+      // 渲染成一张恢复卡，原因文案和按钮都在卡里，不必再拼进错误消息重复一遍；已经
+      // 清干净的车道没有卡片可挂，就把原因附在错误后面。
+      const laneNote = released?.notice && !needsRecovery ? ` ${laneNoticeText(released.notice, getAgentLanguage())}` : ''
       const effectiveError = laneNote
         ? new Error(`${error instanceof Error ? error.message : String(error)}${laneNote}`)
         : error
       const appError = AppError.fromError(effectiveError)
       logger.agent.error('[Agent] Error:', appError.toJSON())
       this.showError(formatErrorMessage(appError), assistantId, threadId || undefined)
+      if (laneProjection && needsRecovery && released) {
+        this.showLaneNotice(
+          'warning',
+          translateAgentText('worktreeLane.retainedTitle'),
+          laneOutcomeText(released, getAgentLanguage()),
+          assistantId,
+          threadId || undefined,
+          { projection: laneProjection, workspacePath },
+        )
+      }
       throw error
     } finally {
       if (persistSuspended) {
@@ -559,6 +576,9 @@ export class AgentClass {
    *
    * 和 showError 的区别：不 finalize 助手消息 —— 车道提示可能在运行开始时就发出
    * （退回共享工作区），此时这条消息还要继续流式输出。
+   *
+   * `lane` 是可选的：带上它，这条提示会在聊天里就地长出恢复面板（重试合并 / 丢弃）。
+   * 顶层会话没有任务卡，不给这个入口的话未合并的提交只能靠用户自己去命令行找。
    */
   private showLaneNotice(
     alertType: 'warning' | 'error' | 'info',
@@ -566,10 +586,17 @@ export class AgentClass {
     message: string,
     assistantId?: string,
     threadId?: string,
+    lane?: { projection: ExecutionLaneProjection, workspacePath: string | null },
   ): void {
     const store = useAgentStore.getState()
     const id = assistantId || store.addAssistantMessage('', threadId)
-    store.addSystemAlertPart(id, { alertType, title, message }, threadId)
+    store.addSystemAlertPart(id, {
+      alertType,
+      title,
+      message,
+      lane: lane && laneNeedsRecovery(lane.projection) ? lane.projection : undefined,
+      laneWorkspacePath: lane?.workspacePath || undefined,
+    }, threadId)
   }
 
   /**

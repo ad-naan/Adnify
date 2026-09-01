@@ -25,7 +25,7 @@ import type { LLMConfig } from '../core/types'
 import type { WorkMode } from '@/renderer/modes/types'
 import type { SubAgentLifecycleCallbacks, SubAgentRequest, SubAgentResult, SubAgentStatus } from './types'
 import { ExecutionLaneCoordinator, type ExecutionLaneAssignment } from './ExecutionLaneCoordinator'
-import type { WorktreeLaneCompletion } from './WorktreeLaneService'
+import { projectLane } from './laneProjection'
 
 /** 单个子代理的运行句柄 */
 interface SubAgentHandle {
@@ -370,7 +370,7 @@ class SubAgentManagerClass {
             threadId: handle.threadId,
             assistantId: handle.assistantId,
             durationMs: Date.now() - handle.startedAt,
-            worktree: this.laneProjection(handle, laneResult),
+            worktree: laneResult ? projectLane(laneResult) : undefined,
           })
         })()
       })
@@ -400,25 +400,8 @@ class SubAgentManagerClass {
       const released = handle.laneAssignment?.isolated
         ? await ExecutionLaneCoordinator.release(handle.laneAssignment, reason) || undefined
         : undefined
-      this.settle(handle.id, { ...result, worktree: this.laneProjection(handle, released) })
+      this.settle(handle.id, { ...result, worktree: released ? projectLane(released) : undefined })
     })()
-  }
-
-  /** 把车道终态投影成回传给主 agent 的 worktree 元信息 */
-  private laneProjection(handle: SubAgentHandle, completion?: WorktreeLaneCompletion) {
-    if (completion) {
-      return {
-        path: completion.path || handle.laneAssignment?.lane?.path || '',
-        branch: completion.branch || handle.laneAssignment?.lane?.branch || '',
-        commit: completion.commit,
-        merged: completion.merged,
-        conflicts: completion.conflicts,
-        outcome: completion.outcome,
-        archived: completion.archived,
-      }
-    }
-    const lane = handle.laneAssignment?.lane
-    return lane ? { path: lane.path, branch: lane.branch } : undefined
   }
 
   /**

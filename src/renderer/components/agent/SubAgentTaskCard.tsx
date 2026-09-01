@@ -4,12 +4,31 @@ import type { ToolCall } from '@/renderer/agent/types'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { Agent } from '@/renderer/agent/core/Agent'
 import { buildSubAgentExecutionSteps, type SubAgentStepState } from '@/renderer/agent/presentation/subAgentExecution'
+import { LaneStatusChip, WorktreeLanePanel } from '@/renderer/components/git'
 import { useStore } from '@/renderer/store'
 import { t } from '@shared/i18n'
+import type { ExecutionLaneProjection, ExecutionLaneStatus } from '@shared/types/executionLane'
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {}
 const asString = (value: unknown): string => typeof value === 'string' ? value : ''
 const asNumber = (value: unknown): number | undefined => typeof value === 'number' ? value : undefined
+
+const LANE_STATUSES: ExecutionLaneStatus[] = ['active', 'ready', 'merged', 'conflict', 'discarded', 'failed']
+
+/**
+ * 从工具 meta 里取车道投影。
+ *
+ * `_meta` 是 `Record<string, unknown>`（会落盘、也可能来自旧版本的会话），所以这里只认
+ * 带合法 status 的对象，不做类型断言 —— 旧记录里的 `{ outcome: 'retained' }` 就该被当成
+ * 没有车道，而不是渲染出一张状态是 undefined 的卡。
+ */
+function asLane(value: unknown): ExecutionLaneProjection | undefined {
+  const record = asRecord(value)
+  const status = record.status
+  return typeof status === 'string' && (LANE_STATUSES as string[]).includes(status)
+    ? record as unknown as ExecutionLaneProjection
+    : undefined
+}
 
 function formatDuration(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000))
@@ -25,9 +44,11 @@ function StepIcon({ state }: { state: SubAgentStepState }) {
   return <Circle className="h-2.5 w-2.5 text-text-muted/30" />
 }
 
-function SubAgentTaskCard({ toolCall }: { toolCall: ToolCall }) {
+function SubAgentTaskCard({ toolCall, messageId }: { toolCall: ToolCall, messageId?: string }) {
   const language = useStore(state => state.language)
+  const workspacePath = useStore(state => state.workspacePath)
   const meta = asRecord(toolCall.arguments._meta)
+  const lane = asLane(meta.worktree)
   const threadId = asString(meta.subAgentThreadId)
   const startedAt = asNumber(meta.subAgentStartedAt)
   const finishedDuration = asNumber(meta.subAgentDurationMs)
@@ -97,6 +118,7 @@ function SubAgentTaskCard({ toolCall }: { toolCall: ToolCall }) {
         <span className="text-text-muted">SubAgent</span><span className="px-1.5 text-text-muted/35">·</span>{description}
       </span>
       {waitingApproval && <span className="shrink-0 text-[10px] text-amber-400">{t('subAgentTaskCard.approvalNeeded', language)}</span>}
+      {lane && <LaneStatusChip status={lane.status} language={language} className="shrink-0 text-[10px]" />}
       {completedTools > 0 && <span className="shrink-0 text-[10px] tabular-nums text-text-muted/60">{completedTools}</span>}
       {elapsed > 0 && <span className="shrink-0 pr-2 text-[10px] tabular-nums text-text-muted/60">{formatDuration(elapsed)}</span>}
     </button>
@@ -121,6 +143,24 @@ function SubAgentTaskCard({ toolCall }: { toolCall: ToolCall }) {
       </div>}
 
       {(toolCall.result || toolCall.error) && !isRunning && <div className={`ml-6 mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-md px-2.5 py-2 text-[10px] leading-5 custom-scrollbar ${isError ? 'bg-red-500/10 text-red-300' : 'bg-text-primary/[0.025] text-text-secondary'}`}>{toolCall.result || toolCall.error}</div>}
+      {/* 子代理跑在独立车道里时，改动可能没能自动合并 —— 提交只留在 adnify/lane-* 分支上。
+          恢复入口必须挂在这张卡上：子代理没有任务面板，聊天流是用户唯一能看到它的地方。 */}
+      {lane && <div className="ml-6">
+        <WorktreeLanePanel
+          lane={lane}
+          workspacePath={workspacePath}
+          language={language}
+          onResolved={(status, diagnosis) => {
+            if (!messageId) return
+            useAgentStore.getState().updateToolCall(messageId, toolCall.id, {
+              arguments: {
+                ...toolCall.arguments,
+                _meta: { ...meta, worktree: { ...lane, status, notice: diagnosis?.notice, error: diagnosis?.error, conflicts: diagnosis?.conflicts } },
+              },
+            })
+          }}
+        />
+      </div>}
       {threadId && <button type="button" onClick={() => switchThread(threadId)} className="ml-6 mt-2 inline-flex items-center gap-1.5 text-[10px] font-medium text-accent hover:underline"><ExternalLink className="h-3 w-3" />{t('subAgentTaskCard.openSubTask', language)}</button>}
     </div>}
   </div>

@@ -34,40 +34,12 @@ import {
 } from './types'
 import { buildReviewProof, parseProofGraph, stripProofGraph } from './proofGraph'
 import { ExecutionLaneCoordinator } from '../orchestration/ExecutionLaneCoordinator'
-import type { WorktreeLaneCompletion, WorktreeLaneHandle } from '../orchestration/WorktreeLaneService'
+import { activeLaneProjection, projectLane } from '../orchestration/laneProjection'
 import { laneOutcomeText } from '../orchestration/laneNoticeText'
 import { getAgentLanguage } from '../utils/agentText'
-import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 import { createModelRecommender } from './modelOutcomeLedger'
 import { getConfiguredPlanProviders } from './planProviderCatalog'
 import { planTaskMayWrite } from './planExecutionPolicy'
-
-/**
- * 把车道终态投影到任务卡片上。
- *
- * `ready` 表示"已归档、等人工处理"：目录被回收了，但提交还在车道分支上，
- * 任务面板可以据此给出重新合并 / 丢弃的入口。
- */
-function projectLane(lane: WorktreeLaneHandle, completion: WorktreeLaneCompletion): ExecutionLaneProjection {
-    const status: ExecutionLaneProjection['status'] = completion.outcome === 'merged'
-        ? 'merged'
-        : completion.outcome === 'discarded'
-            ? 'discarded'
-            : completion.outcome === 'retained'
-                ? (completion.conflicts?.length ? 'conflict' : 'ready')
-                : 'failed'
-    return {
-        status,
-        path: lane.path,
-        branch: lane.branch,
-        baseBranch: lane.baseBranch,
-        commit: completion.commit,
-        conflicts: completion.conflicts,
-        notice: completion.notice,
-        error: status === 'merged' || status === 'discarded' ? undefined : completion.error,
-        archived: completion.archived,
-    }
-}
 
 const sessions = new Map<string, ExecutionSession>()
 const planToSessionId = new Map<string, string>()
@@ -523,10 +495,7 @@ async function executeTask(
             mayWrite: needsLane, concurrent: plan.executionMode === 'parallel',
         })
         if (laneAssignment.lane) {
-            const lane = laneAssignment.lane
-            store.updateTask(plan.id, existingTask.id, {
-                worktreeLane: { status: 'active', path: lane.path, branch: lane.branch, baseBranch: lane.baseBranch },
-            })
+            store.updateTask(plan.id, existingTask.id, { worktreeLane: activeLaneProjection(laneAssignment.lane) })
         }
 
         let result = await runTaskWithAgent(session, existingTask, store.getPlan(plan.id) || plan, threadId, requestId, laneAssignment.workspacePath || undefined)
@@ -537,7 +506,7 @@ async function executeTask(
                 ? await ExecutionLaneCoordinator.complete(laneAssignment, `Adnify plan: ${existingTask.title}`)
                 : await ExecutionLaneCoordinator.release(laneAssignment, result.error || 'task failed')
             if (completion) {
-                store.updateTask(plan.id, existingTask.id, { worktreeLane: projectLane(laneAssignment.lane, completion) })
+                store.updateTask(plan.id, existingTask.id, { worktreeLane: projectLane(completion) })
                 if (result.success && !completion.success) {
                     // 任务错误会直接显示在计划面板上，所以用可翻译的车道文案，
                     // 拿不到原因码时才退回 Git 原文。

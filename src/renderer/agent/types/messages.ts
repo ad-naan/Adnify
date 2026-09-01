@@ -8,6 +8,7 @@ import type { ContextItem } from './context'
 import type { InteractiveContent } from './interactive'
 import type { FileSnapshot } from './checkpoint'
 import type { StructuredSummary, CompressionLevel } from '../domains/context/types'
+import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 
 // ============================================
 // 消息部分类型
@@ -49,6 +50,16 @@ export interface SystemAlertPart {
   message: string
   suggestion?: string
   compact?: boolean
+  /**
+   * 车道终态（可选）。
+   *
+   * 带上它这条提示就能就地渲染恢复面板 —— 顶层会话的车道没合并时，提交只留在
+   * `adnify/lane-*` 分支上，而聊天界面里没有任务卡可以承载"重试合并 / 丢弃"。
+   * 之前用户只能自己去命令行找这条分支。
+   */
+  lane?: ExecutionLaneProjection
+  /** 车道所属工作区，恢复操作要在这个仓库里执行（当前工作区可能已经切走了） */
+  laneWorkspacePath?: string
 }
 
 export interface ContextSnapshotPart {

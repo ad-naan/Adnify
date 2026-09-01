@@ -25,6 +25,7 @@ describe('assessWorktreeLaneCommand', () => {
       { name: 'forced remove', args: ['worktree', 'remove', '--force', LANE] },
       { name: 'porcelain list', args: ['worktree', 'list', '--porcelain'] },
       { name: 'prune', args: ['worktree', 'prune'] },
+      { name: 'force-deleting a lane branch', args: ['branch', '-D', BRANCH] },
     ])('$name', ({ args }) => {
       expect(assess(args).allowed).toBe(true)
     })
@@ -87,6 +88,27 @@ describe('assessWorktreeLaneCommand', () => {
       { name: 'prune with operands', args: ['worktree', 'prune', '--expire', 'now'] },
     ])('rejects $name', ({ args }) => {
       expect(assess(args).allowed).toBe(false)
+    })
+
+    /**
+     * 分支删除只放开 `-D <adnify/lane-*>` 这一个形状。
+     *
+     * 这条通道免审批，所以它同时是"丢弃车道不弹第二个框"的实现和"不能顺手删掉用户分支"
+     * 的边界：换个分支名、换个子命令、多带一个参数，都必须回到通用通道去走审批。
+     */
+    it.each([
+      { name: 'a branch outside the lane namespace', args: ['branch', '-D', 'main'] },
+      { name: 'the bare lane prefix', args: ['branch', '-D', 'adnify/lane-'] },
+      { name: 'a traversal sequence in the branch', args: ['branch', '-D', 'adnify/lane-a..b'] },
+      { name: 'whitespace in the branch', args: ['branch', '-D', 'adnify/lane-a b'] },
+      { name: 'two branches at once', args: ['branch', '-D', BRANCH, 'main'] },
+      { name: 'the safe delete flag', args: ['branch', '-d', BRANCH] },
+      { name: 'no flag at all', args: ['branch', BRANCH] },
+      { name: 'listing branches', args: ['branch', '--list', 'adnify/lane-*'] },
+      { name: 'renaming a branch', args: ['branch', '-m', BRANCH, 'main'] },
+      { name: 'a cwd outside the workspace', args: ['branch', '-D', BRANCH], cwd: '/tmp/elsewhere' },
+    ])('rejects branch deletion with $name', ({ args, cwd }) => {
+      expect(assess(args, cwd).allowed).toBe(false)
     })
 
     it('explains why a command was refused', () => {

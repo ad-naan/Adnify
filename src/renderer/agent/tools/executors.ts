@@ -21,6 +21,7 @@ import {
 } from '@/renderer/utils/searchReplace'
 import { smartReplace, normalizeLineEndings, checkLineReplaceWarnings } from '@/renderer/utils/smartReplace'
 import { getAgentConfig } from '../utils/AgentConfig'
+import { laneNeedsRecovery } from '../orchestration/laneProjection'
 import { fileCacheService } from '../services/fileCacheService'
 import { memoryService, normalizeMemoryContentInput } from '../services/memoryService'
 import { useStore } from '@/renderer/store'
@@ -4100,10 +4101,10 @@ const rawToolExecutors: Record<string, (args: Record<string, unknown>, ctx: Tool
         )
         // 车道保留下来时任务本身是成功的（success=true），但改动还在分支上没合并。
         // 这件事必须写进 result 文本里：meta 模型读不到，不说它就会以为文件已经落地。
-        const pendingLane = result.success && result.worktree?.outcome === 'retained'
+        const pendingLane = result.success && result.worktree && laneNeedsRecovery(result.worktree)
             ? `\n\nNote: these changes were made on branch ${result.worktree.branch} and could NOT be merged automatically${
                 result.worktree.conflicts?.length ? ` (conflicting files: ${result.worktree.conflicts.join(', ')})` : ''
-            }. They are not present in the working tree; the user must resolve the merge from the task panel.`
+            }. They are not present in the working tree; the user has to retry the merge or discard the branch from the lane panel on this task card.`
             : ''
         return {
             success: result.success,

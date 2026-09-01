@@ -6,6 +6,7 @@
  * - 子 agent 上下文隔离,只回传摘要结果,不污染主 agent
  * - 默认只读工具集,递归深度受限
  */
+import type { ExecutionLaneProjection } from '@shared/types/executionLane'
 
 /**
  * 主 agent 调用 task 工具时传入的子代理请求
@@ -49,17 +50,7 @@ export interface SubAgentResult {
   assistantId?: string
   /** 实际运行时长（毫秒） */
   durationMs?: number
-  worktree?: {
-    path: string
-    branch: string
-    commit?: string
-    merged?: boolean
-    conflicts?: string[]
-    /** 车道终态：合并 / 归档保留 / 无产出丢弃 / 出错 */
-    outcome?: 'merged' | 'retained' | 'discarded' | 'failed'
-    /** worktree 目录已回收，分支与提交仍可恢复 */
-    archived?: boolean
-  }
+  worktree?: ExecutionLaneProjection
 }
 
 export interface SubAgentStartedInfo {

@@ -12,6 +12,7 @@ const git = vi.hoisted(() => ({
   pruneWorktrees: vi.fn(),
   listWorktrees: vi.fn(),
   deleteBranch: vi.fn(),
+  deleteLaneBranch: vi.fn(),
 }))
 const exclude = vi.hoisted(() => ({ update: vi.fn() }))
 
@@ -37,6 +38,7 @@ describe('WorktreeLaneService', () => {
     git.pruneWorktrees.mockResolvedValue({ success: true })
     git.listWorktrees.mockResolvedValue([])
     git.deleteBranch.mockResolvedValue({ success: true })
+    git.deleteLaneBranch.mockResolvedValue({ success: true })
     exclude.update.mockResolvedValue({ changed: true, pattern: '/.adnify/', target: 'exclude' })
 
     vi.resetModules()
@@ -283,6 +285,7 @@ describe('WorktreeLaneService', () => {
       await expect(service.dropLane('D:/repo', { branch: 'main' })).resolves.toMatchObject({ success: false })
       expect(git.mergeWorktreeBranch).not.toHaveBeenCalled()
       expect(git.deleteBranch).not.toHaveBeenCalled()
+      expect(git.deleteLaneBranch).not.toHaveBeenCalled()
     })
 
     it('refuses to drop a lane that is still running', async () => {
@@ -291,11 +294,24 @@ describe('WorktreeLaneService', () => {
       expect(git.removeWorktree).not.toHaveBeenCalled()
     })
 
-    it('force-deletes the branch when the user drops an archived lane', async () => {
+    /**
+     * 丢弃走车道通道，不走通用的 `deleteBranch`。
+     *
+     * 通用通道上的 `branch -D` 会命中危险模式再弹一次安全审批，而面板已经用带分支名的
+     * 确认框问过一次了 —— 连着两个弹框，第二个只会让人以为出了别的事。
+     */
+    it('force-deletes the branch through the lane channel when the user drops an archived lane', async () => {
       const result = await service.dropLane('D:/repo', { branch: 'adnify/lane-archived-5678ef01' })
       expect(result).toEqual({ success: true })
-      expect(git.deleteBranch).toHaveBeenCalledWith('adnify/lane-archived-5678ef01', true, 'D:/repo')
+      expect(git.deleteLaneBranch).toHaveBeenCalledWith('adnify/lane-archived-5678ef01', 'D:/repo')
+      expect(git.deleteBranch).not.toHaveBeenCalled()
       expect(git.removeWorktree).not.toHaveBeenCalled()
+    })
+
+    it('reports the git error when the lane branch cannot be deleted', async () => {
+      git.deleteLaneBranch.mockResolvedValue({ success: false, error: 'branch is checked out' })
+      await expect(service.dropLane('D:/repo', { branch: 'adnify/lane-archived-5678ef01' }))
+        .resolves.toEqual({ success: false, error: 'branch is checked out' })
     })
   })
 })

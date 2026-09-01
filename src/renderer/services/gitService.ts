@@ -1047,6 +1047,18 @@ class GitService {
         return { success: false, branch, conflicts, error: (result.stderr || result.stdout || 'Worktree merge failed').trim() }
     }
 
+    /**
+     * 删除车道分支（`branch -D`）。
+     *
+     * 走车道通道而不是 `deleteBranch`：`branch -D` 命中全局危险模式会弹一次安全审批，
+     * 而丢弃车道之前面板已经用带分支名的确认框问过一次了 —— 连着两个弹框，第二个反而
+     * 让人以为出了别的事。通道只认 `adnify/lane-*` 前缀，越界仍然被拒。
+     */
+    async deleteLaneBranch(branch: string, rootPath?: string): Promise<{ success: boolean; error?: string }> {
+        const result = await this.execLane(['branch', '-D', branch], rootPath)
+        return { success: result.exitCode === 0, error: result.exitCode === 0 ? undefined : (result.stderr || result.stdout).trim() }
+    }
+
     async removeWorktree(path: string, rootPath?: string, force = false): Promise<{ success: boolean; error?: string }> {
         const args = force ? ['worktree', 'remove', '--force', path] : ['worktree', 'remove', path]
         const result = await this.execLane(args, rootPath)

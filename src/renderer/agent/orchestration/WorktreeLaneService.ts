@@ -394,7 +394,10 @@ class WorktreeLaneServiceClass {
 
   /**
    * 彻底丢弃一条车道：目录 + 分支都删掉，提交不可恢复。
-   * 只应该由用户显式触发。
+   * 只应该由用户显式触发（恢复面板会先弹一次带分支名的确认框）。
+   *
+   * 分支删除走车道通道的 `deleteLaneBranch`：`branch -D` 命中全局危险模式会再弹一次
+   * 安全审批，用户刚确认过一遍，连着第二个弹框只会让人以为出了别的事。
    */
   async dropLane(workspacePath: string, lane: { branch: string; path?: string }): Promise<LaneActionResult> {
     if (!lane.branch.startsWith(WORKTREE_LANE_BRANCH_PREFIX)) {
@@ -408,7 +411,7 @@ class WorktreeLaneServiceClass {
       if (!removed.success) return { success: false, error: removed.error }
       await gitService.pruneWorktrees(workspacePath)
     }
-    const deleted = await gitService.deleteBranch(lane.branch, true, workspacePath)
+    const deleted = await gitService.deleteLaneBranch(lane.branch, workspacePath)
     return deleted.success ? { success: true } : { success: false, error: deleted.error }
   }
 

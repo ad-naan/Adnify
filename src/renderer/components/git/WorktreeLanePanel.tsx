@@ -5,14 +5,20 @@
  * 面对的是一个"只剩分支"的车道：要么重试合并，要么确认丢弃。没有这个入口时，
  * 未合并的提交只能靠用户自己敲 `git branch --list 'adnify/lane-*'` 才能发现。
  *
+ * 三个消费面（Plan 任务卡、Agent 会话提示、子 Agent 任务卡）共用这一个组件，所以它
+ * 放在 components/git 而不是 components/plan —— 之前挂在 plan 下面，Agent 侧要用就
+ * 得跨模块 import 一个"计划组件"，读代码的人会以为这里只有 Plan 会出现车道。
+ *
  * 文案全部走 i18n key：车道的原因文本由 laneNoticeText 统一翻译，组件里不再出现
  * 中英分支。
  */
 import { useState } from 'react'
 import { GitBranch, GitMerge, Trash2 } from 'lucide-react'
 import { Button } from '@/renderer/components/ui'
+import { globalConfirm } from '@/renderer/components/common/ConfirmDialog'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { WorktreeLaneService } from '@/renderer/agent/orchestration/WorktreeLaneService'
+import { laneNeedsRecovery } from '@/renderer/agent/orchestration/laneProjection'
 import { laneNoticeText, lanePlacementText } from '@/renderer/agent/orchestration/laneNoticeText'
 import { t, type Language } from '@shared/i18n'
 import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
@@ -28,7 +34,7 @@ export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }:
   const [busy, setBusy] = useState<'merge' | 'drop' | null>(null)
 
   // 只有归档保留的车道需要人工处理；已合并/已丢弃的车道在仓库里什么都不剩。
-  if (!lane.branch || !workspacePath || !['ready', 'conflict', 'failed'].includes(lane.status)) return null
+  if (!lane.branch || !workspacePath || !laneNeedsRecovery(lane)) return null
 
   const branch = lane.branch
 
@@ -55,7 +61,15 @@ export function WorktreeLanePanel({ lane, workspacePath, language, onResolved }:
   }
 
   const drop = async () => {
-    if (!window.confirm(t('worktreeLane.dropConfirm', language, { branch }))) return
+    // 用应用内确认框而不是 window.confirm：后者在 Electron 里会阻塞渲染进程，
+    // 而且这一步之后 `branch -D` 走的是车道专用通道，不会再弹一次安全审批。
+    const confirmed = await globalConfirm({
+      title: t('worktreeLane.dropConfirmTitle', language),
+      message: t('worktreeLane.dropConfirm', language, { branch }),
+      confirmText: t('worktreeLane.drop', language),
+      variant: 'danger',
+    })
+    if (!confirmed) return
     setBusy('drop')
     try {
       const result = await WorktreeLaneService.dropLane(workspacePath, { branch, path: lane.archived ? undefined : lane.path })

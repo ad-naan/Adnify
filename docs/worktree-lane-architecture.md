@@ -55,8 +55,11 @@ no lane could ever be created) and would be committed into merges by the lane's
 `git add -A`.
 
 Callers may persist a projection of the lane state for UI, but must not issue
-their own worktree commands. Plan stores that projection on `PlanTask`;
-lightweight Agent tasks return it in tool metadata.
+their own worktree commands. The lane → UI mapping lives in exactly one place
+([laneProjection.ts](../src/renderer/agent/orchestration/laneProjection.ts)) so
+the three surfaces cannot disagree about what `ready` or `failed` means: Plan
+stores the projection on `PlanTask`, sub-agent tasks return it in tool metadata,
+and chat carries it on the lane notice part.
 
 ## Git access
 
@@ -73,6 +76,12 @@ Instead there is one narrow IPC channel, `git:worktreeLane`, admitted by
 - only `add` / `remove` / `list` / `prune`;
 - `add` must be exactly `worktree add -b <adnify/lane-*> <path> <HEAD|hash>`;
 - `add`/`remove` targets must resolve inside `<root>/.adnify/worktrees/`;
+- plus exactly one branch shape: `branch -D <adnify/lane-*>`, the last step of
+  dropping a lane. It lives here because `branch … -D` matches the global
+  dangerous-pattern list and would raise a second approval prompt right after
+  the panel's own confirmation — which already names the branch. A second modal
+  reads as a different failure, not as the same question twice. The prefix is
+  Adnify's own namespace, so model-issued commands cannot reach this channel;
 - the cwd must resolve inside an authorized workspace root.
 
 Everything else a lane needs (`add -A`, `commit`, `merge`, `branch -d`,
@@ -116,8 +125,9 @@ active -> merged      (merged into the base branch; folder and branch removed)
 - Message branches do not create Git branches. Only concurrently executable
   nodes do; this keeps conversation history separate from repository history.
 
-Retained lanes are recoverable from the Plan task panel
-([WorktreeLanePanel](../src/renderer/components/plan/WorktreeLanePanel.tsx)):
+Retained lanes are recoverable from the same panel wherever they surface — Plan
+task cards, sub-agent task cards, and chat lane notices
+([WorktreeLanePanel](../src/renderer/components/git/WorktreeLanePanel.tsx)):
 `retryMerge` re-enters the same serialized merge queue, and `dropLane` deletes
 folder and branch after an explicit confirmation. A lane whose plan is gone is
 still reachable through the Git panel's branch list: archived lanes keep the

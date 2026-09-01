@@ -14,6 +14,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChatMessage as ChatMessageType, isUserMessage, isAssistantMessage, getMessageText, getMessageImages, AssistantPart, isTextPart, isToolCallPart, isReasoningPart, isSearchPart, isSystemAlertPart, isLintCheckPart, isContextSnapshotPart, isSourcesPart, ToolCall, } from '@renderer/agent/types'
 import type { LLMStreamSource } from '@/shared/types/llm'
+import type { SystemAlertPart } from '@renderer/agent/types'
+import { WorktreeLanePanel } from '@/renderer/components/git'
 import { LintCheckCard } from './LintCheckCard'
 import ToolCallGroup, { renderToolCallCard } from './ToolCallGroup'
 import { InteractiveCard } from './InteractiveCard'
@@ -791,6 +793,41 @@ const SourcesBlock = React.memo(({ sources }: { sources: LLMStreamSource[] }) =>
 
 SourcesBlock.displayName = 'SourcesBlock'
 
+/**
+ * 系统提示卡（可能带车道恢复面板）。
+ *
+ * 顶层会话的车道没能自动合并时，提交只留在 `adnify/lane-*` 分支上，而聊天界面里没有
+ * Plan 任务卡可以承载"重试合并 / 丢弃"。所以提示卡自己带上车道投影，就地长出面板 ——
+ * 面板本体和 Plan 侧共用（components/git），状态语义因此不会两边打架。
+ */
+const SystemAlertWithLane = React.memo(({ part, messageId }: { part: SystemAlertPart, messageId?: string }) => {
+  const language = useStore(s => s.language)
+  const lane = part.lane
+  return <>
+    <SystemAlert
+      type={part.alertType}
+      title={part.title}
+      message={part.message}
+      suggestion={part.suggestion}
+      compact={part.compact}
+    />
+    {lane?.branch && <WorktreeLanePanel
+      lane={lane}
+      workspacePath={part.laneWorkspacePath ?? null}
+      language={language}
+      onResolved={(status, diagnosis) => {
+        if (!messageId) return
+        useAgentStore.getState().resolveLaneAlert(messageId, lane.branch!, {
+          ...lane, status,
+          notice: diagnosis?.notice, error: diagnosis?.error, conflicts: diagnosis?.conflicts,
+        })
+      }}
+    />}
+  </>
+})
+
+SystemAlertWithLane.displayName = 'SystemAlertWithLane'
+
 // 渲染单个 Part
 const RenderPart = React.memo(({
   part,
@@ -834,15 +871,7 @@ const RenderPart = React.memo(({
   }
 
   if (isSystemAlertPart(part)) {
-    return (
-      <SystemAlert
-        type={part.alertType}
-        title={part.title}
-        message={part.message}
-        suggestion={part.suggestion}
-        compact={part.compact}
-      />
-    )
+    return <SystemAlertWithLane part={part} messageId={messageId} />
   }
 
   // Lint check results

@@ -23,6 +23,7 @@ import type {
     ChatThread,
 } from '../../types'
 import type { LLMStreamSource } from '@/shared/types/llm'
+import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 import { createIdleHandoffState, materializeThreadMessages } from '../../types'
 import { streamingBuffer } from '../StreamingBuffer'
 import type { ThreadSlice } from './threadSlice'
@@ -110,9 +111,13 @@ export interface MessageActions {
             message: string
             suggestion?: string
             compact?: boolean
+            lane?: ExecutionLaneProjection
+            laneWorkspacePath?: string
         },
         targetThreadId?: string
     ) => void
+    /** 车道恢复动作（重试合并 / 丢弃）之后更新提示卡里的车道状态，按分支定位 */
+    resolveLaneAlert: (messageId: string, branch: string, lane: ExecutionLaneProjection, targetThreadId?: string) => void
 
     // 交互式内容操作
     setInteractive: (messageId: string, interactive: InteractiveContent, targetThreadId?: string) => void
@@ -1299,6 +1304,8 @@ export const createMessageSlice: StateCreator<
                         message: alert.message,
                         suggestion: alert.suggestion,
                         compact: 'compact' in alert ? Boolean((alert as { compact?: boolean }).compact) : false,
+                        lane: alert.lane,
+                        laneWorkspacePath: alert.laneWorkspacePath,
                     }
                     return { ...assistantMsg, parts: [...assistantMsg.parts, newPart] }
                 }
@@ -1317,6 +1324,31 @@ export const createMessageSlice: StateCreator<
                     },
                 },
             }
+        })
+    },
+
+    /**
+     * 车道恢复后就地更新提示卡。
+     *
+     * 按分支名定位而不是按 part 下标：提示卡是 system_alert，没有 id，而下标会随着后续
+     * 追加的 part 变化。一个线程里同一条车道分支只会出现一次，分支名就是稳定的键。
+     */
+    resolveLaneAlert: (messageId, branch, lane, targetThreadId) => {
+        const threadId = targetThreadId || get().currentThreadId
+        if (!threadId) return
+
+        mutateAssistantRow(set, get, {
+            threadId,
+            messageId,
+            edit: assistantMsg => {
+                let changed = false
+                const parts = assistantMsg.parts.map(part => {
+                    if (part.type !== 'system_alert' || part.lane?.branch !== branch) return part
+                    changed = true
+                    return { ...part, lane }
+                })
+                return changed ? { ...assistantMsg, parts } : assistantMsg
+            },
         })
     },
 

@@ -102,7 +102,7 @@ export function renderToolCallCard(
   }
 
   if (tc.name === 'task') {
-    return <SubAgentTaskCard key={tc.id} toolCall={tc} />
+    return <SubAgentTaskCard key={tc.id} toolCall={tc} messageId={opts.messageId} />
   }
 
   // 其他工具使用 ToolCallCard
