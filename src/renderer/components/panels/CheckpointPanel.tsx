@@ -9,7 +9,7 @@ import { useState, useCallback, memo } from 'react'
 import { History, RotateCcw, ChevronDown, ChevronUp, FileText, X, Loader2 } from 'lucide-react'
 import { selectMessageCheckpoints, useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
-import { t } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 import { MessageCheckpoint } from '@/renderer/agent/types'
 import { getFileName } from '@shared/utils/pathUtils'
 

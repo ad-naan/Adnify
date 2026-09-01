@@ -7,7 +7,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
 import { AppError, formatErrorMessage } from '@/shared/errors'
 import { logger } from '@shared/utils/Logger'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { useStore } from '@store'
 import { Button } from '../ui'
 

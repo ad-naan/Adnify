@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { FolderOpen, Plus, RefreshCw, FolderPlus, FilePlus, ExternalLink, Crosshair, Terminal, Clipboard } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { getDirPath, joinPath, pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 import { gitService } from '@renderer/services/gitService'
 import { getEditorConfig } from '@renderer/settings'
@@ -352,7 +352,7 @@ export function ExplorerView() {
           {t('explorer', language)}
         </span>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all duration-300 flex-shrink-0">
-          <Tooltip content={t('revealActiveFile', language) || 'Reveal Active File'}>
+          <Tooltip content={t('revealActiveFile', language)}>
             <button onClick={handleRevealActiveFile} disabled={!activeFilePath} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90">
               <Crosshair className="w-3.5 h-3.5" />
             </button>
@@ -372,7 +372,7 @@ export function ExplorerView() {
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
-          <Tooltip content={t('paste', language) || 'Paste'}>
+          <Tooltip content={t('paste', language)}>
             <button
               onClick={handlePasteToWorkspaceRoot}
               disabled={!clipboardItem}
@@ -409,7 +409,7 @@ export function ExplorerView() {
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">{t('noFolderOpened', language)}</p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto mb-6 opacity-70">
-              {t('explorerView.openAFolderOr', asLanguage(language))}
+              {t('explorerView.openAFolderOr', language)}
             </p>
             <Button
               onClick={handleOpenFolder}

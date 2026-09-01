@@ -1,30 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Copy,
-  Maximize2,
-  Minimize2,
-  FolderOpen,
-  FolderTree,
-  HardDrive,
-  LayoutPanelLeft,
-  MessageSquare,
-  Play,
-  Plus,
-  Search,
-  Server,
-  Settings2,
-  Sparkles,
-  Star,
-  Terminal as TerminalIcon,
-  X,
-  Loader2,
-  CheckCircle2,
-  AlertTriangle,
-} from 'lucide-react'
+  ChevronDown, ChevronLeft, ChevronRight, Clock3, Copy, Maximize2, Minimize2, FolderOpen, FolderTree, HardDrive, LayoutPanelLeft, MessageSquare, Play, Plus, Search, Server, Settings2, Sparkles, Star, Terminal as TerminalIcon, X, Loader2, CheckCircle2, AlertTriangle, } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { useResizePanel } from '@/renderer/hooks/useResizePanel'
@@ -37,7 +13,7 @@ import { ShellManagerDialog } from './ShellManagerDialog'
 import { RemoteFileBrowser } from './RemoteFileBrowser'
 import { XTERM_STYLE, getTerminalTheme } from '@/renderer/services/xtermTheme'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 type Selection =
   | { kind: 'root'; root: string }
@@ -55,7 +31,7 @@ const SHELL_STUDIO_NAV_WIDTH_KEY = 'adnify.shellStudio.navWidth'
 const DEFAULT_INSPECTOR_WIDTH = 320
 const DEFAULT_NAV_WIDTH = 280
 
-function formatTime(timestamp: number, language: string) {
+function formatTime(timestamp: number, language: Language) {
   return new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -73,10 +49,10 @@ function formatDuration(durationMs?: number) {
   return remain > 0 ? `${minutes}m ${remain}s` : `${minutes}m`
 }
 
-function getCommandStatusMeta(session: TerminalManagerState['commandInfoByTerminal'][string]['current'] | TerminalManagerState['commandInfoByTerminal'][string]['last'], language: string) {
+function getCommandStatusMeta(session: TerminalManagerState['commandInfoByTerminal'][string]['current'] | TerminalManagerState['commandInfoByTerminal'][string]['last'], language: Language) {
   if (!session) {
     return {
-      label: t('shellStudio.idle', asLanguage(language)),
+      label: t('shellStudio.idle', language),
       tone: 'muted' as const,
       icon: null as React.ReactNode,
     }
@@ -86,25 +62,25 @@ function getCommandStatusMeta(session: TerminalManagerState['commandInfoByTermin
     case 'queued':
     case 'running':
       return {
-        label: t('preview.servers.status.ready', asLanguage(language)),
+        label: t('preview.servers.status.ready', language),
         tone: 'accent' as const,
         icon: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
       }
     case 'completed':
       return {
-        label: t('common.completed', asLanguage(language)),
+        label: t('common.completed', language),
         tone: 'success' as const,
         icon: <CheckCircle2 className="h-3.5 w-3.5" />,
       }
     case 'detached':
       return {
-        label: t('shellStudio.detached', asLanguage(language)),
+        label: t('shellStudio.detached', language),
         tone: 'success' as const,
         icon: <Play className="h-3.5 w-3.5" />,
       }
     case 'timed_out':
       return {
-        label: t('shellStudio.timedOut', asLanguage(language)),
+        label: t('shellStudio.timedOut', language),
         tone: 'warning' as const,
         icon: <Clock3 className="h-3.5 w-3.5" />,
       }
@@ -113,7 +89,7 @@ function getCommandStatusMeta(session: TerminalManagerState['commandInfoByTermin
     case 'interrupted':
     case 'shell_exited':
       return {
-        label: t('shellStudio.endedWithIssues', asLanguage(language)),
+        label: t('shellStudio.endedWithIssues', language),
         tone: 'danger' as const,
         icon: <AlertTriangle className="h-3.5 w-3.5" />,
       }
@@ -387,7 +363,7 @@ export default function ShellStudio() {
 
   const sendTerminalOutputToAi = useCallback(() => {
     if (!terminalPreview) return
-    setInputPrompt(`${t('shellStudio.pleaseAnalyzeTheFollowing', asLanguage(language))}\n\n\`\`\`\n${terminalPreview}\n\`\`\``)
+    setInputPrompt(`${t('shellStudio.pleaseAnalyzeTheFollowing', language)}\n\n\`\`\`\n${terminalPreview}\n\`\`\``)
     setChatVisible(true)
   }, [language, setChatVisible, setInputPrompt, terminalPreview])
 
@@ -485,23 +461,23 @@ export default function ShellStudio() {
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-text-primary">Shell Studio</div>
-                <div className="truncate text-xs text-text-muted">{t('shellStudio.unifiedShellLaunchSessions', asLanguage(language))}</div>
+                <div className="truncate text-xs text-text-muted">{t('shellStudio.unifiedShellLaunchSessions', language)}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
               {!focusMode && (
-                <Button variant="ghost" size="icon" onClick={toggleNavCollapsed} title={navCollapsed ? (t('shellStudio.expandNavigation', asLanguage(language))) : (t('shellStudio.collapseNavigation', asLanguage(language)))}>
+                <Button variant="ghost" size="icon" onClick={toggleNavCollapsed} title={navCollapsed ? (t('shellStudio.expandNavigation', language)) : (t('shellStudio.collapseNavigation', language))}>
                   {navCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
                 </Button>
               )}
-              <Button variant="ghost" size="icon" onClick={toggleFocusMode} title={focusMode ? (t('shellStudio.exitFocusMode', asLanguage(language))) : (t('shellStudio.maximizeTerminal', asLanguage(language)))}>
+              <Button variant="ghost" size="icon" onClick={toggleFocusMode} title={focusMode ? (t('shellStudio.exitFocusMode', language)) : (t('shellStudio.maximizeTerminal', language))}>
                 {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => openManagerCreate('preset')} leftIcon={<Star className="h-4 w-4" />}>
-                {t('shellStudio.newPreset', asLanguage(language))}
+                {t('shellStudio.newPreset', language)}
               </Button>
               <Button variant="primary" size="sm" onClick={() => createTerminalAtRoot()} leftIcon={<Plus className="h-4 w-4" />}>
-                {t('shellStudio.newTerminal', asLanguage(language))}
+                {t('shellStudio.newTerminal', language)}
               </Button>
             </div>
           </div>
@@ -511,14 +487,14 @@ export default function ShellStudio() {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('shellStudio.searchRootsPresetsLinks', asLanguage(language))}
+                placeholder={t('shellStudio.searchRootsPresetsLinks', language)}
                 leftIcon={<Search className="h-4 w-4" />}
               />
 
               <div className="mt-4 h-[calc(100%-3rem)] space-y-5 overflow-y-auto pr-1">
                 {favoriteItems.length > 0 && (
                   <section>
-                    {renderSectionHeader('favorites', <Sparkles className="h-3.5 w-3.5" />, t('common.favorites', asLanguage(language)), favoriteItems.length)}
+                    {renderSectionHeader('favorites', <Sparkles className="h-3.5 w-3.5" />, t('common.favorites', language), favoriteItems.length)}
                     {!collapsedSections.favorites && (
                       <div className="space-y-2">
                         {favoriteItems.map((item) => renderNavButton({
@@ -532,7 +508,7 @@ export default function ShellStudio() {
                             <button
                               onClick={(event) => { event.stopPropagation(); item.action() }}
                               className="rounded-lg p-1 text-text-muted hover:bg-white/5 hover:text-text-primary"
-                              title={t('shellStudio.launch', asLanguage(language))}
+                              title={t('shellStudio.launch', language)}
                             >
                               <Play className="h-3.5 w-3.5" />
                             </button>
@@ -544,7 +520,7 @@ export default function ShellStudio() {
                 )}
 
                 <section>
-                  {renderSectionHeader('roots', <FolderTree className="h-3.5 w-3.5" />, t('shellStudio.workspaceRoots', asLanguage(language)), filteredRoots.length)}
+                  {renderSectionHeader('roots', <FolderTree className="h-3.5 w-3.5" />, t('shellStudio.workspaceRoots', language), filteredRoots.length)}
                   {!collapsedSections.roots && (
                     <div className="space-y-2">
                       {filteredRoots.map((root) => renderNavButton({
@@ -575,7 +551,7 @@ export default function ShellStudio() {
                         key: preset.id,
                         icon: <TerminalIcon className="h-4 w-4" />,
                         title: preset.name,
-                        subtitle: preset.cwd || preset.group || (t('shellStudio.reusableLaunchPreset', asLanguage(language))),
+                        subtitle: preset.cwd || preset.group || (t('shellStudio.reusableLaunchPreset', language)),
                         active: selection?.kind === 'preset' && selection.id === preset.id,
                         onClick: () => setSelection({ kind: 'preset', id: preset.id }),
                         trailing: (
@@ -592,7 +568,7 @@ export default function ShellStudio() {
                 </section>
 
                 <section>
-                  {renderSectionHeader('links', <HardDrive className="h-3.5 w-3.5" />, t('shellStudio.linksCommands', asLanguage(language)), filteredLinks.length)}
+                  {renderSectionHeader('links', <HardDrive className="h-3.5 w-3.5" />, t('shellStudio.linksCommands', language), filteredLinks.length)}
                   {!collapsedSections.links && (
                     <div className="space-y-2">
                       {filteredLinks.map((link) => renderNavButton({
@@ -622,7 +598,7 @@ export default function ShellStudio() {
                 className="w-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent/30 active:bg-accent"
                 onMouseDown={startNavResize}
                 onDoubleClick={resetNavWidth}
-                title={t('shellStudio.dragToResizeNavigation', asLanguage(language))}
+                title={t('shellStudio.dragToResizeNavigation', language)}
               />
             )}
 
@@ -630,7 +606,7 @@ export default function ShellStudio() {
               <div className="flex h-full min-h-0 flex-col gap-4">
                 <div className="grid grid-cols-4 gap-3">
                   <div className="rounded-2xl border border-border bg-surface/40 p-3">
-                    <div className="text-xs text-text-muted">{t('shellStudio.activeSessions', asLanguage(language))}</div>
+                    <div className="text-xs text-text-muted">{t('shellStudio.activeSessions', language)}</div>
                     <div className="mt-2 text-2xl font-semibold text-text-primary">{managerState.terminals.length}</div>
                   </div>
                   <div className="rounded-2xl border border-border bg-surface/40 p-3">
@@ -638,11 +614,11 @@ export default function ShellStudio() {
                     <div className="mt-2 text-2xl font-semibold text-text-primary">{shellState.presets.length}</div>
                   </div>
                   <div className="rounded-2xl border border-border bg-surface/40 p-3">
-                    <div className="text-xs text-text-muted">{t('shellStudio.links', asLanguage(language))}</div>
+                    <div className="text-xs text-text-muted">{t('shellStudio.links', language)}</div>
                     <div className="mt-2 text-2xl font-semibold text-text-primary">{shellState.links.length}</div>
                   </div>
                   <div className="rounded-2xl border border-border bg-surface/40 p-3">
-                    <div className="text-xs text-text-muted">{t('shellStudio.bufferedOutput', asLanguage(language))}</div>
+                    <div className="text-xs text-text-muted">{t('shellStudio.bufferedOutput', language)}</div>
                     <div className="mt-2 text-2xl font-semibold text-text-primary">{activeBufferStats?.lines || 0}</div>
                   </div>
                 </div>
@@ -707,7 +683,7 @@ export default function ShellStudio() {
                         <TerminalIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-accent" />
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-text-primary">
-                            {activeSession?.name || (t('shellStudio.noActiveTerminal', asLanguage(language)))}
+                            {activeSession?.name || (t('shellStudio.noActiveTerminal', language))}
                           </div>
                           {activeSession && (
                             <div
@@ -743,23 +719,23 @@ export default function ShellStudio() {
                               size="sm"
                               onClick={() => openSftpPanel(activeSession.remote!, activeSession.name)}
                               leftIcon={<Server className="h-4 w-4" />}
-                              title={t('shellStudio.openSftpPanel', asLanguage(language))}
+                              title={t('shellStudio.openSftpPanel', language)}
                             >
                               SFTP
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" onClick={copyTerminalOutput} title={t('shellStudio.copyOutput', asLanguage(language))}>
+                          <Button variant="ghost" size="icon" onClick={copyTerminalOutput} title={t('shellStudio.copyOutput', language)}>
                             <Copy className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={sendTerminalOutputToAi} title={t('shellStudio.sendToAi', asLanguage(language))}>
+                          <Button variant="ghost" size="icon" onClick={sendTerminalOutputToAi} title={t('shellStudio.sendToAi', language)}>
                             <MessageSquare className="h-4 w-4" />
                           </Button>
                           {!focusMode && (
-                            <Button variant="ghost" size="icon" onClick={toggleNavCollapsed} title={navCollapsed ? (t('shellStudio.expandNavigation', asLanguage(language))) : (t('shellStudio.collapseNavigation', asLanguage(language)))}>
+                            <Button variant="ghost" size="icon" onClick={toggleNavCollapsed} title={navCollapsed ? (t('shellStudio.expandNavigation', language)) : (t('shellStudio.collapseNavigation', language))}>
                               {navCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" onClick={toggleFocusMode} title={focusMode ? (t('shellStudio.exitFocusMode', asLanguage(language))) : (t('shellStudio.maximizeTerminal', asLanguage(language)))}>
+                          <Button variant="ghost" size="icon" onClick={toggleFocusMode} title={focusMode ? (t('shellStudio.exitFocusMode', language)) : (t('shellStudio.maximizeTerminal', language))}>
                             {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                           </Button>
                         </div>
@@ -774,15 +750,15 @@ export default function ShellStudio() {
                         <TerminalIcon className="h-8 w-8" />
                       </div>
                       <div>
-                        <div className="text-lg font-semibold text-text-primary">{t('shellStudio.startYourFirstShell', asLanguage(language))}</div>
-                        <div className="mt-2 text-sm text-text-muted">{t('shellStudio.launchDirectlyFromA', asLanguage(language))}</div>
+                        <div className="text-lg font-semibold text-text-primary">{t('shellStudio.startYourFirstShell', language)}</div>
+                        <div className="mt-2 text-sm text-text-muted">{t('shellStudio.launchDirectlyFromA', language)}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button variant="primary" size="sm" onClick={() => createTerminalAtRoot()} leftIcon={<Plus className="h-4 w-4" />}>
-                          {t('shellStudio.newTerminal', asLanguage(language))}
+                          {t('shellStudio.newTerminal', language)}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => openManagerCreate('command')} leftIcon={<Sparkles className="h-4 w-4" />}>
-                          {t('shellStudio.createCommand', asLanguage(language))}
+                          {t('shellStudio.createCommand', language)}
                         </Button>
                       </div>
                     </div>
@@ -792,13 +768,13 @@ export default function ShellStudio() {
                   <div className="min-h-0 h-[360px] rounded-[24px] border border-border bg-background-secondary/55 overflow-hidden">
                     <div className="flex items-center justify-between border-b border-border px-4 py-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-text-primary">{t('shellStudio.sftpFilePanel', asLanguage(language))}</div>
+                        <div className="text-sm font-semibold text-text-primary">{t('shellStudio.sftpFilePanel', language)}</div>
                         <div className="truncate text-xs text-text-muted">
-                          {sftpPanelLabel || (t('shellStudio.remoteFileBrowser', asLanguage(language)))}
+                          {sftpPanelLabel || (t('shellStudio.remoteFileBrowser', language))}
                         </div>
                       </div>
                       <Button variant="ghost" size="sm" onClick={closeSftpPanel} leftIcon={<X className="h-4 w-4" />}>
-                        {t('closeTerminal', asLanguage(language))}
+                        {t('closeTerminal', language)}
                       </Button>
                     </div>
                     <div className="h-[calc(100%-57px)] p-4">
@@ -815,7 +791,7 @@ export default function ShellStudio() {
                   className="w-1 flex-shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent/30 active:bg-accent"
                   onMouseDown={startInspectorResize}
                   onDoubleClick={resetInspectorWidth}
-                  title={t('shellStudio.dragToResizeDouble', asLanguage(language))}
+                  title={t('shellStudio.dragToResizeDouble', language)}
                 />
                 <div ref={inspectorRef} style={{ width: inspectorWidth }} className="min-h-0 w-full max-w-full flex-shrink-0 overflow-hidden border-l border-border bg-background/30 p-4">
                   <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-y-auto pr-1">
@@ -823,9 +799,9 @@ export default function ShellStudio() {
                   <div className="flex min-w-0 items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-text-primary">Inspector</div>
-                      <div className="mt-1 text-xs text-text-muted">{t('shellStudio.inspectContextAndActions', asLanguage(language))}</div>
+                      <div className="mt-1 text-xs text-text-muted">{t('shellStudio.inspectContextAndActions', language)}</div>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => setShowManager(true)} title={t('shellStudio.openManager', asLanguage(language))}>
+                    <Button variant="ghost" size="icon" onClick={() => setShowManager(true)} title={t('shellStudio.openManager', language)}>
                       <Settings2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -835,16 +811,16 @@ export default function ShellStudio() {
                   <>
                     <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-4">
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('shellStudio.session', asLanguage(language))}</div>
+                        <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('shellStudio.session', language)}</div>
                         <div className="mt-2 text-lg font-semibold text-text-primary">{selectedSession.name}</div>
                         <div className="mt-1 text-sm text-text-muted break-all">{selectedSession.cwd}</div>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">Shell</div><div className="mt-1 text-text-primary break-all">{selectedSession.shell || 'default'}</div></div>
-                        <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">{t('shellStudio.created', asLanguage(language))}</div><div className="mt-1 text-text-primary">{formatTime(selectedSession.createdAt, language)}</div></div>
+                        <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">{t('shellStudio.created', language)}</div><div className="mt-1 text-text-primary">{formatTime(selectedSession.createdAt, language)}</div></div>
                         {selectedSession.remote && (
                           <div className="col-span-2 rounded-xl border border-border bg-background/60 p-3">
-                            <div className="text-text-muted">{t('shellStudio.remoteHost', asLanguage(language))}</div>
+                            <div className="text-text-muted">{t('shellStudio.remoteHost', language)}</div>
                             <div className="mt-1 text-text-primary break-all">
                               {selectedSession.remote.username ? `${selectedSession.remote.username}@` : ''}
                               {selectedSession.remote.host}
@@ -869,8 +845,8 @@ export default function ShellStudio() {
                             <div className="text-sm text-text-primary break-all">{commandSession.command}</div>
                             <div className="grid grid-cols-2 gap-3 text-xs text-text-muted">
                               <div>Exit code: {commandSession.exitCode ?? '—'}</div>
-                              <div>{t('shellStudio.duration', asLanguage(language))}: {formatDuration(commandSession.endedAt ? commandSession.endedAt - commandSession.startedAt : Date.now() - commandSession.startedAt)}</div>
-                              <div>{t('shellStudio.reason', asLanguage(language))}: {commandSession.terminationReason || '—'}</div>
+                              <div>{t('shellStudio.duration', language)}: {formatDuration(commandSession.endedAt ? commandSession.endedAt - commandSession.startedAt : Date.now() - commandSession.startedAt)}</div>
+                              <div>{t('shellStudio.reason', language)}: {commandSession.terminationReason || '—'}</div>
                               <div>Sentinel: {commandSession.sentinelMatched ? 'yes' : 'no'}</div>
                             </div>
                             {(commandSession.output || commandSession.partialOutput) && (
@@ -880,12 +856,12 @@ export default function ShellStudio() {
                         ) : null
                       })()}
                       <div className="rounded-xl border border-border bg-background/60 p-3">
-                        <div className="text-text-muted text-sm">{t('shellStudio.terminalSnippet', asLanguage(language))}</div>
-                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs text-text-primary">{terminalPreview || (t('shellStudio.noOutputYet', asLanguage(language)))}</pre>
+                        <div className="text-text-muted text-sm">{t('shellStudio.terminalSnippet', language)}</div>
+                        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words text-xs text-text-primary">{terminalPreview || (t('shellStudio.noOutputYet', language))}</pre>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="sm" onClick={() => terminalManager.setActiveTerminal(selectedSession.id)} leftIcon={<Play className="h-4 w-4" />}>
-                          {t('shellStudio.focus', asLanguage(language))}
+                          {t('shellStudio.focus', language)}
                         </Button>
                         {selectedSession.remote && (
                           <Button
@@ -894,17 +870,17 @@ export default function ShellStudio() {
                             onClick={() => openSftpPanel(selectedSession.remote!, selectedSession.name)}
                             leftIcon={<Server className="h-4 w-4" />}
                           >
-                            {t('shellStudio.openSftp', asLanguage(language))}
+                            {t('shellStudio.openSftp', language)}
                           </Button>
                         )}
                         <Button variant="outline" size="sm" onClick={copyTerminalOutput} leftIcon={<Copy className="h-4 w-4" />}>
-                          {t('shellStudio.copyOutput2', asLanguage(language))}
+                          {t('shellStudio.copyOutput2', language)}
                         </Button>
                         <Button variant="outline" size="sm" onClick={sendTerminalOutputToAi} leftIcon={<MessageSquare className="h-4 w-4" />}>
-                          {t('shellStudio.askAi', asLanguage(language))}
+                          {t('shellStudio.askAi', language)}
                         </Button>
                         <Button variant="danger" size="sm" onClick={() => terminalManager.closeTerminal(selectedSession.id)} leftIcon={<X className="h-4 w-4" />}>
-                          {t('shellStudio.close', asLanguage(language))}
+                          {t('shellStudio.close', language)}
                         </Button>
                       </div>
                     </div>
@@ -913,11 +889,11 @@ export default function ShellStudio() {
 
                 {selectedRoot && (
                   <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-4">
-                    <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('shellStudio.rootLaunch', asLanguage(language))}</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('shellStudio.rootLaunch', language)}</div>
                     <div className="text-lg font-semibold text-text-primary">{selectedRoot.split('/').filter(Boolean).pop() || selectedRoot}</div>
                     <div className="text-sm text-text-muted break-all">{selectedRoot}</div>
                     <Button variant="primary" size="sm" onClick={() => createTerminalAtRoot(selectedRoot)} leftIcon={<Play className="h-4 w-4" />}>
-                      {t('shellStudio.launchHere', asLanguage(language))}
+                      {t('shellStudio.launchHere', language)}
                     </Button>
                   </div>
                 )}
@@ -933,10 +909,10 @@ export default function ShellStudio() {
                     </div>
                     <div className="flex gap-2">
                       <Button variant="primary" size="sm" onClick={() => openPreset(selectedPreset)} leftIcon={<Play className="h-4 w-4" />}>
-                        {t('shellStudio.runPreset', asLanguage(language))}
+                        {t('shellStudio.runPreset', language)}
                       </Button>
                       <Button variant="outline" size="sm" onClick={() => openManagerEdit('preset', selectedPreset.id)} leftIcon={<Settings2 className="h-4 w-4" />}>
-                        {t('editor.edit', asLanguage(language))}
+                        {t('editor.edit', language)}
                       </Button>
                     </div>
                   </div>
@@ -945,7 +921,7 @@ export default function ShellStudio() {
                 {selectedLink && (
                   <>
                     <div className="rounded-2xl border border-border bg-surface/40 p-4 space-y-4">
-                      <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('common.link', asLanguage(language))}</div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('common.link', language)}</div>
                       <div className="flex items-center gap-2">
                         {selectedLink.type === 'remote' ? <Server className="h-4 w-4 text-accent" /> : <TerminalIcon className="h-4 w-4 text-accent" />}
                         <div className="text-lg font-semibold text-text-primary">{selectedLink.name}</div>
@@ -955,12 +931,12 @@ export default function ShellStudio() {
                         <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">Target</div><div className="mt-1 text-text-primary break-all">{selectedLink.target || '-'}</div></div>
                         <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">CWD</div><div className="mt-1 text-text-primary break-all">{selectedLink.cwd || roots[0] || '-'}</div></div>
                         {selectedLink.type === 'remote' && (
-                          <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">Auth</div><div className="mt-1 text-text-primary break-all">{selectedLink.remote?.privateKeyPath ? (t('shellStudio.privateKey', asLanguage(language))) : ''}{selectedLink.remote?.privateKeyPath && selectedLink.remote?.password ? ' + ' : ''}{selectedLink.remote?.password ? (t('password', asLanguage(language))) : (!selectedLink.remote?.privateKeyPath ? '-' : '')}</div></div>
+                          <div className="rounded-xl border border-border bg-background/60 p-3"><div className="text-text-muted">Auth</div><div className="mt-1 text-text-primary break-all">{selectedLink.remote?.privateKeyPath ? (t('shellStudio.privateKey', language)) : ''}{selectedLink.remote?.privateKeyPath && selectedLink.remote?.password ? ' + ' : ''}{selectedLink.remote?.password ? (t('password', language)) : (!selectedLink.remote?.privateKeyPath ? '-' : '')}</div></div>
                         )}
                       </div>
                       <div className="flex gap-2">
                         <Button variant="primary" size="sm" onClick={() => openLink(selectedLink)} leftIcon={<Play className="h-4 w-4" />}>
-                          {t('shellStudio.openLink', asLanguage(language))}
+                          {t('shellStudio.openLink', language)}
                         </Button>
                         {selectedLink.type === 'remote' && selectedLink.remote && (
                           <Button
@@ -969,11 +945,11 @@ export default function ShellStudio() {
                             onClick={() => openSftpPanel(selectedLink.remote!, selectedLink.name)}
                             leftIcon={<Server className="h-4 w-4" />}
                           >
-                            {t('shellStudio.openSftp', asLanguage(language))}
+                            {t('shellStudio.openSftp', language)}
                           </Button>
                         )}
                         <Button variant="outline" size="sm" onClick={() => openManagerEdit('link', selectedLink.id)} leftIcon={<Settings2 className="h-4 w-4" />}>
-                          {t('editor.edit', asLanguage(language))}
+                          {t('editor.edit', language)}
                         </Button>
                       </div>
                     </div>
@@ -981,19 +957,19 @@ export default function ShellStudio() {
                 )}
 
                 <div className="rounded-2xl border border-border bg-surface/40 p-4">
-                  <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('shellStudio.quickCreate', asLanguage(language))}</div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-text-muted">{t('shellStudio.quickCreate', language)}</div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Button variant="ghost" size="sm" onClick={() => openManagerCreate('preset')} leftIcon={<Star className="h-4 w-4" />}>Preset</Button>
-                    <Button variant="ghost" size="sm" onClick={() => openManagerCreate('directory')} leftIcon={<FolderOpen className="h-4 w-4" />}>{t('common.directory', asLanguage(language))}</Button>
-                    <Button variant="ghost" size="sm" onClick={() => openManagerCreate('remote')} leftIcon={<Server className="h-4 w-4" />}>{t('shellStudio.remote', asLanguage(language))}</Button>
-                    <Button variant="ghost" size="sm" onClick={() => openManagerCreate('command')} leftIcon={<TerminalIcon className="h-4 w-4" />}>{t('shellStudio.command', asLanguage(language))}</Button>
+                    <Button variant="ghost" size="sm" onClick={() => openManagerCreate('directory')} leftIcon={<FolderOpen className="h-4 w-4" />}>{t('common.directory', language)}</Button>
+                    <Button variant="ghost" size="sm" onClick={() => openManagerCreate('remote')} leftIcon={<Server className="h-4 w-4" />}>{t('shellStudio.remote', language)}</Button>
+                    <Button variant="ghost" size="sm" onClick={() => openManagerCreate('command')} leftIcon={<TerminalIcon className="h-4 w-4" />}>{t('shellStudio.command', language)}</Button>
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-border bg-surface/40 p-4">
                   <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-text-muted">
                     <Clock3 className="h-3.5 w-3.5" />
-                    {t('shellStudio.recentSessions', asLanguage(language))}
+                    {t('shellStudio.recentSessions', language)}
                   </div>
                   <div className="space-y-2">
                     {managerState.terminals.slice(-4).reverse().map((session) => (

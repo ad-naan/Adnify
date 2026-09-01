@@ -14,7 +14,7 @@ import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useAgentHistoryActions } from '@/renderer/hooks/useAgent'
-import { t } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 import { keybindingService, formatShortcut, isMac } from '@/renderer/services/keybindingService'
 import { workspaceFiles } from '@/renderer/services/workspaceFileRepository'
 import { toast } from '@/renderer/components/common/ToastProvider'
@@ -130,17 +130,15 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  const isZh = language === 'zh'
-
   // 定义所有命令
   const commands: Command[] = [
     // AI Actions (Priority)
     {
       id: 'ai-chat',
-      label: isZh ? '询问 AI...' : 'Ask AI...',
-      description: isZh ? '发起新的 AI 对话会话' : 'Start a new chat conversation',
+      label: t('commandPalette.askAi', language),
+      description: t('commandPalette.startANewChat', language),
       icon: Sparkles,
-      category: isZh ? 'AI 助手' : 'AI Helper',
+      category: t('commandPalette.aiHelper', language),
       action: () => {
         setChatVisible(true)
         setMode('agent')
@@ -149,43 +147,43 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     },
     {
       id: 'ai-explain',
-      label: isZh ? '解释当前文件' : 'Explain Current File',
-      description: isZh ? '让 AI 详细分析并解释当前激活的文件' : 'Ask AI to explain the active file',
+      label: t('commandPalette.explainCurrentFile', language),
+      description: t('commandPalette.askAiToExplain', language),
       icon: MessageSquare,
-      category: isZh ? 'AI 助手' : 'AI Helper',
+      category: t('commandPalette.aiHelper', language),
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
           setMode('agent')
-          setInputPrompt(isZh ? `请详细解释文件 ${activeFilePath} 的结构与核心逻辑。` : `Explain the file ${activeFilePath} in detail.`)
+          setInputPrompt(t('commandPalette.explainTheFileInDetail', language, { path: activeFilePath }))
         }
       }
     },
     {
       id: 'ai-refactor',
-      label: isZh ? '重构当前文件' : 'Refactor File',
-      description: isZh ? '让 AI 提出代码重构与性能可读性优化建议' : 'Ask AI to suggest refactoring improvements',
+      label: t('commandPalette.refactorFile', language),
+      description: t('commandPalette.askAiToSuggest', language),
       icon: Zap,
-      category: isZh ? 'AI 助手' : 'AI Helper',
+      category: t('commandPalette.aiHelper', language),
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
           setMode('agent')
-          setInputPrompt(isZh ? `请分析 ${activeFilePath} 并提出重构改进方案，提升可读性与性能。` : `Analyze ${activeFilePath} and suggest refactoring improvements for readability and performance.`)
+          setInputPrompt(t('commandPalette.analyzeAndSuggestRefactoring', language, { path: activeFilePath }))
         }
       }
     },
     {
       id: 'ai-fix',
-      label: isZh ? '修复当前文件问题' : 'Fix Bugs',
-      description: isZh ? '让 AI 排查潜在缺陷并生成修复方案' : 'Ask AI to find and fix bugs in current file',
+      label: t('commandPalette.fixBugs', language),
+      description: t('commandPalette.askAiToFindAndFix', language),
       icon: Zap,
-      category: isZh ? 'AI 助手' : 'AI Helper',
+      category: t('commandPalette.aiHelper', language),
       action: () => {
         if (activeFilePath) {
           setChatVisible(true)
           setMode('agent')
-          setInputPrompt(isZh ? `请排查 ${activeFilePath} 中的潜在问题并给出修复建议。` : `Find potential bugs in ${activeFilePath} and provide fixes.`)
+          setInputPrompt(t('commandPalette.findPotentialBugsIn', language, { path: activeFilePath }))
         }
       }
     },
@@ -193,58 +191,58 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     // File Operations
     {
       id: 'open-folder',
-      label: isZh ? '打开文件夹' : 'Open Folder',
-      description: isZh ? '打开工作区目录' : 'Open a workspace folder',
+      label: t('commandPalette.openFolder', language),
+      description: t('commandPalette.openAWorkspaceFolder', language),
       icon: FolderOpen,
-      category: isZh ? '文件' : 'File',
+      category: t('commandPalette.file', language),
       action: () => api.file.openFolder(),
       shortcut: formatShortcut('Ctrl+O'),
     },
     {
       id: 'new-window',
-      label: isZh ? '新建窗口' : 'New Window',
-      description: isZh ? '打开新的应用窗口' : 'Open a new application window',
+      label: t('commandPalette.newWindow', language),
+      description: t('commandPalette.openANewApplication', language),
       icon: Plus,
-      category: isZh ? '窗口' : 'Window',
+      category: t('commandPalette.window', language),
       action: () => api.window.new(),
       shortcut: formatShortcut('Ctrl+Shift+N'),
     },
     {
       id: 'add-folder',
-      label: isZh ? '添加文件夹到工作区...' : 'Add Folder to Workspace...',
-      description: isZh ? '为当前工作区添加新的根目录' : 'Add a new root folder to the current workspace',
+      label: t('commandPalette.addFolderToWorkspace', language),
+      description: t('commandPalette.addANewRootFolder', language),
       icon: FolderPlus,
-      category: isZh ? '工作区' : 'Workspace',
+      category: t('commandPalette.workspace', language),
       action: async () => {
         const path = await api.workspace.addFolder()
         if (path) {
           const { addRoot } = useStore.getState()
           addRoot(path)
           await workspaceFiles.initialize(path)
-          toast.success(isZh ? `已添加 ${path} 到工作区` : `Added ${path} to workspace`)
+          toast.success(t('commandPalette.addedPathToWorkspace', language, { path }))
         }
       },
     },
     {
       id: 'save-workspace',
-      label: isZh ? '工作区另存为...' : 'Save Workspace As...',
-      description: isZh ? '保存当前多根工作区配置' : 'Save the current multi-root workspace configuration',
+      label: t('commandPalette.saveWorkspaceAs', language),
+      description: t('commandPalette.saveTheCurrentMultiRoot', language),
       icon: Save,
-      category: isZh ? '工作区' : 'Workspace',
+      category: t('commandPalette.workspace', language),
       action: async () => {
         const { workspace } = useStore.getState()
         if (workspace) {
           const success = await api.workspace.save(workspace.configPath || '', workspace.roots)
-          if (success) toast.success(isZh ? '工作区已保存' : 'Workspace saved')
+          if (success) toast.success(t('commandPalette.workspaceSaved', language))
         }
       },
     },
     {
       id: 'save-file',
-      label: isZh ? '保存文件' : 'Save File',
-      description: isZh ? '保存当前正在编辑的文件' : 'Save the current file',
+      label: t('commandPalette.saveFile', language),
+      description: t('commandPalette.saveTheCurrentFile', language),
       icon: Save,
-      category: isZh ? '文件' : 'File',
+      category: t('commandPalette.file', language),
       action: () => {
         document.dispatchEvent(new KeyboardEvent('keydown', {
           key: 's',
@@ -256,10 +254,10 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     },
     {
       id: 'refresh-files',
-      label: isZh ? '刷新文件资源管理器' : 'Refresh File Explorer',
-      description: isZh ? '重新加载文件目录树' : 'Reload the file tree',
+      label: t('commandPalette.refreshFileExplorer', language),
+      description: t('commandPalette.reloadTheFileTree', language),
       icon: RefreshCw,
-      category: isZh ? '文件' : 'File',
+      category: t('commandPalette.file', language),
       action: async () => {
         if (workspacePath) {
           const files = await api.file.readDir(workspacePath)
@@ -273,81 +271,81 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
     // View & Settings
     {
       id: 'quick-open',
-      label: isZh ? '快速打开文件...' : 'Go to File...',
-      description: isZh ? '按名称搜索并打开文件' : 'Search and open files by name',
+      label: t('commandPalette.goToFile', language),
+      description: t('commandPalette.searchAndOpenFiles', language),
       icon: Search,
-      category: isZh ? '文件' : 'File',
+      category: t('commandPalette.file', language),
       action: () => setShowQuickOpen(true),
       shortcut: formatShortcut('Ctrl+P'),
     },
     {
       id: 'toggle-terminal',
-      label: terminalVisible ? (isZh ? '隐藏终端' : 'Hide Terminal') : (isZh ? '显示终端' : 'Show Terminal'),
-      description: isZh ? '切换终端面板的显示与隐藏' : 'Toggle the terminal panel',
+      label: terminalVisible ? t('commandPalette.hideTerminal', language) : t('commandPalette.showTerminal', language),
+      description: t('commandPalette.toggleTheTerminalPanel', language),
       icon: Terminal,
-      category: isZh ? '视图' : 'View',
+      category: t('commandPalette.view', language),
       action: () => setTerminalVisible(!terminalVisible),
       shortcut: formatShortcut('Ctrl+`'),
     },
     {
       id: 'toggle-ai-panel',
-      label: chatVisible ? (isZh ? '隐藏 AI 面板' : 'Hide AI Panel') : (isZh ? '显示 AI 面板' : 'Show AI Panel'),
-      description: isZh ? '切换 AI 助手对话面板的显示' : 'Toggle the AI assistant panel',
+      label: chatVisible ? t('commandPalette.hideAiPanel', language) : t('commandPalette.showAiPanel', language),
+      description: t('commandPalette.toggleTheAiAssistant', language),
       icon: PanelRight,
-      category: isZh ? '视图' : 'View',
+      category: t('commandPalette.view', language),
       action: () => setChatVisible(!chatVisible),
       shortcut: formatShortcut('Ctrl+L'),
     },
     {
       id: 'settings',
-      label: isZh ? '打开设置' : 'Open Settings',
-      description: isZh ? '配置 API 密钥、模型与系统偏好' : 'Configure API keys and preferences',
+      label: t('commandPalette.openSettings', language),
+      description: t('commandPalette.configureApiKeysAnd', language),
       icon: Settings,
-      category: isZh ? '偏好设置' : 'Preferences',
+      category: t('commandPalette.preferences', language),
       action: () => setShowSettings(true),
       shortcut: formatShortcut('Ctrl+,'),
     },
     {
       id: 'keyboard-shortcuts',
-      label: isZh ? '快捷键列表' : 'Keyboard Shortcuts',
-      description: isZh ? '查看所有键盘快捷键' : 'View all keyboard shortcuts',
+      label: t('commandPalette.keyboardShortcuts', language),
+      description: t('commandPalette.viewAllKeyboardShortcuts', language),
       icon: Keyboard,
-      category: isZh ? '帮助' : 'Help',
+      category: t('commandPalette.help', language),
       action: () => onShowKeyboardShortcuts(),
       shortcut: '?',
     },
     {
       id: 'about',
-      label: isZh ? '关于 Adnify' : 'About Adnify',
-      description: isZh ? '查看应用版本与相关信息' : 'View application information',
+      label: t('commandPalette.aboutAdnify', language),
+      description: t('commandPalette.viewApplicationInformation', language),
       icon: MessageSquare,
-      category: isZh ? '帮助' : 'Help',
+      category: t('commandPalette.help', language),
       action: () => setShowAbout(true),
     },
     {
       id: 'view-changelog',
-      label: isZh ? '更新日志 (版本记录)' : 'View Changelog / Release Notes',
-      description: isZh ? '查看所有历史版本与新功能更新记录' : 'View release history and new features',
+      label: t('commandPalette.viewChangelogReleaseNotes', language),
+      description: t('commandPalette.viewReleaseHistoryAnd', language),
       icon: BookOpen,
-      category: isZh ? '帮助' : 'Help',
+      category: t('commandPalette.help', language),
       action: () => setShowChangelog(true),
     },
 
     // AI Tools
     {
       id: 'clear-chat',
-      label: isZh ? '清空对话历史' : 'Clear Chat History',
-      description: isZh ? '移除当前对话中的所有消息记录' : 'Remove all messages from the chat',
+      label: t('commandPalette.clearChatHistory', language),
+      description: t('commandPalette.removeAllMessagesFrom', language),
       icon: Trash2,
-      category: isZh ? 'AI 工具' : 'AI Tools',
+      category: t('commandPalette.aiTools', language),
       action: () => clearMessages(),
     },
     {
       id: 'clear-checkpoints',
-      label: isZh ? '清除所有检查点' : 'Clear All Checkpoints',
-      description: isZh ? '删除已保存的所有历史快照与检查点' : 'Remove all saved checkpoints',
+      label: t('commandPalette.clearAllCheckpoints', language),
+      description: t('commandPalette.removeAllSavedCheckpoints', language),
       icon: History,
-      category: isZh ? 'AI 工具' : 'AI Tools',
+      category: t('commandPalette.aiTools', language),
       action: () => clearCheckpoints(),
     },
   ]
@@ -494,11 +492,11 @@ export default function CommandPalette({ onClose, onShowKeyboardShortcuts }: Com
                 <kbd className="floating-surface-chip font-sans px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↑</kbd>
                 <kbd className="floating-surface-chip font-sans px-1 py-0.5 rounded min-w-[16px] text-center shadow-sm">↓</kbd>
               </div>
-              <span>{isZh ? '导航' : 'to navigate'}</span>
+              <span>{t('commandPalette.toNavigate', language)}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <kbd className="floating-surface-chip font-sans px-1.5 py-0.5 rounded shadow-sm">↵</kbd>
-              <span>{isZh ? '选择执行' : 'to select'}</span>
+              <span>{t('commandPalette.toSelect', language)}</span>
             </span>
           </div>
           <div className="flex items-center gap-2 opacity-50">

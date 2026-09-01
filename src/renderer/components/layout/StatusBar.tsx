@@ -48,7 +48,7 @@ import FileFormatControls from './FileFormatControls'
 import { gitService, type GitBranch as GitBranchInfo } from '@renderer/services/gitService'
 import { toast } from '../common/ToastProvider'
 import AdministratorModeIndicator from './AdministratorModeIndicator'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 export default function StatusBar() {
   const {
@@ -172,11 +172,11 @@ export default function StatusBar() {
       await refreshGitState()
       setBranchQuery('')
       toast.success(
-        translate('statusBar.branchSwitched', asLanguage(language)),
+        t('statusBar.branchSwitched', language),
         'branch' in result && typeof result.branch === 'string' ? result.branch : branch.name,
       )
     } else {
-      toast.error(translate('statusBar.couldNotSwitchBranch', asLanguage(language)), result.error)
+      toast.error(t('statusBar.couldNotSwitchBranch', language), result.error)
     }
     setSwitchingBranch(null)
   }, [language, refreshGitState, switchingBranch, workspacePath])
@@ -187,7 +187,7 @@ export default function StatusBar() {
     const toast = toasts.find(item => item.id === id)
     return toast?.variant === 'inline'
   })
-  const activeToast = latestVisibleToastId ? toasts.find(t => t.id === latestVisibleToastId) : null
+  const activeToast = latestVisibleToastId ? toasts.find(item => item.id === latestVisibleToastId) : null
   const shouldEject = useHasElevatedToastLayer()
 
   const diagnostics = useDiagnosticsStore(state => state.diagnostics)
@@ -269,10 +269,10 @@ export default function StatusBar() {
             'text-text-muted group-hover:text-text-primary'
 
   const contextIndicatorCopy = useMemo(() => ({
-    compressing: translate('statusBar.compressing', asLanguage(language)),
-    handoffReady: translate('statusBar.handoffReady', asLanguage(language)),
-    switching: translate('statusBar.switching', asLanguage(language)),
-    switched: translate('statusBar.switched', asLanguage(language)),
+    compressing: t('statusBar.compressing', language),
+    handoffReady: t('statusBar.handoffReady', language),
+    switching: t('statusBar.switching', language),
+    switched: t('statusBar.switched', language),
   }), [language])
   const currentContextUsage = compressionStats?.ratio ?? null
 
@@ -283,8 +283,8 @@ export default function StatusBar() {
 
         {isGitRepo && gitStatus && (
           <BottomBarPopover
-            tooltip={translate('statusBar.switchGitBranch', asLanguage(language))}
-            title={translate('statusBar.gitBranches', asLanguage(language))}
+            tooltip={t('statusBar.switchGitBranch', language)}
+            title={t('statusBar.gitBranches', language)}
             width={320}
             height={360}
             onOpenChange={open => {
@@ -310,15 +310,15 @@ export default function StatusBar() {
                         if (target) void handleSwitchBranch(target)
                       }
                     }}
-                    placeholder={translate('statusBar.searchBranches', asLanguage(language))}
+                    placeholder={t('statusBar.searchBranches', language)}
                     className="h-8 min-w-0 flex-1 bg-transparent text-[11px] text-text-primary outline-none placeholder:text-text-muted/60"
-                    aria-label={translate('statusBar.searchGitBranches', asLanguage(language))}
+                    aria-label={t('statusBar.searchGitBranches', language)}
                   />
                 </div>
                 <button
                   onClick={() => void refreshGitState()}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                  title={translate('statusBar.refreshBranches', asLanguage(language))}
+                  title={t('statusBar.refreshBranches', language)}
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
@@ -344,15 +344,15 @@ export default function StatusBar() {
                     <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{branch.name}</span>
                     <span className="shrink-0 text-[9px] uppercase tracking-wider text-text-muted/70">
                       {branch.current
-                        ? (translate('statusBar.current', asLanguage(language)))
+                        ? (t('statusBar.current', language))
                         : branch.remote
-                          ? (translate('statusBar.remote', asLanguage(language)))
+                          ? (t('statusBar.remote', language))
                           : ''}
                     </span>
                   </button>
                 )) : (
                   <div className="flex h-24 items-center justify-center text-[11px] text-text-muted">
-                    {translate('statusBar.noMatchingBranches', asLanguage(language))}
+                    {t('statusBar.noMatchingBranches', language)}
                   </div>
                 )}
               </div>
@@ -361,7 +361,7 @@ export default function StatusBar() {
                 onClick={() => setActiveSidePanel('git')}
                 className="flex h-10 shrink-0 items-center justify-between border-t border-border/40 px-3 text-[10px] font-medium text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
               >
-                <span>{translate('statusBar.openFullGitPanel', asLanguage(language))}</span>
+                <span>{t('statusBar.openFullGitPanel', language)}</span>
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -522,19 +522,18 @@ export default function StatusBar() {
             }
             width={340}
             height={480}
-            language={language as 'en' | 'zh'}
           >
             <ContextStatsContent
               totalUsage={tokenStats.totalUsage}
               lastUsage={tokenStats.lastUsage}
-              language={language as 'en' | 'zh'}
+              language={language}
             />
           </BottomBarPopover>
 
           {messageCount > 0 && (
             <div
               className="flex items-center justify-center w-7 h-7 rounded-md cursor-default group hover:bg-white/5 transition-colors"
-              title={translate('statusBar.messages', asLanguage(language), { messageCount })}
+              title={t('statusBar.messages', language, { messageCount })}
             >
               <div className="relative flex items-center justify-center w-4 h-4 transition-colors">
                 <MessageSquare className="w-3 h-3 text-blue-400 drop-shadow-[0_0_6px_rgba(96,165,250,0.5)] transition-colors" />
@@ -556,12 +555,11 @@ export default function StatusBar() {
             }
             width={380}
             height={280}
-            language={language as 'en' | 'zh'}
           >
-            <ToolCallLogContent language={language as 'en' | 'zh'} />
+            <ToolCallLogContent language={language} />
           </BottomBarPopover>
 
-          <LocalServersIndicator language={language as 'en' | 'zh'} />
+          <LocalServersIndicator language={language} />
         </div>
 
         <div className="flex items-center gap-0.5 h-full">
@@ -629,9 +627,8 @@ export default function StatusBar() {
             }
             width={360}
             height={420}
-            language={language as 'en' | 'zh'}
           >
-            <NotificationCenterContent language={language as 'en' | 'zh'} />
+            <NotificationCenterContent language={language} />
           </BottomBarPopover>
         </div>
       </div>

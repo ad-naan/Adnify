@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, X, ZoomIn, ZoomOut } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
-import { t } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface ImageLightboxItem {
   src: string

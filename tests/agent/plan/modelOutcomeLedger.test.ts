@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recommendModelForTask } from '@/renderer/agent/plan/modelOutcomeLedger'
+import { createModelRecommender, recommendModelForTask } from '@/renderer/agent/plan/modelOutcomeLedger'
 import type { ModelOutcome, PlanTask, TaskPlan } from '@/renderer/agent/plan/types'
 
 const outcome = (provider: string, model: string, succeeded: boolean, duration = 10_000): ModelOutcome => ({
@@ -22,5 +22,23 @@ describe('modelOutcomeLedger', () => {
 
   it('does not recommend from a single anecdote', () => {
     expect(recommendModelForTask(task('target'), [plan([task('one', outcome('a', 'm', true))])])).toBeNull()
+  })
+
+  it('batch recommender matches the single-shot call and keeps execution classes apart', () => {
+    const plans = [plan([
+      task('a1', outcome('a', 'fast', true)), task('a2', outcome('a', 'fast', true)),
+      task('r1', { ...outcome('r', 'reader', true), executionClass: 'analysis-read-heavy' }),
+      task('r2', { ...outcome('r', 'reader', true), executionClass: 'analysis-read-heavy' }),
+    ])]
+    const recommend = createModelRecommender(plans)
+    const write = task('write')
+    const read: PlanTask = { ...task('read'), executionClass: 'analysis-read-heavy' }
+
+    expect(recommend(write)).toEqual(recommendModelForTask(write, plans))
+    expect(recommend(write)).toMatchObject({ provider: 'a', model: 'fast' })
+    // 同一个索引连续查两个 executionClass：缓存不能把上一个类的排名串给下一个。
+    expect(recommend(read)).toMatchObject({ provider: 'r', model: 'reader' })
+    expect(recommend(write)).toMatchObject({ provider: 'a', model: 'fast' })
+    expect(recommend({ ...task('other'), executionClass: 'general' })).toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Command, FolderOpen, Search, Settings, TerminalSquare } from 'lucide-react'
 import { useStore } from '@store'
-import { t, type Language } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import { publicAsset } from '@utils/publicAsset'
 import UsageDashboard from '../welcome/UsageDashboard'
 

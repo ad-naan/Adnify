@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Brain } from 'lucide-react'
 import { Button } from '../ui'
 import { useDecorativeAnimations } from '@/renderer/hooks/useDecorativeAnimations'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface ReasoningOption {
   value: string
@@ -225,7 +225,7 @@ const ParticleSlider = memo(function ParticleSlider({
       ref={trackRef}
       role="slider"
       tabIndex={0}
-      aria-label={t('reasoningParticleSlider.reasoningEffortParticleSlider', asLanguage(language))}
+      aria-label={t('reasoningParticleSlider.reasoningEffortParticleSlider', language)}
       aria-valuemin={0}
       aria-valuemax={Math.max(0, count - 1)}
       aria-valuenow={index}
@@ -346,7 +346,7 @@ export default memo(function ReasoningParticleSlider({
       >
         <div className="mb-2 flex items-center justify-between gap-3 px-0.5">
           <span className="text-[10px] font-medium text-text-muted">
-            {t('reasoningParticleSlider.reasoningEffort', asLanguage(language))}
+            {t('reasoningParticleSlider.reasoningEffort', language)}
           </span>
           <span className={`text-[10px] font-medium ${enabled ? 'text-accent' : 'text-text-muted'}`}>
             {selectedLabel}
@@ -375,8 +375,8 @@ export default memo(function ReasoningParticleSlider({
         variant="ghost"
         size="icon"
         onClick={() => setIsOpen(open => !open)}
-        title={t('reasoningParticleSlider.reasoningEffort2', asLanguage(language), { selectedLabel })}
-        aria-label={t('reasoningParticleSlider.selectReasoningEffort', asLanguage(language))}
+        title={t('reasoningParticleSlider.reasoningEffort2', language, { selectedLabel })}
+        aria-label={t('reasoningParticleSlider.selectReasoningEffort', language)}
         aria-expanded={isOpen}
         className={`h-8 w-8 rounded-lg transition-all ${enabled ? 'text-accent hover:bg-accent/5' : 'text-text-muted hover:text-text-primary'}`}
       >

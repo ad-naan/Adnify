@@ -7,8 +7,8 @@
 import { describe, expect, it } from 'vitest'
 import { laneNoticeText, lanePlacementText, laneOutcomeText } from '@/renderer/agent/orchestration/laneNoticeText'
 import type { ExecutionLaneNoticeCode } from '@/shared/types/executionLane'
-import { en } from '@/renderer/i18n/locales/en'
-import { zh } from '@/renderer/i18n/locales/zh'
+import { en } from '@shared/i18n/locales/en'
+import { zh } from '@shared/i18n/locales/zh'
 
 const CODES: ExecutionLaneNoticeCode[] = [
   'noRepository', 'noCommits', 'dirtyBase', 'createFailed', 'dirtyBaseMerge', 'baseBranchChanged',

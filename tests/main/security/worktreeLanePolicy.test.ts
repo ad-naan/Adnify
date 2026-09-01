@@ -5,6 +5,7 @@
  * `git worktree add <任意路径>` 就能把一份完整检出写到工作区之外。
  */
 import { describe, expect, it } from 'vitest'
+import * as path from 'path'
 import { assessWorktreeLaneCommand } from '../../../src/main/security/worktreeLanePolicy'
 
 const ROOTS = ['/work/repo']
@@ -92,6 +93,50 @@ describe('assessWorktreeLaneCommand', () => {
       const decision = assess(['worktree', 'add', '-b', 'feature/x', LANE, 'HEAD'])
       expect(decision.allowed).toBe(false)
       if (!decision.allowed) expect(decision.reason).toContain('adnify/lane-')
+    })
+  })
+
+  /**
+   * Windows 形状的路径。
+   *
+   * 上面所有用例都是 POSIX 写法，而这个产品的主力平台是 Windows —— 真实入参一律是
+   * `D:\repo\.adnify\worktrees\task-x` 这种反斜杠路径，判定全靠 `path.relative` 的
+   * 平台行为。免审批通道上"没测过的平台"等于"没有边界"，所以这里按当前盘符拼出真实
+   * 路径再跑一遍准入矩阵。只在 win32 上运行：POSIX 下 `D:\...` 只是个普通文件名。
+   */
+  describe.skipIf(process.platform !== 'win32')('accepts and rejects the same shapes with Windows paths', () => {
+    const winRoot = path.resolve('/work/repo')                    // 例如 D:\work\repo
+    const winLane = path.join(winRoot, '.adnify', 'worktrees', 'task-1234abcd')
+    const winRoots = [winRoot]
+
+    it('accepts a backslash lane path', () => {
+      expect(assess(['worktree', 'add', '-b', BRANCH, winLane, 'HEAD'], winRoot, winRoots).allowed).toBe(true)
+      expect(assess(['worktree', 'remove', winLane], winRoot, winRoots).allowed).toBe(true)
+    })
+
+    it('accepts the forward-slash spelling of the same Windows path', () => {
+      const asPosix = winLane.split(path.sep).join('/')
+      expect(assess(['worktree', 'remove', asPosix], winRoot, winRoots).allowed).toBe(true)
+    })
+
+    it('accepts a case-mismatched drive letter and root', () => {
+      // git 报出来的 worktree 路径用的是记录时的大小写，和我们手上的根不一定一致。
+      expect(assess(['worktree', 'remove', winLane.toLowerCase()], winRoot, winRoots).allowed).toBe(true)
+      expect(assess(['worktree', 'remove', winLane], winRoot.toUpperCase(), [winRoot.toUpperCase()]).allowed).toBe(true)
+    })
+
+    it('rejects a backslash traversal out of the lane root', () => {
+      const escape = `${winRoot}\\.adnify\\worktrees\\..\\..\\..`
+      expect(assess(['worktree', 'remove', escape], winRoot, winRoots).allowed).toBe(false)
+    })
+
+    it('rejects a lane path on another drive', () => {
+      const otherDrive = `${winRoot[0] === 'Z' ? 'Y' : 'Z'}:\\work\\repo\\.adnify\\worktrees\\task-1234abcd`
+      expect(assess(['worktree', 'remove', otherDrive], winRoot, winRoots).allowed).toBe(false)
+    })
+
+    it('rejects a cwd outside the workspace root', () => {
+      expect(assess(['worktree', 'prune'], path.join(winRoot, '..', 'elsewhere'), winRoots).allowed).toBe(false)
     })
   })
 })

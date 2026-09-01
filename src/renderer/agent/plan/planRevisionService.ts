@@ -1,5 +1,5 @@
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 export type PlanRevisionSource = 'review' | 'validation'
 
@@ -20,7 +20,7 @@ const isRunningStatus = (status: string) => ['executing', 'pausing', 'paused', '
 export function beginPlanRevision(
   planId: string,
   source: PlanRevisionSource,
-  language: string,
+  language: Language,
 ): BeginPlanRevisionResult {
   const store = useAgentStore.getState()
   const plan = store.getPlan(planId)
@@ -28,19 +28,19 @@ export function beginPlanRevision(
   if (!plan) {
     return {
       success: false,
-      message: t('planRevisionService.thePlanNoLonger', asLanguage(language)),
+      message: t('planRevisionService.thePlanNoLonger', language),
     }
   }
   if (isRunningStatus(plan.status)) {
     return {
       success: false,
-      message: t('planRevisionService.pauseOrStopThe', asLanguage(language)),
+      message: t('planRevisionService.pauseOrStopThe', language),
     }
   }
   if (!plan.originThreadId || !store.threads[plan.originThreadId]) {
     return {
       success: false,
-      message: t('planRevisionService.thePlanningConversationFor', asLanguage(language)),
+      message: t('planRevisionService.thePlanningConversationFor', language),
     }
   }
 
@@ -54,8 +54,8 @@ export function beginPlanRevision(
   store.switchThread(plan.originThreadId)
 
   const prompt = source === 'validation'
-    ? (t('planRevisionService.pleaseReviseTheExecution', asLanguage(language), { name: plan.name }))
-    : (t('planRevisionService.pleaseRevisePlan', asLanguage(language), { name: plan.name }))
+    ? (t('planRevisionService.pleaseReviseTheExecution', language, { name: plan.name }))
+    : (t('planRevisionService.pleaseRevisePlan', language, { name: plan.name }))
   store.setInputPrompt(prompt)
 
   if (typeof window !== 'undefined') {
@@ -64,7 +64,7 @@ export function beginPlanRevision(
 
   return {
     success: true,
-    message: t('planRevisionService.revisionModeIsReady', asLanguage(language)),
+    message: t('planRevisionService.revisionModeIsReady', language),
   }
 }
 

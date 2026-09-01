@@ -21,12 +21,12 @@ import { createManualHandoffSession } from '@/renderer/agent/services/handoffSes
 import type { CompressionLevel } from '@/renderer/agent/domains/context/types'
 import type { TokenUsage } from '@renderer/agent/types'
 import { toast } from '../common/ToastProvider'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 interface ContextStatsContentProps {
   totalUsage: TokenUsage
   lastUsage?: TokenUsage
-  language?: 'zh' | 'en'
+  language: Language
 }
 
 const LEVEL_COLORS: Record<CompressionLevel, string> = {
@@ -48,7 +48,7 @@ const LEVEL_BG: Record<CompressionLevel, string> = {
 export default function ContextStatsContent({
   totalUsage,
   lastUsage,
-  language = 'en',
+  language,
 }: ContextStatsContentProps) {
   const compressionStats = useAgentStore(selectCompressionStats)
   const currentThread = useAgentStore(selectCurrentThread)
@@ -66,83 +66,83 @@ export default function ContextStatsContent({
   const peakRatio = compressionStats?.peakRatio ?? ratio
   const staleTurns = memoryHealth?.staleTurns ?? 0
 
-  const t = useMemo(() => ({
-    contextControl: translate('contextStatsContent.contextControl', asLanguage(language)),
-    contextLoad: translate('contextStatsContent.contextLoad', asLanguage(language)),
-    threadPeakUsage: translate('contextStatsContent.threadPeakUsage', asLanguage(language)),
-    memoryState: translate('contextStatsContent.workingMemory', asLanguage(language)),
-    compressionLevel: translate('contextStatsContent.compressionLevel', asLanguage(language)),
-    windowUsage: translate('contextStatsContent.perRequestInputWindow', asLanguage(language)),
-    loadStatus: translate('contextStatsContent.currentState', asLanguage(language)),
-    input: translate('contextStatsContent.input', asLanguage(language)),
-    inputUse: translate('contextStatsContent.inputUse', asLanguage(language)),
-    strategy: translate('contextStatsContent.strategy', asLanguage(language)),
-    summaryTiming: translate('contextStatsContent.whenSummaryStarts', asLanguage(language)),
-    handoffTiming: translate('contextStatsContent.whenNewThreadStarts', asLanguage(language)),
-    summaryTimingValue: translate('contextStatsContent.l3Around85', asLanguage(language)),
-    handoffTimingValue: translate('contextStatsContent.l4Around95', asLanguage(language)),
-    summaryHint: translate('contextStatsContent.aSummaryIsGenerated', asLanguage(language)),
-    handoffHint: translate('contextStatsContent.whenARequestIs', asLanguage(language)),
-    memoryScore: translate('contextStatsContent.continuityScore', asLanguage(language)),
-    snapshotStatus: translate('contextStatsContent.snapshotStatus', asLanguage(language)),
-    snapshotReady: translate('contextStatsContent.ready', asLanguage(language)),
-    snapshotMissing: translate('contextStatsContent.notReady', asLanguage(language)),
-    freshness: translate('contextStatsContent.freshness', asLanguage(language)),
-    freshnessFresh: translate('contextStatsContent.fresh', asLanguage(language)),
-    freshnessStale: translate('contextStatsContent.turnsBehind', asLanguage(language), { staleTurns }),
-    scoreHint: translate('contextStatsContent.thisScoreMeasuresHow', asLanguage(language)),
-    memoryEmptyHint: translate('contextStatsContent.noStructuredWorkingMemory', asLanguage(language)),
-    lowRisk: translate('contextStatsContent.lowRisk', asLanguage(language)),
-    mediumRisk: translate('contextStatsContent.mediumRisk', asLanguage(language)),
-    highRisk: translate('contextStatsContent.highRisk', asLanguage(language)),
-    staleTurnsLabel: translate('contextStatsContent.turnsSinceLastSummary', asLanguage(language)),
-    manualHandoff: translate('contextStatsContent.compressToNewThread', asLanguage(language)),
-    manualHandoffBusy: translate('contextStatsContent.switching', asLanguage(language)),
-    noThread: translate('contextStatsContent.cannotCompress', asLanguage(language)),
-    noThreadBody: translate('contextStatsContent.thereIsNoConversation', asLanguage(language)),
-    switched: translate('contextStatsContent.switchedToNewThread', asLanguage(language)),
-    switchedBody: translate('contextStatsContent.createdANewThread', asLanguage(language)),
-    compressFailed: translate('contextStatsContent.compressionFailed', asLanguage(language)),
-    compressFallback: translate('contextStatsContent.couldNotGenerateA', asLanguage(language)),
-    currentTask: translate('contextStatsContent.currentTask', asLanguage(language)),
-    handoffSnapshot: translate('contextStatsContent.handoffSnapshot', asLanguage(language)),
-    compressionSnapshot: translate('contextStatsContent.compressionSnapshot', asLanguage(language)),
-    noSnapshot: translate('contextStatsContent.noContextSnapshotYet', asLanguage(language)),
-    next: translate('contextStatsContent.next', asLanguage(language)),
-    strategyGuide: translate('contextStatsContent.compressionAndHandoffStrategy', asLanguage(language)),
-    contextFull: translate('contextStatsContent.contextNearLimit', asLanguage(language)),
-    contextFullHint: translate('contextStatsContent.considerCreatingANew', asLanguage(language)),
-    totalTokens: translate('contextStatsContent.totalTokens', asLanguage(language)),
-    totalIn: translate('contextStatsContent.total', asLanguage(language)),
-    totalOut: translate('contextStatsContent.totalOut', asLanguage(language)),
-    cacheRead: translate('contextStatsContent.cacheRead', asLanguage(language)),
-    cacheWrite: translate('contextStatsContent.cacheWrite', asLanguage(language)),
-    lastRequest: translate('contextStatsContent.lastRequest', asLanguage(language)),
-    lastCache: translate('contextStatsContent.lastCache', asLanguage(language)),
-    source: translate('contextStatsContent.source', asLanguage(language)),
-    providerReported: translate('contextStatsContent.providerReported', asLanguage(language)),
-    locallyEstimated: translate('contextStatsContent.locallyEstimated', asLanguage(language)),
-    readProvider: translate('contextStatsContent.readProvider', asLanguage(language)),
-    writeProvider: translate('contextStatsContent.writeProvider', asLanguage(language)),
-    writeEstimated: translate('contextStatsContent.writeEstimated', asLanguage(language)),
-    notAvailable: language === 'zh' ? '-' : '-',
-    levelLabel: translate('contextStatsContent.currentStrategyLevel', asLanguage(language)),
+  const labels = useMemo(() => ({
+    contextControl: t('contextStatsContent.contextControl', language),
+    contextLoad: t('contextStatsContent.contextLoad', language),
+    threadPeakUsage: t('contextStatsContent.threadPeakUsage', language),
+    memoryState: t('contextStatsContent.workingMemory', language),
+    compressionLevel: t('contextStatsContent.compressionLevel', language),
+    windowUsage: t('contextStatsContent.perRequestInputWindow', language),
+    loadStatus: t('contextStatsContent.currentState', language),
+    input: t('contextStatsContent.input', language),
+    inputUse: t('contextStatsContent.inputUse', language),
+    strategy: t('contextStatsContent.strategy', language),
+    summaryTiming: t('contextStatsContent.whenSummaryStarts', language),
+    handoffTiming: t('contextStatsContent.whenNewThreadStarts', language),
+    summaryTimingValue: t('contextStatsContent.l3Around85', language),
+    handoffTimingValue: t('contextStatsContent.l4Around95', language),
+    summaryHint: t('contextStatsContent.aSummaryIsGenerated', language),
+    handoffHint: t('contextStatsContent.whenARequestIs', language),
+    memoryScore: t('contextStatsContent.continuityScore', language),
+    snapshotStatus: t('contextStatsContent.snapshotStatus', language),
+    snapshotReady: t('contextStatsContent.ready', language),
+    snapshotMissing: t('contextStatsContent.notReady', language),
+    freshness: t('contextStatsContent.freshness', language),
+    freshnessFresh: t('contextStatsContent.fresh', language),
+    freshnessStale: t('contextStatsContent.turnsBehind', language, { staleTurns }),
+    scoreHint: t('contextStatsContent.thisScoreMeasuresHow', language),
+    memoryEmptyHint: t('contextStatsContent.noStructuredWorkingMemory', language),
+    lowRisk: t('contextStatsContent.lowRisk', language),
+    mediumRisk: t('contextStatsContent.mediumRisk', language),
+    highRisk: t('contextStatsContent.highRisk', language),
+    staleTurnsLabel: t('contextStatsContent.turnsSinceLastSummary', language),
+    manualHandoff: t('contextStatsContent.compressToNewThread', language),
+    manualHandoffBusy: t('contextStatsContent.switching', language),
+    noThread: t('contextStatsContent.cannotCompress', language),
+    noThreadBody: t('contextStatsContent.thereIsNoConversation', language),
+    switched: t('contextStatsContent.switchedToNewThread', language),
+    switchedBody: t('contextStatsContent.createdANewThread', language),
+    compressFailed: t('contextStatsContent.compressionFailed', language),
+    compressFallback: t('contextStatsContent.couldNotGenerateA', language),
+    currentTask: t('contextStatsContent.currentTask', language),
+    handoffSnapshot: t('contextStatsContent.handoffSnapshot', language),
+    compressionSnapshot: t('contextStatsContent.compressionSnapshot', language),
+    noSnapshot: t('contextStatsContent.noContextSnapshotYet', language),
+    next: t('contextStatsContent.next', language),
+    strategyGuide: t('contextStatsContent.compressionAndHandoffStrategy', language),
+    contextFull: t('contextStatsContent.contextNearLimit', language),
+    contextFullHint: t('contextStatsContent.considerCreatingANew', language),
+    totalTokens: t('contextStatsContent.totalTokens', language),
+    totalIn: t('contextStatsContent.total', language),
+    totalOut: t('contextStatsContent.totalOut', language),
+    cacheRead: t('contextStatsContent.cacheRead', language),
+    cacheWrite: t('contextStatsContent.cacheWrite', language),
+    lastRequest: t('contextStatsContent.lastRequest', language),
+    lastCache: t('contextStatsContent.lastCache', language),
+    source: t('contextStatsContent.source', language),
+    providerReported: t('contextStatsContent.providerReported', language),
+    locallyEstimated: t('contextStatsContent.locallyEstimated', language),
+    readProvider: t('contextStatsContent.readProvider', language),
+    writeProvider: t('contextStatsContent.writeProvider', language),
+    writeEstimated: t('contextStatsContent.writeEstimated', language),
+    notAvailable: '-',
+    levelLabel: t('contextStatsContent.currentStrategyLevel', language),
   }), [language, staleTurns])
 
   const levelNames: Record<CompressionLevel, string> = {
-    0: translate('contextStatsContent.fullContext', asLanguage(language)),
-    1: translate('contextStatsContent.truncateArgs', asLanguage(language)),
-    2: translate('contextStatsContent.clearOldResults', asLanguage(language)),
-    3: translate('contextStatsContent.deepCompress', asLanguage(language)),
-    4: translate('contextStatsContent.sessionHandoff', asLanguage(language)),
+    0: t('contextStatsContent.fullContext', language),
+    1: t('contextStatsContent.truncateArgs', language),
+    2: t('contextStatsContent.clearOldResults', language),
+    3: t('contextStatsContent.deepCompress', language),
+    4: t('contextStatsContent.sessionHandoff', language),
   }
 
   const levelDescriptions: Record<CompressionLevel, string> = {
-    0: translate('contextStatsContent.keepFullMessageHistory', asLanguage(language)),
-    1: translate('contextStatsContent.startTruncatingLongTool', asLanguage(language)),
-    2: translate('contextStatsContent.clearOlderToolResults', asLanguage(language)),
-    3: translate('contextStatsContent.deepCompressHistoryAnd', asLanguage(language)),
-    4: translate('contextStatsContent.prepareAHandoffPacket', asLanguage(language)),
+    0: t('contextStatsContent.keepFullMessageHistory', language),
+    1: t('contextStatsContent.startTruncatingLongTool', language),
+    2: t('contextStatsContent.clearOlderToolResults', language),
+    3: t('contextStatsContent.deepCompressHistoryAnd', language),
+    4: t('contextStatsContent.prepareAHandoffPacket', language),
   }
 
   const formatK = (n: number | undefined) => {
@@ -156,13 +156,13 @@ export default function ContextStatsContent({
   }
 
   const cacheReadHint = totalUsage?.cacheReadSource === 'provider-reported'
-    ? t.providerReported
+    ? labels.providerReported
     : undefined
 
   const cacheWriteHint = totalUsage?.cacheWriteSource === 'provider-reported'
-    ? t.providerReported
+    ? labels.providerReported
     : totalUsage?.cacheWriteSource === 'estimated'
-      ? t.locallyEstimated
+      ? labels.locallyEstimated
       : undefined
 
   const memoryProgressColor = useMemo(() => {
@@ -180,22 +180,22 @@ export default function ContextStatsContent({
   }, [ratio])
 
   const memoryRiskLabel = memoryHealth?.risk === 'low'
-    ? t.lowRisk
+    ? labels.lowRisk
     : memoryHealth?.risk === 'medium'
-      ? t.mediumRisk
-      : t.highRisk
+      ? labels.mediumRisk
+      : labels.highRisk
 
   const freshnessLabel = !hasMemoryHealth
-    ? t.snapshotMissing
+    ? labels.snapshotMissing
     : staleTurns === 0
-      ? t.freshnessFresh
-      : t.freshnessStale
+      ? labels.freshnessFresh
+      : labels.freshnessStale
 
   const handleManualCompress = async () => {
     if (!currentThread || isCreatingHandoff) return
 
     if (currentThread.messages.length === 0) {
-      toast.error(t.noThread, t.noThreadBody)
+      toast.error(labels.noThread, labels.noThreadBody)
       return
     }
 
@@ -203,10 +203,10 @@ export default function ContextStatsContent({
 
     try {
       await createManualHandoffSession(currentThread.id)
-      toast.success(t.switched, t.switchedBody)
+      toast.success(labels.switched, labels.switchedBody)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      toast.error(t.compressFailed, message || t.compressFallback)
+      toast.error(labels.compressFailed, message || labels.compressFallback)
     } finally {
       setIsCreatingHandoff(false)
     }
@@ -218,21 +218,21 @@ export default function ContextStatsContent({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-              {t.contextControl}
+              {labels.contextControl}
             </div>
             <div className="mt-1 text-xs text-text-secondary">
-              {t.loadStatus}
+              {labels.loadStatus}
             </div>
           </div>
           <div className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${LEVEL_BG[currentLevel]}/20 ${LEVEL_COLORS[currentLevel]}`}>
-            {t.levelLabel}: L{currentLevel}
+            {labels.levelLabel}: L{currentLevel}
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 text-center">
-          <MetricCard label={t.input} value={formatK(inputTokens)} />
-          <MetricCard label={t.inputUse} value={`${Math.round(ratio * 100)}%`} tone="secondary" />
-          <MetricCard label={t.strategy} value={`L${currentLevel}`} valueClassName={LEVEL_COLORS[currentLevel]} />
+          <MetricCard label={labels.input} value={formatK(inputTokens)} />
+          <MetricCard label={labels.inputUse} value={`${Math.round(ratio * 100)}%`} tone="secondary" />
+          <MetricCard label={labels.strategy} value={`L${currentLevel}`} valueClassName={LEVEL_COLORS[currentLevel]} />
         </div>
       </div>
 
@@ -240,13 +240,13 @@ export default function ContextStatsContent({
         <section className="rounded-2xl border border-border/40 bg-surface/30 p-4">
           <div className="mb-3 flex items-center gap-2">
             <Scale className="h-4 w-4 text-accent" />
-            <span className="text-xs font-semibold text-text-secondary">{t.contextLoad}</span>
+            <span className="text-xs font-semibold text-text-secondary">{labels.contextLoad}</span>
           </div>
 
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-text-muted">
-                {t.windowUsage}
+                {labels.windowUsage}
               </div>
               <div className="mt-1 text-lg font-bold font-mono text-text-primary">
                 {formatK(inputTokens)} / {formatK(contextLimit)}
@@ -254,7 +254,7 @@ export default function ContextStatsContent({
             </div>
             <div className={`text-right ${LEVEL_COLORS[currentLevel]}`}>
               <div className="text-[10px] uppercase tracking-[0.2em] text-text-muted">
-                {t.compressionLevel}
+                {labels.compressionLevel}
               </div>
               <div className="mt-1 text-lg font-bold font-mono">
                 L{currentLevel}
@@ -282,7 +282,7 @@ export default function ContextStatsContent({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                  {t.loadStatus}
+                  {labels.loadStatus}
                 </div>
                 <div className={`mt-1 text-sm font-semibold ${LEVEL_COLORS[currentLevel]}`}>
                   {levelNames[currentLevel]}
@@ -290,7 +290,7 @@ export default function ContextStatsContent({
               </div>
               {needsHandoff && (
                 <div className="rounded-full bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-400">
-                  {t.contextFull}
+                  {labels.contextFull}
                 </div>
               )}
             </div>
@@ -298,7 +298,7 @@ export default function ContextStatsContent({
               {levelDescriptions[currentLevel]}
             </p>
             <div className="mt-3 text-[10px] text-text-muted">
-              {t.threadPeakUsage}: <span className="font-mono text-text-primary">{Math.round(peakRatio * 100)}%</span>
+              {labels.threadPeakUsage}: <span className="font-mono text-text-primary">{Math.round(peakRatio * 100)}%</span>
             </div>
           </div>
         </section>
@@ -306,13 +306,13 @@ export default function ContextStatsContent({
         <section className="rounded-2xl border border-border/40 bg-surface/30 p-4">
           <div className="mb-3 flex items-center gap-2">
             <BrainCircuit className="h-4 w-4 text-accent" />
-            <span className="text-xs font-semibold text-text-secondary">{t.memoryState}</span>
+            <span className="text-xs font-semibold text-text-secondary">{labels.memoryState}</span>
           </div>
 
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-text-muted">
-                {t.memoryScore}
+                {labels.memoryScore}
               </div>
               <div className="mt-1 text-lg font-bold font-mono text-text-primary">
                 {hasMemoryHealth ? `${Math.round(memoryScore)}%` : '--'}
@@ -320,10 +320,10 @@ export default function ContextStatsContent({
             </div>
             <div className="text-right">
               <div className="text-[10px] uppercase tracking-[0.2em] text-text-muted">
-                {t.snapshotStatus}
+                {labels.snapshotStatus}
               </div>
               <div className={`mt-1 text-sm font-semibold ${hasMemoryHealth ? 'text-emerald-400' : 'text-text-muted'}`}>
-                {hasMemoryHealth ? t.snapshotReady : t.snapshotMissing}
+                {hasMemoryHealth ? labels.snapshotReady : labels.snapshotMissing}
               </div>
             </div>
           </div>
@@ -336,28 +336,28 @@ export default function ContextStatsContent({
           </div>
 
           <div className="mt-2 flex items-center justify-between text-[10px] text-text-muted">
-            <span>{t.freshness}</span>
+            <span>{labels.freshness}</span>
             <span className={hasMemoryHealth ? 'text-yellow-400' : 'text-text-muted'}>
               {freshnessLabel}
             </span>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <MetricCard label={t.snapshotStatus} value={hasMemoryHealth ? t.snapshotReady : t.snapshotMissing} valueClassName={hasMemoryHealth ? 'text-emerald-300' : 'text-text-muted'} />
-            <MetricCard label={t.staleTurnsLabel} value={hasMemoryHealth ? String(staleTurns) : '--'} valueClassName={hasMemoryHealth ? 'text-text-primary' : 'text-text-muted'} />
+            <MetricCard label={labels.snapshotStatus} value={hasMemoryHealth ? labels.snapshotReady : labels.snapshotMissing} valueClassName={hasMemoryHealth ? 'text-emerald-300' : 'text-text-muted'} />
+            <MetricCard label={labels.staleTurnsLabel} value={hasMemoryHealth ? String(staleTurns) : '--'} valueClassName={hasMemoryHealth ? 'text-text-primary' : 'text-text-muted'} />
           </div>
 
           <div className="mt-4 rounded-xl border border-border/30 bg-background/30 p-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] uppercase tracking-[0.18em] text-text-muted">
-                {t.loadStatus}
+                {labels.loadStatus}
               </span>
               <span className={`text-[10px] font-semibold ${hasMemoryHealth ? 'text-yellow-400' : 'text-text-muted'}`}>
-                {hasMemoryHealth ? memoryRiskLabel : t.snapshotMissing}
+                {hasMemoryHealth ? memoryRiskLabel : labels.snapshotMissing}
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-text-secondary">
-              {hasMemoryHealth ? t.scoreHint : t.memoryEmptyHint}
+              {hasMemoryHealth ? labels.scoreHint : labels.memoryEmptyHint}
             </p>
           </div>
         </section>
@@ -365,21 +365,21 @@ export default function ContextStatsContent({
         <section className="rounded-2xl border border-border/40 bg-surface/30 p-4">
           <div className="mb-3 flex items-center gap-2">
             <TimerReset className="h-4 w-4 text-accent" />
-            <span className="text-xs font-semibold text-text-secondary">{t.strategyGuide}</span>
+            <span className="text-xs font-semibold text-text-secondary">{labels.strategyGuide}</span>
           </div>
 
           <div className="space-y-3">
             <StrategyRow
               icon={<BrainCircuit className="h-3.5 w-3.5 text-orange-400" />}
-              label={t.summaryTiming}
-              value={t.summaryTimingValue}
-              description={t.summaryHint}
+              label={labels.summaryTiming}
+              value={labels.summaryTimingValue}
+              description={labels.summaryHint}
             />
             <StrategyRow
               icon={<ArrowRightCircle className="h-3.5 w-3.5 text-red-400" />}
-              label={t.handoffTiming}
-              value={t.handoffTimingValue}
-              description={t.handoffHint}
+              label={labels.handoffTiming}
+              value={labels.handoffTimingValue}
+              description={labels.handoffHint}
             />
           </div>
 
@@ -388,10 +388,10 @@ export default function ContextStatsContent({
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
               <div>
                 <h4 className="text-xs font-bold text-red-400">
-                  {t.contextFull}
+                  {labels.contextFull}
                 </h4>
                 <p className="mt-1 text-[10px] leading-relaxed text-red-400/80">
-                  {t.contextFullHint}
+                  {labels.contextFullHint}
                 </p>
               </div>
             </div>
@@ -400,10 +400,10 @@ export default function ContextStatsContent({
           <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-accent/20 bg-accent/5 p-3">
             <div className="min-w-0">
               <div className="text-[10px] uppercase tracking-[0.18em] text-accent/80">
-                {t.manualHandoff}
+                {labels.manualHandoff}
               </div>
               <div className="mt-1 text-[11px] leading-relaxed text-text-secondary">
-                {translate('contextStatsContent.generateAFreshHandoff', asLanguage(language))}
+                {t('contextStatsContent.generateAFreshHandoff', language)}
               </div>
             </div>
             <button
@@ -417,7 +417,7 @@ export default function ContextStatsContent({
               ) : (
                 <ArrowRightCircle className="h-3 w-3" />
               )}
-              <span>{isCreatingHandoff ? t.manualHandoffBusy : t.manualHandoff}</span>
+              <span>{isCreatingHandoff ? labels.manualHandoffBusy : labels.manualHandoff}</span>
             </button>
           </div>
         </section>
@@ -425,17 +425,17 @@ export default function ContextStatsContent({
         <section className="rounded-2xl border border-border/40 bg-surface/30 p-4">
           <div className="mb-3 flex items-center gap-2">
             <Coins className="h-4 w-4 text-accent" />
-            <span className="text-xs font-semibold text-text-secondary">{t.totalTokens}</span>
+            <span className="text-xs font-semibold text-text-secondary">{labels.totalTokens}</span>
             <span className="ml-auto text-lg font-bold font-mono text-accent">
               {formatK(totalUsage?.totalTokens ?? 0)}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <StatRow label={t.totalIn} value={formatNumber(totalUsage?.promptTokens ?? 0)} />
-            <StatRow label={t.totalOut} value={formatNumber(totalUsage?.completionTokens ?? 0)} />
-            <StatRow label={t.cacheRead} value={formatNumber(totalUsage?.cachedInputTokens ?? 0)} valueClassName="text-emerald-300" hint={cacheReadHint} />
-            <StatRow label={t.cacheWrite} value={formatNumber(totalUsage?.cacheWriteTokens ?? 0)} valueClassName="text-sky-300" hint={cacheWriteHint} />
+            <StatRow label={labels.totalIn} value={formatNumber(totalUsage?.promptTokens ?? 0)} />
+            <StatRow label={labels.totalOut} value={formatNumber(totalUsage?.completionTokens ?? 0)} />
+            <StatRow label={labels.cacheRead} value={formatNumber(totalUsage?.cachedInputTokens ?? 0)} valueClassName="text-emerald-300" hint={cacheReadHint} />
+            <StatRow label={labels.cacheWrite} value={formatNumber(totalUsage?.cacheWriteTokens ?? 0)} valueClassName="text-sky-300" hint={cacheWriteHint} />
           </div>
 
           {lastUsage && (
@@ -443,29 +443,29 @@ export default function ContextStatsContent({
               <div className="mt-3 flex items-center justify-between text-[10px] text-text-muted">
                 <span className="flex items-center gap-1">
                   <Zap className="h-3 w-3" />
-                  {t.lastRequest}
+                  {labels.lastRequest}
                 </span>
                 <span>
                   {formatK(lastUsage.promptTokens)} <ChevronRight className="inline h-3 w-3" /> {formatK(lastUsage.completionTokens)}
                 </span>
               </div>
               <div className="mt-1 flex items-center justify-between text-[10px] text-text-muted">
-                <span>{t.lastCache}</span>
+                <span>{labels.lastCache}</span>
                 <span>
                   {formatK(lastUsage.cachedInputTokens ?? 0)} <ChevronRight className="inline h-3 w-3" /> {formatK(lastUsage.cacheWriteTokens ?? 0)}
                 </span>
               </div>
               {(lastUsage.cacheReadSource || lastUsage.cacheWriteSource) && (
                 <div className="mt-1 flex items-center justify-between text-[9px] text-text-muted/70">
-                  <span>{t.source}</span>
+                  <span>{labels.source}</span>
                   <span>
-                    {lastUsage.cacheReadSource === 'provider-reported' ? t.readProvider : t.notAvailable}
+                    {lastUsage.cacheReadSource === 'provider-reported' ? labels.readProvider : labels.notAvailable}
                     {' / '}
                     {lastUsage.cacheWriteSource === 'provider-reported'
-                      ? t.writeProvider
+                      ? labels.writeProvider
                       : lastUsage.cacheWriteSource === 'estimated'
-                        ? t.writeEstimated
-                        : t.notAvailable}
+                        ? labels.writeEstimated
+                        : labels.notAvailable}
                   </span>
                 </div>
               )}
@@ -477,10 +477,10 @@ export default function ContextStatsContent({
           <section className="rounded-2xl border border-border/40 bg-surface/30 p-4">
             <div className="flex items-center justify-between gap-2">
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-accent">
-                {t.currentTask}
+                {labels.currentTask}
               </div>
               <span className="text-[9px] uppercase tracking-[0.18em] text-text-muted">
-                {latestSnapshot.source === 'handoff' ? t.handoffSnapshot : t.compressionSnapshot}
+                {latestSnapshot.source === 'handoff' ? labels.handoffSnapshot : labels.compressionSnapshot}
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-text-secondary line-clamp-3">
@@ -488,7 +488,7 @@ export default function ContextStatsContent({
             </p>
             {latestSnapshot.summary.pendingSteps[0] && (
               <p className="mt-2 text-[10px] leading-relaxed text-text-muted line-clamp-2">
-                {t.next} {latestSnapshot.summary.pendingSteps[0]}
+                {labels.next} {latestSnapshot.summary.pendingSteps[0]}
               </p>
             )}
           </section>
@@ -496,10 +496,10 @@ export default function ContextStatsContent({
           <section className="rounded-2xl border border-border/30 bg-surface/20 p-4">
             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              {t.currentTask}
+              {labels.currentTask}
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-text-muted">
-              {t.noSnapshot}
+              {labels.noSnapshot}
             </p>
           </section>
         )}

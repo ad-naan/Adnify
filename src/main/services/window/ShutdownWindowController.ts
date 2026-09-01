@@ -1,13 +1,13 @@
 import { BrowserWindow, app, screen } from 'electron'
 import * as path from 'path'
+import { t, toLocaleTag, type Language } from '@shared/i18n'
 
 export type ShutdownPhase = 'saving' | 'done' | 'error'
 export type ShutdownReason = 'window-close' | 'app-quit'
-export type ShutdownLanguage = 'zh' | 'en'
 export type ShutdownThemeType = 'dark' | 'light'
 
 export interface ShutdownWindowPresentation {
-  language: ShutdownLanguage
+  language: Language
   themeType: ShutdownThemeType
   background: string
   surface: string
@@ -30,7 +30,7 @@ const WINDOW_WIDTH = 500
 const WINDOW_HEIGHT = 214
 
 const DEFAULT_PRESENTATION: ShutdownWindowPresentation = {
-  language: 'zh',
+  language: 'en',
   themeType: 'dark',
   background: '18 18 21',
   surface: '25 25 29',
@@ -41,33 +41,6 @@ const DEFAULT_PRESENTATION: ShutdownWindowPresentation = {
   success: '52 211 153',
   warning: '251 191 36',
 }
-
-const COPY = {
-  zh: {
-    savingTitle: '正在保存工作区',
-    savingAppQuit: '正在退出应用前保存所有运行时数据。',
-    savingWindowClose: '正在关闭窗口前保存当前工作区与会话状态。',
-    savingDescription: '请稍候，Adnify 会在保存完成后继续退出流程。',
-    doneTitle: '保存完成',
-    doneMessage: '当前工作区与对话数据已安全保存。',
-    doneDescription: 'Adnify 正在完成最后的退出收尾。',
-    errorTitle: '保存未完全成功',
-    errorMessage: '部分运行时数据可能未完整持久化。',
-    errorDescription: 'Adnify 正在继续退出，请下次启动后确认恢复结果。',
-  },
-  en: {
-    savingTitle: 'Saving workspace',
-    savingAppQuit: 'Saving all runtime data before quitting the application.',
-    savingWindowClose: 'Saving the current workspace and conversation state before closing this window.',
-    savingDescription: 'Please wait while Adnify completes the shutdown flow.',
-    doneTitle: 'Save complete',
-    doneMessage: 'The current workspace and conversation data have been saved safely.',
-    doneDescription: 'Adnify is finishing the last shutdown steps.',
-    errorTitle: 'Save completed with warnings',
-    errorMessage: 'Some runtime data may not have been fully persisted.',
-    errorDescription: 'Adnify will keep exiting. Please verify recovery after the next launch.',
-  },
-} as const
 
 function rgb(value: string, alpha = 1): string {
   const normalized = value.trim().replace(/\s+/g, ' ')
@@ -86,39 +59,37 @@ function escapeHtml(value: string): string {
 function buildState(
   reason: ShutdownReason,
   phase: ShutdownPhase,
-  language: ShutdownLanguage
+  language: Language
 ): ShutdownWindowState {
-  const copy = COPY[language]
-
   if (phase === 'done') {
     return {
       phase,
-      title: copy.doneTitle,
-      message: copy.doneMessage,
-      description: copy.doneDescription,
+      title: t('shutdownWindow.doneTitle', language),
+      message: t('shutdownWindow.doneMessage', language),
+      description: t('shutdownWindow.doneDescription', language),
     }
   }
 
   if (phase === 'error') {
     return {
       phase,
-      title: copy.errorTitle,
-      message: copy.errorMessage,
-      description: copy.errorDescription,
+      title: t('shutdownWindow.errorTitle', language),
+      message: t('shutdownWindow.errorMessage', language),
+      description: t('shutdownWindow.errorDescription', language),
     }
   }
 
   return {
     phase,
-    title: copy.savingTitle,
-    message: reason === 'app-quit' ? copy.savingAppQuit : copy.savingWindowClose,
-    description: copy.savingDescription,
+    title: t('shutdownWindow.savingTitle', language),
+    message: t(reason === 'app-quit' ? 'shutdownWindow.savingAppQuit' : 'shutdownWindow.savingWindowClose', language),
+    description: t('shutdownWindow.savingDescription', language),
   }
 }
 
 function buildHtml(state: ShutdownWindowState, presentation: ShutdownWindowPresentation): string {
   const payload = JSON.stringify(state)
-  const lang = presentation.language === 'zh' ? 'zh-CN' : 'en'
+  const lang = toLocaleTag(presentation.language)
 
   return `<!doctype html>
 <html lang="${lang}">

@@ -16,7 +16,7 @@ describe('threadReference', () => {
   })
 
   it('creates a paste-ready markdown link', () => {
-    expect(createThreadLinkMarkdown('thread-1', '修复任务')).toBe(
+    expect(createThreadLinkMarkdown('thread-1', '修复任务', 'zh')).toBe(
       '[会话：修复任务](adnify://agent/thread/thread-1)',
     )
   })
@@ -44,7 +44,7 @@ describe('threadReference', () => {
       userInstructions: ['不要修改接口'],
       generatedAt: 1,
       turnRange: [0, 2],
-    })
+    }, 'zh')
 
     expect(reference).toContain('[会话：修复任务](adnify://agent/thread/thread-1)')
     expect(reference).toContain('### 目标\n修复登录问题')

@@ -2,7 +2,7 @@ import { useState, type Dispatch, type ReactNode, type SetStateAction } from 're
 import { Bot, Clock3, MonitorUp, PanelBottom, Plus, RotateCcw, ShieldAlert, ShieldCheck, Terminal, X, Zap } from 'lucide-react'
 import { Switch } from '@components/ui'
 import { toast } from '@components/common/ToastProvider'
-import { type Language, t as translate, asLanguage } from '@renderer/i18n'
+import { type Language, t } from '@shared/i18n'
 import { api } from '@renderer/services/electronAPI'
 import type { AutoApproveSettings, SecuritySettings as SecuritySettingsState } from '@shared/config/types'
 import { formatTerminalCommandRule, legacyTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
@@ -58,7 +58,7 @@ export function SecuritySettings({
     const handleAddCommandScope = () => {
         const rule = legacyTerminalCommandRule(newCommandScope)
         if (!rule) {
-            toast.error(translate('securitySettings.enterExecutableFixedArguments', asLanguage(language)))
+            toast.error(t('securitySettings.enterExecutableFixedArguments', language))
             return
         }
         const key = terminalCommandRuleKey(rule)
@@ -77,7 +77,7 @@ export function SecuritySettings({
             const result = await api.settings.resetWhitelist()
             updateSecuritySettings({ allowedShellCommands: result.shell, allowedGitSubcommands: result.git })
         } catch (error) {
-            toast.error(translate('securitySettings.failedToResetTrusted', asLanguage(language)), error instanceof Error ? error.message : String(error))
+            toast.error(t('securitySettings.failedToResetTrusted', language), error instanceof Error ? error.message : String(error))
         }
     }
 
@@ -97,20 +97,20 @@ export function SecuritySettings({
         {
             icon: Zap,
             tone: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-            title: translate('securitySettings.automatic', asLanguage(language)),
-            detail: translate('securitySettings.lowRiskTrustedExecutable', asLanguage(language)),
+            title: t('securitySettings.automatic', language),
+            detail: t('securitySettings.lowRiskTrustedExecutable', language),
         },
         {
             icon: PanelBottom,
             tone: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-            title: translate('securitySettings.toolDockApproval', asLanguage(language)),
-            detail: translate('securitySettings.unknownCommandsDangerousOperations', asLanguage(language)),
+            title: t('securitySettings.toolDockApproval', language),
+            detail: t('securitySettings.unknownCommandsDangerousOperations', language),
         },
         {
             icon: MonitorUp,
             tone: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-            title: translate('securitySettings.nativeConfirmation', asLanguage(language)),
-            detail: translate('securitySettings.onlyStrongBoundariesSuch', asLanguage(language)),
+            title: t('securitySettings.nativeConfirmation', language),
+            detail: t('securitySettings.onlyStrongBoundariesSuch', language),
         },
     ]
 
@@ -119,15 +119,15 @@ export function SecuritySettings({
             <div className="flex items-start gap-4 rounded-xl border border-accent/20 bg-accent/[0.06] p-5">
                 <div className="shrink-0 rounded-lg bg-accent/10 p-2"><ShieldCheck className="h-5 w-5 text-accent" /></div>
                 <div>
-                    <h3 className="mb-1 text-sm font-bold tracking-tight text-text-primary">{translate('securitySettings.layeredApprovalPolicy', asLanguage(language))}</h3>
+                    <h3 className="mb-1 text-sm font-bold tracking-tight text-text-primary">{t('securitySettings.layeredApprovalPolicy', language)}</h3>
                     <p className="text-xs leading-relaxed text-text-secondary">
-                        {translate('securitySettings.trustedListsEstablishThe', asLanguage(language))}
+                        {t('securitySettings.trustedListsEstablishThe', language)}
                     </p>
                 </div>
             </div>
 
             <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
-                <h4 className="ml-1 text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{translate('securitySettings.whenApprovalAppears', asLanguage(language))}</h4>
+                <h4 className="ml-1 text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{t('securitySettings.whenApprovalAppears', language)}</h4>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     {policyCards.map(({ icon: Icon, tone, title, detail }) => (
                         <div key={title} className={`rounded-xl border p-4 ${tone}`}>
@@ -139,25 +139,25 @@ export function SecuritySettings({
                 </div>
                 <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/30 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <div className="text-xs font-medium text-text-primary">{translate('securitySettings.strictWorkspaceMode', asLanguage(language))}</div>
-                        <p className="mt-1 text-[11px] leading-4 text-text-muted">{translate('securitySettings.whenEnabledFirstAccess', asLanguage(language))}</p>
+                        <div className="text-xs font-medium text-text-primary">{t('securitySettings.strictWorkspaceMode', language)}</div>
+                        <p className="mt-1 text-[11px] leading-4 text-text-muted">{t('securitySettings.whenEnabledFirstAccess', language)}</p>
                     </div>
-                    <Switch label={translate('securitySettings.enabled', asLanguage(language))} checked={securitySettings.strictWorkspaceMode} onChange={(event) => updateSecuritySettings({ strictWorkspaceMode: event.target.checked })} />
+                    <Switch label={t('securitySettings.enabled', language)} checked={securitySettings.strictWorkspaceMode} onChange={(event) => updateSecuritySettings({ strictWorkspaceMode: event.target.checked })} />
                 </div>
                 <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex min-w-0 items-start gap-3">
                         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                         <div>
-                            <div className="text-xs font-medium text-text-primary">{translate('securitySettings.autoRunDangerousOperations', asLanguage(language))}</div>
+                            <div className="text-xs font-medium text-text-primary">{t('securitySettings.autoRunDangerousOperations', language)}</div>
                             <p className="mt-1 text-[11px] leading-4 text-text-muted">
                                 {workspaceRoots.length > 0
-                                    ? translate('securitySettings.allowsAgentDeletesAnd', asLanguage(language))
-                                    : translate('securitySettings.openAWorkspaceBefore', asLanguage(language))}
+                                    ? t('securitySettings.allowsAgentDeletesAnd', language)
+                                    : t('securitySettings.openAWorkspaceBefore', language)}
                             </p>
                         </div>
                     </div>
                     <Switch
-                        label={translate('allowExecute', asLanguage(language))}
+                        label={t('allowExecute', language)}
                         checked={trustsCurrentWorkspace}
                         disabled={workspaceRoots.length === 0}
                         onChange={(event) => handleTrustCurrentWorkspace(event.target.checked)}
@@ -165,64 +165,64 @@ export function SecuritySettings({
                 </div>
                 <div className="flex items-start gap-2 text-[11px] leading-5 text-text-muted">
                     <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                    <span>{translate('securitySettings.allowOnceRunsOnly', asLanguage(language))}</span>
+                    <span>{t('securitySettings.allowOnceRunsOnly', language)}</span>
                 </div>
             </section>
 
             <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4 text-accent" />
-                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{translate('securitySettings.automationCommandRulesCross', asLanguage(language))}</h4>
+                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{t('securitySettings.automationCommandRulesCross', language)}</h4>
                 </div>
                 <div className="flex items-start gap-2 rounded-xl border border-accent/15 bg-accent/[0.05] p-3 text-xs leading-5 text-text-secondary">
                     <Bot className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    <p>{translate('securitySettings.thisReplacesTheLegacy', asLanguage(language))}</p>
+                    <p>{t('securitySettings.thisReplacesTheLegacy', language)}</p>
                 </div>
                 {autoApprove.terminalCommandRules.length > 0 ? (
-                    <ProgressiveReveal language={language} collapsedHeight={150} expandLabel={translate('securitySettings.showAllCommandScopes', asLanguage(language))}>
+                    <ProgressiveReveal language={language} collapsedHeight={150} expandLabel={t('securitySettings.showAllCommandScopes', language)}>
                     <div className="grid gap-2 sm:grid-cols-2">
                         {autoApprove.terminalCommandRules.map((rule) => (
                             <div key={terminalCommandRuleKey(rule)} className="flex items-start gap-2 rounded-xl border border-border/70 bg-background/30 p-3">
                                 <div className="min-w-0 flex-1">
                                     <code className="block truncate text-xs text-text-primary">{formatTerminalCommandRule(rule)} <span className="text-text-muted">…</span></code>
-                                    <p className="mt-1 text-[10px] leading-4 text-text-muted">{rule.description || translate('securitySettings.allowsTheSameExecutable', asLanguage(language))}</p>
+                                    <p className="mt-1 text-[10px] leading-4 text-text-muted">{rule.description || t('securitySettings.allowsTheSameExecutable', language)}</p>
                                 </div>
-                                <button type="button" onClick={() => setAutoApprove((current) => ({ ...current, terminalCommandRules: current.terminalCommandRules.filter((item) => terminalCommandRuleKey(item) !== terminalCommandRuleKey(rule)) }))} aria-label={translate('securitySettings.removeRule', asLanguage(language), { rule: formatTerminalCommandRule(rule) })} className="cursor-pointer rounded p-1 text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"><X className="h-3.5 w-3.5" /></button>
+                                <button type="button" onClick={() => setAutoApprove((current) => ({ ...current, terminalCommandRules: current.terminalCommandRules.filter((item) => terminalCommandRuleKey(item) !== terminalCommandRuleKey(rule)) }))} aria-label={t('securitySettings.removeRule', language, { rule: formatTerminalCommandRule(rule) })} className="cursor-pointer rounded p-1 text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"><X className="h-3.5 w-3.5" /></button>
                             </div>
                         ))}
                     </div>
                     </ProgressiveReveal>
-                ) : <p className="text-[11px] text-text-muted">{translate('securitySettings.noApprovedScopesYet', asLanguage(language))}</p>}
-                <AddRow value={newCommandScope} setValue={setNewCommandScope} onAdd={handleAddCommandScope} placeholder={translate('securitySettings.forExampleGitStatus', asLanguage(language))} label={translate('securitySettings.addCrossTaskAutomation', asLanguage(language))} />
+                ) : <p className="text-[11px] text-text-muted">{t('securitySettings.noApprovedScopesYet', language)}</p>}
+                <AddRow value={newCommandScope} setValue={setNewCommandScope} onAdd={handleAddCommandScope} placeholder={t('securitySettings.forExampleGitStatus', language)} label={t('securitySettings.addCrossTaskAutomation', language)} />
             </section>
 
             <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{translate('securitySettings.trustedShellExecutables', asLanguage(language))}</h4>
-                        <p className="mt-2 text-xs leading-5 text-text-secondary">{translate('securitySettings.definesTheExecutableRisk', asLanguage(language))}</p>
+                        <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{t('securitySettings.trustedShellExecutables', language)}</h4>
+                        <p className="mt-2 text-xs leading-5 text-text-secondary">{t('securitySettings.definesTheExecutableRisk', language)}</p>
                     </div>
-                    <button type="button" onClick={handleResetTrustedLists} className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg px-2 text-xs text-text-secondary transition-colors hover:bg-surface hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"><RotateCcw className="h-3.5 w-3.5" />{translate('common.reset2', asLanguage(language))}</button>
+                    <button type="button" onClick={handleResetTrustedLists} className="inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg px-2 text-xs text-text-secondary transition-colors hover:bg-surface hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"><RotateCcw className="h-3.5 w-3.5" />{t('common.reset2', language)}</button>
                 </div>
-                <ProgressiveReveal language={language} collapsedHeight={108} expandLabel={translate('securitySettings.showAllTrustedExecutables', asLanguage(language))}>
+                <ProgressiveReveal language={language} collapsedHeight={108} expandLabel={t('securitySettings.showAllTrustedExecutables', language)}>
                 <div className="flex flex-wrap gap-2">
-                    {securitySettings.allowedShellCommands.map((cmd) => <Tag key={cmd} label={cmd} onRemove={() => updateSecuritySettings({ allowedShellCommands: securitySettings.allowedShellCommands.filter((item) => item !== cmd) })} removeLabel={translate('securitySettings.remove', asLanguage(language), { cmd })} />)}
+                    {securitySettings.allowedShellCommands.map((cmd) => <Tag key={cmd} label={cmd} onRemove={() => updateSecuritySettings({ allowedShellCommands: securitySettings.allowedShellCommands.filter((item) => item !== cmd) })} removeLabel={t('securitySettings.remove', language, { cmd })} />)}
                 </div>
                 </ProgressiveReveal>
-                <AddRow value={newShellCmd} setValue={setNewShellCmd} onAdd={handleAddShellCommand} placeholder={translate('securitySettings.addExecutable', asLanguage(language))} label={translate('securitySettings.addTrustedShellExecutable', asLanguage(language))} />
+                <AddRow value={newShellCmd} setValue={setNewShellCmd} onAdd={handleAddShellCommand} placeholder={t('securitySettings.addExecutable', language)} label={t('securitySettings.addTrustedShellExecutable', language)} />
             </section>
 
             <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
                 <div>
-                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{translate('securitySettings.trustedGitSubcommands', asLanguage(language))}</h4>
-                    <p className="mt-2 text-xs leading-5 text-text-secondary">{translate('securitySettings.lowRiskSubcommandsEstablish', asLanguage(language))}</p>
+                    <h4 className="text-[11px] font-bold uppercase tracking-widest text-text-muted opacity-70">{t('securitySettings.trustedGitSubcommands', language)}</h4>
+                    <p className="mt-2 text-xs leading-5 text-text-secondary">{t('securitySettings.lowRiskSubcommandsEstablish', language)}</p>
                 </div>
-                <ProgressiveReveal language={language} collapsedHeight={108} expandLabel={translate('securitySettings.showAllGitSubcommands', asLanguage(language))}>
+                <ProgressiveReveal language={language} collapsedHeight={108} expandLabel={t('securitySettings.showAllGitSubcommands', language)}>
                 <div className="flex flex-wrap gap-2">
-                    {securitySettings.allowedGitSubcommands.map((cmd) => <Tag key={cmd} label={cmd} onRemove={() => updateSecuritySettings({ allowedGitSubcommands: securitySettings.allowedGitSubcommands.filter((item) => item !== cmd) })} removeLabel={translate('securitySettings.remove', asLanguage(language), { cmd })} />)}
+                    {securitySettings.allowedGitSubcommands.map((cmd) => <Tag key={cmd} label={cmd} onRemove={() => updateSecuritySettings({ allowedGitSubcommands: securitySettings.allowedGitSubcommands.filter((item) => item !== cmd) })} removeLabel={t('securitySettings.remove', language, { cmd })} />)}
                 </div>
                 </ProgressiveReveal>
-                <AddRow value={newGitCmd} setValue={setNewGitCmd} onAdd={handleAddGitCommand} placeholder={translate('securitySettings.addGitSubcommand', asLanguage(language))} label={translate('securitySettings.addTrustedGitSubcommand', asLanguage(language))} />
+                <AddRow value={newGitCmd} setValue={setNewGitCmd} onAdd={handleAddGitCommand} placeholder={t('securitySettings.addGitSubcommand', language)} label={t('securitySettings.addTrustedGitSubcommand', language)} />
             </section>
         </div>
     )

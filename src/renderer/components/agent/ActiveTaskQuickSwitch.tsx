@@ -2,15 +2,11 @@ import { LoaderCircle, ShieldAlert, Split } from 'lucide-react'
 import { useMemo } from 'react'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import {
-  flattenTaskNodes,
-  isAgentTaskThread,
-  projectTaskCenter,
-  type TaskCenterGroup,
-} from './taskCenterProjection'
-import { t, asLanguage } from '@renderer/i18n'
+  flattenTaskNodes, isAgentTaskThread, projectTaskCenter, type TaskCenterGroup, } from './taskCenterProjection'
+import { t, type Language } from '@shared/i18n'
 
 interface ActiveTaskQuickSwitchProps {
-  language: string
+  language: Language
   onOpenTaskCenter: () => void
 }
 
@@ -39,7 +35,7 @@ export default function ActiveTaskQuickSwitch({ language, onOpenTaskCenter }: Ac
   const visible = activeGroups.slice(0, 3)
   const hiddenCount = activeGroups.length - visible.length
 
-  return <div className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-hidden" aria-label={t('activeTaskQuickSwitch.activeTasks', asLanguage(language))}>
+  return <div className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-hidden" aria-label={t('activeTaskQuickSwitch.activeTasks', language)}>
     {visible.map(group => {
       const threadId = targetThreadId(group)
       const current = Boolean(threadId && threadId === currentThreadId)
@@ -48,7 +44,7 @@ export default function ActiveTaskQuickSwitch({ language, onOpenTaskCenter }: Ac
         type="button"
         disabled={!threadId}
         onClick={() => threadId && switchThread(threadId)}
-        title={`${group.title} · ${group.status === 'waiting' ? (t('activeTaskQuickSwitch.needsInput', asLanguage(language))) : group.status === 'handoff' ? (t('activeTaskQuickSwitch.handingOff', asLanguage(language))) : (t('common.running', asLanguage(language)))}`}
+        title={`${group.title} · ${group.status === 'waiting' ? (t('activeTaskQuickSwitch.needsInput', language)) : group.status === 'handoff' ? (t('activeTaskQuickSwitch.handingOff', language)) : (t('common.running', language))}`}
         className={`flex h-7 min-w-0 max-w-32 items-center gap-1.5 rounded-lg px-2 text-[9px] transition-colors focus-visible:ring-2 focus-visible:ring-accent/45 ${current ? 'bg-accent/[0.1] text-accent' : group.status === 'waiting' ? 'bg-amber-400/[0.07] text-amber-500 hover:bg-amber-400/[0.11]' : 'bg-surface/35 text-text-secondary hover:bg-surface-hover'}`}
       >
         {group.status === 'waiting'
@@ -59,6 +55,6 @@ export default function ActiveTaskQuickSwitch({ language, onOpenTaskCenter }: Ac
         <span className="truncate">{group.title}</span>
       </button>
     })}
-    {hiddenCount > 0 && <button type="button" onClick={onOpenTaskCenter} title={t('activeTaskQuickSwitch.viewMoreTasks', asLanguage(language), { hiddenCount })} className="flex h-7 shrink-0 items-center rounded-lg bg-surface/35 px-2 text-[9px] tabular-nums text-text-muted hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45">+{hiddenCount}</button>}
+    {hiddenCount > 0 && <button type="button" onClick={onOpenTaskCenter} title={t('activeTaskQuickSwitch.viewMoreTasks', language, { hiddenCount })} className="flex h-7 shrink-0 items-center rounded-lg bg-surface/35 px-2 text-[9px] tabular-nums text-text-muted hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45">+{hiddenCount}</button>}
   </div>
 }

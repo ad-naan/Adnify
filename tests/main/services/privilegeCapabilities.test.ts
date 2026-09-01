@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { isPrivilegeCapability, PRIVILEGE_CAPABILITY_COPY } from '@main/services/privilegeCapabilities'
+import { isPrivilegeCapability, PRIVILEGE_CAPABILITY_REASON_KEYS } from '@main/services/privilegeCapabilities'
 
 describe('privilege capability registry', () => {
-  it.each(Object.keys(PRIVILEGE_CAPABILITY_COPY))('accepts registered capability %s', capability => {
+  it.each(Object.keys(PRIVILEGE_CAPABILITY_REASON_KEYS))('accepts registered capability %s', capability => {
     expect(isPrivilegeCapability(capability)).toBe(true)
   })
 

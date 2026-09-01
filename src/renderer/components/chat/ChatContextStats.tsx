@@ -4,7 +4,7 @@
 import { memo } from 'react'
 import { Database, History, FileText, Code } from 'lucide-react'
 import type { ContextStats } from '@/renderer/agent/types'
-import { Language, t, asLanguage } from '@renderer/i18n'
+import { Language, t } from '@shared/i18n'
 
 interface ChatContextStatsProps {
   stats: ContextStats
@@ -21,7 +21,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
         {/* 上下文使用量 */}
         <div
           className="flex items-center gap-1.5"
-          title={t('chatContextStats.contextUsageKK', asLanguage(language), { value: (stats.totalChars / 1000).toFixed(1), value2: (stats.maxChars / 1000).toFixed(0) })}
+          title={t('chatContextStats.contextUsageKK', language, { value: (stats.totalChars / 1000).toFixed(1), value2: (stats.maxChars / 1000).toFixed(0) })}
         >
           <Database className="w-3 h-3" />
           <div className="w-12 h-1 bg-text-primary/10 rounded-full overflow-hidden">
@@ -40,7 +40,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
         {/* 历史消息 */}
         <div
           className="flex items-center gap-1"
-          title={t('chatContextStats.historyMessages', asLanguage(language), { messageCount: stats.messageCount, maxMessages: stats.maxMessages })}
+          title={t('chatContextStats.historyMessages', language, { messageCount: stats.messageCount, maxMessages: stats.maxMessages })}
         >
           <History className="w-3 h-3" />
           <span className="font-medium">{stats.messageCount}</span>
@@ -50,7 +50,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
         {stats.fileCount > 0 && (
           <div
             className="flex items-center gap-1"
-            title={t('chatContextStats.contextFiles', asLanguage(language), { fileCount: stats.fileCount, maxFiles: stats.maxFiles })}
+            title={t('chatContextStats.contextFiles', language, { fileCount: stats.fileCount, maxFiles: stats.maxFiles })}
           >
             <FileText className="w-3 h-3" />
             <span className="font-medium">{stats.fileCount}</span>
@@ -65,7 +65,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
       {/* 上下文使用量 */}
       <div
         className="flex items-center gap-1.5"
-        title={t('chatContextStats.contextUsage', asLanguage(language))}
+        title={t('chatContextStats.contextUsage', language)}
       >
         <Database className="w-3 h-3" />
         <span className="font-medium">
@@ -87,7 +87,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
       {/* 历史消息 */}
       <div
         className="flex items-center gap-1.5"
-        title={t('chatContextStats.historyMessages2', asLanguage(language))}
+        title={t('chatContextStats.historyMessages2', language)}
       >
         <History className="w-3 h-3" />
         <span className="font-medium">
@@ -99,7 +99,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
       {stats.fileCount > 0 && (
         <div
           className="flex items-center gap-1.5"
-          title={t('chatContextStats.contextFiles2', asLanguage(language))}
+          title={t('chatContextStats.contextFiles2', language)}
         >
           <FileText className="w-3 h-3" />
           <span className="font-medium">
@@ -112,7 +112,7 @@ function ChatContextStats({ stats, language, compact = false }: ChatContextStats
       {stats.semanticResultCount > 0 && (
         <div
           className="flex items-center gap-1.5"
-          title={t('chatContextStats.semanticResults', asLanguage(language))}
+          title={t('chatContextStats.semanticResults', language)}
         >
           <Code className="w-3 h-3" />
           <span className="font-medium">{stats.semanticResultCount}</span>

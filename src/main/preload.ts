@@ -13,13 +13,8 @@ import type { FormatDocumentRequest, FormatDocumentResult } from '@shared/types/
 import type { ElevationRequest, ElevationRequestResult, NormalRelaunchResult, PrivilegeRequiredEvent, SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
 import type { FileMutationResult } from '@shared/types/fileMutation'
 import type { RendererStreamChunk } from '@shared/types/llm'
-// 值导入必须用相对路径：vite.config.ts 的 preload 入口没有配 resolve.alias
-// （main 和三个 worker 都配了），preload 今天能编译只因为它所有别名导入都是
-// `import type`，会被擦除。
-import { forEachStreamChunk, type StreamBatchEnvelope } from '../shared/utils/llmStreamBatch'
-
-// 本地类型定义（避免从 renderer 导入）
-type Language = 'en' | 'zh'
+import type { Language } from '@shared/i18n'
+import { forEachStreamChunk, type StreamBatchEnvelope } from '@shared/utils/llmStreamBatch'
 
 // =================== 类型定义 ===================
 

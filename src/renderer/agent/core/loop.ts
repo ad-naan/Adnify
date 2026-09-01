@@ -18,25 +18,18 @@ import type { LintCheckFile, ChatMessage, AssistantMessage, InteractiveContent }
 import type { WorkMode } from '@/renderer/modes/types'
 import type { LLMConfig, LLMCallResult, ExecutionContext, LoopCheckResult } from './types'
 import {
-  messageContentHasImages,
-  resolveMessageRouting,
-  resolveRuntimeModelRoutingConfig,
-} from '@shared/config/modelRouting'
+  messageContentHasImages, resolveMessageRouting, resolveRuntimeModelRoutingConfig, } from '@shared/config/modelRouting'
 import { pickLocalizedText, translateAgentText } from '../utils/agentText'
 import { checkAndHandleCompression as runCompressionCheck } from './contextCompression'
 import {
-  injectVisualSummaryIntoMessages,
-  runMultimodalPrepass,
-  stripImagesFromAllUserMessages,
-  stripImagesFromLatestUserMessage,
-} from '../services/multimodalRoutingService'
+  injectVisualSummaryIntoMessages, runMultimodalPrepass, stripImagesFromAllUserMessages, stripImagesFromLatestUserMessage, } from '../services/multimodalRoutingService'
 import { aiAttributionService } from '@/renderer/services/aiAttributionService'
 import { derivePlanPlanningState, getPlanContinuationReminder, selectPlanPlanningTools } from '../plan/planWorkflowGuard'
 import { completeTodosAfterSuccessfulTurn } from '../utils/todoCompletion'
 import type { ThreadBoundStore } from '../store/AgentStore'
 import type { LLMMessage } from '@shared/types'
 import { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 export { clearUnexecutedToolCards, prepareLLMRequestMessages } from './loopMessageUtils'
 
@@ -637,7 +630,7 @@ export async function runLoop(
 
         requestMessages.push({
           role: 'user',
-          content: t('loop.toolCallErrorPlease', asLanguage(language), { error: result.error }),
+          content: t('loop.toolCallErrorPlease', language, { error: result.error }),
         })
 
         shouldContinue = true

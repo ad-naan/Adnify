@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from '../common/ToastProvider'
 import { keybindingService, formatShortcut } from '@services/keybindingService'
 import { isPreviewDocumentPath } from '@shared/types/preview'
+import { t, type Language } from '@shared/i18n'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 
 interface TabContextMenuProps {
@@ -21,7 +22,7 @@ interface TabContextMenuProps {
   onCloseToRight: (path: string) => void
   onSave: (path: string) => void
   isDirty: boolean
-  language: string
+  language: Language
 }
 
 export function TabContextMenu({
@@ -39,7 +40,7 @@ export function TabContextMenu({
   language,
 }: TabContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
-  const isZh = language === 'zh'
+  const lang = language
   const isPreview = isPreviewDocumentPath(filePath)
 
   useEffect(() => {
@@ -65,40 +66,40 @@ export function TabContextMenu({
   }, [onClose])
 
   const menuItems = [
-    { label: isZh ? '关闭' : 'Close', action: () => onCloseFile(filePath), shortcut: formatShortcut('Ctrl+W') },
-    { label: isZh ? '关闭其他' : 'Close Others', action: () => onCloseOthers(filePath) },
-    { label: isZh ? '关闭已保存' : 'Close Saved', action: () => onCloseSaved() },
-    { label: isZh ? '关闭右侧' : 'Close to the Right', action: () => onCloseToRight(filePath) },
-    { label: isZh ? '关闭全部' : 'Close All', action: () => onCloseAll() },
+    { label: t('tabContextMenu.close', lang), action: () => onCloseFile(filePath), shortcut: formatShortcut('Ctrl+W') },
+    { label: t('tabContextMenu.closeOthers', lang), action: () => onCloseOthers(filePath) },
+    { label: t('tabContextMenu.closeSaved', lang), action: () => onCloseSaved() },
+    { label: t('tabContextMenu.closeToTheRight', lang), action: () => onCloseToRight(filePath) },
+    { label: t('tabContextMenu.closeAll', lang), action: () => onCloseAll() },
     { type: 'separator' as const },
     ...(!isPreview
-      ? [{ label: isZh ? '保存' : 'Save', action: () => onSave(filePath), shortcut: formatShortcut('Ctrl+S'), disabled: !isDirty }, { type: 'separator' as const }]
+      ? [{ label: t('tabContextMenu.save', lang), action: () => onSave(filePath), shortcut: formatShortcut('Ctrl+S'), disabled: !isDirty }, { type: 'separator' as const }]
       : []),
     {
-      label: isZh ? '复制路径' : 'Copy Path',
+      label: t('copyPath', lang),
       action: async () => {
         const success = await writeClipboardText(filePath)
         if (!success) return
-        toast.success(isZh ? '已复制路径' : 'Path Copied')
+        toast.success(t('tabContextMenu.pathCopied', lang))
       },
     },
     ...(!isPreview
       ? [
           {
-            label: isZh ? '在资源管理器中显示' : 'Reveal in Explorer',
+            label: t('revealInExplorer', lang),
             action: () => api.file.showInFolder(filePath),
           },
           {
-            label: isZh ? '在侧边栏中定位' : 'Reveal in Sidebar',
+            label: t('cmd.explorer.revealInSidebar', lang),
             action: () => window.dispatchEvent(new CustomEvent('explorer:reveal-file', { detail: { filePath } })),
           },
           { type: 'separator' as const },
           {
-            label: isZh ? '在浏览器中打开' : 'Open in Browser',
+            label: t('openInBrowser', lang),
             action: async () => {
               const success = await api.file.openInBrowser(filePath)
               if (!success) {
-                toast.error(isZh ? '打开失败' : 'Failed to open')
+                toast.error(t('tabContextMenu.failedToOpen', lang))
               }
             },
           },

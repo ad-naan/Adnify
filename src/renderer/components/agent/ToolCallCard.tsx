@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useShallow } from 'zustand/react/shallow'
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { useStore } from '@store'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import type { ToolCall } from '@renderer/agent/types'
 import { useToolDisplayState } from '@renderer/agent/presentation/toolDisplay'
 import { useToolCardExpansion } from '@renderer/hooks'
@@ -448,12 +448,12 @@ export function ExpandablePreviewContainer({
     children,
     maxHeight = 'max-h-[200px]',
     expandedHeight = 'max-h-[350px]',
-    language = 'en',
+    language,
 }: {
     children: React.ReactNode
     maxHeight?: string
     expandedHeight?: string
-    language?: string
+    language: Language
 }) {
     const [expanded, setExpanded] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -510,7 +510,7 @@ export function ExpandablePreviewContainer({
                 >
                     <div className="flex items-center gap-1 font-medium pb-0.5 pointer-events-none bg-surface-elevated text-text-muted hover:text-accent px-3 py-1 rounded-full shadow-sm border border-border/40 text-[10px] transition-colors">
                         <ChevronDown className="w-3 h-3" />
-                        {t('toolExpand', language as any, { height: heightValue })}
+                        {t('toolExpand', language, { height: heightValue })}
                     </div>
                 </div>
             )}
@@ -521,7 +521,7 @@ export function ExpandablePreviewContainer({
                 >
                     <div className="flex items-center gap-1 font-medium pointer-events-none bg-surface-elevated text-text-muted hover:text-accent px-4 py-1 rounded-full shadow-sm border border-border/40 text-[10px] transition-colors">
                         <ChevronDown className="w-3 h-3 rotate-180 pointer-events-none" />
-                        {t('toolCollapse', language as any)}
+                        {t('toolCollapse', language)}
                     </div>
                 </div>
             )}
@@ -545,7 +545,7 @@ function ToolPreview({
     effectiveName: string
     isRunning: boolean
     isStreaming: boolean
-    language: string
+    language: Language
     currentTheme: string
     onCopyResult: () => void
     setTerminalVisible: (visible: boolean) => void
@@ -580,8 +580,8 @@ function ToolPreview({
                             if (!terminalId) {
                                 toast.info(
                                     wasDirectExecution
-                                        ? t('tool.directExecutionNoTerminal', language as any)
-                                        : t('tool.noTerminalSession', language as any)
+                                        ? t('tool.directExecutionNoTerminal', language)
+                                        : t('tool.noTerminalSession', language)
                                 )
                                 return
                             }
@@ -602,15 +602,15 @@ function ToolPreview({
                                     ? 'text-text-muted hover:text-text-primary hover:bg-surface-hover'
                                     : 'text-text-muted/60 bg-surface-elevated/60 cursor-not-allowed'
                         }`}
-                        title={t('tool.viewInTerminal', language as any)}
+                        title={t('tool.viewInTerminal', language)}
                     >
                         <Terminal className={`w-3 h-3 ${isRunning ? 'animate-pulse' : ''}`} />
                         <span>
                             {isRunning
-                                ? t('tool.running', language as any)
+                                ? t('tool.running', language)
                                 : hasLiveTerminal
-                                    ? t('tool.terminal', language as any)
-                                    : t('tool.direct', language as any)}
+                                    ? t('tool.terminal', language)
+                                    : t('tool.direct', language)}
                         </span>
                     </button>
                 </div>
@@ -952,7 +952,7 @@ function ToolPreview({
                 <div className="flex min-w-0 items-center gap-1.5 text-text-muted">
                     <FileCode className="h-3 w-3 shrink-0" />
                     <span className="min-w-0 truncate">
-                        {scopeLabel ? <TextWithFileLinks text={scopeLabel} /> : (t('toolCallCard.workspaceSymbols', asLanguage(language)))}
+                        {scopeLabel ? <TextWithFileLinks text={scopeLabel} /> : (t('toolCallCard.workspaceSymbols', language))}
                     </span>
                     {symbols.length > 0 && <span className="shrink-0 text-text-muted/60">· {symbols.length}</span>}
                 </div>
@@ -1095,7 +1095,7 @@ const ToolCallCard = memo(function ToolCallCard({
             await useStore.getState().save()
         }
         toast.success(
-            t('toolCallCard.similarCommandsAllowed', asLanguage(language)),
+            t('toolCallCard.similarCommandsAllowed', language),
             formatTerminalCommandRule(approvalRule),
         )
         onApprove?.()
@@ -1219,7 +1219,7 @@ const ToolCallCard = memo(function ToolCallCard({
                     {showApproveRule && approvalRule && (
                         <div className="mb-2.5 rounded-lg border border-accent/25 bg-background/75 p-2.5">
                             <div className="mb-1 text-[11px] font-medium text-text-primary">
-                                {t('common.alwaysAllowSimilarCommands', asLanguage(language))}
+                                {t('common.alwaysAllowSimilarCommands', language)}
                             </div>
                             <div className="flex items-center gap-2 rounded-md border border-border/70 bg-surface/60 p-2">
                                 <div className="min-w-0 flex-1">
@@ -1227,11 +1227,11 @@ const ToolCallCard = memo(function ToolCallCard({
                                     {approvalRule.description && <p className="mt-1 text-[10px] leading-4 text-text-muted">{approvalRule.description}</p>}
                                 </div>
                                 <button onClick={() => void handleApproveAlways()} className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hover">
-                                    {t('toolCallCard.saveRun', asLanguage(language))}
+                                    {t('toolCallCard.saveRun', language)}
                                 </button>
                             </div>
                             <p className="mt-1.5 text-[10px] leading-4 text-text-muted">
-                                {t('toolCallCard.onlyTheExecutableAnd', asLanguage(language))}
+                                {t('toolCallCard.onlyTheExecutableAnd', language)}
                             </p>
                         </div>
                     )}

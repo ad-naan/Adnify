@@ -2,6 +2,8 @@
  * MCP (Model Context Protocol) 共享类型定义
  */
 
+import type { TranslationKey } from '@shared/i18n'
+
 // ============================================
 // 配置类型
 // ============================================
@@ -349,10 +351,13 @@ export interface McpDependency {
   minVersion?: string
   /** 检查命令（用于验证是否安装） */
   checkCommand?: string
-  /** 安装说明 */
-  installNote?: string
-  /** 安装说明（中文） */
-  installNoteZh?: string
+  /**
+   * 安装说明的文案键。
+   *
+   * 存键而不是存文案：同一句安装说明会被多个预设共用（四个 Python 预设都是同一条 uv
+   * 安装提示），每个预设各存一份中英文本时，改一处措辞要改八个地方。
+   */
+  installNoteKey?: TranslationKey
 }
 
 /** 环境变量配置 */

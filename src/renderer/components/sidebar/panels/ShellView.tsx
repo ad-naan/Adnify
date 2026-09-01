@@ -10,7 +10,7 @@ import { Button } from '../../ui'
 import { toast } from '../../common/ToastProvider'
 import { ShellManagerDialog } from '@/renderer/shell'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 type CollapsedState = Record<string, boolean>
 
@@ -52,7 +52,7 @@ export function ShellView() {
     const targetCwd = customCwd || cwd
 
     if (!targetCwd) {
-      toast.error(t('shellView.openAWorkspaceBefore', asLanguage(language)))
+      toast.error(t('shellView.openAWorkspaceBefore', language))
       return
     }
 
@@ -77,7 +77,7 @@ export function ShellView() {
   const presetGroups = useMemo(() => {
     const groups = new Map<string, ShellPreset[]>()
     visiblePresets.filter((item) => !item.favorite).forEach((item) => {
-      const group = item.group?.trim() || (t('shellView.ungroupedPresets', asLanguage(language)))
+      const group = item.group?.trim() || (t('shellView.ungroupedPresets', language))
       groups.set(group, [...(groups.get(group) || []), item])
     })
     return Array.from(groups.entries()).map(([group, items]) => ({ group, items }))
@@ -87,10 +87,10 @@ export function ShellView() {
     const groups = new Map<string, ShellLink[]>()
     visibleLinks.filter((item) => !item.favorite).forEach((item) => {
       const fallback = item.type === 'remote'
-        ? (t('shellView.servers', asLanguage(language)))
+        ? (t('shellView.servers', language))
         : item.type === 'command'
-          ? (t('shellView.commands', asLanguage(language)))
-          : (t('shellView.quickLinks', asLanguage(language)))
+          ? (t('shellView.commands', language))
+          : (t('shellView.quickLinks', language))
       const group = item.group?.trim() || fallback
       groups.set(group, [...(groups.get(group) || []), item])
     })
@@ -146,7 +146,7 @@ export function ShellView() {
     })
 
     if (!launch) {
-      toast.error(t('shellView.linkConfigurationIsIncomplete', asLanguage(language)))
+      toast.error(t('shellView.linkConfigurationIsIncomplete', language))
       return
     }
 
@@ -218,7 +218,7 @@ export function ShellView() {
             size="icon"
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90"
             onClick={() => createTerminal()}
-            title={t('cmd.terminal.new', asLanguage(language))}
+            title={t('cmd.terminal.new', language)}
           >
             <Plus className="w-3.5 h-3.5" />
           </Button>
@@ -227,7 +227,7 @@ export function ShellView() {
             size="icon"
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 text-text-muted hover:text-text-primary transition-all active:scale-90"
             onClick={() => setShowManager(true)}
-            title={t('shellView.shellManager', asLanguage(language))}
+            title={t('shellView.shellManager', language)}
           >
             <Settings2 className="w-3.5 h-3.5" />
           </Button>
@@ -238,7 +238,7 @@ export function ShellView() {
         <section>
           <div className="flex items-center gap-2 px-2 pb-2 text-[11px] uppercase tracking-wide text-text-muted">
             <TerminalSquare className="w-3.5 h-3.5" />
-            {t('shellView.availableShells', asLanguage(language))}
+            {t('shellView.availableShells', language)}
           </div>
           <div className="space-y-1">
             {availableShells.length > 0 ? availableShells.map((shell) => (
@@ -253,7 +253,7 @@ export function ShellView() {
             )) : (
               <div className="px-3 py-6 text-xs text-text-muted flex flex-col items-center gap-2 text-center">
                 <OtterAsset asset="shell" className="h-12 w-12 object-contain opacity-70" />
-                <span>{t('shellView.noShellsDetected', asLanguage(language))}</span>
+                <span>{t('shellView.noShellsDetected', language)}</span>
               </div>
             )}
           </div>
@@ -261,16 +261,16 @@ export function ShellView() {
 
         {favorites.length > 0 && renderSection(
           'favorites',
-          t('common.favorites', asLanguage(language)),
+          t('common.favorites', language),
           favorites.map(({ kind, id, item }) => (
             <div key={`${kind}-${id}`} onContextMenu={(event) => handleItemContextMenu(event, kind, item)} className="group w-full px-3 py-2 rounded-lg hover:bg-surface-hover transition-colors flex items-center gap-2">
               <button className="flex-1 min-w-0 text-left text-sm text-text-primary" onClick={() => kind === 'preset' ? handleOpenPreset(item as ShellPreset) : handleOpenLink(item as ShellLink)}>
                 <span className="truncate block">{item.name}</span>
               </button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-70 group-hover:opacity-100" onClick={() => kind === 'preset' ? toggleFavoritePreset(item as ShellPreset) : toggleFavoriteLink(item as ShellLink)} title={t('shellView.unfavorite', asLanguage(language))}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-70 group-hover:opacity-100" onClick={() => kind === 'preset' ? toggleFavoritePreset(item as ShellPreset) : toggleFavoriteLink(item as ShellLink)} title={t('shellView.unfavorite', language)}>
                 <Star className="w-3.5 h-3.5 fill-current text-yellow-400" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => openManagerEdit(kind, item.id)} title={t('editor.edit', asLanguage(language))}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => openManagerEdit(kind, item.id)} title={t('editor.edit', language)}>
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -284,10 +284,10 @@ export function ShellView() {
               <button className="flex-1 min-w-0 text-left text-sm text-text-primary" onClick={() => handleOpenPreset(preset)}>
                 <span className="truncate block">{preset.name}</span>
               </button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => toggleFavoritePreset(preset)} title={t('shellView.favorite', asLanguage(language))}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => toggleFavoritePreset(preset)} title={t('shellView.favorite', language)}>
                 <Star className={`w-3.5 h-3.5 ${preset.favorite ? 'fill-current text-yellow-400' : ''}`} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => openManagerEdit('preset', preset.id)} title={t('editor.edit', asLanguage(language))}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => openManagerEdit('preset', preset.id)} title={t('editor.edit', language)}>
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -303,10 +303,10 @@ export function ShellView() {
                 {link.type === 'remote' ? <Server className="w-3.5 h-3.5 text-accent flex-shrink-0" /> : <FolderOpen className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />}
                 <span className="truncate block">{link.name}</span>
               </button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => toggleFavoriteLink(link)} title={t('shellView.favorite', asLanguage(language))}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => toggleFavoriteLink(link)} title={t('shellView.favorite', language)}>
                 <Star className={`w-3.5 h-3.5 ${link.favorite ? 'fill-current text-yellow-400' : ''}`} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => openManagerEdit('link', link.id)} title={t('editor.edit', asLanguage(language))}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => openManagerEdit('link', link.id)} title={t('editor.edit', language)}>
                 <MoreHorizontal className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -314,16 +314,16 @@ export function ShellView() {
         ))}
 
         <section>
-          <div className="px-2 pb-2 text-[11px] uppercase tracking-wide text-text-muted">{t('shellView.quickAdd', asLanguage(language))}</div>
+          <div className="px-2 pb-2 text-[11px] uppercase tracking-wide text-text-muted">{t('shellView.quickAdd', language)}</div>
           <div className="grid grid-cols-2 gap-2">
             <Button variant="ghost" className="justify-start" onClick={() => openManagerCreate('preset')}>
               <Star className="w-4 h-4 mr-2" />Preset
             </Button>
             <Button variant="ghost" className="justify-start" onClick={() => openManagerCreate('directory')}>
-              <FolderOpen className="w-4 h-4 mr-2" />{t('common.link', asLanguage(language))}
+              <FolderOpen className="w-4 h-4 mr-2" />{t('common.link', language)}
             </Button>
             <Button variant="ghost" className="justify-start col-span-2" onClick={() => openManagerCreate('remote')}>
-              <Server className="w-4 h-4 mr-2" />{t('shellView.server', asLanguage(language))}
+              <Server className="w-4 h-4 mr-2" />{t('shellView.server', language)}
             </Button>
           </div>
         </section>

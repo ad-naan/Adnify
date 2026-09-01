@@ -12,6 +12,7 @@ import { pathStartsWith, pathEquals } from '@shared/utils/pathUtils'
 import type { SecuritySettings } from '@shared/config/types'
 import { isDangerousOperationWorkspaceTrusted } from '@shared/config/securitySettings'
 import type { AppSecurityApprovalRequest } from '@shared/security/executionPolicy'
+import { pickLocalized, t, type Language } from '@shared/i18n'
 
 type ApprovalPresentation = 'native' | 'app'
 type ApprovalReason = string | { zh: string; en: string }
@@ -49,7 +50,7 @@ interface SecurityModule {
 
   // 配置更新
   updateConfig: (config: Partial<SecuritySettings>) => void
-  setLanguage: (language: 'zh' | 'en') => void
+  setLanguage: (language: Language) => void
 }
 
 class SecurityManager implements SecurityModule {
@@ -59,7 +60,7 @@ class SecurityManager implements SecurityModule {
     settle: (allowed: boolean) => void
   }>()
   private config: Partial<SecuritySettings> = {}
-  private language: 'zh' | 'en' | null = null
+  private language: Language | null = null
 
   constructor() {
     ipcMain.on('security:approval-response', (event, response: { requestId?: string; allowed?: boolean }) => {
@@ -85,8 +86,19 @@ class SecurityManager implements SecurityModule {
     logger.security.info('[Security] Configuration updated:', this.config)
   }
 
-  setLanguage(language: 'zh' | 'en') {
+  setLanguage(language: Language) {
     this.language = language
+  }
+
+  /**
+   * 审批框用哪种语言。
+   *
+   * 渲染进程还没同步过语言时（启动早期就触发的审批）退回系统 locale —— 文案本身来自
+   * 主进程自己的 locale 表，绝不接受渲染进程传入：那等于让被审批方决定审批框长什么样。
+   */
+  private approvalLanguage(): Language {
+    if (this.language) return this.language
+    return app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en'
   }
 
   /**
@@ -128,17 +140,19 @@ class SecurityManager implements SecurityModule {
     mainWindow: BrowserWindow | null | undefined,
     request: Pick<AppSecurityApprovalRequest, 'operation' | 'target' | 'reason'>,
   ): Promise<boolean> {
-    const isZh = this.language ? this.language === 'zh' : app.getLocale().toLowerCase().startsWith('zh')
+    const language = this.approvalLanguage()
     const options = {
       type: 'warning' as const,
-      buttons: isZh ? ['仅此次允许', '拒绝'] : ['Allow once', 'Deny'],
+      buttons: [t('securityApproval.allowOnce', language), t('securityApproval.deny', language)],
       defaultId: 1,
       cancelId: 1,
-      title: isZh ? '安全审批' : 'Security approval',
-      message: isZh ? '此操作需要明确授权' : 'This operation requires explicit approval',
-      detail: isZh
-        ? `原因：${request.reason.zh}\n\n操作：${request.operation}\n目标：${request.target}`
-        : `Reason: ${request.reason.en}\n\nOperation: ${request.operation}\nTarget: ${request.target}`,
+      title: t('securityApproval.title', language),
+      message: t('securityApproval.message', language),
+      detail: t('securityApproval.detail', language, {
+        reason: pickLocalized(request.reason, language),
+        operation: request.operation,
+        target: request.target,
+      }),
       noLink: true,
     }
     const result = mainWindow

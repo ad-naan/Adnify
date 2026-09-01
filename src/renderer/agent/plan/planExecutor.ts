@@ -38,7 +38,7 @@ import type { WorktreeLaneCompletion, WorktreeLaneHandle } from '../orchestratio
 import { laneOutcomeText } from '../orchestration/laneNoticeText'
 import { getAgentLanguage } from '../utils/agentText'
 import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
-import { recommendModelForTask } from './modelOutcomeLedger'
+import { createModelRecommender } from './modelOutcomeLedger'
 import { getConfiguredPlanProviders } from './planProviderCatalog'
 import { planTaskMayWrite } from './planExecutionPolicy'
 
@@ -274,10 +274,12 @@ export async function startPlanExecution(
     let repairedAssignments = 0
     let recommendedAssignments = 0
     const allowedModels = new Set(getConfiguredPlanProviders().flatMap(provider => provider.models.map(model => `${provider.id}\u0000${model}`)))
+    // 索引只建一次：在循环里逐个任务重扫全部历史计划是 O(待执行任务 × 计划 × 任务)。
+    const recommendModel = createModelRecommender(store.plans, allowedModels)
     for (const task of plan.tasks) {
         if (task.status !== 'pending') continue
         if (task.modelSelection !== 'manual') {
-            const recommendation = recommendModelForTask(task, store.plans, allowedModels)
+            const recommendation = recommendModel(task)
             if (recommendation) {
                 store.updateTask(plan.id, task.id, {
                     provider: recommendation.provider,

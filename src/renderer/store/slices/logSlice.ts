@@ -1,4 +1,5 @@
 import { StateCreator } from 'zustand'
+import type { TranslationKey, TranslationParams } from '@shared/i18n'
 import type { SettingsSlice } from './settingsSlice'
 
 /**
@@ -38,8 +39,12 @@ export interface PerformanceInsight {
   type: 'slow_tool' | 'high_failure' | 'frequent_tool'
   severity: 'info' | 'warning' | 'critical'
   toolName: string
-  message: string
-  messageZh: string
+  /**
+   * 文案留到渲染时再取：store 里存键和参数，不存拼好的中英双份字符串。
+   * 存字符串的代价是语言切换后旧洞察还是旧语言，而且 store 得知道当前语言。
+   */
+  messageKey: TranslationKey
+  messageParams: TranslationParams
   value: number
 }
 
@@ -125,8 +130,8 @@ export const createLogSlice: StateCreator<LogSliceStore, [], [], LogSlice> = (se
           type: 'slow_tool',
           severity: stat.avgDuration > 8000 ? 'critical' : 'warning',
           toolName: stat.toolName,
-          message: `Avg ${Math.round(stat.avgDuration)}ms`,
-          messageZh: `平均 ${Math.round(stat.avgDuration)}ms`,
+          messageKey: 'toolCallLogContent.insightAvgDuration',
+          messageParams: { ms: Math.round(stat.avgDuration) },
           value: stat.avgDuration,
         })
       }
@@ -137,8 +142,8 @@ export const createLogSlice: StateCreator<LogSliceStore, [], [], LogSlice> = (se
           type: 'high_failure',
           severity: stat.successRate < 0.4 ? 'critical' : 'warning',
           toolName: stat.toolName,
-          message: `${Math.round((1 - stat.successRate) * 100)}% failed`,
-          messageZh: `${Math.round((1 - stat.successRate) * 100)}% 失败`,
+          messageKey: 'toolCallLogContent.insightFailureRate',
+          messageParams: { percent: Math.round((1 - stat.successRate) * 100) },
           value: 1 - stat.successRate,
         })
       }
@@ -149,8 +154,8 @@ export const createLogSlice: StateCreator<LogSliceStore, [], [], LogSlice> = (se
           type: 'frequent_tool',
           severity: 'info',
           toolName: stat.toolName,
-          message: `${stat.totalCalls} calls`,
-          messageZh: `${stat.totalCalls} 次调用`,
+          messageKey: 'toolCallLogContent.insightCallCount',
+          messageParams: { count: stat.totalCalls },
           value: stat.totalCalls,
         })
       }

@@ -2,7 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import type { ElevationRequest, ElevationRequestResult } from '@shared/types/systemPrivilege'
 import { systemPrivilegeService } from '../services/systemPrivilegeService'
 import { ensureTrustedIpcSender } from './safeHandle'
-import { isPrivilegeCapability, PRIVILEGE_CAPABILITY_COPY } from '../services/privilegeCapabilities'
+import { isPrivilegeCapability, PRIVILEGE_CAPABILITY_REASON_KEYS } from '../services/privilegeCapabilities'
+import { asLanguage, t } from '@shared/i18n'
 
 let elevationRequestInFlight = false
 let elevationRelaunchScheduled = false
@@ -32,30 +33,21 @@ export function registerSystemPrivilegeHandlers(
         return { success: false, error: `Automatic privilege elevation is not supported on ${status.platform}.` }
       }
 
-      const language = request?.language === 'en' ? 'en' : 'zh'
-      const reason = PRIVILEGE_CAPABILITY_COPY[request.capability][language]
+      // 未指定语言时按应用默认（en）走，而不是中文：这个弹窗是原生 dialog，
+      // 文案只能由主进程自己查。
+      const language = asLanguage(request?.language)
+      const reason = t(PRIVILEGE_CAPABILITY_REASON_KEYS[request.capability], language)
       const win = BrowserWindow.fromWebContents(event.sender) || getMainWindow()
-      const options = language === 'zh'
-        ? {
-            type: 'warning' as const,
-            title: '需要管理员权限',
-            message: '此操作需要管理员权限',
-            detail: `${reason || '当前操作需要访问受保护的系统资源。'}\n\nWindows 将先显示用户账户控制提示。只有管理员模式的新进程成功启动后，当前应用才会保存状态并退出。重启后整个应用将具有管理员权限，请仅在信任当前操作时继续。`,
-            buttons: ['取消', '以管理员身份重启'],
-            defaultId: 1,
-            cancelId: 0,
-            noLink: true,
-          }
-        : {
-            type: 'warning' as const,
-            title: 'Administrator permission required',
-            message: 'This operation requires administrator permission',
-            detail: `${reason || 'The current operation needs access to protected system resources.'}\n\nWindows will show the User Account Control prompt first. The current app will save its state and exit only after the elevated replacement starts successfully. The entire app will run with administrator privileges after restart; continue only if you trust this operation.`,
-            buttons: ['Cancel', 'Restart as administrator'],
-            defaultId: 1,
-            cancelId: 0,
-            noLink: true,
-          }
+      const options = {
+        type: 'warning' as const,
+        title: t('privilegeDialog.title', language),
+        message: t('privilegeDialog.message', language),
+        detail: t('privilegeDialog.detail', language, { reason }),
+        buttons: [t('cancel', language), t('privilegeDialog.restartAsAdmin', language)],
+        defaultId: 1,
+        cancelId: 0,
+        noLink: true,
+      }
 
       const choice = win
         ? await dialog.showMessageBox(win, options)

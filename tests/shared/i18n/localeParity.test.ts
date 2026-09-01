@@ -5,9 +5,9 @@
  * 会静默退回英文，界面变成中英混排，而且没有任何测试会红。这条测试就是那道闸门。
  */
 import { describe, expect, it } from 'vitest'
-import { en } from '@/renderer/i18n/locales/en'
-import { zh } from '@/renderer/i18n/locales/zh'
-import { asLanguage, t } from '@/renderer/i18n'
+import { en } from '@shared/i18n/locales/en'
+import { zh } from '@shared/i18n/locales/zh'
+import { asLanguage, t } from '@shared/i18n'
 
 const enKeys = Object.keys(en) as Array<keyof typeof en>
 const zhKeys = Object.keys(zh) as Array<keyof typeof zh>

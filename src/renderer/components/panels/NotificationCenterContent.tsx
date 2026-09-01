@@ -1,13 +1,13 @@
 import { Trash2, Bell, CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react'
 import { useInlineToast } from '../common/InlineToast'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 interface NotificationCenterContentProps {
-  language?: 'en' | 'zh'
+  language: Language
 }
 
-export default function NotificationCenterContent({ language = 'zh' }: NotificationCenterContentProps) {
+export default function NotificationCenterContent({ language }: NotificationCenterContentProps) {
   const { toasts, removeToast } = useInlineToast()
 
   
@@ -24,9 +24,9 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
   const formatTime = (ts: number) => {
     const diff = Date.now() - ts
     const mins = Math.floor(diff / 60000)
-    if (mins < 1) return translate('justNow', asLanguage(language))
-    if (mins < 60) return `${mins}${translate('notificationCenterContent.mAgo', asLanguage(language))}`
-    return `${Math.floor(mins / 60)}${translate('notificationCenterContent.hAgo', asLanguage(language))}`
+    if (mins < 1) return t('justNow', language)
+    if (mins < 60) return `${mins}${t('notificationCenterContent.mAgo', language)}`
+    return `${Math.floor(mins / 60)}${t('notificationCenterContent.hAgo', language)}`
   }
 
   return (
@@ -36,14 +36,14 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
         <div className="flex items-center gap-2">
           <Bell className="w-3.5 h-3.5 text-text-muted" />
           <span className="text-[11px] font-bold tracking-wider uppercase text-text-muted">
-            {translate('notificationCenterContent.notifications', asLanguage(language))}
+            {t('notificationCenterContent.notifications', language)}
           </span>
         </div>
 
         <button 
-          onClick={() => toasts.forEach(t => removeToast(t.id))}
+          onClick={() => toasts.forEach(entry => removeToast(entry.id))}
           className="flex items-center justify-center p-1.5 rounded-md text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors" 
-          title={translate('clearTerminal', asLanguage(language))}
+          title={t('clearTerminal', language)}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -56,7 +56,7 @@ export default function NotificationCenterContent({ language = 'zh' }: Notificat
             <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.03]">
               <OtterAsset asset="rest" className="h-16 w-16 object-contain" />
             </div>
-            <span className="text-[11px] font-medium tracking-wide">{translate('notificationCenterContent.noRecords', asLanguage(language))}</span>
+            <span className="text-[11px] font-medium tracking-wide">{t('notificationCenterContent.noRecords', language)}</span>
           </div>
         ) : (
           <div className="space-y-1.5">

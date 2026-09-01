@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@store'
-import { t } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 import { EventBus } from '@/renderer/agent/core/EventBus'
 import type { EmotionFeedbackPayload } from '@/renderer/agent/types/emotion'
 import { useEmotionState } from '@/renderer/hooks/useEmotionState'
@@ -105,7 +105,7 @@ export const EmotionEditorBar: React.FC = () => {
                 </motion.div>
                 <div className="flex flex-col">
                   <span className="text-xs font-medium leading-none" style={{ color: meta.color }}>
-                    {t(`emotion.state.${state}`, language)}
+                    {t(meta.translationKey, language)}
                   </span>
                   <div className="flex items-center gap-1 mt-0.5">
                     <div

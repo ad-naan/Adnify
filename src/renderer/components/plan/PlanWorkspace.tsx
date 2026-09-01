@@ -3,7 +3,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useStore } from '@/renderer/store'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { TaskBoard } from './TaskBoard'
-import { t, asLanguage, type TranslationKey } from '@renderer/i18n'
+import { t, type TranslationKey, type Language } from '@shared/i18n'
 
 /**
  * 计划状态 → 文案 key。
@@ -23,10 +23,10 @@ const PLAN_STATUS_KEYS = {
   failed: 'common.failed',
 } satisfies Record<string, TranslationKey>
 
-function planStatusLabel(status: string, language: string): string {
+function planStatusLabel(status: string, language: Language): string {
   const key = PLAN_STATUS_KEYS[status as keyof typeof PLAN_STATUS_KEYS]
   // 未知状态原样显示，而不是空白 —— 后端加了新状态时至少看得出是哪个
-  return key ? t(key, asLanguage(language)) : status
+  return key ? t(key, language) : status
 }
 
 export const PlanWorkspace = memo(function PlanWorkspace() {
@@ -46,8 +46,8 @@ export const PlanWorkspace = memo(function PlanWorkspace() {
     <div className="min-h-0 flex-1">
       {activePlan ? <TaskBoard planId={activePlan.id} planOptions={options} onPlanChange={setActivePlan} /> : <div className="flex h-full flex-col items-center justify-center px-8 pb-16 text-center">
         <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border/45 bg-surface/[0.12]"><OtterAsset asset="plans" className="h-11 w-11 object-contain" alt="" /></div>
-        <h2 className="text-sm font-semibold text-text-primary">{t('planWorkspace.waitingForAPlan', asLanguage(language))}</h2>
-        <p className="mt-2 max-w-md text-xs leading-5 text-text-muted">{t('planWorkspace.describeTheRequestOn', asLanguage(language))}</p>
+        <h2 className="text-sm font-semibold text-text-primary">{t('planWorkspace.waitingForAPlan', language)}</h2>
+        <p className="mt-2 max-w-md text-xs leading-5 text-text-muted">{t('planWorkspace.describeTheRequestOn', language)}</p>
       </div>}
     </div>
   </div>

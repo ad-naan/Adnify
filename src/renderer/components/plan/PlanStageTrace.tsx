@@ -1,15 +1,15 @@
 import { Fragment } from 'react'
 import type { PlanWorkbenchStage } from '@/renderer/agent/plan/planWorkbenchProjection'
 import { Check } from 'lucide-react'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 const STAGES: PlanWorkbenchStage[] = ['requirements', 'plan', 'execution', 'validation']
 
-const label = (stage: PlanWorkbenchStage, language: string) => ({
-  requirements: t('common.brief', asLanguage(language)),
-  plan: t('planStageTrace.plan', asLanguage(language)),
-  execution: t('planStageTrace.run', asLanguage(language)),
-  validation: t('planStageTrace.validate', asLanguage(language)),
+const label = (stage: PlanWorkbenchStage, language: Language) => ({
+  requirements: t('common.brief', language),
+  plan: t('planStageTrace.plan', language),
+  execution: t('planStageTrace.run', language),
+  validation: t('planStageTrace.validate', language),
 })[stage]
 
 interface PlanStageTraceProps {
@@ -17,7 +17,7 @@ interface PlanStageTraceProps {
   stage: PlanWorkbenchStage
   /** The page currently displayed by the board. */
   selectedStage?: PlanWorkbenchStage
-  language: string
+  language: Language
   compact?: boolean
   onStageChange?: (stage: PlanWorkbenchStage) => void
 }
@@ -25,7 +25,7 @@ interface PlanStageTraceProps {
 export function PlanStageTrace({ stage, selectedStage = stage, language, compact = false, onStageChange }: PlanStageTraceProps) {
   const activeIndex = STAGES.indexOf(stage)
 
-  return <nav className={`flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`} aria-label={t('planStageTrace.planStages', asLanguage(language))}>
+  return <nav className={`flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`} aria-label={t('planStageTrace.planStages', language)}>
     {STAGES.map((item, index) => {
       const completed = index < activeIndex
       const current = index === activeIndex

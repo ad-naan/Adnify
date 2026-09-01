@@ -6,9 +6,7 @@
 import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Play, Square, SkipForward, ArrowDownToLine, ArrowUpFromLine, Pause,
-  X, ChevronUp, ChevronDown, ChevronRight, Bug, CircleDot,
-  Variable, Layers, RefreshCw, Trash2, Circle, FileCode
+  Play, Square, SkipForward, ArrowDownToLine, ArrowUpFromLine, Pause, X, ChevronUp, ChevronDown, ChevronRight, Bug, CircleDot, Variable, Layers, RefreshCw, Trash2, Circle, FileCode
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
@@ -17,7 +15,7 @@ import { toast } from '@components/common/ToastProvider'
 import type { DebugConfig, DebugEvent } from '@renderer/types/electron'
 import { getFileName, getDirPath } from '@shared/utils/pathUtils'
 import { safeOpenFile } from '@/renderer/utils/fileUtils'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 type DebugTab = 'variables' | 'callstack' | 'breakpoints' | 'console'
 
@@ -229,7 +227,7 @@ export default function DebugPanel() {
   const handleStartDebug = async () => {
     const config = launchConfigs[selectedConfigIndex]
     if (!config) {
-      toast.warning(t('debugPanel.pleaseConfigureDebugOptions', asLanguage(language)))
+      toast.warning(t('debugPanel.pleaseConfigureDebugOptions', language))
       return
     }
 
@@ -242,7 +240,7 @@ export default function DebugPanel() {
 
     // 检查程序路径
     if (resolvedConfig.request === 'launch' && !resolvedConfig.program) {
-      toast.warning(t('debugPanel.pleaseSpecifyAProgram', asLanguage(language)))
+      toast.warning(t('debugPanel.pleaseSpecifyAProgram', language))
       return
     }
 
@@ -417,10 +415,10 @@ export default function DebugPanel() {
             ))}
           </select>
 
-          <Button variant="ghost" size="icon" onClick={openLaunchConfig} className="h-7 w-7" title={t('debugPanel.editConfigurations', asLanguage(language))}>
+          <Button variant="ghost" size="icon" onClick={openLaunchConfig} className="h-7 w-7" title={t('debugPanel.editConfigurations', language)}>
             <FileCode className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={loadLaunchConfigs} className="h-7 w-7" title={t('debugPanel.reload', asLanguage(language))}>
+          <Button variant="ghost" size="icon" onClick={loadLaunchConfigs} className="h-7 w-7" title={t('debugPanel.reload', language)}>
             <RefreshCw className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -433,7 +431,7 @@ export default function DebugPanel() {
             </Button>
           ) : (
             <>
-              <Button variant="ghost" size="icon" onClick={handleStop} className="h-7 w-7" title={t('common.stop', asLanguage(language))}>
+              <Button variant="ghost" size="icon" onClick={handleStop} className="h-7 w-7" title={t('common.stop', language)}>
                 <Square className="w-4 h-4 text-red-400" />
               </Button>
               {isPaused ? (
@@ -461,13 +459,13 @@ export default function DebugPanel() {
 
         {/* 右侧：操作按钮 */}
         <div className="flex items-center gap-1 px-2">
-          <Button variant="ghost" size="icon" onClick={loadSessions} className="h-7 w-7" title={t('refresh', asLanguage(language))}>
+          <Button variant="ghost" size="icon" onClick={loadSessions} className="h-7 w-7" title={t('refresh', language)}>
             <RefreshCw className="w-3.5 h-3.5" />
           </Button>
           <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(!isCollapsed)} className="h-7 w-7">
             {isCollapsed ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => setDebugVisible(false)} className="h-7 w-7" title={t('closeTerminal', asLanguage(language))}>
+          <Button variant="ghost" size="icon" onClick={() => setDebugVisible(false)} className="h-7 w-7" title={t('closeTerminal', language)}>
             <X className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -488,10 +486,10 @@ export default function DebugPanel() {
               {tab === 'callstack' && <Layers className="w-3.5 h-3.5" />}
               {tab === 'breakpoints' && <CircleDot className="w-3.5 h-3.5" />}
               {tab === 'console' && <Bug className="w-3.5 h-3.5" />}
-              {tab === 'variables' && t('debugPanel.variables', asLanguage(language))}
-              {tab === 'callstack' && t('debugPanel.callStack', asLanguage(language))}
-              {tab === 'breakpoints' && `${t('debugPanel.breakpoints', asLanguage(language))} (${breakpoints.length})`}
-              {tab === 'console' && t('debugPanel.console', asLanguage(language))}
+              {tab === 'variables' && t('debugPanel.variables', language)}
+              {tab === 'callstack' && t('debugPanel.callStack', language)}
+              {tab === 'breakpoints' && `${t('debugPanel.breakpoints', language)} (${breakpoints.length})`}
+              {tab === 'console' && t('debugPanel.console', language)}
             </button>
           ))}
         </div>
@@ -504,7 +502,7 @@ export default function DebugPanel() {
               {scopes.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-40 italic">
                   <Variable className="w-8 h-8 mb-2" />
-                  <p className="text-xs">{t('debugPanel.variablesShownWhenPaused', asLanguage(language))}</p>
+                  <p className="text-xs">{t('debugPanel.variablesShownWhenPaused', language)}</p>
                 </div>
               ) : (
                 scopes.map(scope => (
@@ -540,7 +538,7 @@ export default function DebugPanel() {
               {stackFrames.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-text-muted opacity-40 italic">
                   <Layers className="w-8 h-8 mb-2" />
-                  <p className="text-xs">{t('debugPanel.callStackShownWhen', asLanguage(language))}</p>
+                  <p className="text-xs">{t('debugPanel.callStackShownWhen', language)}</p>
                 </div>
               ) : (
                 stackFrames.map((frame, i) => {
@@ -573,15 +571,15 @@ export default function DebugPanel() {
           {activeTab === 'breakpoints' && (
             <div className="text-xs">
               <div className="flex items-center justify-between px-2 py-1 mb-2">
-                <span className="text-text-muted">{t('debugPanel.clickLineNumbersTo', asLanguage(language))}</span>
+                <span className="text-text-muted">{t('debugPanel.clickLineNumbersTo', language)}</span>
                 {breakpoints.length > 0 && (
-                  <Button variant="ghost" size="icon" onClick={() => clearBreakpoints()} className="h-6 w-6" title={t('debugPanel.clearAllBreakpoints', asLanguage(language))}>
+                  <Button variant="ghost" size="icon" onClick={() => clearBreakpoints()} className="h-6 w-6" title={t('debugPanel.clearAllBreakpoints', language)}>
                     <Trash2 className="w-3 h-3 text-red-400" />
                   </Button>
                 )}
               </div>
               {breakpoints.length === 0 ? (
-                <div className="text-text-muted text-center py-4">{t('debugPanel.noBreakpoints', asLanguage(language))}</div>
+                <div className="text-text-muted text-center py-4">{t('debugPanel.noBreakpoints', language)}</div>
               ) : (
                 // 按文件分组显示
                 Object.entries(
@@ -602,7 +600,7 @@ export default function DebugPanel() {
                         <button
                           onClick={() => toggleBreakpointEnabled(bp.id)}
                           className="flex-shrink-0"
-                          title={bp.enabled ? t('debugPanel.disableBreakpoint', asLanguage(language)) : t('debugPanel.enableBreakpoint', asLanguage(language))}
+                          title={bp.enabled ? t('debugPanel.disableBreakpoint', language) : t('debugPanel.enableBreakpoint', language)}
                         >
                           {bp.enabled ? (
                             <CircleDot className="w-3 h-3 text-red-400" />
@@ -614,7 +612,7 @@ export default function DebugPanel() {
                           onClick={() => gotoBreakpoint(bp.filePath, bp.line)}
                           className={`cursor-pointer hover:text-accent ${!bp.enabled ? 'opacity-50' : ''}`}
                         >
-                          {t('debugPanel.line', asLanguage(language))} {bp.line}
+                          {t('debugPanel.line', language)} {bp.line}
                         </span>
                         {bp.condition && (
                           <span className="text-yellow-400 text-[10px]">({bp.condition})</span>
@@ -636,7 +634,7 @@ export default function DebugPanel() {
             <div className="h-full flex flex-col">
               <div ref={consoleRef} className="flex-1 text-xs font-mono space-y-0.5 overflow-auto">
                 {consoleOutput.length === 0 ? (
-                  <div className="text-text-muted text-center py-4">{t('debugPanel.debugOutputWillAppear', asLanguage(language))}</div>
+                  <div className="text-text-muted text-center py-4">{t('debugPanel.debugOutputWillAppear', language)}</div>
                 ) : (
                   consoleOutput.map((line, i) => (
                     <div key={i} className="text-text-secondary px-2 py-0.5 hover:bg-surface-hover whitespace-pre-wrap">{line}</div>
@@ -645,7 +643,7 @@ export default function DebugPanel() {
               </div>
               <div className="flex items-center gap-2 pt-2 border-t border-border-subtle">
                 <Button variant="ghost" size="sm" onClick={clearConsoleOutput} className="text-xs">
-                  {t('common.clear', asLanguage(language))}
+                  {t('common.clear', language)}
                 </Button>
               </div>
             </div>

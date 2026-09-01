@@ -10,6 +10,7 @@ import {
   type McpPresetCategory,
 } from '@shared/types/mcp'
 import { platform as runtimePlatform } from '@shared/utils/pathUtils'
+import { t, type Language } from '@shared/i18n'
 
 /** 分类显示名称 */
 export const MCP_CATEGORY_NAMES: Record<McpPresetCategory, { en: string; zh: string }> = {
@@ -147,7 +148,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['Show all tables in the database', 'Query users where age > 18', 'Describe the orders table structure'],
     usageExamplesZh: ['显示数据库中的所有表', '查询年龄大于 18 的用户', '描述 orders 表的结构'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
   {
@@ -407,7 +408,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['Fetch the content of https://example.com', 'Read this article and summarize it: [URL]'],
     usageExamplesZh: ['获取 https://example.com 的内容', '阅读这篇文章并总结：[URL]'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
   {
@@ -649,7 +650,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['Search for the latest news about AI', 'Find tutorials about TypeScript'],
     usageExamplesZh: ['搜索 AI 最新动态', '查找 TypeScript 教程'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
 
@@ -675,7 +676,7 @@ export const MCP_PRESETS: McpPreset[] = [
     usageExamples: ['What time is it now in Tokyo?', 'Convert 3pm EST to Beijing time'],
     usageExamplesZh: ['现在东京是几点？', '将美东时间下午3点转换为北京时间'],
     dependencies: [
-      { type: 'uv', checkCommand: 'uvx --version', installNote: 'Install uv: https://docs.astral.sh/uv/', installNoteZh: '安装 uv: https://docs.astral.sh/uv/' },
+      { type: 'uv', checkCommand: 'uvx --version', installNoteKey: 'mcpPresets.installUv' },
     ],
   },
 
@@ -828,10 +829,10 @@ export function getPresetDependencyChecks(preset: McpPreset): Array<{ type: McpD
 }
 
 /** 获取预设的缺失依赖提示 */
-export function getPresetMissingDependencyNote(preset: McpPreset, missingType: McpDependencyType, language: 'en' | 'zh'): string | undefined {
+export function getPresetMissingDependencyNote(preset: McpPreset, missingType: McpDependencyType, language: Language): string | undefined {
   const dep = preset.dependencies?.find(d => d.type === missingType)
-  if (!dep) return undefined
-  return language === 'zh' ? dep.installNoteZh : dep.installNote
+  if (!dep?.installNoteKey) return undefined
+  return t(dep.installNoteKey, language)
 }
 
 /** 根据平台过滤预设 */

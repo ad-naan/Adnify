@@ -7,7 +7,7 @@ import type { TextFileChunk } from '@shared/types/fileChunk'
 import { api } from '@renderer/services/electronAPI'
 import { defineMonacoTheme } from './utils/monacoTheme'
 import { LargeFilePageCache } from './largeFilePageCache'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 const PAGE_CACHE_SIZE = 5
 const SEEK_STEPS = 1_000
@@ -155,16 +155,16 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 text-xs text-text-muted">
         <Lock className="h-3.5 w-3.5 shrink-0" />
         <span className="shrink-0">
-          {t('largeFileViewer.virtualizedLargeFileRead', asLanguage(language))}
+          {t('largeFileViewer.virtualizedLargeFileRead', language)}
         </span>
         <span className="hidden shrink-0 text-text-muted/70 xl:inline">
-          {t('largeFileViewer.scrollAcrossWindowsContinuously', asLanguage(language))}
+          {t('largeFileViewer.scrollAcrossWindowsContinuously', language)}
         </span>
         <span className="ml-auto shrink-0 tabular-nums">
           {percentage.toFixed(1)}% · {formatBytes(chunk.startOffset)}–{formatBytes(pageEnd)} / {formatBytes(chunk.totalSize)}
         </span>
         <input
-          aria-label={t('largeFileViewer.seekThroughFile', asLanguage(language))}
+          aria-label={t('largeFileViewer.seekThroughFile', language)}
           type="range"
           min={0}
           max={SEEK_STEPS}
@@ -184,7 +184,7 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
           disabled={loading || chunk.startOffset <= 0}
           className="rounded p-1 hover:bg-surface disabled:opacity-30"
           onClick={() => loadPrevious()}
-          title={t('largeFileViewer.previousWindow', asLanguage(language))}
+          title={t('largeFileViewer.previousWindow', language)}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -193,7 +193,7 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
           disabled={loading || chunk.eof}
           className="rounded p-1 hover:bg-surface disabled:opacity-30"
           onClick={loadNext}
-          title={t('largeFileViewer.nextWindow', asLanguage(language))}
+          title={t('largeFileViewer.nextWindow', language)}
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -201,7 +201,7 @@ export default function LargeFileViewer({ file, language, theme }: LargeFileView
       </div>
       {error && (
         <div className="border-b border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-          {t('largeFileViewer.couldNotReadThis', asLanguage(language))}
+          {t('largeFileViewer.couldNotReadThis', language)}
         </div>
       )}
       <div className="min-h-0 flex-1">

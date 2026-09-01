@@ -15,10 +15,10 @@ import {
 } from 'lucide-react'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 interface RulesMemorySettingsProps {
-  language: string
+  language: Language
 }
 
 export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
@@ -126,7 +126,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-accent" />
               <h5 className="text-sm font-medium text-text-primary">
-                {translate('rulesMemorySettings.projectRules', asLanguage(language))}
+                {t('rulesMemorySettings.projectRules', language)}
               </h5>
             </div>
             <div className="flex items-center gap-2">
@@ -138,7 +138,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
               <button
                 onClick={loadRules}
                 className="p-1.5 text-text-muted hover:text-accent transition-colors"
-                title={translate('refresh', asLanguage(language))}
+                title={t('refresh', language)}
               >
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
@@ -146,7 +146,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           </div>
 
           <p className="text-xs text-text-muted">
-            {translate('rulesMemorySettings.defineProjectLevelAi', asLanguage(language))}
+            {t('rulesMemorySettings.defineProjectLevelAi', language)}
           </p>
 
           {rulesLoading ? (
@@ -162,14 +162,14 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                   setRulesModified(true)
                 }}
                 className="w-full h-64 p-3 bg-black/20 rounded-lg border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none transition-all resize-none text-xs font-mono custom-scrollbar text-text-primary placeholder-text-muted/50"
-                placeholder={translate('rulesMemorySettings.projectRulesWriteAi', asLanguage(language))}
+                placeholder={t('rulesMemorySettings.projectRulesWriteAi', language)}
               />
 
               <div className="flex items-center justify-between">
                 {rulesModified && (
                   <div className="flex items-center gap-1.5 text-amber-400 text-xs">
                     <AlertCircle className="w-3.5 h-3.5" />
-                    <span>{translate('settings.unsavedChanges', asLanguage(language))}</span>
+                    <span>{t('settings.unsavedChanges', language)}</span>
                   </div>
                 )}
                 <div className="flex-1" />
@@ -180,7 +180,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                   disabled={!rulesModified || rulesSaving}
                   className="text-xs"
                 >
-                  {rulesSaving ? translate('saving', asLanguage(language)) : translate('rulesMemorySettings.saveRules', asLanguage(language))}
+                  {rulesSaving ? t('saving', language) : t('rulesMemorySettings.saveRules', language)}
                 </Button>
               </div>
             </>
@@ -193,7 +193,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 text-accent" />
               <h5 className="text-sm font-medium text-text-primary">
-                {translate('rulesMemorySettings.projectMemory', asLanguage(language))}
+                {t('rulesMemorySettings.projectMemory', language)}
               </h5>
             </div>
             <span className="text-[10px] text-text-muted px-2 py-0.5 bg-black/20 rounded">
@@ -202,7 +202,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           </div>
 
           <p className="text-xs text-text-muted">
-            {translate('rulesMemorySettings.addImportantProjectInformation', asLanguage(language))}
+            {t('rulesMemorySettings.addImportantProjectInformation', language)}
           </p>
 
           {/* Add new memory */}
@@ -210,7 +210,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             <Input
               value={newMemory}
               onChange={(e) => setNewMemory(e.target.value)}
-              placeholder={translate('rulesMemorySettings.addNewMemory', asLanguage(language))}
+              placeholder={t('rulesMemorySettings.addNewMemory', language)}
               className="flex-1 bg-black/20 border-border text-xs"
               onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
             />
@@ -228,7 +228,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           <ProgressiveReveal
             language={language}
             collapsedHeight={260}
-            expandLabel={translate('rulesMemorySettings.showAllProjectMemories', asLanguage(language))}
+            expandLabel={t('rulesMemorySettings.showAllProjectMemories', language)}
           >
           <div className="space-y-2">
             {memoryLoading ? (
@@ -238,7 +238,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
             ) : memories.length === 0 ? (
               <div className="h-24 flex flex-col items-center justify-center gap-1.5 text-text-muted text-xs">
                 <OtterAsset asset="relaxed" className="h-12 w-12 object-contain opacity-75" />
-                <span>{translate('rulesMemorySettings.noMemoriesYet', asLanguage(language))}</span>
+                <span>{t('rulesMemorySettings.noMemoriesYet', language)}</span>
               </div>
             ) : (
               memories.map((item) => (
@@ -280,7 +280,7 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
                         onClick={() => handleToggleMemory(item.id, item.enabled)}
                         className={`p-0.5 transition-colors ${item.enabled ? 'text-accent' : 'text-text-muted'
                           }`}
-                        title={item.enabled ? translate('common.disable', asLanguage(language)) : translate('common.enable', asLanguage(language))}
+                        title={item.enabled ? t('common.disable', language) : t('common.enable', language)}
                       >
                         {item.enabled ? (
                           <ToggleRight className="w-4 h-4" />
@@ -317,12 +317,12 @@ export function RulesMemorySettings({ language }: RulesMemorySettingsProps) {
           <div className="p-3 rounded-lg bg-accent/5 border border-accent/20 text-xs text-text-muted space-y-1">
             <p className="font-medium text-accent/80 flex items-center gap-1.5">
               <OtterAsset asset="question" className="h-5 w-5 object-contain" />
-              {translate('common.tips', asLanguage(language))}
+              {t('common.tips', language)}
             </p>
             <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-              <li>{translate('rulesMemorySettings.memoriesAreFullyInjected', asLanguage(language))}</li>
-              <li>{translate('rulesMemorySettings.keepItConciseTo', asLanguage(language))}</li>
-              <li>{translate('rulesMemorySettings.youCanDisableMemories', asLanguage(language))}</li>
+              <li>{t('rulesMemorySettings.memoriesAreFullyInjected', language)}</li>
+              <li>{t('rulesMemorySettings.keepItConciseTo', language)}</li>
+              <li>{t('rulesMemorySettings.youCanDisableMemories', language)}</li>
             </ul>
           </div>
         </section>

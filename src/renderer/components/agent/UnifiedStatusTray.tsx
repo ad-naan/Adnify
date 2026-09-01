@@ -12,26 +12,7 @@
  */
 
 import React, { useState, useCallback, useMemo, memo } from 'react'
-import {
-  X,
-  Check,
-  ExternalLink,
-  Square,
-  ChevronDown,
-  FileCode,
-  FilePlus,
-  FileX,
-  CheckCheck,
-  XCircle,
-  FolderOpen,
-  ListTodo,
-  Layers,
-  ShieldCheck,
-  Play,
-  Pencil,
-  Trash2,
-  ChevronUp,
-} from 'lucide-react'
+import { X, Check, ExternalLink, Square, ChevronDown, FileCode, FilePlus, FileX, CheckCheck, XCircle, FolderOpen, ListTodo, Layers, ShieldCheck, Play, Pencil, Trash2, ChevronUp, } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFileName, getDirname } from '@shared/utils/pathUtils'
 import type { PendingChange, TodoItem, ToolCall } from '@/renderer/agent/types'
@@ -42,8 +23,7 @@ import { toast } from '@components/common/ToastProvider'
 import { deriveTerminalCommandRule, formatTerminalCommandRule, terminalCommandRuleKey } from '@shared/security/commandApprovalRule'
 import { ToolApprovalActions } from './ToolApprovalActions'
 import { supportsTaskApproval } from './ToolCallGroup'
-import type { Language } from '@renderer/i18n'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 type TabView = 'approvals' | 'files' | 'tasks' | 'queue'
 
@@ -167,7 +147,7 @@ function UnifiedStatusTray({
                   <TabButton
                     active={currentTab === 'approvals'}
                     onClick={() => setActiveTab('approvals')}
-                    title={translate('unifiedStatusTray.approvals', asLanguage(language))}
+                    title={t('unifiedStatusTray.approvals', language)}
                     badge={pendingToolCalls.length}
                   >
                     <ShieldCheck className="w-3 h-3" />
@@ -188,7 +168,7 @@ function UnifiedStatusTray({
                     active={currentTab === 'tasks'}
                     onClick={() => setActiveTab('tasks')}
                     title="Tasks"
-                    badge={hasTodos ? todos.filter(t => t.status !== 'completed').length : undefined}
+                    badge={hasTodos ? todos.filter(todo => todo.status !== 'completed').length : undefined}
                   >
                     <ListTodo className="w-3 h-3" />
                   </TabButton>
@@ -209,10 +189,10 @@ function UnifiedStatusTray({
             {/* 单 tab 时显示标签文字 */}
             {availableTabs.length === 1 && (
               <span className="text-[11px] font-medium text-text-muted/70">
-                {currentTab === 'approvals' && (translate('unifiedStatusTray.approvals2', asLanguage(language), { length: pendingToolCalls.length }))}
+                {currentTab === 'approvals' && (t('unifiedStatusTray.approvals2', language, { length: pendingToolCalls.length }))}
                 {currentTab === 'files' && `${pendingChanges.length} file${pendingChanges.length > 1 ? 's' : ''} changed`}
-                {currentTab === 'tasks' && `${todos.filter(t => t.status === 'completed').length}/${todos.length} Tasks`}
-                {currentTab === 'queue' && `${queue.length} ${translate('unifiedStatusTray.queued', asLanguage(language))}`}
+                {currentTab === 'tasks' && `${todos.filter(todo => todo.status === 'completed').length}/${todos.length} Tasks`}
+                {currentTab === 'queue' && `${queue.length} ${t('unifiedStatusTray.queued', language)}`}
               </span>
             )}
           </div>
@@ -267,7 +247,7 @@ function UnifiedStatusTray({
               <button
                 onClick={clearQueue}
                 className="p-1 rounded-md text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                title={translate('common.clearQueue', asLanguage(language))}
+                title={t('common.clearQueue', language)}
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -405,7 +385,7 @@ function ApprovalQueueContent({
       await useStore.getState().save()
     }
     toast.success(
-      translate('unifiedStatusTray.similarCommandsAreNow', asLanguage(language)),
+      t('unifiedStatusTray.similarCommandsAreNow', language),
       `${formatTerminalCommandRule(rule)} *`,
     )
     decideOnce(toolCall.id, onApprove)
@@ -436,7 +416,7 @@ function ApprovalQueueContent({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-medium text-text-primary">{toolCall.name}</span>
-                {isCurrent && <span className="text-[9px] text-amber-400">{translate('checkpoint.current', asLanguage(language))}</span>}
+                {isCurrent && <span className="text-[9px] text-amber-400">{t('checkpoint.current', language)}</span>}
               </div>
               <code className="block truncate font-mono text-[10px] text-text-muted" title={getApprovalSummary(toolCall)}>
                 {getApprovalSummary(toolCall)}
@@ -447,10 +427,10 @@ function ApprovalQueueContent({
                 type="button"
                 onClick={() => void approveAlways(toolCall)}
                 className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] font-medium text-accent transition-colors hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
-                title={`${translate('common.alwaysAllowSimilarCommands', asLanguage(language))}: ${formatTerminalCommandRule(persistentRule)} *`}
+                title={`${t('common.alwaysAllowSimilarCommands', language)}: ${formatTerminalCommandRule(persistentRule)} *`}
               >
                 <ShieldCheck className="h-3 w-3" />
-                <span>{translate('unifiedStatusTray.always', asLanguage(language))}</span>
+                <span>{t('unifiedStatusTray.always', language)}</span>
               </button>
             )}
             <ToolApprovalActions
@@ -650,7 +630,7 @@ function QueueContent({
   onReorder,
 }: {
   queue: QueuedMessage[]
-  language: string
+  language: Language
   onRemove: (id: string) => void
   onUpdateContent: (id: string, content: any) => void
   onSendNow?: (id: string) => void
@@ -688,7 +668,7 @@ function QueueItemRow({
   item: QueuedMessage
   index: number
   total: number
-  language: string
+  language: Language
   onRemove: (id: string) => void
   onUpdateContent: (id: string, content: any) => void
   onSendNow?: (id: string) => void
@@ -743,16 +723,16 @@ function QueueItemRow({
             <div className="flex items-center gap-1">
               <button onClick={confirmEdit} className="px-2 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded-md hover:bg-accent/20 transition-colors">
                 <Check className="w-3 h-3 inline mr-0.5" />
-                {translate('common.save', asLanguage(language))}
+                {t('common.save', language)}
               </button>
               <button onClick={() => setIsEditing(false)} className="px-2 py-0.5 text-[10px] font-medium text-text-muted rounded-md hover:bg-surface-hover transition-colors">
-                {translate('cancel', asLanguage(language))}
+                {t('cancel', language)}
               </button>
             </div>
           </div>
         ) : (
           <p className="text-xs text-text-secondary leading-relaxed line-clamp-2 break-all">
-            {displayText || (translate('common.multimodal', asLanguage(language)))}
+            {displayText || (t('common.multimodal', language))}
           </p>
         )}
       </div>

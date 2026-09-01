@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { WorkMode } from '@/renderer/modes/types'
 import { useStore } from '@store'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface ModeSelectorProps {
   mode: WorkMode
@@ -233,7 +233,7 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
     <div
       className={`relative h-9 w-[136px] overflow-hidden rounded-xl border border-border/25 bg-text-primary/[0.035] p-[3px] shadow-inner ${className}`}
       role="radiogroup"
-      aria-label={t('modeSelector.workMode', asLanguage(language))}
+      aria-label={t('modeSelector.workMode', language)}
       onKeyDown={handleKeyDown}
     >
       <span
@@ -245,8 +245,8 @@ export default function ModeSelector({ mode, onModeChange, className = '' }: Mod
         {MODE_OPTIONS.map(option => {
           const selected = option.id === mode
           const description = option.id === 'agent'
-            ? (t('modeSelector.executeDirectly', asLanguage(language)))
-            : (t('modeSelector.planBeforeExecution', asLanguage(language)))
+            ? (t('modeSelector.executeDirectly', language))
+            : (t('modeSelector.planBeforeExecution', language))
 
           return (
             <button

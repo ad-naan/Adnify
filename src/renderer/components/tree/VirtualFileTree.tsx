@@ -22,7 +22,7 @@ import {
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import type { FileItem } from '@shared/types'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { getDirPath, joinPath, pathEquals, normalizePath, pathStartsWith } from '@shared/utils/pathUtils'
 import { formatShortcut, keybindingService } from '@services/keybindingService'
 import { toast } from '../common/ToastProvider'
@@ -144,12 +144,12 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         target,
       )
       const verb = action === 'add'
-        ? (t('virtualFileTree.added', asLanguage(language)))
-        : (t('virtualFileTree.removed', asLanguage(language)))
+        ? (t('virtualFileTree.added', language))
+        : (t('virtualFileTree.removed', language))
       toast.success(
         result.changed
-          ? (t('virtualFileTree.text', asLanguage(language), { verb, targetLabel }))
-          : (t('virtualFileTree.noChangesNeeded', asLanguage(language))),
+          ? (t('virtualFileTree.text', language, { verb, targetLabel }))
+          : (t('virtualFileTree.noChangesNeeded', language)),
         result.pattern,
       )
       setContextMenu(current => current && current.node === node
@@ -163,7 +163,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
         : current)
     } catch (error) {
       toast.error(
-        t('virtualFileTree.failedToUpdate', asLanguage(language), { targetLabel }),
+        t('virtualFileTree.failedToUpdate', language, { targetLabel }),
         error instanceof Error ? error.message : String(error),
       )
     }
@@ -616,7 +616,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleDelete = useCallback(async (node: FlattenedNode) => {
     const success = await api.file.delete(node.item.path)
     if (!success) {
-      toast.error(t('virtualFileTree.deleteFailed', asLanguage(language)))
+      toast.error(t('virtualFileTree.deleteFailed', language))
       return
     }
     directoryCacheService.invalidate(getDirPath(node.item.path))
@@ -676,27 +676,26 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       copiedAt: Date.now(),
     })
     toast.success(node.item.isDirectory
-      ? (t('virtualFileTree.folderCopied', asLanguage(language)))
-      : (t('virtualFileTree.fileCopied', asLanguage(language))))
+      ? (t('virtualFileTree.folderCopied', language))
+      : (t('virtualFileTree.fileCopied', language)))
   }, [language])
 
   const getCopyDestinationPath = useCallback(async (targetDirectoryPath: string, item: ExplorerClipboardItem) => {
     const nameParts = item.isDirectory ? null : item.name.match(/^(.*?)(\.[^.]*)?$/)
     const baseName = item.isDirectory ? item.name : (nameParts?.[1] || item.name)
     const extension = item.isDirectory ? '' : (nameParts?.[2] || '')
-
-    let candidateName = `${baseName} - 副本${extension}`
+    let candidateName = t('virtualFileTree.nameCopyExt', language, { name: baseName, ext: extension })
     let candidatePath = joinPath(targetDirectoryPath, candidateName)
     let counter = 2
 
     while (await api.file.exists(candidatePath)) {
-      candidateName = `${baseName} - 副本 ${counter}${extension}`
+      candidateName = t('virtualFileTree.nameCopyCounterExt', language, { name: baseName, counter, ext: extension })
       candidatePath = joinPath(targetDirectoryPath, candidateName)
       counter += 1
     }
 
     return candidatePath
-  }, [])
+  }, [language])
 
   const handlePasteIntoDirectory = useCallback(async (targetDirectoryPath: string) => {
     const item = explorerClipboardService.getState().item
@@ -707,14 +706,14 @@ export const VirtualFileTree = memo(function VirtualFileTree({
     if (!normalizedSourcePath || !normalizedTargetDirectoryPath) return
 
     if (item.isDirectory && normalizedTargetDirectoryPath.startsWith(`${normalizedSourcePath}/`)) {
-      toast.error(t('virtualFileTree.cannotPasteAFolder', asLanguage(language)))
+      toast.error(t('virtualFileTree.cannotPasteAFolder', language))
       return
     }
 
     const destinationPath = await getCopyDestinationPath(targetDirectoryPath, item)
     const success = await api.file.copy(item.path, destinationPath)
     if (!success) {
-      toast.error(t('virtualFileTree.pasteFailed', asLanguage(language)))
+      toast.error(t('virtualFileTree.pasteFailed', language))
       return
     }
 
@@ -724,8 +723,8 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       refreshRoot: pathEquals(targetDirectoryPath, workspacePath || ''),
     })
     toast.success(item.isDirectory
-      ? (t('virtualFileTree.folderPasted', asLanguage(language)))
-      : (t('virtualFileTree.filePasted', asLanguage(language))))
+      ? (t('virtualFileTree.folderPasted', language))
+      : (t('virtualFileTree.filePasted', language)))
   }, [getCopyDestinationPath, language, onRefresh, workspacePath])
 
   const handlePasteForNode = useCallback((node: FlattenedNode) => {
@@ -783,7 +782,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleCopyPath = useCallback(async (node: FlattenedNode) => {
     const success = await writeClipboardText(node.item.path)
     if (!success) return
-    toast.success(t('pathCopied', language) || 'Path copied')
+    toast.success(t('pathCopied', language))
   }, [language])
 
   const handleCopyRelativePath = useCallback(async (node: FlattenedNode) => {
@@ -791,7 +790,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
       const relativePath = node.item.path.replace(workspacePath, '').replace(/^[\\/]/, '')
       const success = await writeClipboardText(relativePath)
       if (!success) return
-      toast.success(t('pathCopied', language) || 'Path copied')
+      toast.success(t('pathCopied', language))
     }
   }, [workspacePath, language])
 
@@ -802,7 +801,7 @@ export const VirtualFileTree = memo(function VirtualFileTree({
   const handleOpenInBrowser = useCallback(async (node: FlattenedNode) => {
     const success = await api.file.openInBrowser(node.item.path)
     if (!success) {
-      toast.error(t('failedToOpenInBrowser', language) || 'Failed to open in browser')
+      toast.error(t('failedToOpenInBrowser', language))
     }
   }, [language])
 
@@ -882,59 +881,57 @@ export const VirtualFileTree = memo(function VirtualFileTree({
 
   // 构建右键菜单项
   const getContextMenuItems = useCallback((node: FlattenedNode): ContextMenuItem[] => {
-    const contextMenuLanguage = 'zh'
-
     if (node.item.isDirectory) {
       return [
-        { id: 'newFile', label: t('newFile', contextMenuLanguage), icon: FilePlus, onClick: () => handleNewFile(node) },
-        { id: 'newFolder', label: t('newFolder', contextMenuLanguage), icon: FolderPlus, onClick: () => handleNewFolder(node) },
+        { id: 'newFile', label: t('newFile', language), icon: FilePlus, onClick: () => handleNewFile(node) },
+        { id: 'newFolder', label: t('newFolder', language), icon: FolderPlus, onClick: () => handleNewFolder(node) },
         { id: 'sep1', label: '', separator: true },
-        { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
+        { id: 'openTerminal', label: t('openIntegratedTerminalHere', language), icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
         { id: 'sep2', label: '', separator: true },
-        { id: 'copy', label: t('copy', contextMenuLanguage) || '复制', icon: Copy, shortcut: formatShortcut('Ctrl+C'), onClick: () => handleCopyItem(node) },
-        { id: 'paste', label: t('paste', contextMenuLanguage) || '粘贴', icon: Clipboard, shortcut: formatShortcut('Ctrl+V'), disabled: !clipboardItem, onClick: () => handlePasteForNode(node) },
+        { id: 'copy', label: t('copy', language), icon: Copy, shortcut: formatShortcut('Ctrl+C'), onClick: () => handleCopyItem(node) },
+        { id: 'paste', label: t('paste', language), icon: Clipboard, shortcut: formatShortcut('Ctrl+V'), disabled: !clipboardItem, onClick: () => handlePasteForNode(node) },
         { id: 'sepClipboard', label: '', separator: true },
-        { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
-        { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+        { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
+        { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
         { id: 'sep3', label: '', separator: true },
-        { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
-        { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+        { id: 'copyPath', label: t('copyPath', language), icon: Copy, onClick: () => handleCopyPath(node) },
+        { id: 'copyRelPath', label: t('copyRelativePath', language), icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
         contextMenu?.gitignoreIgnored
-          ? { id: 'gitignoreRemove', label: contextMenuLanguage === 'zh' ? '从 .gitignore 中移除' : 'Remove from .gitignore', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'gitignore') }
-          : { id: 'gitignoreAdd', label: contextMenuLanguage === 'zh' ? '添加到 .gitignore' : 'Add to .gitignore', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'gitignore') },
+          ? { id: 'gitignoreRemove', label: t('virtualFileTree.removeFromTarget', language, { target: '.gitignore' }), icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'gitignore') }
+          : { id: 'gitignoreAdd', label: t('virtualFileTree.addToTarget', language, { target: '.gitignore' }), icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'gitignore') },
         contextMenu?.gitExcludeIgnored
-          ? { id: 'gitExcludeRemove', label: contextMenuLanguage === 'zh' ? '从 .git/info/exclude 中移除' : 'Remove from .git/info/exclude', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'exclude') }
-          : { id: 'gitExcludeAdd', label: contextMenuLanguage === 'zh' ? '添加到 .git/info/exclude' : 'Add to .git/info/exclude', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'exclude') },
-        { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+          ? { id: 'gitExcludeRemove', label: t('virtualFileTree.removeFromTarget', language, { target: '.git/info/exclude' }), icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'exclude') }
+          : { id: 'gitExcludeAdd', label: t('virtualFileTree.addToTarget', language, { target: '.git/info/exclude' }), icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'exclude') },
+        { id: 'reveal', label: t('revealInExplorer', language), icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
       ]
     }
     const isHtmlFile = node.item.name.toLowerCase().endsWith('.html') ||
       node.item.name.toLowerCase().endsWith('.htm')
 
     const items: ContextMenuItem[] = [
-      { id: 'openTerminal', label: t('openIntegratedTerminalHere', contextMenuLanguage) || '在此处打开集成终端', icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
+      { id: 'openTerminal', label: t('openIntegratedTerminalHere', language), icon: Terminal, onClick: () => handleOpenTerminalHere(node) },
       { id: 'sep1', label: '', separator: true },
-      { id: 'copy', label: t('copy', contextMenuLanguage) || '复制', icon: Copy, shortcut: formatShortcut('Ctrl+C'), onClick: () => handleCopyItem(node) },
-      { id: 'paste', label: t('paste', contextMenuLanguage) || '粘贴', icon: Clipboard, shortcut: formatShortcut('Ctrl+V'), disabled: !clipboardItem, onClick: () => handlePasteForNode(node) },
+      { id: 'copy', label: t('copy', language), icon: Copy, shortcut: formatShortcut('Ctrl+C'), onClick: () => handleCopyItem(node) },
+      { id: 'paste', label: t('paste', language), icon: Clipboard, shortcut: formatShortcut('Ctrl+V'), disabled: !clipboardItem, onClick: () => handlePasteForNode(node) },
       { id: 'sepClipboard', label: '', separator: true },
-      { id: 'rename', label: t('rename', contextMenuLanguage), icon: Edit2, onClick: () => handleRenameStart(node) },
-      { id: 'delete', label: t('delete', contextMenuLanguage), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
+      { id: 'rename', label: t('rename', language), icon: Edit2, onClick: () => handleRenameStart(node) },
+      { id: 'delete', label: t('delete', language), icon: Trash2, danger: true, onClick: () => handleDelete(node) },
       { id: 'sep2', label: '', separator: true },
-      { id: 'copyPath', label: t('copyPath', contextMenuLanguage) || '复制路径', icon: Copy, onClick: () => handleCopyPath(node) },
-      { id: 'copyRelPath', label: t('copyRelativePath', contextMenuLanguage) || '复制相对路径', icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
+      { id: 'copyPath', label: t('copyPath', language), icon: Copy, onClick: () => handleCopyPath(node) },
+      { id: 'copyRelPath', label: t('copyRelativePath', language), icon: Clipboard, onClick: () => handleCopyRelativePath(node) },
       contextMenu?.gitignoreIgnored
-        ? { id: 'gitignoreRemove', label: contextMenuLanguage === 'zh' ? '从 .gitignore 中移除' : 'Remove from .gitignore', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'gitignore') }
-        : { id: 'gitignoreAdd', label: contextMenuLanguage === 'zh' ? '添加到 .gitignore' : 'Add to .gitignore', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'gitignore') },
+        ? { id: 'gitignoreRemove', label: t('virtualFileTree.removeFromTarget', language, { target: '.gitignore' }), icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'gitignore') }
+        : { id: 'gitignoreAdd', label: t('virtualFileTree.addToTarget', language, { target: '.gitignore' }), icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'gitignore') },
       contextMenu?.gitExcludeIgnored
-        ? { id: 'gitExcludeRemove', label: contextMenuLanguage === 'zh' ? '从 .git/info/exclude 中移除' : 'Remove from .git/info/exclude', icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'exclude') }
-        : { id: 'gitExcludeAdd', label: contextMenuLanguage === 'zh' ? '添加到 .git/info/exclude' : 'Add to .git/info/exclude', icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'exclude') },
-      { id: 'reveal', label: t('revealInExplorer', contextMenuLanguage) || '在资源管理器中显示', icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
+        ? { id: 'gitExcludeRemove', label: t('virtualFileTree.removeFromTarget', language, { target: '.git/info/exclude' }), icon: Eye, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'remove', 'exclude') }
+        : { id: 'gitExcludeAdd', label: t('virtualFileTree.addToTarget', language, { target: '.git/info/exclude' }), icon: EyeOff, disabled: contextMenu?.node !== node || !contextMenu.gitAvailable, onClick: () => void handleGitIgnore(node, 'add', 'exclude') },
+      { id: 'reveal', label: t('revealInExplorer', language), icon: ExternalLink, onClick: () => handleRevealInExplorer(node) },
     ]
 
     // 对 HTML 文件添加"在浏览器中打开"选项
     if (isHtmlFile) {
       items.push({ id: 'sep2', label: '', separator: true })
-      items.push({ id: 'openInBrowser', label: t('openInBrowser', contextMenuLanguage) || '在浏览器中打开', icon: Globe, onClick: () => handleOpenInBrowser(node) })
+      items.push({ id: 'openInBrowser', label: t('openInBrowser', language), icon: Globe, onClick: () => handleOpenInBrowser(node) })
     }
 
     return items

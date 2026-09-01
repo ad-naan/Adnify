@@ -6,19 +6,13 @@
 import { api } from '@/renderer/services/electronAPI'
 import { useStore } from '@store'
 import {
-  LARGE_FILE_CONFIRM_BYTES,
-  LARGE_FILE_PAGE_BYTES,
-  MAX_EDITABLE_TEXT_FILE_BYTES,
-  type LargeFileInfo,
-} from '@shared/types/largeFile'
+  LARGE_FILE_CONFIRM_BYTES, LARGE_FILE_PAGE_BYTES, MAX_EDITABLE_TEXT_FILE_BYTES, type LargeFileInfo, } from '@shared/types/largeFile'
 import {
-  getFileInfo,
-  getLargeFileWarning,
-  isLargeFile
+  getFileInfo, getLargeFileWarning, isLargeFile
 } from '@services/largeFileService'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '../components/common/ConfirmDialog'
-import { t, asLanguage } from '../i18n'
+import { t } from '@shared/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { detectEolFromContent } from '@services/fileFormatService'
 
@@ -111,7 +105,7 @@ export async function safeOpenFile(
 
   // 1. 检查二进制文件
   if (isBinaryFile(filePath)) {
-    const msg = t('fileUtils.cannotOpenBinaryFile', asLanguage(language))
+    const msg = t('fileUtils.cannotOpenBinaryFile', language)
     if (showWarning) {
       toast.warning(msg, getFileName(filePath))
     }
@@ -130,7 +124,7 @@ export async function safeOpenFile(
     if (byteSize > FILE_CONFIG.maxFileSize) {
       const chunk = await api.file.readTextChunk(filePath, 0, LARGE_FILE_PAGE_BYTES)
       if (!chunk) {
-        const msg = t('fileUtils.couldNotReadVery', asLanguage(language))
+        const msg = t('fileUtils.couldNotReadVery', language)
         if (showWarning) toast.error(msg, filePath)
         return { success: false, error: msg, isLargeFile: true }
       }
@@ -158,7 +152,7 @@ export async function safeOpenFile(
       setActiveFile(filePath)
       if (showWarning) {
         toast.warning(
-          t('fileUtils.openedInVeryLarge', asLanguage(language)),
+          t('fileUtils.openedInVeryLarge', language),
           `${(byteSize / 1024 / 1024).toFixed(1)} MB`,
         )
       }
@@ -170,9 +164,9 @@ export async function safeOpenFile(
       const size = (byteSize / 1024 / 1024).toFixed(1)
 
       const confirmed = await globalConfirm({
-        title: t('fileUtils.largeFileWarning', asLanguage(language)),
+        title: t('fileUtils.largeFileWarning', language),
         message: t('confirmLargeFile', language, { size }),
-        confirmText: t('git.continue', asLanguage(language)),
+        confirmText: t('git.continue', language),
         variant: 'warning',
       })
 
@@ -186,7 +180,7 @@ export async function safeOpenFile(
     const content = await api.file.readFull(filePath)
 
     if (content === null) {
-      const msg = t('fileUtils.fileNotFound', asLanguage(language))
+      const msg = t('fileUtils.fileNotFound', language)
       if (showWarning) {
         toast.error(msg, filePath)
       }
@@ -199,7 +193,7 @@ export async function safeOpenFile(
     // 6. 显示大文件警告
     if (showWarning && largeFileInfo?.warning) {
       toast.warning(
-        t('fileUtils.largeFile', asLanguage(language)),
+        t('fileUtils.largeFile', language),
         largeFileInfo.warning
       )
     }
@@ -224,7 +218,7 @@ export async function safeOpenFile(
     const msg = error instanceof Error ? error.message : 'Unknown error'
     if (showWarning) {
       toast.error(
-        t('git.openFileFailed', asLanguage(language)),
+        t('git.openFileFailed', language),
         msg
       )
     }
@@ -243,7 +237,7 @@ export async function safeOpenFiles(
   const language = options.language || 'en'
 
   if (filePaths.length > maxFiles) {
-    const msg = t('fileUtils.canOnlyOpenFiles', asLanguage(language), { maxFiles })
+    const msg = t('fileUtils.canOnlyOpenFiles', language, { maxFiles })
     toast.warning(msg)
     filePaths = filePaths.slice(0, maxFiles)
   }
@@ -267,7 +261,7 @@ export async function safeOpenFiles(
 
   if (failed > 0) {
     toast.warning(
-      t('fileUtils.someFilesFailedTo', asLanguage(language)),
+      t('fileUtils.someFilesFailedTo', language),
       `${opened}/${filePaths.length}`
     )
   }

@@ -2,26 +2,15 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-    Braces,
-    Check,
-    ChevronRight,
-    Copy,
-    Database,
-    Layers3,
-    Search,
-    ShieldCheck,
-} from 'lucide-react'
+    Braces, Check, ChevronRight, Copy, Database, Layers3, Search, ShieldCheck, } from 'lucide-react'
 import {
-    getPromptTemplateById,
-    getPromptTemplatePreview,
-    type PromptTemplatePreview,
-} from '@renderer/agent/prompts/promptTemplates'
+    getPromptTemplateById, getPromptTemplatePreview, type PromptTemplatePreview, } from '@renderer/agent/prompts/promptTemplates'
 import type { SystemPromptSection, SystemPromptSectionGroup } from '@renderer/agent/prompts/PromptBuilder'
 import { toast } from '@components/common/ToastProvider'
 import { Button, Modal } from '@components/ui'
 import { PromptPreviewModalProps } from '../types'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 type PreviewView = 'layers' | 'raw'
 
@@ -86,7 +75,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
             })
             .catch(() => {
                 if (!cancelled) {
-                    toast.error(translate('promptPreviewModal.failedToLoadPrompt', asLanguage(language)))
+                    toast.error(t('promptPreviewModal.failedToLoadPrompt', language))
                 }
             })
             .finally(() => {
@@ -116,11 +105,11 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
     const handleCopy = async (content: string, target: string) => {
         const success = await writeClipboardText(content)
         if (!success) {
-            toast.error(translate('promptPreviewModal.copyFailed', asLanguage(language)))
+            toast.error(t('promptPreviewModal.copyFailed', language))
             return
         }
         setCopiedTarget(target)
-        toast.success(translate('changelog.copied', asLanguage(language)))
+        toast.success(t('changelog.copied', language))
         window.setTimeout(() => setCopiedTarget(current => current === target ? null : current), 1800)
     }
 
@@ -132,7 +121,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
     if (!template) return null
 
     return (
-        <Modal isOpen onClose={onClose} title={translate('promptPreviewModal.systemPrompt', asLanguage(language))} size="5xl" noPadding>
+        <Modal isOpen onClose={onClose} title={t('promptPreviewModal.systemPrompt', language)} size="5xl" noPadding>
             <div className="flex h-[min(760px,82vh)] min-h-[560px] flex-col bg-background">
                 <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface/20 px-5 py-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -143,16 +132,16 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                             <div className="flex items-center gap-2">
                                 <span className="truncate text-sm font-medium text-text-primary">{language === 'zh' ? template.nameZh : template.name}</span>
                                 <span className="rounded border border-border-subtle bg-background/50 px-1.5 py-0.5 text-[10px] text-text-muted">
-                                    {preview?.sections.length ?? 0} {translate('promptPreviewModal.layers', asLanguage(language))}
+                                    {preview?.sections.length ?? 0} {t('promptPreviewModal.layers', language)}
                                 </span>
                             </div>
                             <p className="mt-0.5 text-[11px] text-text-muted">
-                                {translate('promptPreviewModal.thisShowsTheFinal', asLanguage(language))}
+                                {t('promptPreviewModal.thisShowsTheFinal', language)}
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex rounded-lg border border-border-subtle bg-background/50 p-0.5" role="tablist" aria-label={translate('promptPreviewModal.previewMode', asLanguage(language))}>
+                    <div className="flex rounded-lg border border-border-subtle bg-background/50 p-0.5" role="tablist" aria-label={t('promptPreviewModal.previewMode', language)}>
                         {(['layers', 'raw'] as const).map(item => (
                             <button
                                 key={item}
@@ -166,7 +155,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                     }`}
                             >
                                 {item === 'layers' ? <Layers3 className="h-3.5 w-3.5" /> : <Braces className="h-3.5 w-3.5" />}
-                                {item === 'layers' ? translate('promptPreviewModal.layers2', asLanguage(language)) : translate('promptPreviewModal.raw', asLanguage(language))}
+                                {item === 'layers' ? t('promptPreviewModal.layers2', language) : t('promptPreviewModal.raw', language)}
                             </button>
                         ))}
                     </div>
@@ -181,13 +170,13 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                     type="search"
                                     value={searchQuery}
                                     onChange={event => setSearchQuery(event.target.value)}
-                                    placeholder={translate('promptPreviewModal.searchContentOrLayer', asLanguage(language))}
+                                    placeholder={t('promptPreviewModal.searchContentOrLayer', language)}
                                     className="h-8 w-full rounded-md border border-border-subtle bg-background/60 pl-8 pr-2 text-xs text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-accent/50"
                                 />
                             </div>
                         </div>
 
-                        <nav className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar" aria-label={translate('promptPreviewModal.promptLayers', asLanguage(language))}>
+                        <nav className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar" aria-label={t('promptPreviewModal.promptLayers', language)}>
                             {visibleSections.map((section, index) => {
                                 const label = SECTION_LABELS[section.id]
                                 const previousGroup = visibleSections[index - 1]?.group
@@ -217,28 +206,28 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                 )
                             })}
                             {!isLoading && visibleSections.length === 0 && (
-                                <p className="px-3 py-8 text-center text-xs leading-5 text-text-muted">{translate('promptPreviewModal.noMatchingLayers', asLanguage(language))}</p>
+                                <p className="px-3 py-8 text-center text-xs leading-5 text-text-muted">{t('promptPreviewModal.noMatchingLayers', language)}</p>
                             )}
                         </nav>
 
                         <div className="space-y-2 border-t border-border-subtle p-3 text-[10px] text-text-muted">
-                            <div className="flex items-center justify-between"><span>{translate('promptPreviewModal.estimatedTokens', asLanguage(language))}</span><span className="font-mono text-text-secondary">≈{promptTokens.toLocaleString()}</span></div>
-                            <div className="flex items-center justify-between"><span>{translate('promptPreviewModal.stableSections', asLanguage(language))}</span><span className="font-mono text-text-secondary">{stableTokens.toLocaleString()}</span></div>
+                            <div className="flex items-center justify-between"><span>{t('promptPreviewModal.estimatedTokens', language)}</span><span className="font-mono text-text-secondary">≈{promptTokens.toLocaleString()}</span></div>
+                            <div className="flex items-center justify-between"><span>{t('promptPreviewModal.stableSections', language)}</span><span className="font-mono text-text-secondary">{stableTokens.toLocaleString()}</span></div>
                             <div className="flex items-center gap-3 pt-1">
-                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{translate('promptPreviewModal.stable', asLanguage(language))}</span>
-                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-amber-400" />{translate('promptPreviewModal.dynamic', asLanguage(language))}</span>
+                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{t('promptPreviewModal.stable', language)}</span>
+                                <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-amber-400" />{t('promptPreviewModal.dynamic', language)}</span>
                             </div>
                         </div>
                     </aside>
 
                     <main className="min-h-0 overflow-y-auto bg-gradient-to-b from-transparent to-surface/5 p-5 custom-scrollbar">
                         {isLoading ? (
-                            <div className="flex h-full items-center justify-center text-sm text-text-muted">{translate('promptPreviewModal.generatingPreview', asLanguage(language))}</div>
+                            <div className="flex h-full items-center justify-center text-sm text-text-muted">{t('promptPreviewModal.generatingPreview', language)}</div>
                         ) : view === 'raw' ? (
                             <section className="mx-auto max-w-4xl overflow-hidden rounded-xl border border-border-subtle bg-surface/20">
                                 <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
-                                    <div className="flex items-center gap-2 text-xs text-text-secondary"><Braces className="h-3.5 w-3.5" />{translate('promptPreviewModal.systemPromptReceivedBy', asLanguage(language))}</div>
-                                    <CopyButton copied={copiedTarget === 'full'} onClick={() => preview && handleCopy(preview.content, 'full')} label={translate('promptPreviewModal.copyAll', asLanguage(language))} copiedLabel={translate('promptPreviewModal.copied', asLanguage(language))} />
+                                    <div className="flex items-center gap-2 text-xs text-text-secondary"><Braces className="h-3.5 w-3.5" />{t('promptPreviewModal.systemPromptReceivedBy', language)}</div>
+                                    <CopyButton copied={copiedTarget === 'full'} onClick={() => preview && handleCopy(preview.content, 'full')} label={t('promptPreviewModal.copyAll', language)} copiedLabel={t('promptPreviewModal.copied', language)} />
                                 </div>
                                 <pre className="overflow-x-auto whitespace-pre-wrap break-words p-5 font-mono text-xs leading-6 text-text-secondary">{preview ? highlightText(preview.content, searchQuery) : null}</pre>
                             </section>
@@ -246,7 +235,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                             <div className="mx-auto max-w-4xl space-y-3">
                                 <div className="mb-4 flex items-start gap-2 rounded-lg border border-border-subtle bg-surface/20 px-3 py-2.5 text-xs leading-5 text-text-muted">
                                     <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                                    <span>{translate('promptPreviewModal.greenLayersFormThe', asLanguage(language))}</span>
+                                    <span>{t('promptPreviewModal.greenLayersFormThe', language)}</span>
                                 </div>
                                 {visibleSections.map(section => (
                                     <PromptSectionCard
@@ -259,7 +248,7 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                                     />
                                 ))}
                                 {visibleSections.length === 0 && (
-                                    <div className="py-20 text-center text-sm text-text-muted">{translate('promptPreviewModal.noMatchingContentFound', asLanguage(language))}</div>
+                                    <div className="py-20 text-center text-sm text-text-muted">{t('promptPreviewModal.noMatchingContentFound', language)}</div>
                                 )}
                             </div>
                         )}
@@ -269,13 +258,13 @@ export function PromptPreviewModal({ templateId, customInstructions, language, o
                 <footer className="flex items-center justify-between border-t border-border-subtle bg-surface/20 px-5 py-3">
                     <div className="flex items-center gap-2 text-[11px] text-text-muted">
                         <Database className="h-3.5 w-3.5" />
-                        {translate('promptPreviewModal.previewDataIsSimulated', asLanguage(language))}
+                        {t('promptPreviewModal.previewDataIsSimulated', language)}
                     </div>
                     <div className="flex items-center gap-2">
                         <Button variant="secondary" size="sm" onClick={() => preview && handleCopy(preview.content, 'full')} leftIcon={copiedTarget === 'full' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}>
-                            {copiedTarget === 'full' ? translate('promptPreviewModal.copied', asLanguage(language)) : translate('promptPreviewModal.copyAll', asLanguage(language))}
+                            {copiedTarget === 'full' ? t('promptPreviewModal.copied', language) : t('promptPreviewModal.copyAll', language)}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={onClose}>{translate('closeTerminal', asLanguage(language))}</Button>
+                        <Button variant="ghost" size="sm" onClick={onClose}>{t('closeTerminal', language)}</Button>
                     </div>
                 </footer>
             </div>
@@ -306,7 +295,7 @@ function PromptSectionCard({
                     <h3 className="text-xs font-medium text-text-primary">{title}</h3>
                     <code className="text-[10px] text-text-muted">{`<${section.id.replaceAll('-', '_')}>`}</code>
                 </div>
-                <CopyButton copied={copied} onClick={onCopy} label={translate('promptPreviewModal.copyLayer', asLanguage(language))} copiedLabel={translate('promptPreviewModal.copied', asLanguage(language))} />
+                <CopyButton copied={copied} onClick={onCopy} label={t('promptPreviewModal.copyLayer', language)} copiedLabel={t('promptPreviewModal.copied', language)} />
             </header>
             <pre className="overflow-x-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-6 text-text-secondary">{highlightText(section.content, query)}</pre>
         </section>

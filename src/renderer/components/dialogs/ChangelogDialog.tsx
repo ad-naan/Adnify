@@ -25,7 +25,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { useStore } from '@store'
-import { t } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import { toast } from '@components/common/ToastProvider'
 import { Modal } from '../ui'
 import {
@@ -34,6 +34,8 @@ import {
   getReleaseByVersion,
   getMajorReleaseGroups,
   searchChangelog,
+  releaseText,
+  releaseList,
   type ReleaseNote,
   type ReleaseCategory,
 } from '@/shared/config/changelogData'
@@ -47,7 +49,6 @@ interface ChangelogDialogProps {
 
 export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDialogProps) {
   const language = useStore((s) => s.language)
-  const isZh = language === 'zh'
 
   const [currentAppVersion, setCurrentAppVersion] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -163,17 +164,15 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
 
     let text = `## [${activeRelease.version}] - ${activeRelease.date}\n\n`
     if (activeRelease.highlight) {
-      text += `> ${isZh ? activeRelease.highlight : activeRelease.highlightEn || activeRelease.highlight}\n\n`
+      text += `> ${releaseText(activeRelease.highlight, activeRelease.highlightEn, language)}\n\n`
     }
 
     for (const cat of activeRelease.categories) {
-      text += `### ${cat.label}\n`
+      text += `### ${releaseText(cat.label, cat.labelEn, language)}\n`
       for (const item of cat.items) {
-        text += `- **${isZh ? item.title : item.titleEn || item.title}**\n`
-        if (item.details) {
-          for (const d of item.details) {
-            text += `  - ${d}\n`
-          }
+        text += `- **${releaseText(item.title, item.titleEn, language)}**\n`
+        for (const d of releaseList(item.details, item.detailsEn, language)) {
+          text += `  - ${d}\n`
         }
       }
       text += '\n'
@@ -186,9 +185,9 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
       toast.success(t('changelog.copied', language))
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      toast.error(isZh ? '复制失败' : 'Failed to copy')
+      toast.error(t('changelogDialog.failedToCopy', language))
     }
-  }, [activeRelease, isZh, language])
+  }, [activeRelease, language])
 
   // 跳转到当前运行版本
   const handleJumpToCurrent = () => {
@@ -254,7 +253,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
               type="button"
               onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-white/10 transition-colors"
-              aria-label={isZh ? '关闭' : 'Close'}
+              aria-label={t('changelogDialog.close', language)}
             >
               <X className="w-4 h-4" />
             </button>
@@ -291,7 +290,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
               {/* 系列标题与展开/收起控制 */}
               <div className="flex items-center justify-between px-0.5">
                 <span className="text-[11px] font-medium text-text-muted">
-                  {isZh ? '版本系列筛选' : 'Filter by Series'}
+                  {t('changelogDialog.filterBySeries', language)}
                 </span>
                 <div className="flex items-center gap-1.5 text-[11px]">
                   <button
@@ -299,7 +298,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                     onClick={() => toggleAllGroups(true)}
                     className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
                   >
-                    {isZh ? '全部展开' : 'Expand All'}
+                    {t('changelogDialog.expandAll', language)}
                   </button>
                   <span className="text-border text-[10px]">|</span>
                   <button
@@ -307,7 +306,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                     onClick={() => toggleAllGroups(false)}
                     className="text-text-muted hover:text-text-primary transition-colors cursor-pointer"
                   >
-                    {isZh ? '全部收起' : 'Collapse All'}
+                    {t('changelogDialog.collapseAll', language)}
                   </button>
                 </div>
               </div>
@@ -315,7 +314,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
               {/* 系列快捷过滤网格 (4列对齐，无滚动条无截断) */}
               <div className="grid grid-cols-4 gap-1">
                 {[
-                  { key: 'all', label: isZh ? '全部' : 'All' },
+                  { key: 'all', label: t('changelogDialog.all', language) },
                   { key: 'v1.7.x', label: 'v1.7' },
                   { key: 'v1.6.x', label: 'v1.6' },
                   { key: 'v1.5.x', label: 'v1.5' },
@@ -358,7 +357,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                       release={release}
                       isActive={activeRelease?.rawVersion === release.rawVersion}
                       isCurrentApp={currentAppVersion === release.rawVersion}
-                      isZh={isZh}
+                      language={language}
                       onClick={() => handleSelectVersion(release.rawVersion)}
                     />
                   ))
@@ -386,7 +385,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                           ) : (
                             <ChevronRight className="w-3.5 h-3.5 opacity-70" />
                           )}
-                          <span className="truncate">{isZh ? group.groupTitle : group.groupTitleEn}</span>
+                          <span className="truncate">{releaseText(group.groupTitle, group.groupTitleEn, language)}</span>
                         </div>
                         <span className="text-[10px] px-1.5 py-0.2 bg-surface border border-border/40 rounded text-text-muted">
                           {group.releases.length}
@@ -408,7 +407,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                                 release={release}
                                 isActive={activeRelease?.rawVersion === release.rawVersion}
                                 isCurrentApp={currentAppVersion === release.rawVersion}
-                                isZh={isZh}
+                                language={language}
                                 onClick={() => handleSelectVersion(release.rawVersion)}
                               />
                             ))}
@@ -461,7 +460,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                         </span>
                         <span>•</span>
                         <span className="font-medium text-text-primary/90">
-                          {isZh ? activeRelease.title : activeRelease.titleEn || activeRelease.title}
+                          {releaseText(activeRelease.title, activeRelease.titleEn, language)}
                         </span>
                       </div>
                     </div>
@@ -505,10 +504,10 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                     <div className="mt-4 pt-4 border-t border-border/40 text-sm text-text-primary/90 leading-relaxed flex items-start gap-2">
                       <span className="inline-flex items-center gap-1 font-semibold text-accent flex-shrink-0">
                         <Sparkles className="w-4 h-4" />
-                        <span>{isZh ? '核心亮点：' : 'Highlights:'}</span>
+                        <span>{t('changelogDialog.highlights', language)}</span>
                       </span>
                       <span>
-                        {isZh ? activeRelease.highlight : activeRelease.highlightEn || activeRelease.highlight}
+                        {releaseText(activeRelease.highlight, activeRelease.highlightEn, language)}
                       </span>
                     </div>
                   )}
@@ -520,7 +519,7 @@ export default function ChangelogDialog({ onClose, initialVersion }: ChangelogDi
                     <CategorySection
                       key={catIdx}
                       category={category}
-                      isZh={isZh}
+                      language={language}
                     />
                   ))}
                 </div>
@@ -574,13 +573,13 @@ function VersionListItem({
   release,
   isActive,
   isCurrentApp,
-  isZh,
+  language,
   onClick,
 }: {
   release: ReleaseNote
   isActive: boolean
   isCurrentApp: boolean
-  isZh: boolean
+  language: Language
   onClick: () => void
 }) {
   return (
@@ -610,7 +609,7 @@ function VersionListItem({
           )}
         </div>
         <p className="text-[11px] text-text-muted/80 truncate mt-0.5">
-          {isZh ? release.title : release.titleEn || release.title}
+          {releaseText(release.title, release.titleEn, language)}
         </p>
       </div>
 
@@ -623,10 +622,10 @@ function VersionListItem({
 
 function CategorySection({
   category,
-  isZh,
+  language,
 }: {
   category: ReleaseCategory
-  isZh: boolean
+  language: Language
 }) {
   const getBadgeMeta = () => {
     switch (category.type) {
@@ -665,20 +664,22 @@ function CategorySection({
       <div className="flex items-center gap-2 mb-3">
         <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${style}`}>
           <Icon className="w-3.5 h-3.5" />
-          <span>{category.label}</span>
+          <span>{releaseText(category.label, category.labelEn, language)}</span>
         </span>
       </div>
 
       <div className="space-y-3">
-        {category.items.map((item, idx) => (
+        {category.items.map((item, idx) => {
+          const details = releaseList(item.details, item.detailsEn, language)
+          return (
           <div key={idx} className="text-xs leading-relaxed">
             <div className="font-semibold text-text-primary flex items-start gap-2">
               <span className="text-accent mt-0.5">•</span>
-              <span>{isZh ? item.title : item.titleEn || item.title}</span>
+              <span>{releaseText(item.title, item.titleEn, language)}</span>
             </div>
-            {item.details && item.details.length > 0 && (
+            {details.length > 0 && (
               <ul className="pl-5 mt-1 space-y-0.5 text-text-muted">
-                {item.details.map((detail, dIdx) => (
+                {details.map((detail, dIdx) => (
                   <li key={dIdx} className="list-disc">
                     {detail}
                   </li>
@@ -686,7 +687,8 @@ function CategorySection({
               </ul>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

@@ -8,7 +8,7 @@ import { Command, Sparkles, FileCode, Wrench, Bug, Zap, MessageSquare, Code } fr
 import { slashCommandService, SlashCommand } from '@/renderer/services/slashCommandService'
 import { InputPopup, InputPopupItem } from '@/renderer/components/common/InputPopup'
 import { useStore } from '@/renderer/store'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface SlashCommandPopupProps {
     query: string // 包含 / 的输入
@@ -59,8 +59,8 @@ export default function SlashCommandPopup({ query, position, onSelect, onClose }
             items={items}
             onSelect={handleSelect}
             onClose={onClose}
-            header={<span>{t('slashCommandPopup.quickCommands', asLanguage(language))}</span>}
-            emptyText={t('slashCommandPopup.noMatchingCommands', asLanguage(language))}
+            header={<span>{t('slashCommandPopup.quickCommands', language)}</span>}
+            emptyText={t('slashCommandPopup.noMatchingCommands', language)}
         />
     )
 }

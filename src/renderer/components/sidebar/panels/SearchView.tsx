@@ -7,7 +7,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { ChevronRight, ChevronDown, FileText, Edit2, Box, MoreHorizontal, Loader2, Search, Crosshair } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { getFileName, joinPath } from '@shared/utils/pathUtils'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
 import { globalConfirm } from '../../common/ConfirmDialog'
@@ -253,10 +253,10 @@ export function SearchView() {
     const matchCount = searchResults.length
 
     // 确认对话框
-    const confirmMessage = t('searchView.replaceMatchesInFiles', asLanguage(language), { fileCount, matchCount })
+    const confirmMessage = t('searchView.replaceMatchesInFiles', language, { fileCount, matchCount })
 
     const confirmed = await globalConfirm({
-      title: t('searchView.replaceConfirmation', asLanguage(language)),
+      title: t('searchView.replaceConfirmation', language),
       message: confirmMessage,
       variant: 'warning',
     })
@@ -294,7 +294,7 @@ export function SearchView() {
     }
 
     // 显示替换结果
-    const resultMessage = t('searchView.replacedInFiles', asLanguage(language), { replacedCount })
+    const resultMessage = t('searchView.replacedInFiles', language, { replacedCount })
     toast.success(resultMessage)
 
     handleSearch()
@@ -349,7 +349,7 @@ export function SearchView() {
           {showHistory && searchHistory.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border-subtle rounded-md shadow-lg z-20 max-h-48 overflow-y-auto animate-slide-in">
               <div className="px-2 py-1 text-[10px] text-text-muted font-semibold border-b border-border-subtle bg-surface/50 backdrop-blur-sm">
-                {t('recentSearches', language) || 'Recent Searches'}
+                {t('recentSearches', language)}
               </div>
               {searchHistory.map((item) => (
                 <div
@@ -388,7 +388,7 @@ export function SearchView() {
             {showReplace && (
               <button
                 onClick={() => setReplaceInSelection(!replaceInSelection)}
-                title={t('searchView.replaceInSelection', asLanguage(language))}
+                title={t('searchView.replaceInSelection', language)}
                 className={`p-1 rounded transition-colors ${replaceInSelection ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-surface-active hover:text-text-primary'}`}
               >
                 <span className="text-[10px] font-bold px-1 border border-current rounded-[2px]">Sel</span>
@@ -467,7 +467,7 @@ export function SearchView() {
             {visibleCount < searchResults.length && (
               <div className="px-3 py-1 text-[10px] text-accent cursor-pointer hover:underline text-center"
                 onClick={() => setVisibleCount(prev => Math.min(prev + 500, searchResults.length))}>
-                {t('searchView.showingClickOrScroll', asLanguage(language), { visibleCount, length: searchResults.length })}
+                {t('searchView.showingClickOrScroll', language, { visibleCount, length: searchResults.length })}
               </div>
             )}
 
@@ -496,7 +496,7 @@ export function SearchView() {
                         }}
                         disabled={!replaceQuery}
                         className="p-0.5 rounded hover:bg-surface-active text-text-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-30"
-                        title={t('searchView.replaceInThisFile', asLanguage(language))}
+                        title={t('searchView.replaceInThisFile', language)}
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
@@ -518,7 +518,7 @@ export function SearchView() {
                         })
                       }}
                       className="p-0.5 rounded hover:bg-surface-active text-text-muted hover:text-accent transition-colors opacity-0 group-hover:opacity-100"
-                      title={t('cmd.explorer.revealInSidebar', asLanguage(language))}
+                      title={t('cmd.explorer.revealInSidebar', language)}
                     >
                       <Crosshair className="w-3 h-3" />
                     </button>
@@ -560,7 +560,7 @@ export function SearchView() {
               {t('noResults', language)}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {t('tryDifferentKeyword', language) || 'Try a different keyword or regex'}
+              {t('tryDifferentKeyword', language)}
             </p>
           </div>
         )}
@@ -572,10 +572,10 @@ export function SearchView() {
               <Search className="w-6 h-6 text-text-muted relative opacity-70" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
-              {t('searchView.searchAcrossFiles', asLanguage(language))}
+              {t('searchView.searchAcrossFiles', language)}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {t('searchView.typeAKeywordOr', asLanguage(language))}
+              {t('searchView.typeAKeywordOr', language)}
             </p>
           </div>
         )}

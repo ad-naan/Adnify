@@ -6,6 +6,7 @@ import { shellRegistryService } from '../services/shellRegistryService'
 import { DEFAULT_REMOTE_PORT } from '../types'
 import type { AvailableShell, RemoteServerConfig, ShellLink, ShellPreset } from '../types'
 import { useStore } from '@store'
+import { t, type Language } from '@shared/i18n'
 import { detectNodePackageManager, nodeScriptCommand } from '@shared/utils/projectTasks'
 
 interface ShellManagerDialogProps {
@@ -26,10 +27,10 @@ type SelectedItem =
   | { kind: 'preset'; id: string }
   | { kind: 'link'; id: string }
 
-function createPreset(): ShellPreset {
+function createPreset(language: Language): ShellPreset {
   return {
     id: crypto.randomUUID(),
-    name: 'New Preset',
+    name: t('shellManagerDialog.newPreset', language),
     shellPath: '',
     cwd: '',
     visibleInMenu: true,
@@ -38,10 +39,10 @@ function createPreset(): ShellPreset {
   }
 }
 
-function createDirectoryLink(): ShellLink {
+function createDirectoryLink(language: Language): ShellLink {
   return {
     id: crypto.randomUUID(),
-    name: 'New Link',
+    name: t('shellManagerDialog.newLink', language),
     type: 'directory',
     target: '',
     shellPath: '',
@@ -51,10 +52,10 @@ function createDirectoryLink(): ShellLink {
   }
 }
 
-function createRemoteLink(): ShellLink {
+function createRemoteLink(language: Language): ShellLink {
   return {
     id: crypto.randomUUID(),
-    name: 'New Server',
+    name: t('shellManagerDialog.newServer', language),
     type: 'remote',
     target: '',
     shellPath: '',
@@ -72,10 +73,10 @@ function createRemoteLink(): ShellLink {
   }
 }
 
-function createCommandLink(command = ''): ShellLink {
+function createCommandLink(language: Language, command = ''): ShellLink {
   return {
     id: crypto.randomUUID(),
-    name: 'New Command',
+    name: t('shellManagerDialog.newCommand', language),
     type: 'command',
     target: command,
     shellPath: '',
@@ -155,6 +156,7 @@ export function ShellManagerDialog({
   initialEdit,
 }: ShellManagerDialogProps) {
   const nodePackageManager = useStore(state => state.editorConfig.terminal.nodePackageManager)
+  const language: Language = useStore(state => state.language)
   const [saving, setSaving] = useState(false)
   const [formDefaultShell, setFormDefaultShell] = useState<string>('')
   const [formPresets, setFormPresets] = useState<ShellPreset[]>([])
@@ -165,30 +167,30 @@ export function ShellManagerDialog({
   // Custom Select options list
   const defaultShellOptions = useMemo(() => {
     return [
-      { value: '', label: '系统默认 Shell' },
+      { value: '', label: t('shellManagerDialog.systemDefaultShell', language) },
       ...availableShells.map((shell) => ({
         value: shell.path || '',
         label: `${shell.label}${shell.path ? ` (${shell.path})` : ''}`,
       })),
     ]
-  }, [availableShells])
+  }, [availableShells, language])
 
   const shellOptions = useMemo(() => {
     return [
-      { value: '', label: '默认 Shell' },
+      { value: '', label: t('shellManagerDialog.defaultShell', language) },
       ...availableShells.map((shell) => ({
         value: shell.path || '',
         label: shell.label,
       })),
     ]
-  }, [availableShells])
+  }, [availableShells, language])
 
   const linkTypeOptions = useMemo(() => [
-    { value: 'directory', label: '目录' },
-    { value: 'local-shell', label: '本地 Shell' },
-    { value: 'command', label: '常用命令' },
-    { value: 'remote', label: '远程服务器' },
-  ], [])
+    { value: 'directory', label: t('common.directory', language) },
+    { value: 'local-shell', label: t('shellManagerDialog.localShell', language) },
+    { value: 'command', label: t('shellView.commands', language) },
+    { value: 'remote', label: t('shellManagerDialog.remoteServer', language) },
+  ], [language])
 
   useEffect(() => {
     if (!isOpen) return
@@ -216,19 +218,19 @@ export function ShellManagerDialog({
       const section = sectionForCreate(initialCreate)
       setActiveSection(section)
       if (initialCreate === 'preset') {
-        const item = createPreset()
+        const item = createPreset(language)
         setFormPresets((prev) => [...prev, item])
         setSelectedItem({ kind: 'preset', id: item.id })
       } else if (initialCreate === 'directory') {
-        const item = createDirectoryLink()
+        const item = createDirectoryLink(language)
         setFormLinks((prev) => [...prev, item])
         setSelectedItem({ kind: 'link', id: item.id })
       } else if (initialCreate === 'remote') {
-        const item = createRemoteLink()
+        const item = createRemoteLink(language)
         setFormLinks((prev) => [...prev, item])
         setSelectedItem({ kind: 'link', id: item.id })
       } else if (initialCreate === 'command') {
-        const item = createCommandLink()
+        const item = createCommandLink(language)
         setFormLinks((prev) => [...prev, item])
         setSelectedItem({ kind: 'link', id: item.id })
       }
@@ -279,19 +281,19 @@ export function ShellManagerDialog({
 
   const sectionItems = useMemo(() => {
     if (activeSection === 'preset') {
-      return formPresets.map((item) => ({ key: `preset-${item.id}`, label: item.name || 'New Preset', sublabel: item.group || 'Preset', kind: 'preset' as const, id: item.id, favorite: item.favorite === true }))
+      return formPresets.map((item) => ({ key: `preset-${item.id}`, label: item.name || t('shellManagerDialog.newPreset', language), sublabel: item.group || t('shellManagerDialog.preset', language), kind: 'preset' as const, id: item.id, favorite: item.favorite === true }))
     }
     if (activeSection === 'directory') {
-      return formLinks.filter((item) => item.type === 'directory' || item.type === 'local-shell').map((item) => ({ key: `link-${item.id}`, label: item.name || 'New Link', sublabel: item.type === 'local-shell' ? 'Local Shell' : 'Directory', kind: 'link' as const, id: item.id, favorite: item.favorite === true }))
+      return formLinks.filter((item) => item.type === 'directory' || item.type === 'local-shell').map((item) => ({ key: `link-${item.id}`, label: item.name || t('shellManagerDialog.newLink', language), sublabel: item.type === 'local-shell' ? t('shellManagerDialog.localShell', language) : t('common.directory', language), kind: 'link' as const, id: item.id, favorite: item.favorite === true }))
     }
     if (activeSection === 'remote') {
-      return formLinks.filter((item) => item.type === 'remote').map((item) => ({ key: `link-${item.id}`, label: item.name || 'New Server', sublabel: item.remote?.host || 'Remote Server', kind: 'link' as const, id: item.id, favorite: item.favorite === true }))
+      return formLinks.filter((item) => item.type === 'remote').map((item) => ({ key: `link-${item.id}`, label: item.name || t('shellManagerDialog.newServer', language), sublabel: item.remote?.host || t('shellManagerDialog.remoteServer', language), kind: 'link' as const, id: item.id, favorite: item.favorite === true }))
     }
     if (activeSection === 'command') {
-      return formLinks.filter((item) => item.type === 'command').map((item) => ({ key: `link-${item.id}`, label: item.name || 'New Command', sublabel: item.target || 'Command', kind: 'link' as const, id: item.id, favorite: item.favorite === true }))
+      return formLinks.filter((item) => item.type === 'command').map((item) => ({ key: `link-${item.id}`, label: item.name || t('shellManagerDialog.newCommand', language), sublabel: item.target || t('shellStudio.command', language), kind: 'link' as const, id: item.id, favorite: item.favorite === true }))
     }
     return []
-  }, [activeSection, formLinks, formPresets])
+  }, [activeSection, formLinks, formPresets, language])
 
   const selectedPreset = selectedItem.kind === 'preset' ? formPresets.find((item) => item.id === selectedItem.id) || null : null
   const selectedLink = selectedItem.kind === 'link' ? formLinks.find((item) => item.id === selectedItem.id) || null : null
@@ -299,24 +301,24 @@ export function ShellManagerDialog({
   const createItem = (section: Exclude<ManagerSection, 'overview'>, presetCommand?: string) => {
     setActiveSection(section)
     if (section === 'preset') {
-      const item = createPreset()
+      const item = createPreset(language)
       setFormPresets((prev) => [...prev, item])
       setSelectedItem({ kind: 'preset', id: item.id })
       return
     }
     if (section === 'directory') {
-      const item = createDirectoryLink()
+      const item = createDirectoryLink(language)
       setFormLinks((prev) => [...prev, item])
       setSelectedItem({ kind: 'link', id: item.id })
       return
     }
     if (section === 'remote') {
-      const item = createRemoteLink()
+      const item = createRemoteLink(language)
       setFormLinks((prev) => [...prev, item])
       setSelectedItem({ kind: 'link', id: item.id })
       return
     }
-    const item = createCommandLink(presetCommand || '')
+    const item = createCommandLink(language, presetCommand || '')
     if (presetCommand) item.name = presetCommand
     setFormLinks((prev) => [...prev, item])
     setSelectedItem({ kind: 'link', id: item.id })
@@ -359,7 +361,7 @@ export function ShellManagerDialog({
         defaultShell: formDefaultShell || undefined,
         presets: formPresets.map((preset) => ({
           ...preset,
-          name: preset.name.trim() || 'New Preset',
+          name: preset.name.trim() || t('shellManagerDialog.newPreset', language),
           shellPath: preset.shellPath || undefined,
           cwd: preset.cwd?.trim() || undefined,
           group: preset.group?.trim() || undefined,
@@ -372,7 +374,7 @@ export function ShellManagerDialog({
             const target = `${remote.username ? `${remote.username}@` : ''}${remote.host}${remote.port && remote.port !== 22 ? `:${remote.port}` : ''}${remote.remotePath ? `|${remote.remotePath}` : ''}`
             return {
               ...link,
-              name: link.name.trim() || 'New Server',
+              name: link.name.trim() || t('shellManagerDialog.newServer', language),
               target,
               shellPath: link.shellPath || undefined,
               group: link.group?.trim() || undefined,
@@ -387,7 +389,7 @@ export function ShellManagerDialog({
           }
           return {
             ...link,
-            name: link.name.trim() || (link.type === 'command' ? 'New Command' : 'New Link'),
+            name: link.name.trim() || (link.type === 'command' ? t('shellManagerDialog.newCommand', language) : t('shellManagerDialog.newLink', language)),
             target: link.target.trim(),
             shellPath: link.shellPath || undefined,
             cwd: link.type === 'command' ? link.cwd?.trim() || undefined : undefined,
@@ -412,11 +414,11 @@ export function ShellManagerDialog({
     }`
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Shell 管理" size="5xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('shellView.shellManager', language)} size="5xl">
       <div className="flex flex-col gap-4 h-[620px] overflow-hidden pr-1">
         {duplicateRemoteServerNames.length > 0 && (
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex-shrink-0">
-            Remote server names should be unique for agent routing. Current duplicates: {duplicateRemoteServerNames.join(', ')}
+            {t('shellManagerDialog.remoteServerNamesShouldBe', language, { names: duplicateRemoteServerNames.join(', ') })}
           </div>
         )}
         
@@ -433,7 +435,7 @@ export function ShellManagerDialog({
               >
                 <span className="flex items-center gap-2.5">
                   <Settings2 className="w-4 h-4 flex-shrink-0" />
-                  <span>总览设置</span>
+                  <span>{t('shellManagerDialog.overviewSettings', language)}</span>
                 </span>
               </button>
               
@@ -441,7 +443,7 @@ export function ShellManagerDialog({
                 <button className={sectionCardClass('preset')} onClick={() => setActiveSection('preset')}>
                   <span className="flex items-center gap-2.5">
                     <Star className="w-4 h-4 flex-shrink-0" />
-                    <span>Presets</span>
+                    <span>{t('shellManagerDialog.presets', language)}</span>
                   </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
                     activeSection === 'preset' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
@@ -450,7 +452,7 @@ export function ShellManagerDialog({
                 <button className={sectionCardClass('directory')} onClick={() => setActiveSection('directory')}>
                   <span className="flex items-center gap-2.5">
                     <FolderOpen className="w-4 h-4 flex-shrink-0" />
-                    <span>目录 / Shell</span>
+                    <span>{t('shellManagerDialog.directoryShell', language)}</span>
                   </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
                     activeSection === 'directory' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
@@ -459,7 +461,7 @@ export function ShellManagerDialog({
                 <button className={sectionCardClass('remote')} onClick={() => setActiveSection('remote')}>
                   <span className="flex items-center gap-2.5">
                     <Server className="w-4 h-4 flex-shrink-0" />
-                    <span>服务器</span>
+                    <span>{t('shellView.servers', language)}</span>
                   </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
                     activeSection === 'remote' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
@@ -468,7 +470,7 @@ export function ShellManagerDialog({
                 <button className={sectionCardClass('command')} onClick={() => setActiveSection('command')}>
                   <span className="flex items-center gap-2.5">
                     <Sparkles className="w-4 h-4 flex-shrink-0" />
-                    <span>命令</span>
+                    <span>{t('shellManagerDialog.commands', language)}</span>
                   </span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
                     activeSection === 'command' ? 'bg-accent/20 text-accent font-bold' : 'bg-white/5 text-text-muted'
@@ -478,19 +480,19 @@ export function ShellManagerDialog({
             </div>
             
             <div className="rounded-xl border border-border/50 bg-background/25 p-3 space-y-2.5 mt-4">
-              <div className="text-[10px] uppercase font-bold tracking-widest text-text-muted px-1">快速新增</div>
+              <div className="text-[10px] uppercase font-bold tracking-widest text-text-muted px-1">{t('shellView.quickAdd', language)}</div>
               <div className="grid grid-cols-2 gap-1.5">
                 <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('preset')}>
-                  <Plus className="w-3 h-3 mr-1 text-accent flex-shrink-0" />Preset
+                  <Plus className="w-3 h-3 mr-1 text-accent flex-shrink-0" />{t('shellManagerDialog.preset', language)}
                 </Button>
                 <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('directory')}>
-                  <FolderOpen className="w-3 h-3 mr-1 text-accent flex-shrink-0" />目录
+                  <FolderOpen className="w-3 h-3 mr-1 text-accent flex-shrink-0" />{t('common.directory', language)}
                 </Button>
                 <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('remote')}>
-                  <Server className="w-3 h-3 mr-1 text-accent flex-shrink-0" />服务器
+                  <Server className="w-3 h-3 mr-1 text-accent flex-shrink-0" />{t('shellView.server', language)}
                 </Button>
                 <Button variant="ghost" size="sm" className="justify-start px-2 py-1.5 hover:bg-white/5 text-xs" onClick={() => createItem('command')}>
-                  <Sparkles className="w-3 h-3 mr-1 text-accent flex-shrink-0" />命令
+                  <Sparkles className="w-3 h-3 mr-1 text-accent flex-shrink-0" />{t('shellStudio.command', language)}
                 </Button>
               </div>
             </div>
@@ -501,13 +503,13 @@ export function ShellManagerDialog({
             <div className="flex items-center justify-between gap-2 pb-3 border-b border-border/30 flex-shrink-0">
               <div>
                 <div className="text-sm font-semibold text-text-primary">
-                  {activeSection === 'overview' ? '总览' : activeSection === 'preset' ? 'Presets' : activeSection === 'directory' ? '目录 / 本地 Shell' : activeSection === 'remote' ? '服务器' : '命令'}
+                  {activeSection === 'overview' ? t('shellManagerDialog.overview', language) : activeSection === 'preset' ? t('shellManagerDialog.presets', language) : activeSection === 'directory' ? t('shellManagerDialog.directoryLocalShell', language) : activeSection === 'remote' ? t('shellView.servers', language) : t('shellManagerDialog.commands', language)}
                 </div>
-                <div className="text-[11px] text-text-muted mt-0.5">选择条目后在右侧配置</div>
+                <div className="text-[11px] text-text-muted mt-0.5">{t('shellManagerDialog.selectAnItemTo', language)}</div>
               </div>
               {activeSection !== 'overview' && (
                 <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2 hover:bg-white/5" onClick={() => createItem(activeSection)}>
-                  <Plus className="w-3.5 h-3.5 mr-1 text-accent" />新增
+                  <Plus className="w-3.5 h-3.5 mr-1 text-accent" />{t('shellManagerDialog.add', language)}
                 </Button>
               )}
             </div>
@@ -515,12 +517,12 @@ export function ShellManagerDialog({
             <div className="mt-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar pr-1">
               {activeSection === 'overview' && (
                 <div className="rounded-xl border border-border/50 bg-background/20 p-4 text-xs text-text-secondary leading-relaxed">
-                  在左侧选择分类，或者点击“快速新增”按钮直接创建新的 Shell 入口进行配置。
+                  {t('shellManagerDialog.pickACategoryOn', language)}
                 </div>
               )}
               {activeSection !== 'overview' && sectionItems.length === 0 && (
                 <div className="rounded-xl border border-dashed border-border/50 bg-background/25 p-8 text-center text-xs text-text-secondary">
-                  当前分类下没有条目
+                  {t('shellManagerDialog.noItemsInThis', language)}
                 </div>
               )}
               {activeSection !== 'overview' && sectionItems.map((item) => {
@@ -565,8 +567,8 @@ export function ShellManagerDialog({
               {selectedItem.kind === 'overview' && (
                 <div className="space-y-6">
                   <div>
-                    <div className="text-sm font-semibold text-text-primary">系统状态与配置总览</div>
-                    <div className="text-xs text-text-muted mt-0.5">配置全局默认 Shell，并查看当前已保存的 Shell 统计信息</div>
+                    <div className="text-sm font-semibold text-text-primary">{t('shellManagerDialog.systemStatusAndConfiguration', language)}</div>
+                    <div className="text-xs text-text-muted mt-0.5">{t('shellManagerDialog.configureTheGlobalDefault', language)}</div>
                   </div>
 
                   {/* Status Cards Grid inside Overview */}
@@ -574,7 +576,7 @@ export function ShellManagerDialog({
                     <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
                       <div className="flex items-center gap-2 text-text-muted mb-1.5">
                         <TerminalSquare className="w-3.5 h-3.5 text-accent" />
-                        <span className="text-[11px] uppercase font-bold tracking-wider">默认 Shell</span>
+                        <span className="text-[11px] uppercase font-bold tracking-wider">{t('shellManagerDialog.defaultShell', language)}</span>
                       </div>
                       <div className="text-xs font-medium text-text-primary truncate" title={resolvedDefaultShell}>
                         {resolvedDefaultShell}
@@ -583,7 +585,7 @@ export function ShellManagerDialog({
                     <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
                       <div className="flex items-center gap-2 text-text-muted mb-1.5">
                         <Star className="w-3.5 h-3.5 text-accent" />
-                        <span className="text-[11px] uppercase font-bold tracking-wider">已收藏项</span>
+                        <span className="text-[11px] uppercase font-bold tracking-wider">{t('shellManagerDialog.favorites', language)}</span>
                       </div>
                       <div className="text-xl font-bold text-text-primary font-mono leading-none">
                         {favoriteCount}
@@ -592,7 +594,7 @@ export function ShellManagerDialog({
                     <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
                       <div className="flex items-center gap-2 text-text-muted mb-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-accent" />
-                        <span className="text-[11px] uppercase font-bold tracking-wider">快捷命令</span>
+                        <span className="text-[11px] uppercase font-bold tracking-wider">{t('slashCommandPopup.quickCommands', language)}</span>
                       </div>
                       <div className="text-xl font-bold text-text-primary font-mono leading-none">
                         {commandCount}
@@ -601,7 +603,7 @@ export function ShellManagerDialog({
                     <div className="rounded-xl border border-border/50 bg-background/30 p-3.5">
                       <div className="flex items-center gap-2 text-text-muted mb-1.5">
                         <Server className="w-3.5 h-3.5 text-accent" />
-                        <span className="text-[11px] uppercase font-bold tracking-wider">远程服务器</span>
+                        <span className="text-[11px] uppercase font-bold tracking-wider">{t('shellManagerDialog.remoteServers', language)}</span>
                       </div>
                       <div className="text-xl font-bold text-text-primary font-mono leading-none">
                         {remoteCount}
@@ -610,7 +612,7 @@ export function ShellManagerDialog({
                   </div>
 
                   <div className="space-y-1.5 pt-2">
-                    <label className="text-xs font-semibold text-text-muted">修改全局默认 Shell</label>
+                    <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.changeTheGlobalDefault', language)}</label>
                     <Select
                       options={defaultShellOptions}
                       value={formDefaultShell}
@@ -619,7 +621,7 @@ export function ShellManagerDialog({
                   </div>
 
                   <div className="border-t border-border/30 pt-4">
-                    <div className="text-xs uppercase font-bold tracking-wider text-text-muted mb-3 px-0.5">常用命令模板快捷创建</div>
+                    <div className="text-xs uppercase font-bold tracking-wider text-text-muted mb-3 px-0.5">{t('shellManagerDialog.quickCreateFromCommonCommand', language)}</div>
                     <div className="flex flex-wrap gap-2">
                       {suggestedCommands.map((command) => (
                         <Button
@@ -641,20 +643,20 @@ export function ShellManagerDialog({
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-3">
                     <div>
-                      <div className="text-sm font-semibold text-text-primary">Preset 编辑</div>
-                      <div className="text-xs text-text-muted mt-0.5">配置启动目录、参数和显示方式</div>
+                      <div className="text-sm font-semibold text-text-primary">{t('shellManagerDialog.editPreset', language)}</div>
+                      <div className="text-xs text-text-muted mt-0.5">{t('shellManagerDialog.configureTheStartupDirectory', language)}</div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(-1)} title="上移">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(-1)} title={t('messageQueuePanel.moveUp', language)}>
                         <ArrowUp className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(1)} title="下移">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(1)} title={t('messageQueuePanel.moveDown', language)}>
                         <ArrowDown className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" onClick={() => updatePreset(selectedPreset.id, { favorite: !selectedPreset.favorite })} title="收藏">
+                      <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" onClick={() => updatePreset(selectedPreset.id, { favorite: !selectedPreset.favorite })} title={t('shellView.favorite', language)}>
                         <Star className={`w-4 h-4 ${selectedPreset.favorite ? 'fill-current text-yellow-400' : 'text-text-muted'}`} />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-status-error/10 hover:text-status-error" onClick={removeSelected} title="删除">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-status-error/10 hover:text-status-error" onClick={removeSelected} title={t('delete', language)}>
                         <Trash2 className="w-4 h-4 text-text-muted" />
                       </Button>
                     </div>
@@ -662,37 +664,37 @@ export function ShellManagerDialog({
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted">配置名称</label>
-                      <Input value={selectedPreset.name} onChange={(e) => updatePreset(selectedPreset.id, { name: e.target.value })} placeholder="例如：开发环境" />
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.configurationName', language)}</label>
+                      <Input value={selectedPreset.name} onChange={(e) => updatePreset(selectedPreset.id, { name: e.target.value })} placeholder={t('shellManagerDialog.egDevelopmentEnvironment', language)} />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted">显示分组 (可选)</label>
-                      <Input value={selectedPreset.group || ''} onChange={(e) => updatePreset(selectedPreset.id, { group: e.target.value })} placeholder="例如：工作 / 个人" />
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.displayGroupOptional', language)}</label>
+                      <Input value={selectedPreset.group || ''} onChange={(e) => updatePreset(selectedPreset.id, { group: e.target.value })} placeholder={t('shellManagerDialog.egWorkPersonal', language)} />
                     </div>
                     <div className="space-y-1.5 md:col-span-2">
-                      <label className="text-xs font-semibold text-text-muted">默认工作目录 (CWD - 可选)</label>
-                      <Input value={selectedPreset.cwd || ''} onChange={(e) => updatePreset(selectedPreset.id, { cwd: e.target.value })} placeholder="输入工作空间目录绝对路径" />
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.defaultWorkingDirectoryCwd', language)}</label>
+                      <Input value={selectedPreset.cwd || ''} onChange={(e) => updatePreset(selectedPreset.id, { cwd: e.target.value })} placeholder={t('shellManagerDialog.enterTheAbsolutePath', language)} />
                     </div>
                     <div className="space-y-1.5 md:col-span-2">
-                      <label className="text-xs font-semibold text-text-muted">启动参数 (可选)</label>
-                      <Input value={selectedPreset.args?.join(' ') || ''} onChange={(e) => updatePreset(selectedPreset.id, { args: e.target.value.trim() ? e.target.value.trim().split(/\s+/) : undefined })} placeholder="多个启动参数用空格分隔" />
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.startupArgumentsOptional', language)}</label>
+                      <Input value={selectedPreset.args?.join(' ') || ''} onChange={(e) => updatePreset(selectedPreset.id, { args: e.target.value.trim() ? e.target.value.trim().split(/\s+/) : undefined })} placeholder={t('shellManagerDialog.separateMultipleStartupArguments', language)} />
                     </div>
                     <div className="space-y-1.5 md:col-span-2">
-                      <label className="text-xs font-semibold text-text-muted">Shell 解释器类型</label>
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.shellInterpreterType', language)}</label>
                       <Select
                         options={shellOptions}
                         value={selectedPreset.shellPath || ''}
                         onChange={(val) => updatePreset(selectedPreset.id, { shellPath: val })}
-                        placeholder="选择 Shell 类型"
+                        placeholder={t('shellManagerDialog.selectAShellType', language)}
                       />
                     </div>
                   </div>
-                  
+
                   <div className="border-t border-border/30 pt-4 flex items-center justify-between">
                     <Checkbox
                       checked={selectedPreset.visibleInMenu !== false}
                       onChange={(e) => updatePreset(selectedPreset.id, { visibleInMenu: e.target.checked })}
-                      label="在菜单中显示"
+                      label={t('shellManagerDialog.showInMenu', language)}
                     />
                   </div>
                 </div>
@@ -703,21 +705,21 @@ export function ShellManagerDialog({
                   <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-3">
                     <div>
                       <div className="text-sm font-semibold text-text-primary">
-                        {selectedLink.type === 'remote' ? '服务器编辑' : selectedLink.type === 'command' ? '命令编辑' : '链接编辑'}
+                        {selectedLink.type === 'remote' ? t('shellManagerDialog.editServer', language) : selectedLink.type === 'command' ? t('shellManagerDialog.editCommand', language) : t('shellManagerDialog.editLink', language)}
                       </div>
-                      <div className="text-xs text-text-muted mt-0.5">当前入口的详细配置</div>
+                      <div className="text-xs text-text-muted mt-0.5">{t('shellManagerDialog.detailedConfigurationOfThe', language)}</div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(-1)} title="上移">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(-1)} title={t('messageQueuePanel.moveUp', language)}>
                         <ArrowUp className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(1)} title="下移">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => moveSelected(1)} title={t('messageQueuePanel.moveDown', language)}>
                         <ArrowDown className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" onClick={() => updateLink(selectedLink.id, { favorite: !selectedLink.favorite })} title="收藏">
+                      <Button variant="ghost" size="sm" className="h-8 rounded-lg px-2" onClick={() => updateLink(selectedLink.id, { favorite: !selectedLink.favorite })} title={t('shellView.favorite', language)}>
                         <Star className={`w-4 h-4 ${selectedLink.favorite ? 'fill-current text-yellow-400' : 'text-text-muted'}`} />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-status-error/10 hover:text-status-error" onClick={removeSelected} title="删除">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-status-error/10 hover:text-status-error" onClick={removeSelected} title={t('delete', language)}>
                         <Trash2 className="w-4 h-4 text-text-muted" />
                       </Button>
                     </div>
@@ -725,15 +727,15 @@ export function ShellManagerDialog({
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted">入口名称</label>
-                      <Input value={selectedLink.name} onChange={(e) => updateLink(selectedLink.id, { name: e.target.value })} placeholder="例如：服务器终端" />
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.entryName', language)}</label>
+                      <Input value={selectedLink.name} onChange={(e) => updateLink(selectedLink.id, { name: e.target.value })} placeholder={t('shellManagerDialog.egServerTerminal', language)} />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted">显示分组 (可选)</label>
-                      <Input value={selectedLink.group || ''} onChange={(e) => updateLink(selectedLink.id, { group: e.target.value })} placeholder="例如：开发 / 部署" />
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.displayGroupOptional', language)}</label>
+                      <Input value={selectedLink.group || ''} onChange={(e) => updateLink(selectedLink.id, { group: e.target.value })} placeholder={t('shellManagerDialog.egDevDeploy', language)} />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted">入口类型</label>
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.entryType', language)}</label>
                       <Select
                         options={linkTypeOptions}
                         value={selectedLink.type}
@@ -741,70 +743,70 @@ export function ShellManagerDialog({
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-text-muted">默认 Shell 解释器</label>
+                      <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.defaultShellInterpreter', language)}</label>
                       <Select
                         options={shellOptions}
                         value={selectedLink.shellPath || ''}
                         onChange={(val) => updateLink(selectedLink.id, { shellPath: val })}
-                        placeholder="默认系统 Shell"
+                        placeholder={t('shellManagerDialog.defaultSystemShell', language)}
                       />
                     </div>
                   </div>
                   
                   {selectedLink.type === 'remote' ? (
                     <div className="space-y-3 pt-2">
-                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">远程 SSH 服务器配置</div>
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">{t('shellManagerDialog.remoteSshServerConfiguration', language)}</div>
                       <div className="grid grid-cols-4 gap-4 rounded-xl border border-border/50 bg-background/20 p-4">
                         <div className="col-span-3 space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">主机地址 (Host)</label>
-                          <Input value={normalizeRemote(selectedLink.remote).host} onChange={(e) => updateRemote(selectedLink.id, { host: e.target.value })} placeholder="例如：192.168.1.100" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.hostAddress', language)}</label>
+                          <Input value={normalizeRemote(selectedLink.remote).host} onChange={(e) => updateRemote(selectedLink.id, { host: e.target.value })} placeholder={t('shellManagerDialog.eg1921681100', language)} />
                         </div>
                         <div className="col-span-1 space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">端口 (Port)</label>
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.port', language)}</label>
                           <Input type="number" value={String(normalizeRemote(selectedLink.remote).port || DEFAULT_REMOTE_PORT)} onChange={(e) => updateRemote(selectedLink.id, { port: Number(e.target.value) || DEFAULT_REMOTE_PORT })} placeholder="22" />
                         </div>
                         <div className="col-span-2 space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">登录用户名 (Username)</label>
-                          <Input value={normalizeRemote(selectedLink.remote).username || ''} onChange={(e) => updateRemote(selectedLink.id, { username: e.target.value })} placeholder="例如：root" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.loginUsername', language)}</label>
+                          <Input value={normalizeRemote(selectedLink.remote).username || ''} onChange={(e) => updateRemote(selectedLink.id, { username: e.target.value })} placeholder={t('shellManagerDialog.egRoot', language)} />
                         </div>
                         <div className="col-span-2 space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">登录密码 (Password - 可选)</label>
-                          <Input type="password" value={normalizeRemote(selectedLink.remote).password || ''} onChange={(e) => updateRemote(selectedLink.id, { password: e.target.value })} placeholder="留空则使用密钥登录" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.loginPasswordOptional', language)}</label>
+                          <Input type="password" value={normalizeRemote(selectedLink.remote).password || ''} onChange={(e) => updateRemote(selectedLink.id, { password: e.target.value })} placeholder={t('shellManagerDialog.leaveEmptyToSignIn', language)} />
                         </div>
                         <div className="col-span-4 space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">远程默认工作路径 (可选)</label>
-                          <Input value={normalizeRemote(selectedLink.remote).remotePath || ''} onChange={(e) => updateRemote(selectedLink.id, { remotePath: e.target.value })} placeholder="例如：/var/www/project" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.remoteDefaultWorkingPath', language)}</label>
+                          <Input value={normalizeRemote(selectedLink.remote).remotePath || ''} onChange={(e) => updateRemote(selectedLink.id, { remotePath: e.target.value })} placeholder={t('shellManagerDialog.egVarWwwProject', language)} />
                         </div>
                         <div className="col-span-4 space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">私钥文件绝对路径 (Private Key Path - 可选)</label>
-                          <Input value={normalizeRemote(selectedLink.remote).privateKeyPath || ''} onChange={(e) => updateRemote(selectedLink.id, { privateKeyPath: e.target.value })} placeholder="例如：C:\Users\Admin\.ssh\id_rsa" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.privateKeyFileAbsolute', language)}</label>
+                          <Input value={normalizeRemote(selectedLink.remote).privateKeyPath || ''} onChange={(e) => updateRemote(selectedLink.id, { privateKeyPath: e.target.value })} placeholder={t('shellManagerDialog.egCUsersAdminSshIdRsa', language)} />
                         </div>
                       </div>
                     </div>
                   ) : selectedLink.type === 'command' ? (
                     <div className="space-y-3 pt-2">
-                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">常用命令配置</div>
+                      <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">{t('shellManagerDialog.commonCommandConfiguration', language)}</div>
                       <div className="grid grid-cols-1 gap-4 rounded-xl border border-border/50 bg-background/20 p-4">
                         <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">要执行的命令内容</label>
-                          <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder="例如：npm run dev" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.commandToRun', language)}</label>
+                          <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder={t('shellManagerDialog.egNpmRunDev', language)} />
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-xs font-semibold text-text-muted">工作执行目录 (CWD - 可选)</label>
-                          <Input value={selectedLink.cwd || ''} onChange={(e) => updateLink(selectedLink.id, { cwd: e.target.value })} placeholder="留空则在当前终端目录下执行" />
+                          <label className="text-xs font-semibold text-text-muted">{t('shellManagerDialog.workingDirectoryCwdOptional', language)}</label>
+                          <Input value={selectedLink.cwd || ''} onChange={(e) => updateLink(selectedLink.id, { cwd: e.target.value })} placeholder={t('shellManagerDialog.leaveEmptyToRun', language)} />
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-3 pt-2">
                       <div className="text-[11px] uppercase font-bold tracking-wider text-accent px-0.5">
-                        {selectedLink.type === 'local-shell' ? '本地 Shell 路径配置' : '目标目录配置'}
+                        {selectedLink.type === 'local-shell' ? t('shellManagerDialog.localShellPathConfiguration', language) : t('shellManagerDialog.targetDirectoryConfiguration', language)}
                       </div>
                       <div className="rounded-xl border border-border/50 bg-background/20 p-4 space-y-1.5">
                         <label className="text-xs font-semibold text-text-muted">
-                          {selectedLink.type === 'local-shell' ? 'Shell 可执行文件绝对路径' : '文件夹绝对路径'}
+                          {selectedLink.type === 'local-shell' ? t('shellManagerDialog.absolutePathToTheShell', language) : t('shellManagerDialog.folderAbsolutePath', language)}
                         </label>
-                        <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder={selectedLink.type === 'local-shell' ? '例如：C:\Program Files\Git\bin\bash.exe' : '例如：E:\Project\adnify'} />
+                        <Input value={selectedLink.target} onChange={(e) => updateLink(selectedLink.id, { target: e.target.value })} placeholder={selectedLink.type === 'local-shell' ? t('shellManagerDialog.egCProgramFilesGit', language) : t('shellManagerDialog.egEProjectAdnify', language)} />
                       </div>
                     </div>
                   )}
@@ -813,7 +815,7 @@ export function ShellManagerDialog({
                     <Checkbox
                       checked={selectedLink.visibleInMenu !== false}
                       onChange={(e) => updateLink(selectedLink.id, { visibleInMenu: e.target.checked })}
-                      label="在菜单中显示"
+                      label={t('shellManagerDialog.showInMenu', language)}
                     />
                   </div>
                 </div>
@@ -825,10 +827,10 @@ export function ShellManagerDialog({
         {/* Bottom Action Footer */}
         <div className="flex items-center justify-end gap-3 border-t border-border/30 pt-4 flex-shrink-0">
           <Button variant="ghost" size="md" className="rounded-xl px-5 hover:bg-white/5" onClick={onClose}>
-            取消
+            {t('cancel', language)}
           </Button>
           <Button variant="primary" size="md" className="rounded-xl px-6 min-w-[90px]" onClick={handleSave} disabled={saving}>
-            {saving ? '保存中...' : '保存'}
+            {saving ? t('saving', language) : t('saveSession', language)}
           </Button>
         </div>
       </div>

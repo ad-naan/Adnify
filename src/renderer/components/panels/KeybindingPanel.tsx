@@ -4,7 +4,7 @@ import { Search, RotateCcw } from 'lucide-react'
 import { keybindingService, Command, formatShortcut, isMac } from '@services/keybindingService'
 import { registerCoreCommands } from '@renderer/config/commands'
 import { useStore } from '@store'
-import { t, type TranslationKey } from '@renderer/i18n'
+import { t, tDynamic } from '@shared/i18n'
 import { Input, Button, Modal } from '../ui'
 
 export default function KeybindingPanel() {
@@ -65,12 +65,13 @@ export default function KeybindingPanel() {
         loadData()
     }
 
-    const filteredCommands = commands.filter(cmd => {
-        const translatedTitle = t(`cmd.${cmd.id}` as TranslationKey, language) || cmd.title
-        const translatedCategory = cmd.category ? (t(`kb.category.${cmd.category}` as TranslationKey, language) || cmd.category) : ''
+    const commandTitle = (cmd: Command) => tDynamic(`cmd.${cmd.id}`, language, cmd.title)
+    const commandCategory = (cmd: Command) => cmd.category ? tDynamic(`kb.category.${cmd.category}`, language, cmd.category) : ''
 
-        return translatedTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            translatedCategory.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredCommands = commands.filter(cmd => {
+        const query = searchQuery.toLowerCase()
+        return commandTitle(cmd).toLowerCase().includes(query) ||
+            commandCategory(cmd).toLowerCase().includes(query)
     })
 
     return (
@@ -79,7 +80,7 @@ export default function KeybindingPanel() {
                 <div className="relative flex-1">
                     <Input
                         leftIcon={<Search className="w-4 h-4" />}
-                        placeholder={t('kb.searchPlaceholder' as TranslationKey, language) || "Search keybindings..."}
+                        placeholder={t('kb.searchPlaceholder', language)}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         className="bg-surface/35 border-border/70 shadow-sm"
@@ -92,8 +93,8 @@ export default function KeybindingPanel() {
                     {filteredCommands.map(cmd => (
                         <div key={cmd.id} className="flex items-center justify-between p-3 rounded-lg group transition-colors odd:bg-surface/[0.035] hover:bg-surface-hover/70">
                             <div className="flex flex-col gap-0.5">
-                                <span className="text-sm font-medium">{t(`cmd.${cmd.id}` as TranslationKey, language) || cmd.title}</span>
-                                <span className="text-xs text-text-muted">{cmd.category ? (t(`kb.category.${cmd.category}` as TranslationKey, language) || cmd.category) : ''} • {cmd.id}</span>
+                                <span className="text-sm font-medium">{commandTitle(cmd)}</span>
+                                <span className="text-xs text-text-muted">{commandCategory(cmd)} • {cmd.id}</span>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -112,7 +113,7 @@ export default function KeybindingPanel() {
                                         size="icon"
                                         onClick={() => handleReset(cmd.id)}
                                         className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title={t('kb.resetToDefault' as TranslationKey, language) || "Reset to default"}
+                                        title={t('kb.resetToDefault', language)}
                                     >
                                         <RotateCcw className="w-3.5 h-3.5" />
                                     </Button>
@@ -127,7 +128,7 @@ export default function KeybindingPanel() {
             <Modal
                 isOpen={!!recordingId}
                 onClose={() => setRecordingId(null)}
-                title={t('kb.pressKeyCombination' as TranslationKey, language) || "Press desired key combination"}
+                title={t('kb.pressKeyCombination', language)}
                 size="sm"
             >
                 <div
@@ -144,10 +145,10 @@ export default function KeybindingPanel() {
                         handleKeyDown(e)
                     }}
                 >
-                    <p className="text-text-muted text-sm">{t('kb.pressEscToCancel' as TranslationKey, language) || "Press Esc to cancel"}</p>
+                    <p className="text-text-muted text-sm">{t('kb.pressEscToCancel', language)}</p>
 
                     <div className="px-6 py-3 bg-surface-active rounded-lg border border-accent/30 text-2xl font-mono text-accent shadow-lg shadow-accent/10 animate-pulse">
-                        {t('kb.recording' as TranslationKey, language) || "Recording..."}
+                        {t('kb.recording', language)}
                     </div>
                 </div>
             </Modal>

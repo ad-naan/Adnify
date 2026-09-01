@@ -7,16 +7,12 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import {
-    Check,
-    ChevronDown,
-    CheckCircle2,
-    ArrowRight,
-    Send
+    Check, ChevronDown, CheckCircle2, ArrowRight, Send
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { InteractiveContent } from '@/renderer/agent/types'
 import { useStore } from '@store'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface InteractiveCardProps {
     content: InteractiveContent
@@ -259,7 +255,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                         : 'border-border/60 text-text-muted hover:border-accent/35 hover:text-text-secondary'
                                     }`}
                                 >
-                                    {t('common.customResponse', asLanguage(language))}
+                                    {t('common.customResponse', language)}
                                 </button>
                             )}
 
@@ -284,7 +280,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                                         handleCustomSubmit()
                                                     }
                                                 }}
-                                                placeholder={t('interactiveCard.typeYourCustomResponse', asLanguage(language))}
+                                                placeholder={t('interactiveCard.typeYourCustomResponse', language)}
                                                 rows={2}
                                                 className="w-full px-3 py-2 pr-10 text-[12px] text-text-primary bg-surface/60 border border-border/50 rounded-lg resize-none focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20 placeholder:text-text-muted/40 transition-all custom-scrollbar"
                                             />
@@ -295,7 +291,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                                     ? 'text-accent hover:bg-accent/10 active:scale-90'
                                                     : 'text-text-muted/30 cursor-not-allowed'
                                                     }`}
-                                                title={t('interactiveCard.send', asLanguage(language))}
+                                                title={t('interactiveCard.send', language)}
                                             >
                                                 <Send className="w-3.5 h-3.5" />
                                             </button>
@@ -318,7 +314,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                             }
                                         `}
                                     >
-                                        <span>{t('interactiveCard.confirm', asLanguage(language), { size: selected.size })}</span>
+                                        <span>{t('interactiveCard.confirm', language, { size: selected.size })}</span>
                                         <ArrowRight className="w-3 h-3" />
                                     </button>
                                 </div>
@@ -338,7 +334,7 @@ export function InteractiveCard({ content, onSelect, disabled }: InteractiveCard
                                             }
                                         `}
                                     >
-                                        <span>{t('interactiveCard.confirm', asLanguage(language), { size: selected.size })}</span>
+                                        <span>{t('interactiveCard.confirm', language, { size: selected.size })}</span>
                                         <ArrowRight className="w-3 h-3" />
                                     </button>
                                 </div>

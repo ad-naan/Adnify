@@ -3,7 +3,7 @@
  */
 import { memo, useCallback, useState, useRef } from 'react'
 import { X, Check, Columns, AlignJustify, ChevronDown, ChevronUp, Settings2 } from 'lucide-react'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import type { editor } from 'monaco-editor'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { useStore } from '@store'
@@ -187,7 +187,7 @@ export const DiffPreview = memo(function DiffPreview({
               onClick={handleClose}
               className="px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary hover:bg-surface-active rounded-md transition-colors"
             >
-              {t('closeMenu', language) || 'Close'}
+              {t('closeMenu', language)}
             </button>
           )}
         </div>

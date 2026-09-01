@@ -9,13 +9,7 @@ import { memo, useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash, Eye, EyeOff, Check, AlertTriangle, X, Server, Sliders, Box, RefreshCw, Pencil } from 'lucide-react'
 import {
-  PROVIDERS,
-  type ApiProtocol,
-  type OpenAICompatibilityProfile,
-  getProviderDefaultHeaders,
-  isOpenAIStyleProtocol,
-  resolveOpenAICompatibilityProfile,
-} from '@/shared/config/providers'
+  PROVIDERS, type ApiProtocol, type OpenAICompatibilityProfile, getProviderDefaultHeaders, isOpenAIStyleProtocol, resolveOpenAICompatibilityProfile, } from '@/shared/config/providers'
 import { REASONING_EFFORT_VALUES } from '@/shared/config/llmPersistence'
 import { captureActiveProviderConfig } from '@renderer/settings/providerConfigPersistence'
 import { LLM_DEFAULTS } from '@/shared/config/defaults'
@@ -25,7 +19,7 @@ import { Button, Input, Select, Switch } from '@components/ui'
 import { ProviderSettingsProps } from '../types'
 import { isCustomProvider } from '@renderer/types/provider'
 import { ProgressiveReveal } from '../ProgressiveReveal'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 // 内置厂商 ID
 const BUILTIN_PROVIDER_IDS = ['openai', 'openai-oauth', 'anthropic', 'gemini', 'deepseek', 'groq']
@@ -118,34 +112,34 @@ function getReasoningEffortDescription(
   language: 'en' | 'zh',
 ): string {
   if (provider === 'anthropic' || protocol === 'anthropic') {
-    return t('providerSettings.anthropicUsesLowMedium', asLanguage(language))
+    return t('providerSettings.anthropicUsesLowMedium', language)
   }
 
   if (provider === 'gemini' || protocol === 'google') {
-    return t('providerSettings.gemini3UsesThinking', asLanguage(language))
+    return t('providerSettings.gemini3UsesThinking', language)
   }
 
   if (isOpenAIStyleProtocol(protocol) && openAICompatibilityProfile === 'compatible') {
     if (supportsExtendedCompatibleEffort) {
-      return t('providerSettings.extendedCompatibleTiersAre', asLanguage(language))
+      return t('providerSettings.extendedCompatibleTiersAre', language)
     }
-    return t('providerSettings.compatibleModeOnlySends', asLanguage(language))
+    return t('providerSettings.compatibleModeOnlySends', language)
   }
 
   if (isOpenAIStyleProtocol(protocol)) {
-    return t('providerSettings.fullOpenaiEnablesRicher', asLanguage(language))
+    return t('providerSettings.fullOpenaiEnablesRicher', language)
   }
 
-  return t('providerSettings.openaiStyleProtocolsUse', asLanguage(language))
+  return t('providerSettings.openaiStyleProtocolsUse', language)
 }
 
 function getHeaderSelectOptions(language: 'en' | 'zh') {
   return [
     ...PREDEFINED_HEADER_OPTIONS.map(option => ({
       value: option.value,
-      label: option.value ? option.label : t('providerSettings.selectHeader', asLanguage(language)),
+      label: option.value ? option.label : t('providerSettings.selectHeader', language),
     })),
-    { value: 'X-Custom-Header', label: t('providerSettings.custom', asLanguage(language)) },
+    { value: 'X-Custom-Header', label: t('providerSettings.custom', language) },
   ]
 }
 
@@ -209,26 +203,26 @@ function formatUsageWindow(minutes: number | undefined, language: 'en' | 'zh'): 
   if (!minutes) return ''
   if (minutes % (60 * 24) === 0) {
     const days = minutes / (60 * 24)
-    return t('providerSettings.d', asLanguage(language), { days })
+    return t('providerSettings.d', language, { days })
   }
   if (minutes % 60 === 0) {
     const hours = minutes / 60
-    return t('providerSettings.h', asLanguage(language), { hours })
+    return t('providerSettings.h', language, { hours })
   }
-  return t('providerSettings.m', asLanguage(language), { minutes })
+  return t('providerSettings.m', language, { minutes })
 }
 
 /** Relative time until a reset instant given as epoch seconds. */
 function formatResetIn(resetAt: number | undefined, language: 'en' | 'zh'): string {
   if (!resetAt) return ''
   const seconds = resetAt - Math.floor(Date.now() / 1000)
-  if (seconds <= 0) return t('providerSettings.resettingSoon', asLanguage(language))
+  if (seconds <= 0) return t('providerSettings.resettingSoon', language)
   const days = Math.floor(seconds / 86400)
-  if (days >= 1) return t('providerSettings.resetsInD', asLanguage(language), { days })
+  if (days >= 1) return t('providerSettings.resetsInD', language, { days })
   const hours = Math.floor(seconds / 3600)
-  if (hours >= 1) return t('providerSettings.resetsInH', asLanguage(language), { hours })
+  if (hours >= 1) return t('providerSettings.resetsInH', language, { hours })
   const mins = Math.max(1, Math.floor(seconds / 60))
-  return t('providerSettings.resetsInM', asLanguage(language), { mins })
+  return t('providerSettings.resetsInM', language, { mins })
 }
 
 const UsageBar = memo(function UsageBar({
@@ -254,7 +248,7 @@ const UsageBar = memo(function UsageBar({
           {windowLabel ? <span className="opacity-60"> · {windowLabel}</span> : null}
         </span>
         <span className={used >= 100 ? 'font-medium text-red-400' : 'text-text-secondary'}>
-          {t('providerSettings.used', asLanguage(language), { used })}
+          {t('providerSettings.used', language, { used })}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
@@ -284,7 +278,7 @@ const UsagePanel = memo(function UsagePanel({
     <div className="space-y-2 rounded-md border border-white/10 bg-white/[0.02] p-2.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">
-          {t('providerSettings.usage', asLanguage(language))}
+          {t('providerSettings.usage', language)}
         </span>
         <button
           type="button"
@@ -293,8 +287,8 @@ const UsagePanel = memo(function UsagePanel({
           className="cursor-pointer text-[10px] text-text-secondary underline-offset-2 hover:underline disabled:opacity-50"
         >
           {busy
-            ? (t('providerSettings.refreshing', asLanguage(language)))
-            : (t('refresh', asLanguage(language)))}
+            ? (t('providerSettings.refreshing', language))
+            : (t('refresh', language))}
         </button>
       </div>
 
@@ -302,7 +296,7 @@ const UsagePanel = memo(function UsagePanel({
         <div className="space-y-2.5">
           {usage?.primary ? (
             <UsageBar
-              label={t('providerSettings.primary', asLanguage(language))}
+              label={t('providerSettings.primary', language)}
               window={usage.primary}
               language={language}
             />
@@ -310,30 +304,30 @@ const UsagePanel = memo(function UsagePanel({
           {/* A zero-length secondary window means the plan has no burst quota. */}
           {usage?.secondary && usage.secondary.windowMinutes ? (
             <UsageBar
-              label={t('providerSettings.secondary', asLanguage(language))}
+              label={t('providerSettings.secondary', language)}
               window={usage.secondary}
               language={language}
             />
           ) : null}
           {usage?.credits?.unlimited ? (
             <div className="text-[10px] text-emerald-400">
-              {t('providerSettings.creditsUnlimited', asLanguage(language))}
+              {t('providerSettings.creditsUnlimited', language)}
             </div>
           ) : usage?.credits?.hasCredits ? (
             <div className="text-[10px] text-text-secondary">
-              {t('providerSettings.credits', asLanguage(language))}
+              {t('providerSettings.credits', language)}
               {typeof usage.credits.balance === 'number' ? `: ${usage.credits.balance}` : ''}
             </div>
           ) : null}
         </div>
       ) : (
         <div className="text-[11px] text-text-secondary opacity-70">
-          {t('providerSettings.noUsageDataYet', asLanguage(language))}
+          {t('providerSettings.noUsageDataYet', language)}
         </div>
       )}
 
       <div className="text-[10px] text-text-secondary opacity-50">
-        {t('providerSettings.chatgptExposesNoQuota', asLanguage(language))}
+        {t('providerSettings.chatgptExposesNoQuota', language)}
       </div>
     </div>
   )
@@ -391,13 +385,13 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
     try {
       const result = await window.electronAPI.credentialsOAuthLogin()
       if (result.success) {
-        toast.success(t('providerSettings.signedInToChatgpt', asLanguage(language)))
+        toast.success(t('providerSettings.signedInToChatgpt', language))
         await refresh()
       } else {
-        toast.error(result.error || (t('providerSettings.signInFailed', asLanguage(language))))
+        toast.error(result.error || (t('providerSettings.signInFailed', language)))
       }
     } catch (err: any) {
-      toast.error(err?.message || (t('providerSettings.signInFailed', asLanguage(language))))
+      toast.error(err?.message || (t('providerSettings.signInFailed', language)))
     } finally {
       setBusy(false)
     }
@@ -407,7 +401,7 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
     setBusy(true)
     try {
       await window.electronAPI.credentialsOAuthLogout()
-      toast.success(t('providerSettings.signedOut', asLanguage(language)))
+      toast.success(t('providerSettings.signedOut', language))
       await refresh()
     } finally {
       setBusy(false)
@@ -417,32 +411,32 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
   return (
     <div className="space-y-2">
       <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-        {t('providerSettings.chatgptAccount', asLanguage(language))}
+        {t('providerSettings.chatgptAccount', language)}
       </label>
       {status?.loggedIn ? (
         <div className="space-y-2">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
-              {t('providerSettings.signed', asLanguage(language))}
+              {t('providerSettings.signed', language)}
               {status.planType ? ` · ${status.planType.toUpperCase()}` : ''}
             </span>
             <Button variant="secondary" size="sm" onClick={handleLogout} disabled={busy} className="h-9 px-3 text-xs font-medium">
-              {t('providerSettings.signOut', asLanguage(language))}
+              {t('providerSettings.signOut', language)}
             </Button>
           </div>
           <div className="space-y-0.5 px-0.5 text-[11px] text-text-secondary">
             {status.email ? (
-              <div>{t('email', asLanguage(language))}: {status.email}</div>
+              <div>{t('email', language)}: {status.email}</div>
             ) : null}
             {status.accountID ? (
-              <div>{t('providerSettings.accountId', asLanguage(language))}: {status.accountID}</div>
+              <div>{t('providerSettings.accountId', language)}: {status.accountID}</div>
             ) : null}
             {status.expiresAt ? (
               <div>
-                {t('providerSettings.tokenExpires', asLanguage(language))}:{' '}
+                {t('providerSettings.tokenExpires', language)}:{' '}
                 {new Date(status.expiresAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}
                 <span className="opacity-60">
-                  {t('providerSettings.autoRefreshed', asLanguage(language))}
+                  {t('providerSettings.autoRefreshed', language)}
                 </span>
               </div>
             ) : null}
@@ -460,14 +454,14 @@ const OAuthSignInPanel = memo(function OAuthSignInPanel({
             {busy ? (
               <span className="flex items-center gap-2">
                 <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                {t('common.waitingForBrowser', asLanguage(language))}
+                {t('common.waitingForBrowser', language)}
               </span>
             ) : (
-              t('providerSettings.signInWithChatgpt', asLanguage(language))
+              t('providerSettings.signInWithChatgpt', language)
             )}
           </Button>
           <p className="text-[10px] text-text-muted px-0.5">
-            {t('providerSettings.usesYourChatgptPro', asLanguage(language))}
+            {t('providerSettings.usesYourChatgptPro', language)}
           </p>
         </div>
       )}
@@ -484,7 +478,7 @@ const TestConnectionButton = memo(function TestConnectionButton({ localConfig, l
     const usesOAuth = PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
     if (!localConfig.apiKey && !usesOAuth && localConfig.provider !== 'ollama') {
       setStatus('error')
-      setErrorMsg(t('providerSettings.pleaseEnterApiKey', asLanguage(language)))
+      setErrorMsg(t('providerSettings.pleaseEnterApiKey', language))
       return
     }
     setTesting(true)
@@ -495,7 +489,7 @@ const TestConnectionButton = memo(function TestConnectionButton({ localConfig, l
       const result = await checkProviderHealth(localConfig.provider, localConfig.apiKey, localConfig.baseUrl, localConfig.protocol)
       if (result.status === 'healthy') {
         setStatus('success')
-        toast.success(t('providerSettings.connectedLatencyMs', asLanguage(language), { latency: result.latency }))
+        toast.success(t('providerSettings.connectedLatencyMs', language, { latency: result.latency }))
       } else {
         setStatus('error')
         setErrorMsg(result.error || 'Connection failed')
@@ -513,16 +507,16 @@ const TestConnectionButton = memo(function TestConnectionButton({ localConfig, l
         {testing ? (
           <span className="flex items-center gap-2">
             <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            {t('providerSettings.testing', asLanguage(language))}
+            {t('providerSettings.testing', language)}
           </span>
         ) : (
-          t('providerSettings.testConnection', asLanguage(language))
+          t('providerSettings.testConnection', language)
         )}
       </Button>
       {status === 'success' && (
         <span className="flex items-center gap-1.5 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-medium text-emerald-400">
           <Check className="w-3 h-3" />
-          {t('providerSettings.connected', asLanguage(language))}
+          {t('providerSettings.connected', language)}
         </span>
       )}
       {status === 'error' && (
@@ -541,11 +535,11 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
   const handleTest = async () => {
     const usesOAuth = PROVIDERS[localConfig.provider]?.auth.type === 'oauth'
     if (!localConfig.apiKey && !usesOAuth && localConfig.provider !== 'ollama') {
-      toast.error(t('providerSettings.pleaseEnterApiKey', asLanguage(language)))
+      toast.error(t('providerSettings.pleaseEnterApiKey', language))
       return
     }
     if (!localConfig.model) {
-      toast.error(t('providerSettings.pleaseSelectOrEnter', asLanguage(language)))
+      toast.error(t('providerSettings.pleaseSelectOrEnter', language))
       return
     }
 
@@ -555,11 +549,11 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
       const result = await testModelCall(localConfig)
 
       if (result.success) {
-        const message = t('providerSettings.callSuccessLatencyMs', asLanguage(language), { latency: result.latency, content: result.content })
+        const message = t('providerSettings.callSuccessLatencyMs', language, { latency: result.latency, content: result.content })
         toast.success(message)
       } else {
         const errorMsg = result.error || 'Test failed'
-        toast.error(t('providerSettings.callFailed', asLanguage(language), { errorMsg }))
+        toast.error(t('providerSettings.callFailed', language, { errorMsg }))
       }
     } catch (err: any) {
       toast.error(err.message || 'Test failed')
@@ -573,10 +567,10 @@ const TestModelButton = memo(function TestModelButton({ localConfig, language }:
       {testing ? (
         <span className="flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          {t('providerSettings.calling', asLanguage(language))}
+          {t('providerSettings.calling', language)}
         </span>
       ) : (
-        t('providerSettings.testModelCall', asLanguage(language))
+        t('providerSettings.testModelCall', language)
       )}
     </Button>
   )
@@ -615,7 +609,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
     // OAuth providers have no API key — the main process resolves their token.
     const usesOAuth = PROVIDERS[provider]?.auth.type === 'oauth'
     if (!apiKey && !usesOAuth && provider !== 'ollama') {
-      toast.error(t('providerSettings.pleaseEnterApiKey', asLanguage(language)))
+      toast.error(t('providerSettings.pleaseEnterApiKey', language))
       return
     }
 
@@ -638,10 +632,10 @@ const FetchModelsButton = memo(function FetchModelsButton({
         setFetchedModels(result.models)
         setShowList(true)
         if (result.models.length === 0) {
-          toast.info(t('providerSettings.noModelsFound', asLanguage(language)))
+          toast.info(t('providerSettings.noModelsFound', language))
         }
       } else {
-        toast.error(t('providerSettings.fetchFailed', asLanguage(language), { error: result.error }))
+        toast.error(t('providerSettings.fetchFailed', language, { error: result.error }))
       }
     } catch (err: any) {
       toast.error(err.message || 'Fetch failed')
@@ -708,15 +702,15 @@ const FetchModelsButton = memo(function FetchModelsButton({
           type="text"
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          placeholder={t('providerSettings.searchModels', asLanguage(language))}
+          placeholder={t('providerSettings.searchModels', language)}
           className="w-full px-2.5 py-1.5 text-xs bg-surface/50 border border-border rounded-lg outline-none focus:border-accent/50 transition-colors text-text-primary placeholder:text-text-muted"
           autoFocus
         />
         <div className="flex items-center justify-between px-1">
           <span className="text-[9px] font-bold text-text-muted uppercase tracking-wider">
             {searchQuery
-              ? (t('providerSettings.matched', asLanguage(language), { length: filteredModels.length, length2: fetchedModels.length }))
-              : (t('providerSettings.models', asLanguage(language), { length: fetchedModels.length }))
+              ? (t('providerSettings.matched', language, { length: filteredModels.length, length2: fetchedModels.length }))
+              : (t('providerSettings.models', language, { length: fetchedModels.length }))
             }
           </span>
           <div className="flex items-center gap-1">
@@ -727,7 +721,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
               }}
               className="text-[9px] text-accent hover:text-accent-hover px-1.5 py-0.5 rounded hover:bg-accent/10 transition-colors"
             >
-              {t('providerSettings.all', asLanguage(language))}
+              {t('providerSettings.all', language)}
             </button>
             <button
               onClick={() => {
@@ -736,7 +730,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
               }}
               className="text-[9px] text-red-400 hover:text-red-300 px-1.5 py-0.5 rounded hover:bg-red-400/10 transition-colors"
             >
-              {t('providerSettings.none', asLanguage(language))}
+              {t('providerSettings.none', language)}
             </button>
           </div>
         </div>
@@ -781,7 +775,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
           className="flex-1 py-1.5 text-[10px] font-bold text-text-muted hover:text-red-400 hover:bg-red-400/5 rounded-lg transition-colors uppercase flex items-center justify-center gap-1.5 border border-transparent hover:border-red-400/20"
         >
           <Trash className="w-3 h-3" />
-          {t('providerSettings.clearAll', asLanguage(language))}
+          {t('providerSettings.clearAll', language)}
         </button>
         <button
           onClick={() => {
@@ -794,7 +788,7 @@ const FetchModelsButton = memo(function FetchModelsButton({
           className="flex-1 py-1.5 text-[10px] font-bold bg-accent text-white hover:bg-accent-hover rounded-lg transition-colors uppercase flex items-center justify-center gap-1.5 shadow-lg shadow-accent/20"
         >
           <Check className="w-3 h-3" />
-          {t('providerSettings.addAll', asLanguage(language))}
+          {t('providerSettings.addAll', language)}
         </button>
       </div>
     </div>,
@@ -810,10 +804,10 @@ const FetchModelsButton = memo(function FetchModelsButton({
         onClick={handleFetch}
         disabled={fetching}
         className="h-8 px-2.5 flex items-center gap-1.5"
-        title={t('providerSettings.fetchModelsFromApi', asLanguage(language))}
+        title={t('providerSettings.fetchModelsFromApi', language)}
       >
         <RefreshCw className={`w-3 h-3 ${fetching ? 'animate-spin' : ''}`} />
-        <span className="text-[10px] font-semibold">{t('providerSettings.fetchModels', asLanguage(language))}</span>
+        <span className="text-[10px] font-semibold">{t('providerSettings.fetchModels', language)}</span>
       </Button>
 
       {dropdownMenu}
@@ -840,7 +834,7 @@ function InlineCustomProviderForm({
 
   const handleSubmit = () => {
     if (!displayName.trim() || !baseUrl.trim()) {
-      toast.error(t('providerSettings.pleaseEnterNameAnd', asLanguage(language)))
+      toast.error(t('providerSettings.pleaseEnterNameAnd', language))
       return
     }
     onSave({
@@ -860,7 +854,7 @@ function InlineCustomProviderForm({
       if (!model && newModels.length > 0) {
         setModel(newModels[0])
       }
-      toast.success(t('providerSettings.fetchedAndAddedModels', asLanguage(language), { length: newModels.length }))
+      toast.success(t('providerSettings.fetchedAndAddedModels', language, { length: newModels.length }))
     }
   }
 
@@ -870,7 +864,7 @@ function InlineCustomProviderForm({
     if (models.includes(model)) {
       setModel(remaining[0] || '')
     }
-    toast.success(t('providerSettings.clearedModels', asLanguage(language), { length: models.length }))
+    toast.success(t('providerSettings.clearedModels', language, { length: models.length }))
   }
 
   return (
@@ -878,18 +872,18 @@ function InlineCustomProviderForm({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">
-            {t('common.displayName', asLanguage(language))}
+            {t('common.displayName', language)}
           </label>
           <Input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder={t('providerSettings.eGMyProvider', asLanguage(language))}
+            placeholder={t('providerSettings.eGMyProvider', language)}
             className="bg-background/50 border-border text-sm"
           />
         </div>
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">
-            {t('providerSettings.protocol', asLanguage(language))}
+            {t('providerSettings.protocol', language)}
           </label>
           <Select
             value={protocol}
@@ -902,7 +896,7 @@ function InlineCustomProviderForm({
 
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-text-secondary">
-          {t('providerSettings.apiEndpoint', asLanguage(language))}
+          {t('providerSettings.apiEndpoint', language)}
         </label>
         <Input
           value={baseUrl}
@@ -926,7 +920,7 @@ function InlineCustomProviderForm({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-text-secondary">
-              {t('providerSettings.defaultModel', asLanguage(language))}
+              {t('providerSettings.defaultModel', language)}
             </label>
             <FetchModelsButton
               provider="custom"
@@ -943,7 +937,7 @@ function InlineCustomProviderForm({
           <Input
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder={t('providerSettings.eGGpt4', asLanguage(language))}
+            placeholder={t('providerSettings.eGGpt4', language)}
             className="bg-background/50 border-border text-xs"
           />
         </div>
@@ -952,7 +946,7 @@ function InlineCustomProviderForm({
       {customModels.length > 0 && (
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-text-secondary">
-            {t('providerSettings.addedModels', asLanguage(language), { length: customModels.length })}
+            {t('providerSettings.addedModels', language, { length: customModels.length })}
           </label>
           <div className="flex flex-wrap gap-2 rounded-xl border border-border/50 bg-background/30 p-2">
             {customModels.map(m => (
@@ -972,10 +966,10 @@ function InlineCustomProviderForm({
 
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" size="sm" onClick={onCancel}>
-          {t('cancel', asLanguage(language))}
+          {t('cancel', language)}
         </Button>
         <Button variant="primary" size="sm" onClick={handleSubmit}>
-          {t('git.add', asLanguage(language))}
+          {t('git.add', language)}
         </Button>
       </div>
     </div>
@@ -1222,7 +1216,7 @@ export function ProviderSettings({
     setLocalProviderConfigs(updatedConfigs)
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
 
-    toast.success(t('providerSettings.addedModels2', asLanguage(language), { length: newModels.length }))
+    toast.success(t('providerSettings.addedModels2', language, { length: newModels.length }))
   }, [language, localConfig.provider, localProviderConfigs, setLocalProviderConfigs, setProvider])
 
   const providerHasApiKey = useCallback((providerId: string) => {
@@ -1346,9 +1340,9 @@ export function ProviderSettings({
     setProvider(localConfig.provider, updatedConfigs[localConfig.provider])
 
     if (models.length === 1) {
-      toast.success(t('providerSettings.removedModel', asLanguage(language), { value: models[0] }))
+      toast.success(t('providerSettings.removedModel', language, { value: models[0] }))
     } else {
-      toast.success(t('providerSettings.clearedModels', asLanguage(language), { length: models.length }))
+      toast.success(t('providerSettings.clearedModels', language, { length: models.length }))
     }
   }, [collectProviderModels, language, localConfig.provider, localModelRouting.multimodal?.model, localModelRouting.multimodal?.provider, localProviderConfigs, setLocalProviderConfigs, setProvider, updateMultimodalSelection])
 
@@ -1448,7 +1442,7 @@ export function ProviderSettings({
       [id]: newConfig
     })
 
-    toast.success(t('providerSettings.added', asLanguage(language), { displayName: config.displayName }))
+    toast.success(t('providerSettings.added', language, { displayName: config.displayName }))
     setIsAddingCustom(false)
 
     // 自动选择新添加的 Provider
@@ -1471,8 +1465,8 @@ export function ProviderSettings({
   const handleDeleteCustomProvider = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation()
     const confirmed = await globalConfirm({
-      title: t('providerSettings.deleteProvider', asLanguage(language)),
-      message: t('providerSettings.delete', asLanguage(language), { name }),
+      title: t('providerSettings.deleteProvider', language),
+      message: t('providerSettings.delete', language, { name }),
       variant: 'danger',
     })
     if (confirmed) {
@@ -1526,7 +1520,7 @@ export function ProviderSettings({
   const multimodalProviderOptions = useMemo(() => [
     {
       value: '',
-      label: t('providerSettings.notConfiguredUsePrimary', asLanguage(language)),
+      label: t('providerSettings.notConfiguredUsePrimary', language),
     },
     ...allProviderOptions
       .filter(provider => providerHasApiKey(provider.id))
@@ -1552,11 +1546,11 @@ export function ProviderSettings({
           <div className="flex items-center gap-2 mb-1.5">
             <Box className="w-4 h-4 text-accent" />
             <h4 className="text-sm font-semibold text-text-primary">
-              {t('providerSettings.selectProvider', asLanguage(language))}
+              {t('providerSettings.selectProvider', language)}
             </h4>
           </div>
           <p className="text-[11px] text-text-muted">
-            {t('providerSettings.selectTheModelService', asLanguage(language))}
+            {t('providerSettings.selectTheModelService', language)}
           </p>
         </div>
 
@@ -1637,7 +1631,7 @@ export function ProviderSettings({
                       startEditingCustomProvider(id, displayName)
                     }}
                     className="absolute -top-2 -left-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-accent/30 hover:text-accent"
-                    title={t('rename', asLanguage(language))}
+                    title={t('rename', language)}
                   >
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
@@ -1645,7 +1639,7 @@ export function ProviderSettings({
                 <button
                   onClick={(e) => handleDeleteCustomProvider(e, id, displayName)}
                   className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-text-muted opacity-0 transition-all group-hover:opacity-100 hover:border-red-500/30 hover:text-red-500"
-                  title={t('delete', asLanguage(language))}
+                  title={t('delete', language)}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1662,7 +1656,7 @@ export function ProviderSettings({
               }`}
           >
             <Plus className="mb-1 w-5 h-5" />
-            <span className="text-xs font-medium">{t('providerSettings.addCustom', asLanguage(language))}</span>
+            <span className="text-xs font-medium">{t('providerSettings.addCustom', language)}</span>
           </button>
         </div>
 
@@ -1671,7 +1665,7 @@ export function ProviderSettings({
           <div className="mt-6 rounded-xl border border-border bg-surface/25 p-6 animate-slide-down">
             <div className="flex justify-between items-center mb-4">
               <h5 className="text-sm font-medium text-text-primary">
-                {t('providerSettings.addNewProvider', asLanguage(language))}
+                {t('providerSettings.addNewProvider', language)}
               </h5>
               <Button variant="ghost" size="sm" onClick={() => setIsAddingCustom(false)}>
                 <X className="w-4 h-4" />
@@ -1695,7 +1689,7 @@ export function ProviderSettings({
                 <div className="flex items-center gap-2">
                   <Box className="w-4 h-4 text-accent" />
                   <h5 className="text-sm font-medium text-text-primary">
-                    {t('providerSettings.modelConfiguration', asLanguage(language))}
+                    {t('providerSettings.modelConfiguration', language)}
                   </h5>
                 </div>
                 <FetchModelsButton
@@ -1716,10 +1710,10 @@ export function ProviderSettings({
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="sr-only text-xs font-medium text-text-secondary">
-                    {t('providerSettings.selectModel', asLanguage(language))}
+                    {t('providerSettings.selectModel', language)}
                   </label>
                   <label className="text-xs font-medium text-text-secondary">
-                    {t('providerSettings.selectModel', asLanguage(language))}
+                    {t('providerSettings.selectModel', language)}
                   </label>
                   <Select
                     value={localConfig.model}
@@ -1734,7 +1728,7 @@ export function ProviderSettings({
                     <Input
                       value={newModelName}
                       onChange={(e) => setNewModelName(e.target.value)}
-                      placeholder={t('providerSettings.enterModelNamesSupports', asLanguage(language))}
+                      placeholder={t('providerSettings.enterModelNamesSupports', language)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddModel()}
                       className="flex-1 h-9 text-xs bg-background/50 border-border"
                     />
@@ -1776,10 +1770,10 @@ export function ProviderSettings({
                   </div>
                   <div>
                     <h5 className="text-sm font-semibold text-text-primary">
-                      {t('providerSettings.authenticationNetwork', asLanguage(language))}
+                      {t('providerSettings.authenticationNetwork', language)}
                     </h5>
                     <p className="text-[10px] text-text-muted mt-0.5">
-                      {t('providerSettings.configureApiKeysAnd', asLanguage(language))}
+                      {t('providerSettings.configureApiKeysAnd', language)}
                     </p>
                   </div>
                 </div>
@@ -1814,7 +1808,7 @@ export function ProviderSettings({
                 )}
                 <div className="space-y-2">
                   <label className="text-[11px] font-bold text-text-secondary uppercase tracking-wider px-0.5">
-                    {t('providerSettings.apiEndpoint', asLanguage(language))}
+                    {t('providerSettings.apiEndpoint', language)}
                   </label>
                   <Input
                     value={localConfig.baseUrl || ''}
@@ -1832,10 +1826,10 @@ export function ProviderSettings({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h5 className="text-sm font-semibold text-text-primary">
-                    {t('providerSettings.multimodalRouting', asLanguage(language))}
+                    {t('providerSettings.multimodalRouting', language)}
                   </h5>
                   <p className="mt-1 text-[11px] text-text-muted">
-                    {t('providerSettings.whenEnabledImageMessages', asLanguage(language))}
+                    {t('providerSettings.whenEnabledImageMessages', language)}
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -1853,7 +1847,7 @@ export function ProviderSettings({
                 <>
                   <div className="rounded-lg border border-border/60 bg-background/30 px-3 py-2">
                     <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                      {t('providerSettings.primaryModel', asLanguage(language))}
+                      {t('providerSettings.primaryModel', language)}
                     </div>
                     <div className="mt-1 text-xs font-medium text-text-primary">
                       {selectedProvider?.name ?? localProviderConfigs[localConfig.provider]?.displayName ?? localConfig.provider}/{localConfig.model}
@@ -1863,7 +1857,7 @@ export function ProviderSettings({
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-text-secondary">
-                        {t('providerSettings.multimodalProvider', asLanguage(language))}
+                        {t('providerSettings.multimodalProvider', language)}
                       </label>
                       <Select
                         value={selectedMultimodalProviderId}
@@ -1875,13 +1869,13 @@ export function ProviderSettings({
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-text-secondary">
-                        {t('providerSettings.multimodalModel', asLanguage(language))}
+                        {t('providerSettings.multimodalModel', language)}
                       </label>
                       <Select
                         value={localModelRouting.multimodal?.model || ''}
                         onChange={(value) => updateMultimodalSelection(selectedMultimodalProviderId, value)}
                         options={multimodalModelOptions}
-                        placeholder={t('providerSettings.selectProviderFirst', asLanguage(language))}
+                        placeholder={t('providerSettings.selectProviderFirst', language)}
                         disabled={!selectedMultimodalProviderId || multimodalModelOptions.length === 0}
                         className="w-full bg-background/50 border-border"
                       />
@@ -1895,7 +1889,7 @@ export function ProviderSettings({
           <ProgressiveReveal
             language={language}
             collapsedHeight={520}
-            expandLabel={t('providerSettings.showAllGenerationParameters', asLanguage(language))}
+            expandLabel={t('providerSettings.showAllGenerationParameters', language)}
           >
           <section className="relative overflow-hidden rounded-xl border border-border/70 bg-surface/25">
 
@@ -1906,10 +1900,10 @@ export function ProviderSettings({
                 </div>
                 <div className="text-left">
                   <h5 className="text-sm font-semibold text-text-primary">
-                    {t('providerSettings.generationParameters', asLanguage(language))}
+                    {t('providerSettings.generationParameters', language)}
                   </h5>
                   <p className="text-[10px] text-text-muted mt-0.5">
-                    {t('providerSettings.adjustTemperatureTopP', asLanguage(language))}
+                    {t('providerSettings.adjustTemperatureTopP', language)}
                   </p>
                 </div>
               </div>
@@ -1924,7 +1918,7 @@ export function ProviderSettings({
                     {/* Max Tokens */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs text-text-secondary">{t('common.maxTokens', asLanguage(language))}</label>
+                        <label className="text-xs text-text-secondary">{t('common.maxTokens', language)}</label>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                           {localConfig.maxTokens ?? LLM_DEFAULTS.maxTokens}
                         </span>
@@ -1947,7 +1941,7 @@ export function ProviderSettings({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <label className="text-xs text-text-secondary">
-                          {t('providerSettings.temperature', asLanguage(language))}
+                          {t('providerSettings.temperature', language)}
                         </label>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
                           {(localConfig.temperature ?? LLM_DEFAULTS.temperature).toFixed(1)}
@@ -1966,8 +1960,8 @@ export function ProviderSettings({
                         className="w-full h-1.5 bg-surface-active rounded-full appearance-none cursor-pointer accent-accent hover:accent-accent-hover"
                       />
                       <div className="flex justify-between text-[10px] text-text-muted px-1">
-                        <span>{t('providerSettings.precise', asLanguage(language))}</span>
-                        <span>{t('providerSettings.creative', asLanguage(language))}</span>
+                        <span>{t('providerSettings.precise', language)}</span>
+                        <span>{t('providerSettings.creative', language)}</span>
                       </div>
                     </div>
 
@@ -1977,7 +1971,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Top P</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.nucleusSamplingConsidersTokens', asLanguage(language))}
+                            {t('providerSettings.nucleusSamplingConsidersTokens', language)}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2004,7 +1998,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Top K</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.limitsSelectionToThe', asLanguage(language))}
+                            {t('providerSettings.limitsSelectionToThe', language)}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2029,10 +2023,10 @@ export function ProviderSettings({
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5 flex-1">
                           <label className="text-xs font-medium text-text-secondary">
-                            {t('providerSettings.extendedThinking', asLanguage(language))}
+                            {t('providerSettings.extendedThinking', language)}
                           </label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.enableDeeperReasoningE', asLanguage(language))}
+                            {t('providerSettings.enableDeeperReasoningE', language)}
                           </p>
                         </div>
                         <Switch
@@ -2049,7 +2043,7 @@ export function ProviderSettings({
                           <div className="space-y-2">
                             <div className="space-y-0.5">
                               <label className="text-xs text-text-secondary">
-                                {t('providerSettings.reasoningEffort', asLanguage(language))}
+                                {t('providerSettings.reasoningEffort', language)}
                               </label>
                               <p className="text-[10px] text-text-muted">
                                 {reasoningEffortDescription}
@@ -2067,10 +2061,10 @@ export function ProviderSettings({
                             <div className="flex items-center justify-between">
                               <div className="space-y-0.5">
                                 <label className="text-xs text-text-secondary">
-                                  {t('providerSettings.thinkingBudget', asLanguage(language))}
+                                  {t('providerSettings.thinkingBudget', language)}
                                 </label>
                                 <p className="text-[10px] text-text-muted">
-                                  {t('providerSettings.maxThinkingTokensFor', asLanguage(language))}
+                                  {t('providerSettings.maxThinkingTokensFor', language)}
                                 </p>
                               </div>
                               <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2101,26 +2095,26 @@ export function ProviderSettings({
                     <div className="space-y-4 pt-3 border-t border-border/50">
                       <div className="space-y-0.5">
                         <label className="sr-only text-xs font-medium text-text-secondary">
-                          {t('providerSettings.requestBehavior', asLanguage(language))}
+                          {t('providerSettings.requestBehavior', language)}
                         </label>
                         <label className="text-xs font-medium text-text-secondary">
-                          {t('providerSettings.requestBehavior', asLanguage(language))}
+                          {t('providerSettings.requestBehavior', language)}
                         </label>
                         <p className="sr-only text-[10px] text-text-muted">
-                          {t('providerSettings.controlsRetriesToolPolicy', asLanguage(language))}
+                          {t('providerSettings.controlsRetriesToolPolicy', language)}
                         </p>
                         <p className="text-[10px] text-text-muted">
-                          {t('providerSettings.controlsRetriesToolPolicy', asLanguage(language))}
+                          {t('providerSettings.controlsRetriesToolPolicy', language)}
                         </p>
                       </div>
 
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div className="space-y-1.5">
                           <label className="sr-only text-xs text-text-secondary">
-                            {t('providerSettings.toolChoice', asLanguage(language))}
+                            {t('providerSettings.toolChoice', language)}
                           </label>
                           <label className="text-xs text-text-secondary">
-                            {t('providerSettings.toolChoice', asLanguage(language))}
+                            {t('providerSettings.toolChoice', language)}
                           </label>
                           <Select
                             value={typeof localConfig.toolChoice === 'string' ? localConfig.toolChoice : 'required'}
@@ -2129,19 +2123,19 @@ export function ProviderSettings({
                               toolChoice: value as 'auto' | 'none' | 'required',
                             })}
                             options={[
-                              { value: 'auto', label: t('common.auto', asLanguage(language)) },
-                              { value: 'required', label: t('providerSettings.required', asLanguage(language)) },
-                              { value: 'none', label: t('providerSettings.none2', asLanguage(language)) },
+                              { value: 'auto', label: t('common.auto', language) },
+                              { value: 'required', label: t('providerSettings.required', language) },
+                              { value: 'none', label: t('providerSettings.none2', language) },
                             ]}
                           />
                         </div>
 
                         <div className="space-y-1.5">
                           <label className="sr-only text-xs text-text-secondary">
-                            {t('providerSettings.maxRetries', asLanguage(language))}
+                            {t('providerSettings.maxRetries', language)}
                           </label>
                           <label className="text-xs text-text-secondary">
-                            {t('providerSettings.maxRetries', asLanguage(language))}
+                            {t('providerSettings.maxRetries', language)}
                           </label>
                           <Input
                             type="number"
@@ -2160,16 +2154,16 @@ export function ProviderSettings({
                       <div className="flex items-center justify-between rounded-lg border border-border/60 bg-background/30 px-3 py-2.5">
                         <div className="space-y-0.5 pr-4">
                           <label className="sr-only text-xs text-text-secondary">
-                            {t('providerSettings.parallelToolCalls', asLanguage(language))}
+                            {t('providerSettings.parallelToolCalls', language)}
                           </label>
                           <label className="text-xs text-text-secondary">
-                            {t('providerSettings.parallelToolCalls', asLanguage(language))}
+                            {t('providerSettings.parallelToolCalls', language)}
                           </label>
                           <p className="sr-only text-[10px] text-text-muted">
-                            {t('providerSettings.allowsTheModelTo', asLanguage(language))}
+                            {t('providerSettings.allowsTheModelTo', language)}
                           </p>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.allowsTheModelTo', asLanguage(language))}
+                            {t('providerSettings.allowsTheModelTo', language)}
                           </p>
                         </div>
                         <Switch
@@ -2185,17 +2179,17 @@ export function ProviderSettings({
                       <div className="rounded-xl border border-border/60 bg-background/20 p-4 space-y-4">
                         <div className="space-y-1">
                           <label className="text-xs font-medium text-text-secondary">
-                            {t('providerSettings.protocolTransport', asLanguage(language))}
+                            {t('providerSettings.protocolTransport', language)}
                           </label>
                           <p className="text-[10px] text-text-muted leading-relaxed">
-                            {t('providerSettings.controlRequestShapingThrough', asLanguage(language))}
+                            {t('providerSettings.controlRequestShapingThrough', language)}
                           </p>
                         </div>
 
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <div className="space-y-1.5">
                             <label className="text-xs text-text-secondary">
-                              {t('providerSettings.apiProtocol', asLanguage(language))}
+                              {t('providerSettings.apiProtocol', language)}
                             </label>
                             <Select
                               value={currentProtocol || 'openai'}
@@ -2215,14 +2209,14 @@ export function ProviderSettings({
                               className="bg-background/40 border-border/60 h-9 text-xs"
                             />
                             <p className="text-[10px] text-text-muted leading-relaxed">
-                              {t('providerSettings.theProtocolDecidesThe', asLanguage(language))}
+                              {t('providerSettings.theProtocolDecidesThe', language)}
                             </p>
                           </div>
 
                           {isCustomSelected && isOpenAIStyleProtocol(currentProtocol) && currentOpenAICompatibilityProfile && (
                             <div className="space-y-1.5">
                               <label className="text-xs text-text-secondary">
-                                {t('providerSettings.openaiCompatibility', asLanguage(language))}
+                                {t('providerSettings.openaiCompatibility', language)}
                               </label>
                               <Select
                                 value={currentOpenAICompatibilityProfile}
@@ -2234,7 +2228,7 @@ export function ProviderSettings({
                                 className="bg-background/40 border-border/60 h-9 text-xs"
                               />
                               <p className="text-[10px] text-text-muted leading-relaxed">
-                                {t('providerSettings.onlyAdjustThisWhen', asLanguage(language))}
+                                {t('providerSettings.onlyAdjustThisWhen', language)}
                               </p>
                             </div>
                           )}
@@ -2244,10 +2238,10 @@ export function ProviderSettings({
                           <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
                             <div className="pr-4">
                               <div className="text-xs text-text-secondary">
-                                {t('providerSettings.compatibleModeExtendedReasoning', asLanguage(language))}
+                                {t('providerSettings.compatibleModeExtendedReasoning', language)}
                               </div>
                               <p className="text-[10px] text-text-muted mt-0.5">
-                                {t('providerSettings.enableOnlyWhenThe', asLanguage(language))}
+                                {t('providerSettings.enableOnlyWhenThe', language)}
                               </p>
                             </div>
                             <Switch
@@ -2268,10 +2262,10 @@ export function ProviderSettings({
                           <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
                             <div className="pr-4">
                               <div className="text-xs text-text-secondary">
-                                {t('providerSettings.compatibleModeMaxOutput', asLanguage(language))}
+                                {t('providerSettings.compatibleModeMaxOutput', language)}
                               </div>
                               <p className="text-[10px] text-text-muted mt-0.5">
-                                {t('providerSettings.standardResponsesRequestsSend', asLanguage(language))}
+                                {t('providerSettings.standardResponsesRequestsSend', language)}
                               </p>
                             </div>
                             <Switch
@@ -2292,20 +2286,20 @@ export function ProviderSettings({
                           <div className="rounded-xl border border-accent/20 bg-accent/5 p-3 space-y-3">
                             <div className="space-y-1">
                               <div className="text-xs font-medium text-text-secondary">
-                                {t('providerSettings.openaiResponsesCapabilities', asLanguage(language))}
+                                {t('providerSettings.openaiResponsesCapabilities', language)}
                               </div>
                               <p className="text-[10px] text-text-muted leading-relaxed">
-                                {t('providerSettings.onlyAppliesToFull', asLanguage(language))}
+                                {t('providerSettings.onlyAppliesToFull', language)}
                               </p>
                             </div>
 
                             <div className="flex items-center justify-between rounded-lg border border-border/60 bg-surface/20 px-3 py-2.5">
                               <div className="pr-4">
                                 <div className="text-xs text-text-secondary">
-                                  {t('providerSettings.proReasoningMode', asLanguage(language))}
+                                  {t('providerSettings.proReasoningMode', language)}
                                 </div>
                                 <p className="text-[10px] text-text-muted mt-0.5">
-                                  {t('providerSettings.requestsDeeperReasoningOn', asLanguage(language))}
+                                  {t('providerSettings.requestsDeeperReasoningOn', language)}
                                 </p>
                               </div>
                               <Switch
@@ -2321,7 +2315,7 @@ export function ProviderSettings({
                             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {t('providerSettings.reasoningContext', asLanguage(language))}
+                                  {t('providerSettings.reasoningContext', language)}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.reasoningContext === 'string'
@@ -2329,10 +2323,10 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('reasoningContext', value || undefined)}
                                   options={[
-                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
-                                    { value: 'auto', label: t('common.auto', asLanguage(language)) },
-                                    { value: 'current_turn', label: t('providerSettings.currentTurn', asLanguage(language)) },
-                                    { value: 'all_turns', label: t('providerSettings.allTurns', asLanguage(language)) },
+                                    { value: '', label: t('providerSettings.providerDefault', language) },
+                                    { value: 'auto', label: t('common.auto', language) },
+                                    { value: 'current_turn', label: t('providerSettings.currentTurn', language) },
+                                    { value: 'all_turns', label: t('providerSettings.allTurns', language) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2340,7 +2334,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {t('providerSettings.textVerbosity', asLanguage(language))}
+                                  {t('providerSettings.textVerbosity', language)}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.textVerbosity === 'string'
@@ -2348,10 +2342,10 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('textVerbosity', value || undefined)}
                                   options={[
-                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
-                                    { value: 'low', label: t('providerSettings.low', asLanguage(language)) },
-                                    { value: 'medium', label: t('providerSettings.medium', asLanguage(language)) },
-                                    { value: 'high', label: t('providerSettings.high', asLanguage(language)) },
+                                    { value: '', label: t('providerSettings.providerDefault', language) },
+                                    { value: 'low', label: t('providerSettings.low', language) },
+                                    { value: 'medium', label: t('providerSettings.medium', language) },
+                                    { value: 'high', label: t('providerSettings.high', language) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2359,7 +2353,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {t('providerSettings.promptCacheMode', asLanguage(language))}
+                                  {t('providerSettings.promptCacheMode', language)}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.promptCacheOptions === 'object'
@@ -2372,9 +2366,9 @@ export function ProviderSettings({
                                     value ? { mode: value, ...(value === 'explicit' ? { ttl: '30m' } : {}) } : undefined,
                                   )}
                                   options={[
-                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
-                                    { value: 'implicit', label: t('providerSettings.implicitRecommendedForAgent', asLanguage(language)) },
-                                    { value: 'explicit', label: t('providerSettings.explicit30Min', asLanguage(language)) },
+                                    { value: '', label: t('providerSettings.providerDefault', language) },
+                                    { value: 'implicit', label: t('providerSettings.implicitRecommendedForAgent', language) },
+                                    { value: 'explicit', label: t('providerSettings.explicit30Min', language) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2382,7 +2376,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5">
                                 <label className="text-xs text-text-secondary">
-                                  {t('providerSettings.legacyCacheRetention', asLanguage(language))}
+                                  {t('providerSettings.legacyCacheRetention', language)}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.promptCacheRetention === 'string'
@@ -2390,9 +2384,9 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('promptCacheRetention', value || undefined)}
                                   options={[
-                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
-                                    { value: 'in_memory', label: t('providerSettings.inMemory', asLanguage(language)) },
-                                    { value: '24h', label: t('providerSettings.24Hours', asLanguage(language)) },
+                                    { value: '', label: t('providerSettings.providerDefault', language) },
+                                    { value: 'in_memory', label: t('providerSettings.inMemory', language) },
+                                    { value: '24h', label: t('providerSettings.24Hours', language) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
@@ -2400,7 +2394,7 @@ export function ProviderSettings({
 
                               <div className="space-y-1.5 md:col-span-2">
                                 <label className="text-xs text-text-secondary">
-                                  {t('providerSettings.serviceTier', asLanguage(language))}
+                                  {t('providerSettings.serviceTier', language)}
                                 </label>
                                 <Select
                                   value={typeof openAIResponsesOptions.serviceTier === 'string'
@@ -2408,17 +2402,17 @@ export function ProviderSettings({
                                     : ''}
                                   onChange={(value) => updateOpenAIResponsesOption('serviceTier', value || undefined)}
                                   options={[
-                                    { value: '', label: t('providerSettings.providerDefault', asLanguage(language)) },
-                                    { value: 'auto', label: t('common.auto', asLanguage(language)) },
-                                    { value: 'default', label: t('providerSettings.default', asLanguage(language)) },
+                                    { value: '', label: t('providerSettings.providerDefault', language) },
+                                    { value: 'auto', label: t('common.auto', language) },
+                                    { value: 'default', label: t('providerSettings.default', language) },
                                     { value: 'flex', label: 'Flex' },
-                                    { value: 'priority', label: t('providerSettings.priority', asLanguage(language)) },
-                                    { value: 'fast', label: t('providerSettings.fast', asLanguage(language)) },
+                                    { value: 'priority', label: t('providerSettings.priority', language) },
+                                    { value: 'fast', label: t('providerSettings.fast', language) },
                                   ]}
                                   className="bg-background/40 border-border/60 h-9 text-xs"
                                 />
                                 <p className="text-[10px] text-text-muted leading-relaxed">
-                                  {t('providerSettings.nonDefaultTiersMay', asLanguage(language))}
+                                  {t('providerSettings.nonDefaultTiersMay', language)}
                                 </p>
                               </div>
                             </div>
@@ -2427,7 +2421,7 @@ export function ProviderSettings({
 
                         <div className="space-y-1.5">
                           <label className="text-xs text-text-secondary">
-                            {t('providerSettings.timeoutS', asLanguage(language))}
+                            {t('providerSettings.timeoutS', language)}
                           </label>
                           <Input
                             type="number"
@@ -2437,7 +2431,7 @@ export function ProviderSettings({
                             className="bg-background/40 border-border/60 text-xs h-9"
                           />
                           <p className="text-[10px] text-text-muted leading-relaxed">
-                            {t('providerSettings.timeoutIsAnAdvanced', asLanguage(language))}
+                            {t('providerSettings.timeoutIsAnAdvanced', language)}
                           </p>
                         </div>
                       </div>
@@ -2449,7 +2443,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Frequency Penalty</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.penalizesTokensBasedOn', asLanguage(language))}
+                            {t('providerSettings.penalizesTokensBasedOn', language)}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2476,7 +2470,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Presence Penalty</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.penalizesTokensBasedOn2', asLanguage(language))}
+                            {t('providerSettings.penalizesTokensBasedOn2', language)}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2503,7 +2497,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Seed</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.fixedSeedForReproducible', asLanguage(language))}
+                            {t('providerSettings.fixedSeedForReproducible', language)}
                           </p>
                         </div>
                         <span className="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded text-accent">
@@ -2528,7 +2522,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Stop Sequences</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.stopGenerationWhenThese', asLanguage(language))}
+                            {t('providerSettings.stopGenerationWhenThese', language)}
                           </p>
                         </div>
                         <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
@@ -2556,7 +2550,7 @@ export function ProviderSettings({
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">Logit Bias (JSON)</label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.modifyLikelihoodOfSpecific', asLanguage(language))}
+                            {t('providerSettings.modifyLikelihoodOfSpecific', language)}
                           </p>
                         </div>
                         <span className="text-[10px] text-text-muted bg-background/50 px-1.5 py-0.5 rounded">
@@ -2590,10 +2584,10 @@ export function ProviderSettings({
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
                           <label className="text-xs text-text-secondary">
-                            {t('providerSettings.customHeaders', asLanguage(language))}
+                            {t('providerSettings.customHeaders', language)}
                           </label>
                           <p className="text-[10px] text-text-muted">
-                            {t('providerSettings.addExtraHttpHeaders', asLanguage(language))}
+                            {t('providerSettings.addExtraHttpHeaders', language)}
                           </p>
                         </div>
                         <button
@@ -2603,7 +2597,7 @@ export function ProviderSettings({
                           className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 flex-shrink-0"
                         >
                           <Plus className="w-3 h-3" />
-                          {t('git.add', asLanguage(language))}
+                          {t('git.add', language)}
                         </button>
                       </div>
 
@@ -2614,7 +2608,7 @@ export function ProviderSettings({
                         return defaultKeys.length > 0 && (
                           <div className="space-y-2">
                             <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                              {t('providerSettings.defaultHeadersEditable', asLanguage(language))}
+                              {t('providerSettings.defaultHeadersEditable', language)}
                             </div>
                             {defaultKeys.map((key) => {
                               const defaultValue = defaultHeaders[key]
@@ -2641,7 +2635,7 @@ export function ProviderSettings({
                                       className="flex-1 bg-background/50 border-border text-xs font-mono h-8"
                                     />
                                     <span className="text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20 flex-shrink-0 ml-2">
-                                      {t('providerSettings.default2', asLanguage(language))}
+                                      {t('providerSettings.default2', language)}
                                     </span>
                                   </div>
                                   <Input
@@ -2658,7 +2652,7 @@ export function ProviderSettings({
                                     className="bg-background/50 border-border text-xs font-mono h-8"
                                   />
                                   <p className="text-[10px] text-text-muted">
-                                    {t('providerSettings.useAsPlaceholderFor', asLanguage(language))}
+                                    {t('providerSettings.useAsPlaceholderFor', language)}
                                   </p>
                                 </div>
                               )
@@ -2672,7 +2666,7 @@ export function ProviderSettings({
                         <div className="space-y-2">
                           {Object.keys(defaultHeaders).length > 0 && (
                             <div className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
-                              {t('providerSettings.additionalHeaders', asLanguage(language))}
+                              {t('providerSettings.additionalHeaders', language)}
                             </div>
                           )}
                           {customHeaders.map((header, index) => (
@@ -2704,7 +2698,7 @@ export function ProviderSettings({
                                         newHeaders[index].key = e.target.value
                                         syncCustomHeaders(newHeaders)
                                       }}
-                                      placeholder={t('providerSettings.headerName', asLanguage(language))}
+                                      placeholder={t('providerSettings.headerName', language)}
                                       className="bg-surface-active border-border text-xs font-mono h-8"
                                     />
                                   )}
@@ -2716,7 +2710,7 @@ export function ProviderSettings({
                                       newHeaders[index].value = e.target.value
                                       syncCustomHeaders(newHeaders)
                                     }}
-                                    placeholder={t('providerSettings.value', asLanguage(language))}
+                                    placeholder={t('providerSettings.value', language)}
                                     className="bg-surface-active border-border text-xs font-mono h-8"
                                   />
                                 </div>
@@ -2737,7 +2731,7 @@ export function ProviderSettings({
 
                       {customHeaders.length === 0 && Object.keys(defaultHeaders).length === 0 && (
                         <div className="text-[10px] text-text-muted bg-background/50 px-3 py-2 rounded-lg border border-border text-center">
-                          {t('providerSettings.clickAddToAdd', asLanguage(language))}
+                          {t('providerSettings.clickAddToAdd', language)}
                         </div>
                       )}
                     </div>

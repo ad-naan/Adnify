@@ -1,28 +1,26 @@
 import { memo, useMemo } from 'react'
 import {
-  AlertTriangle, CheckCircle2, Circle, Clock3, FileCode2, LoaderCircle,
-  ShieldAlert, UserRoundCog, XCircle,
-} from 'lucide-react'
+  AlertTriangle, CheckCircle2, Circle, Clock3, FileCode2, LoaderCircle, ShieldAlert, UserRoundCog, XCircle, } from 'lucide-react'
 import type { PlanTask } from '@/renderer/agent/plan/types'
 import { layoutPlanGraph } from '@/renderer/agent/plan/planGraphLayout'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 export interface PlanDependencyGraphProps {
   tasks: PlanTask[]
   selectedTaskId?: string | null
   waitingApprovalTaskIds?: ReadonlySet<string>
-  language: string
+  language: Language
   onSelectTask: (taskId: string) => void
 }
 
-function taskState(task: PlanTask, waitingApproval: boolean, language: string) {
-  if (waitingApproval) return { label: t('planDependencyGraph.approvalRequired', asLanguage(language)), icon: ShieldAlert, tone: 'text-amber-500', ring: 'border-amber-400/45' }
-  if (task.status === 'completed') return { label: t('common.completed', asLanguage(language)), icon: CheckCircle2, tone: 'text-emerald-500', ring: 'border-emerald-400/35' }
-  if (task.status === 'running') return { label: t('common.running', asLanguage(language)), icon: LoaderCircle, tone: 'text-accent', ring: 'border-accent/45' }
-  if (task.status === 'failed') return { label: t('planDependencyGraph.failed', asLanguage(language)), icon: AlertTriangle, tone: 'text-red-400', ring: 'border-red-400/40' }
-  if (task.status === 'skipped' || task.status === 'cancelled') return { label: t('common.skipped', asLanguage(language)), icon: XCircle, tone: 'text-text-muted', ring: 'border-border/70' }
-  return { label: t('planDependencyGraph.queued', asLanguage(language)), icon: Circle, tone: 'text-text-muted', ring: 'border-border/70' }
+function taskState(task: PlanTask, waitingApproval: boolean, language: Language) {
+  if (waitingApproval) return { label: t('planDependencyGraph.approvalRequired', language), icon: ShieldAlert, tone: 'text-amber-500', ring: 'border-amber-400/45' }
+  if (task.status === 'completed') return { label: t('common.completed', language), icon: CheckCircle2, tone: 'text-emerald-500', ring: 'border-emerald-400/35' }
+  if (task.status === 'running') return { label: t('common.running', language), icon: LoaderCircle, tone: 'text-accent', ring: 'border-accent/45' }
+  if (task.status === 'failed') return { label: t('planDependencyGraph.failed', language), icon: AlertTriangle, tone: 'text-red-400', ring: 'border-red-400/40' }
+  if (task.status === 'skipped' || task.status === 'cancelled') return { label: t('common.skipped', language), icon: XCircle, tone: 'text-text-muted', ring: 'border-border/70' }
+  return { label: t('planDependencyGraph.queued', language), icon: Circle, tone: 'text-text-muted', ring: 'border-border/70' }
 }
 
 function formatDuration(task: PlanTask): string | null {
@@ -47,15 +45,15 @@ export const PlanDependencyGraph = memo(function PlanDependencyGraph({
 
   if (!tasks.length) return <div className="flex min-h-[320px] flex-col items-center justify-center text-[11px] text-text-muted">
     <OtterAsset asset="idlePaws" className="mb-3 h-16 w-16 object-contain opacity-80" />
-    {t('planDependencyGraph.noTasksInThis', asLanguage(language))}
+    {t('planDependencyGraph.noTasksInThis', language)}
   </div>
 
   return <div className="relative min-h-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_1px_1px,rgb(var(--color-border)/0.22)_1px,transparent_0)] bg-[size:20px_20px] custom-scrollbar">
     {(layout.hasCycle || layout.missingDependencies.length > 0) && <div className="sticky left-4 top-3 z-30 mx-4 flex w-fit max-w-[640px] items-center gap-2 rounded-md border border-amber-400/30 bg-background/95 px-3 py-2 text-[11px] text-amber-500 shadow-sm backdrop-blur">
       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
       <span>{layout.hasCycle
-        ? t('planDependencyGraph.thePlanContainsA', asLanguage(language))
-        : t('planDependencyGraph.dependenciesReferenceMissingTasks', asLanguage(language), { length: layout.missingDependencies.length })}</span>
+        ? t('planDependencyGraph.thePlanContainsA', language)
+        : t('planDependencyGraph.dependenciesReferenceMissingTasks', language, { length: layout.missingDependencies.length })}</span>
     </div>}
     <div className="relative" style={{ width: layout.width, height: layout.height }}>
       <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
@@ -95,10 +93,10 @@ export const PlanDependencyGraph = memo(function PlanDependencyGraph({
             </div>
 
             <div className="mt-auto grid grid-cols-2 gap-x-4 gap-y-1.5 border-t border-border/45 pt-2.5 text-[10px]">
-              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><UserRoundCog className="h-3 w-3 shrink-0" /><span className="truncate">{task.role || t('planDependencyGraph.defaultRole', asLanguage(language))}</span></span>
-              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><Clock3 className="h-3 w-3 shrink-0" /><span className="truncate">{duration || (task.estimatedTokens ? `${task.estimatedTokens.toLocaleString()} tokens` : t('planDependencyGraph.notEstimated', asLanguage(language)))}</span></span>
-              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><FileCode2 className="h-3 w-3 shrink-0" /><span className="truncate">{task.producesFiles?.length ? task.producesFiles.join('、') : t('planDependencyGraph.noDeclaredArtifact', asLanguage(language))}</span></span>
-              <span className="truncate text-text-muted" title={dependencyTitles.join('、')}>{task.dependencies.length ? `${t('common.depends', asLanguage(language))} ${dependencyTitles.join('、')}` : t('planDependencyGraph.startingTask', asLanguage(language))}</span>
+              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><UserRoundCog className="h-3 w-3 shrink-0" /><span className="truncate">{task.role || t('planDependencyGraph.defaultRole', language)}</span></span>
+              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><Clock3 className="h-3 w-3 shrink-0" /><span className="truncate">{duration || (task.estimatedTokens ? `${task.estimatedTokens.toLocaleString()} tokens` : t('planDependencyGraph.notEstimated', language))}</span></span>
+              <span className="flex min-w-0 items-center gap-1.5 text-text-muted"><FileCode2 className="h-3 w-3 shrink-0" /><span className="truncate">{task.producesFiles?.length ? task.producesFiles.join('、') : t('planDependencyGraph.noDeclaredArtifact', language)}</span></span>
+              <span className="truncate text-text-muted" title={dependencyTitles.join('、')}>{task.dependencies.length ? `${t('common.depends', language)} ${dependencyTitles.join('、')}` : t('planDependencyGraph.startingTask', language)}</span>
             </div>
           </div>
         </button>

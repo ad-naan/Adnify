@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { t, type Language } from '@shared/i18n'
 
 interface ProgressiveRevealProps {
   children: ReactNode
   collapsedHeight?: number
-  language: string
+  language: Language
   expandLabel?: string
   collapseLabel?: string
   className?: string
@@ -37,8 +38,6 @@ export function ProgressiveReveal({
     return () => observer?.disconnect()
   }, [collapsedHeight])
 
-  const zh = language === 'zh'
-
   return (
     <div className={`relative ${className}`}>
       <div
@@ -59,7 +58,7 @@ export function ProgressiveReveal({
             onClick={(event) => { event.stopPropagation(); setExpanded(true) }}
             className="pointer-events-auto inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-surface px-4 text-xs font-medium text-text-secondary shadow-lg transition-colors hover:border-accent/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
-            {expandLabel || (zh ? '展开全部' : 'Show all')}
+            {expandLabel || t('progressiveReveal.showAll', language)}
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -72,7 +71,7 @@ export function ProgressiveReveal({
             onClick={(event) => { event.stopPropagation(); setExpanded(false) }}
             className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-4 text-xs font-medium text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
-            {collapseLabel || (zh ? '收起部分内容' : 'Show less')}
+            {collapseLabel || t('progressiveReveal.showLess', language)}
             <ChevronUp className="h-3.5 w-3.5" />
           </button>
         </div>

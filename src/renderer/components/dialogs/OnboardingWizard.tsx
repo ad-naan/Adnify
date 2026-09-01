@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { useStore, LLMConfig } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { Language } from '@renderer/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 import { themeManager, Theme } from '@renderer/config/themeConfig'
 import { PROVIDERS } from '@/shared/config/providers'
 import { LLM_DEFAULTS } from '@shared/config/defaults'
@@ -31,20 +31,20 @@ type Step = 'welcome' | 'language' | 'theme' | 'provider' | 'capabilities' | 'wo
 
 const STEPS: Step[] = ['welcome', 'language', 'theme', 'provider', 'capabilities', 'workspace', 'complete']
 
-const LANGUAGES: { id: Language; name: string; native: string; glyph: string; description: { en: string; zh: string } }[] = [
+const LANGUAGES: { id: Language; name: string; native: string; glyph: string; descriptionKey: TranslationKey }[] = [
   {
     id: 'en',
     name: 'English',
     native: 'English',
     glyph: 'Aa',
-    description: { en: 'Interface and AI in English', zh: '界面与 AI 使用英文' },
+    descriptionKey: 'onboardingWizard.interfaceAndAiInEnglish',
   },
   {
     id: 'zh',
     name: 'Chinese',
     native: '中文',
     glyph: '中',
-    description: { en: 'Interface and AI in Chinese', zh: '界面与 AI 使用中文' },
+    descriptionKey: 'onboardingWizard.interfaceAndAiInChinese',
   },
 ]
 
@@ -77,7 +77,6 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
 
   const allThemes = themeManager.getAllThemes()
   const currentStepIndex = STEPS.indexOf(currentStep)
-  const isZh = selectedLanguage === 'zh'
 
   const welcomeArtwork = useMemo(
     () => publicAsset(currentThemeId === 'dawn' ? 'brand/welcome/light.webp' : 'brand/welcome/dark.webp'),
@@ -210,7 +209,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
               className="adnify-onboarding-logo"
             />
             <div>
-              <p className="adnify-onboarding-eyebrow">{isZh ? '初始化' : 'Setup'}</p>
+              <p className="adnify-onboarding-eyebrow">{t('onboardingWizard.setup', selectedLanguage)}</p>
               <p className="adnify-onboarding-brand-name">Adnify</p>
             </div>
           </div>
@@ -219,7 +218,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             <ProgressBar
               steps={STEPS.slice(0, -1)}
               currentIndex={Math.min(currentStepIndex, STEPS.length - 2)}
-              isZh={isZh}
+              language={selectedLanguage}
             />
           </div>
 
@@ -229,7 +228,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
               className="adnify-onboarding-skip"
               onClick={handleComplete}
             >
-              <span>{isZh ? '跳过引导' : 'Skip setup'}</span>
+              <span>{t('onboardingWizard.skipSetup', selectedLanguage)}</span>
               <ChevronRight className="h-3 w-3" />
             </button>
           )}
@@ -241,28 +240,28 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
           className={`adnify-onboarding-card adnify-onboarding-card-${direction > 0 ? 'enter' : 'enter-reverse'}`}
         >
           {currentStep === 'welcome' && (
-            <WelcomeStep isZh={isZh} artwork={welcomeArtwork} onStart={goNext} />
+            <WelcomeStep language={selectedLanguage} artwork={welcomeArtwork} onStart={goNext} />
           )}
           {currentStep === 'language' && (
-            <LanguageStep isZh={isZh} selectedLanguage={selectedLanguage} onSelect={setSelectedLanguage} />
+            <LanguageStep selectedLanguage={selectedLanguage} onSelect={setSelectedLanguage} />
           )}
           {currentStep === 'theme' && (
-            <ThemeStep isZh={isZh} themes={allThemes} selectedTheme={selectedTheme} onSelect={setSelectedTheme} />
+            <ThemeStep language={selectedLanguage} themes={allThemes} selectedTheme={selectedTheme} onSelect={setSelectedTheme} />
           )}
           {currentStep === 'provider' && (
             <ProviderStep
-              isZh={isZh}
+              language={selectedLanguage}
               config={providerConfig}
               setConfig={setProviderConfig}
               showApiKey={showApiKey}
               setShowApiKey={setShowApiKey}
             />
           )}
-          {currentStep === 'capabilities' && <CapabilitiesStep isZh={isZh} />}
+          {currentStep === 'capabilities' && <CapabilitiesStep language={selectedLanguage} />}
           {currentStep === 'workspace' && (
-            <WorkspaceStep isZh={isZh} workspacePath={workspacePath} onOpenFolder={handleOpenFolder} />
+            <WorkspaceStep language={selectedLanguage} workspacePath={workspacePath} onOpenFolder={handleOpenFolder} />
           )}
-          {currentStep === 'complete' && <CompleteStep isZh={isZh} />}
+          {currentStep === 'complete' && <CompleteStep language={selectedLanguage} />}
         </section>
 
         <footer className="adnify-onboarding-footer">
@@ -274,7 +273,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             aria-hidden={currentStepIndex === 0}
           >
             <ChevronLeft className="h-4 w-4" />
-            {isZh ? '上一步' : 'Back'}
+            {t('onboardingWizard.back', selectedLanguage)}
           </button>
 
           <span className="adnify-onboarding-step-count">
@@ -289,7 +288,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
             >
               <span className="adnify-onboarding-primary-content">
                 <Rocket className="h-4 w-4" />
-                {isZh ? '开始使用' : 'Get Started'}
+                {t('onboardingWizard.getStarted', selectedLanguage)}
               </span>
               <span className="adnify-onboarding-button-mascot">
                 <img src={publicAsset('brand/ip/4.webp')} alt="" draggable={false} />
@@ -302,7 +301,7 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
               onClick={goNext}
             >
               <span className="adnify-onboarding-primary-content">
-                {isZh ? '下一步' : 'Next'}
+                {t('onboardingWizard.next', selectedLanguage)}
                 <ChevronRight className="h-4 w-4" />
               </span>
             </button>
@@ -318,20 +317,20 @@ export default function OnboardingWizard({ onComplete }: OnboardingWizardProps) 
 function ProgressBar({
   steps,
   currentIndex,
-  isZh,
+  language,
 }: {
   steps: Step[]
   currentIndex: number
-  isZh: boolean
+  language: Language
 }) {
-  const STEP_LABELS: Record<Step, { en: string; zh: string }> = {
-    welcome: { en: 'Welcome', zh: '欢迎' },
-    language: { en: 'Language', zh: '语言' },
-    theme: { en: 'Theme', zh: '主题' },
-    provider: { en: 'AI Model', zh: 'AI 模型' },
-    capabilities: { en: 'Capabilities', zh: '能力' },
-    workspace: { en: 'Workspace', zh: '工作区' },
-    complete: { en: 'Done', zh: '完成' },
+  const STEP_LABEL_KEYS: Record<Step, TranslationKey> = {
+    welcome: 'onboardingWizard.welcome',
+    language: 'onboardingWizard.language',
+    theme: 'onboardingWizard.theme',
+    provider: 'onboardingWizard.aiModel',
+    capabilities: 'onboardingWizard.capabilities',
+    workspace: 'onboardingWizard.workspace',
+    complete: 'onboardingWizard.done',
   }
 
   return (
@@ -348,7 +347,7 @@ function ProgressBar({
               {isDone ? <Check className="h-3 w-3" /> : <span>{idx + 1}</span>}
             </span>
             <span className="adnify-onboarding-progress-label">
-              {isZh ? STEP_LABELS[step].zh : STEP_LABELS[step].en}
+              {t(STEP_LABEL_KEYS[step], language)}
             </span>
           </li>
         )
@@ -360,11 +359,11 @@ function ProgressBar({
 // =================== Step Components ===================
 
 function WelcomeStep({
-  isZh,
+  language,
   artwork,
   onStart,
 }: {
-  isZh: boolean
+  language: Language
   artwork: string
   onStart: () => void
 }) {
@@ -372,22 +371,20 @@ function WelcomeStep({
     <div className="adnify-onboarding-step adnify-onboarding-welcome">
       <div className="adnify-onboarding-copy">
         <p className="adnify-onboarding-eyebrow">
-          {isZh ? '欢迎来到 Adnify' : 'Welcome to Adnify'}
+          {t('onboardingWizard.welcomeToAdnify', language)}
         </p>
         <h1 className="adnify-onboarding-title">
-          {isZh ? '让我们一起，搭好工作台' : 'Let\'s set up your workspace'}
+          {t('onboardingWizard.letsSetUpYour', language)}
         </h1>
         <p className="adnify-onboarding-subtitle">
-          {isZh
-            ? '只需几步，配置语言、主题、AI 模型与工作区。完成后即可开始智能编程。'
-            : 'A few quick steps to pick your language, theme, AI model and workspace. Then you\'re ready to build.'}
+          {t('onboardingWizard.aFewQuickSteps', language)}
         </p>
 
         <div className="adnify-onboarding-actions">
           <button type="button" className="adnify-onboarding-primary group" onClick={onStart}>
             <span className="adnify-onboarding-primary-content">
               <Sparkles className="h-4 w-4" />
-              {isZh ? '开始设置' : 'Start setup'}
+              {t('onboardingWizard.startSetup', language)}
             </span>
             <span className="adnify-onboarding-button-mascot">
               <img src={publicAsset('brand/ip/1.webp')} alt="" draggable={false} />
@@ -396,9 +393,9 @@ function WelcomeStep({
         </div>
 
         <ul className="adnify-onboarding-perks">
-          <li><Check className="h-3.5 w-3.5" />{isZh ? '约 1 分钟完成' : 'Takes about a minute'}</li>
-          <li><Check className="h-3.5 w-3.5" />{isZh ? '随时可在设置中调整' : 'Change anything later in settings'}</li>
-          <li><Check className="h-3.5 w-3.5" />{isZh ? '本地保存，不上传' : 'Saved locally, never uploaded'}</li>
+          <li><Check className="h-3.5 w-3.5" />{t('onboardingWizard.takesAboutAMinute', language)}</li>
+          <li><Check className="h-3.5 w-3.5" />{t('onboardingWizard.changeAnythingLaterIn', language)}</li>
+          <li><Check className="h-3.5 w-3.5" />{t('onboardingWizard.savedLocallyNeverUploaded', language)}</li>
         </ul>
       </div>
 
@@ -411,11 +408,9 @@ function WelcomeStep({
 }
 
 function LanguageStep({
-  isZh,
   selectedLanguage,
   onSelect,
 }: {
-  isZh: boolean
   selectedLanguage: Language
   onSelect: (lang: Language) => void
 }) {
@@ -423,9 +418,9 @@ function LanguageStep({
     <div className="adnify-onboarding-step">
       <StepHeader
         icon={<Globe className="h-5 w-5" />}
-        eyebrow={isZh ? '步骤一' : 'Step 1'}
-        title={isZh ? '选择你的语言' : 'Choose your language'}
-        subtitle={isZh ? '可随时在设置中切换' : 'You can switch anytime in settings'}
+        eyebrow={t('onboardingWizard.step1', selectedLanguage)}
+        title={t('onboardingWizard.chooseYourLanguage', selectedLanguage)}
+        subtitle={t('onboardingWizard.youCanSwitchAnytime', selectedLanguage)}
       />
 
       <div className="adnify-onboarding-lang-grid">
@@ -445,7 +440,7 @@ function LanguageStep({
               <span className="adnify-onboarding-pick-title">{lang.native}</span>
               <span className="adnify-onboarding-pick-sub">{lang.name}</span>
               <span className="adnify-onboarding-pick-desc">
-                {isZh ? lang.description.zh : lang.description.en}
+                {t(lang.descriptionKey, selectedLanguage)}
               </span>
               {active && (
                 <span className="adnify-onboarding-pick-check">
@@ -461,12 +456,12 @@ function LanguageStep({
 }
 
 function ThemeStep({
-  isZh,
+  language,
   themes,
   selectedTheme,
   onSelect,
 }: {
-  isZh: boolean
+  language: Language
   themes: Theme[]
   selectedTheme: string
   onSelect: (id: string) => void
@@ -475,9 +470,9 @@ function ThemeStep({
     <div className="adnify-onboarding-step">
       <StepHeader
         icon={<Palette className="h-5 w-5" />}
-        eyebrow={isZh ? '步骤二' : 'Step 2'}
-        title={isZh ? '挑一个顺眼的主题' : 'Pick a theme you love'}
-        subtitle={isZh ? '主题会立即在背景中预览' : 'Themes preview live in the background'}
+        eyebrow={t('onboardingWizard.step2', language)}
+        title={t('onboardingWizard.pickAThemeYou', language)}
+        subtitle={t('onboardingWizard.themesPreviewLiveIn', language)}
       />
 
       <div className="adnify-onboarding-theme-grid custom-scrollbar">
@@ -511,13 +506,13 @@ function ThemeStep({
 
 
 function ProviderStep({
-  isZh,
+  language,
   config,
   setConfig,
   showApiKey,
   setShowApiKey,
 }: {
-  isZh: boolean
+  language: Language
   config: LLMConfig
   setConfig: (config: LLMConfig) => void
   showApiKey: boolean
@@ -530,14 +525,14 @@ function ProviderStep({
     <div className="adnify-onboarding-step">
       <StepHeader
         icon={<Cpu className="h-5 w-5" />}
-        eyebrow={isZh ? '步骤三' : 'Step 3'}
-        title={isZh ? '连接 AI 模型' : 'Connect your AI model'}
-        subtitle={isZh ? 'API Key 仅保存在本机，可稍后再填' : 'API key stays local. You can add it later.'}
+        eyebrow={t('onboardingWizard.step3', language)}
+        title={t('onboardingWizard.connectYourAiModel', language)}
+        subtitle={t('onboardingWizard.apiKeyStaysLocal', language)}
       />
 
       <div className="adnify-onboarding-form">
         <div className="adnify-onboarding-field">
-          <span className="adnify-onboarding-field-label">{isZh ? '服务商' : 'Provider'}</span>
+          <span className="adnify-onboarding-field-label">{t('onboardingWizard.provider', language)}</span>
           <div className="adnify-onboarding-provider-grid">
             {providers.map((p) => {
               const active = config.provider === p.id
@@ -576,7 +571,7 @@ function ProviderStep({
 
         {selectedProvider && (
           <div className="adnify-onboarding-field">
-            <span className="adnify-onboarding-field-label">{isZh ? '默认模型' : 'Default model'}</span>
+            <span className="adnify-onboarding-field-label">{t('onboardingWizard.defaultModel', language)}</span>
             <Select
               value={config.model}
               onChange={(value) => setConfig({ ...config, model: value })}
@@ -589,7 +584,7 @@ function ProviderStep({
         <div className="adnify-onboarding-field">
           <span className="adnify-onboarding-field-label">
             <span>API Key</span>
-            <span className="adnify-onboarding-field-hint">{isZh ? '可选' : 'Optional'}</span>
+            <span className="adnify-onboarding-field-hint">{t('onboardingWizard.optional', language)}</span>
           </span>
           <div className="adnify-onboarding-key-input">
             <Input
@@ -615,7 +610,7 @@ function ProviderStep({
               rel="noreferrer"
               className="adnify-onboarding-link"
             >
-              <span>{isZh ? '获取 API Key' : 'Get API key'}</span>
+              <span>{t('onboardingWizard.getApiKey', language)}</span>
               <ChevronRight className="h-3 w-3" />
             </a>
           )}
@@ -625,55 +620,55 @@ function ProviderStep({
   )
 }
 
-function CapabilitiesStep({ isZh }: { isZh: boolean }) {
+function CapabilitiesStep({ language }: { language: Language }) {
   const capabilities: { icon: React.ReactNode; title: string; desc: string; tone: string }[] = [
     {
       icon: <Bot className="h-[18px] w-[18px]" />,
       tone: 'violet',
-      title: isZh ? 'AI Agent' : 'AI Agent',
-      desc: isZh ? '让 AI 自主读写代码与运行命令' : 'Reads, edits and runs commands for you',
+      title: 'AI Agent',
+      desc: t('onboardingWizard.readsEditsAndRuns', language),
     },
     {
       icon: <Plug className="h-[18px] w-[18px]" />,
       tone: 'blue',
-      title: isZh ? 'MCP 工具' : 'MCP tools',
-      desc: isZh ? '接入数据库、浏览器等外部能力' : 'Plug in databases, browsers and more',
+      title: t('onboardingWizard.mcpTools', language),
+      desc: t('onboardingWizard.plugInDatabasesBrowsers', language),
     },
     {
       icon: <Lightbulb className="h-[18px] w-[18px]" />,
       tone: 'amber',
-      title: isZh ? 'Skills' : 'Skills',
-      desc: isZh ? '为不同任务装载专用工作流' : 'Load specialized workflows for tasks',
+      title: 'Skills',
+      desc: t('onboardingWizard.loadSpecializedWorkflowsFor', language),
     },
     {
       icon: <FileText className="h-[18px] w-[18px]" />,
       tone: 'emerald',
-      title: isZh ? 'Rules & Memory' : 'Rules & Memory',
-      desc: isZh ? '将团队规范与项目上下文沉淀下来' : 'Persist team conventions and context',
+      title: 'Rules & Memory',
+      desc: t('onboardingWizard.persistTeamConventionsAnd', language),
     },
     {
       icon: <WorkflowIcon className="h-[18px] w-[18px]" />,
       tone: 'rose',
-      title: isZh ? 'Workflows' : 'Workflows',
-      desc: isZh ? '记录可复用的多步任务流程' : 'Capture reusable multi-step playbooks',
+      title: 'Workflows',
+      desc: t('onboardingWizard.captureReusableMultiStepPlaybooks', language),
     },
     {
       icon: <Search className="h-[18px] w-[18px]" />,
       tone: 'cyan',
-      title: isZh ? '语义索引' : 'Semantic index',
-      desc: isZh ? '基于向量的代码搜索与理解' : 'Vector search across your codebase',
+      title: t('onboardingWizard.semanticIndex', language),
+      desc: t('onboardingWizard.vectorSearchAcrossYour', language),
     },
     {
       icon: <ShieldCheck className="h-[18px] w-[18px]" />,
       tone: 'lime',
-      title: isZh ? '安全审批' : 'Safe approvals',
-      desc: isZh ? '危险操作前需要你点头' : 'Risky actions require your nod',
+      title: t('onboardingWizard.safeApprovals', language),
+      desc: t('onboardingWizard.riskyActionsRequireYour', language),
     },
     {
       icon: <Code2 className="h-[18px] w-[18px]" />,
       tone: 'sky',
-      title: isZh ? 'LSP 编辑器' : 'LSP editor',
-      desc: isZh ? '语言服务、片段、Git 一应俱全' : 'Language server, snippets, Git built-in',
+      title: t('onboardingWizard.lspEditor', language),
+      desc: t('onboardingWizard.languageServerSnippetsGit', language),
     },
   ]
 
@@ -681,9 +676,9 @@ function CapabilitiesStep({ isZh }: { isZh: boolean }) {
     <div className="adnify-onboarding-step">
       <StepHeader
         icon={<Sparkles className="h-5 w-5" />}
-        eyebrow={isZh ? '步骤四' : 'Step 4'}
-        title={isZh ? '你将获得这些能力' : 'What you get out of the box'}
-        subtitle={isZh ? '所有功能可在设置中启用或调整' : 'Every feature can be tuned in settings'}
+        eyebrow={t('onboardingWizard.step4', language)}
+        title={t('onboardingWizard.whatYouGetOut', language)}
+        subtitle={t('onboardingWizard.everyFeatureCanBe', language)}
       />
 
       <div className="adnify-onboarding-cap-grid">
@@ -700,11 +695,11 @@ function CapabilitiesStep({ isZh }: { isZh: boolean }) {
 }
 
 function WorkspaceStep({
-  isZh,
+  language,
   workspacePath,
   onOpenFolder,
 }: {
-  isZh: boolean
+  language: Language
   workspacePath: string | null
   onOpenFolder: () => void
 }) {
@@ -712,9 +707,9 @@ function WorkspaceStep({
     <div className="adnify-onboarding-step">
       <StepHeader
         icon={<FolderOpen className="h-5 w-5" />}
-        eyebrow={isZh ? '步骤五' : 'Step 5'}
-        title={isZh ? '打开一个项目' : 'Open a project'}
-        subtitle={isZh ? '选择文件夹立即开始，也可以稍后再开' : 'Pick a folder now or skip and open later'}
+        eyebrow={t('onboardingWizard.step5', language)}
+        title={t('onboardingWizard.openAProject', language)}
+        subtitle={t('onboardingWizard.pickAFolderNow', language)}
       />
 
       <div className="adnify-onboarding-workspace">
@@ -724,7 +719,7 @@ function WorkspaceStep({
               <Check className="h-7 w-7" />
             </div>
             <p className="adnify-onboarding-workspace-title">
-              {isZh ? '项目已就绪' : 'Project ready'}
+              {t('onboardingWizard.projectReady', language)}
             </p>
             <p className="adnify-onboarding-workspace-path">{workspacePath}</p>
             <button
@@ -732,7 +727,7 @@ function WorkspaceStep({
               onClick={onOpenFolder}
               className="adnify-onboarding-link"
             >
-              <span>{isZh ? '更换项目' : 'Change project'}</span>
+              <span>{t('onboardingWizard.changeProject', language)}</span>
               <ChevronRight className="h-3 w-3" />
             </button>
           </div>
@@ -750,13 +745,13 @@ function WorkspaceStep({
                 <FolderOpen className="h-5 w-5" />
               </span>
               <span className="adnify-onboarding-workspace-cta-title">
-                {isZh ? '选择一个文件夹' : 'Pick a folder'}
+                {t('onboardingWizard.pickAFolder', language)}
               </span>
               <span className="adnify-onboarding-workspace-cta-hint">
-                {isZh ? '点击这里浏览本地项目，或继续下一步稍后再开' : 'Click to browse, or continue and open it later'}
+                {t('onboardingWizard.clickToBrowseOr', language)}
               </span>
               <span className="adnify-onboarding-workspace-action">
-                <span>{isZh ? '浏览本地项目' : 'Browse projects'}</span>
+                <span>{t('onboardingWizard.browseProjects', language)}</span>
                 <ChevronRight className="h-3.5 w-3.5" />
               </span>
             </span>
@@ -767,27 +762,25 @@ function WorkspaceStep({
   )
 }
 
-function CompleteStep({ isZh }: { isZh: boolean }) {
+function CompleteStep({ language }: { language: Language }) {
   return (
     <div className="adnify-onboarding-step adnify-onboarding-complete">
-      <ContributorGalaxy isZh={isZh} />
+      <ContributorGalaxy language={language} />
 
       <div className="adnify-onboarding-complete-text">
-        <p className="adnify-onboarding-eyebrow">{isZh ? '一切就绪' : 'All set'}</p>
+        <p className="adnify-onboarding-eyebrow">{t('onboardingWizard.allSet', language)}</p>
         <h2 className="adnify-onboarding-complete-title">
-          {isZh ? '由社区共建，开始构建吧' : 'Built with the community'}
+          {t('onboardingWizard.builtWithTheCommunity', language)}
         </h2>
         <p className="adnify-onboarding-complete-sub">
-          {isZh
-            ? `感谢 ${CONTRIBUTORS.length} 位贡献者，让 Adnify 一路走到这里。`
-            : `Made possible by ${CONTRIBUTORS.length} contributors who shaped Adnify.`}
+          {t('onboardingWizard.madePossibleByContributors', language, { count: CONTRIBUTORS.length })}
         </p>
       </div>
 
       <div className="adnify-onboarding-complete-shortcuts">
-        <ShortcutChip label={isZh ? '命令面板' : 'Command palette'} keys={['Ctrl', 'P']} />
-        <ShortcutChip label={isZh ? 'AI 助手' : 'AI assistant'} keys={['Ctrl', 'L']} />
-        <ShortcutChip label={isZh ? '设置' : 'Settings'} keys={['Ctrl', ',']} />
+        <ShortcutChip label={t('onboardingWizard.commandPalette', language)} keys={['Ctrl', 'P']} />
+        <ShortcutChip label={t('onboardingWizard.aiAssistant', language)} keys={['Ctrl', 'L']} />
+        <ShortcutChip label={t('onboardingWizard.settings', language)} keys={['Ctrl', ',']} />
       </div>
     </div>
   )
@@ -809,7 +802,7 @@ function ShortcutChip({ label, keys }: { label: string; keys: string[] }) {
   )
 }
 
-function ContributorGalaxy({ isZh }: { isZh: boolean }) {
+function ContributorGalaxy({ language }: { language: Language }) {
   const orbit = getOrbitContributors()
   const core = getCoreContributor()
 
@@ -822,7 +815,7 @@ function ContributorGalaxy({ isZh }: { isZh: boolean }) {
     <div
       className="adnify-onboarding-galaxy"
       role="img"
-      aria-label={isZh ? '贡献者星系' : 'Contributor galaxy'}
+      aria-label={t('onboardingWizard.contributorGalaxy', language)}
     >
       <div className="adnify-onboarding-galaxy-stars" aria-hidden="true" />
 

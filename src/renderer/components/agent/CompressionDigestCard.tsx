@@ -2,6 +2,7 @@ import { memo, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Archive, ChevronDown, Layers3, ListTodo, MessageSquareQuote, Sparkles } from 'lucide-react'
 import { useStore } from '@store'
+import { t, type Language } from '@shared/i18n'
 import type { ContextSnapshotPart } from '@/renderer/agent/types'
 
 interface CompressionDigestCardProps {
@@ -17,47 +18,46 @@ const levelTone: Record<number, { badge: string; dot: string; glow: string }> = 
   4: { badge: 'text-red-300 bg-red-500/10 border-red-500/20', dot: 'bg-red-400', glow: 'shadow-red-500/10' },
 }
 
-function getCopy(language: string, part: ContextSnapshotPart, activeTaskCount: number) {
-  const isZh = language === 'zh'
+function getCopy(language: Language, part: ContextSnapshotPart, activeTaskCount: number) {
   const isHandoff = part.snapshotKind === 'handoff'
 
   return {
     title: isHandoff
-      ? (isZh ? '上下文续接快照' : 'Context Handoff Snapshot')
-      : (isZh ? '上下文压缩快照' : 'Context Compression Snapshot'),
+      ? t('compressionDigestCard.contextHandoffSnapshot', language)
+      : t('compressionDigestCard.contextCompressionSnapshot', language),
     subtitle: isHandoff
-      ? (isZh ? '新线程将从这份续接包恢复目标、步骤和任务列表。' : 'A new thread should resume from this packet.')
-      : (isZh ? '较早历史已折叠为结构化上下文，但关键任务状态仍被保留。' : 'Older history was folded into this structured state.'),
-    objective: isZh ? '当前目标' : 'Objective',
-    lastRequest: isZh ? '最近用户请求' : 'Last Request',
-    pending: isZh ? '待续步骤' : 'Pending Steps',
-    tasks: isZh ? '任务列表' : 'Task List',
-    noObjective: isZh ? '未记录目标' : 'No objective recorded',
-    completedStat: isZh ? `${part.summary.completedSteps.length} 已完成` : `${part.summary.completedSteps.length} completed`,
-    pendingStat: isZh ? `${part.summary.pendingSteps.length} 待续` : `${part.summary.pendingSteps.length} pending`,
-    taskStat: isZh ? `${activeTaskCount} 个活跃任务` : `${activeTaskCount} active tasks`,
+      ? t('compressionDigestCard.aNewThreadShould', language)
+      : t('compressionDigestCard.olderHistoryWasFolded', language),
+    objective: t('compressionDigestCard.objective', language),
+    lastRequest: t('compressionDigestCard.lastRequest', language),
+    pending: t('compressionDigestCard.pendingSteps', language),
+    tasks: t('compressionDigestCard.taskList', language),
+    noObjective: t('compressionDigestCard.noObjectiveRecorded', language),
+    completedStat: t('compressionDigestCard.completed', language, { count: part.summary.completedSteps.length }),
+    pendingStat: t('compressionDigestCard.pending', language, { count: part.summary.pendingSteps.length }),
+    taskStat: t('compressionDigestCard.activeTasks', language, { count: activeTaskCount }),
   }
 }
 
 export const CompressionDigestCard = memo(({ part, variant = 'card' }: CompressionDigestCardProps) => {
   const language = useStore(state => state.language || 'zh')
+  const lang = language
   const expandAgentBlocksByDefault = useStore(state => state.agentConfig.expandAgentBlocksByDefault ?? false)
   const [expanded, setExpanded] = useState(expandAgentBlocksByDefault && variant === 'card')
   const todos = part.summary.todos || []
   const activeTodos = todos.filter(todo => todo.status !== 'completed')
   const tone = levelTone[part.level] || levelTone[3]
-  const copy = getCopy(language, part, activeTodos.length)
+  const copy = getCopy(lang, part, activeTodos.length)
 
   const visiblePending = useMemo(() => part.summary.pendingSteps.slice(0, 5), [part.summary.pendingSteps])
   const visibleTodos = useMemo(() => activeTodos.slice(0, 5), [activeTodos])
   const note = part.note || copy.subtitle
 
   if (variant === 'timeline') {
-    const isZh = language === 'zh'
-    const title = isZh ? '上下文已压缩，已切换到新会话继续' : 'Context compressed and continued in a new thread'
+    const title = t('compressionDigestCard.contextCompressedAndContinued', lang)
     const detailLabel = expanded
-      ? (isZh ? '收起详情' : 'Hide details')
-      : (isZh ? '查看快照详情' : 'View snapshot details')
+      ? t('compressionDigestCard.hideDetails', lang)
+      : t('compressionDigestCard.viewSnapshotDetails', lang)
 
     return (
       <div className="my-4 w-full">

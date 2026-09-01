@@ -8,7 +8,7 @@
 import { useState, useCallback } from 'react'
 import { X, Check, ChevronDown, ChevronUp, Copy, FileEdit, Columns, AlignJustify, Loader2 } from 'lucide-react'
 import { useStore } from '@store'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { SafeDiffEditor } from './SafeDiffEditor'
 import { getLanguage } from './utils/languageMap'

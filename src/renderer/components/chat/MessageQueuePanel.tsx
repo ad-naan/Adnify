@@ -6,19 +6,11 @@
 import { memo, useState, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X,
-  Play,
-  Pencil,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Check,
-  Layers,
-} from 'lucide-react'
+  X, Play, Pencil, Trash2, ChevronUp, ChevronDown, Check, Layers, } from 'lucide-react'
 import { useMessageQueueStore } from '@/renderer/agent/store/slices/queueSlice'
 import { useStore } from '@store'
 import type { QueuedMessage } from '@/renderer/agent/types/queue'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 interface MessageQueuePanelProps {
   onSendNow: (id: string) => void
@@ -55,7 +47,7 @@ export default memo(function MessageQueuePanel({ onSendNow }: MessageQueuePanelP
               <Layers className="w-3 h-3 text-accent" />
             </div>
             <span className="text-xs font-medium text-text-secondary">
-              {t('messageQueuePanel.sendQueue', asLanguage(language))}
+              {t('messageQueuePanel.sendQueue', language)}
             </span>
             <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-accent/15 text-accent rounded-full min-w-[18px] text-center">
               {queue.length}
@@ -65,7 +57,7 @@ export default memo(function MessageQueuePanel({ onSendNow }: MessageQueuePanelP
             <button
               onClick={(e) => { e.stopPropagation(); clearQueue() }}
               className="p-1 rounded-md text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-              title={t('common.clearQueue', asLanguage(language))}
+              title={t('common.clearQueue', language)}
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -117,7 +109,7 @@ interface QueueItemProps {
   item: QueuedMessage
   index: number
   total: number
-  language: string
+  language: Language
   onRemove: (id: string) => void
   onUpdateContent: (id: string, content: string) => void
   onSendNow: (id: string) => void
@@ -206,19 +198,19 @@ function QueueItem({
                 className="px-2 py-0.5 text-[10px] font-medium bg-accent/10 text-accent rounded-md hover:bg-accent/20 transition-colors"
               >
                 <Check className="w-3 h-3 inline mr-0.5" />
-                {t('common.save', asLanguage(language))}
+                {t('common.save', language)}
               </button>
               <button
                 onClick={cancelEdit}
                 className="px-2 py-0.5 text-[10px] font-medium text-text-muted rounded-md hover:bg-surface-hover transition-colors"
               >
-                {t('cancel', asLanguage(language))}
+                {t('cancel', language)}
               </button>
             </div>
           </div>
         ) : (
           <p className="text-xs text-text-secondary leading-relaxed line-clamp-2 break-all">
-            {displayText || (t('common.multimodal', asLanguage(language)))}
+            {displayText || (t('common.multimodal', language))}
           </p>
         )}
 
@@ -226,7 +218,7 @@ function QueueItem({
         {!isEditing && item.contextItems.length > 0 && (
           <div className="flex items-center gap-1 mt-1">
             <span className="text-[10px] text-text-muted/60">
-              +{item.contextItems.length} {t('messageQueuePanel.context', asLanguage(language))}
+              +{item.contextItems.length} {t('messageQueuePanel.context', language)}
             </span>
           </div>
         )}
@@ -240,7 +232,7 @@ function QueueItem({
             <button
               onClick={() => onReorder(index, index - 1)}
               className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-active transition-colors"
-              title={t('messageQueuePanel.moveUp', asLanguage(language))}
+              title={t('messageQueuePanel.moveUp', language)}
             >
               <ChevronUp className="w-3 h-3" />
             </button>
@@ -250,7 +242,7 @@ function QueueItem({
             <button
               onClick={() => onReorder(index, index + 1)}
               className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-active transition-colors"
-              title={t('messageQueuePanel.moveDown', asLanguage(language))}
+              title={t('messageQueuePanel.moveDown', language)}
             >
               <ChevronDown className="w-3 h-3" />
             </button>
@@ -259,7 +251,7 @@ function QueueItem({
           <button
             onClick={startEdit}
             className="p-1 rounded text-text-muted hover:text-accent hover:bg-accent/10 transition-colors"
-            title={t('editor.edit', asLanguage(language))}
+            title={t('editor.edit', language)}
           >
             <Pencil className="w-3 h-3" />
           </button>
@@ -267,7 +259,7 @@ function QueueItem({
           <button
             onClick={() => onSendNow(item.id)}
             className="p-1 rounded text-text-muted hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-            title={t('messageQueuePanel.sendNow', asLanguage(language))}
+            title={t('messageQueuePanel.sendNow', language)}
           >
             <Play className="w-3 h-3" />
           </button>
@@ -275,7 +267,7 @@ function QueueItem({
           <button
             onClick={() => onRemove(item.id)}
             className="p-1 rounded text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
-            title={t('messageQueuePanel.remove', asLanguage(language))}
+            title={t('messageQueuePanel.remove', language)}
           >
             <X className="w-3 h-3" />
           </button>

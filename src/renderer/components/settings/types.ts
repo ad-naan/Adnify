@@ -2,7 +2,7 @@
  * Settings 组件共享类型定义
  */
 
-import { Language } from '@renderer/i18n'
+import { Language } from '@shared/i18n'
 import type { LLMConfig, AgentConfig, WebSearchConfig, ResolvedModelRoutingConfig } from '@shared/config/types'
 import type { ProviderModelConfig } from '@shared/config/settings'
 

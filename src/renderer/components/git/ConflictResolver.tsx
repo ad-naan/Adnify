@@ -7,7 +7,7 @@ import { api } from '@/renderer/services/electronAPI'
 import { useState, useEffect, useCallback } from 'react'
 import { GitMerge, Check, X, ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react'
 import { useStore } from '@store'
-import { t, type TranslationKey } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { gitService } from '@renderer/services/gitService'
 import { toast } from '@components/common/ToastProvider'
 import { Button } from '@components/ui'
@@ -117,8 +117,6 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
   const [resolvedContent, setResolvedContent] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
 
-  const tt = useCallback((key: string) => t(key as TranslationKey, language), [language])
-
   // 加载文件内容
   useEffect(() => {
     const loadFile = async () => {
@@ -131,7 +129,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
           setConflicts(parseConflicts(fileContent))
         }
       } catch (e) {
-        toast.error(tt('git.failedToLoadFile'))
+        toast.error(t('git.failedToLoadFile', language))
       } finally {
         setIsLoading(false)
       }
@@ -211,19 +209,19 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
   // 保存并标记为已解决
   const saveAndResolve = useCallback(async () => {
     if (conflicts.length > 0) {
-      toast.warning(tt('git.unresolvedConflicts'))
+      toast.warning(t('git.unresolvedConflicts', language))
       return
     }
     
     try {
       await api.file.write(filePath, resolvedContent)
       await gitService.stageFile(filePath)
-      toast.success(tt('git.conflictResolved'))
+      toast.success(t('git.conflictResolved', language))
       onResolved()
     } catch (e) {
-      toast.error(tt('git.failedToSaveFile'))
+      toast.error(t('git.failedToSaveFile', language))
     }
-  }, [conflicts, filePath, resolvedContent, tt, onResolved])
+  }, [conflicts, filePath, resolvedContent, language, onResolved])
 
   if (isLoading) {
     return (
@@ -242,7 +240,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
       <div className="flex items-center justify-between px-4 py-2 border-b border-border-subtle bg-surface">
         <div className="flex items-center gap-2">
           <GitMerge className="w-4 h-4 text-accent" />
-          <span className="text-sm font-medium">{tt('git.resolveConflicts')}</span>
+          <span className="text-sm font-medium">{t('git.resolveConflicts', language)}</span>
           <span className="text-xs text-text-muted">
             {getFileName(filePath)}
           </span>
@@ -250,7 +248,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
         <div className="flex items-center gap-2">
           {conflicts.length > 0 && (
             <span className="text-xs text-status-warning">
-              {conflicts.length} {tt('git.conflictsRemaining')}
+              {conflicts.length} {t('git.conflictsRemaining', language)}
             </span>
           )}
           <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -285,13 +283,13 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
           </div>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={acceptOurs}>
-              {tt('git.acceptOurs')}
+              {t('git.acceptOurs', language)}
             </Button>
             <Button variant="secondary" size="sm" onClick={acceptTheirs}>
-              {tt('git.acceptTheirs')}
+              {t('git.acceptTheirs', language)}
             </Button>
             <Button variant="secondary" size="sm" onClick={acceptBoth}>
-              {tt('git.acceptBoth')}
+              {t('git.acceptBoth', language)}
             </Button>
           </div>
         </div>
@@ -305,7 +303,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
             <div className="flex flex-col border border-border-subtle rounded-lg overflow-hidden">
               <div className="px-3 py-1.5 bg-green-500/10 border-b border-border-subtle">
                 <span className="text-xs font-medium text-green-400">
-                  {tt('git.currentChanges')} (Ours)
+                  {t('git.currentChanges', language)} (Ours)
                 </span>
               </div>
               <pre className="flex-1 p-3 text-xs font-mono overflow-auto bg-surface/30">
@@ -317,7 +315,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
             <div className="flex flex-col border border-border-subtle rounded-lg overflow-hidden">
               <div className="px-3 py-1.5 bg-blue-500/10 border-b border-border-subtle">
                 <span className="text-xs font-medium text-blue-400">
-                  {tt('git.incomingChanges')} (Theirs)
+                  {t('git.incomingChanges', language)} (Theirs)
                 </span>
               </div>
               <pre className="flex-1 p-3 text-xs font-mono overflow-auto bg-surface/30">
@@ -328,7 +326,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-text-muted">
             <Check className="w-12 h-12 text-green-400 mb-4" />
-            <p className="text-sm">{tt('git.allConflictsResolved')}</p>
+            <p className="text-sm">{t('git.allConflictsResolved', language)}</p>
           </div>
         )}
       </div>
@@ -336,7 +334,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
       {/* 底部操作 */}
       <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border-subtle bg-surface">
         <Button variant="ghost" onClick={onCancel}>
-          {tt('cancel')}
+          {t('cancel', language)}
         </Button>
         <Button
           variant="primary"
@@ -344,7 +342,7 @@ export function ConflictResolver({ filePath, onResolved, onCancel }: ConflictRes
           onClick={saveAndResolve}
         >
           <Check className="w-4 h-4 mr-1" />
-          {tt('git.markResolved')}
+          {t('git.markResolved', language)}
         </Button>
       </div>
     </div>

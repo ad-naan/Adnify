@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Zap, ChevronRight, ChevronDown, Bot, GitCommitHorizontal, Clock3, ShieldCheck, ShieldAlert } from 'lucide-react'
-import { type Language, t, asLanguage } from '@renderer/i18n'
+import { type Language, t } from '@shared/i18n'
 import { publicAsset } from '@utils/publicAsset'
 import { DatePicker } from '../ui/DatePicker'
 import { useWorkspaceAnalytics } from '@renderer/hooks/useWorkspaceAnalytics'
@@ -30,62 +30,47 @@ export default function UsageDashboard({ language }: { language: Language }) {
       || data.overview.activeHours.rawValue > 0
 
     if (!hasAnyData) {
-      return language === 'zh'
-        ? {
-          title: '还没有可展示的统计数据',
-          body: '当你开始编辑文件、提交代码或发起会话后，这里会自动显示真实统计结果。',
-        }
-        : {
-          title: 'No activity recorded yet',
-          body: 'Once you start editing files, committing code, or chatting, real workspace stats will appear here automatically.',
-        }
+      return {
+        title: t('usageDashboard.noActivityRecordedYet', language),
+        body: t('usageDashboard.onceYouStartEditing', language),
+      }
     }
 
     const momentumUp = data.overview.fileChanges.rawValue >= data.overview.commits.rawValue
-    if (language === 'zh') {
-      return momentumUp
-        ? {
-          title: '今天节奏不错！',
-          body: '现在这里展示的是工作区真实统计数据，可以直接用来观察当前产出变化。',
-        }
-        : {
-          title: '今天状态很稳！',
-          body: '统计面板已经接入真实数据，趋势会随着你的实际工作区活动持续更新。',
-        }
+    if (momentumUp) {
+      return {
+        title: t('usageDashboard.niceMomentumToday', language),
+        body: t('usageDashboard.thisDashboardNowReads', language),
+      }
     }
 
-    return momentumUp
-      ? {
-        title: 'Nice momentum today!',
-        body: 'This dashboard now reads from real workspace analytics, so the trend reflects actual activity.',
-      }
-      : {
-        title: 'A steady day so far!',
-        body: 'The dashboard is now backed by real data and will keep tracking real workspace changes over time.',
-      }
+    return {
+      title: t('usageDashboard.aSteadyDaySo', language),
+      body: t('usageDashboard.theDashboardIsNow', language),
+    }
   }, [data, language])
 
   const workspaceRows = useMemo(() => [
     {
-      label: t('usageDashboard.activeProjects', asLanguage(language)),
+      label: t('usageDashboard.activeProjects', language),
       value: data.workspace.activeProjects.toString(),
       color: 'rgb(var(--accent))',
       percent: normalizePercent(data.workspace.activeProjects, 10),
     },
     {
-      label: t('usageDashboard.fileChanges', asLanguage(language)),
+      label: t('usageDashboard.fileChanges', language),
       value: data.overview.fileChanges.value,
       color: 'rgb(var(--accent-subtle))',
       percent: normalizePercent(data.overview.fileChanges.rawValue, 1),
     },
     {
-      label: t('usageDashboard.sessions', asLanguage(language)),
+      label: t('usageDashboard.sessions', language),
       value: data.overview.sessions.value,
       color: '#10b981',
       percent: normalizePercent(data.overview.sessions.rawValue, 4),
     },
     {
-      label: t('usageDashboard.pendingTasks', asLanguage(language)),
+      label: t('usageDashboard.pendingTasks', language),
       value: data.workspace.pendingTasks.toString(),
       color: '#f59e0b',
       percent: normalizePercent(data.workspace.pendingTasks, 10),
@@ -93,7 +78,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
   ], [data, language])
 
   const modelOptions = useMemo(() => {
-    const allLabel = t('usageDashboard.allModels', asLanguage(language))
+    const allLabel = t('usageDashboard.allModels', language)
     return [
       { value: '__all__', label: allLabel },
       ...data.models.map(model => ({ value: model.name, label: model.name })),
@@ -113,7 +98,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
 
   const selectedModelLabel = useMemo(() => {
     return modelOptions.find(option => option.value === selectedModel)?.label
-      || (t('usageDashboard.allModels', asLanguage(language)))
+      || (t('usageDashboard.allModels', language))
   }, [language, modelOptions, selectedModel])
 
   const aiOverview = data.ai.overview
@@ -125,42 +110,33 @@ export default function UsageDashboard({ language }: { language: Language }) {
 
   const aiStatusCopy = useMemo(() => {
     if (!data.ai.available) {
-      return language === 'zh'
-        ? {
-          title: '当前工作区还没有 Git 归因数据',
-          body: '当你通过 Adnify 写入代码并提交后，这里会显示分支级 AI 统计。',
-        }
-        : {
-          title: 'No Git attribution data yet',
-          body: 'Once Adnify-generated code lands in commits, branch-level AI stats will appear here.',
-        }
+      return {
+        title: t('usageDashboard.noGitAttributionData', language),
+        body: t('usageDashboard.onceAdnifyGeneratedCode', language),
+      }
     }
 
     if (!aiHasData) {
-      return language === 'zh'
-        ? {
-          title: data.ai.hook.installed ? 'Hook 已就绪，等待第一批提交' : '欢迎页 AI 统计已启用',
-          body: data.ai.hook.installed
-            ? '当前仓库已经安装提交追踪 hook，后续终端提交也会进入待归因队列。'
-            : '当前还没有可归因的提交数据，首次提交后会生成分支级 AI 统计。',
+      if (data.ai.hook.installed) {
+        return {
+          title: t('usageDashboard.hooksReadyForThe', language),
+          body: t('usageDashboard.thisRepoAlreadyHas', language),
         }
-        : {
-          title: data.ai.hook.installed ? 'Hooks ready for the first tracked commit' : 'AI attribution is enabled',
-          body: data.ai.hook.installed
-            ? 'This repo already has commit tracking hooks, so terminal commits can be reconciled later as well.'
-            : 'There is no attributable commit data yet. Your first tracked commit will populate the branch summary.',
-        }
+      }
+
+      return {
+        title: t('usageDashboard.aiAttributionIsEnabled', language),
+        body: t('usageDashboard.thereIsNoAttributable', language),
+      }
     }
 
-    return language === 'zh'
-      ? {
-        title: `${formatSharePercent(aiOverview.aiAssistedShare)} 的新增代码带有 AI 痕迹`,
-        body: `当前分支累计 ${aiOverview.pureAiLines} 行纯 AI、${aiOverview.aiModifiedLines} 行 AI 后人工改写。`,
-      }
-      : {
-        title: `${formatSharePercent(aiOverview.aiAssistedShare)} of added lines are AI-assisted`,
-        body: `This branch currently includes ${aiOverview.pureAiLines} pure AI lines and ${aiOverview.aiModifiedLines} AI-modified lines.`,
-      }
+    return {
+      title: t('usageDashboard.ofAddedLinesAre', language, { share: formatSharePercent(aiOverview.aiAssistedShare) }),
+      body: t('usageDashboard.thisBranchCurrentlyIncludes', language, {
+        pureAiLines: aiOverview.pureAiLines,
+        aiModifiedLines: aiOverview.aiModifiedLines,
+      }),
+    }
   }, [aiHasData, aiOverview.aiAssistedShare, aiOverview.aiModifiedLines, aiOverview.pureAiLines, data.ai.available, data.ai.hook.installed, language])
 
   const reportPoster = useMemo(() => buildWorkPosterData({
@@ -214,33 +190,33 @@ export default function UsageDashboard({ language }: { language: Language }) {
       <DashboardStyles />
       <div className="dashboard-panel panel-main">
         <div className="panel-header">
-          <h3 className="panel-title">{t('usageDashboard.dataOverview', asLanguage(language))}</h3>
+          <h3 className="panel-title">{t('usageDashboard.dataOverview', language)}</h3>
           <div className="panel-actions" style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
             <div className="time-tabs">
               <button className={timeRange === 'daily' ? 'active' : ''} onClick={() => setTimeRange('daily')}>
-                {t('usageDashboard.daily', asLanguage(language))}
+                {t('usageDashboard.daily', language)}
               </button>
               <button className={timeRange === 'weekly' ? 'active' : ''} onClick={() => setTimeRange('weekly')}>
-                {t('usageDashboard.weekly', asLanguage(language))}
+                {t('usageDashboard.weekly', language)}
               </button>
               <button className={timeRange === 'monthly' ? 'active' : ''} onClick={() => setTimeRange('monthly')}>
-                {t('usageDashboard.monthly', asLanguage(language))}
+                {t('usageDashboard.monthly', language)}
               </button>
             </div>
             <DatePicker
               value={selectedDate}
               onChange={handleDateChange}
-              placeholder={t('usageDashboard.selectDate', asLanguage(language))}
+              placeholder={t('usageDashboard.selectDate', language)}
               className="h-7 text-xs bg-transparent hover:bg-surface/50"
             />
           </div>
         </div>
 
         <div className="stat-cards-row">
-          <StatItem title={t('usageDashboard.fileChanges', asLanguage(language))} value={data.overview.fileChanges.value} trend={data.overview.fileChanges.trend} trendLabel={t('usageDashboard.vsPrev', asLanguage(language))} />
-          <StatItem title={t('usageDashboard.commits', asLanguage(language))} value={data.overview.commits.value} trend={data.overview.commits.trend} trendLabel={t('usageDashboard.vsPrev', asLanguage(language))} />
-          <StatItem title={t('usageDashboard.sessions', asLanguage(language))} value={data.overview.sessions.value} trend={data.overview.sessions.trend} trendLabel={t('usageDashboard.vsPrev', asLanguage(language))} />
-          <StatItem title={t('usageDashboard.activeTime', asLanguage(language))} value={data.overview.activeHours.value} unit="h" trend={data.overview.activeHours.trend} trendLabel={t('usageDashboard.vsPrev', asLanguage(language))} />
+          <StatItem title={t('usageDashboard.fileChanges', language)} value={data.overview.fileChanges.value} trend={data.overview.fileChanges.trend} trendLabel={t('usageDashboard.vsPrev', language)} />
+          <StatItem title={t('usageDashboard.commits', language)} value={data.overview.commits.value} trend={data.overview.commits.trend} trendLabel={t('usageDashboard.vsPrev', language)} />
+          <StatItem title={t('usageDashboard.sessions', language)} value={data.overview.sessions.value} trend={data.overview.sessions.trend} trendLabel={t('usageDashboard.vsPrev', language)} />
+          <StatItem title={t('usageDashboard.activeTime', language)} value={data.overview.activeHours.value} unit="h" trend={data.overview.activeHours.trend} trendLabel={t('usageDashboard.vsPrev', language)} />
         </div>
 
         <div className="main-chart-area pl-8 pb-4">
@@ -254,7 +230,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
             <p>{overviewCopy.body}</p>
           </div>
           <button className="view-report hover:underline" onClick={() => setIsReportModalOpen(true)}>
-            {t('usageDashboard.viewDetailedReport', asLanguage(language))} <ChevronRight className="w-3 h-3 ml-1" />
+            {t('usageDashboard.viewDetailedReport', language)} <ChevronRight className="w-3 h-3 ml-1" />
           </button>
         </div>
       </div>
@@ -268,7 +244,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
               setIsModelMenuOpen(false)
             }}
           >
-            {t('usageDashboard.stats', asLanguage(language))}
+            {t('usageDashboard.stats', language)}
           </button>
           <button
             className={sidebarPage === 'ai' ? 'active' : ''}
@@ -277,18 +253,18 @@ export default function UsageDashboard({ language }: { language: Language }) {
               setIsModelMenuOpen(false)
             }}
           >
-            {t('usageDashboard.aiCode', asLanguage(language))}
+            {t('usageDashboard.aiCode', language)}
           </button>
         </div>
 
         <div className="sidebar-carousel-viewport">
             <div className={`sidebar-carousel-page sidebar-page-stats ${sidebarPage === 'stats' ? 'active' : 'previous'}`}>
         <div className="dashboard-panel panel-workspace">
-          <h3 className="panel-title mb-5">{t('usageDashboard.workspaceStats', asLanguage(language))}</h3>
+          <h3 className="panel-title mb-5">{t('usageDashboard.workspaceStats', language)}</h3>
           <div className="workspace-content">
             <div className="ring-chart">
               <span>{data.workspace.activityPercent}%</span>
-              <small>{t('usageDashboard.activity', asLanguage(language))}</small>
+              <small>{t('usageDashboard.activity', language)}</small>
             </div>
             <div className="workspace-stats-list">
               {workspaceRows.map(row => (
@@ -299,7 +275,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
           <div className="workspace-footer">
             <Zap className="w-4 h-4 text-[rgb(var(--accent))]" />
             <span>
-              {t('usageDashboard.projectsHaveImportantUpdates', asLanguage(language), { updatesToday: data.workspace.updatesToday })}
+              {t('usageDashboard.projectsHaveImportantUpdates', language, { updatesToday: data.workspace.updatesToday })}
             </span>
             <img src={publicAsset('brand/ip/2.webp')} className="mascot-overlap" alt="" />
           </div>
@@ -307,7 +283,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
 
         <div className="dashboard-panel panel-models">
           <div className="panel-header" style={{ marginBottom: '16px' }}>
-            <h3 className="panel-title">{t('usageDashboard.modelStats', asLanguage(language))}</h3>
+            <h3 className="panel-title">{t('usageDashboard.modelStats', language)}</h3>
             <div className="model-filter" ref={modelMenuRef}>
               <button
                 className={`model-filter-button ${isModelMenuOpen ? 'open' : ''}`}
@@ -337,10 +313,10 @@ export default function UsageDashboard({ language }: { language: Language }) {
             <table className="models-table">
               <thead>
                 <tr>
-                  <th>{t('model', asLanguage(language))}</th>
-                  <th>{t('usageDashboard.requests', asLanguage(language))}</th>
+                  <th>{t('model', language)}</th>
+                  <th>{t('usageDashboard.requests', language)}</th>
                   <th>Tokens</th>
-                  <th>{t('usageDashboard.avgResp', asLanguage(language))}</th>
+                  <th>{t('usageDashboard.avgResp', language)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -358,7 +334,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
                   ))
                 ) : (
                   <MTableRow
-                    name={t('usageDashboard.noData', asLanguage(language))}
+                    name={t('usageDashboard.noData', language)}
                     color="#9ca3af"
                     percent={15}
                     req="0"
@@ -376,43 +352,43 @@ export default function UsageDashboard({ language }: { language: Language }) {
       <div className="dashboard-panel panel-ai">
         <div className="panel-header ai-panel-header" style={{ marginBottom: '14px' }}>
             <div className="ai-panel-heading">
-              <h3 className="panel-title">{t('usageDashboard.aiCodeAttribution', asLanguage(language))}</h3>
+              <h3 className="panel-title">{t('usageDashboard.aiCodeAttribution', language)}</h3>
               <p className="ai-panel-subtitle">
                 <span>
                   {data.ai.branch
-                    ? `${t('usageDashboard.currentBranch', asLanguage(language))}: ${data.ai.branch}`
-                    : (t('usageDashboard.waitingForAGit', asLanguage(language)))}
+                    ? `${t('usageDashboard.currentBranch', language)}: ${data.ai.branch}`
+                    : (t('usageDashboard.waitingForAGit', language))}
                 </span>
                 <span className={`ai-hook-status ${data.ai.hook.installed ? 'ok' : 'warn'}`}>
                   {data.ai.hook.installed ? <ShieldCheck className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
-                  {data.ai.hook.installed ? (t('usageDashboard.hookReady', asLanguage(language))) : (t('usageDashboard.hookMissing', asLanguage(language)))}
+                  {data.ai.hook.installed ? (t('usageDashboard.hookReady', language)) : (t('usageDashboard.hookMissing', language))}
                 </span>
               </p>
             </div>
             <button className="ai-detail-button" onClick={() => setIsAiModalOpen(true)}>
-              {t('usageDashboard.details', asLanguage(language))} <ChevronRight className="w-3.5 h-3.5" />
+              {t('usageDashboard.details', language)} <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="ai-overview-grid">
             <AiMiniStat
               icon={<Bot className="w-4 h-4" />}
-              label={t('usageDashboard.aiAssisted', asLanguage(language))}
+              label={t('usageDashboard.aiAssisted', language)}
               value={formatSharePercent(aiOverview.aiAssistedShare)}
             />
             <AiMiniStat
               icon={<Zap className="w-4 h-4" />}
-              label={t('usageDashboard.pureAi', asLanguage(language))}
+              label={t('usageDashboard.pureAi', language)}
               value={aiOverview.pureAiLines.toLocaleString()}
             />
             <AiMiniStat
               icon={<GitCommitHorizontal className="w-4 h-4" />}
-              label={t('usageDashboard.aiModified', asLanguage(language))}
+              label={t('usageDashboard.aiModified', language)}
               value={aiOverview.aiModifiedLines.toLocaleString()}
             />
             <AiMiniStat
               icon={<Clock3 className="w-4 h-4" />}
-              label={t('usageDashboard.pending', asLanguage(language))}
+              label={t('usageDashboard.pending', language)}
               value={data.ai.hook.pendingCount.toLocaleString()}
             />
           </div>
@@ -426,7 +402,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
           </div>
 
           <div className="ai-last-commit-card">
-            <div className="ai-last-commit-title">{t('usageDashboard.latestAttributedCommit', asLanguage(language))}</div>
+            <div className="ai-last-commit-title">{t('usageDashboard.latestAttributedCommit', language)}</div>
             {data.ai.lastCommit ? (
               <>
                 <div className="ai-last-commit-main">
@@ -435,14 +411,14 @@ export default function UsageDashboard({ language }: { language: Language }) {
                 </div>
                 <div className="ai-last-commit-message">{data.ai.lastCommit.message || '--'}</div>
                 <div className="ai-last-commit-meta">
-                  <span>{t('usageDashboard.aiAssisted2', asLanguage(language))} {formatSharePercent(data.ai.lastCommit.totals.aiAssistedShare)}</span>
-                  <span>{t('usageDashboard.added', asLanguage(language))} {data.ai.lastCommit.totals.totalAddedLines}</span>
+                  <span>{t('usageDashboard.aiAssisted2', language)} {formatSharePercent(data.ai.lastCommit.totals.aiAssistedShare)}</span>
+                  <span>{t('usageDashboard.added', language)} {data.ai.lastCommit.totals.totalAddedLines}</span>
                 </div>
               </>
             ) : (
               <div className="ai-last-commit-empty">
                 <OtterAsset asset="gitStamping" className="h-10 w-10 shrink-0 object-contain opacity-75" />
-                <span>{t('usageDashboard.noCommitLevelAi', asLanguage(language))}</span>
+                <span>{t('usageDashboard.noCommitLevelAi', language)}</span>
               </div>
             )}
           </div>
@@ -455,7 +431,7 @@ export default function UsageDashboard({ language }: { language: Language }) {
       <Modal
         isOpen={isAiModalOpen}
         onClose={() => setIsAiModalOpen(false)}
-        title={t('usageDashboard.aiCodeAttributionDetails', asLanguage(language))}
+        title={t('usageDashboard.aiCodeAttributionDetails', language)}
         size="3xl"
         className="max-h-[82vh]"
       >
@@ -463,35 +439,35 @@ export default function UsageDashboard({ language }: { language: Language }) {
           <div className="ai-modal-section">
             <div className="ai-modal-summary">
               <div className="ai-modal-summary-card">
-                <span>{t('usageDashboard.repository', asLanguage(language))}</span>
+                <span>{t('usageDashboard.repository', language)}</span>
                 <strong>{data.ai.repoName || '--'}</strong>
               </div>
               <div className="ai-modal-summary-card">
-                <span>{t('usageDashboard.branch', asLanguage(language))}</span>
+                <span>{t('usageDashboard.branch', language)}</span>
                 <strong>{data.ai.branch || '--'}</strong>
               </div>
               <div className="ai-modal-summary-card">
-                <span>{t('usageDashboard.base', asLanguage(language))}</span>
+                <span>{t('usageDashboard.base', language)}</span>
                 <strong>{data.ai.baseRef ? data.ai.baseRef.slice(0, 8) : '--'}</strong>
               </div>
               <div className="ai-modal-summary-card">
-                <span>{t('usageDashboard.hookStatus', asLanguage(language))}</span>
-                <strong>{data.ai.hook.installed ? (t('common.installed', asLanguage(language))) : (t('usageDashboard.missing', asLanguage(language)))}</strong>
+                <span>{t('usageDashboard.hookStatus', language)}</span>
+                <strong>{data.ai.hook.installed ? (t('common.installed', language)) : (t('usageDashboard.missing', language))}</strong>
               </div>
             </div>
 
             <div className="ai-modal-metrics">
-              <AiMetricCard label={t('usageDashboard.aiAssistedShare', asLanguage(language))} value={formatSharePercent(aiOverview.aiAssistedShare)} />
-              <AiMetricCard label={t('usageDashboard.pureAiShare', asLanguage(language))} value={formatSharePercent(aiOverview.pureAiShare)} />
-              <AiMetricCard label={t('usageDashboard.humanLines', asLanguage(language))} value={aiOverview.humanLines.toLocaleString()} />
-              <AiMetricCard label={t('usageDashboard.addedLines', asLanguage(language))} value={aiOverview.totalAddedLines.toLocaleString()} />
+              <AiMetricCard label={t('usageDashboard.aiAssistedShare', language)} value={formatSharePercent(aiOverview.aiAssistedShare)} />
+              <AiMetricCard label={t('usageDashboard.pureAiShare', language)} value={formatSharePercent(aiOverview.pureAiShare)} />
+              <AiMetricCard label={t('usageDashboard.humanLines', language)} value={aiOverview.humanLines.toLocaleString()} />
+              <AiMetricCard label={t('usageDashboard.addedLines', language)} value={aiOverview.totalAddedLines.toLocaleString()} />
             </div>
           </div>
 
           <div className="ai-modal-section">
             <div className="ai-modal-section-header">
-              <h4>{t('usageDashboard.recentCommits', asLanguage(language))}</h4>
-              <span>{t('usageDashboard.entries', asLanguage(language), { length: data.ai.recentCommits.length })}</span>
+              <h4>{t('usageDashboard.recentCommits', language)}</h4>
+              <span>{t('usageDashboard.entries', language, { length: data.ai.recentCommits.length })}</span>
             </div>
             <div className="ai-commit-list">
               {data.ai.recentCommits.length > 0 ? data.ai.recentCommits.map(commit => (
@@ -502,14 +478,14 @@ export default function UsageDashboard({ language }: { language: Language }) {
                   </div>
                   <div className="ai-commit-row-message">{commit.message || '--'}</div>
                   <div className="ai-commit-row-metrics">
-                    <span>{t('usageDashboard.aiAssisted2', asLanguage(language))} {formatSharePercent(commit.totals.aiAssistedShare)}</span>
-                    <span>{t('usageDashboard.pureAi2', asLanguage(language))} {commit.totals.pureAiLines}</span>
-                    <span>{t('usageDashboard.aiModified2', asLanguage(language))} {commit.totals.aiModifiedLines}</span>
-                    <span>{t('usageDashboard.added', asLanguage(language))} {commit.totals.totalAddedLines}</span>
+                    <span>{t('usageDashboard.aiAssisted2', language)} {formatSharePercent(commit.totals.aiAssistedShare)}</span>
+                    <span>{t('usageDashboard.pureAi2', language)} {commit.totals.pureAiLines}</span>
+                    <span>{t('usageDashboard.aiModified2', language)} {commit.totals.aiModifiedLines}</span>
+                    <span>{t('usageDashboard.added', language)} {commit.totals.totalAddedLines}</span>
                   </div>
                 </div>
               )) : (
-                <div className="ai-empty">{t('usageDashboard.noCommitAttributionRecords', asLanguage(language))}</div>
+                <div className="ai-empty">{t('usageDashboard.noCommitAttributionRecords', language)}</div>
               )}
             </div>
           </div>
@@ -517,8 +493,8 @@ export default function UsageDashboard({ language }: { language: Language }) {
           <div className="ai-modal-split">
             <div className="ai-modal-section">
               <div className="ai-modal-section-header">
-                <h4>{t('usageDashboard.modelBreakdown', asLanguage(language))}</h4>
-                <span>{t('usageDashboard.sortedByPureAi', asLanguage(language))}</span>
+                <h4>{t('usageDashboard.modelBreakdown', language)}</h4>
+                <span>{t('usageDashboard.sortedByPureAi', language)}</span>
               </div>
               <div className="ai-list-table">
                 {data.ai.modelBreakdown.length > 0 ? data.ai.modelBreakdown.map(model => (
@@ -529,34 +505,34 @@ export default function UsageDashboard({ language }: { language: Language }) {
                     </div>
                     <div>
                       <strong>{model.pureAiLines + model.aiModifiedLines}</strong>
-                      <span>{t('usageDashboard.pureModified', asLanguage(language), { pureAiLines: model.pureAiLines, aiModifiedLines: model.aiModifiedLines })}</span>
+                      <span>{t('usageDashboard.pureModified', language, { pureAiLines: model.pureAiLines, aiModifiedLines: model.aiModifiedLines })}</span>
                     </div>
                   </div>
                 )) : (
-                  <div className="ai-empty">{t('usageDashboard.noModelAttributionData', asLanguage(language))}</div>
+                  <div className="ai-empty">{t('usageDashboard.noModelAttributionData', language)}</div>
                 )}
               </div>
             </div>
 
             <div className="ai-modal-section">
               <div className="ai-modal-section-header">
-                <h4>{t('usageDashboard.topFiles', asLanguage(language))}</h4>
-                <span>{t('usageDashboard.sortedByAiAttributed', asLanguage(language))}</span>
+                <h4>{t('usageDashboard.topFiles', language)}</h4>
+                <span>{t('usageDashboard.sortedByAiAttributed', language)}</span>
               </div>
               <div className="ai-list-table">
                 {data.ai.topFiles.length > 0 ? data.ai.topFiles.map(file => (
                   <div className="ai-list-row" key={file.path}>
                     <div>
                       <strong>{file.path}</strong>
-                      <span>{t('usageDashboard.added2', asLanguage(language), { totalAddedLines: file.totalAddedLines })}</span>
+                      <span>{t('usageDashboard.added2', language, { totalAddedLines: file.totalAddedLines })}</span>
                     </div>
                     <div>
                       <strong>{file.pureAiLines + file.aiModifiedLines}</strong>
-                      <span>{t('usageDashboard.pureModified', asLanguage(language), { pureAiLines: file.pureAiLines, aiModifiedLines: file.aiModifiedLines })}</span>
+                      <span>{t('usageDashboard.pureModified', language, { pureAiLines: file.pureAiLines, aiModifiedLines: file.aiModifiedLines })}</span>
                     </div>
                   </div>
                 )) : (
-                  <div className="ai-empty">{t('usageDashboard.noFileLevelAttribution', asLanguage(language))}</div>
+                  <div className="ai-empty">{t('usageDashboard.noFileLevelAttribution', language)}</div>
                 )}
               </div>
             </div>
@@ -565,8 +541,8 @@ export default function UsageDashboard({ language }: { language: Language }) {
           {data.ai.pendingCommits.length > 0 && (
             <div className="ai-modal-section">
               <div className="ai-modal-section-header">
-                <h4>{t('usageDashboard.pendingReconciliation', asLanguage(language))}</h4>
-                <span>{t('usageDashboard.theseCommitsDoNot', asLanguage(language))}</span>
+                <h4>{t('usageDashboard.pendingReconciliation', language)}</h4>
+                <span>{t('usageDashboard.theseCommitsDoNot', language)}</span>
               </div>
               <div className="ai-pending-list">
                 {data.ai.pendingCommits.slice(0, 12).map(commitSha => (
@@ -813,7 +789,7 @@ function InteractiveAreaChart({ points, language, timeRange }: { points: number[
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--accent))]"></span>
             <span className="text-[12px] font-bold text-text-primary whitespace-nowrap">
-              {t('usageDashboard.fileChanges', asLanguage(language))} {safePoints[hoverIdx]}
+              {t('usageDashboard.fileChanges', language)} {safePoints[hoverIdx]}
             </span>
           </div>
         </div>

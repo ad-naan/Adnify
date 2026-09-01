@@ -9,7 +9,7 @@
  * `language` 是显式参数而不是在这里读 store：这样这个模块只依赖 i18n 与共享类型，
  * 组件可以传响应式的语言（切换语言会重渲染），而不是一个取过就固定的快照。
  */
-import { t, type Language } from '@/renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import type { ExecutionLaneNotice } from '@/shared/types/executionLane'
 
 /** 车道文案需要的最小信息（service 的 completion 和 UI 的 projection 都满足） */

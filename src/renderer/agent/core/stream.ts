@@ -11,7 +11,7 @@ import { getErrorMessage, ErrorCode } from '@shared/utils/errorHandler'
 import type { ToolCall, TokenUsage } from '../types'
 import type { LLMCallResult } from './types'
 import { ToolCallLeakFilter } from '../utils/toolCallLeakFilter'
-import { t } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 import { StreamingEditPreviewCoordinator } from '../services/streamingEditPreview'
 import type { LLMResponseMetadata, LLMStreamSource, RendererStreamChunk } from '@/shared/types/llm'
 import {

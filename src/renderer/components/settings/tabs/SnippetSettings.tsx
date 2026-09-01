@@ -9,7 +9,7 @@ import { Button, Input, Select } from '@components/ui'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { toast } from '@components/common/ToastProvider'
 import { snippetService, type CodeSnippet } from '@services/snippetService'
-import { Language, t, asLanguage } from '@renderer/i18n'
+import { Language, t } from '@shared/i18n'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
 
@@ -82,7 +82,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
   const handleEdit = (snippet: CodeSnippet) => {
     if (snippetService.isDefaultSnippet(snippet.id)) {
-      toast.warning(t('snippetSettings.defaultSnippetsCannotBe', asLanguage(language)))
+      toast.warning(t('snippetSettings.defaultSnippetsCannotBe', language))
       return
     }
     setEditingId(snippet.id)
@@ -98,43 +98,43 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
   const handleDelete = async (id: string) => {
     if (snippetService.isDefaultSnippet(id)) {
-      toast.warning(t('snippetSettings.defaultSnippetsCannotBe2', asLanguage(language)))
+      toast.warning(t('snippetSettings.defaultSnippetsCannotBe2', language))
       return
     }
     const confirmed = await globalConfirm({
-      title: t('snippetSettings.deleteSnippet', asLanguage(language)),
-      message: t('snippetSettings.deleteThisSnippet', asLanguage(language)),
+      title: t('snippetSettings.deleteSnippet', language),
+      message: t('snippetSettings.deleteThisSnippet', language),
       variant: 'danger',
     })
     if (!confirmed) return
     
     const success = await snippetService.delete(id)
     if (success) {
-      toast.success(t('common.deleted', asLanguage(language)))
+      toast.success(t('common.deleted', language))
       loadSnippets()
     }
   }
 
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.prefix.trim() || !formData.body.trim()) {
-      toast.error(t('snippetSettings.pleaseFillRequiredFields', asLanguage(language)))
+      toast.error(t('snippetSettings.pleaseFillRequiredFields', language))
       return
     }
 
     try {
       if (editingId) {
         await snippetService.update(editingId, formData)
-        toast.success(t('snippetSettings.updated', asLanguage(language)))
+        toast.success(t('snippetSettings.updated', language))
       } else {
         await snippetService.add(formData)
-        toast.success(t('snippetSettings.created', asLanguage(language)))
+        toast.success(t('snippetSettings.created', language))
       }
       setShowForm(false)
       setFormData(defaultFormData)
       setEditingId(null)
       loadSnippets()
     } catch (error) {
-      toast.error(t('common.saveFailed2', asLanguage(language)))
+      toast.error(t('common.saveFailed2', language))
     }
   }
 
@@ -147,7 +147,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
     a.download = 'snippets.json'
     a.click()
     URL.revokeObjectURL(url)
-    toast.success(t('snippetSettings.exported', asLanguage(language)))
+    toast.success(t('snippetSettings.exported', language))
   }
 
   const handleImport = () => {
@@ -162,11 +162,11 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
       const text = await file.text()
       const result = await snippetService.importSnippets(text)
       toast.success(
-        t('snippetSettings.importedFailed', asLanguage(language), { success: result.success, failed: result.failed })
+        t('snippetSettings.importedFailed', language, { success: result.success, failed: result.failed })
       )
       loadSnippets()
     } catch {
-      toast.error(t('common.importFailed', asLanguage(language)))
+      toast.error(t('common.importFailed', language))
     }
     e.target.value = ''
   }
@@ -190,7 +190,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
             <Input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder={t('snippetSettings.searchSnippets', asLanguage(language))}
+              placeholder={t('snippetSettings.searchSnippets', language)}
               className="pl-9 h-9 bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
             />
           </div>
@@ -204,15 +204,15 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" onClick={handleImport}>
             <Upload className="w-4 h-4 mr-1" />
-            {t('common.import2', asLanguage(language))}
+            {t('common.import2', language)}
           </Button>
           <Button variant="ghost" size="sm" onClick={handleExport}>
             <Download className="w-4 h-4 mr-1" />
-            {t('exportSession', asLanguage(language))}
+            {t('exportSession', language)}
           </Button>
           <Button variant="primary" size="sm" onClick={handleCreate}>
             <Plus className="w-4 h-4 mr-1" />
-            {t('newSession', asLanguage(language))}
+            {t('newSession', language)}
           </Button>
         </div>
         <input
@@ -229,17 +229,17 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
         <section className="space-y-4 rounded-xl border border-border/70 bg-surface/25 p-5">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-bold text-text-primary">
-              {editingId ? (t('snippetSettings.editSnippet', asLanguage(language))) : (t('snippetSettings.newSnippet', asLanguage(language)))}
+              {editingId ? (t('snippetSettings.editSnippet', language)) : (t('snippetSettings.newSnippet', language))}
             </h4>
             <Button variant="ghost" size="sm" onClick={() => setShowForm(false)}>
-              {t('cancel', asLanguage(language))}
+              {t('cancel', language)}
             </Button>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-text-muted mb-1.5">
-                {t('snippetSettings.name', asLanguage(language))}
+                {t('snippetSettings.name', language)}
               </label>
               <Input
                 value={formData.name}
@@ -250,7 +250,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
             </div>
             <div>
               <label className="block text-xs text-text-muted mb-1.5">
-                {t('snippetSettings.triggerPrefix', asLanguage(language))}
+                {t('snippetSettings.triggerPrefix', language)}
               </label>
               <Input
                 value={formData.prefix}
@@ -263,21 +263,21 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">
-              {t('snippetSettings.description', asLanguage(language))}
+              {t('snippetSettings.description', language)}
             </label>
             <Input
               value={formData.description}
               onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder={t('snippetSettings.snippetDescription', asLanguage(language))}
+              placeholder={t('snippetSettings.snippetDescription', language)}
               className="bg-background/50 border-border/50 text-xs rounded-lg focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
             />
           </div>
 
           <div>
             <label className="block text-xs text-text-muted mb-1.5">
-              {t('snippetSettings.codeTemplate', asLanguage(language))}
+              {t('snippetSettings.codeTemplate', language)}
               <span className="ml-2 text-text-muted/60">
-                {t('snippetSettings.supports11Placeholder', asLanguage(language))}
+                {t('snippetSettings.supports11Placeholder', language)}
               </span>
             </label>
             <textarea
@@ -290,7 +290,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
           <div>
             <label className="block text-xs text-text-muted mb-2">
-              {t('snippetSettings.languagesEmptyForAll', asLanguage(language))}
+              {t('snippetSettings.languagesEmptyForAll', language)}
             </label>
             <div className="flex flex-wrap gap-2">
               {COMMON_LANGUAGES.slice(1).map(lang => (
@@ -311,7 +311,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
 
           <div className="flex justify-end pt-2">
             <Button variant="primary" onClick={handleSave}>
-              {t('saveSession', asLanguage(language))}
+              {t('saveSession', language)}
             </Button>
           </div>
         </section>
@@ -322,7 +322,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
         {filteredSnippets.length === 0 ? (
           <div className="col-span-full text-center py-16 text-text-muted border border-dashed border-border/50 rounded-xl bg-surface/5">
             <OtterAsset asset="snippets" className="w-16 h-16 mx-auto mb-3 object-contain opacity-75" />
-            <p className="text-sm font-medium opacity-60">{t('snippetSettings.noSnippetsFound', asLanguage(language))}</p>
+            <p className="text-sm font-medium opacity-60">{t('snippetSettings.noSnippetsFound', language)}</p>
           </div>
         ) : (
           filteredSnippets.map(snippet => {
@@ -362,7 +362,7 @@ export function SnippetSettings({ language }: SnippetSettingsProps) {
                 <ProgressiveReveal
                   language={language}
                   collapsedHeight={170}
-                  expandLabel={t('snippetSettings.showFullCode', asLanguage(language))}
+                  expandLabel={t('snippetSettings.showFullCode', language)}
                   className="flex-1 bg-black/5 transition-colors group-hover:bg-black/10"
                 >
                   <pre className="p-4 text-[11px] font-mono text-text-secondary leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity whitespace-pre-wrap break-words">

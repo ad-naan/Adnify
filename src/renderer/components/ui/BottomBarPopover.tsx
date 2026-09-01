@@ -19,7 +19,6 @@ export interface BottomBarPopoverProps {
     children: ReactNode
     width?: number
     height?: number
-    language?: 'en' | 'zh'
     scrollable?: boolean
     onOpenChange?: (isOpen: boolean) => void
 }

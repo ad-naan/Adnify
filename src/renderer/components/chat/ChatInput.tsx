@@ -4,30 +4,13 @@
  */
 import { memo, useRef, useCallback, useMemo, useState, useLayoutEffect } from 'react'
 import {
-  FileText,
-  X,
-  Code,
-  GitBranch,
-  Terminal,
-  Database,
-  ArrowUp,
-  Plus,
-  Folder,
-  Globe,
-  Wrench,
-  Server,
-  Image as ImageIcon,
-  ListOrdered,
-  Maximize2,
-  Minimize2,
-  WandSparkles,
-  LoaderCircle
+  FileText, X, Code, GitBranch, Terminal, Database, ArrowUp, Plus, Folder, Globe, Wrench, Server, Image as ImageIcon, ListOrdered, Maximize2, Minimize2, WandSparkles, LoaderCircle
 } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { getFileName } from '@shared/utils/pathUtils'
 import { motion, AnimatePresence } from 'framer-motion'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { Button } from '../ui'
 import ModelSelector from './ModelSelector'
 import ReasoningParticleSlider from './ReasoningParticleSlider'
@@ -175,13 +158,13 @@ const ChatInput = memo(function ChatInput({
   const isSendable = input.trim().length > 0 || images.length > 0
   const reasoningOptions = useMemo(() => {
     const labels = {
-      none: t('chatInput.off', asLanguage(language)),
-      minimal: t('chatInput.minimal', asLanguage(language)),
-      low: t('emotion.sensitivityLow', asLanguage(language)),
-      medium: t('emotion.sensitivityMedium', asLanguage(language)),
-      high: t('emotion.sensitivityHigh', asLanguage(language)),
-      xhigh: t('chatInput.xHigh', asLanguage(language)),
-      max: t('chatInput.max', asLanguage(language)),
+      none: t('chatInput.off', language),
+      minimal: t('chatInput.minimal', language),
+      low: t('emotion.sensitivityLow', language),
+      medium: t('emotion.sensitivityMedium', language),
+      high: t('emotion.sensitivityHigh', language),
+      xhigh: t('chatInput.xHigh', language),
+      max: t('chatInput.max', language),
     } as const
     const protocol = llmConfig.protocol
     const supported = llmConfig.provider === 'anthropic' || protocol === 'anthropic'
@@ -351,11 +334,11 @@ const ChatInput = memo(function ChatInput({
                 onClick={() => setIsInputExpanded(prev => !prev)}
                 className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-text-muted/55 transition-colors hover:bg-text-primary/[0.04] hover:text-text-secondary"
                 title={isInputExpanded
-                  ? (t('chatInput.collapseInput', asLanguage(language)))
-                  : (t('chatInput.expandInput', asLanguage(language)))}
+                  ? (t('chatInput.collapseInput', language))
+                  : (t('chatInput.expandInput', language))}
               >
                 {isInputExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-                <span>{isInputExpanded ? (t('toolCollapse', asLanguage(language))) : (t('chatInput.expand', asLanguage(language)))}</span>
+                <span>{isInputExpanded ? (t('toolCollapse', language)) : (t('chatInput.expand', language))}</span>
               </button>
             </div>
           )}
@@ -406,8 +389,8 @@ const ChatInput = memo(function ChatInput({
                 size="icon"
                 onClick={onOptimizePrompt}
                 disabled={!hasApiKey || !input.trim() || isOptimizingPrompt || isStreaming}
-                title={t('chatInput.improveThePromptUsing', asLanguage(language))}
-                aria-label={t('chatInput.improvePrompt', asLanguage(language))}
+                title={t('chatInput.improveThePromptUsing', language)}
+                aria-label={t('chatInput.improvePrompt', language)}
                 className="h-8 w-8 rounded-lg text-text-muted hover:bg-accent/10 hover:text-accent disabled:opacity-35"
               >
                 {isOptimizingPrompt
@@ -423,7 +406,7 @@ const ChatInput = memo(function ChatInput({
                     <button
                       onClick={onSubmit}
                       disabled={!hasApiKey || hasPendingToolCall}
-                      title={t('chatInput.queueMessage', asLanguage(language))}
+                      title={t('chatInput.queueMessage', language)}
                       className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 bg-accent/80 text-white shadow-sm shadow-accent/10 hover:bg-accent hover:shadow-accent/30 hover:-translate-y-0.5 active:translate-y-0 border border-transparent"
                     >
                       <ListOrdered className="w-4 h-4 stroke-[2.5]" />

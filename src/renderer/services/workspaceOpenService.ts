@@ -3,7 +3,7 @@ import { workspaceManager, WorkspaceOpenError } from '@/renderer/services/Worksp
 import { logger } from '@utils/Logger'
 import { toast } from '@components/common/ToastProvider'
 import { getFileName } from '@shared/utils/pathUtils'
-import { t, type Language } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 export async function openFolderFromDialog(language: Language): Promise<void> {
   const folderPath = await api.file.openFolder()

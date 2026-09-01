@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef, ReactNode, useCallback } from 'react'
 import { useStore } from '@/renderer/store'
-import { t } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 
 export interface InputPopupItem {
     id: string

@@ -1,4 +1,4 @@
-import { type Language } from '@renderer/i18n'
+import { type Language } from '@shared/i18n'
 
 export type WorkPosterTone = 'blue' | 'green'
 

@@ -17,7 +17,7 @@ import { Eye, Edit, Image as ImageIcon, AlertTriangle, Columns } from 'lucide-re
 import { Button } from '../ui'
 import { getDirname, getFileName, joinPath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 
 // 文件类型分类

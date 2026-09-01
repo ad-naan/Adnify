@@ -13,11 +13,8 @@ import { EditorSettingsProps } from '../types'
 import { CODE_FONT_PRESETS, DEFAULT_GIT_COMMIT_PROMPT } from '@shared/config/defaults'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
 import {
-    loadEmotionPanelSettings,
-    subscribeEmotionPanelSettings,
-    updateEmotionPanelSettings,
-} from '@/renderer/agent/emotion/panelSettings'
-import { t as translate, asLanguage } from '@renderer/i18n'
+    loadEmotionPanelSettings, subscribeEmotionPanelSettings, updateEmotionPanelSettings, } from '@/renderer/agent/emotion/panelSettings'
+import { t } from '@shared/i18n'
 
 const CUSTOM_FONT_VALUE = '__custom__'
 
@@ -62,7 +59,7 @@ function FontFamilyPicker({
                 }}
                 options={[
                     ...CODE_FONT_PRESETS.map(preset => ({ value: preset.value, label: preset.label })),
-                    { value: CUSTOM_FONT_VALUE, label: translate('editorSettings.custom', asLanguage(language)) },
+                    { value: CUSTOM_FONT_VALUE, label: t('editorSettings.custom', language) },
                 ]}
                 className={`w-full ${inputClass}`}
             />
@@ -103,7 +100,7 @@ const TRIGGER_CHAR_OPTIONS = [
 
 export function EditorSettings({ settings, setSettings, advancedConfig, setAdvancedConfig, language }: EditorSettingsProps) {
     const { currentTheme, setTheme } = useStore(useShallow(s => ({ currentTheme: s.currentTheme, setTheme: s.setTheme })))
-    const allThemes = themeManager.getAllThemes().map(t => t.id)
+    const allThemes = themeManager.getAllThemes().map(theme => theme.id)
     const [decorativeAnimations, setDecorativeAnimations] = useState(
         () => loadEmotionPanelSettings().decorativeAnimations,
     )
@@ -141,7 +138,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <Layout className="w-4 h-4 text-accent" />
                     </div>
                     <h4 className="text-sm font-bold text-text-primary tracking-tight">
-                        {translate('editorSettings.appearanceTheme', asLanguage(language))}
+                        {t('editorSettings.appearanceTheme', language)}
                     </h4>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -177,11 +174,11 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <div className="flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-accent" />
                             <h5 className="text-sm font-bold text-text-primary">
-                                {translate('editorSettings.decorativeAnimations', asLanguage(language))}
+                                {t('editorSettings.decorativeAnimations', language)}
                             </h5>
                         </div>
                         <p className="mt-2 text-xs leading-relaxed text-text-muted">
-                            {translate('editorSettings.controlsLoopingEffectsSuch', asLanguage(language))}
+                            {t('editorSettings.controlsLoopingEffectsSuch', language)}
                         </p>
                     </div>
                     <Switch
@@ -192,7 +189,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                 <div className="flex items-start gap-2 border-t border-border/50 pt-4 text-[10px] leading-relaxed text-text-muted">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>
-                        {translate('editorSettings.theseAnimationsAlsoStop', asLanguage(language))}
+                        {t('editorSettings.theseAnimationsAlsoStop', language)}
                     </span>
                 </div>
             </section>
@@ -204,12 +201,12 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Type className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.typographyLayout', asLanguage(language))}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{t('editorSettings.typographyLayout', language)}</h5>
                         </div>
 
                         <div className="grid grid-cols-2 gap-5">
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.fontSize', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.fontSize', language)}</label>
                                 <Input
                                     type="number"
                                     value={settings.fontSize}
@@ -220,7 +217,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.tabSize', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.tabSize', language)}</label>
                                 <Select
                                     value={settings.tabSize.toString()}
                                     onChange={(value) => setSettings({ ...settings, tabSize: parseInt(value) })}
@@ -229,7 +226,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.wordWrap', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.wordWrap', language)}</label>
                                 <Select
                                     value={settings.wordWrap}
                                     onChange={(value) => setSettings({ ...settings, wordWrap: value as 'on' | 'off' | 'wordWrapColumn' })}
@@ -238,7 +235,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.lineHeight', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.lineHeight', language)}</label>
                                 <Input
                                     type="number"
                                     value={advancedConfig.lineHeight}
@@ -250,7 +247,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.lineNumbers', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.lineNumbers', language)}</label>
                                 <Select
                                     value={settings.lineNumbers}
                                     onChange={(value) => setSettings({ ...settings, lineNumbers: value as 'on' | 'off' | 'relative' })}
@@ -261,7 +258,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         </div>
 
                         <FontFamilyPicker
-                            label={translate('editorSettings.codeFont', asLanguage(language))}
+                            label={t('editorSettings.codeFont', language)}
                             value={advancedConfig.fontFamily}
                             onChange={(fontFamily) => setAdvancedConfig({ ...advancedConfig, fontFamily })}
                             language={language}
@@ -273,10 +270,10 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Type className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.agentChatArea', asLanguage(language))}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{t('editorSettings.agentChatArea', language)}</h5>
                         </div>
                         <div>
-                            <label className={labelClass}>{translate('editorSettings.fontSize', asLanguage(language))}</label>
+                            <label className={labelClass}>{t('editorSettings.fontSize', language)}</label>
                             <Input
                                 type="number"
                                 value={settings.chatFontSize}
@@ -292,11 +289,11 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Terminal className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.terminal', asLanguage(language))}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{t('editorSettings.terminal', language)}</h5>
                         </div>
                         <div className="grid grid-cols-2 gap-5">
                             <div className="col-span-2">
-                                <label className={labelClass}>{translate('editorSettings.nodeJsPackageManager', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.nodeJsPackageManager', language)}</label>
                                 <Select
                                     value={advancedConfig.terminal.nodePackageManager}
                                     onChange={(value) => setAdvancedConfig({
@@ -307,7 +304,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                         },
                                     })}
                                     options={[
-                                        { value: 'auto', label: translate('editorSettings.autoDetectRecommended', asLanguage(language)) },
+                                        { value: 'auto', label: t('editorSettings.autoDetectRecommended', language) },
                                         { value: 'npm', label: 'npm' },
                                         { value: 'pnpm', label: 'pnpm' },
                                         { value: 'yarn', label: 'Yarn' },
@@ -316,28 +313,28 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     className={`w-full ${inputClass}`}
                                 />
                                 <p className="mt-2 text-[10px] leading-4 text-text-muted">
-                                    {translate('editorSettings.autoModeReadsPackagemanager', asLanguage(language))}
+                                    {t('editorSettings.autoModeReadsPackagemanager', language)}
                                 </p>
                             </div>
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.fontSize', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.fontSize', language)}</label>
                                 <Input type="number" value={advancedConfig.terminal.fontSize} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, fontSize: parseInt(e.target.value) || 13 } })} min={10} max={24} className={inputClass} />
                             </div>
                             <div>
-                                <label className={labelClass}>{translate('editorSettings.lineHeight', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.lineHeight', language)}</label>
                                 <Input type="number" value={advancedConfig.terminal.lineHeight} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, lineHeight: parseFloat(e.target.value) || 1.2 } })} min={1} max={2} step={0.1} className={inputClass} />
                             </div>
                             <div className="col-span-2">
-                                <label className={labelClass}>{translate('editorSettings.scrollbackLines', asLanguage(language))}</label>
+                                <label className={labelClass}>{t('editorSettings.scrollbackLines', language)}</label>
                                 <Input type="number" value={settings.terminalScrollback} onChange={(e) => setSettings({ ...settings, terminalScrollback: parseInt(e.target.value) || 1000 })} min={100} max={10000} step={100} className={inputClass} />
                             </div>
                         </div>
                         <div className="pt-2">
-                            <Switch label={translate('editorSettings.cursorBlink', asLanguage(language))} checked={advancedConfig.terminal.cursorBlink} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, cursorBlink: e.target.checked } })} />
+                            <Switch label={t('editorSettings.cursorBlink', language)} checked={advancedConfig.terminal.cursorBlink} onChange={(e) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, cursorBlink: e.target.checked } })} />
                         </div>
 
                         <FontFamilyPicker
-                            label={translate('editorSettings.terminalFont', asLanguage(language))}
+                            label={t('editorSettings.terminalFont', language)}
                             value={advancedConfig.terminal.fontFamily}
                             onChange={(fontFamily) => setAdvancedConfig({ ...advancedConfig, terminal: { ...advancedConfig.terminal, fontFamily } })}
                             language={language}
@@ -350,32 +347,32 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Settings2 className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.features', asLanguage(language))}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{t('editorSettings.features', language)}</h5>
                         </div>
                         <div className="space-y-4 px-1">
-                            <Switch label={translate('editorSettings.showMinimap', asLanguage(language))} checked={settings.minimap} onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })} />
-                            <Switch label={translate('editorSettings.bracketPairColorization', asLanguage(language))} checked={settings.bracketPairColorization} onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })} />
+                            <Switch label={t('editorSettings.showMinimap', language)} checked={settings.minimap} onChange={(e) => setSettings({ ...settings, minimap: e.target.checked })} />
+                            <Switch label={t('editorSettings.bracketPairColorization', language)} checked={settings.bracketPairColorization} onChange={(e) => setSettings({ ...settings, bracketPairColorization: e.target.checked })} />
                             <div className="space-y-1.5">
-                                <Switch label={translate('editorSettings.formatOnSave', asLanguage(language))} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
+                                <Switch label={t('editorSettings.formatOnSave', language)} checked={settings.formatOnSave} onChange={(e) => setSettings({ ...settings, formatOnSave: e.target.checked })} />
                                 <p className="pl-1 text-[10px] leading-4 text-text-muted">
-                                    {translate('editorSettings.choosesByLanguageProject', asLanguage(language))}
+                                    {t('editorSettings.choosesByLanguageProject', language)}
                                 </p>
                             </div>
                         </div>
 
                         <div className="pt-4 border-t border-border/50">
                             <div className="flex items-center justify-between mb-4">
-                                <label className={labelClass.replace('mb-2', 'mb-0')}>{translate('editorSettings.autoSave', asLanguage(language))}</label>
+                                <label className={labelClass.replace('mb-2', 'mb-0')}>{t('editorSettings.autoSave', language)}</label>
                                 <Select
                                     value={settings.autoSave}
                                     onChange={(value) => setSettings({ ...settings, autoSave: value as 'off' | 'afterDelay' | 'onFocusChange' })}
-                                    options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: translate('editorSettings.afterDelay', asLanguage(language)) }, { value: 'onFocusChange', label: translate('editorSettings.onFocusChange', asLanguage(language)) }]}
+                                    options={[{ value: 'off', label: 'Off' }, { value: 'afterDelay', label: t('editorSettings.afterDelay', language) }, { value: 'onFocusChange', label: t('editorSettings.onFocusChange', language) }]}
                                     className={`w-40 ${inputClass}`}
                                 />
                             </div>
                             {settings.autoSave === 'afterDelay' && (
                                 <div className="flex items-center justify-between animate-scale-in pl-1">
-                                    <label className="text-xs text-text-secondary">{translate('editorSettings.delayMs', asLanguage(language))}</label>
+                                    <label className="text-xs text-text-secondary">{t('editorSettings.delayMs', language)}</label>
                                     <Input
                                         type="number"
                                         value={settings.autoSaveDelay}
@@ -398,7 +395,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Sparkles className="w-4 h-4 text-accent" />
-                                <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.aiCompletion', asLanguage(language))}</h5>
+                                <h5 className="text-sm font-bold text-text-primary">{t('editorSettings.aiCompletion', language)}</h5>
                             </div>
                             <Switch checked={settings.completionEnabled} onChange={(e) => setSettings({ ...settings, completionEnabled: e.target.checked })} />
                         </div>
@@ -407,7 +404,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                             <div className="space-y-5 pt-2 animate-scale-in">
                                 <div className="grid grid-cols-2 gap-5">
                                     <div>
-                                        <label className={labelClass}>{translate('editorSettings.triggerDelay', asLanguage(language))}</label>
+                                        <label className={labelClass}>{t('editorSettings.triggerDelay', language)}</label>
                                         <Input
                                             type="number"
                                             value={settings.completionDebounceMs}
@@ -419,7 +416,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                         />
                                     </div>
                                     <div>
-                                        <label className={labelClass}>{translate('common.maxTokens', asLanguage(language))}</label>
+                                        <label className={labelClass}>{t('common.maxTokens', language)}</label>
                                         <Input
                                             type="number"
                                             value={settings.completionMaxTokens}
@@ -432,7 +429,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     </div>
                                 </div>
                                 <div>
-                                    <label className={labelClass}>{translate('editorSettings.triggerCharacters', asLanguage(language))}</label>
+                                    <label className={labelClass}>{t('editorSettings.triggerCharacters', language)}</label>
                                     <div className="flex flex-wrap gap-2 p-3 bg-background/50 rounded-xl border border-border/50">
                                         {TRIGGER_CHAR_OPTIONS.map(({ char, label }) => {
                                             const isSelected = settings.completionTriggerChars.includes(char)
@@ -453,7 +450,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                         })}
                                     </div>
                                     <p className="text-[10px] text-text-muted mt-2 ml-1">
-                                        {translate('editorSettings.selectCharactersThatTrigger', asLanguage(language))}
+                                        {t('editorSettings.selectCharactersThatTrigger', language)}
                                     </p>
                                 </div>
                             </div>
@@ -468,18 +465,18 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                         </div>
                         <div className="space-y-4 px-1">
                             <Switch
-                                label={translate('editorSettings.autoRefreshGitStatus', asLanguage(language))}
+                                label={t('editorSettings.autoRefreshGitStatus', language)}
                                 checked={advancedConfig.git?.autoRefresh ?? true}
                                 onChange={(e) => setAdvancedConfig({ ...advancedConfig, git: { ...advancedConfig.git, autoRefresh: e.target.checked } })}
                             />
                             <p className="text-[10px] text-text-muted opacity-80 leading-relaxed">
-                                {translate('editorSettings.automaticallyRefreshGitIndicators', asLanguage(language))}
+                                {t('editorSettings.automaticallyRefreshGitIndicators', language)}
                             </p>
 
                             <div className="pt-3 border-t border-border/50 space-y-2">
                                 <div className="flex items-center justify-between">
                                     <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block">
-                                        {translate('editorSettings.aiCommitMessagePrompt', asLanguage(language))}
+                                        {t('editorSettings.aiCommitMessagePrompt', language)}
                                     </label>
                                     {(advancedConfig.git?.commitPrompt !== undefined && advancedConfig.git.commitPrompt !== '' && advancedConfig.git.commitPrompt !== DEFAULT_GIT_COMMIT_PROMPT) && (
                                         <button
@@ -489,10 +486,10 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                                 git: { ...advancedConfig.git, commitPrompt: DEFAULT_GIT_COMMIT_PROMPT },
                                             })}
                                             className="inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-accent transition-colors"
-                                            title={translate('editorSettings.resetToDefaultPrompt', asLanguage(language))}
+                                            title={t('editorSettings.resetToDefaultPrompt', language)}
                                         >
                                             <RotateCcw className="w-3 h-3" />
-                                            <span>{translate('common.reset', asLanguage(language))}</span>
+                                            <span>{t('common.reset', language)}</span>
                                         </button>
                                     )}
                                 </div>
@@ -507,7 +504,7 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                                     className="w-full rounded-lg border border-border/50 bg-background/50 p-3 text-xs leading-relaxed text-text-primary placeholder:text-text-muted/40 focus:border-accent/50 focus:outline-none focus:ring-1 focus:ring-accent/50 transition-all resize-y custom-scrollbar"
                                 />
                                 <p className="text-[10px] text-text-muted opacity-80 leading-relaxed">
-                                    {translate('editorSettings.editThePromptRules', asLanguage(language))}
+                                    {t('editorSettings.editThePromptRules', language)}
                                 </p>
                             </div>
                         </div>
@@ -517,31 +514,31 @@ export function EditorSettings({ settings, setSettings, advancedConfig, setAdvan
                     <section className={sectionClass}>
                         <div className="flex items-center gap-2 mb-1">
                             <Zap className="w-4 h-4 text-accent" />
-                            <h5 className="text-sm font-bold text-text-primary">{translate('editorSettings.performance', asLanguage(language))}</h5>
+                            <h5 className="text-sm font-bold text-text-primary">{t('editorSettings.performance', language)}</h5>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.largeFileWarningMb', asLanguage(language))}</label>
+                                <label className="text-xs font-medium text-text-secondary">{t('editorSettings.largeFileWarningMb', language)}</label>
                                 <Input type="number" value={settings.largeFileWarningThresholdMB} onChange={(e) => setSettings({ ...settings, largeFileWarningThresholdMB: parseFloat(e.target.value) || 5 })} min={1} max={50} step={1} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.largeFileLineCount', asLanguage(language))}</label>
+                                <label className="text-xs font-medium text-text-secondary">{t('editorSettings.largeFileLineCount', language)}</label>
                                 <Input type="number" value={settings.largeFileLineCount} onChange={(e) => setSettings({ ...settings, largeFileLineCount: parseInt(e.target.value) || 10000 })} min={1000} max={100000} step={1000} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.commandTimeoutS', asLanguage(language))}</label>
+                                <label className="text-xs font-medium text-text-secondary">{t('editorSettings.commandTimeoutS', language)}</label>
                                 <Input type="number" value={settings.commandTimeoutMs / 1000} onChange={(e) => setSettings({ ...settings, commandTimeoutMs: (parseInt(e.target.value) || 30) * 1000 })} min={10} max={300} step={10} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.maxProjectFiles', asLanguage(language))}</label>
+                                <label className="text-xs font-medium text-text-secondary">{t('editorSettings.maxProjectFiles', language)}</label>
                                 <Input type="number" value={settings.maxProjectFiles} onChange={(e) => setSettings({ ...settings, maxProjectFiles: parseInt(e.target.value) || 500 })} min={100} max={2000} step={100} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.fileTreeMaxDepth', asLanguage(language))}</label>
+                                <label className="text-xs font-medium text-text-secondary">{t('editorSettings.fileTreeMaxDepth', language)}</label>
                                 <Input type="number" value={settings.maxFileTreeDepth} onChange={(e) => setSettings({ ...settings, maxFileTreeDepth: parseInt(e.target.value) || 5 })} min={2} max={15} step={1} className={inputClass} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-text-secondary">{translate('editorSettings.maxSearchResults', asLanguage(language))}</label>
+                                <label className="text-xs font-medium text-text-secondary">{t('editorSettings.maxSearchResults', language)}</label>
                                 <Input type="number" value={settings.maxSearchResults} onChange={(e) => setSettings({ ...settings, maxSearchResults: parseInt(e.target.value) || 1000 })} min={100} max={5000} step={100} className={inputClass} />
                             </div>
                         </div>

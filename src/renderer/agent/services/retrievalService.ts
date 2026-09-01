@@ -4,7 +4,7 @@ import { useStore } from '@store'
 import { useAgentStore } from '../store/AgentStore'
 import { z } from 'zod'
 import { getLLMConfigForTask } from './llmConfigService'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 export interface RetrievalResult {
     relativePath: string
@@ -68,7 +68,7 @@ Rules:
         }
 
         // 回退方案：如果 LLM 失败，则使用简单的分词处理
-        const basicKeywords = query.split(/[\s,.:;!?()[\]{}'"]+/).filter(t => t.length > 1).slice(0, 3)
+        const basicKeywords = query.split(/[\s,.:;!?()[\]{}'"]+/).filter(token => token.length > 1).slice(0, 3)
         return {
             keywords: basicKeywords.length > 0 ? basicKeywords : [query],
             semanticQuery: query
@@ -106,7 +106,7 @@ Rules:
             const threadBoundStore = useAgentStore.getState().forThread(threadId)
             searchPartId = threadBoundStore.addSearchPart(assistantId)
 
-            const initText = translate('retrievalService.analyzingSearchIntent', asLanguage(language))
+            const initText = t('retrievalService.analyzingSearchIntent', language)
             threadBoundStore.updateSearchPart(assistantId, searchPartId, initText, true)
 
             // 让出线程，确保 "分析意图" 的状态块能立刻在 UI 展现
@@ -122,7 +122,7 @@ Rules:
             // 更新 UI，告知用户系统实际上在搜什么
             if (assistantId && threadId && searchPartId) {
                 const queryDisplay = optimized.keywords.join(', ') || optimized.semanticQuery
-                const searchingText = translate('retrievalService.retrievingCode', asLanguage(language), { queryDisplay })
+                const searchingText = t('retrievalService.retrievingCode', language, { queryDisplay })
                 useAgentStore.getState().forThread(threadId).updateSearchPart(assistantId, searchPartId, searchingText, true)
             }
 
@@ -168,7 +168,7 @@ Rules:
         threadId: string | undefined,
         assistantId: string | undefined,
         searchPartId: string | undefined,
-        language: string,
+        language: Language,
         type: 'success' | 'no_results' | 'low_score' | 'error',
         data?: any
     ) {
@@ -179,18 +179,18 @@ Rules:
 
         switch (type) {
             case 'success':
-                const foundHeader = translate('retrievalService.foundRelevantFiles', asLanguage(language), { count: data.count })
+                const foundHeader = t('retrievalService.foundRelevantFiles', language, { count: data.count })
                 const filesList = data.results.map((r: any) => `- ${r.relativePath}`).join('\n')
                 message = foundHeader + filesList
                 break
             case 'no_results':
-                message = translate('retrievalService.noRelevantFilesFound', asLanguage(language))
+                message = t('retrievalService.noRelevantFilesFound', language)
                 break
             case 'low_score':
-                message = translate('retrievalService.noHighlyRelevantCode', asLanguage(language), { bestScore: data.bestScore, threshold: data.threshold })
+                message = t('retrievalService.noHighlyRelevantCode', language, { bestScore: data.bestScore, threshold: data.threshold })
                 break
             case 'error':
-                message = translate('retrievalService.anErrorOccurredDuring', asLanguage(language))
+                message = t('retrievalService.anErrorOccurredDuring', language)
                 break
         }
 

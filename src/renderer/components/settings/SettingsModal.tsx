@@ -6,7 +6,7 @@ import { PROVIDERS } from '@/shared/config/providers'
 import stableStringify from 'fast-json-stable-stringify'
 import { getEditorConfig } from '@renderer/settings'
 import { captureActiveProviderConfig } from '@renderer/settings/providerConfigPersistence'
-import { t, type Language, asLanguage } from '@renderer/i18n'
+import { t, type Language, asLanguage } from '@shared/i18n'
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Modal, Select } from '@components/ui'
@@ -95,7 +95,7 @@ function SettingsTabFallback({ language }: { language: Language }) {
         <div className="min-h-[320px] flex items-center justify-center rounded-2xl border border-border/40 bg-surface/70">
             <div className="flex items-center gap-3 text-sm text-text-muted">
                 <div className="w-4 h-4 border-2 border-accent/60 border-t-transparent rounded-full animate-spin" />
-                <span>{t('settingsModal.loadingSettings', asLanguage(language))}</span>
+                <span>{t('settingsModal.loadingSettings', language)}</span>
             </div>
         </div>
     )
@@ -352,7 +352,7 @@ export default function SettingsModal() {
 
             setSaved(true)
             window.setTimeout(() => setSaved(false), 2000)
-            toast.success(t('success.settingsSaved', localLanguage as Language))
+            toast.success(t('success.settingsSaved', localLanguage))
         } catch (error) {
             toast.error(error instanceof Error ? error.message : String(error))
         }
@@ -386,10 +386,10 @@ export default function SettingsModal() {
 
         if (isDirty) {
             const confirmed = await globalConfirm({
-                title: t('settings', language as Language),
-                message: t('unsavedChangesConfirm', language as Language),
-                confirmText: t('discard', language as Language),
-                cancelText: t('cancel', language as Language),
+                title: t('settings', language),
+                message: t('unsavedChangesConfirm', language),
+                confirmText: t('discard', language),
+                cancelText: t('cancel', language),
                 variant: 'warning',
             })
             if (!confirmed) {
@@ -416,10 +416,10 @@ export default function SettingsModal() {
         try {
             if (isDirty) {
                 const confirmed = await globalConfirm({
-                    title: t('git.openFile', asLanguage(language)),
-                    message: t('settingsModal.thereAreUnsavedSettings', asLanguage(language)),
-                    confirmText: t('settingsModal.discardAndOpen', asLanguage(language)),
-                    cancelText: t('cancel', language as Language),
+                    title: t('git.openFile', language),
+                    message: t('settingsModal.thereAreUnsavedSettings', language),
+                    confirmText: t('settingsModal.discardAndOpen', language),
+                    cancelText: t('cancel', language),
                     variant: 'warning',
                 })
                 if (!confirmed) return false
@@ -428,13 +428,13 @@ export default function SettingsModal() {
             const authorized = await api.file.authorizeSettingsEdit(filePath, options?.initialContent)
             if (!authorized) {
                 toast.error(
-                    t('settingsModal.cannotEditThisConfiguration', asLanguage(language)),
-                    t('settingsModal.onlyWorkspaceFilesAnd', asLanguage(language)),
+                    t('settingsModal.cannotEditThisConfiguration', language),
+                    t('settingsModal.onlyWorkspaceFilesAnd', language),
                 )
                 return false
             }
 
-            const result = await safeOpenFile(filePath, { language: language as Language })
+            const result = await safeOpenFile(filePath, { language })
             if (!result.success) return false
 
             setShowSettings(false)
@@ -457,25 +457,25 @@ export default function SettingsModal() {
         [localConfig.provider, providers])
 
     const tabs = useMemo(() => [
-        { id: 'provider', group: 'ai', label: t('settingsModal.modelsProviders', asLanguage(language)), description: t('settingsModal.connectionsCredentialsRoutingAnd', asLanguage(language)), icon: <Cpu className="w-4 h-4" /> },
-        { id: 'agent', group: 'ai', label: t('settingsModal.agentBehavior', asLanguage(language)), description: t('settingsModal.automationContextRetrievalAnd', asLanguage(language)), icon: <Settings2 className="w-4 h-4" /> },
-        { id: 'rules', group: 'ai', label: t('settingsModal.instructionsMemory', asLanguage(language)), description: t('settingsModal.projectRulesDurableMemory', asLanguage(language)), icon: <Brain className="w-4 h-4" /> },
-        { id: 'editor', group: 'workspace', label: t('settingsModal.appearanceEditor', asLanguage(language)), description: t('settingsModal.themeMotionTypographyEditing', asLanguage(language)), icon: <Code className="w-4 h-4" /> },
-        { id: 'keybindings', group: 'workspace', label: t('settingsModal.keyboardShortcuts', asLanguage(language)), description: t('settingsModal.viewAndCustomizeKeyboard', asLanguage(language)), icon: <Keyboard className="w-4 h-4" /> },
-        { id: 'snippets', group: 'workspace', label: t('settingsModal.codeSnippets', asLanguage(language)), description: t('settingsModal.manageReusableCodeTemplates', asLanguage(language)), icon: <FileCode className="w-4 h-4" /> },
-        { id: 'lsp', group: 'workspace', label: t('settingsModal.languageServices', asLanguage(language)), description: t('settingsModal.installAndManageLanguage', asLanguage(language)), icon: <Braces className="w-4 h-4" /> },
-        { id: 'indexing', group: 'workspace', label: t('settingsModal.codeIndexing', asLanguage(language)), description: t('settingsModal.semanticIndexEmbeddingsAnd', asLanguage(language)), icon: <Database className="w-4 h-4" /> },
-        { id: 'skills', group: 'extensions', label: 'Skills', description: t('settingsModal.manageSpecializedAgentCapabilities', asLanguage(language)), icon: <Zap className="w-4 h-4" /> },
-        { id: 'mcp', group: 'extensions', label: 'MCP', description: t('settingsModal.connectAndManageExternal', asLanguage(language)), icon: <Plug className="w-4 h-4" /> },
-        { id: 'security', group: 'app', label: t('settingsModal.securityApprovals', asLanguage(language)), description: t('settingsModal.approvalPolicyWorkspaceBoundaries', asLanguage(language)), icon: <Shield className="w-4 h-4" /> },
-        { id: 'system', group: 'app', label: t('settingsModal.appData', asLanguage(language)), description: t('settingsModal.networkStorageLogsBackup', asLanguage(language)), icon: <Monitor className="w-4 h-4" /> },
+        { id: 'provider', group: 'ai', label: t('settingsModal.modelsProviders', language), description: t('settingsModal.connectionsCredentialsRoutingAnd', language), icon: <Cpu className="w-4 h-4" /> },
+        { id: 'agent', group: 'ai', label: t('settingsModal.agentBehavior', language), description: t('settingsModal.automationContextRetrievalAnd', language), icon: <Settings2 className="w-4 h-4" /> },
+        { id: 'rules', group: 'ai', label: t('settingsModal.instructionsMemory', language), description: t('settingsModal.projectRulesDurableMemory', language), icon: <Brain className="w-4 h-4" /> },
+        { id: 'editor', group: 'workspace', label: t('settingsModal.appearanceEditor', language), description: t('settingsModal.themeMotionTypographyEditing', language), icon: <Code className="w-4 h-4" /> },
+        { id: 'keybindings', group: 'workspace', label: t('settingsModal.keyboardShortcuts', language), description: t('settingsModal.viewAndCustomizeKeyboard', language), icon: <Keyboard className="w-4 h-4" /> },
+        { id: 'snippets', group: 'workspace', label: t('settingsModal.codeSnippets', language), description: t('settingsModal.manageReusableCodeTemplates', language), icon: <FileCode className="w-4 h-4" /> },
+        { id: 'lsp', group: 'workspace', label: t('settingsModal.languageServices', language), description: t('settingsModal.installAndManageLanguage', language), icon: <Braces className="w-4 h-4" /> },
+        { id: 'indexing', group: 'workspace', label: t('settingsModal.codeIndexing', language), description: t('settingsModal.semanticIndexEmbeddingsAnd', language), icon: <Database className="w-4 h-4" /> },
+        { id: 'skills', group: 'extensions', label: 'Skills', description: t('settingsModal.manageSpecializedAgentCapabilities', language), icon: <Zap className="w-4 h-4" /> },
+        { id: 'mcp', group: 'extensions', label: 'MCP', description: t('settingsModal.connectAndManageExternal', language), icon: <Plug className="w-4 h-4" /> },
+        { id: 'security', group: 'app', label: t('settingsModal.securityApprovals', language), description: t('settingsModal.approvalPolicyWorkspaceBoundaries', language), icon: <Shield className="w-4 h-4" /> },
+        { id: 'system', group: 'app', label: t('settingsModal.appData', language), description: t('settingsModal.networkStorageLogsBackup', language), icon: <Monitor className="w-4 h-4" /> },
     ] as const, [language])
 
     const tabGroups = useMemo(() => [
-        { id: 'ai', label: t('settingsModal.aiWorkflow', asLanguage(language)) },
-        { id: 'workspace', label: t('settingsModal.workspace', asLanguage(language)) },
-        { id: 'extensions', label: t('settingsModal.extensions', asLanguage(language)) },
-        { id: 'app', label: t('settingsModal.application', asLanguage(language)) },
+        { id: 'ai', label: t('settingsModal.aiWorkflow', language) },
+        { id: 'workspace', label: t('settingsModal.workspace', language) },
+        { id: 'extensions', label: t('settingsModal.extensions', language) },
+        { id: 'app', label: t('settingsModal.application', language) },
     ] as const, [language])
 
     // 搜索逻辑：按关键词筛选设置项，按 Tab 分组
@@ -601,7 +601,7 @@ export default function SettingsModal() {
                             <div className="p-1.5 rounded-lg bg-accent/10 border border-accent/20">
                                 <Settings2 className="w-5 h-5 text-accent" />
                             </div>
-                            {t('welcome.settings', asLanguage(language))}
+                            {t('welcome.settings', language)}
                         </h2>
                     </div>
 
@@ -615,7 +615,7 @@ export default function SettingsModal() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 onKeyDown={handleSearchKeyDown}
-                                placeholder={t('settingsModal.searchSettings', asLanguage(language))}
+                                placeholder={t('settingsModal.searchSettings', language)}
                                 className="w-full h-8 pl-9 pr-8 text-xs rounded-lg bg-background/50 border border-border/50 text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-accent/40 focus:ring-2 focus:ring-accent/10 transition-all"
                             />
                             {searchQuery && (
@@ -654,7 +654,7 @@ export default function SettingsModal() {
                             <div className="flex flex-col items-center justify-center py-8 text-center">
                                 <Search className="w-8 h-8 text-text-muted/30 mb-3" />
                                 <p className="text-xs text-text-muted">
-                                    {t('settingsModal.noMatchingSettingsFound', asLanguage(language))}
+                                    {t('settingsModal.noMatchingSettingsFound', language)}
                                 </p>
                             </div>
                         ) : (
@@ -687,11 +687,11 @@ export default function SettingsModal() {
                     <div className="mt-auto px-4 pt-4 border-t border-border/50 space-y-2">
                         <div className="flex items-center gap-2 px-1 text-text-muted opacity-80">
                             <Globe className="w-3.5 h-3.5" />
-                            <span className="text-xs font-bold uppercase tracking-widest">{t('language', asLanguage(language))}</span>
+                            <span className="text-xs font-bold uppercase tracking-widest">{t('language', language)}</span>
                         </div>
                         <Select
                             value={localLanguage}
-                            onChange={(value) => setLocalLanguage(value as 'en' | 'zh')}
+                            onChange={(value) => setLocalLanguage(asLanguage(value))}
                             options={LANGUAGES.map(item => ({ value: item.id, label: item.name }))}
                             className="w-full text-xs bg-surface/50 border-border/50 hover:border-accent/50 transition-colors"
                         />
@@ -710,7 +710,7 @@ export default function SettingsModal() {
                         </div>
 
                         <div className="settings-tab-panel mx-auto max-w-4xl space-y-6">
-                            <Suspense fallback={<SettingsTabFallback language={language as Language} />}>
+                            <Suspense fallback={<SettingsTabFallback language={language} />}>
                                 {renderActiveTab()}
                             </Suspense>
                         </div>
@@ -720,12 +720,12 @@ export default function SettingsModal() {
                         <div className="absolute bottom-6 right-8 left-8 p-4 rounded-xl bg-surface/95 border border-border/60 shadow-lg flex items-center justify-between z-10 transition-all duration-300">
                             <span className="text-xs text-text-muted ml-2 font-medium">
                                 {saved && !isDirty
-                                    ? t('settings.allChangesSaved', language as Language)
-                                    : t('settings.unsavedChanges', language as Language)}
+                                    ? t('settings.allChangesSaved', language)
+                                    : t('settings.unsavedChanges', language)}
                             </span>
                             <div className="flex items-center gap-3">
                                 <Button variant="ghost" onClick={handleClose} className="hover:bg-text-inverted/[0.05] hover:bg-text-primary/[0.05] text-text-secondary rounded-lg">
-                                    {t('cancel', language as Language)}
+                                    {t('cancel', language)}
                                 </Button>
                                 <Button
                                     variant={saved ? 'primary' : 'primary'}
@@ -736,10 +736,10 @@ export default function SettingsModal() {
                                     {saved ? (
                                         <span className="flex items-center gap-2 justify-center font-bold">
                                             <Check className="w-4 h-4" />
-                                            {t('saved', language as Language)}
+                                            {t('saved', language)}
                                         </span>
                                     ) : (
-                                        <span className="font-bold">{t('settings.saveChanges', language as Language)}</span>
+                                        <span className="font-bold">{t('settings.saveChanges', language)}</span>
                                     )}
                                 </Button>
                             </div>

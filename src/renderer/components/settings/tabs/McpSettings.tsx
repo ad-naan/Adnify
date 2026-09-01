@@ -6,26 +6,7 @@
 import { useState, useEffect } from 'react'
 import { logger } from '@shared/utils/Logger'
 import {
-  Server,
-  RefreshCw,
-  Power,
-  PowerOff,
-  AlertCircle,
-  CheckCircle,
-  Loader2,
-  Wrench,
-  FileText,
-  MessageSquare,
-  FolderOpen,
-  Plus,
-  Trash2,
-  Globe,
-  Key,
-  LogIn,
-  Lightbulb,
-  Import,
-  Check,
-} from 'lucide-react'
+  Server, RefreshCw, Power, PowerOff, AlertCircle, CheckCircle, Loader2, Wrench, FileText, MessageSquare, FolderOpen, Plus, Trash2, Globe, Key, LogIn, Lightbulb, Import, Check, } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { mcpService } from '@services/mcpService'
@@ -36,7 +17,7 @@ import { MCP_PRESETS } from '@shared/config/mcpPresets'
 import McpAddServerModal, { type McpServerFormData } from './McpAddServerModal'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { ProgressiveReveal } from '../ProgressiveReveal'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface McpSettingsProps {
   language: 'en' | 'zh'
@@ -157,7 +138,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
     if (imported > 0) await mcpService.reloadConfig()
     setImportLoading(false)
     setShowImportModal(false)
-    setActionError(imported === selectedImports.size ? null : (t('mcpSettings.someConfigsCouldNot', asLanguage(language))))
+    setActionError(imported === selectedImports.size ? null : (t('mcpSettings.someConfigsCouldNot', language)))
   }
 
   const handleDeleteServer = async (server: McpServerState) => {
@@ -169,11 +150,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
         await mcpService.reloadConfig()
         setDeleteConfirm(null)
       } else {
-        setActionError(t('mcpSettings.deleteFailedCouldNot', asLanguage(language), { id: server.id }))
+        setActionError(t('mcpSettings.deleteFailedCouldNot', language, { id: server.id }))
       }
     } catch (err) {
       logger.settings.error('Failed to delete server:', err)
-      setActionError(t('mcpSettings.deleteFailedTheSource', asLanguage(language)))
+      setActionError(t('mcpSettings.deleteFailedTheSource', language))
     }
     setActionLoading(null)
   }
@@ -186,11 +167,11 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       if (success) {
         await mcpService.reloadConfig()
       } else {
-        setActionError(t('mcpSettings.updateFailedTheSource', asLanguage(language), { id: server.id }))
+        setActionError(t('mcpSettings.updateFailedTheSource', language, { id: server.id }))
       }
     } catch (err) {
       logger.settings.error('Failed to toggle server:', err)
-      setActionError(t('mcpSettings.updateFailedCheckThe', asLanguage(language)))
+      setActionError(t('mcpSettings.updateFailedCheckThe', language))
     }
     setActionLoading(null)
   }
@@ -203,9 +184,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       codex: 'Codex',
       cursor: 'Cursor',
       vscode: 'VS Code',
-      generic: t('mcpSettings.generic', asLanguage(language)),
+      generic: t('mcpSettings.generic', language),
     }
-    return provider ? labels[provider] : (t('mcpSettings.unknown', asLanguage(language)))
+    return provider ? labels[provider] : (t('mcpSettings.unknown', language))
   }
 
   const getStatusIcon = (status: McpServerStatus) => {
@@ -227,12 +208,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
 
   const getStatusText = (status: McpServerStatus) => {
     const texts: Record<McpServerStatus, string> = {
-      connected: t('mcpSettings.connected', asLanguage(language)),
-      connecting: t('mcpSettings.connecting', asLanguage(language)),
-      error: t('toolError', asLanguage(language)),
-      disconnected: t('mcpSettings.disconnected', asLanguage(language)),
-      needs_auth: t('mcpSettings.authRequired', asLanguage(language)),
-      needs_registration: t('mcpSettings.registrationRequired', asLanguage(language)),
+      connected: t('mcpSettings.connected', language),
+      connecting: t('mcpSettings.connecting', language),
+      error: t('toolError', language),
+      disconnected: t('mcpSettings.disconnected', language),
+      needs_auth: t('mcpSettings.authRequired', language),
+      needs_registration: t('mcpSettings.registrationRequired', language),
     }
     return texts[status]
   }
@@ -309,7 +290,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="flex items-center gap-2.5">
                 <h4 className="text-base font-bold text-text-primary tracking-tight">{server.config.name}</h4>
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded border bg-accent/10 text-accent border-accent/20 tracking-tight">
-                  {server.config.importedFrom ? (t('mcpSettings.from', asLanguage(language), { providerLabel })) : 'Adnify'}
+                  {server.config.importedFrom ? (t('mcpSettings.from', language, { providerLabel })) : 'Adnify'}
                 </span>
                 {server.config.source && (
                   <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded border uppercase tracking-tight ${
@@ -317,7 +298,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                       ? 'bg-green-500/10 text-green-400 border-green-500/20'
                       : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                   }`}>
-                    {server.config.source === 'workspace' ? (t('common.project', asLanguage(language))) : (t('common.global', asLanguage(language)))}
+                    {server.config.source === 'workspace' ? (t('common.project', language)) : (t('common.global', language))}
                   </span>
                 )}
                 {isRemote && (
@@ -337,7 +318,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   className="mt-2 max-w-[520px] truncate text-[11px] text-text-muted/80 font-mono"
                   title={server.config.sourcePath}
                 >
-                  {t('mcpSettings.source', asLanguage(language))}{server.config.sourcePath}
+                  {t('mcpSettings.source', language)}{server.config.sourcePath}
                 </div>
               )}
               {server.config.importedFrom && (
@@ -345,7 +326,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   className="mt-1 max-w-[520px] truncate text-[10px] text-accent/70 font-mono"
                   title={server.config.importedFrom.path}
                 >
-                  {t('common.originallyImported', asLanguage(language))}{server.config.importedFrom.path}
+                  {t('common.originallyImported', language)}{server.config.importedFrom.path}
                 </div>
               )}
             </div>
@@ -368,16 +349,16 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />
                   <span className="text-xs text-orange-400">
-                    {t('common.waitingForBrowser', asLanguage(language))}
+                    {t('common.waitingForBrowser', language)}
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => handleCancelOAuth(server.id)}
-                    title={t('cancel', asLanguage(language))}
+                    title={t('cancel', language)}
                     className="text-text-muted hover:text-red-400 text-xs"
                   >
-                    {t('cancel', asLanguage(language))}
+                    {t('cancel', language)}
                   </Button>
                 </div>
               )}
@@ -389,10 +370,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   size="sm"
                   onClick={() => handleStartOAuth(server.id)}
                   disabled={isLoading}
-                  title={t('mcpSettings.startAuthentication', asLanguage(language))}
+                  title={t('mcpSettings.startAuthentication', language)}
                 >
                   <Key className="w-4 h-4 mr-1" />
-                  {t('mcpSettings.auth', asLanguage(language))}
+                  {t('mcpSettings.auth', language)}
                 </Button>
               )}
 
@@ -403,7 +384,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     size="sm"
                     onClick={() => handleRefreshCapabilities(server.id)}
                     disabled={isLoading}
-                    title={t('mcpSettings.refreshCapabilities', asLanguage(language))}
+                    title={t('mcpSettings.refreshCapabilities', language)}
                   >
                     <RefreshCw className={`w-4 h-4 ${actionLoading === `refresh-${server.id}` ? 'animate-spin' : ''}`} />
                   </Button>
@@ -412,7 +393,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     size="sm"
                     onClick={() => handleDisconnectServer(server.id)}
                     disabled={isLoading}
-                    title={t('mcpSettings.disconnect', asLanguage(language))}
+                    title={t('mcpSettings.disconnect', language)}
                   >
                     <PowerOff className="w-4 h-4" />
                   </Button>
@@ -427,7 +408,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   size="sm"
                   onClick={() => handleConnectServer(server.id)}
                   disabled={isLoading}
-                  title={t('mcpSettings.connect', asLanguage(language))}
+                  title={t('mcpSettings.connect', language)}
                 >
                   <Power className="w-4 h-4" />
                 </Button>
@@ -440,8 +421,8 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 onClick={() => handleToggleServer(server, !server.config.disabled)}
                 disabled={isLoading}
                 title={server.config.disabled 
-                  ? (t('common.enable', asLanguage(language)))
-                  : (t('common.disable', asLanguage(language)))
+                  ? (t('common.enable', language))
+                  : (t('common.disable', language))
                 }
               >
                 {server.config.disabled ? (
@@ -457,7 +438,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 size="sm"
                 onClick={() => setDeleteConfirm(server.id)}
                 disabled={isLoading}
-                title={t('delete', asLanguage(language))}
+                title={t('delete', language)}
                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
               >
                 <Trash2 className="w-4 h-4" />
@@ -472,7 +453,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             <div className="flex flex-col gap-3 rounded-xl border border-red-500/20 bg-red-500/10 p-4 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0 space-y-1.5">
                 <div className="text-sm font-semibold text-red-300">
-                  {t('mcpSettings.deleteTheAdnifyConfig', asLanguage(language))}
+                  {t('mcpSettings.deleteTheAdnifyConfig', language)}
                 </div>
                 <p className="text-xs leading-relaxed text-text-secondary">
                   {language === 'zh'
@@ -480,7 +461,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     : `Only the Adnify copy is removed${server.config.importedFrom ? `; the original ${providerLabel} config is untouched` : ''}. The file below will be modified.`}
                 </p>
                 <div className="break-all rounded-lg border border-red-500/15 bg-black/20 px-2.5 py-2 font-mono text-[11px] text-red-200/80">
-                  {server.config.sourcePath || (t('mcpSettings.sourcePathUnavailable', asLanguage(language)))}
+                  {server.config.sourcePath || (t('mcpSettings.sourcePathUnavailable', language))}
                 </div>
               </div>
               <div className="flex shrink-0 justify-end gap-2">
@@ -489,7 +470,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   size="sm"
                   onClick={() => setDeleteConfirm(null)}
                 >
-                  {t('cancel', asLanguage(language))}
+                  {t('cancel', language)}
                 </Button>
                 <Button
                   variant="primary"
@@ -501,7 +482,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   {isDeleting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    t('delete', asLanguage(language))
+                    t('delete', language)
                   )}
                 </Button>
               </div>
@@ -510,7 +491,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
         )}
 
         {!showDeleteConfirm && (
-          <ProgressiveReveal language={language} collapsedHeight={420} expandLabel={t('mcpSettings.showAllServerDetails', asLanguage(language))}>
+          <ProgressiveReveal language={language} collapsedHeight={420} expandLabel={t('mcpSettings.showAllServerDetails', language)}>
           <div className="space-y-6 border-t border-border/50 p-5">
             {/* OAuth Pending Banner */}
             {isOAuthPending && (
@@ -518,10 +499,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 <Loader2 className="w-4 h-4 mt-0.5 flex-shrink-0 animate-spin" />
                 <div>
                   <div className="font-bold mb-1">
-                    {t('mcpSettings.waitingForBrowserAuthorization', asLanguage(language))}
+                    {t('mcpSettings.waitingForBrowserAuthorization', language)}
                   </div>
                   <div className="opacity-80">
-                    {t('mcpSettings.pleaseCompleteAuthorizationIn', asLanguage(language))}
+                    {t('mcpSettings.pleaseCompleteAuthorizationIn', language)}
                   </div>
                 </div>
               </div>
@@ -546,9 +527,9 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               }`}>
                 <Key className="w-4 h-4" />
                 <span>
-                  {server.authStatus === 'authenticated' && (t('mcpSettings.authenticated', asLanguage(language)))}
-                  {server.authStatus === 'expired' && (t('mcpSettings.authenticationExpired', asLanguage(language)))}
-                  {server.authStatus === 'not_authenticated' && (t('mcpSettings.notAuthenticated', asLanguage(language)))}
+                  {server.authStatus === 'authenticated' && (t('mcpSettings.authenticated', language))}
+                  {server.authStatus === 'expired' && (t('mcpSettings.authenticationExpired', language))}
+                  {server.authStatus === 'not_authenticated' && (t('mcpSettings.notAuthenticated', language))}
                 </span>
               </div>
             )}
@@ -556,7 +537,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             {/* Config Details */}
             <div className="space-y-2">
               <h5 className="text-[11px] font-bold text-text-muted uppercase tracking-wider ml-1">
-                {t('mcpSettings.configuration', asLanguage(language))}
+                {t('mcpSettings.configuration', language)}
               </h5>
               <div className="text-xs text-text-secondary space-y-1.5 font-mono bg-black/20 p-4 rounded-xl border border-border shadow-inner">
                 <div className="flex"><span className="text-text-muted w-20 shrink-0">id:</span> <span className="select-all">{server.id}</span></div>
@@ -592,7 +573,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-3">
                 <h5 className="text-[11px] font-bold text-text-muted uppercase tracking-wider flex items-center gap-2 ml-1">
                   <Wrench className="w-3.5 h-3.5" />
-                  {t('mcpSettings.tools', asLanguage(language))} <span className="bg-white/10 px-1.5 rounded-md text-[10px]">{server.tools.length}</span>
+                  {t('mcpSettings.tools', language)} <span className="bg-white/10 px-1.5 rounded-md text-[10px]">{server.tools.length}</span>
                 </h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {server.tools.map((tool) => (
@@ -616,7 +597,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
                   <FileText className="w-4 h-4" />
-                  {t('mcpSettings.resources', asLanguage(language))} ({server.resources.length})
+                  {t('mcpSettings.resources', language)} ({server.resources.length})
                 </h5>
                 <div className="space-y-1">
                   {server.resources.map((resource) => (
@@ -638,7 +619,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
-                  {t('mcpSettings.prompts', asLanguage(language))} ({server.prompts.length})
+                  {t('mcpSettings.prompts', language)} ({server.prompts.length})
                 </h5>
                 <div className="space-y-1">
                   {server.prompts.map((prompt) => (
@@ -661,7 +642,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             {server.config.autoApprove && server.config.autoApprove.length > 0 && (
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary">
-                  {t('common.autoApprovedTools', asLanguage(language))}
+                  {t('common.autoApprovedTools', language)}
                 </h5>
                 <div className="flex flex-wrap gap-1">
                   {server.config.autoApprove.map((tool) => (
@@ -681,7 +662,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-text-secondary flex items-center gap-2">
                   <Lightbulb className="w-4 h-4 text-yellow-500" />
-                  {t('mcpSettings.usageExamples', asLanguage(language))}
+                  {t('mcpSettings.usageExamples', language)}
                 </h5>
                 <div className="space-y-1.5">
                   {usageExamples.map((example) => (
@@ -695,7 +676,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   ))}
                 </div>
                 <p className="text-xs text-text-muted">
-                  {t('mcpSettings.typeSimilarPromptsIn', asLanguage(language))}
+                  {t('mcpSettings.typeSimilarPromptsIn', language)}
                 </p>
               </div>
             )}
@@ -719,10 +700,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             </div>
             <div>
               <h4 className="text-sm font-medium text-text-primary">
-                {t('mcpSettings.autoConnectOnStartup', asLanguage(language))}
+                {t('mcpSettings.autoConnectOnStartup', language)}
               </h4>
               <p className="text-xs text-text-muted mt-0.5">
-                {t('mcpSettings.automaticallyConnectAllEnabled', asLanguage(language))}
+                {t('mcpSettings.automaticallyConnectAllEnabled', language)}
               </p>
             </div>
           </div>
@@ -737,13 +718,13 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-text-muted">
-            {t('mcpSettings.configureAndManageMcp', asLanguage(language))}
+            {t('mcpSettings.configureAndManageMcp', language)}
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={handleOpenImport}>
             <Import className="w-4 h-4 mr-2" />
-            {t('common.importFromAgent', asLanguage(language))}
+            {t('common.importFromAgent', language)}
           </Button>
           <Button
             variant="secondary"
@@ -752,7 +733,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             disabled={actionLoading === 'reload'}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${actionLoading === 'reload' ? 'animate-spin' : ''}`} />
-            {t('refresh', asLanguage(language))}
+            {t('refresh', language)}
           </Button>
           <Button
             variant="primary"
@@ -760,7 +741,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             onClick={() => setShowAddModal(true)}
           >
             <Plus className="w-4 h-4 mr-2" />
-            {t('common.addServer', asLanguage(language))}
+            {t('common.addServer', language)}
           </Button>
         </div>
       </div>
@@ -780,7 +761,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             <span>{actionError}</span>
           </div>
           <button type="button" className="shrink-0 text-xs text-red-300 hover:text-red-200" onClick={() => setActionError(null)}>
-            {t('mcpSettings.dismiss', asLanguage(language))}
+            {t('mcpSettings.dismiss', language)}
           </button>
         </div>
       )}
@@ -789,7 +770,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium text-text-secondary">
-            {t('mcpSettings.mcpServers', asLanguage(language))} ({mcpServers.length})
+            {t('mcpSettings.mcpServers', language)} ({mcpServers.length})
           </h4>
         </div>
         
@@ -801,14 +782,14 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           <div className="text-center py-12 text-text-muted border border-dashed border-border rounded-lg">
             <Server className="w-12 h-12 mx-auto mb-3 opacity-50" />
             <p className="text-sm font-medium">
-              {t('mcpSettings.noMcpServersConfigured', asLanguage(language))}
+              {t('mcpSettings.noMcpServersConfigured', language)}
             </p>
             <p className="text-xs mt-1 mb-4">
-              {t('mcpSettings.addMcpServersTo', asLanguage(language))}
+              {t('mcpSettings.addMcpServersTo', language)}
             </p>
             <Button variant="primary" size="sm" onClick={() => setShowAddModal(true)}>
               <Plus className="w-4 h-4 mr-2" />
-              {t('common.addServer', asLanguage(language))}
+              {t('common.addServer', language)}
             </Button>
           </div>
         ) : (
@@ -822,17 +803,17 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <aside className="space-y-2 rounded-xl border border-accent/20 bg-accent/[0.04] p-4 text-xs text-text-muted">
         <p className="font-bold text-sm text-accent/90 flex items-center gap-1.5">
           <OtterAsset asset="question" className="h-6 w-6 object-contain" />
-          {t('common.tips', asLanguage(language))}
+          {t('common.tips', language)}
         </p>
         <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed pl-1">
           <li>
-            {t('mcpSettings.autoConnectionToolsOf', asLanguage(language))}
+            {t('mcpSettings.autoConnectionToolsOf', language)}
           </li>
           <li>
-            {t('mcpSettings.statusMonitoringTheLeft', asLanguage(language))}
+            {t('mcpSettings.statusMonitoringTheLeft', language)}
           </li>
           <li>
-            {t('mcpSettings.configMergingGlobalAnd', asLanguage(language))}
+            {t('mcpSettings.configMergingGlobalAnd', language)}
           </li>
         </ul>
       </aside>
@@ -843,12 +824,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           <div className="flex items-center gap-2">
             <FolderOpen className="w-4 h-4 text-accent" />
             <h5 className="text-sm font-medium text-text-primary">
-              {t('mcpSettings.localMcpConfigurationFiles', asLanguage(language))}
+              {t('mcpSettings.localMcpConfigurationFiles', language)}
             </h5>
           </div>
 
           <p className="text-xs text-text-muted leading-relaxed">
-            {t('mcpSettings.mcpConfigurationIsStored', asLanguage(language))}
+            {t('mcpSettings.mcpConfigurationIsStored', language)}
           </p>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -857,10 +838,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-text-primary">
-                    {t('mcpSettings.userConfigurationFile', asLanguage(language))}
+                    {t('mcpSettings.userConfigurationFile', language)}
                   </span>
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">
-                    {t('mcpSettings.global', asLanguage(language))}
+                    {t('mcpSettings.global', language)}
                   </span>
                 </div>
                 <p className="text-[11px] text-text-muted break-all font-mono opacity-80 leading-relaxed bg-black/10 p-2 rounded border border-border/30">
@@ -875,7 +856,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 className="w-full text-xs justify-center gap-1.5"
               >
                 <FileText className="w-3.5 h-3.5" />
-                {t('mcpSettings.openInEditor', asLanguage(language))}
+                {t('mcpSettings.openInEditor', language)}
               </Button>
             </div>
 
@@ -886,10 +867,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold text-text-primary">
-                        {t('mcpSettings.projectConfigFile', asLanguage(language), { index1: index + 1 })}
+                        {t('mcpSettings.projectConfigFile', language, { index1: index + 1 })}
                       </span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-bold">
-                        {t('mcpSettings.project', asLanguage(language))}
+                        {t('mcpSettings.project', language)}
                       </span>
                     </div>
                     <p className="text-[11px] text-text-muted break-all font-mono opacity-80 leading-relaxed bg-black/10 p-2 rounded border border-border/30">
@@ -904,7 +885,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     className="w-full text-xs justify-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    {t('mcpSettings.openInEditor', asLanguage(language))}
+                    {t('mcpSettings.openInEditor', language)}
                   </Button>
                 </div>
               ))
@@ -912,10 +893,10 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="rounded-lg border border-dashed border-border bg-surface/10 p-4 flex flex-col items-center justify-center text-center space-y-2 min-h-[140px]">
                 <OtterAsset asset="standFront" className="w-12 h-12 object-contain opacity-70" />
                 <div className="text-xs font-medium text-text-muted">
-                  {t('mcpSettings.noWorkspaceMcpConfig', asLanguage(language))}
+                  {t('mcpSettings.noWorkspaceMcpConfig', language)}
                 </div>
                 <p className="text-[10px] text-text-muted max-w-[200px] leading-relaxed">
-                  {t('mcpSettings.createAdnifySettingsMcp', asLanguage(language))}
+                  {t('mcpSettings.createAdnifySettingsMcp', language)}
                 </p>
               </div>
             )}
@@ -925,20 +906,20 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
           <div className="rounded-lg border border-border bg-background/50 p-4 space-y-3">
             <div className="space-y-1">
               <p className="text-xs font-semibold text-text-primary">
-                {t('mcpSettings.recognizedMcpServerTypes', asLanguage(language))}
+                {t('mcpSettings.recognizedMcpServerTypes', language)}
               </p>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                {t('mcpSettings.modelContextProtocolMcp', asLanguage(language))}
+                {t('mcpSettings.modelContextProtocolMcp', language)}
               </p>
               <p className="text-[11px] text-text-muted leading-relaxed">
-                {t('mcpSettings.adnifyIsFullyCompliant', asLanguage(language))}
+                {t('mcpSettings.adnifyIsFullyCompliant', language)}
               </p>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-border/30">
               <div className="space-y-1 text-[11px] text-text-muted">
                 <p>
-                  {t('mcpSettings.ifYouModifiedConfiguration', asLanguage(language))}
+                  {t('mcpSettings.ifYouModifiedConfiguration', language)}
                 </p>
               </div>
               <Button
@@ -949,7 +930,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 className="text-xs shrink-0 gap-1.5"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${actionLoading === 'reload' ? 'animate-spin' : ''}`} />
-                {t('mcpSettings.reloadSync', asLanguage(language))}
+                {t('mcpSettings.reloadSync', language)}
               </Button>
             </div>
           </div>
@@ -960,12 +941,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
       <Modal
         isOpen={showImportModal}
         onClose={() => !importLoading && setShowImportModal(false)}
-        title={t('mcpSettings.importMcpFromAnother', asLanguage(language))}
+        title={t('mcpSettings.importMcpFromAnother', language)}
         size="3xl"
       >
         <div className="space-y-5">
           <div className="rounded-xl border border-accent/20 bg-accent/[0.05] p-4 text-xs leading-relaxed text-text-secondary">
-            {t('mcpSettings.externalConfigsAreScanned', asLanguage(language))}
+            {t('mcpSettings.externalConfigsAreScanned', language)}
           </div>
           <div className="flex gap-2">
             {(['user', 'workspace'] as const).map(level => (
@@ -976,7 +957,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                 onClick={() => setImportLevel(level)}
                 className={`rounded-lg border px-3 py-2 text-xs transition-colors ${importLevel === level ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-text-muted hover:bg-white/5'} disabled:opacity-40`}
               >
-                {level === 'user' ? (t('common.saveGlobally', asLanguage(language))) : (t('common.saveToProject', asLanguage(language)))}
+                {level === 'user' ? (t('common.saveGlobally', language)) : (t('common.saveToProject', language))}
               </button>
             ))}
           </div>
@@ -985,7 +966,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
               <div className="flex h-36 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-accent" /></div>
             ) : externalConfigs.length === 0 ? (
               <div className="flex h-36 flex-col items-center justify-center rounded-xl border border-dashed border-border text-sm text-text-muted">
-                {t('mcpSettings.noExternalMcpConfigs', asLanguage(language))}
+                {t('mcpSettings.noExternalMcpConfigs', language)}
               </div>
             ) : externalConfigs.map(config => {
               const key = externalKey(config)
@@ -1010,7 +991,7 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold text-text-primary">{config.name || config.id}</span>
                       <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted">{getProviderLabel(config.sourceProvider)}</span>
-                      {exists && <span className="text-[10px] text-amber-400">{t('mcpSettings.alreadyExistsInAdnify', asLanguage(language))}</span>}
+                      {exists && <span className="text-[10px] text-amber-400">{t('mcpSettings.alreadyExistsInAdnify', language)}</span>}
                     </span>
                     <span className="mt-1 block truncate font-mono text-[10px] text-text-muted" title={config.sourcePath}>{config.sourcePath}</span>
                   </span>
@@ -1019,12 +1000,12 @@ export default function McpSettings({ language, mcpConfig, setMcpConfig, onOpenF
             })}
           </div>
           <div className="flex items-center justify-between border-t border-border pt-4">
-            <span className="text-xs text-text-muted">{t('common.selected', asLanguage(language), { size: selectedImports.size })}</span>
+            <span className="text-xs text-text-muted">{t('common.selected', language, { size: selectedImports.size })}</span>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{t('cancel', asLanguage(language))}</Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowImportModal(false)} disabled={importLoading}>{t('cancel', language)}</Button>
               <Button variant="primary" size="sm" onClick={handleImportSelected} disabled={selectedImports.size === 0 || importLoading}>
                 {importLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {t('common.import', asLanguage(language), { size: selectedImports.size })}
+                {t('common.import', language, { size: selectedImports.size })}
               </Button>
             </div>
           </div>

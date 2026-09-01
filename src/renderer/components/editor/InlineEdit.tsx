@@ -8,7 +8,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Sparkles, Loader2, StopCircle, Check, X } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { composerService } from '@renderer/agent/services/composerService'
 import { buildFileChangeDescriptor } from '@renderer/agent/utils/fileChangeUtils'
 import { toast } from '../common/ToastProvider'
@@ -132,7 +132,7 @@ export default function InlineEdit({
 			const unsubError = api.llm.onError(requestId, (err) => {
 				cleanup()
 				console.error('[InlineEdit] AI Edit stream error:', err)
-				toast.error(t('error', language) || 'Error', err.message || 'AI request failed')
+				toast.error(t('error', language), err.message || 'AI request failed')
 				replaceEditorBufferContent(filePath, baseContent)
 				composerService.rejectChange(filePath)
 				setState('idle')
@@ -147,7 +147,7 @@ export default function InlineEdit({
 			})
 		} catch (err: any) {
 			console.error(err)
-			toast.error(t('error', language) || 'Error', err.message || 'Generation failed')
+			toast.error(t('error', language), err.message || 'Generation failed')
 			replaceEditorBufferContent(filePath, baseContent)
 			composerService.rejectChange(filePath)
 			setState('idle')
@@ -228,7 +228,7 @@ export default function InlineEdit({
 							value={instruction}
 							onChange={(e) => setInstruction(e.target.value)}
 							onKeyDown={handleKeyDown}
-							placeholder={t('describeChangesInline', language) || 'Ask AI to edit...'}
+							placeholder={t('describeChangesInline', language)}
 							spellCheck={false}
 							className="flex-1 bg-transparent border-none text-[13px] text-text-primary placeholder-text-muted focus:outline-none focus:ring-0 py-0.5"
 						/>
@@ -242,7 +242,7 @@ export default function InlineEdit({
 						<button
 							onClick={handleCancelStream}
 							className="p-1 rounded-full text-text-muted hover:text-status-error hover:bg-status-error/10 transition-colors tooltip"
-							title={t('cancel', language) || 'Cancel'}
+							title={t('cancel', language)}
 						>
 							<StopCircle className="w-4 h-4" />
 						</button>

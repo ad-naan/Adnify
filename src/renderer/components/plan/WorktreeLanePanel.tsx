@@ -14,7 +14,7 @@ import { Button } from '@/renderer/components/ui'
 import { toast } from '@/renderer/components/common/ToastProvider'
 import { WorktreeLaneService } from '@/renderer/agent/orchestration/WorktreeLaneService'
 import { laneNoticeText, lanePlacementText } from '@/renderer/agent/orchestration/laneNoticeText'
-import { t, type Language } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import type { ExecutionLaneProjection } from '@/shared/types/executionLane'
 
 interface WorktreeLanePanelProps {

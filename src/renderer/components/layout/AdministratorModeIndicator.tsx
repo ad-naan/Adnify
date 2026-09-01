@@ -6,7 +6,7 @@ import { toast } from '../common/ToastProvider'
 import BottomBarPopover from '../ui/BottomBarPopover'
 import type { SystemPrivilegeStatus } from '@shared/types/systemPrivilege'
 import { getSystemPrivilegeStatus } from '@renderer/services/systemPrivilegeService'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 export default function AdministratorModeIndicator() {
   const language = useStore(state => state.language)
@@ -30,13 +30,13 @@ export default function AdministratorModeIndicator() {
       if (result.success) return
       setRestarting(false)
       toast.error(
-        t('administratorModeIndicator.couldNotReturnTo', asLanguage(language)),
+        t('administratorModeIndicator.couldNotReturnTo', language),
         result.error,
       )
     } catch (error) {
       setRestarting(false)
       toast.error(
-        t('administratorModeIndicator.couldNotReturnTo', asLanguage(language)),
+        t('administratorModeIndicator.couldNotReturnTo', language),
         error instanceof Error ? error.message : String(error),
       )
     }
@@ -45,18 +45,18 @@ export default function AdministratorModeIndicator() {
   return (
     <BottomBarPopover
       width={320}
-      title={t('administratorModeIndicator.administratorMode', asLanguage(language))}
-      tooltip={t('administratorModeIndicator.theAppIsRunning', asLanguage(language))}
+      title={t('administratorModeIndicator.administratorMode', language)}
+      tooltip={t('administratorModeIndicator.theAppIsRunning', language)}
       icon={
         <span className="flex items-center gap-1.5 px-1 text-amber-400">
           <ShieldCheck className="h-3.5 w-3.5" />
-          <span className="text-[9px] font-semibold">{t('common.admin', asLanguage(language))}</span>
+          <span className="text-[9px] font-semibold">{t('common.admin', language)}</span>
         </span>
       }
     >
       <div className="space-y-3 p-4">
         <p className="text-[11px] leading-5 text-text-secondary">
-          {t('administratorModeIndicator.theAppAndLocal', asLanguage(language))}
+          {t('administratorModeIndicator.theAppAndLocal', language)}
         </p>
         {status.platform === 'win32' ? (
           <button
@@ -67,12 +67,12 @@ export default function AdministratorModeIndicator() {
           >
             <RotateCcw className={`h-3.5 w-3.5 ${restarting ? 'animate-spin' : ''}`} />
             {restarting
-              ? (t('administratorModeIndicator.restarting', asLanguage(language)))
-              : (t('administratorModeIndicator.restartInNormalMode', asLanguage(language)))}
+              ? (t('administratorModeIndicator.restarting', language))
+              : (t('administratorModeIndicator.restartInNormalMode', language))}
           </button>
         ) : (
           <p className="rounded-md border border-border/50 bg-background/40 px-3 py-2 text-[10px] leading-4 text-text-muted">
-            {t('administratorModeIndicator.automaticDeElevationIs', asLanguage(language))}
+            {t('administratorModeIndicator.automaticDeElevationIs', language)}
           </p>
         )}
       </div>

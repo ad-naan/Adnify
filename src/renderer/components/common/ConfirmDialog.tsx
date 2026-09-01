@@ -1,7 +1,7 @@
 import { useState, useCallback, createContext, useContext, type ReactNode, useEffect } from 'react'
 import { AlertTriangle, Info, Trash2 } from 'lucide-react'
 import { useStore } from '@store'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { logger } from '@utils/Logger'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
@@ -193,11 +193,11 @@ export function GlobalConfirmDialog() {
       const language = useStore.getState().language
       const allowed = await globalConfirm({
         title: request.operation === 'file:delete'
-          ? (t('confirmDialog.deleteConfirmation', asLanguage(language)))
-          : (t('confirmDialog.securityConfirmation', asLanguage(language))),
-        message: `${request.reason[language]}\n\n${t('confirmDialog.target', asLanguage(language), { target: request.target })}`,
-        confirmText: t('confirmDialog.allowOnce', asLanguage(language)),
-        cancelText: t('confirmDialog.deny', asLanguage(language)),
+          ? (t('confirmDialog.deleteConfirmation', language))
+          : (t('confirmDialog.securityConfirmation', language)),
+        message: `${request.reason[language]}\n\n${t('confirmDialog.target', language, { target: request.target })}`,
+        confirmText: t('confirmDialog.allowOnce', language),
+        cancelText: t('confirmDialog.deny', language),
         variant: request.operation === 'file:delete' ? 'danger' : 'warning',
       })
       api.security.respondApproval(request.requestId, allowed)

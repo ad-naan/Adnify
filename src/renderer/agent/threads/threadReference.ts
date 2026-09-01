@@ -1,5 +1,5 @@
 import type { StructuredSummary } from '@/renderer/agent/domains/context/types'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 const THREAD_LINK_PREFIX = 'adnify://agent/thread/'
 
@@ -27,8 +27,8 @@ export function parseThreadDeepLink(value: string | undefined): string | null {
   }
 }
 
-export function createThreadLinkMarkdown(threadId: string, title: string, language = 'zh'): string {
-  return `[${t('threadReference.thread', asLanguage(language), { title })}](${createThreadDeepLink(threadId)})`
+export function createThreadLinkMarkdown(threadId: string, title: string, language: Language): string {
+  return `[${t('threadReference.thread', language, { title })}](${createThreadDeepLink(threadId)})`
 }
 
 function addList(lines: string[], title: string, items: string[], limit = 8): void {
@@ -40,21 +40,20 @@ export function formatStructuredThreadReference(
   threadId: string,
   title: string,
   summary: StructuredSummary,
-  language = 'zh',
+  language: Language,
 ): string {
-  const zh = language === 'zh'
   const lines = [
-    `> ${zh ? '引用' : 'Reference'} ${createThreadLinkMarkdown(threadId, title, language)}`,
+    `> ${t('threadReference.reference', language)} ${createThreadLinkMarkdown(threadId, title, language)}`,
     '',
-    `### ${zh ? '目标' : 'Objective'}`,
+    `### ${t('threadReference.objective', language)}`,
     summary.objective,
   ]
 
-  addList(lines, zh ? '已完成' : 'Completed', summary.completedSteps)
-  addList(lines, zh ? '待处理' : 'Pending', summary.pendingSteps)
-  addList(lines, zh ? '关键决定' : 'Key decisions', summary.decisions.map(decision => decision.description))
-  addList(lines, zh ? '用户约束' : 'User constraints', summary.userInstructions)
-  addList(lines, zh ? '相关文件' : 'Related files', summary.fileChanges.map(change => `${change.action}: ${change.path}`), 10)
+  addList(lines, t('common.completed', language), summary.completedSteps)
+  addList(lines, t('threadReference.pending', language), summary.pendingSteps)
+  addList(lines, t('threadReference.keyDecisions', language), summary.decisions.map(decision => decision.description))
+  addList(lines, t('threadReference.userConstraints', language), summary.userInstructions)
+  addList(lines, t('threadReference.relatedFiles', language), summary.fileChanges.map(change => `${change.action}: ${change.path}`), 10)
   return lines.join('\n')
 }
 
@@ -62,18 +61,17 @@ export function formatGeneratedThreadReference(
   threadId: string,
   title: string,
   summary: GeneratedThreadSummary,
-  language = 'zh',
+  language: Language,
 ): string {
-  const zh = language === 'zh'
   const lines = [
-    `> ${zh ? '引用' : 'Reference'} ${createThreadLinkMarkdown(threadId, title, language)}`,
+    `> ${t('threadReference.reference', language)} ${createThreadLinkMarkdown(threadId, title, language)}`,
     '',
-    `### ${zh ? '上下文摘要' : 'Context summary'}`,
+    `### ${t('threadReference.contextSummary', language)}`,
     summary.summary || summary.objective,
   ]
 
-  addList(lines, zh ? '已完成' : 'Completed', summary.completedSteps)
-  addList(lines, zh ? '待处理' : 'Pending', summary.pendingSteps)
-  addList(lines, zh ? '相关文件' : 'Related files', summary.fileChanges.map(change => `${change.action}: ${change.path}`), 10)
+  addList(lines, t('common.completed', language), summary.completedSteps)
+  addList(lines, t('threadReference.pending', language), summary.pendingSteps)
+  addList(lines, t('threadReference.relatedFiles', language), summary.fileChanges.map(change => `${change.action}: ${change.path}`), 10)
   return lines.join('\n')
 }

@@ -1,5 +1,5 @@
 import type { EmotionState } from '../types/emotion'
-import type { TranslationKey } from '@/renderer/i18n'
+import type { TranslationKey } from '@shared/i18n'
 import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 
 export const EMOTION_COLORS: Record<EmotionState, string> = {

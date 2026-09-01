@@ -133,6 +133,7 @@ export default defineConfig({
         entry: 'src/main/preload.ts',
         onstart(options) { options.reload() },
         vite: {
+          resolve: { alias: aliases },
           build: { outDir: 'dist/preload' }
         }
       }

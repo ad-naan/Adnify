@@ -10,7 +10,7 @@ import { useDiagnosticsStore } from '@services/diagnosticsStore'
 import { getFileName } from '@shared/utils/pathUtils'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { safeOpenFile } from '@renderer/utils/fileUtils'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 export function ProblemsView() {
   const language = useStore(state => state.language)
@@ -80,7 +80,7 @@ export function ProblemsView() {
     <div className="flex flex-col h-full bg-transparent">
       <div className="h-11 px-4 flex items-center justify-between border-b border-border/30 bg-transparent sticky top-0 z-10">
         <span className="text-[10px] font-black text-text-primary/45 uppercase tracking-[0.2em] font-sans">
-          {t('problemsView.problems', asLanguage(language))}
+          {t('problemsView.problems', language)}
         </span>
         <div className="flex items-center gap-2 text-[10px]">
           {errorCount > 0 && (
@@ -107,10 +107,10 @@ export function ProblemsView() {
             }`}
           >
             {f === 'all'
-              ? t('common.all', asLanguage(language))
+              ? t('common.all', language)
               : f === 'errors'
-                ? t('problemsView.errors', asLanguage(language))
-                : t('problemsView.warnings', asLanguage(language))}
+                ? t('problemsView.errors', language)
+                : t('problemsView.warnings', language)}
           </button>
         ))}
       </div>
@@ -123,10 +123,10 @@ export function ProblemsView() {
               <OtterAsset asset="success" className="relative h-12 w-12 object-contain" />
             </div>
             <p className="text-xs font-semibold text-text-primary mb-1 tracking-wide">
-              {t('problemsView.noProblemsDetected', asLanguage(language))}
+              {t('problemsView.noProblemsDetected', language)}
             </p>
             <p className="text-[10px] text-text-muted leading-relaxed max-w-[190px] mx-auto opacity-70">
-              {t('problemsView.noCompilationIssuesOr', asLanguage(language))}
+              {t('problemsView.noCompilationIssuesOr', language)}
             </p>
           </div>
         ) : (

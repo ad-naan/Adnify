@@ -90,7 +90,7 @@ export interface RetainedLaneInfo {
  * 保留 Unicode 字母与数字：任务标题常常是中文，`[^a-z0-9-]` 会把它整段吃掉，
  * 结果所有中文任务的车道都叫 `task-<id>`，日志和 `git branch` 里完全认不出来。
  */
-export const laneSegment = (value: string) =>
+const laneSegment = (value: string) =>
   value.toLowerCase().replace(/[^\p{L}\p{N}-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'task'
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error)
@@ -370,7 +370,11 @@ class WorktreeLaneServiceClass {
   }
 
   /**
-   * 列出仓库里残留的车道（含已归档的纯分支），供任务面板做恢复入口。
+   * 列出仓库里残留的车道（含已归档的纯分支）。
+   *
+   * 目前只有测试在用：`WorktreeLanePanel` 是按当前会话的 lane projection 逐条渲染的，
+   * 拿不到上次会话崩溃留下的孤立分支，所以这个"全仓库扫一遍"的入口还没有 UI。
+   * 留着是因为 `sweep` 保留脏车道的策略依赖它 —— 没有它，那些提交在界面上就彻底不可见了。
    */
   async listLanes(workspacePath: string): Promise<RetainedLaneInfo[]> {
     const laneRoot = this.laneRoot(workspacePath)
@@ -452,8 +456,9 @@ class WorktreeLaneServiceClass {
    * 会话开始后第一次建车道时，回收上次会话崩溃留下的残留。
    *
    * 只动"干净"的车道目录：清掉目录、留下分支（提交还在，随时能捞回来）。
-   * 有未提交改动的残留车道一律不碰 —— 那是别人没保存的工作，让它出现在
-   * `listLanes` 里由用户决定，比我们替他删掉安全。
+   * 有未提交改动的残留车道一律不碰 —— 那是别人没保存的工作，让它留在 `listLanes` 的
+   * 结果里由用户决定，比我们替他删掉安全。注意 `listLanes` 目前还没有 UI 入口，
+   * 所以用户实际上要靠 `git worktree list` 才能发现它们。
    */
   private async sweepOnce(workspacePath: string): Promise<void> {
     const key = this.laneKey(workspacePath)

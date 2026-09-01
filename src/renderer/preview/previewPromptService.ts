@@ -1,7 +1,7 @@
 import { useStore } from '@store'
 import type { PreviewServerCandidate } from '@shared/types/preview'
 import { toast } from '@/renderer/components/common/ToastProvider'
-import { t, type Language } from '@/renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import { devServerDiscoveryService } from './devServerDiscoveryService'
 import { previewSessionService } from './previewSessionService'
 import { dismissOrigin, isOriginDismissed, loadPreviewSettings, subscribePreviewSettings } from './previewSettings'

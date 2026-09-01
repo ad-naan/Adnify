@@ -6,6 +6,7 @@ import { WorkPosterCanvas } from './WorkPosterCanvas'
 import { WORK_POSTER_CANVAS_ID } from './workPosterAssets'
 import { downloadCanvasPng } from './download'
 import { fetchWorkPosterQuote } from './workPosterQuote'
+import { t, type Language } from '@shared/i18n'
 import './workPoster.css'
 
 interface WorkPosterModalProps {
@@ -18,7 +19,7 @@ export function WorkPosterModal({ isOpen, onClose, poster }: WorkPosterModalProp
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
   const [quote, setQuote] = useState<string | null>(null)
   const [signature, setSignature] = useState(() => poster.signature || 'adnaan')
-  const isZh = poster.language === 'zh'
+  const lang: Language = poster.language
 
   useEffect(() => {
     if (isOpen) {
@@ -48,7 +49,7 @@ export function WorkPosterModal({ isOpen, onClose, poster }: WorkPosterModalProp
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isZh ? '生成工作海报' : 'Generate Work Poster'}
+      title={t('workPosterModal.generateWorkPoster', lang)}
       size="4xl"
       className="max-h-[88vh]"
     >
@@ -59,28 +60,26 @@ export function WorkPosterModal({ isOpen, onClose, poster }: WorkPosterModalProp
             {quote === null && (
               <div className="report-quote-loading" role="status" aria-live="polite">
                 <span className="report-quote-spinner" />
-                <span>{isZh ? '正在获取一言' : 'Loading quote'}</span>
+                <span>{t('workPosterModal.loadingQuote', lang)}</span>
               </div>
             )}
           </div>
         </div>
         <div className="report-side">
           <div>
-            <h4>{isZh ? '今日工作切片' : 'Work Snapshot'}</h4>
+            <h4>{t('workPosterModal.workSnapshot', lang)}</h4>
             <p>
-              {isZh
-                ? '把当前统计导出成一张适合收藏或分享的海报，数据来自本地工作区记录。'
-                : 'Export the current workspace stats as a polished poster generated locally from this dashboard.'}
+              {t('workPosterModal.exportTheCurrentWorkspace', lang)}
             </p>
           </div>
           <div className="report-side-stats">
-            <span>{isZh ? '节奏评分' : 'Rhythm Score'} <strong>{poster.score}</strong></span>
-            <span>{isZh ? '最高峰值' : 'Peak'} <strong>{poster.peak}</strong></span>
+            <span>{t('workPosterModal.rhythmScore', lang)} <strong>{poster.score}</strong></span>
+            <span>{t('workPosterModal.peak', lang)} <strong>{poster.peak}</strong></span>
             <span>AI <strong>{poster.aiShare}</strong></span>
           </div>
           <div className="report-signature-wrap">
             <label className="report-signature-label">
-              {isZh ? '自定义签名' : 'Signature'}
+              {t('workPosterModal.signature', lang)}
             </label>
             <input
               type="text"
@@ -94,7 +93,7 @@ export function WorkPosterModal({ isOpen, onClose, poster }: WorkPosterModalProp
           <div className="report-actions">
             <button onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>
               <Shuffle className="w-4 h-4" />
-              {isZh ? '换一版' : 'Shuffle'}
+              {t('workPosterModal.shuffle', lang)}
             </button>
             <button
               disabled={quote === null}

@@ -12,7 +12,7 @@ import { getLanguageId, isLanguageSupported } from '@/renderer/services/lspServi
 import BottomBarPopover from '../ui/BottomBarPopover'
 import { logger } from '@shared/utils/Logger'
 import { toast } from '../common/ToastProvider'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface LspServerStatus {
   installed: boolean
@@ -128,12 +128,12 @@ export default function LspStatusIndicator() {
       } else {
         logger.lsp.error('Install failed:', result.error)
         const message = result.error || 'Installation failed'
-        toast.error(t('common.languageServerInstallationFailed', asLanguage(language)), message)
+        toast.error(t('common.languageServerInstallationFailed', language), message)
       }
     } catch (error) {
       logger.lsp.error('Install error:', error)
       const message = error instanceof Error ? error.message : String(error)
-      toast.error(t('common.languageServerInstallationFailed', asLanguage(language)), message)
+      toast.error(t('common.languageServerInstallationFailed', language), message)
     } finally {
       setInstalling(prev => { const next = new Set(prev); next.delete(serverType); return next })
     }
@@ -229,13 +229,12 @@ export default function LspStatusIndicator() {
       }
       tooltip={
         isInstalled
-          ? (t('lspStatusIndicator.lspEnabled', asLanguage(language)))
-          : (t('lspStatusIndicator.lspNotInstalledClick', asLanguage(language)))
+          ? (t('lspStatusIndicator.lspEnabled', language))
+          : (t('lspStatusIndicator.lspNotInstalledClick', language))
       }
-      title={t('lspStatusIndicator.lspLanguageServer', asLanguage(language))}
+      title={t('lspStatusIndicator.lspLanguageServer', language)}
       width={320}
       height={200}
-      language={language as 'en' | 'zh'}
     >
       <div className="p-3 space-y-3">
         {/* 当前语言服务器状态 */}
@@ -245,19 +244,19 @@ export default function LspStatusIndicator() {
               {SERVER_NAMES[currentServerType] || currentServerType}
             </div>
             <div className="mt-0.5 truncate text-xs text-text-muted">
-              {t('lspStatusIndicator.currentFileLanguage', asLanguage(language))}: {currentLanguageId}
+              {t('lspStatusIndicator.currentFileLanguage', language)}: {currentLanguageId}
             </div>
           </div>
           <div className={`flex shrink-0 items-center gap-1.5 ${isInstalled ? 'text-green-400' : 'text-yellow-400'}`}>
             {isInstalled ? (
               <>
                 <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span className="text-xs">{t('common.installed', asLanguage(language))}</span>
+                <span className="text-xs">{t('common.installed', language)}</span>
               </>
             ) : (
               <>
                 <ZapOff className="h-4 w-4 shrink-0" />
-                <span className="text-xs">{t('lspStatusIndicator.notInstalled', asLanguage(language))}</span>
+                <span className="text-xs">{t('lspStatusIndicator.notInstalled', language)}</span>
               </>
             )}
           </div>
@@ -278,18 +277,18 @@ export default function LspStatusIndicator() {
                 {installing.has(currentServerType) ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{t('lspStatusIndicator.installing', asLanguage(language))}</span>
+                    <span>{t('lspStatusIndicator.installing', language)}</span>
                   </>
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    <span>{t('lspStatusIndicator.installLanguageServer', asLanguage(language))}</span>
+                    <span>{t('lspStatusIndicator.installLanguageServer', language)}</span>
                   </>
                 )}
               </button>
             ) : (
               <div className="text-xs text-orange-400 bg-orange-400/10 px-3 py-2 rounded-md">
-                {t('lspStatusIndicator.manualInstallationRequired', asLanguage(language))}
+                {t('lspStatusIndicator.manualInstallationRequired', language)}
               </div>
             )}
           </div>
@@ -300,7 +299,7 @@ export default function LspStatusIndicator() {
           <div className="space-y-2">
             {installInfo?.builtin && (
               <div className="text-xs text-blue-400">
-                {t('lspStatusIndicator.builtInLanguageServer', asLanguage(language))}
+                {t('lspStatusIndicator.builtInLanguageServer', language)}
               </div>
             )}
             {currentStatus?.path && (
@@ -314,23 +313,23 @@ export default function LspStatusIndicator() {
               <div className="pt-2 border-t border-border/30 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-text-muted">
-                    {t('lspStatusIndicator.runtime', asLanguage(language))}
+                    {t('lspStatusIndicator.runtime', language)}
                   </span>
                   <button
                     onClick={handleResetRuntime}
                     className="text-[10px] text-text-muted hover:text-text-primary transition-colors"
                   >
-                    {t('lspStatusIndicator.autoDetect', asLanguage(language))}
+                    {t('lspStatusIndicator.autoDetect', language)}
                   </button>
                 </div>
                 <div className="flex min-w-0 items-center gap-1.5">
                   <div className="min-w-0 flex-1 truncate rounded bg-background-tertiary px-2 py-1.5 font-mono text-xs text-text-primary" title={runtimePath || ''}>
-                    {runtimePath || (t('lspStatusIndicator.notDetected', asLanguage(language)))}
+                    {runtimePath || (t('lspStatusIndicator.notDetected', language))}
                   </div>
                   <button
                     onClick={handleSelectRuntime}
                     className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-white/10 text-text-muted hover:text-text-primary transition-colors shrink-0"
-                    title={t('lspStatusIndicator.browse', asLanguage(language))}
+                    title={t('lspStatusIndicator.browse', language)}
                   >
                     <FolderOpen className="w-3.5 h-3.5" />
                   </button>

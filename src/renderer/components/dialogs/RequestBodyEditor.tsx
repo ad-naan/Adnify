@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Code2, RotateCcw, AlertTriangle, Check } from 'lucide-react'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 // 默认请求体模板
 const DEFAULT_REQUEST_BODY = {
@@ -117,29 +117,29 @@ export default function RequestBodyEditor({
             <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2.5 text-[11px] font-bold text-text-muted uppercase tracking-widest opacity-60 ml-1">
                     <Code2 className="w-3.5 h-3.5 text-accent" />
-                    {t('requestBodyEditor.requestBodyConfig', asLanguage(language))}
+                    {t('requestBodyEditor.requestBodyConfig', language)}
                 </label>
                 <div className="flex items-center gap-3">
                     {saved && (
                         <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded-full border border-emerald-400/20 animate-fade-in">
                             <Check className="w-3 h-3" strokeWidth={3} />
-                            {t('requestBodyEditor.saved', asLanguage(language))}
+                            {t('requestBodyEditor.saved', language)}
                         </span>
                     )}
                     <button
                         onClick={handleReset}
                         className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-bold text-text-muted hover:text-text-primary transition-all rounded-lg bg-white/5 border border-transparent hover:border-border"
-                        title={t('requestBodyEditor.resetToDefault', asLanguage(language))}
+                        title={t('requestBodyEditor.resetToDefault', language)}
                     >
                         <RotateCcw className="w-3 h-3" />
-                        {t('requestBodyEditor.reset', asLanguage(language))}
+                        {t('requestBodyEditor.reset', language)}
                     </button>
                 </div>
             </div>
 
             {/* 说明 */}
             <p className="text-[11px] text-text-muted leading-relaxed opacity-60 ml-1">
-                {t('requestBodyEditor.customizeTheJsonStructure', asLanguage(language))}
+                {t('requestBodyEditor.customizeTheJsonStructure', language)}
             </p>
 
             {/* JSON 编辑器 */}
@@ -170,7 +170,7 @@ export default function RequestBodyEditor({
 
             {/* 常用字段提示 */}
             <div className="p-4 bg-white/[0.02] rounded-xl border border-border flex flex-col gap-2 shadow-sm">
-                <div className="text-[10px] font-black text-text-muted uppercase tracking-widest opacity-40">{t('requestBodyEditor.commonFields', asLanguage(language))}</div>
+                <div className="text-[10px] font-black text-text-muted uppercase tracking-widest opacity-40">{t('requestBodyEditor.commonFields', language)}</div>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                     <code className="text-[11px] text-accent/80 font-mono hover:text-accent transition-colors cursor-help">temperature</code>
                     <code className="text-[11px] text-accent/80 font-mono hover:text-accent transition-colors cursor-help">top_p</code>

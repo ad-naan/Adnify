@@ -5,7 +5,7 @@
 
 import { getEditorConfig } from '@renderer/settings'
 import type { LargeFileInfo } from '@shared/types/largeFile'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 export type { LargeFileInfo } from '@shared/types/largeFile'
 
 // 文件大小阈值（字节）- 从配置获取
@@ -266,10 +266,10 @@ export function getLargeFileWarning(fileInfo: LargeFileInfo, language: 'en' | 'z
   const lines = fileInfo.lineCount > 0 ? `, ${fileInfo.lineCount.toLocaleString()} lines` : ''
   
   if (fileInfo.isVeryLarge) {
-    return t('largeFileService.thisFileIsLarge', asLanguage(language), { size, lines })
+    return t('largeFileService.thisFileIsLarge', language, { size, lines })
   }
   
-  return t('largeFileService.thisFileIsLarge2', asLanguage(language), { size, lines })
+  return t('largeFileService.thisFileIsLarge2', language, { size, lines })
 }
 
 /**

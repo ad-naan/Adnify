@@ -6,7 +6,7 @@ import { X, AlertCircle, AlertTriangle, RefreshCw, FileX, FileDiff, Globe, ListC
 import { getFileName, normalizePath } from '@shared/utils/pathUtils'
 import { useStore } from '@store'
 import { useAgentStore } from '@renderer/agent/store/AgentStore'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { isPreviewDocumentPath } from '@shared/types/preview'
 import { isPlanBoardPath } from '@shared/types/planBoard'
 import type { EditorDocumentKind } from '@shared/types/editorDocument'
@@ -65,7 +65,7 @@ export const EditorTabs = memo(function EditorTabs({
         const isPlanBoard = isPlanBoardPath(file.path)
 
         // 计算显示名称
-        let fileName = isPlanBoard ? (t('editorTabs.planBoard', asLanguage(language))) : getTabDisplayName(file.path)
+        let fileName = isPlanBoard ? (t('editorTabs.planBoard', language)) : getTabDisplayName(file.path)
 
         // 如果是计划文件，尝试显示计划名称
         if (isPlanJsonFile(file.path)) {
@@ -119,7 +119,7 @@ export const EditorTabs = memo(function EditorTabs({
             {isPlanBoard && <ListChecks className="w-3.5 h-3.5 text-accent flex-shrink-0" />}
 
             <span className={`text-[13px] truncate flex-1 ${file.isDeleted ? 'line-through text-text-muted' : ''}`}>{fileName}</span>
-            {file.pinned && <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[8px] font-medium text-accent">{t('editorTabs.pinned', asLanguage(language))}</span>}
+            {file.pinned && <span className="shrink-0 rounded bg-accent/10 px-1 py-0.5 text-[8px] font-medium text-accent">{t('editorTabs.pinned', language)}</span>}
 
             {!file.pinned && <div
               className="flex items-center justify-center w-5 h-5 rounded-lg hover:bg-surface-hover transition-colors"

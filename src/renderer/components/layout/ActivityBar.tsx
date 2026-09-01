@@ -2,7 +2,7 @@ import { Files, Search, GitBranch, Settings, AlertCircle, ListTree, History, Bra
 import { Tooltip } from '../ui/Tooltip'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 export default function ActivityBar() {
   const { activeSidePanel, setActiveSidePanel, language, setShowSettings } = useStore(useShallow(s => ({ activeSidePanel: s.activeSidePanel, setActiveSidePanel: s.setActiveSidePanel, language: s.language, setShowSettings: s.setShowSettings })))
@@ -11,10 +11,10 @@ export default function ActivityBar() {
     { id: 'explorer', icon: Files, label: t('explorer', language) },
     { id: 'search', icon: Search, label: t('search', language) },
     { id: 'git', icon: GitBranch, label: 'Git' },
-    { id: 'emotion', icon: Brain, label: t('activityBar.mood', asLanguage(language)) },
-    { id: 'problems', icon: AlertCircle, label: t('activityBar.problems', asLanguage(language)) },
-    { id: 'outline', icon: ListTree, label: t('activityBar.outline', asLanguage(language)) },
-    { id: 'history', icon: History, label: t('git.history', asLanguage(language)) },
+    { id: 'emotion', icon: Brain, label: t('activityBar.mood', language) },
+    { id: 'problems', icon: AlertCircle, label: t('activityBar.problems', language) },
+    { id: 'outline', icon: ListTree, label: t('activityBar.outline', language) },
+    { id: 'history', icon: History, label: t('git.history', language) },
     { id: 'shell', icon: Terminal, label: 'Shell' },
   ] as const
 

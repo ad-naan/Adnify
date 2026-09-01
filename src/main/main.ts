@@ -7,13 +7,12 @@
  */
 
 import { app, BrowserWindow, Menu, clipboard, crashReporter, dialog, ipcMain, net, shell } from 'electron'
-// 补充 Language 类型（与渲染端对齐）
-export type Language = 'zh' | 'en'
 import { randomUUID } from 'crypto'
 import * as os from 'os'
 import * as path from 'path'
 import * as v8 from 'v8'
 import { logger } from '@shared/utils/Logger'
+import { asLanguage, t, type Language } from '@shared/i18n'
 import { performanceMonitor } from '@shared/utils/PerformanceMonitor'
 import { normalizeSecuritySettings, SECURITY_SETTINGS_DEFAULTS } from '@shared/config/securitySettings'
 import type Store from 'electron-store'
@@ -367,7 +366,7 @@ function getShutdownFallbackPresentation(): ShutdownWindowPresentation {
   }
 
   return {
-    language: configStore?.get('language') === 'en' ? 'en' : 'zh',
+    language: asLanguage(configStore?.get('language') as string | undefined),
     themeType,
     background: themeBackground[themeId] || '18 18 21',
     surface: themeType === 'light' ? '248 249 250' : '25 25 29',
@@ -398,7 +397,7 @@ async function getShutdownPresentation(win?: BrowserWindow | null): Promise<Shut
       }
 
       return {
-        language: store?.language === 'en' ? 'en' : 'zh',
+        language: store?.language,
         themeType: root.getAttribute('data-theme') === 'light' ? 'light' : 'dark',
         background: asRgb(styles.getPropertyValue('--background'), '${fallback.background}'),
         surface: asRgb(styles.getPropertyValue('--surface'), '${fallback.surface}'),
@@ -412,7 +411,9 @@ async function getShutdownPresentation(win?: BrowserWindow | null): Promise<Shut
     })()`, true)
 
     return {
-      language: snapshot?.language === 'en' ? 'en' : fallback.language,
+      // 语言在注入脚本里原样取出，收敛留给主进程：`=== 'en' ? 'en' : fallback` 会把
+      // 中文界面的关机窗口显示成英文（zh 落进 fallback 分支）。
+      language: snapshot?.language ? asLanguage(snapshot.language) : fallback.language,
       themeType: snapshot?.themeType === 'light' ? 'light' : fallback.themeType,
       background: normalizeRgbColor(snapshot?.background, fallback.background),
       surface: normalizeRgbColor(snapshot?.surface, fallback.surface),
@@ -755,67 +756,61 @@ async function initializeModules(firstWin: BrowserWindow) {
     getWindowWorkspace: (id: number) => windowWorkspaces.get(id) || null,
   })
 
-  // 全局：当前应用语言
-  let currentAppLanguage: Language = 'zh'
+  // 全局：当前应用语言。默认跟 SETTINGS.language.default 保持一致（en），
+  // 否则配置缺失时原生菜单会是中文、界面却是英文。
+  let currentAppLanguage: Language = 'en'
 
   /** 从配置加载并返回当前语言 */
   function getCurrentLanguage(): Language {
-    const lang = configStore.get('language') as string
-    // 兼容写法：en / zh
-    if (lang?.toLowerCase().includes('en')) return 'en'
-    return 'zh'
+    return asLanguage(configStore.get('language') as string | undefined)
   }
 
   /** 设置应用菜单（多语言自动适配） */
   function setApplicationMenu(lang?: Language) {
-    if (lang) currentAppLanguage = lang;
-    const isEn = currentAppLanguage.toLowerCase().includes("en");
+    if (lang) currentAppLanguage = lang
+    const language = currentAppLanguage
 
     const menuTemplate: Electron.MenuItemConstructorOptions[] = [
       {
-        label: isEn ? "File" : "文件",
-        submenu: [{ role: "quit", label: isEn ? "Quit" : "退出" }],
+        label: t('appMenu.file', language),
+        submenu: [{ role: 'quit', label: t('appMenu.quit', language) }],
       },
       {
-        label: isEn ? "Edit" : "编辑",
+        label: t('appMenu.edit', language),
         submenu: [
-          { role: "undo", label: isEn ? "Undo" : "撤销" },
-          { role: "redo", label: isEn ? "Redo" : "重做" },
-          { type: "separator" },
-          { role: "cut", label: isEn ? "Cut" : "剪切" },
-          { role: "copy", label: isEn ? "Copy" : "复制" },
-          { role: "paste", label: isEn ? "Paste" : "粘贴" },
-          { role: "selectAll", label: isEn ? "Select All" : "全选" },
+          { role: 'undo', label: t('appMenu.undo', language) },
+          { role: 'redo', label: t('appMenu.redo', language) },
+          { type: 'separator' },
+          { role: 'cut', label: t('appMenu.cut', language) },
+          { role: 'copy', label: t('copy', language) },
+          { role: 'paste', label: t('paste', language) },
+          { role: 'selectAll', label: t('selectAll', language) },
         ],
       },
       {
-        label: isEn ? "View" : "视图",
+        label: t('appMenu.view', language),
         submenu: [
-          { role: "reload", label: isEn ? "Reload" : "刷新" },
-          { role: "forceReload", label: isEn ? "Force Reload" : "强制刷新" },
-          { role: "toggleDevTools", label: isEn ? "DevTools" : "开发者工具" },
-          { type: "separator" },
-          { role: "resetZoom", label: isEn ? "Reset Zoom" : "重置缩放" },
-          { role: "zoomIn", label: isEn ? "Zoom In" : "放大" },
-          { role: "zoomOut", label: isEn ? "Zoom Out" : "缩小" },
-          { type: "separator" },
-          { role: "togglefullscreen", label: isEn ? "Full Screen" : "全屏" },
+          { role: 'reload', label: t('appMenu.reload', language) },
+          { role: 'forceReload', label: t('appMenu.forceReload', language) },
+          { role: 'toggleDevTools', label: t('appMenu.devTools', language) },
+          { type: 'separator' },
+          { role: 'resetZoom', label: t('appMenu.resetZoom', language) },
+          { role: 'zoomIn', label: t('appMenu.zoomIn', language) },
+          { role: 'zoomOut', label: t('appMenu.zoomOut', language) },
+          { type: 'separator' },
+          { role: 'togglefullscreen', label: t('appMenu.fullScreen', language) },
           {
-            label: isEn ? "Command Palette" : "命令面板",
-            accelerator: "CmdOrCtrl+Shift+P",
+            label: t('commandPalette', language),
+            accelerator: 'CmdOrCtrl+Shift+P',
             click: () => {
-              const win = getMainWindow();
-              win?.webContents.send(
-                "workbench:execute-command",
-                "workbench.action.showCommands",
-              );
+              getMainWindow()?.webContents.send('workbench:execute-command', 'workbench.action.showCommands')
             },
           },
         ],
       },
-    ];
+    ]
 
-    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate))
   }
   /** 初始化语言：读取配置 + 设置菜单 + 监听切换 */
   function initLanguageSync() {

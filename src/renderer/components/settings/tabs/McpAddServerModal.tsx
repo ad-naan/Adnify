@@ -4,48 +4,17 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react'
-import {
-  Search,
-  Plus,
-  ChevronRight,
-  ExternalLink,
-  Check,
-  AlertCircle,
-  Loader2,
-  Eye,
-  EyeOff,
-  // 图标映射
-  Search as SearchIcon,
-  Database,
-  FolderOpen,
-  Github,
-  GitBranch,
-  Brain,
-  ListOrdered,
-  Cloud,
-  Globe,
-  Monitor,
-  Clock,
-  Boxes,
-  Sparkles,
-  Server,
-  Trash2,
-} from 'lucide-react'
+import { Search, Plus, ChevronRight, ExternalLink, Check, AlertCircle, Loader2, Eye, EyeOff, // 图标映射
+  Search as SearchIcon, Database, FolderOpen, Github, GitBranch, Brain, ListOrdered, Cloud, Globe, Monitor, Clock, Boxes, Sparkles, Server, Trash2, } from 'lucide-react'
 import { Button, Input, Modal } from '@components/ui'
 import { api } from '@renderer/services/electronAPI'
 import {
-  MCP_PRESETS,
-  MCP_CATEGORY_NAMES,
-  searchPresets,
-} from '@shared/config/mcpPresets'
+  MCP_PRESETS, MCP_CATEGORY_NAMES, searchPresets, } from '@shared/config/mcpPresets'
 import {
-  type McpPreset,
-  type McpPresetCategory,
-  type McpEnvConfig,
-} from '@shared/types/mcp'
+  type McpPreset, type McpPresetCategory, type McpEnvConfig, } from '@shared/types/mcp'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface McpAddServerModalProps {
   isOpen: boolean
@@ -165,7 +134,7 @@ export default function McpAddServerModal({
 
   // 分类列表
   const categories: Array<{ id: McpPresetCategory | 'all'; name: string }> = [
-    { id: 'all', name: translate('common.all', asLanguage(language)) },
+    { id: 'all', name: t('common.all', language) },
     ...Object.entries(MCP_CATEGORY_NAMES).map(([id, names]) => ({
       id: id as McpPresetCategory,
       name: language === 'zh' ? names.zh : names.en,
@@ -206,7 +175,7 @@ export default function McpAddServerModal({
       if (result.success) {
         setRegistryServers(result.servers || [])
       } else {
-        setError(result.error || (translate('mcpAddServerModal.searchFailed', asLanguage(language))))
+        setError(result.error || (t('mcpAddServerModal.searchFailed', language)))
       }
     } catch (err: any) {
       setError(err.message)
@@ -272,7 +241,7 @@ export default function McpAddServerModal({
         setShowSecrets({})
         setViewMode('configure')
       } else {
-        setError(result.error || (translate('mcpAddServerModal.failedToGetDetails', asLanguage(language))))
+        setError(result.error || (t('mcpAddServerModal.failedToGetDetails', language)))
       }
     } catch (err: any) {
       setError(err.message)
@@ -379,10 +348,10 @@ export default function McpAddServerModal({
           }
         }
       } else if (serverType === 'remote') {
-        if (!formData.id.trim()) throw new Error(translate('mcpAddServerModal.pleaseFillInServer', asLanguage(language)))
-        if (!formData.name.trim()) throw new Error(translate('mcpAddServerModal.pleaseFillInServer2', asLanguage(language)))
-        if (!remoteUrl.trim()) throw new Error(translate('mcpAddServerModal.pleaseFillInServer3', asLanguage(language)))
-        if (existingServerIds.includes(formData.id)) throw new Error(translate('mcpAddServerModal.serverIdAlreadyExists', asLanguage(language)))
+        if (!formData.id.trim()) throw new Error(t('mcpAddServerModal.pleaseFillInServer', language))
+        if (!formData.name.trim()) throw new Error(t('mcpAddServerModal.pleaseFillInServer2', language))
+        if (!remoteUrl.trim()) throw new Error(t('mcpAddServerModal.pleaseFillInServer3', language))
+        if (existingServerIds.includes(formData.id)) throw new Error(t('mcpAddServerModal.serverIdAlreadyExists', language))
 
         const headers: Record<string, string> = {}
         for (const { key, value } of customHeaderPairs) {
@@ -402,10 +371,10 @@ export default function McpAddServerModal({
           disabled: false,
         }
       } else {
-        if (!formData.id.trim()) throw new Error(translate('mcpAddServerModal.pleaseFillInServer', asLanguage(language)))
-        if (!formData.name.trim()) throw new Error(translate('mcpAddServerModal.pleaseFillInServer2', asLanguage(language)))
-        if (!formData.command?.trim()) throw new Error(translate('mcpAddServerModal.pleaseFillInCommand', asLanguage(language)))
-        if (existingServerIds.includes(formData.id)) throw new Error(translate('mcpAddServerModal.serverIdAlreadyExists', asLanguage(language)))
+        if (!formData.id.trim()) throw new Error(t('mcpAddServerModal.pleaseFillInServer', language))
+        if (!formData.name.trim()) throw new Error(t('mcpAddServerModal.pleaseFillInServer2', language))
+        if (!formData.command?.trim()) throw new Error(t('mcpAddServerModal.pleaseFillInCommand', language))
+        if (existingServerIds.includes(formData.id)) throw new Error(t('mcpAddServerModal.serverIdAlreadyExists', language))
 
         const env: Record<string, string> = {}
         for (const { key, value } of customEnvPairs) {
@@ -486,7 +455,7 @@ export default function McpAddServerModal({
               )}
               {isAdded && (
                 <span className="px-1.5 py-0.5 text-[10px] font-bold bg-green-500/20 text-green-400 rounded flex items-center gap-1">
-                  <Check className="w-3 h-3" />{translate('mcpAddServerModal.added', asLanguage(language))}
+                  <Check className="w-3 h-3" />{t('mcpAddServerModal.added', language)}
                 </span>
               )}
             </div>
@@ -550,10 +519,10 @@ export default function McpAddServerModal({
       onClose={() => { onClose(); resetForm() }}
       title={
         viewMode === 'custom'
-          ? (translate('mcpAddServerModal.addCustomServer', asLanguage(language)))
+          ? (t('mcpAddServerModal.addCustomServer', language))
           : viewMode === 'configure' && selectedPreset
-            ? (translate('mcpAddServerModal.configure', asLanguage(language), { name: selectedPreset.name }))
-            : (translate('mcpAddServerModal.addMcpServer', asLanguage(language)))
+            ? (t('mcpAddServerModal.configure', language, { name: selectedPreset.name }))
+            : (t('mcpAddServerModal.addMcpServer', language))
       }
       size="2xl"
     >
@@ -566,21 +535,21 @@ export default function McpAddServerModal({
               onClick={() => setViewMode('browse')}
             >
               <Boxes className="w-3.5 h-3.5" />
-              {translate('mcpAddServerModal.builtInPresets', asLanguage(language))}
+              {t('mcpAddServerModal.builtInPresets', language)}
             </button>
             <button
               className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${viewMode === 'registry' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary'}`}
               onClick={() => setViewMode('registry')}
             >
               <Globe className="w-3.5 h-3.5" />
-              {translate('mcpAddServerModal.exploreRegistry', asLanguage(language))}
+              {t('mcpAddServerModal.exploreRegistry', language)}
             </button>
             <button
               className="flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all text-text-muted hover:text-text-primary"
               onClick={handleCustomMode}
             >
               <Plus className="w-3.5 h-3.5" />
-              {translate('mcpAddServerModal.manualCustom', asLanguage(language))}
+              {t('mcpAddServerModal.manualCustom', language)}
             </button>
           </div>
         )}
@@ -593,7 +562,7 @@ export default function McpAddServerModal({
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={translate('mcpAddServerModal.searchBuiltInPresets', asLanguage(language))}
+                placeholder={t('mcpAddServerModal.searchBuiltInPresets', language)}
                 className="pl-10 h-10 rounded-xl bg-surface/20 border-border focus:bg-surface/40"
               />
             </div>
@@ -615,7 +584,7 @@ export default function McpAddServerModal({
               {filteredPresets.length === 0 ? (
                 <div className="text-center py-8 text-text-muted">
                   <OtterAsset asset="searchEmpty" className="w-14 h-14 mx-auto mb-3 object-contain opacity-75" />
-                  <p>{translate('mcpAddServerModal.noMatchingServersFound', asLanguage(language))}</p>
+                  <p>{t('mcpAddServerModal.noMatchingServersFound', language)}</p>
                 </div>
               ) : filteredPresets.map(renderPresetCard)}
             </div>
@@ -632,19 +601,19 @@ export default function McpAddServerModal({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleRegistrySearch()}
-                  placeholder={translate('mcpAddServerModal.searchOfficialMcpRegistry', asLanguage(language))}
+                  placeholder={t('mcpAddServerModal.searchOfficialMcpRegistry', language)}
                   className="pl-10 h-10 rounded-xl bg-surface/20 border-border focus:bg-surface/40"
                 />
               </div>
               <Button variant="primary" onClick={handleRegistrySearch} disabled={isLoadingRegistry} className="h-10 rounded-xl px-6">
-                {isLoadingRegistry ? <Loader2 className="w-4 h-4 animate-spin" /> : (translate('searchPlaceholder', asLanguage(language)))}
+                {isLoadingRegistry ? <Loader2 className="w-4 h-4 animate-spin" /> : (t('searchPlaceholder', language))}
               </Button>
             </div>
             <div className="grid grid-cols-1 gap-3 max-h-[350px] overflow-y-auto custom-scrollbar pr-2">
               {registryServers.length === 0 ? (
                 <div className="text-center py-12 text-text-muted bg-surface/10 rounded-xl border border-dashed border-border">
                   <OtterAsset asset="tool" className="w-14 h-14 mx-auto mb-3 object-contain opacity-70" />
-                  <p className="text-sm">{translate('mcpAddServerModal.searchTheWorldFor', asLanguage(language))}</p>
+                  <p className="text-sm">{t('mcpAddServerModal.searchTheWorldFor', language)}</p>
                 </div>
               ) : registryServers.map(server => (
                 <div
@@ -686,7 +655,7 @@ export default function McpAddServerModal({
                 {selectedPreset.docsUrl && (
                   <a href={selectedPreset.docsUrl} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-2">
-                    {translate('mcpAddServerModal.viewDocumentation', asLanguage(language))}<ExternalLink className="w-3 h-3" />
+                    {t('mcpAddServerModal.viewDocumentation', language)}<ExternalLink className="w-3 h-3" />
                   </a>
                 )}
               </div>
@@ -696,13 +665,13 @@ export default function McpAddServerModal({
               <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg space-y-2">
                 <div className="flex items-center gap-2 text-yellow-400 text-sm font-medium">
                   <AlertCircle className="w-4 h-4" />
-                  {translate('mcpAddServerModal.setupRequired', asLanguage(language))}
+                  {t('mcpAddServerModal.setupRequired', language)}
                 </div>
                 <p className="text-sm text-text-muted">{language === 'zh' ? selectedPreset.setupNoteZh : selectedPreset.setupNote}</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 px-3 py-2 bg-black/30 rounded font-mono text-xs text-text-primary">{selectedPreset.setupCommand}</code>
                   <Button variant="secondary" size="sm" onClick={() => writeClipboardText(selectedPreset.setupCommand!)}>
-                    {translate('copy', asLanguage(language))}
+                    {t('copy', language)}
                   </Button>
                 </div>
               </div>
@@ -710,14 +679,14 @@ export default function McpAddServerModal({
 
             {selectedPreset.envConfig && selectedPreset.envConfig.length > 0 && (
               <div className="space-y-4">
-                <h4 className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.configuration', asLanguage(language))}</h4>
+                <h4 className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.configuration', language)}</h4>
                 {selectedPreset.envConfig.map(renderEnvConfig)}
               </div>
             )}
 
             {selectedPreset.defaultAutoApprove && selectedPreset.defaultAutoApprove.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-text-secondary">{translate('common.autoApprovedTools', asLanguage(language))}</h4>
+                <h4 className="text-sm font-medium text-text-secondary">{t('common.autoApprovedTools', language)}</h4>
                 <div className="flex flex-wrap gap-1">
                   {selectedPreset.defaultAutoApprove.map(tool => (
                     <span key={tool} className="px-2 py-1 text-xs bg-accent/10 text-accent rounded">{tool}</span>
@@ -727,7 +696,7 @@ export default function McpAddServerModal({
             )}
 
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.command', asLanguage(language))}</h4>
+              <h4 className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.command', language)}</h4>
               <div className="p-3 bg-black/30 rounded font-mono text-xs text-text-muted">
                 {selectedPreset.type === 'local'
                   ? `${(selectedPreset as any).command} ${((selectedPreset as any).args || []).join(' ')}`
@@ -742,13 +711,13 @@ export default function McpAddServerModal({
           <div className="space-y-4">
             {/* 服务器类型 */}
             <div className="flex gap-2 p-1 bg-surface/30 rounded-lg">
-              {(['local', 'remote'] as ServerType[]).map(t => (
+              {(['local', 'remote'] as ServerType[]).map(type => (
                 <button
-                  key={t}
-                  className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${serverType === t ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
-                  onClick={() => setServerType(t)}
+                  key={type}
+                  className={`flex-1 px-4 py-2 text-sm rounded-md transition-colors ${serverType === type ? 'bg-accent text-white' : 'text-text-secondary hover:text-text-primary'}`}
+                  onClick={() => setServerType(type)}
                 >
-                  {t === 'local' ? (translate('mcpAddServerModal.localServerStdio', asLanguage(language))) : (translate('mcpAddServerModal.remoteServerHttpSse', asLanguage(language)))}
+                  {type === 'local' ? (t('mcpAddServerModal.localServerStdio', language)) : (t('mcpAddServerModal.remoteServerHttpSse', language))}
                 </button>
               ))}
             </div>
@@ -756,11 +725,11 @@ export default function McpAddServerModal({
             {/* 通用字段 */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.serverId', asLanguage(language))} <span className="text-red-400">*</span></label>
+                <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.serverId', language)} <span className="text-red-400">*</span></label>
                 <Input value={formData.id} onChange={(e) => setFormData(prev => ({ ...prev, id: e.target.value }))} placeholder="my-server" />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-text-secondary">{translate('common.displayName', asLanguage(language))} <span className="text-red-400">*</span></label>
+                <label className="text-sm font-medium text-text-secondary">{t('common.displayName', language)} <span className="text-red-400">*</span></label>
                 <Input value={formData.name} onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))} placeholder="My Server" />
               </div>
             </div>
@@ -769,25 +738,25 @@ export default function McpAddServerModal({
             {serverType === 'local' && (
               <>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.command', asLanguage(language))} <span className="text-red-400">*</span></label>
+                  <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.command', language)} <span className="text-red-400">*</span></label>
                   <Input value={formData.command || ''} onChange={(e) => setFormData(prev => ({ ...prev, command: e.target.value }))} placeholder="npx / uvx / node / python..." />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.arguments', asLanguage(language))}</label>
+                  <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.arguments', language)}</label>
                   <Input value={argsInput} onChange={(e) => setArgsInput(e.target.value)} placeholder="-y @modelcontextprotocol/server-xxx" />
-                  <p className="text-xs text-text-muted">{translate('mcpAddServerModal.separateMultipleArgumentsWith', asLanguage(language))}</p>
+                  <p className="text-xs text-text-muted">{t('mcpAddServerModal.separateMultipleArgumentsWith', language)}</p>
                 </div>
 
                 {/* 环境变量 */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.environmentVariables', asLanguage(language))}</label>
+                    <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.environmentVariables', language)}</label>
                     <Button variant="ghost" size="sm" onClick={addEnvPair} className="text-xs">
-                      <Plus className="w-3 h-3 mr-1" />{translate('git.add', asLanguage(language))}
+                      <Plus className="w-3 h-3 mr-1" />{t('git.add', language)}
                     </Button>
                   </div>
                   {customEnvPairs.length === 0 ? (
-                    <p className="text-xs text-text-muted py-2">{translate('mcpAddServerModal.clickAddToSet', asLanguage(language))}</p>
+                    <p className="text-xs text-text-muted py-2">{t('mcpAddServerModal.clickAddToSet', language)}</p>
                   ) : (
                     <div className="space-y-2">
                       {customEnvPairs.map(pair => (
@@ -810,20 +779,20 @@ export default function McpAddServerModal({
             {serverType === 'remote' && (
               <>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.serverUrl', asLanguage(language))} <span className="text-red-400">*</span></label>
+                  <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.serverUrl', language)} <span className="text-red-400">*</span></label>
                   <Input value={remoteUrl} onChange={(e) => setRemoteUrl(e.target.value)} placeholder="https://mcp.example.com/api" />
                 </div>
 
                 {/* 自定义请求头 */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.requestHeaders', asLanguage(language))}</label>
+                    <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.requestHeaders', language)}</label>
                     <Button variant="ghost" size="sm" onClick={addHeaderPair} className="text-xs">
-                      <Plus className="w-3 h-3 mr-1" />{translate('git.add', asLanguage(language))}
+                      <Plus className="w-3 h-3 mr-1" />{t('git.add', language)}
                     </Button>
                   </div>
                   {customHeaderPairs.length === 0 ? (
-                    <p className="text-xs text-text-muted py-1">{translate('mcpAddServerModal.eGAuthorizationBearer', asLanguage(language))}</p>
+                    <p className="text-xs text-text-muted py-1">{t('mcpAddServerModal.eGAuthorizationBearer', language)}</p>
                   ) : (
                     <div className="space-y-2">
                       {customHeaderPairs.map(pair => (
@@ -843,7 +812,7 @@ export default function McpAddServerModal({
                 {/* OAuth */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.oauthAuthentication', asLanguage(language))}</label>
+                    <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.oauthAuthentication', language)}</label>
                     <button
                       className={`relative w-10 h-5 rounded-full transition-colors ${enableOAuth ? 'bg-accent' : 'bg-white/10'}`}
                       onClick={() => setEnableOAuth(!enableOAuth)}
@@ -854,16 +823,16 @@ export default function McpAddServerModal({
                   {enableOAuth && (
                     <div className="space-y-3 p-3 bg-surface/30 rounded-lg">
                       <div className="space-y-1.5">
-                        <label className="text-sm text-text-muted">{translate('mcpAddServerModal.clientIdOptional', asLanguage(language))}</label>
+                        <label className="text-sm text-text-muted">{t('mcpAddServerModal.clientIdOptional', language)}</label>
                         <Input value={oauthClientId} onChange={(e) => setOauthClientId(e.target.value)}
-                          placeholder={translate('mcpAddServerModal.leaveEmptyForDynamic', asLanguage(language))} />
+                          placeholder={t('mcpAddServerModal.leaveEmptyForDynamic', language)} />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm text-text-muted">{translate('mcpAddServerModal.clientSecret', asLanguage(language))}</label>
+                        <label className="text-sm text-text-muted">{t('mcpAddServerModal.clientSecret', language)}</label>
                         <Input type="password" value={oauthClientSecret} onChange={(e) => setOauthClientSecret(e.target.value)} />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-sm text-text-muted">{translate('mcpAddServerModal.scope', asLanguage(language))}</label>
+                        <label className="text-sm text-text-muted">{t('mcpAddServerModal.scope', language)}</label>
                         <Input value={oauthScope} onChange={(e) => setOauthScope(e.target.value)} placeholder="read write" />
                       </div>
                     </div>
@@ -873,9 +842,9 @@ export default function McpAddServerModal({
             )}
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-text-secondary">{translate('mcpAddServerModal.autoApproveTools', asLanguage(language))}</label>
+              <label className="text-sm font-medium text-text-secondary">{t('mcpAddServerModal.autoApproveTools', language)}</label>
               <Input value={autoApproveInput} onChange={(e) => setAutoApproveInput(e.target.value)} placeholder="tool1, tool2, tool3" />
-              <p className="text-xs text-text-muted">{translate('mcpAddServerModal.commaSeparatedTheseTools', asLanguage(language))}</p>
+              <p className="text-xs text-text-muted">{t('mcpAddServerModal.commaSeparatedTheseTools', language)}</p>
             </div>
           </div>
         )}
@@ -892,9 +861,9 @@ export default function McpAddServerModal({
         <div className="pt-4 border-t border-border space-y-3">
           {!isBrowsing && (
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-text-muted">{translate('common.save2', asLanguage(language))}</span>
+              <span className="text-[11px] text-text-muted">{t('common.save2', language)}</span>
               <div className="flex items-center rounded-md border border-border overflow-hidden">
-                {([['user', translate('mcpAddServerModal.global', asLanguage(language))], ['workspace', translate('mcpAddServerModal.project', asLanguage(language))]] as ['user' | 'workspace', string][]).map(([val, label]) => (
+                {([['user', t('mcpAddServerModal.global', language)], ['workspace', t('mcpAddServerModal.project', language)]] as ['user' | 'workspace', string][]).map(([val, label]) => (
                   <button
                     key={val}
                     onClick={() => setSaveLevel(val)}
@@ -912,14 +881,14 @@ export default function McpAddServerModal({
           )}
           <div className="flex justify-between">
             {!isBrowsing ? (
-              <Button variant="ghost" onClick={handleBack}>{translate('mcpAddServerModal.back', asLanguage(language))}</Button>
+              <Button variant="ghost" onClick={handleBack}>{t('mcpAddServerModal.back', language)}</Button>
             ) : <div />}
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => { onClose(); resetForm() }}>{translate('cancel', asLanguage(language))}</Button>
+              <Button variant="ghost" onClick={() => { onClose(); resetForm() }}>{t('cancel', language)}</Button>
               {!isBrowsing && (
                 <Button variant="primary" onClick={handleSubmit} disabled={isSubmitting}>
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                  {translate('common.addServer', asLanguage(language))}
+                  {t('common.addServer', language)}
                 </Button>
               )}
             </div>

@@ -47,7 +47,7 @@ import {
   type TaskCenterNode,
   type TaskCenterStatus,
 } from './taskCenterProjection'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language, type TranslationKey } from '@shared/i18n'
 
 type LegacyTab = 'history' | 'branches'
 type CenterTab = 'focus' | 'all' | 'branches'
@@ -65,14 +65,14 @@ interface TaskSection {
   groups: TaskCenterGroup[]
 }
 
-const statusCopy: Record<TaskCenterStatus, { zh: string; en: string }> = {
-  running: { zh: '执行中', en: 'Running' },
-  waiting: { zh: '需要处理', en: 'Needs input' },
-  handoff: { zh: '交接中', en: 'Handing off' },
-  failed: { zh: '失败', en: 'Failed' },
-  completed: { zh: '已完成', en: 'Completed' },
-  aborted: { zh: '已停止', en: 'Stopped' },
-  idle: { zh: '可继续', en: 'Ready' },
+const STATUS_LABEL_KEYS: Record<TaskCenterStatus, TranslationKey> = {
+  running: 'common.running',
+  waiting: 'activeTaskQuickSwitch.needsInput',
+  handoff: 'activeTaskQuickSwitch.handingOff',
+  failed: 'common.failed',
+  completed: 'common.completed',
+  aborted: 'planWorkspace.statusStopped',
+  idle: 'taskCommandCenter.statusReady',
 }
 
 function StatusMark({ status, compact = false }: { status: TaskCenterStatus; compact?: boolean }) {
@@ -86,10 +86,10 @@ function StatusMark({ status, compact = false }: { status: TaskCenterStatus; com
   return <Circle className={`${className} text-text-muted/50`} />
 }
 
-function relationLabel(node: TaskCenterNode, language: string): string | null {
-  if (node.relation === 'continuation') return t('taskCommandCenter.continuation', asLanguage(language))
-  if (node.relation === 'subtask') return t('taskCommandCenter.subTask', asLanguage(language))
-  if (node.relation === 'plan-task') return t('taskCommandCenter.planTask', asLanguage(language))
+function relationLabel(node: TaskCenterNode, language: Language): string | null {
+  if (node.relation === 'continuation') return t('taskCommandCenter.continuation', language)
+  if (node.relation === 'subtask') return t('taskCommandCenter.subTask', language)
+  if (node.relation === 'plan-task') return t('taskCommandCenter.planTask', language)
   return null
 }
 
@@ -100,21 +100,21 @@ function ThreadActionStrip({
   onDelete,
   deleteLabel,
 }: {
-  language: string
+  language: Language
   onAction: (action: ThreadReferenceAction) => void
   onRename: () => void
   onDelete?: () => void
   deleteLabel?: string
 }) {
   const actions: Array<{ id: ThreadReferenceAction; label: string; icon: typeof Copy }> = [
-    { id: 'copy-reference', label: t('taskCommandCenter.copyThreadReference', asLanguage(language)), icon: Copy },
-    { id: 'reference-new', label: t('taskCommandCenter.referenceInNewChat', asLanguage(language)), icon: MessageSquarePlus },
+    { id: 'copy-reference', label: t('taskCommandCenter.copyThreadReference', language), icon: Copy },
+    { id: 'reference-new', label: t('taskCommandCenter.referenceInNewChat', language), icon: MessageSquarePlus },
   ]
 
   return <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-surface/45 p-0.5">
-    <button type="button" onClick={onRename} title={t('rename', asLanguage(language))} aria-label={t('rename', asLanguage(language))} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45"><Pencil className="h-3.5 w-3.5" /></button>
+    <button type="button" onClick={onRename} title={t('rename', language)} aria-label={t('rename', language)} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45"><Pencil className="h-3.5 w-3.5" /></button>
     {actions.map(action => <button key={action.id} type="button" onClick={() => onAction(action.id)} title={action.label} aria-label={action.label} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45"><action.icon className="h-3.5 w-3.5" /></button>)}
-    {onDelete && <button type="button" onClick={onDelete} title={deleteLabel || (t('delete', asLanguage(language)))} aria-label={deleteLabel || (t('delete', asLanguage(language)))} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:ring-2 focus-visible:ring-red-400/45"><Trash2 className="h-3.5 w-3.5" /></button>}
+    {onDelete && <button type="button" onClick={onDelete} title={deleteLabel || (t('delete', language))} aria-label={deleteLabel || (t('delete', language))} className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:ring-2 focus-visible:ring-red-400/45"><Trash2 className="h-3.5 w-3.5" /></button>}
   </div>
 }
 
@@ -126,7 +126,7 @@ function RenameOverlay({
   onCancel,
 }: {
   value: string
-  language: string
+  language: Language
   onChange: (value: string) => void
   onSave: () => void
   onCancel: () => void
@@ -142,11 +142,11 @@ function RenameOverlay({
       onChange={event => onChange(event.target.value)}
       onFocus={event => event.currentTarget.select()}
       onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); onCancel() } }}
-      aria-label={t('common.taskName', asLanguage(language))}
+      aria-label={t('common.taskName', language)}
       className="h-7 min-w-0 flex-1 rounded-md bg-surface/55 px-2 text-[11px] font-medium text-text-primary outline-none placeholder:text-text-muted/45 focus:ring-2 focus:ring-accent/30"
     />
-    <button type="submit" disabled={!value.trim()} title={t('saveSession', asLanguage(language))} aria-label={t('saveSession', asLanguage(language))} className="flex h-7 w-7 items-center justify-center rounded-md text-accent hover:bg-accent/10 focus-visible:ring-2 focus-visible:ring-accent/45 disabled:opacity-35"><Check className="h-3.5 w-3.5" /></button>
-    <button type="button" onClick={onCancel} title={t('cancel', asLanguage(language))} aria-label={t('cancel', asLanguage(language))} className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45"><X className="h-3.5 w-3.5" /></button>
+    <button type="submit" disabled={!value.trim()} title={t('saveSession', language)} aria-label={t('saveSession', language)} className="flex h-7 w-7 items-center justify-center rounded-md text-accent hover:bg-accent/10 focus-visible:ring-2 focus-visible:ring-accent/45 disabled:opacity-35"><Check className="h-3.5 w-3.5" /></button>
+    <button type="button" onClick={onCancel} title={t('cancel', language)} aria-label={t('cancel', language)} className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45"><X className="h-3.5 w-3.5" /></button>
   </form>
 }
 
@@ -161,7 +161,7 @@ function TaskNodeRow({
 }: {
   node: TaskCenterNode
   currentThreadId: string | null
-  language: string
+  language: Language
   onOpen: (threadId: string) => void
   onReference: (threadId: string, action: ThreadReferenceAction) => void
   onRename: (threadId: string, title: string) => void
@@ -187,7 +187,7 @@ function TaskNodeRow({
         {hasChildren ? <span
           role="button"
           tabIndex={0}
-          aria-label={expanded ? 'Collapse' : 'Expand'}
+          aria-label={expanded ? t('taskCommandCenter.collapse', language) : t('taskCommandCenter.expand', language)}
           onClick={event => { event.stopPropagation(); setExpanded(value => !value) }}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setExpanded(value => !value) } }}
           className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-muted hover:bg-surface-hover hover:text-text-primary"
@@ -200,16 +200,16 @@ function TaskNodeRow({
             {relation && <span className="shrink-0 rounded bg-surface-active/45 px-1.5 py-0.5 text-[7px] font-medium text-text-muted">{relation}</span>}
           </span>
           <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[8px] text-text-muted">
-            <span className="truncate">{node.detail || statusCopy[node.status][language === 'zh' ? 'zh' : 'en']}</span>
+            <span className="truncate">{node.detail || t(STATUS_LABEL_KEYS[node.status], language)}</span>
             {node.branchCount > 0 && <span className="flex shrink-0 items-center gap-0.5"><GitBranch className="h-2.5 w-2.5" />{node.branchCount}</span>}
-            {node.messageCount > 0 && <span className="shrink-0 tabular-nums">{node.messageCount} msg</span>}
+            {node.messageCount > 0 && <span className="shrink-0 tabular-nums">{t('messagesCount', language, { count: node.messageCount })}</span>}
           </span>
         </span>
         {node.status === 'waiting' && !actionsOpen && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400 motion-reduce:animate-none" />}
       </button>
       {node.threadId && <div className="absolute right-1 top-2 flex items-center gap-0.5">
-        {actionsOpen && <ThreadActionStrip language={language} onRename={() => { setActionsOpen(false); setRenameValue(node.title); setRenaming(true) }} onAction={action => { setActionsOpen(false); onReference(node.threadId!, action) }} onDelete={() => { setActionsOpen(false); onDelete(node) }} deleteLabel={t('taskCommandCenter.deleteSubThread', asLanguage(language))} />}
-        <button type="button" aria-label={t('taskCommandCenter.threadActions', asLanguage(language))} onClick={() => setActionsOpen(value => !value)} className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted/55 transition-all hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45 ${actionsOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><MoreHorizontal className="h-3.5 w-3.5" /></button>
+        {actionsOpen && <ThreadActionStrip language={language} onRename={() => { setActionsOpen(false); setRenameValue(node.title); setRenaming(true) }} onAction={action => { setActionsOpen(false); onReference(node.threadId!, action) }} onDelete={() => { setActionsOpen(false); onDelete(node) }} deleteLabel={t('taskCommandCenter.deleteSubThread', language)} />}
+        <button type="button" aria-label={t('taskCommandCenter.threadActions', language)} onClick={() => setActionsOpen(value => !value)} className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted/55 transition-all hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45 ${actionsOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><MoreHorizontal className="h-3.5 w-3.5" /></button>
       </div>}
     </div>
     {expanded && node.children.map(child => <TaskNodeRow key={child.id} node={child} currentThreadId={currentThreadId} language={language} onOpen={onOpen} onReference={onReference} onRename={onRename} onDelete={onDelete} />)}
@@ -228,7 +228,7 @@ function TaskGroupCard({
 }: {
   group: TaskCenterGroup
   currentThreadId: string | null
-  language: string
+  language: Language
   onOpen: (threadId: string) => void
   onReference: (threadId: string, action: ThreadReferenceAction) => void
   onRename: (threadId: string, title: string) => void
@@ -244,7 +244,7 @@ function TaskGroupCard({
   const [actionsOpen, setActionsOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(group.title)
-  const copy = statusCopy[group.status][language === 'zh' ? 'zh' : 'en']
+  const copy = t(STATUS_LABEL_KEYS[group.status], language)
   const openRoot = () => {
     if (rootNode?.threadId) onOpen(rootNode.threadId)
     else setExpanded(value => !value)
@@ -260,19 +260,19 @@ function TaskGroupCard({
       <button type="button" onClick={openRoot} className="min-w-0 flex-1 rounded-sm text-left focus-visible:ring-2 focus-visible:ring-accent/50">
         <span className="flex items-center gap-2">
           <span className={`truncate text-[11px] font-semibold ${containsCurrent ? 'text-accent' : 'text-text-primary'}`}>{group.title}</span>
-          {!isSimpleTask && <span className="shrink-0 rounded bg-surface-active/45 px-1.5 py-0.5 text-[7px] font-medium text-text-muted">{group.kind === 'plan' ? 'PLAN' : (t('taskCommandCenter.runs', asLanguage(language), { length: flatNodes.length }))}</span>}
+          {!isSimpleTask && <span className="shrink-0 rounded bg-surface-active/45 px-1.5 py-0.5 text-[7px] font-medium text-text-muted">{group.kind === 'plan' ? 'PLAN' : (t('taskCommandCenter.runs', language, { length: flatNodes.length }))}</span>}
         </span>
         <span className="mt-0.5 flex min-w-0 items-center gap-2 text-[8px] text-text-muted">
           <span className="truncate">{rootNode?.detail || copy}</span>
           <span>·</span>
           <span>{getRelativeTime(group.updatedAt, language)}</span>
           {rootNode?.branchCount ? <span className="flex shrink-0 items-center gap-0.5"><GitBranch className="h-2.5 w-2.5" />{rootNode.branchCount}</span> : null}
-          {isSimpleTask && rootNode?.messageCount ? <span className="shrink-0 tabular-nums">{rootNode.messageCount} msg</span> : null}
+          {isSimpleTask && rootNode?.messageCount ? <span className="shrink-0 tabular-nums">{t('messagesCount', language, { count: rootNode.messageCount })}</span> : null}
           {group.progress && <span className="tabular-nums">{group.progress.completed}/{group.progress.total}</span>}
         </span>
       </button>
-      {actionsOpen && rootNode?.threadId && <ThreadActionStrip language={language} onRename={() => { setActionsOpen(false); setRenameValue(group.title); setRenaming(true) }} onAction={action => { setActionsOpen(false); onReference(rootNode.threadId!, action) }} onDelete={() => { setActionsOpen(false); onDelete?.() }} deleteLabel={t('taskCommandCenter.deleteTask', asLanguage(language))} />}
-      {rootNode?.threadId && <button type="button" onClick={() => setActionsOpen(value => !value)} aria-label={t('taskCommandCenter.threadActions', asLanguage(language))} className={`rounded-md p-1.5 text-text-muted/45 transition-all hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45 ${actionsOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><MoreHorizontal className="h-3.5 w-3.5" /></button>}
+      {actionsOpen && rootNode?.threadId && <ThreadActionStrip language={language} onRename={() => { setActionsOpen(false); setRenameValue(group.title); setRenaming(true) }} onAction={action => { setActionsOpen(false); onReference(rootNode.threadId!, action) }} onDelete={() => { setActionsOpen(false); onDelete?.() }} deleteLabel={t('taskCommandCenter.deleteTask', language)} />}
+      {rootNode?.threadId && <button type="button" onClick={() => setActionsOpen(value => !value)} aria-label={t('taskCommandCenter.threadActions', language)} className={`rounded-md p-1.5 text-text-muted/45 transition-all hover:bg-surface-hover hover:text-text-primary focus-visible:ring-2 focus-visible:ring-accent/45 ${actionsOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}><MoreHorizontal className="h-3.5 w-3.5" /></button>}
     </div>
     <AnimatePresence initial={false}>
       {!isSimpleTask && expanded && visibleNodes.length > 0 && <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.16 }} className="overflow-hidden">
@@ -284,7 +284,7 @@ function TaskGroupCard({
   </section>
 }
 
-function BranchPanel({ language, onClose }: { language: string; onClose: () => void }) {
+function BranchPanel({ language, onClose }: { language: Language; onClose: () => void }) {
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   // 必须用 selectBranches：内联写 `state.branches[id] || []` 每次都会返回新数组，
   // zustand v5 走 useSyncExternalStore 的严格引用比较，会判定快照一直在变 →
@@ -302,12 +302,12 @@ function BranchPanel({ language, onClose }: { language: string; onClose: () => v
 
   return <div className="space-y-1 px-1.5">
     <button type="button" onClick={() => openBranch()} className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left ${!activeBranchId ? 'bg-accent/[0.09]' : 'hover:bg-surface/35'}`}>
-      <GitBranch className="h-4 w-4 text-accent" /><span className="min-w-0 flex-1"><strong className="block text-[11px] font-medium text-text-primary">{t('taskCommandCenter.mainline', asLanguage(language))}</strong><span className="mt-0.5 block text-[8px] text-text-muted">{t('taskCommandCenter.originalExecutionPathFor', asLanguage(language))}</span></span>{!activeBranchId && <Check className="h-3.5 w-3.5 text-accent" />}
+      <GitBranch className="h-4 w-4 text-accent" /><span className="min-w-0 flex-1"><strong className="block text-[11px] font-medium text-text-primary">{t('taskCommandCenter.mainline', language)}</strong><span className="mt-0.5 block text-[8px] text-text-muted">{t('taskCommandCenter.originalExecutionPathFor', language)}</span></span>{!activeBranchId && <Check className="h-3.5 w-3.5 text-accent" />}
     </button>
     {visible.map(branch => <button key={branch.id} type="button" onClick={() => openBranch(branch)} className={`relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left ${activeBranchId === branch.id ? 'bg-accent/[0.09]' : 'hover:bg-surface/35'}`}>
-      <Split className="h-4 w-4 text-text-muted" /><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-primary">{branch.name}</strong><span className="mt-0.5 block text-[8px] text-text-muted">{branch.messages.length} msg · {getRelativeTime(branch.createdAt, language)}</span></span>{activeBranchId === branch.id && <Check className="h-3.5 w-3.5 text-accent" />}
+      <Split className="h-4 w-4 text-text-muted" /><span className="min-w-0 flex-1"><strong className="block truncate text-[11px] font-medium text-text-primary">{branch.name}</strong><span className="mt-0.5 block text-[8px] text-text-muted">{t('messagesCount', language, { count: branch.messages.length })} · {getRelativeTime(branch.createdAt, language)}</span></span>{activeBranchId === branch.id && <Check className="h-3.5 w-3.5 text-accent" />}
     </button>)}
-    {visible.length === 0 && <div className="flex flex-col items-center px-8 py-14 text-center"><OtterAsset asset="waveStand" className="h-14 w-14 object-contain opacity-80" /><p className="mt-3 text-[11px] font-medium text-text-secondary">{t('taskCommandCenter.noConversationBranchesYet', asLanguage(language))}</p><p className="mt-1 text-[9px] leading-4 text-text-muted">{t('taskCommandCenter.alternativePathsAppearHere', asLanguage(language))}</p></div>}
+    {visible.length === 0 && <div className="flex flex-col items-center px-8 py-14 text-center"><OtterAsset asset="waveStand" className="h-14 w-14 object-contain opacity-80" /><p className="mt-3 text-[11px] font-medium text-text-secondary">{t('taskCommandCenter.noConversationBranchesYet', language)}</p><p className="mt-1 text-[9px] leading-4 text-text-muted">{t('taskCommandCenter.alternativePathsAppearHere', language)}</p></div>}
   </div>
 }
 
@@ -355,10 +355,10 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
     const recent = matched.filter(group => !claimed.has(group.id))
 
     const sections: TaskSection[] = []
-    if (attention.length > 0) sections.push({ id: 'attention', title: t('taskCommandCenter.needsAction', asLanguage(language)), groups: attention })
-    if (running.length > 0) sections.push({ id: 'running', title: t('common.running', asLanguage(language)), groups: running })
-    if (current.length > 0) sections.push({ id: 'current', title: t('taskCommandCenter.currentTask', asLanguage(language)), groups: current })
-    if (recent.length > 0) sections.push({ id: 'recent', title: t('taskCommandCenter.recent', asLanguage(language)), groups: tab === 'focus' ? recent.slice(0, 5) : recent })
+    if (attention.length > 0) sections.push({ id: 'attention', title: t('taskCommandCenter.needsAction', language), groups: attention })
+    if (running.length > 0) sections.push({ id: 'running', title: t('common.running', language), groups: running })
+    if (current.length > 0) sections.push({ id: 'current', title: t('taskCommandCenter.currentTask', language), groups: current })
+    if (recent.length > 0) sections.push({ id: 'recent', title: t('taskCommandCenter.recent', language), groups: tab === 'focus' ? recent.slice(0, 5) : recent })
     return sections
   }, [currentThreadId, groups, language, query, tab])
 
@@ -368,6 +368,11 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
   const currentBranchCount = currentThreadId
     ? (branches[currentThreadId] || []).filter(branch => branch.id !== '__mainline__').length
     : 0
+  const activitySummary = counts.running
+    ? t('taskCommandCenter.countRunning', language, { count: counts.running })
+    : counts.waiting || counts.failed
+      ? t('taskCommandCenter.countNeedAction', language, { count: counts.waiting + counts.failed })
+      : t('taskCommandCenter.noBackgroundWork', language)
 
   const openThread = (threadId: string) => { switchThread(threadId); onClose() }
 
@@ -396,20 +401,20 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
     if (!thread) return
 
     try {
-      toast.info(t('taskCommandCenter.preparingThreadSummary', asLanguage(language)))
+      toast.info(t('taskCommandCenter.preparingThreadSummary', language))
       const reference = await buildThreadReference(thread)
       if (action === 'copy-reference') {
         const copied = await writeClipboardText(reference)
         if (!copied) throw new Error('clipboard unavailable')
-        toast.success(t('taskCommandCenter.threadReferenceCopied', asLanguage(language)))
+        toast.success(t('taskCommandCenter.threadReferenceCopied', language))
         return
       }
 
       createThread({ mode: 'agent', origin: 'user' })
-      setInputPrompt(`${t('taskCommandCenter.continueFromTheFollowing', asLanguage(language))}\n\n${reference}`)
+      setInputPrompt(`${t('taskCommandCenter.continueFromTheFollowing', language)}\n\n${reference}`)
       onClose()
     } catch {
-      toast.error(t('taskCommandCenter.couldNotPrepareThread', asLanguage(language)))
+      toast.error(t('taskCommandCenter.couldNotPrepareThread', language))
     }
   }, [buildThreadReference, createThread, language, onClose, setInputPrompt, threads])
 
@@ -424,19 +429,19 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
   return <AnimatePresence>
     {isOpen && <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }} className="absolute inset-0 z-40 bg-black/25 backdrop-blur-[2px]" onClick={onClose} />
-      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 280 }} aria-label={t('common.agentTasks', asLanguage(language))} className="absolute bottom-0 right-0 top-0 z-50 flex w-[min(400px,92vw)] flex-col bg-background backdrop-blur-2xl">
+      <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 280 }} aria-label={t('common.agentTasks', language)} className="absolute bottom-0 right-0 top-0 z-50 flex w-[min(400px,92vw)] flex-col bg-background backdrop-blur-2xl">
         <header className="shrink-0 px-3 pb-2.5 pt-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2"><ListTree className="h-4 w-4 shrink-0 text-accent" /><div className="min-w-0"><h2 className="truncate text-[12px] font-semibold text-text-primary">{t('common.agentTasks', asLanguage(language))}</h2><p className="mt-0.5 text-[8px] text-text-muted">{language === 'zh' ? `${groups.length} 个任务 · ${counts.running ? `${counts.running} 个正在执行` : counts.waiting || counts.failed ? `${counts.waiting + counts.failed} 个需要处理` : '当前无后台执行'}` : `${groups.length} tasks · ${counts.running ? `${counts.running} running` : counts.waiting || counts.failed ? `${counts.waiting + counts.failed} need action` : 'no background work'}`}</p></div></div>
-            <div className="flex shrink-0 items-center gap-0.5"><Button variant="ghost" size="icon" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} title={t('common.newAgentTask', asLanguage(language))} className="h-7 w-7 rounded-md text-text-muted hover:bg-surface-hover hover:text-accent"><Plus className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 rounded-md text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-4 w-4" /></Button></div>
+            <div className="flex min-w-0 items-center gap-2"><ListTree className="h-4 w-4 shrink-0 text-accent" /><div className="min-w-0"><h2 className="truncate text-[12px] font-semibold text-text-primary">{t('common.agentTasks', language)}</h2><p className="mt-0.5 text-[8px] text-text-muted">{t('taskCommandCenter.taskCountSummary', language, { count: groups.length, detail: activitySummary })}</p></div></div>
+            <div className="flex shrink-0 items-center gap-0.5"><Button variant="ghost" size="icon" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} title={t('common.newAgentTask', language)} className="h-7 w-7 rounded-md text-text-muted hover:bg-surface-hover hover:text-accent"><Plus className="h-4 w-4" /></Button><Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 rounded-md text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-4 w-4" /></Button></div>
           </div>
         </header>
 
         <div className="shrink-0">
           <div className="grid h-10 grid-cols-3 gap-1 px-2 py-1 text-[9px] font-medium">
-            {(['focus', 'all', 'branches'] as CenterTab[]).map(item => <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-lg px-2 transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 ${tab === item ? 'bg-accent/[0.1] text-accent' : 'text-text-muted hover:bg-surface/30 hover:text-text-secondary'}`}>{item === 'focus' ? `${t('taskCommandCenter.focus', asLanguage(language))}${focusCount ? ` ${focusCount}` : ''}` : item === 'all' ? `${t('taskCommandCenter.allTasks', asLanguage(language))} ${groups.length}` : `${t('taskCommandCenter.branches', asLanguage(language))}${currentBranchCount ? ` ${currentBranchCount}` : ''}`}</button>)}
+            {(['focus', 'all', 'branches'] as CenterTab[]).map(item => <button key={item} type="button" onClick={() => setTab(item)} className={`rounded-lg px-2 transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 ${tab === item ? 'bg-accent/[0.1] text-accent' : 'text-text-muted hover:bg-surface/30 hover:text-text-secondary'}`}>{item === 'focus' ? `${t('taskCommandCenter.focus', language)}${focusCount ? ` ${focusCount}` : ''}` : item === 'all' ? `${t('taskCommandCenter.allTasks', language)} ${groups.length}` : `${t('taskCommandCenter.branches', language)}${currentBranchCount ? ` ${currentBranchCount}` : ''}`}</button>)}
           </div>
-          {tab === 'all' && <label className="relative mx-3 mb-2 block"><span className="sr-only">{t('taskCommandCenter.searchAgentTasks', asLanguage(language))}</span><Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('taskCommandCenter.searchTasks', asLanguage(language))} className="h-7 w-full rounded-md bg-surface/35 pl-8 pr-7 text-[9px] text-text-primary placeholder:text-text-muted/55 focus:outline-none focus:ring-2 focus:ring-accent/20" />{query && <button type="button" onClick={() => setQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3 w-3" /></button>}</label>}
+          {tab === 'all' && <label className="relative mx-3 mb-2 block"><span className="sr-only">{t('taskCommandCenter.searchAgentTasks', language)}</span><Search className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-text-muted" /><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('taskCommandCenter.searchTasks', language)} className="h-7 w-full rounded-md bg-surface/35 pl-8 pr-7 text-[9px] text-text-primary placeholder:text-text-muted/55 focus:outline-none focus:ring-2 focus:ring-accent/20" />{query && <button type="button" onClick={() => setQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"><X className="h-3 w-3" /></button>}</label>}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
@@ -445,7 +450,7 @@ export default function TaskCommandCenter({ isOpen, onClose, initialTab = 'histo
               <div className="flex h-8 items-center justify-between bg-surface/[0.14] px-3 text-[9px] font-semibold text-text-secondary"><span>{section.title}</span><span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-surface-active/55 px-1 text-[8px] tabular-nums text-text-muted">{section.groups.length}</span></div>
               <div className="space-y-0.5 px-1 pb-1 pt-0.5">{section.groups.map(group => <TaskGroupCard key={group.id} group={group} currentThreadId={currentThreadId} language={language} onOpen={openThread} onReference={handleThreadReference} onRename={renameThread} onDelete={() => deleteTaskNodes(group.nodes)} onDeleteNode={node => deleteTaskNodes([node])} />)}</div>
             </section>)}
-            {taskSections.length === 0 && <div className="flex flex-col items-center px-10 py-14 text-center"><OtterAsset asset="sitFront" className="h-14 w-14 object-contain opacity-80" /><p className="mt-3 text-[10px] font-medium text-text-secondary">{tab === 'focus' ? (t('taskCommandCenter.noTaskActivityYet', asLanguage(language))) : (t('taskCommandCenter.noMatchingTasks', asLanguage(language)))}</p><p className="mt-1 max-w-52 text-[8px] leading-4 text-text-muted">{t('taskCommandCenter.executionAndSubTask', asLanguage(language))}</p><button type="button" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md bg-surface/45 px-2.5 text-[9px] text-text-secondary hover:bg-surface-hover hover:text-accent"><Plus className="h-3 w-3" />{t('taskCommandCenter.newTask', asLanguage(language))}</button></div>}
+            {taskSections.length === 0 && <div className="flex flex-col items-center px-10 py-14 text-center"><OtterAsset asset="sitFront" className="h-14 w-14 object-contain opacity-80" /><p className="mt-3 text-[10px] font-medium text-text-secondary">{tab === 'focus' ? (t('taskCommandCenter.noTaskActivityYet', language)) : (t('taskCommandCenter.noMatchingTasks', language))}</p><p className="mt-1 max-w-52 text-[8px] leading-4 text-text-muted">{t('taskCommandCenter.executionAndSubTask', language)}</p><button type="button" onClick={() => { createThread({ mode: 'agent', origin: 'user' }); onClose() }} className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md bg-surface/45 px-2.5 text-[9px] text-text-secondary hover:bg-surface-hover hover:text-accent"><Plus className="h-3 w-3" />{t('taskCommandCenter.newTask', language)}</button></div>}
           </div>}
         </div>
       </motion.aside>

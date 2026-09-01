@@ -25,15 +25,15 @@ import { useShallow } from 'zustand/react/shallow'
 import { writeClipboardText } from '@/renderer/services/clipboardService'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
 import { toast } from '@/renderer/components/common/ToastProvider'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 interface ToolCallLogContentProps {
-  language?: 'en' | 'zh'
+  language: Language
 }
 
 type ViewMode = 'logs' | 'stats'
 
-export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogContentProps) {
+export default function ToolCallLogContent({ language }: ToolCallLogContentProps) {
   const { toolCallLogs: logs, loggingEnabled, clearToolCallLogs, getToolStats, getPerformanceInsights } = useStore(useShallow(s => ({
     toolCallLogs: s.toolCallLogs,
     loggingEnabled: s.agentConfig.enableToolCallLogging ?? false,
@@ -99,7 +99,7 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
       if (!enabled) store.clearToolCallLogs()
     } catch {
       store.set('agentConfig', previousConfig)
-      toast.error(translate('toolCallLogContent.failedToSaveTool', asLanguage(language)))
+      toast.error(t('toolCallLogContent.failedToSaveTool', language))
     } finally {
       setSavingLoggingSetting(false)
     }
@@ -117,7 +117,7 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
             className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
               viewMode === 'logs' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary'
             }`}
-            title={translate('toolCallLogContent.logs', asLanguage(language))}
+            title={t('toolCallLogContent.logs', language)}
           >
             <List className="w-3 h-3" />
           </button>
@@ -126,7 +126,7 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
             className={`px-1.5 py-0.5 text-[10px] rounded transition-colors ${
               viewMode === 'stats' ? 'bg-accent/20 text-accent' : 'text-text-muted hover:text-text-primary'
             }`}
-            title={translate('toolCallLogContent.stats', asLanguage(language))}
+            title={t('toolCallLogContent.stats', language)}
           >
             <BarChart3 className="w-3 h-3" />
           </button>
@@ -138,20 +138,20 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
             onChange={(e) => setFilter(e.target.value as 'all' | 'request' | 'response')}
             className="px-1.5 py-0.5 text-[10px] bg-surface border border-border-subtle rounded text-text-secondary outline-none focus:border-accent/50"
           >
-            <option value="all">{translate('common.all', asLanguage(language))}</option>
-            <option value="request">{translate('toolCallLogContent.req', asLanguage(language))}</option>
-            <option value="response">{translate('toolCallLogContent.res', asLanguage(language))}</option>
+            <option value="all">{t('common.all', language)}</option>
+            <option value="request">{t('toolCallLogContent.req', language)}</option>
+            <option value="response">{t('toolCallLogContent.res', language)}</option>
           </select>
         )}
 
         <div className="flex-1" />
 
         <Button variant="ghost" size="sm" onClick={handleExport}
-          className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-text-primary" title={translate('exportSession', asLanguage(language))}>
+          className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-text-primary" title={t('exportSession', language)}>
           <Download className="w-3 h-3" />
         </Button>
         <Button variant="ghost" size="sm" onClick={() => clearToolCallLogs(currentThreadId || undefined)}
-          className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-red-400 hover:bg-red-500/10" title={translate('common.clear', asLanguage(language))}>
+          className="h-6 px-1.5 text-[10px] gap-1 text-text-muted hover:text-red-400 hover:bg-red-500/10" title={t('common.clear', language)}>
           <Trash2 className="w-3 h-3" />
         </Button>
       </div>}
@@ -161,8 +161,8 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
         {!loggingEnabled ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-text-muted">
             <OtterAsset asset="logs" className="h-12 w-12 object-contain opacity-55 grayscale" />
-            <span className="text-xs font-medium text-text-secondary">{translate('toolCallLogContent.toolCallLoggingIs', asLanguage(language))}</span>
-            <span className="text-[10px] leading-relaxed">{translate('toolCallLogContent.turnItOnTo', asLanguage(language))}</span>
+            <span className="text-xs font-medium text-text-secondary">{t('toolCallLogContent.toolCallLoggingIs', language)}</span>
+            <span className="text-[10px] leading-relaxed">{t('toolCallLogContent.turnItOnTo', language)}</span>
           </div>
         ) : viewMode === 'logs' ? (
           <LogsView logs={filteredLogs} expandedIds={expandedIds} toggleExpand={toggleExpand}
@@ -175,8 +175,8 @@ export default function ToolCallLogContent({ language = 'zh' }: ToolCallLogConte
       <div className="px-2 py-2 border-t border-border/40">
         <label className="flex cursor-pointer items-center justify-between gap-3 px-1">
           <div className="min-w-0">
-            <div className="text-[10px] font-medium text-text-secondary">{translate('common.recordToolCallLogs', asLanguage(language))}</div>
-            <div className="mt-0.5 text-[9px] leading-snug text-text-muted">{translate('toolCallLogContent.offByDefaultOnly', asLanguage(language))}</div>
+            <div className="text-[10px] font-medium text-text-secondary">{t('common.recordToolCallLogs', language)}</div>
+            <div className="mt-0.5 text-[9px] leading-snug text-text-muted">{t('toolCallLogContent.offByDefaultOnly', language)}</div>
           </div>
           <Switch
             checked={loggingEnabled}
@@ -198,14 +198,14 @@ function LogsView({ logs, expandedIds, toggleExpand, handleCopy, copiedId, langu
   toggleExpand: (id: string) => void
   handleCopy: (id: string, data: unknown) => void
   copiedId: string | null
-  language?: string
+  language: Language
 }) {
 
   if (logs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-muted text-xs gap-2">
         <OtterAsset asset="logs" className="w-12 h-12 object-contain opacity-70" />
-        <span>{translate('toolCallLogContent.noLogs', asLanguage(language))}</span>
+        <span>{t('toolCallLogContent.noLogs', language)}</span>
       </div>
     )
   }
@@ -246,14 +246,14 @@ function LogsView({ logs, expandedIds, toggleExpand, handleCopy, copiedId, langu
 function StatsView({ stats, insights, language }: {
   stats: import('@/renderer/store/slices/logSlice').ToolStats[]
   insights: import('@/renderer/store/slices/logSlice').PerformanceInsight[]
-  language?: string
+  language: Language
 }) {
 
   if (stats.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-muted text-xs gap-2">
         <OtterAsset asset="logs" className="w-12 h-12 object-contain opacity-70" />
-        <span>{translate('toolCallLogContent.noStatistics', asLanguage(language))}</span>
+        <span>{t('toolCallLogContent.noStatistics', language)}</span>
       </div>
     )
   }
@@ -263,7 +263,7 @@ function StatsView({ stats, insights, language }: {
       {/* 性能洞察 */}
       {insights.length > 0 && (
         <div className="space-y-1">
-          <div className="text-[10px] font-medium text-text-muted uppercase tracking-wide">{translate('toolCallLogContent.insights', asLanguage(language))}</div>
+          <div className="text-[10px] font-medium text-text-muted uppercase tracking-wide">{t('toolCallLogContent.insights', language)}</div>
           <div className="space-y-1">
             {insights.slice(0, 3).map((insight, i) => (
               <div key={i} className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] ${
@@ -274,7 +274,7 @@ function StatsView({ stats, insights, language }: {
                 {insight.type === 'high_failure' && <AlertTriangle className="w-3 h-3" />}
                 {insight.type === 'frequent_tool' && <Zap className="w-3 h-3" />}
                 <span className="font-medium">{insight.toolName}</span>
-                <span className="text-[9px] opacity-80">{language === 'zh' ? insight.messageZh : insight.message}</span>
+                <span className="text-[9px] opacity-80">{t(insight.messageKey, language, insight.messageParams)}</span>
               </div>
             ))}
           </div>
@@ -283,15 +283,15 @@ function StatsView({ stats, insights, language }: {
 
       {/* 工具统计表 */}
       <div className="space-y-1">
-        <div className="text-[10px] font-medium text-text-muted uppercase tracking-wide">{translate('toolCallLogContent.toolStats', asLanguage(language))}</div>
+        <div className="text-[10px] font-medium text-text-muted uppercase tracking-wide">{t('toolCallLogContent.toolStats', language)}</div>
         <div className="bg-surface/30 rounded border border-border-subtle overflow-hidden">
           <table className="w-full text-[10px]">
             <thead>
               <tr className="bg-surface/50 text-text-muted">
-                <th className="text-left px-2 py-1 font-medium">{translate('toolCallLogContent.tool', asLanguage(language))}</th>
-                <th className="text-right px-2 py-1 font-medium">{translate('toolCallLogContent.calls', asLanguage(language))}</th>
-                <th className="text-right px-2 py-1 font-medium">{translate('toolCallLogContent.rate', asLanguage(language))}</th>
-                <th className="text-right px-2 py-1 font-medium">{translate('toolCallLogContent.avg', asLanguage(language))}</th>
+                <th className="text-left px-2 py-1 font-medium">{t('toolCallLogContent.tool', language)}</th>
+                <th className="text-right px-2 py-1 font-medium">{t('toolCallLogContent.calls', language)}</th>
+                <th className="text-right px-2 py-1 font-medium">{t('toolCallLogContent.rate', language)}</th>
+                <th className="text-right px-2 py-1 font-medium">{t('toolCallLogContent.avg', language)}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">

@@ -3,13 +3,7 @@ import { logger } from '@utils/Logger'
 import { memo, useState, useRef, useEffect, useCallback, useMemo, forwardRef, type ComponentPropsWithoutRef } from 'react'
 import { Virtuoso, type FlatIndexLocationWithAlign } from 'react-virtuoso'
 import {
-  AlertTriangle,
-  ListTree,
-  Plus,
-  Trash2,
-  Upload,
-  ChevronDown,
-} from 'lucide-react'
+  AlertTriangle, ListTree, Plus, Trash2, Upload, ChevronDown, } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore, useModeStore } from '@/renderer/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -17,7 +11,7 @@ import { useAgentActions, useAgentCommands, useAgentViewState } from '@/renderer
 import { useChatScrollController } from '@/renderer/hooks'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { selectTodos } from '@/renderer/agent/store/AgentStore'
-import { t, asLanguage } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 import { toFullPath, getFileName } from '@shared/utils/pathUtils'
 import { getBuiltinProvider } from '@shared/config/providers'
 import {
@@ -486,16 +480,16 @@ export default function ChatPanel() {
       if (!finish()) return
       const result = optimizedPrompt.trim()
       if (!result) {
-        toast.error(t('chatPanel.couldNotImprovePrompt', asLanguage(language)), t('chatPanel.theModelReturnedNo', asLanguage(language)))
+        toast.error(t('chatPanel.couldNotImprovePrompt', language), t('chatPanel.theModelReturnedNo', language))
         return
       }
       setInput(result)
       requestAnimationFrame(() => textareaRef.current?.focus())
-      toast.success(t('chatPanel.promptImproved', asLanguage(language)))
+      toast.success(t('chatPanel.promptImproved', language))
     })
     unsubscribeError = api.llm.onError(requestId, error => {
       if (!finish()) return
-      toast.error(t('chatPanel.couldNotImprovePrompt', asLanguage(language)), error.message)
+      toast.error(t('chatPanel.couldNotImprovePrompt', language), error.message)
     })
     optimizeRequestRef.current = { requestId, cleanup }
 
@@ -503,14 +497,14 @@ export default function ChatPanel() {
       await api.llm.send({
         config: llmConfig,
         messages: [{ role: 'user', content: draft }],
-        systemPrompt: t('chatPanel.youAreAPrompt', asLanguage(language)),
+        systemPrompt: t('chatPanel.youAreAPrompt', language),
         requestId,
       })
     } catch (error) {
       if (!finish()) return
       const message = error instanceof Error ? error.message : String(error)
       logger.ui.error('[ChatPanel] Prompt optimization failed:', error)
-      toast.error(t('chatPanel.couldNotImprovePrompt', asLanguage(language)), message)
+      toast.error(t('chatPanel.couldNotImprovePrompt', language), message)
     }
   }, [input, isOptimizingPrompt, isStreaming, language, llmConfig, setInput, textareaRef, toast])
 
@@ -942,7 +936,7 @@ export default function ChatPanel() {
         chatMode: effectiveMode,
         targetThreadId,
       })
-      toast.info(t('chatPanel.addedToSendQueue', asLanguage(language)))
+      toast.info(t('chatPanel.addedToSendQueue', language))
       return
     }
 
@@ -969,7 +963,7 @@ export default function ChatPanel() {
 
     if (result) {
       // 成功创建分支，发送消息重新生成
-      toast.success(t('chatPanel.branchCreated', asLanguage(language)))
+      toast.success(t('chatPanel.branchCreated', language))
       await sendMessage(result.messageContent)
     } else {
       // 回退到原来的逻辑（直接删除并重新发送）
@@ -1072,9 +1066,9 @@ export default function ChatPanel() {
       : ''
 
     const confirmed = await globalConfirm({
-      title: t('chatPanel.restoreCheckpoint', asLanguage(language)),
+      title: t('chatPanel.restoreCheckpoint', language),
       message: t('confirmRestoreCheckpoint', language),
-      confirmText: t('chatPanel.restore', asLanguage(language)),
+      confirmText: t('chatPanel.restore', language),
       variant: 'warning',
     })
     if (!confirmed) return
@@ -1169,11 +1163,11 @@ export default function ChatPanel() {
 
   // 渲染消息
   const renderArchiveItem = useCallback((item: TimelineArchiveItem) => {
-    const label = t('chatPanel.showMoreHistory', asLanguage(language))
-    const hiddenLabel = t('chatPanel.olderMessagesArchived', asLanguage(language), { hiddenCount: item.hiddenCount })
-    const revealLabel = t('chatPanel.revealMore', asLanguage(language), { revealCount: item.revealCount })
+    const label = t('chatPanel.showMoreHistory', language)
+    const hiddenLabel = t('chatPanel.olderMessagesArchived', language, { hiddenCount: item.hiddenCount })
+    const revealLabel = t('chatPanel.revealMore', language, { revealCount: item.revealCount })
     const remainingLabel = item.remainingCount > 0
-      ? (t('chatPanel.remaining', asLanguage(language), { remainingCount: item.remainingCount }))
+      ? (t('chatPanel.remaining', language, { remainingCount: item.remainingCount }))
       : undefined
 
     return (
@@ -1358,7 +1352,7 @@ export default function ChatPanel() {
                     variant="ghost"
                     size="icon"
                     onClick={() => scrollToBottom('smooth')}
-                    title={t('chatPanel.scrollToBottom', asLanguage(language))}
+                    title={t('chatPanel.scrollToBottom', language)}
                     className="hover:bg-accent/10 text-accent transition-colors"
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -1384,7 +1378,7 @@ export default function ChatPanel() {
               variant="ghost"
               size="icon"
               onClick={() => createThread({ mode: chatMode, origin: 'user' })}
-              title={t('chatPanel.newChat', asLanguage(language))}
+              title={t('chatPanel.newChat', language)}
               className="hover:bg-surface-hover text-text-muted hover:text-text-primary transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -1395,7 +1389,7 @@ export default function ChatPanel() {
               size="icon"
               onClick={clearMessages}
               className="hover:bg-red-500/10 hover:text-red-500 text-text-muted transition-colors"
-              title={t('clearChat', asLanguage(language))}
+              title={t('clearChat', language)}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -1427,8 +1421,8 @@ export default function ChatPanel() {
                   <Upload className="w-10 h-10 text-accent relative z-10" />
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-medium text-text-primary mb-1">{t('chatPanel.dropFilesToAdd', asLanguage(language))}</p>
-                  <p className="text-sm text-text-muted">{t('chatPanel.supportsCodeAndImages', asLanguage(language))}</p>
+                  <p className="text-lg font-medium text-text-primary mb-1">{t('chatPanel.dropFilesToAdd', language)}</p>
+                  <p className="text-sm text-text-muted">{t('chatPanel.supportsCodeAndImages', language)}</p>
                 </div>
               </motion.div>
             </motion.div>

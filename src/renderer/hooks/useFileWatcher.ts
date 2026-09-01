@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useStore } from '@store'
 import { api } from '@renderer/services/electronAPI'
-import { t, type Language, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { getFileName, pathEquals } from '@shared/utils/pathUtils'
 import { internalWriteTracker } from '@renderer/services/internalWriteTracker'
@@ -60,7 +60,7 @@ export function useFileWatcher() {
         const confirmed = await globalConfirm({
           title: getFileName(event.path),
           message: t('file.externalModifiedReload', language as Language, { name: getFileName(event.path) }),
-          confirmText: t('useFileWatcher.reload', asLanguage(language)),
+          confirmText: t('useFileWatcher.reload', language),
           cancelText: t('cancel', language as Language),
           variant: 'warning',
         })

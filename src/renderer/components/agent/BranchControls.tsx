@@ -8,7 +8,7 @@ import { GitBranch, RotateCcw, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAgentStore, selectBranches, selectActiveBranch, selectIsOnBranch } from '@/renderer/agent/store/AgentStore'
 import { Button } from '../ui'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 /**
  * 分支选择器 - 显示在聊天面板顶部左侧
@@ -28,7 +28,7 @@ export function BranchSelector({
   // 计算显示文本
   const displayText = isOnBranch && activeBranch 
     ? activeBranch.name 
-    : (t('branchControls.main', asLanguage(language)))
+    : (t('branchControls.main', language))
 
   const hasBranches = branches.length > 0
 
@@ -40,7 +40,7 @@ export function BranchSelector({
           ? 'bg-accent/10 border border-accent/20 text-accent hover:bg-accent/15' 
           : 'bg-surface/30 border border-transparent hover:border-border/40 hover:bg-surface/50 text-text-muted hover:text-text-primary'
       }`}
-      title={t('branchControls.clickToManageBranches', asLanguage(language))}
+      title={t('branchControls.clickToManageBranches', language)}
     >
       <GitBranch className={`w-3.5 h-3.5 ${isOnBranch ? 'text-accent' : 'text-text-muted group-hover:text-text-primary'}`} />
       <span className="truncate max-w-[120px] font-medium">{displayText}</span>
@@ -82,10 +82,10 @@ export function MessageBranchActions({
         size="sm"
         onClick={() => setShowConfirm(!showConfirm)}
         className={`text-xs gap-1.5 h-7 px-2.5 transition-all ${showConfirm ? 'bg-accent/10 text-accent' : 'hover:bg-surface/50'}`}
-        title={t('branchControls.regenerateCreateBranch', asLanguage(language))}
+        title={t('branchControls.regenerateCreateBranch', language)}
       >
         <RotateCcw className={`w-3.5 h-3.5 ${showConfirm ? 'text-accent' : ''}`} />
-        <span>{t('branchControls.regenerate', asLanguage(language))}</span>
+        <span>{t('branchControls.regenerate', language)}</span>
       </Button>
 
       <AnimatePresence>
@@ -100,7 +100,7 @@ export function MessageBranchActions({
             <div className="absolute -top-1.5 right-6 w-3 h-3 bg-background/80 backdrop-blur-xl border-t border-l border-border/50 transform rotate-45" />
             
             <p className="text-xs text-text-secondary mb-3 leading-relaxed relative z-10">
-              {t('branchControls.thisWillCreateA', asLanguage(language))}
+              {t('branchControls.thisWillCreateA', language)}
             </p>
             <div className="flex gap-2 relative z-10">
               <Button
@@ -109,7 +109,7 @@ export function MessageBranchActions({
                 onClick={() => setShowConfirm(false)}
                 className="flex-1 h-7 text-xs hover:bg-black/10"
               >
-                {t('cancel', asLanguage(language))}
+                {t('cancel', language)}
               </Button>
               <Button
                 variant="primary"
@@ -118,7 +118,7 @@ export function MessageBranchActions({
                 className="flex-1 h-7 text-xs whitespace-nowrap bg-accent hover:bg-accent-hover text-white shadow-lg shadow-accent/20"
               >
                 <GitBranch className="w-3.5 h-3.5 mr-1.5" />
-                {t('branchControls.createBranch', asLanguage(language))}
+                {t('branchControls.createBranch', language)}
               </Button>
             </div>
           </motion.div>

@@ -21,10 +21,11 @@ import { motion } from 'framer-motion'
 import type { EmotionState, EmotionHistory } from '@/renderer/agent/types/emotion'
 import { cn } from '@utils/cn'
 import { useStore } from '@store'
-import { t, type TranslationKey } from '@/renderer/i18n'
+import { t } from '@shared/i18n'
 import { useEmotionHistory } from '@/renderer/hooks/useEmotionHistory'
 import {
   EMOTION_COLORS,
+  EMOTION_META,
   loadEmotionPanelSettings,
   subscribeEmotionPanelSettings,
   updateEmotionPanelSettings,
@@ -475,10 +476,9 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: I
     )
   }
 
-  const stateLabelKey = (s: EmotionState): TranslationKey => `emotion.state.${s}` as TranslationKey
   const renderInflectionTooltip = (ip: InflectionPoint) => {
     if (ip.type === 'prolonged') {
-      const stateLabel = t(stateLabelKey(ip.state), language)
+      const stateLabel = t(EMOTION_META[ip.state].translationKey, language)
       return t('emotion.inflection.prolonged', language, { duration: ip.durationMin, stateLabel })
     }
     if (ip.type === 'interrupted') return t('emotion.inflection.flowInterrupted', language)
@@ -556,10 +556,7 @@ const EmotionTimeline: React.FC<{ history: EmotionHistory[]; inflectionPoints: I
           <div key={state} className="flex items-center gap-1">
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: EMOTION_COLORS[state] }} />
             <span className="text-[9px] text-text-muted">
-              {state === 'focused' ? t('emotion.state.focused', language) :
-                state === 'flow' ? t('emotion.state.flow', language) :
-                  state === 'frustrated' ? t('emotion.state.frustrated', language) :
-                    state === 'tired' ? t('emotion.state.tired', language) : t('emotion.state.stressed', language)}
+              {t(EMOTION_META[state].translationKey, language)}
             </span>
           </div>
         ))}

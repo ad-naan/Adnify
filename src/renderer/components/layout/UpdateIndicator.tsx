@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { updaterService, type UpdateStatus } from '@services/updaterService'
 import { useStore } from '@store'
 import { api } from '@/renderer/services/electronAPI'
-import { t as translate, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 export default function UpdateIndicator() {
   const language = useStore(state => state.language)
@@ -58,23 +58,23 @@ export default function UpdateIndicator() {
   const isDownloading = status?.status === 'downloading'
   const isError = status?.status === 'error'
 
-  const t = {
-    title: translate('updateIndicator.systemUpdate', asLanguage(language)),
-    checking: translate('updateIndicator.checkingForUpdates', asLanguage(language)),
-    available: translate('updateIndicator.newVersionAvailable', asLanguage(language)),
-    downloaded: translate('updateIndicator.updateReady', asLanguage(language)),
-    downloading: translate('updateIndicator.downloadingUpdate', asLanguage(language)),
-    notAvailable: translate('updateIndicator.youAreUpTo', asLanguage(language)),
-    error: translate('updateIndicator.updateFailed', asLanguage(language)),
-    download: translate('updateIndicator.updateNow', asLanguage(language)),
-    install: translate('updateIndicator.restartToApply', asLanguage(language)),
-    openPage: translate('updateIndicator.openDownloadPage', asLanguage(language)),
-    checkNow: translate('updateIndicator.checkForUpdates', asLanguage(language)),
+  const labels = {
+    title: t('updateIndicator.systemUpdate', language),
+    checking: t('updateIndicator.checkingForUpdates', language),
+    available: t('updateIndicator.newVersionAvailable', language),
+    downloaded: t('updateIndicator.updateReady', language),
+    downloading: t('updateIndicator.downloadingUpdate', language),
+    notAvailable: t('updateIndicator.youAreUpTo', language),
+    error: t('updateIndicator.updateFailed', language),
+    download: t('updateIndicator.updateNow', language),
+    install: t('updateIndicator.restartToApply', language),
+    openPage: t('updateIndicator.openDownloadPage', language),
+    checkNow: t('updateIndicator.checkForUpdates', language),
     manualHint:
-      translate('updateIndicator.thisIsAPortable', asLanguage(language)),
+      t('updateIndicator.thisIsAPortable', language),
     mirrorHint:
-      translate('updateIndicator.githubDownloadAccelerationIs', asLanguage(language)),
-    current: translate('updateIndicator.current', asLanguage(language)),
+      t('updateIndicator.githubDownloadAccelerationIs', language),
+    current: t('updateIndicator.current', language),
   }
 
   return (
@@ -90,7 +90,7 @@ export default function UpdateIndicator() {
                 ? 'bg-surface text-text-primary'
                 : 'text-text-muted hover:text-text-primary hover:bg-white/5'
         }`}
-        title={hasUpdate ? t.available : t.checkNow}
+        title={hasUpdate ? labels.available : labels.checkNow}
       >
         {isChecking || isDownloading ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -116,7 +116,7 @@ export default function UpdateIndicator() {
           >
             {/* 顶栏 */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-[rgb(var(--border)/0.6)] bg-[rgb(var(--background-tertiary)/0.5)]">
-              <span className="text-[12px] font-semibold text-[rgb(var(--text-primary))]">{t.title}</span>
+              <span className="text-[12px] font-semibold text-[rgb(var(--text-primary))]">{labels.title}</span>
               <button
                 onClick={() => setShowPopover(false)}
                 className="p-1 rounded-md text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] hover:bg-[rgb(var(--surface-hover))] transition-colors"
@@ -154,16 +154,16 @@ export default function UpdateIndicator() {
               {/* 标题 */}
               <h4 className="text-[15px] font-semibold text-[rgb(var(--text-primary))]">
                 {status?.status === 'available'
-                  ? t.available
+                  ? labels.available
                   : status?.status === 'downloaded'
-                    ? t.downloaded
+                    ? labels.downloaded
                     : status?.status === 'downloading'
-                      ? t.downloading
+                      ? labels.downloading
                       : status?.status === 'checking'
-                        ? t.checking
+                        ? labels.checking
                         : status?.status === 'error'
-                          ? t.error
-                          : t.notAvailable}
+                          ? labels.error
+                          : labels.notAvailable}
               </h4>
 
               {/* 版本号 */}
@@ -173,7 +173,7 @@ export default function UpdateIndicator() {
                     v{currentVersion} <span className="text-[rgb(var(--text-muted)/0.4)]">→</span> <span className="text-[rgb(var(--accent))] font-medium">v{status.version}</span>
                   </span>
                 ) : (
-                  <span>{t.current}: v{currentVersion}</span>
+                  <span>{labels.current}: v{currentVersion}</span>
                 )}
               </div>
 
@@ -181,7 +181,7 @@ export default function UpdateIndicator() {
               {isDownloading && status?.progress !== undefined && (
                 <div className="w-full mb-4 p-2.5 rounded-xl bg-[rgb(var(--surface))] border border-[rgb(var(--border)/0.6)] space-y-1.5 text-left">
                   <div className="flex justify-between text-[11px] font-medium text-[rgb(var(--text-muted))]">
-                    <span>{t.downloading}</span>
+                    <span>{labels.downloading}</span>
                     <span className="text-[rgb(var(--accent))] font-bold">{status.progress.toFixed(0)}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-[rgb(var(--surface-active))] rounded-full overflow-hidden">
@@ -198,14 +198,14 @@ export default function UpdateIndicator() {
               {/* 加速镜像提示 */}
               {status?.usingDownloadMirror && (
                 <div className="w-full mb-4 px-3 py-2 rounded-xl bg-[rgb(var(--surface))] border border-[rgb(var(--border)/0.5)] text-[11px] text-[rgb(var(--text-secondary))] leading-relaxed text-left">
-                  {t.mirrorHint}
+                  {labels.mirrorHint}
                 </div>
               )}
 
               {/* 便携版提示 */}
               {hasUpdate && status?.requiresManualDownload && (
                 <div className="w-full mb-4 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 leading-relaxed text-left">
-                  {t.manualHint}
+                  {labels.manualHint}
                 </div>
               )}
 
@@ -218,7 +218,7 @@ export default function UpdateIndicator() {
                       className="w-full h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
-                      <span>{t.install}</span>
+                      <span>{labels.install}</span>
                     </button>
                   ) : (
                     <button
@@ -226,7 +226,7 @@ export default function UpdateIndicator() {
                       className="w-full h-9 rounded-xl bg-[rgb(var(--accent))] hover:bg-[rgb(var(--accent-hover))] text-white text-[13px] font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-sm"
                     >
                       {status?.requiresManualDownload ? <ExternalLink className="w-3.5 h-3.5" /> : <Download className="w-3.5 h-3.5" />}
-                      <span>{status?.requiresManualDownload ? t.openPage : t.download}</span>
+                      <span>{status?.requiresManualDownload ? labels.openPage : labels.download}</span>
                     </button>
                   )
                 ) : (
@@ -237,7 +237,7 @@ export default function UpdateIndicator() {
                       className="w-full h-9 rounded-xl bg-[rgb(var(--surface))] hover:bg-[rgb(var(--surface-hover))] border border-[rgb(var(--border))] text-[rgb(var(--text-primary))] text-[13px] font-medium transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-[rgb(var(--text-muted))]" />
-                      <span>{t.checkNow}</span>
+                      <span>{labels.checkNow}</span>
                     </button>
                   )
                 )}
@@ -251,7 +251,7 @@ export default function UpdateIndicator() {
                   className="w-full py-1 text-[12px] text-[rgb(var(--text-muted))] hover:text-[rgb(var(--text-primary))] flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  <span>{translate('common.viewChangelog', asLanguage(language))}</span>
+                  <span>{t('common.viewChangelog', language)}</span>
                 </button>
               </div>
             </div>

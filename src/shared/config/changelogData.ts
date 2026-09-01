@@ -3,6 +3,8 @@
  * Auto-generated and maintained for in-app changelog & version history.
  */
 
+import { pickLocalized, type Language } from '@shared/i18n'
+
 export interface ReleaseDetailItem {
   title: string
   titleEn?: string
@@ -39,6 +41,21 @@ export interface MajorReleaseGroup {
   description: string
   descriptionEn: string
   releases: ReleaseNote[]
+}
+
+/**
+ * 这份数据的双语约定：中文在 `x`，英文在可选的 `xEn`（没给就退回中文）。
+ *
+ * 读取收成两个函数，调用点就不用各自写 `language === 'zh' ? a : b` —— 那样和"漏迁移的
+ * 内联文案"长得一模一样，评审时分不出来；也正是分类标签（`labelEn`）和明细条目
+ * （`detailsEn`）一直只显示中文的原因：那两处根本没人写这个三元。
+ */
+export function releaseText(zh: string, en: string | undefined, lang: Language): string {
+  return pickLocalized({ zh, en: en ?? zh }, lang)
+}
+
+export function releaseList(zh: string[] | undefined, en: string[] | undefined, lang: Language): string[] {
+  return ({ zh: zh ?? [], en: en ?? zh ?? [] })[lang]
 }
 
 export const CHANGELOG_DATA: ReleaseNote[] = [

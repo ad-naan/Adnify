@@ -1,4 +1,4 @@
-import type { TranslationKey } from '@/renderer/i18n'
+import type { TranslationKey } from '@shared/i18n'
 import type { ReplaceErrorCode } from '@/renderer/utils/smartReplace'
 import { getAgentLanguage, pickLocalizedText, translateAgentText } from '../../utils/agentText'
 

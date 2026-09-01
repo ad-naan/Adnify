@@ -5,7 +5,7 @@ import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { Agent } from '@/renderer/agent/core/Agent'
 import { buildSubAgentExecutionSteps, type SubAgentStepState } from '@/renderer/agent/presentation/subAgentExecution'
 import { useStore } from '@/renderer/store'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === 'object' ? value as Record<string, unknown> : {}
 const asString = (value: unknown): string => typeof value === 'string' ? value : ''
@@ -70,7 +70,7 @@ function SubAgentTaskCard({ toolCall }: { toolCall: ToolCall }) {
     completedToolCount: completedTools,
   }), [completedTools, currentTool?.name, isError, isRunning, isSuccess, language, threadId, waitingApproval])
 
-  const description = asString(toolCall.arguments.description) || (t('subAgentTaskCard.subAgentTask', asLanguage(language)))
+  const description = asString(toolCall.arguments.description) || (t('subAgentTaskCard.subAgentTask', language))
   const elapsed = isRunning && startedAt ? now - startedAt : finishedDuration || 0
   const cardStyle = waitingApproval
     ? 'border border-yellow-500/20 bg-yellow-500/5 shadow-sm shadow-yellow-500/5'
@@ -96,7 +96,7 @@ function SubAgentTaskCard({ toolCall }: { toolCall: ToolCall }) {
       <span className={`min-w-0 flex-1 truncate text-[12px] ${isRunning ? 'text-text-primary tool-text-shimmer' : 'text-text-secondary group-hover:text-text-primary'}`}>
         <span className="text-text-muted">SubAgent</span><span className="px-1.5 text-text-muted/35">·</span>{description}
       </span>
-      {waitingApproval && <span className="shrink-0 text-[10px] text-amber-400">{t('subAgentTaskCard.approvalNeeded', asLanguage(language))}</span>}
+      {waitingApproval && <span className="shrink-0 text-[10px] text-amber-400">{t('subAgentTaskCard.approvalNeeded', language)}</span>}
       {completedTools > 0 && <span className="shrink-0 text-[10px] tabular-nums text-text-muted/60">{completedTools}</span>}
       {elapsed > 0 && <span className="shrink-0 pr-2 text-[10px] tabular-nums text-text-muted/60">{formatDuration(elapsed)}</span>}
     </button>
@@ -116,12 +116,12 @@ function SubAgentTaskCard({ toolCall }: { toolCall: ToolCall }) {
       </ol>
 
       {waitingApproval && <div className="mt-2 flex items-center gap-2 pl-6">
-        <button type="button" onClick={() => Agent.reject(childThread?.streamState?.requestId)} className="rounded-md px-2.5 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400">{t('toolReject', asLanguage(language))}</button>
-        <button type="button" onClick={() => Agent.approve(childThread?.streamState?.requestId)} className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover">{t('toolApprove', asLanguage(language))}</button>
+        <button type="button" onClick={() => Agent.reject(childThread?.streamState?.requestId)} className="rounded-md px-2.5 py-1.5 text-[11px] font-medium text-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400">{t('toolReject', language)}</button>
+        <button type="button" onClick={() => Agent.approve(childThread?.streamState?.requestId)} className="rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent-hover">{t('toolApprove', language)}</button>
       </div>}
 
       {(toolCall.result || toolCall.error) && !isRunning && <div className={`ml-6 mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-md px-2.5 py-2 text-[10px] leading-5 custom-scrollbar ${isError ? 'bg-red-500/10 text-red-300' : 'bg-text-primary/[0.025] text-text-secondary'}`}>{toolCall.result || toolCall.error}</div>}
-      {threadId && <button type="button" onClick={() => switchThread(threadId)} className="ml-6 mt-2 inline-flex items-center gap-1.5 text-[10px] font-medium text-accent hover:underline"><ExternalLink className="h-3 w-3" />{t('subAgentTaskCard.openSubTask', asLanguage(language))}</button>}
+      {threadId && <button type="button" onClick={() => switchThread(threadId)} className="ml-6 mt-2 inline-flex items-center gap-1.5 text-[10px] font-medium text-accent hover:underline"><ExternalLink className="h-3 w-3" />{t('subAgentTaskCard.openSubTask', language)}</button>}
     </div>}
   </div>
 }

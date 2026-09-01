@@ -5,7 +5,7 @@ import type {
   PlanStageKey,
   PlanStageSectionKind,
 } from './types'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 const STAGES: PlanStageKey[] = ['requirements', 'plan', 'execution', 'validation']
 const KINDS = new Set<PlanStageSectionKind>(['overview', 'list', 'checklist', 'decisions', 'risks', 'deliverables', 'metrics'])
@@ -87,7 +87,7 @@ export function renderPlanStageMarkdown(content: PlanStageContent): string {
 }
 
 /** Compatibility adapter for plans created before schema version 1. */
-export function legacyRequirementsToStageContent(content: string, fallbackTitle: string, language: string): PlanStageContent {
+export function legacyRequirementsToStageContent(content: string, fallbackTitle: string, language: Language): PlanStageContent {
   const lines = content.split(/\r?\n/)
   let title = fallbackTitle
   const items: PlanStageContentItem[] = []
@@ -106,10 +106,10 @@ export function legacyRequirementsToStageContent(content: string, fallbackTitle:
   }
   return {
     title,
-    summary: t('planStageContent.compatibilityViewMigratedFrom', asLanguage(language)),
+    summary: t('planStageContent.compatibilityViewMigratedFrom', language),
     sections: [{
       id: 'legacy-confirmed-scope',
-      title: t('common.confirmedScope', asLanguage(language)),
+      title: t('common.confirmedScope', language),
       kind: 'checklist',
       items,
     }],

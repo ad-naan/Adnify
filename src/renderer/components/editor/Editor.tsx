@@ -7,7 +7,7 @@ import type { editor } from 'monaco-editor'
 import { Eye, Edit, Columns } from 'lucide-react'
 import { useStore, useModeStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { useAgentChangeState } from '@hooks/useAgent'
 import { useLspIntegration, useFileSave, useLintCheck } from '@renderer/hooks'
 import { toast } from '../common/ToastProvider'
@@ -454,9 +454,9 @@ export default function Editor() {
         const model = editorRef.current.getModel()
         const versionId = model?.getAlternativeVersionId()
         markFileSaved(activeFile.path, versionId)
-        toast.success(t('common.fileSaved', asLanguage(language)), getFileName(activeFile.path))
+        toast.success(t('common.fileSaved', language), getFileName(activeFile.path))
       } else {
-        toast.error(t('common.saveFailed', asLanguage(language)), t('editor.couldNotWriteTo', asLanguage(language)))
+        toast.error(t('common.saveFailed', language), t('editor.couldNotWriteTo', language))
       }
     }
   }, [activeFile, isPlanBoardDocument, markFileSaved, language])
@@ -588,13 +588,13 @@ export default function Editor() {
           </Suspense>
         ) : activeFile?.contentState === 'error' ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-xs text-text-muted">
-            <span>{t('editor.couldNotReloadFile', asLanguage(language))}</span>
+            <span>{t('editor.couldNotReloadFile', language)}</span>
             <button
               type="button"
               className="rounded-md border border-border px-3 py-1.5 text-text-secondary hover:bg-surface"
               onClick={() => setFileContentState(activeFile.path, 'unloaded')}
             >
-              {t('preview.tab.retry', asLanguage(language))}
+              {t('preview.tab.retry', language)}
             </button>
           </div>
         ) : activeFile && activeFile.contentState !== 'loaded' ? (

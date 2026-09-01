@@ -1,3 +1,5 @@
+import { t, type Language } from '@shared/i18n'
+
 export type SubAgentStepState = 'pending' | 'active' | 'waiting' | 'complete' | 'error'
 
 export interface SubAgentExecutionStep {
@@ -8,7 +10,7 @@ export interface SubAgentExecutionStep {
 }
 
 export interface SubAgentExecutionInput {
-  language: string
+  language: Language
   hasThread: boolean
   isRunning: boolean
   isSuccess: boolean
@@ -20,31 +22,31 @@ export interface SubAgentExecutionInput {
 
 /** Maps real child-thread state to a small, stable execution story for the UI. */
 export function buildSubAgentExecutionSteps(input: SubAgentExecutionInput): SubAgentExecutionStep[] {
-  const zh = input.language === 'zh'
+  const language = input.language
   const workDetail = input.waitingApproval
-    ? (zh ? '等待你批准下一项操作' : 'Waiting for approval')
+    ? t('subAgentExecution.waitingForApproval', language)
     : input.currentToolName
-      ? `${zh ? '正在使用' : 'Using'} ${input.currentToolName}`
+      ? t('subAgentExecution.usingTool', language, { tool: input.currentToolName })
       : input.completedToolCount > 0
-        ? `${zh ? '已完成' : 'Completed'} ${input.completedToolCount} ${zh ? '次工具调用' : 'tool calls'}`
+        ? t('subAgentExecution.completedToolCalls', language, { count: input.completedToolCount })
         : input.isRunning
-          ? (zh ? '正在分析并执行任务' : 'Analyzing and executing')
+          ? t('subAgentExecution.analyzingAndExecuting', language)
           : input.isSuccess
-            ? (zh ? '执行已结束' : 'Execution finished')
-            : (zh ? '尚未开始' : 'Not started')
+            ? t('subAgentExecution.executionFinished', language)
+            : t('subAgentExecution.notStarted', language)
 
   return [
     {
       id: 'brief',
-      label: zh ? '接收任务' : 'Receive brief',
+      label: t('subAgentExecution.receiveBrief', language),
       detail: input.hasThread || input.isError
-        ? (zh ? '上下文已交给子代理' : 'Context handed to the sub-agent')
-        : (zh ? '正在创建子代理' : 'Starting sub-agent'),
+        ? t('subAgentExecution.contextHandedToSubAgent', language)
+        : t('subAgentExecution.startingSubAgent', language),
       state: input.hasThread || input.isError ? 'complete' : 'active',
     },
     {
       id: 'work',
-      label: zh ? '执行任务' : 'Execute task',
+      label: t('subAgentExecution.executeTask', language),
       detail: workDetail,
       state: input.isError
         ? 'error'
@@ -58,12 +60,12 @@ export function buildSubAgentExecutionSteps(input: SubAgentExecutionInput): SubA
     },
     {
       id: 'report',
-      label: zh ? '回传结果' : 'Report back',
+      label: t('subAgentExecution.reportBack', language),
       detail: input.isSuccess
-        ? (zh ? '结果已返回主任务' : 'Result returned to the parent task')
+        ? t('subAgentExecution.resultReturnedToParent', language)
         : input.isError
-          ? (zh ? '已返回失败信息' : 'Failure returned to the parent task')
-          : (zh ? '等待执行完成' : 'Waiting for execution'),
+          ? t('subAgentExecution.failureReturnedToParent', language)
+          : t('subAgentExecution.waitingForExecution', language),
       state: input.isSuccess ? 'complete' : input.isError ? 'error' : 'pending',
     },
   ]

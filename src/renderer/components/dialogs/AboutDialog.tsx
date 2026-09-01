@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Code2, ExternalLink, Github, Sparkles, X, Zap, BookOpen } from 'lucide-react'
 import { CONTRIBUTORS, getCoreContributor, getOrbitContributors } from '@shared/config/contributors'
+import { t, type Language } from '@shared/i18n'
 import { useStore } from '@store'
 import { logger } from '@utils/Logger'
 import { Modal } from '../ui'
@@ -36,7 +37,6 @@ interface RingAssignment<T> {
 export default function AboutDialog({ onClose }: AboutDialogProps) {
   const language = useStore(s => s.language)
   const setShowChangelog = useStore(s => s.setShowChangelog)
-  const isZh = language === 'zh'
   const [version, setVersion] = useState('1.0.0')
   const core = getCoreContributor()
   const contributorLabel = `${CONTRIBUTORS.length}+`
@@ -79,7 +79,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
           type="button"
           onClick={onClose}
           className="adnify-about-close"
-          aria-label={isZh ? '关闭' : 'Close'}
+          aria-label={t('aboutDialog.close', language)}
         >
           <X className="w-4 h-4" />
         </button>
@@ -98,27 +98,25 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                     setShowChangelog(true, version)
                   }}
                   className="adnify-about-version hover:ring-1 hover:ring-accent/50 cursor-pointer transition-all"
-                  title={isZh ? '查看此版本更新日志' : 'View changelog for this version'}
+                  title={t('aboutDialog.viewChangelogForThis', language)}
                 >
                   v{version}
                 </button>
-                <p className="adnify-about-eyebrow">{isZh ? 'AI 原生编辑器' : 'AI-native editor'}</p>
+                <p className="adnify-about-eyebrow">{t('aboutDialog.aiNativeEditor', language)}</p>
               </div>
             </div>
 
             <div>
               <h1 className="adnify-about-title">Adnify</h1>
               <p className="adnify-about-subtitle">
-                {isZh
-                  ? '为下一代开发者打造的工程化 AI 编程工作台。'
-                  : 'An engineering-grade AI coding workspace for the next generation of developers.'}
+                {t('aboutDialog.anEngineeringGradeAi', language)}
               </p>
             </div>
 
-            <div className="adnify-about-chips" aria-label={isZh ? '产品能力' : 'Product capabilities'}>
-              <FeatureChip icon={Sparkles} label={isZh ? '智能补全' : 'Intelligent'} />
-              <FeatureChip icon={Code2} label={isZh ? '深度理解' : 'Deep Context'} />
-              <FeatureChip icon={Zap} label={isZh ? '极速响应' : 'Fast Loop'} />
+            <div className="adnify-about-chips" aria-label={t('aboutDialog.productCapabilities', language)}>
+              <FeatureChip icon={Sparkles} label={t('aboutDialog.intelligent', language)} />
+              <FeatureChip icon={Code2} label={t('aboutDialog.deepContext', language)} />
+              <FeatureChip icon={Zap} label={t('aboutDialog.fastLoop', language)} />
             </div>
 
             <div className="adnify-about-actions">
@@ -131,7 +129,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
                 className="adnify-about-link !bg-accent/15 !border-accent/30 !text-accent hover:!bg-accent/25 transition-all"
               >
                 <BookOpen className="w-4 h-4" />
-                <span>{isZh ? '更新日志' : 'Release Notes'}</span>
+                <span>{t('aboutDialog.releaseNotes', language)}</span>
               </button>
               <SocialButton href="https://github.com/ad-naan/adnify" icon={Github} label="GitHub" />
               <SocialButton href="https://gitee.com/adnaan/adnify" icon={ExternalLink} label="Gitee" />
@@ -139,16 +137,14 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
           </div>
 
           <div className="adnify-about-community">
-            <ContributorGalaxy isZh={isZh} />
+            <ContributorGalaxy language={language} />
             <div className="adnify-about-community-copy">
               <p className="adnify-about-eyebrow adnify-about-eyebrow-success">
-                {isZh ? '社区共建' : 'Community built'}
+                {t('aboutDialog.communityBuilt', language)}
               </p>
-              <h2>{isZh ? '感谢每一位贡献者' : 'Shaped by contributors'}</h2>
+              <h2>{t('aboutDialog.shapedByContributors', language)}</h2>
               <p>
-                {isZh
-                  ? `感谢 ${contributorLabel} 位贡献者，让 Adnify 持续进化。`
-                  : `Made possible by ${contributorLabel} contributors who keep Adnify moving.`}
+                {t('aboutDialog.madePossibleByContributors', language, { count: contributorLabel })}
               </p>
             </div>
           </div>
@@ -159,7 +155,7 @@ export default function AboutDialog({ onClose }: AboutDialogProps) {
             <img src={core.avatar} alt={core.name} draggable={false} />
             <span>
               <strong>{core.name}</strong>
-              <small>{isZh ? '创建者与维护者' : 'Creator & Maintainer'}</small>
+              <small>{t('aboutDialog.creatorMaintainer', language)}</small>
             </span>
           </a>
           <p>Copyright © 2025-present adnaan. All rights reserved.</p>
@@ -187,7 +183,7 @@ function SocialButton({ href, icon: Icon, label }: { href: string; icon: React.E
   )
 }
 
-function ContributorGalaxy({ isZh }: { isZh: boolean }) {
+function ContributorGalaxy({ language }: { language: Language }) {
   const orbit = getOrbitContributors()
   const core = getCoreContributor()
   const layout = useMemo(() => computeGalaxyLayout(orbit.length), [orbit.length])
@@ -196,7 +192,7 @@ function ContributorGalaxy({ isZh }: { isZh: boolean }) {
   const overflow = orbit.length - visible.length
 
   return (
-    <div className="adnify-about-galaxy" role="img" aria-label={isZh ? '贡献者星系' : 'Contributor galaxy'}>
+    <div className="adnify-about-galaxy" role="img" aria-label={t('aboutDialog.contributorGalaxy', language)}>
       <div className="adnify-about-galaxy-stars" aria-hidden="true" />
       <svg className="adnify-about-galaxy-svg" viewBox="-150 -150 300 300" aria-hidden="true">
         <defs>

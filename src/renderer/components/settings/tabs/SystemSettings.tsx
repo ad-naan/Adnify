@@ -9,7 +9,7 @@ import { HardDrive, AlertTriangle, Download, Upload, FileText, ExternalLink, Glo
 import { toast } from '@components/common/ToastProvider'
 import { globalConfirm } from '@components/common/ConfirmDialog'
 import { Button, Switch } from '@components/ui'
-import { Language, t, asLanguage } from '@renderer/i18n'
+import { Language, t } from '@shared/i18n'
 import { useStore } from '@store'
 import { downloadSettings, importSettings, settingsService } from '@renderer/settings'
 import { importUserPreferences, resetUserPreferences } from '@/renderer/services/preferenceService'
@@ -123,10 +123,10 @@ export function SystemSettings({
     const handleExport = async () => {
         try {
             await downloadSettings(getCurrentSettings(), includeApiKeys)
-            toast.success(t('systemSettings.settingsExported', asLanguage(language)))
+            toast.success(t('systemSettings.settingsExported', language))
         } catch (error) {
             logger.settings.error('Failed to export settings:', error)
-            toast.error(t('systemSettings.exportFailed', asLanguage(language)))
+            toast.error(t('systemSettings.exportFailed', language))
         }
     }
 
@@ -143,7 +143,7 @@ export function SystemSettings({
             const result = importSettings(text)
 
             if (!result.success || !result.settings) {
-                toast.error(result.error || (t('common.importFailed', asLanguage(language))))
+                toast.error(result.error || (t('common.importFailed', language)))
                 return
             }
 
@@ -191,10 +191,10 @@ export function SystemSettings({
             // 保存设置到持久化存储
             await getStore().save()
 
-            toast.success(t('systemSettings.settingsImported', asLanguage(language)))
+            toast.success(t('systemSettings.settingsImported', language))
         } catch (error) {
             logger.settings.error('Failed to import settings:', error)
-            toast.error(t('common.importFailed', asLanguage(language)))
+            toast.error(t('common.importFailed', language))
         }
 
         // 清空 input
@@ -216,10 +216,10 @@ export function SystemSettings({
             Agent.clearSession()
             memoryService.clearCache()
 
-            toast.success(t('systemSettings.cacheCleared', asLanguage(language)))
+            toast.success(t('systemSettings.cacheCleared', language))
         } catch (error) {
             logger.settings.error('Failed to clear cache:', error)
-            toast.error(t('systemSettings.failedToClearCache', asLanguage(language)))
+            toast.error(t('systemSettings.failedToClearCache', language))
         } finally {
             setIsClearing(false)
         }
@@ -229,10 +229,10 @@ export function SystemSettings({
         setIsClearing(true)
         try {
             await api.settings.deepCleanCache()
-            toast.success(t('systemSettings.deepCacheCleared', asLanguage(language)))
+            toast.success(t('systemSettings.deepCacheCleared', language))
         } catch (error) {
             logger.settings.error('Failed to deep clear cache:', error)
-            toast.error(t('systemSettings.deepClearFailed', asLanguage(language)))
+            toast.error(t('systemSettings.deepClearFailed', language))
         } finally {
             setIsClearing(false)
         }
@@ -240,8 +240,8 @@ export function SystemSettings({
 
     const handleReset = async () => {
         const confirmed = await globalConfirm({
-            title: t('systemSettings.resetSettings', asLanguage(language)),
-            message: t('systemSettings.areYouSureYou', asLanguage(language)),
+            title: t('systemSettings.resetSettings', language),
+            message: t('systemSettings.areYouSureYou', language),
             variant: 'danger',
         })
         if (confirmed) {
@@ -260,7 +260,7 @@ export function SystemSettings({
     const handleOpenLogFile = async () => {
         if (!logPath) return
         const shown = await api.file.showInFolder(logPath)
-        if (!shown) toast.error(t('systemSettings.couldNotLocateThe', asLanguage(language)))
+        if (!shown) toast.error(t('systemSettings.couldNotLocateThe', language))
     }
 
     const handleExportLogs = async () => {
@@ -274,13 +274,13 @@ export function SystemSettings({
                 a.download = `adnify-logs-${new Date().toISOString().slice(0, 10)}.log`
                 a.click()
                 URL.revokeObjectURL(url)
-                toast.success(t('systemSettings.logsExported', asLanguage(language)))
+                toast.success(t('systemSettings.logsExported', language))
             } else {
-                toast.error(t('systemSettings.noLogsToExport', asLanguage(language)))
+                toast.error(t('systemSettings.noLogsToExport', language))
             }
         } catch (err) {
             logger.settings.error('Failed to export logs:', err)
-            toast.error(t('systemSettings.failedToExportLogs', asLanguage(language)))
+            toast.error(t('systemSettings.failedToExportLogs', language))
         }
     }
 
@@ -290,7 +290,7 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <ExternalLink className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {t('systemSettings.githubIntegration', asLanguage(language))}
+                        {t('systemSettings.githubIntegration', language)}
                     </h4>
                 </div>
                 <div className="space-y-4">
@@ -300,7 +300,7 @@ export function SystemSettings({
                                 {language === 'zh' ? 'GitHub Token' : 'GitHub Token'}
                             </div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">
-                                {t('systemSettings.usedForGithubReleases', asLanguage(language))}
+                                {t('systemSettings.usedForGithubReleases', language)}
                             </div>
                         </div>
 
@@ -308,7 +308,7 @@ export function SystemSettings({
                             type="password"
                             value={githubToken}
                             onChange={(e) => setGithubToken(e.target.value)}
-                            placeholder={t('systemSettings.enterGithubPersonalAccess', asLanguage(language))}
+                            placeholder={t('systemSettings.enterGithubPersonalAccess', language)}
                             className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                             autoComplete="off"
                             spellCheck={false}
@@ -317,7 +317,7 @@ export function SystemSettings({
                         <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
                             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                             <div>
-                                {t('systemSettings.theTokenIsStored', asLanguage(language))}
+                                {t('systemSettings.theTokenIsStored', language)}
                             </div>
                         </div>
                     </div>
@@ -328,7 +328,7 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <Globe className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {t('systemSettings.networkProxy', asLanguage(language))}
+                        {t('systemSettings.networkProxy', language)}
                     </h4>
                 </div>
                 <div className="space-y-4">
@@ -336,10 +336,10 @@ export function SystemSettings({
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">
-                                    {t('systemSettings.enableProxy', asLanguage(language))}
+                                    {t('systemSettings.enableProxy', language)}
                                 </div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {t('systemSettings.enableGlobalNetworkProxy', asLanguage(language))}
+                                    {t('systemSettings.enableGlobalNetworkProxy', language)}
                                 </div>
                             </div>
                             <Switch
@@ -352,37 +352,37 @@ export function SystemSettings({
                             <div className="space-y-5 border-t border-border/40 pt-5 animate-fade-in">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-text-secondary">
-                                        {t('systemSettings.proxyServerRules', asLanguage(language))}
+                                        {t('systemSettings.proxyServerRules', language)}
                                     </label>
                                     <input
                                         type="text"
                                         value={proxySettings.rules}
                                         onChange={(e) => handleProxyRulesChange(e.target.value)}
-                                        placeholder={t('systemSettings.eGHttp127', asLanguage(language))}
+                                        placeholder={t('systemSettings.eGHttp127', language)}
                                         className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                                         autoComplete="off"
                                         spellCheck={false}
                                     />
                                     <div className="text-[10px] text-text-muted opacity-75">
-                                        {t('systemSettings.specifyProxyServerUrl', asLanguage(language))}
+                                        {t('systemSettings.specifyProxyServerUrl', language)}
                                     </div>
                                 </div>
 
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-text-secondary">
-                                        {t('systemSettings.bypassProxyRules', asLanguage(language))}
+                                        {t('systemSettings.bypassProxyRules', language)}
                                     </label>
                                     <input
                                         type="text"
                                         value={proxySettings.bypassRules}
                                         onChange={(e) => handleProxyBypassChange(e.target.value)}
-                                        placeholder={t('systemSettings.eGLocalhost127', asLanguage(language))}
+                                        placeholder={t('systemSettings.eGLocalhost127', language)}
                                         className="w-full rounded-xl border border-border bg-background/50 px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                                         autoComplete="off"
                                         spellCheck={false}
                                     />
                                     <div className="text-[10px] text-text-muted opacity-75">
-                                        {t('systemSettings.commaSeparatedListOf', asLanguage(language))}
+                                        {t('systemSettings.commaSeparatedListOf', language)}
                                     </div>
                                 </div>
                             </div>
@@ -395,16 +395,16 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <HardDrive className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {t('systemSettings.storageCache', asLanguage(language))}
+                        {t('systemSettings.storageCache', language)}
                     </h4>
                 </div>
                 <div className="space-y-4">
                     <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="text-sm font-bold text-text-primary">{t('systemSettings.configStoragePath', asLanguage(language))}</div>
+                                <div className="text-sm font-bold text-text-primary">{t('systemSettings.configStoragePath', language)}</div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {t('systemSettings.storageLocationForAll', asLanguage(language))}
+                                    {t('systemSettings.storageLocationForAll', language)}
                                 </div>
                             </div>
                             <Button variant="secondary" size="sm" className="rounded-xl px-4" onClick={async () => {
@@ -412,16 +412,16 @@ export function SystemSettings({
                                 if (newPath) {
                                     const result = await api.settings.setConfigPathDetailed(newPath)
                                     if (result.success) {
-                                        toast.success(t('systemSettings.pathUpdatedRestartRequired', asLanguage(language)))
+                                        toast.success(t('systemSettings.pathUpdatedRestartRequired', language))
                                     } else {
                                         toast.error(
-                                            t('systemSettings.failedToUpdatePath', asLanguage(language)),
+                                            t('systemSettings.failedToUpdatePath', language),
                                             result.error.message,
                                         )
                                     }
                                 }
                             }}>
-                                {t('systemSettings.changePath', asLanguage(language))}
+                                {t('systemSettings.changePath', language)}
                             </Button>
                         </div>
 
@@ -436,32 +436,32 @@ export function SystemSettings({
 
                         <div className="flex items-center gap-2 text-[10px] font-medium text-yellow-500 bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20">
                             <AlertTriangle className="w-3.5 h-3.5" />
-                            {t('systemSettings.restartApplicationManuallyAfter', asLanguage(language))}
+                            {t('systemSettings.restartApplicationManuallyAfter', language)}
                         </div>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
-                            <div className="text-sm font-bold text-text-primary">{t('systemSettings.clearCache', asLanguage(language))}</div>
-                            <div className="text-xs text-text-muted mt-1 opacity-70">{t('systemSettings.clearAppCachesIndex', asLanguage(language))}</div>
+                            <div className="text-sm font-bold text-text-primary">{t('systemSettings.clearCache', language)}</div>
+                            <div className="text-xs text-text-muted mt-1 opacity-70">{t('systemSettings.clearAppCachesIndex', language)}</div>
                         </div>
                         <div className="flex gap-2">
                             <Button variant="secondary" size="sm" onClick={handleClearCache} disabled={isClearing} className="rounded-xl px-6">
-                                {isClearing ? (t('systemSettings.clearing', asLanguage(language))) : (t('common.clear', asLanguage(language)))}
+                                {isClearing ? (t('systemSettings.clearing', language)) : (t('common.clear', language))}
                             </Button>
                             <Button variant="danger" size="sm" onClick={handleDeepClearCache} disabled={isClearing} className="rounded-xl px-6">
-                                {t('systemSettings.deepClean', asLanguage(language))}
+                                {t('systemSettings.deepClean', language)}
                             </Button>
                         </div>
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/[0.07] p-5">
                         <div>
-                            <div className="text-sm font-bold text-red-400">{t('systemSettings.resetAllSettings', asLanguage(language))}</div>
-                            <div className="text-xs text-red-400/70 mt-1">{t('systemSettings.restoreFactorySettingsIrreversible', asLanguage(language))}</div>
+                            <div className="text-sm font-bold text-red-400">{t('systemSettings.resetAllSettings', language)}</div>
+                            <div className="text-xs text-red-400/70 mt-1">{t('systemSettings.restoreFactorySettingsIrreversible', language)}</div>
                         </div>
                         <Button variant="danger" size="sm" onClick={handleReset} className="rounded-xl px-6">
-                            {t('common.reset2', asLanguage(language))}
+                            {t('common.reset2', language)}
                         </Button>
                     </div>
                 </div>
@@ -472,7 +472,7 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <FileText className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {t('systemSettings.logManagement', asLanguage(language))}
+                        {t('systemSettings.logManagement', language)}
                     </h4>
                 </div>
                 <div className="space-y-4">
@@ -480,10 +480,10 @@ export function SystemSettings({
                         <div className="flex items-center justify-between">
                             <div>
                                 <div className="text-sm font-bold text-text-primary">
-                                    {t('systemSettings.enableFileLogging', asLanguage(language))}
+                                    {t('systemSettings.enableFileLogging', language)}
                                 </div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {t('systemSettings.saveApplicationLogsTo', asLanguage(language))}
+                                    {t('systemSettings.saveApplicationLogsTo', language)}
                                 </div>
                             </div>
                             <Switch
@@ -496,7 +496,7 @@ export function SystemSettings({
                             <>
                                 <div>
                                     <div className="text-sm font-bold text-text-primary mb-3">
-                                        {t('systemSettings.logFileLocation', asLanguage(language))}
+                                        {t('systemSettings.logFileLocation', language)}
                                     </div>
                                     {logPath && (
                                         <div className="flex items-center gap-3 p-4 bg-background/50 rounded-xl border border-border shadow-inner">
@@ -519,7 +519,7 @@ export function SystemSettings({
                                         className="rounded-xl px-4 flex-1"
                                     >
                                         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                                        {t('revealInExplorer', asLanguage(language))}
+                                        {t('revealInExplorer', language)}
                                     </Button>
                                     <Button
                                         variant="secondary"
@@ -528,14 +528,14 @@ export function SystemSettings({
                                         className="rounded-xl px-4 flex-1"
                                     >
                                         <Download className="w-3.5 h-3.5 mr-1.5" />
-                                        {t('systemSettings.exportLogs', asLanguage(language))}
+                                        {t('systemSettings.exportLogs', language)}
                                     </Button>
                                 </div>
 
                                 <div className="flex items-start gap-2 text-[10px] font-medium text-blue-500 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-500/20">
                                     <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                     <div>
-                                        {t('systemSettings.logFilesRotateAutomatically', asLanguage(language))}
+                                        {t('systemSettings.logFilesRotateAutomatically', language)}
                                     </div>
                                 </div>
                             </>
@@ -545,7 +545,7 @@ export function SystemSettings({
                             <div className="flex items-start gap-2 text-[10px] font-medium text-text-muted bg-white/5 px-3 py-2 rounded-lg border border-border">
                                 <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                                 <div>
-                                    {t('systemSettings.fileLoggingIsDisabled', asLanguage(language))}
+                                    {t('systemSettings.fileLoggingIsDisabled', language)}
                                 </div>
                             </div>
                         )}
@@ -558,27 +558,27 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <Download className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {t('systemSettings.settingsBackup', asLanguage(language))}
+                        {t('systemSettings.settingsBackup', language)}
                     </h4>
                 </div>
                 <div className="space-y-4">
                     <div className="rounded-xl border border-border/70 bg-surface/25 p-5 space-y-5">
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="text-sm font-bold text-text-primary">{t('systemSettings.exportSettings', asLanguage(language))}</div>
+                                <div className="text-sm font-bold text-text-primary">{t('systemSettings.exportSettings', language)}</div>
                                 <div className="text-xs text-text-muted mt-1 opacity-70">
-                                    {t('systemSettings.exportCurrentSettingsTo', asLanguage(language))}
+                                    {t('systemSettings.exportCurrentSettingsTo', language)}
                                 </div>
                             </div>
                             <Button variant="secondary" size="sm" onClick={handleExport} className="rounded-xl px-4">
                                 <Download className="w-3.5 h-3.5 mr-1.5" />
-                                {t('exportSession', asLanguage(language))}
+                                {t('exportSession', language)}
                             </Button>
                         </div>
 
                         <div className="flex items-center justify-between py-2">
                             <div className="text-xs text-text-muted">
-                                {t('systemSettings.includeApiKeysNot', asLanguage(language))}
+                                {t('systemSettings.includeApiKeysNot', language)}
                             </div>
                             <Switch
                                 checked={includeApiKeys}
@@ -589,21 +589,21 @@ export function SystemSettings({
                         {includeApiKeys && (
                             <div className="flex items-center gap-2 text-[10px] font-medium text-yellow-500 bg-yellow-500/10 px-3 py-2 rounded-lg border border-yellow-500/20">
                                 <AlertTriangle className="w-3.5 h-3.5" />
-                                {t('systemSettings.exportedFileWillContain', asLanguage(language))}
+                                {t('systemSettings.exportedFileWillContain', language)}
                             </div>
                         )}
                     </div>
 
                     <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                         <div>
-                            <div className="text-sm font-bold text-text-primary">{t('systemSettings.importSettings', asLanguage(language))}</div>
+                            <div className="text-sm font-bold text-text-primary">{t('systemSettings.importSettings', language)}</div>
                             <div className="text-xs text-text-muted mt-1 opacity-70">
-                                {t('systemSettings.importSettingsFromJson', asLanguage(language))}
+                                {t('systemSettings.importSettingsFromJson', language)}
                             </div>
                         </div>
                         <Button variant="secondary" size="sm" onClick={handleImport} className="rounded-xl px-4">
                             <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            {t('common.import2', asLanguage(language))}
+                            {t('common.import2', language)}
                         </Button>
                         <input
                             ref={fileInputRef}
@@ -621,16 +621,16 @@ export function SystemSettings({
                 <div className="flex items-center gap-2 mb-3 ml-1">
                     <BookOpen className="w-4 h-4 text-accent" />
                     <h4 className="text-[11px] font-semibold text-text-muted uppercase tracking-[0.14em]">
-                        {t('systemSettings.versionHistory', asLanguage(language))}
+                        {t('systemSettings.versionHistory', language)}
                     </h4>
                 </div>
                 <div className="flex items-center justify-between rounded-xl border border-border/70 bg-surface/25 p-5">
                     <div>
                         <div className="text-sm font-bold text-text-primary">
-                            {t('systemSettings.releaseNotesChangelog', asLanguage(language))}
+                            {t('systemSettings.releaseNotesChangelog', language)}
                         </div>
                         <div className="text-xs text-text-muted mt-1 opacity-70">
-                            {t('systemSettings.exploreCompleteReleaseHistory', asLanguage(language))}
+                            {t('systemSettings.exploreCompleteReleaseHistory', language)}
                         </div>
                     </div>
                     <Button
@@ -640,7 +640,7 @@ export function SystemSettings({
                         className="rounded-xl px-4 !bg-accent/15 !border-accent/30 !text-accent hover:!bg-accent/25"
                     >
                         <BookOpen className="w-3.5 h-3.5 mr-1.5" />
-                        {t('common.viewChangelog', asLanguage(language))}
+                        {t('common.viewChangelog', language)}
                     </Button>
                 </div>
             </section>

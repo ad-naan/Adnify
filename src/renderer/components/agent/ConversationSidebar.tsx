@@ -25,7 +25,7 @@ import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 import { useModeStore } from '@/renderer/modes/modeStore'
 import { projectThreadsForMode } from '@/renderer/agent/threads/threadModeProjection'
 import { PLAN_BOARD_PATH, isPlanBoardPath } from '@/shared/types/planBoard'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 type Tab = 'history' | 'branches'
 
@@ -72,8 +72,8 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/30 select-none">
               <h2 className="text-base font-semibold text-text-primary tracking-tight">
                 {currentMode === 'plan'
-                  ? (t('conversationSidebar.planHistory', asLanguage(language)))
-                  : (t('common.agentTasks', asLanguage(language)))}
+                  ? (t('conversationSidebar.planHistory', language))
+                  : (t('common.agentTasks', language))}
               </h2>
               <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8 rounded-full hover:bg-surface/80 text-text-muted hover:text-text-primary transition-colors">
                 <X className="w-4 h-4" />
@@ -97,7 +97,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                     />
                   )}
                   <History className="w-3.5 h-3.5" />
-                  {t('checkpoint.title', asLanguage(language))}
+                  {t('checkpoint.title', language)}
                 </button>
                 <button
                   onClick={() => setActiveTab('branches')}
@@ -114,7 +114,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                     />
                   )}
                   <GitBranch className="w-3.5 h-3.5" />
-                  {t('git.branches', asLanguage(language))}
+                  {t('git.branches', language)}
                 </button>
               </div>
             </div>}
@@ -124,7 +124,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted/70 group-focus-within:text-accent transition-colors" />
                 <input
                   type="text"
-                  placeholder={t('conversationSidebar.search', asLanguage(language))}
+                  placeholder={t('conversationSidebar.search', language)}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-8 text-xs bg-surface/30 border border-border/30 rounded-lg focus:outline-none focus:border-accent/30 focus:bg-surface/50 transition-all placeholder:text-text-muted/40"
@@ -169,8 +169,8 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
                 >
                   <Plus className="w-4 h-4" />
                   {currentMode === 'plan'
-                    ? (t('conversationSidebar.newPlanTask', asLanguage(language)))
-                    : (t('common.newAgentTask', asLanguage(language)))}
+                    ? (t('conversationSidebar.newPlanTask', language))
+                    : (t('common.newAgentTask', language))}
                 </Button>
               </div>
             )}
@@ -181,7 +181,7 @@ export default function ConversationSidebar({ isOpen, onClose, initialTab = 'his
   )
 }
 
-function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: string, onClose: () => void, language: string, mode: 'agent' | 'plan' }) {
+function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: string, onClose: () => void, language: Language, mode: 'agent' | 'plan' }) {
   const currentThreadId = useAgentStore(state => state.currentThreadId)
   const { switchThread, deleteThread, renameThread } = useAgentActions()
   const allThreads = useAllThreads()
@@ -212,7 +212,7 @@ function HistoryList({ searchQuery, onClose, language, mode }: { searchQuery: st
   }, [allThreads, mode, searchQuery])
 
   if (filteredThreads.length === 0) {
-    return <EmptyState asset="sitThreeQuarter" text={t('conversationSidebar.noHistoryFound', asLanguage(language))} />
+    return <EmptyState asset="sitThreeQuarter" text={t('conversationSidebar.noHistoryFound', language)} />
   }
 
   return (
@@ -245,7 +245,7 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
   isActive: boolean
   isEditing: boolean
   editName: string
-  language: string
+  language: Language
   onSelect: () => void
   onDelete: () => void
   onStartEdit: () => void
@@ -304,7 +304,7 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
         ) : (
           <div className="flex items-center justify-between gap-2">
             <h4 className={`text-sm font-medium truncate pr-6 ${isActive ? 'text-accent' : 'text-text-primary'}`}>
-              {preview || 'New Chat'}
+              {preview || t('conversationSidebar.untitledThread', language)}
             </h4>
           </div>
         )}
@@ -314,14 +314,14 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
             {timeStr}
           </span>
           <span className="text-[10px] text-text-muted/50">
-            {(thread.messageCount ?? thread.messages.length)} msgs
+            {t('messagesCount', language, { count: thread.messageCount ?? thread.messages.length })}
           </span>
         </div>
       </div>
 
       {!isEditing && (
         <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/50 backdrop-blur-sm rounded-lg">
-          <Tooltip content="Rename">
+          <Tooltip content={t('rename', language)}>
             <button
               onClick={e => {
                 e.stopPropagation()
@@ -332,7 +332,7 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
               <Edit2 className="w-3.5 h-3.5" />
             </button>
           </Tooltip>
-          <Tooltip content="Delete">
+          <Tooltip content={t('delete', language)}>
             <button
               onClick={e => {
                 e.stopPropagation()
@@ -349,7 +349,7 @@ function ThreadItem({ thread, isActive, isEditing, editName, language, onSelect,
   )
 }
 
-function BranchList({ searchQuery, onClose, language }: { searchQuery: string, onClose: () => void, language: string }) {
+function BranchList({ searchQuery, onClose, language }: { searchQuery: string, onClose: () => void, language: Language }) {
   const branches = useAgentStore(selectBranches)
   const activeBranch = useAgentStore(selectActiveBranch)
   const isOnBranch = useAgentStore(selectIsOnBranch)
@@ -403,12 +403,12 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
             <div className="flex items-center justify-between">
               <span className={`text-sm font-semibold tracking-tight ${!isOnBranch ? 'text-accent' : 'text-text-primary'
                 }`}>
-                {t('conversationSidebar.mainThread', asLanguage(language))}
+                {t('conversationSidebar.mainThread', language)}
               </span>
               {!isOnBranch && <Check className="w-3.5 h-3.5 text-accent" />}
             </div>
             <p className="text-[11px] text-text-muted/80 mt-0.5 truncate">
-              {t('conversationSidebar.originalConversationFlow', asLanguage(language))}
+              {t('conversationSidebar.originalConversationFlow', language)}
             </p>
           </div>
         </div>
@@ -418,7 +418,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
         {filteredBranches.length > 0 && (
           <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 opacity-70 flex items-center gap-2">
             <GitBranch className="w-3 h-3" />
-            {t('conversationSidebar.yourBranches', asLanguage(language))} ({filteredBranches.length})
+            {t('conversationSidebar.yourBranches', language)} ({filteredBranches.length})
           </p>
         )}
 
@@ -480,7 +480,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                           {getRelativeTime(branch.createdAt, language)}
                         </span>
                         <span>•</span>
-                        <span>{branch.messages.length} msgs</span>
+                        <span>{t('messagesCount', language, { count: branch.messages.length })}</span>
                       </div>
                     </>
                   )}
@@ -489,7 +489,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2 bg-background/50 backdrop-blur-sm rounded-lg">
                   {editingId !== branch.id && (
                     <>
-                      <Tooltip content="Rename">
+                      <Tooltip content={t('rename', language)}>
                         <button
                           onClick={e => {
                             e.stopPropagation()
@@ -500,7 +500,7 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                       </Tooltip>
-                      <Tooltip content="Delete">
+                      <Tooltip content={t('delete', language)}>
                         <button
                           onClick={e => {
                             e.stopPropagation()
@@ -522,8 +522,8 @@ function BranchList({ searchQuery, onClose, language }: { searchQuery: string, o
         {filteredBranches.length === 0 && (
           <EmptyState
             asset="waveStand"
-            text={t('conversationSidebar.noBranchesFound', asLanguage(language))}
-            subText={t('conversationSidebar.clickRegenerateOnMessages', asLanguage(language))}
+            text={t('conversationSidebar.noBranchesFound', language)}
+            subText={t('conversationSidebar.clickRegenerateOnMessages', language)}
           />
         )}
       </div>

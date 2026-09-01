@@ -8,7 +8,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Globe } from 'lucide-react'
 import { useStore } from '@store'
 import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
-import { t, type Language } from '@/renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import BottomBarPopover from '../ui/BottomBarPopover'
 
 const LocalServersContent = lazy(() => import('../panels/LocalServersContent'))
@@ -53,7 +53,6 @@ export default function LocalServersIndicator({ language }: { language: Language
       title={t('preview.servers.title', language)}
       width={320}
       height={340}
-      language={language as 'en' | 'zh'}
     >
       <Suspense fallback={<div className="p-4 text-[11px] text-text-muted">{t('preview.servers.scanning', language)}</div>}>
         <LocalServersContent language={language} />

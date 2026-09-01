@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { WorkPosterData } from './types'
 import { WORK_POSTER_CANVAS_ID, WORK_POSTER_HEIGHT, WORK_POSTER_WIDTH } from './workPosterAssets'
 import { renderWorkPoster } from './workPosterRenderer'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, asLanguage } from '@shared/i18n'
 
 export function WorkPosterCanvas({
   poster,

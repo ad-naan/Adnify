@@ -6,7 +6,7 @@ import {
   WORK_POSTER_SPRITES,
   WORK_POSTER_WIDTH,
 } from './workPosterAssets'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, asLanguage } from '@shared/i18n'
 
 type Rect = { x: number; y: number; w: number; h: number }
 type SpriteId = keyof typeof WORK_POSTER_SPRITES

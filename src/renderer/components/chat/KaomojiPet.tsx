@@ -1,30 +1,30 @@
 import { motion } from 'framer-motion'
 import { OtterAsset } from '@/renderer/components/brand/OtterAsset'
-import { t, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 
 interface KaomojiPetProps {
-  language?: string
+  language: Language
   isStreaming?: boolean
   hasInput?: boolean
 }
 
-export function KaomojiPet({ language = 'en', isStreaming = false, hasInput = false }: KaomojiPetProps) {
+export function KaomojiPet({ language, isStreaming = false, hasInput = false }: KaomojiPetProps) {
   const label = isStreaming
-    ? (t('kaomojiPet.responding', asLanguage(language)))
+    ? (t('kaomojiPet.responding', language))
     : hasInput
-      ? (t('kaomojiPet.ready', asLanguage(language)))
-      : (t('kaomojiPet.standing', asLanguage(language)))
+      ? (t('kaomojiPet.ready', language))
+      : (t('kaomojiPet.standing', language))
 
   const detail = isStreaming
-    ? (t('kaomojiPet.queueIsAvailable', asLanguage(language)))
+    ? (t('kaomojiPet.queueIsAvailable', language))
     : hasInput
-      ? (t('kaomojiPet.enterToSend', asLanguage(language)))
-      : (t('kaomojiPet.typeOrAttachAn', asLanguage(language)))
+      ? (t('kaomojiPet.enterToSend', language))
+      : (t('kaomojiPet.typeOrAttachAn', language))
 
   return (
     <div
       className="group flex min-w-0 items-center gap-2.5 select-none"
-      title={t('kaomojiPet.adnifyCompanionStatus', asLanguage(language))}
+      title={t('kaomojiPet.adnifyCompanionStatus', language)}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.92 }}

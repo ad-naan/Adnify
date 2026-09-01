@@ -4,6 +4,7 @@ import { Check, RefreshCw } from 'lucide-react'
 import { useStore } from '@store'
 import { useShallow } from 'zustand/react/shallow'
 import { Button, Modal } from '@components/ui'
+import { t } from '@shared/i18n'
 
 export default function UserAvatarDialog() {
   const {
@@ -27,8 +28,6 @@ export default function UserAvatarDialog() {
       language: s.language,
     }))
   )
-
-  const isZh = language === 'zh'
 
   const [style, setStyle] = useState(userAvatarStyle)
   const [seed, setSeed] = useState(userAvatarSeed)
@@ -63,25 +62,25 @@ export default function UserAvatarDialog() {
   const avatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${encodeURIComponent(seed)}`
 
   // 国际化翻译资源
-  const tTitle = isZh ? '个性化名片定制' : 'Personalize Profile'
-  const tAvatarSeed = isZh ? '头像特征特征值 (Seed)' : 'Avatar Feature Seed'
-  const tDisplayName = isZh ? '我的昵称 (Name)' : 'Display Name'
-  const tPlaceholderName = isZh ? '起一个帅气的名字吧...' : 'Enter your name...'
-  const tPlaceholderSeed = isZh ? '输入自定义种子...' : 'Enter seed...'
-  const tTip = isZh ? '提示：键盘输入的每一个字母都会生成完全不同的面部细节哦！' : 'Tip: Every character you type shapes entirely unique facial details!'
-  const tSelectStyle = isZh ? '选择头像风格样式 (Style)' : 'Select Avatar Style'
-  const tCancel = isZh ? '取消' : 'Cancel'
-  const tSave = isZh ? '应用我的新配置' : 'Apply Settings'
+  const tTitle = t('userAvatarDialog.personalizeProfile', language)
+  const tAvatarSeed = t('userAvatarDialog.avatarFeatureSeed', language)
+  const tDisplayName = t('userAvatarDialog.displayName', language)
+  const tPlaceholderName = t('userAvatarDialog.enterYourName', language)
+  const tPlaceholderSeed = t('userAvatarDialog.enterSeed', language)
+  const tTip = t('userAvatarDialog.tipEveryCharacterYouType', language)
+  const tSelectStyle = t('userAvatarDialog.selectAvatarStyle', language)
+  const tCancel = t('userAvatarDialog.cancel', language)
+  const tSave = t('userAvatarDialog.applySettings', language)
 
   const avatarStyles = [
-    { id: 'fun-emoji', name: isZh ? '趣味表情' : 'Fun Emoji', desc: isZh ? '充满生命力的萌趣表情系列' : 'Vibrant and cheerful emoji faces' },
-    { id: 'thumbs', name: isZh ? '幻彩极光' : 'Aurora Gradient', desc: isZh ? '前卫高端的极光微渐变图形' : 'High-end abstract minimalist gradients' },
-    { id: 'big-smile', name: isZh ? '治愈大笑' : 'Big Smile', desc: isZh ? '温馨亮丽的灿烂大笑人像' : 'Warm, bright and cheerful smiling faces' },
-    { id: 'bottts-neutral', name: isZh ? '极简机器人' : 'Minimal Tech', desc: isZh ? '高级洗练的科技感半身机器' : 'Clean tech-inspired cybernetic avatars' },
-    { id: 'shapes', name: isZh ? '流光几何' : 'Abstract Shapes', desc: isZh ? '抽象前卫的艺术几何拼接' : 'Artistic multi-color geometric shapes' },
-    { id: 'croodles', name: isZh ? '涂鸦达人' : 'Graffiti Artist', desc: isZh ? '极有个性与幽默感的手绘涂鸦' : 'Expressive and creative hand-drawn graffiti' },
-    { id: 'adventurer', name: isZh ? '冒险家' : 'Adventurer', desc: isZh ? '精致生动的 3D 卡通角色' : 'Detailed adventurous 3D cartoon character' },
-    { id: 'lorelei', name: isZh ? '时尚人像' : 'Lorelei Portrait', desc: isZh ? '高雅手绘艺术风的肖像画' : 'Artistic and elegant hand-drawn portrait' },
+    { id: 'fun-emoji', name: t('userAvatarDialog.funEmoji', language), desc: t('userAvatarDialog.vibrantAndCheerfulEmoji', language) },
+    { id: 'thumbs', name: t('userAvatarDialog.auroraGradient', language), desc: t('userAvatarDialog.highEndAbstractMinimalist', language) },
+    { id: 'big-smile', name: t('userAvatarDialog.bigSmile', language), desc: t('userAvatarDialog.warmBrightAndCheerful', language) },
+    { id: 'bottts-neutral', name: t('userAvatarDialog.minimalTech', language), desc: t('userAvatarDialog.cleanTechInspiredCybernetic', language) },
+    { id: 'shapes', name: t('userAvatarDialog.abstractShapes', language), desc: t('userAvatarDialog.artisticMultiColorGeometric', language) },
+    { id: 'croodles', name: t('userAvatarDialog.graffitiArtist', language), desc: t('userAvatarDialog.expressiveAndCreativeHandDrawn', language) },
+    { id: 'adventurer', name: t('userAvatarDialog.adventurer', language), desc: t('userAvatarDialog.detailedAdventurous3dCartoon', language) },
+    { id: 'lorelei', name: t('userAvatarDialog.loreleiPortrait', language), desc: t('userAvatarDialog.artisticAndElegantHandDrawn', language) },
   ]
 
   return (
@@ -157,7 +156,7 @@ export default function UserAvatarDialog() {
                   onClick={rollSeed}
                   disabled={isRolling}
                   className="shrink-0 aspect-square p-2 justify-center rounded-xl bg-surface/80 border border-border text-text-secondary hover:text-accent hover:border-accent/30 hover:shadow-sm transition-all duration-200"
-                  title={isZh ? '🎲 随机生成特征值' : '🎲 Random Seed'}
+                  title={t('userAvatarDialog.randomSeed', language)}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isRolling ? 'animate-spin' : ''}`} />
                 </Button>

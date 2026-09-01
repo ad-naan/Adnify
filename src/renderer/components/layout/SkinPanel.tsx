@@ -7,7 +7,7 @@ import { saveEditorConfig } from '@renderer/settings'
 import { themeManager } from '@renderer/config/themeConfig'
 import { api } from '@/renderer/services/electronAPI'
 import ThemeWorkbenchPreview from '@renderer/components/theme/ThemeWorkbenchPreview'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 const SCALE_PRESETS = [0.8, 0.9, 1, 1.1, 1.25] as const
 
@@ -76,11 +76,11 @@ export default function SkinPanel() {
   }
 
   const copy = {
-    title: t('skinPanel.skin', asLanguage(language)),
-    subtitle: t('skinPanel.themeScaleAndLayout', asLanguage(language)),
-    theme: t('skinPanel.theme', asLanguage(language)),
-    scale: t('skinPanel.pageScale', asLanguage(language)),
-    density: t('skinPanel.layout', asLanguage(language)),
+    title: t('skinPanel.skin', language),
+    subtitle: t('skinPanel.themeScaleAndLayout', language),
+    theme: t('skinPanel.theme', language),
+    scale: t('skinPanel.pageScale', language),
+    density: t('skinPanel.layout', language),
   }
 
   return (

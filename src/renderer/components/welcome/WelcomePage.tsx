@@ -6,7 +6,7 @@ import { openFolderFromDialog, openWorkspaceFromDialog, openRecentWorkspace } fr
 import { useStore } from '@/renderer/store'
 import { logger } from '@utils/Logger'
 import { getFileName } from '@shared/utils/pathUtils'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { publicAsset } from '@utils/publicAsset'
 import UsageDashboard from './UsageDashboard'
 

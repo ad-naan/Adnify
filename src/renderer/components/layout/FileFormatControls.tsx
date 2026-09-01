@@ -4,7 +4,7 @@ import BottomBarPopover from '../ui/BottomBarPopover'
 import { applyFileEol } from '@services/fileFormatService'
 import { toast } from '../common/ToastProvider'
 import { globalConfirm } from '../common/ConfirmDialog'
-import { t, type Language, asLanguage } from '@renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import { getFileName } from '@shared/utils/pathUtils'
 import { api } from '@renderer/services/electronAPI'
 import { applySavedEditorBufferContent } from '@renderer/services/editorBufferService'
@@ -65,7 +65,7 @@ export default function FileFormatControls() {
     const changed = applyFileEol(activeFile.path, nextEol)
     if (changed) {
       toast.success(
-        t('fileFormatControls.lineEndingUpdated', asLanguage(language)),
+        t('fileFormatControls.lineEndingUpdated', language),
         nextEol,
       )
     }
@@ -80,7 +80,7 @@ export default function FileFormatControls() {
       const confirmed = await globalConfirm({
         title: getFileName(activeFile.path),
         message: t('file.reencodeDiscardChanges', language as Language, { name: getFileName(activeFile.path) }),
-        confirmText: t('git.continue', asLanguage(language)),
+        confirmText: t('git.continue', language),
         cancelText: t('cancel', language as Language),
         variant: 'warning',
       })
@@ -90,7 +90,7 @@ export default function FileFormatControls() {
     const nextContent = await api.file.readFull(activeFile.path, nextEncoding)
     if (nextContent === null) {
       toast.error(
-        t('fileFormatControls.failedToSwitchEncoding', asLanguage(language)),
+        t('fileFormatControls.failedToSwitchEncoding', language),
         nextEncoding.toUpperCase(),
       )
       return
@@ -99,7 +99,7 @@ export default function FileFormatControls() {
     applySavedEditorBufferContent(activeFile.path, nextContent)
     setFileEncoding(activeFile.path, nextEncoding)
     toast.success(
-      t('fileFormatControls.fileEncodingUpdated', asLanguage(language)),
+      t('fileFormatControls.fileEncodingUpdated', language),
       nextEncoding.toUpperCase(),
     )
   }
@@ -108,8 +108,8 @@ export default function FileFormatControls() {
     <div className="flex items-center gap-1">
       <BottomBarPopover
         icon={<span className="px-1 text-[10px] font-semibold">{currentEol}</span>}
-        tooltip={t('fileFormatControls.lineEnding', asLanguage(language))}
-        title={t('fileFormatControls.lineEnding', asLanguage(language))}
+        tooltip={t('fileFormatControls.lineEnding', language)}
+        title={t('fileFormatControls.lineEnding', language)}
         width={196}
         scrollable={false}
       >
@@ -133,8 +133,8 @@ export default function FileFormatControls() {
             <span className="text-[10px] font-semibold uppercase">{currentEncoding}</span>
           </div>
         }
-        tooltip={t('fileFormatControls.fileEncoding', asLanguage(language))}
-        title={t('fileFormatControls.fileEncoding', asLanguage(language))}
+        tooltip={t('fileFormatControls.fileEncoding', language)}
+        title={t('fileFormatControls.fileEncoding', language)}
         width={220}
         scrollable={false}
       >

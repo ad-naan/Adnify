@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, Globe, RefreshCw } from 'lucide-react'
 import { useStore } from '@store'
 import { api } from '@/renderer/services/electronAPI'
-import { t, type Language, asLanguage } from '@/renderer/i18n'
+import { t, type Language } from '@shared/i18n'
 import { devServerDiscoveryService } from '@/renderer/preview/devServerDiscoveryService'
 import { previewSessionService } from '@/renderer/preview/previewSessionService'
 import {
@@ -138,7 +138,7 @@ export default function LocalServersContent({ language }: { language: Language }
             onClick={clearDismissedOrigins}
             className="mt-1 w-full rounded-md px-1 py-1 text-left text-[10px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"
           >
-            {t('localServersContent.clearMutedAddressEs', asLanguage(language), { length: previewSettings.dismissedOrigins.length })}
+            {t('localServersContent.clearMutedAddressEs', language, { length: previewSettings.dismissedOrigins.length })}
           </button>
         )}
       </div>

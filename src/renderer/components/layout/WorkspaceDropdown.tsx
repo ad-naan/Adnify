@@ -12,7 +12,7 @@ import { useStore } from '@store'
 import { workspaceManager } from '@services/WorkspaceManager'
 import { openFolderFromDialog, openWorkspaceFromDialog, openRecentWorkspace } from '@services/workspaceOpenService'
 import { getFileName, getDirname, getBasename } from '@shared/utils/pathUtils'
-import { t } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 
 interface RecentWorkspace {
     path: string

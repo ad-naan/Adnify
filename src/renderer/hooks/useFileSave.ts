@@ -8,7 +8,7 @@ import { api } from '@renderer/services/electronAPI'
 import { getFileName } from '@shared/utils/pathUtils'
 import { globalConfirm } from '@renderer/components/common/ConfirmDialog'
 import { toast } from '@renderer/components/common/ToastProvider'
-import { t, asLanguage } from '@renderer/i18n'
+import { t } from '@shared/i18n'
 import { getEditorConfig } from '@renderer/settings'
 import { monaco } from '@renderer/monacoWorker'
 import type { FileMutationResult } from '@shared/types/fileMutation'
@@ -70,19 +70,19 @@ export function useFileSave() {
           markFileRestored(file.path)
         }
         toast.success(
-          t('common.fileSaved', asLanguage(language)),
+          t('common.fileSaved', language),
           getFileName(file.path)
         )
       } else {
         toast.error(
-          t('common.saveFailed', asLanguage(language)),
+          t('common.saveFailed', language),
           getSaveErrorMessage(result, language)
         )
       }
       return result.success
     } catch (error) {
       toast.error(
-        t('common.saveFailed', asLanguage(language)),
+        t('common.saveFailed', language),
         String(error)
       )
       return false
@@ -96,10 +96,10 @@ export function useFileSave() {
     if (file?.isDirty) {
       const fileName = getFileName(filePath)
       const result = await globalConfirm({
-        title: t('useFileSave.unsavedChanges', asLanguage(language)),
+        title: t('useFileSave.unsavedChanges', language),
         message: t('confirmUnsavedChanges', language, { name: fileName }),
-        confirmText: t('saveSession', asLanguage(language)),
-        cancelText: t('useFileSave.donTSave', asLanguage(language)),
+        confirmText: t('saveSession', language),
+        cancelText: t('useFileSave.donTSave', language),
         variant: 'warning',
       })
       if (result) {
