@@ -52,8 +52,8 @@ export const EmotionEditorBar: React.FC = () => {
 
   const title = useMemo(() => {
     if (!feedback) return ''
-    return feedback.shortMessage || feedback.message
-  }, [feedback])
+    return t(feedback.shortMessageKey || feedback.messageKey, language)
+  }, [feedback, language])
 
   const dismissFeedback = () => {
     if (feedback) {
@@ -135,7 +135,7 @@ export const EmotionEditorBar: React.FC = () => {
                       onClick={() => handleAction(action.actionType)}
                     >
                       {action.asset && <OtterAsset asset={action.asset} className="h-4 w-4 object-contain" />}
-                      <span>{action.label}</span>
+                      <span>{t(action.labelKey, language)}</span>
                     </motion.button>
                   ))}
                   {feedback.dismissible && (

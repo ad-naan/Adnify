@@ -9,6 +9,7 @@
  */
 
 import type { CodeContext, EmotionState } from '../types/emotion'
+import type { TranslationKey } from '@shared/i18n'
 import { EventBus } from '../core/EventBus'
 import { useStore } from '@/renderer/store'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
@@ -228,7 +229,7 @@ class EmotionContextAnalyzer {
     baseState: EmotionState,
     baseIntensity: number,
     context: CodeContext | null
-  ): { state: EmotionState; intensity: number; confidence: number; suggestions: string[] } {
+  ): { state: EmotionState; intensity: number; confidence: number; suggestions: TranslationKey[] } {
     if (!context) {
       return { state: baseState, intensity: baseIntensity, confidence: 0.5, suggestions: [] }
     }
@@ -236,7 +237,8 @@ class EmotionContextAnalyzer {
     let adjustedState = baseState
     let adjustedIntensity = baseIntensity
     let confidence = 0.75
-    const suggestions: string[] = []
+    // 存键不存句子：这里没有 `language`，句子由状态栏组件翻译。
+    const suggestions: TranslationKey[] = []
 
     // —————— 1. 诊断错误信号（来自真实 LSP 数据） ——————
     if (context.hasErrors) {
@@ -244,11 +246,11 @@ class EmotionContextAnalyzer {
       if (context.errorType === 'syntax') {
         adjustedState = this.nudgeState(adjustedState, 'frustrated', 0.6)
         adjustedIntensity = Math.min(adjustedIntensity + errorBoost, 1)
-        suggestions.push('检测到语法错误，让 AI 帮你快速定位？')
+        suggestions.push('emotion.suggestion.syntaxError')
       } else if (context.errorType === 'type') {
         adjustedState = this.nudgeState(adjustedState, 'stressed', 0.5)
         adjustedIntensity = Math.min(adjustedIntensity + errorBoost, 1)
-        suggestions.push('类型错误有时候很烦人，需要帮忙梳理一下类型关系吗？')
+        suggestions.push('emotion.suggestion.typeError')
       }
       confidence += 0.1
     }
@@ -262,7 +264,7 @@ class EmotionContextAnalyzer {
         // 工具频繁失败 = 环境不顺
         adjustedState = this.nudgeState(adjustedState, 'frustrated', 0.5)
         adjustedIntensity = Math.min(adjustedIntensity + 0.2, 1)
-        suggestions.push('AI 工具执行遇到一些困难，要检查一下工具配置吗？')
+        suggestions.push('emotion.suggestion.toolFailures')
       }
       
       if (ai.count > 8 && ai.avgResponseTime > 5000) {
@@ -281,7 +283,7 @@ class EmotionContextAnalyzer {
     if (context.gitStatus === 'conflict') {
       adjustedState = this.nudgeState(adjustedState, 'stressed', 0.7)
       adjustedIntensity = Math.min(adjustedIntensity + 0.3, 1)
-      suggestions.push('检测到 Git 冲突，需要帮忙解决吗？')
+      suggestions.push('emotion.suggestion.gitConflict')
       confidence += 0.1
     } else if (context.gitStatus === 'modified') {
       // 有修改但状态正常，不强制改变
@@ -301,14 +303,14 @@ class EmotionContextAnalyzer {
     if (context.codeComplexity > 0.7) {
       adjustedState = this.nudgeState(adjustedState, 'stressed', 0.3)
       adjustedIntensity = Math.min(adjustedIntensity + 0.1, 1)
-      suggestions.push('当前工作负载较高，适当休息可以提高效率')
+      suggestions.push('emotion.suggestion.highComplexity')
     }
 
     // —————— 6. 频繁切换文件（来自真实 store 订阅） ——————
     if (context.searchQueries > 8) {
       adjustedState = this.nudgeState(adjustedState, 'stressed', 0.4)
       adjustedIntensity = Math.min(adjustedIntensity + 0.15, 1)
-      suggestions.push('频繁切换文件？试试让 AI 帮你跨文件搜索')
+      suggestions.push('emotion.suggestion.frequentSearch')
     }
 
     confidence = Math.min(confidence, 0.95)

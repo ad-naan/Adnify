@@ -99,7 +99,7 @@ export interface EnvironmentAdaptation {
 
 export interface EmotionFeedbackAction {
   id: string
-  label: string
+  labelKey: TranslationKey
   asset?: import('@/renderer/components/brand/otterAssets').OtterAssetKey
   actionType?: string
 }

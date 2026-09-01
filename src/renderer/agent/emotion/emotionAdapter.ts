@@ -14,6 +14,8 @@ import type {
   EmotionFeedbackType,
 } from '../types/emotion'
 import { getRecommendedActions } from './emotionActions'
+import { EMOTION_STATUS_MESSAGE_KEYS } from './constants'
+import type { TranslationKey } from '@shared/i18n'
 import {
   loadEmotionPanelSettings,
   subscribeEmotionPanelSettings,
@@ -248,15 +250,20 @@ const DEFAULT_ADAPTATIONS: Record<EmotionState, EnvironmentAdaptation> = {
   },
 }
 
-const EMOTION_MESSAGES: Record<EmotionState, string[]> = {
-  focused: ['保持专注，你正在高效工作 💪', '良好的节奏，继续保持', '专注模式已启动'],
-  frustrated: ['遇到困难了吗？深呼吸，一步步来 🌱', '每个 bug 都是成长的机会', '需要我帮你分析一下吗？', '休息一下，换个思路可能会更好'],
-  tired: ['看起来有点累了，喝杯水休息一下吧 ☕', '长时间工作会降低效率，建议休息', '你的眼睛需要放松了，看看远处'],
-  excited: ['充满能量！保持这个状态 🚀', '灵感爆发时刻，记录下来', '创造力满满，继续保持！'],
-  bored: ['看起来有点无聊，试试重构这段代码？ 🤔', '要不要尝试一个新的实现方式？', '休息一下，做点有趣的事情'],
-  stressed: ['压力有点大，深呼吸放松一下 🧘', '优先级排序，一件一件来', '你已经做得很好了，不要给自己太大压力', '需要我帮你整理一下思路吗？'],
-  flow: ['进入心流状态，享受编码的乐趣 ✨', '完美的心流，继续保持', '你正在创造伟大的代码'],
-  neutral: [],
+/**
+ * 定时休息提醒的文案键，按当前情绪挑一句。
+ *
+ * 和状态栏轮播的 `emotion.status.*` 分开：那组是"你现在什么状态"，这组是"该起来动一动了"。
+ */
+const BREAK_SUGGESTION_KEYS: Record<EmotionState, TranslationKey> = {
+  focused: 'emotion.break.suggested.focused',
+  frustrated: 'emotion.break.suggested.frustrated',
+  tired: 'emotion.break.suggested.tired',
+  excited: 'emotion.break.suggested.excited',
+  bored: 'emotion.break.suggested.bored',
+  stressed: 'emotion.break.suggested.stressed',
+  flow: 'emotion.break.suggested.flow',
+  neutral: 'emotion.break.suggested.neutral',
 }
 
 const FEEDBACK_COOLDOWNS: Record<EmotionFeedbackType, number> = {
@@ -461,7 +468,7 @@ class EmotionAdapter {
   private buildFeedbackActions(detection: EmotionDetection) {
     return getRecommendedActions(detection).map((action) => ({
       id: `${action.type}-${detection.state}`,
-      label: action.label,
+      labelKey: action.labelKey,
       asset: action.asset,
       actionType: action.type,
     }))
@@ -470,7 +477,7 @@ class EmotionAdapter {
   private buildFeedback(
     type: EmotionFeedbackType,
     detection: EmotionDetection,
-    message: string,
+    messageKey: TranslationKey,
     sourceRule: string,
     priority: number,
     channelHints: Array<'statusBar' | 'editorBar'>,
@@ -482,8 +489,7 @@ class EmotionAdapter {
       type,
       priority,
       emotionState: detection.state,
-      message,
-      shortMessage: message,
+      messageKey,
       actions: this.buildFeedbackActions(detection),
       createdAt: now,
       expiresAt: now + FEEDBACK_EXPIRES[type],
@@ -525,7 +531,7 @@ class EmotionAdapter {
     if (!this.settings.companionEnabled) return
 
     const contextSuggestions = detection.suggestions || []
-    const emitStructured = (message: string, sourceRule: string) => {
+    const emitStructured = (messageKey: TranslationKey, sourceRule: string) => {
       const type: EmotionFeedbackType =
         state === 'frustrated' || state === 'stressed'
           ? 'frustration_support'
@@ -538,7 +544,7 @@ class EmotionAdapter {
                 : 'encouragement'
 
       this.emitFeedback(
-        this.buildFeedback(type, detection, message, sourceRule, state === 'frustrated' ? 6 : 4, ['statusBar', 'editorBar'])
+        this.buildFeedback(type, detection, messageKey, sourceRule, state === 'frustrated' ? 6 : 4, ['statusBar', 'editorBar'])
       )
     }
 
@@ -550,7 +556,9 @@ class EmotionAdapter {
       return
     }
 
-    const messages = EMOTION_MESSAGES[state]
+    // 没有上下文建议时退回该状态的通用文案，和状态栏轮播用的是同一张键表 ——
+    // 之前适配器自己还留了一份更长的中文副本，两处措辞长期对不上。
+    const messages = EMOTION_STATUS_MESSAGE_KEYS[state]
     if (messages.length > 0) {
       const randomIndex = Math.floor(Math.random() * messages.length)
       const message = messages[randomIndex]
@@ -631,8 +639,6 @@ class EmotionAdapter {
 
     if (breakConfig.microBreaks) {
       this.microBreakTimer = setInterval(() => {
-        const message = '眼睛疲劳了吗？看看远处20秒 👀'
-        EventBus.emit({ type: 'break:micro', message })
         this.emitFeedback(this.buildFeedback('break_micro', {
           state,
           intensity: 0.6,
@@ -640,23 +646,11 @@ class EmotionAdapter {
           triggeredAt: Date.now(),
           duration: 0,
           factors: [],
-        }, message, 'micro_break_timer', 4, ['statusBar', 'editorBar']))
+        }, 'emotion.break.micro', 'micro_break_timer', 4, ['statusBar', 'editorBar']))
       }, 20 * 60 * 1000)
     }
 
     this.breakTimer = setInterval(() => {
-      const messages: Record<EmotionState, string> = {
-        focused: '你已经专注工作很久了，起来活动一下吧 🚶',
-        frustrated: '卡住了？休息一下可能会有新思路 💡',
-        tired: '该休息一下了，充电后效率会更高 ⚡',
-        excited: '保持热情的同时也要注意休息哦 ☕',
-        bored: '休息一下吧，做点有趣的事情 🎮',
-        stressed: '压力大时更要休息，深呼吸放松一下 🧘',
-        flow: '心流很美好，但也记得照顾好身体 🌿',
-        neutral: '工作一段时间了，休息一下吧 ☕',
-      }
-      const message = messages[state]
-      EventBus.emit({ type: 'break:suggested', message })
       this.emitFeedback(this.buildFeedback('break_suggested', {
         state,
         intensity: 0.7,
@@ -664,7 +658,7 @@ class EmotionAdapter {
         triggeredAt: Date.now(),
         duration: 0,
         factors: [],
-      }, message, 'break_timer', 7, ['statusBar', 'editorBar']))
+      }, BREAK_SUGGESTION_KEYS[state], 'break_timer', 7, ['statusBar', 'editorBar']))
     }, breakConfig.breakInterval)
   }
 

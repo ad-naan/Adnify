@@ -323,7 +323,7 @@ class EmotionDetectionEngine {
         value: 0,
         description: 'Session just started',
       }],
-      suggestions: ['欢迎回来！准备好开始高效编码了吗？'],
+      suggestions: ['emotion.suggestion.welcomeBack'],
     }
 
     this.currentState = detection
@@ -665,7 +665,7 @@ class EmotionDetectionEngine {
     factors.push({
       type: 'time_of_day', weight: 0.05, value: timeScore,
       description: relative.calibrated
-        ? `${hour}:00 ${isUnusualHour ? '(非常用时段)' : ''}`
+        ? `${hour}:00 ${isUnusualHour ? '(off-hours)' : ''}`
         : `${hour}:00`,
     })
     // 只有非常用时段才给 tired 加分，正常时段不加

@@ -96,10 +96,11 @@ export type AgentEvent =
   | { type: 'loop:warning'; message: string; threadId?: string; assistantId?: string; requestId?: string; planTaskId?: string }
 
   // 情绪感知事件
+  //
+  // 休息提醒和情绪文案都只走 `emotion:feedback`：状态栏和编辑器栏都订阅它，
+  // 也是唯一带冷却/免打扰的通道。早先另有 `emotion:message`、`break:micro`、
+  // `break:suggested` 三个事件，各自带一段中文句子，却没有任何订阅方。
   | { type: 'emotion:changed'; emotion: import('../types/emotion').EmotionDetection }
-  | { type: 'emotion:message'; message: string; state: import('../types/emotion').EmotionState }
-  | { type: 'break:micro'; message: string }
-  | { type: 'break:suggested'; message: string }
   | { type: 'emotion:feedback'; feedback: import('../types/emotion').EmotionFeedbackPayload }
 
   // Plan 执行事件

@@ -29,7 +29,7 @@ export const EMOTION_META: Record<EmotionState, {
   neutral: { color: EMOTION_COLORS.neutral, asset: 'neutral', pulseSpeed: 3.0, translationKey: 'emotion.state.neutral' },
 }
 
-export const EMOTION_STATUS_MESSAGE_KEYS: Record<EmotionState, string[]> = {
+export const EMOTION_STATUS_MESSAGE_KEYS: Record<EmotionState, TranslationKey[]> = {
   focused: ['emotion.status.focused.1', 'emotion.status.focused.2', 'emotion.status.focused.3'],
   frustrated: ['emotion.status.frustrated.1', 'emotion.status.frustrated.2', 'emotion.status.frustrated.3'],
   tired: ['emotion.status.tired.1', 'emotion.status.tired.2', 'emotion.status.tired.3'],

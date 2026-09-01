@@ -132,8 +132,8 @@ export const EmotionStatusIndicator: React.FC = () => {
   }
 
   const detailText = useMemo(() => {
-    if (activeFeedback) return activeFeedback.message
-    return currentMessageKey ? t(currentMessageKey as any, language) : ''
+    if (activeFeedback) return t(activeFeedback.messageKey, language)
+    return currentMessageKey ? t(currentMessageKey, language) : ''
   }, [activeFeedback, currentMessageKey, language])
 
   return (
@@ -196,7 +196,7 @@ export const EmotionStatusIndicator: React.FC = () => {
               className="overflow-hidden whitespace-nowrap pl-0.5 pr-1 text-[10px] font-medium relative z-10"
               style={{ color: activeFeedback ? 'var(--text-primary)' : meta.color }}
             >
-              {activeFeedback ? activeFeedback.shortMessage || activeFeedback.message : label}
+              {activeFeedback ? t(activeFeedback.shortMessageKey || activeFeedback.messageKey, language) : label}
             </motion.div>
           )}
         </AnimatePresence>
@@ -255,7 +255,7 @@ export const EmotionStatusIndicator: React.FC = () => {
               </div>
 
               <p className="text-[11px] text-text-primary leading-relaxed">
-                {detailText || (emotion.suggestions?.[0] || '')}
+                {detailText || (emotion.suggestions?.[0] ? t(emotion.suggestions[0], language) : '')}
               </p>
 
               {activeFeedback?.actions && activeFeedback.actions.length > 0 && (
@@ -267,7 +267,7 @@ export const EmotionStatusIndicator: React.FC = () => {
                       className="flex items-center gap-1 px-2 py-1.5 rounded bg-white/5 hover:bg-white/10 text-[10px] text-text-secondary hover:text-text-primary transition-colors border border-white/5"
                     >
                       {action.asset && <OtterAsset asset={action.asset} className="h-4 w-4 object-contain" />}
-                      {action.label}
+                      {t(action.labelKey, language)}
                     </button>
                   ))}
                   {activeFeedback.dismissible && (

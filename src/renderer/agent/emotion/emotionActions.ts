@@ -1,7 +1,8 @@
 import { useStore } from '@/renderer/store'
 import { useAgentStore } from '@/renderer/agent/store/AgentStore'
 import { useDiagnosticsStore } from '@/renderer/services/diagnosticsStore'
-import { EventBus } from '../core/EventBus'
+import { toast } from '@/renderer/components/common/InlineToast'
+import { t, type TranslationKey } from '@shared/i18n'
 import type { EmotionDetection } from '../types/emotion'
 import type { OtterAssetKey } from '@/renderer/components/brand/otterAssets'
 
@@ -14,7 +15,8 @@ export type EmotionActionType =
 
 export interface EmotionActionDef {
   type: EmotionActionType
-  label: string
+  /** 按钮文案的 locale 键，渲染的组件自己翻。 */
+  labelKey: TranslationKey
   asset: OtterAssetKey
   execute: () => void
 }
@@ -22,7 +24,7 @@ export interface EmotionActionDef {
 const actions: Record<EmotionActionType, () => EmotionActionDef> = {
   ai_fix: () => ({
     type: 'ai_fix',
-    label: 'AI 修复',
+    labelKey: 'emotion.action.aiFix',
     asset: 'modalDanger',
     execute: () => {
       const activeFile = useStore.getState().activeFilePath
@@ -39,9 +41,12 @@ const actions: Record<EmotionActionType, () => EmotionActionDef> = {
         )
 
       const fileName = activeFile.split(/[\\/]/).pop()
+      // prompt 是替用户写进输入框的话，跟着界面语言走：中文界面里塞一句英文
+      // （或反过来）会让模型的回答语言也跟着跑偏。
+      const language = useStore.getState().language
       const prompt = errors.length > 0
-        ? `请帮我修复当前文件 \`${fileName}\` 中的错误：\n\n${errors.join('\n')}`
-        : `请帮我检查当前文件 \`${fileName}\` 是否有问题。`
+        ? t('emotion.action.aiFix.prompt', language, { file: fileName, errors: errors.join('\n') })
+        : t('emotion.action.aiFix.promptCheck', language, { file: fileName })
 
       useAgentStore.getState().setInputPrompt(prompt)
       useStore.getState().setChatVisible(true)
@@ -50,7 +55,7 @@ const actions: Record<EmotionActionType, () => EmotionActionDef> = {
 
   ask_ai: () => ({
     type: 'ask_ai',
-    label: '问 AI',
+    labelKey: 'emotion.action.askAi',
     asset: 'chat',
     execute: () => {
       useAgentStore.getState().setInputPrompt('')
@@ -60,19 +65,16 @@ const actions: Record<EmotionActionType, () => EmotionActionDef> = {
 
   take_break: () => ({
     type: 'take_break',
-    label: '休息一下',
+    labelKey: 'emotion.action.takeBreak',
     asset: 'break',
     execute: () => {
-      EventBus.emit({
-        type: 'break:suggested',
-        message: '站起来活动一下，看看远处，让大脑放松一下。',
-      })
+      toast.info(t('emotion.break.stretchNow', useStore.getState().language))
     },
   }),
 
   focus_mode: () => ({
     type: 'focus_mode',
-    label: '专注模式',
+    labelKey: 'emotion.action.focusMode',
     asset: 'emotionFocusRing',
     execute: () => {
       const store = useStore.getState()
@@ -84,7 +86,7 @@ const actions: Record<EmotionActionType, () => EmotionActionDef> = {
 
   switch_theme: () => ({
     type: 'switch_theme',
-    label: '切换主题',
+    labelKey: 'emotion.action.switchTheme',
     asset: 'creative',
     execute: () => {
       const store = useStore.getState()

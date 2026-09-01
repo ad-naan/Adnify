@@ -1,5 +1,7 @@
 import { terminalManager } from '@/renderer/services/TerminalManager'
 import { toast } from '@/renderer/components/common/ToastProvider'
+import { useStore } from '@/renderer/store'
+import { t } from '@shared/i18n'
 import { EventBus } from '../core/EventBus'
 
 class TerminalWatcher {
@@ -83,14 +85,16 @@ class TerminalWatcher {
                     confidence: 0.9,
                     triggeredAt: Date.now(),
                     duration: 0,
-                    factors: [{ type: 'error_rate', value: 1, weight: 1, description: '终端报错' }],
-                    suggestions: ['发现终端报错 💥，您可以点击终端栏右上角的 ✨ 按钮让我一键分析！']
+                    // description 是诊断字段，只进日志，所以固定英文；suggestions 是给用户看的，存键。
+                    factors: [{ type: 'error_rate', value: 1, weight: 1, description: 'Terminal command failed' }],
+                    suggestions: ['emotion.suggestion.terminalError']
                 }
             })
         }, 100)
 
         // 2. 抛出 UI Toast 给用户提示
-        toast.error('检测到终端命令执行出错', 5000)
+        // 服务层没有 props，按渲染层惯例直接从 store 取当前语言。
+        toast.error(t('terminalWatcher.commandFailed', useStore.getState().language), 5000)
     }
 }
 
